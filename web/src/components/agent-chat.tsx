@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
+import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { FindBar } from "@/components/find-bar";
 import { Composer, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
@@ -247,7 +248,9 @@ export function AgentChat({
     () => grammarsOn ? adapterFor(agent?.agent)?.buildBlocks(inputLines) ?? [] : [],
     [inputLines, agent?.agent, grammarsOn],
   );
-  const dialogPresent = liveBlocks.some((block) => block.kind !== "raw");
+  // "Owns the keyboard" is asked of the dialog contract, not spelled as `kind !== "raw"`: the
+  // slash-command `autocomplete` popup is a non-raw block painted while the input box is live.
+  const dialogPresent = liveBlocks.some(blockOwnsKeyboard);
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
   const catalog = useModelCatalog({ paneId, session, agent: agent?.agent, live: liveModelBlock,
