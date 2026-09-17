@@ -12,6 +12,8 @@ import { draftCarriesSend, sendGuardedReply } from "./reply-action";
 // approving whatever option was highlighted, while the bridge still reported {ok:true}.
 
 const BOX_RULE = "─".repeat(40); // clears the 20-glyph border threshold in harness/claude/markers
+const PANES_DIR = join(import.meta.dirname, "..", "fixtures", "panes");
+const fixtureText = (name: string) => readFileSync(join(PANES_DIR, name), "utf8");
 const paneWithDraft = (draft: string) => `some output\n${BOX_RULE}\n❯ ${draft}\n${BOX_RULE}`;
 // A focused permission dialog: no input box at the tail at all, so extractInputDraft sees nothing.
 const paneWithDialog = "Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel";
@@ -185,6 +187,38 @@ describe("draftCarriesSend", () => {
 });
 
 describe("sendGuardedReply", () => {
+  // The 82-column stall: Claude's slash popup clipped a command name to "…ugin:…", the box went
+  // undetected, and the guard typed the text and withheld Enter. The same screen now verifies.
+  it("verifies a slash command under a popup with a clipped command name, then submits", async () => {
+    const calls = harness(() => fixtureText("claude--autocomplete-slash-clipped.txt"));
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "/model", agent: "claude", ...instant });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      { text: "/model", submit: false },
+      { text: "", submit: true },
+    ]);
+  });
+
+  // A stale box echoed above a live dialog must never read as the composer: nothing is typed, and no
+  // submit key can answer the dialog.
+  it("refuses a dialog screen with a stale box triple above it, and never sends Enter", async () => {
+    const dialog = fixtureText("claude--permission-bash.txt");
+    const calls = harness(() => `● earlier\n${BOX_RULE}\n❯ please run the migration\n${BOX_RULE}\n\n${dialog}`);
+
+    const out = await sendGuardedReply({
+      paneId: "w1:p1",
+      text: "please run the migration",
+      agent: "claude",
+      ...instant,
+    });
+
+    expect(out.status).toBe("blocked");
+    expect(calls.some((c) => c.submit)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
   it("types, verifies the text on the input line, then submits", async () => {
     const calls = harness(() => paneWithDraft("ship it please"));
 
