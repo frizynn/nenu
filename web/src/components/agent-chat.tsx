@@ -21,6 +21,7 @@ import { ConversationActions } from "@/components/conversation-actions";
 import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
+import { AgentsFooter } from "@/components/agents-footer";
 import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space";
 import { cn } from "@/lib/utils";
 import { parseAnsi } from "@/lib/ansi";
@@ -220,6 +221,17 @@ export function AgentChat({
   const statusLines = useMemo(
     () =>
       grammarsOn ? adapterFor(agent?.agent)?.extractStatusLines(splitLines(parseAnsi(display))) ?? [] : [],
+    [display, agent?.agent, grammarsOn],
+  );
+
+  // The background-agents block the harness paints under its statusline (issue #242). stripChrome
+  // peels it off the mirror with the box, and the strip stops above it, so this is its one surface.
+  // Same adapter and same parse source as the strip, so the two cannot disagree on where it starts.
+  const agentsFooter = useMemo(
+    () =>
+      grammarsOn
+        ? adapterFor(agent?.agent)?.extractAgentsFooter?.(splitLines(parseAnsi(display))) ?? []
+        : [],
     [display, agent?.agent, grammarsOn],
   );
 
@@ -1008,6 +1020,10 @@ export function AgentChat({
               ))}
             </div>
           )}
+
+          {/* Background agents, under the statusline as the TUI drew them: stripChrome peels the block
+              off the mirror, so this is its one surface. One row until tapped (agents-footer.tsx). */}
+          {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
           <Composer
             ref={composerRef}
