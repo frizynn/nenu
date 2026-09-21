@@ -1,3 +1,9 @@
+// The browser and bridge must agree on which cells belong to Codex's ambient animation.
+// These are pure SGR/grammar modules; sharing them avoids weaker server-side text heuristics.
+import { parseAnsi } from "../web/src/lib/ansi.ts";
+import { lineText, splitLines } from "../web/src/lib/blocks.ts";
+import { animatedComposerRegion } from "../web/src/lib/harness/codex/chrome.ts";
+
 /**
  * Normalize a rendered prompt region for comparison across terminal redraws.
  *
@@ -41,11 +47,26 @@ export function verifyExpectedPrompt(
     }
     lastMatch = start;
   }
-  if (lastMatch === -1) return { ok: false, reason: "not_found" };
-
   const boundedTailLines = Math.max(0, Math.floor(tailLines));
   const tailStart = Math.max(0, freshLines.length - boundedTailLines);
   const matchEnd = lastMatch + expectedLines.length - 1;
-  if (matchEnd < tailStart) return { ok: false, reason: "not_in_tail" };
-  return { ok: true };
+  if (lastMatch !== -1 && matchEnd >= tailStart) return { ok: true };
+
+  // A particle may move between the phone's read and this local read. Only the recognized live
+  // Codex composer may shed that decoration; user text, dialogs and transcript rows stay exact.
+  const styled = expectedLines[0]?.startsWith("› ") ? splitLines(parseAnsi(freshText)) : null;
+  const canonical = styled === null ? null : animatedComposerRegion(styled);
+  if (canonical !== null && styled !== null) {
+    const canonicalLines = normalizePromptRegion(canonical.prompt);
+    if (
+      canonicalLines.length === expectedLines.length &&
+      canonicalLines.every((line, index) => line === expectedLines[index])
+    ) {
+      const after = normalizePromptRegion(styled.slice(canonical.endRow + 1).map(lineText).join("\n")).length;
+      return after < boundedTailLines
+        ? { ok: true }
+        : { ok: false, reason: "not_in_tail" };
+    }
+  }
+  return { ok: false, reason: lastMatch === -1 ? "not_found" : "not_in_tail" };
 }

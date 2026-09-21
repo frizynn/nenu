@@ -49,10 +49,11 @@ const MAX_DRAFT_ROWS = 100;
 const CONTINUATION = /^ {2}\s*\S/;
 const PROMPT_PREFIX = "› ";
 
-// The captured renderer paints an ambient animation through the three-row composer surface. Each
-// particle is one dot from a Braille cell, in a true-colour foreground over the composer's exact
-// background. This is deliberately narrower than “Braille”: an operator may type any of these
-// characters, and ordinary draft text does not receive the particle renderer's per-glyph RGB.
+// Astra's sparkle pass (`chat_composer/sparkle.rs` in Codex 0.155.1) paints through the whole
+// composer after the textarea: only an original SPACE cell with an RGB background and no modifiers
+// may become one of these single-dot Braille glyphs with an RGB foreground. Restoring that exact
+// paint to a space preserves words and gutters; ordinary typed Braille keeps the textarea's default
+// foreground and must remain text.
 const PARTICLE = /^[\u2801\u2802\u2804\u2808\u2810\u2820\u2840\u2880]+$/;
 const TRUE_COLOUR = /^rgb\(\d+,\d+,\d+\)$/;
 
@@ -61,7 +62,27 @@ interface ParticleSurface {
   sawParticle: boolean;
 }
 
-/** A row painted only by the ambient composer surface (padding plus RGB Braille particles). */
+function particleBackground(line: StyledLine): string | null {
+  let background: string | null = null;
+  for (const segment of line.segments) {
+    if (
+      segment.bg === undefined ||
+      segment.fg === undefined ||
+      !TRUE_COLOUR.test(segment.fg) ||
+      segment.bold === true ||
+      segment.dim === true ||
+      segment.italic === true ||
+      segment.underline === true ||
+      segment.strike === true ||
+      !PARTICLE.test(segment.text)
+    ) continue;
+    if (background !== null && segment.bg !== background) return null;
+    background = segment.bg;
+  }
+  return background;
+}
+
+/** A row containing only composer padding plus RGB sparkle cells. */
 function particleSurface(line: StyledLine, expectedBackground?: string): ParticleSurface | null {
   let background = expectedBackground;
   let sawParticle = false;
@@ -76,10 +97,76 @@ function particleSurface(line: StyledLine, expectedBackground?: string): Particl
     if (!PARTICLE.test(segment.text) || segment.fg === undefined || !TRUE_COLOUR.test(segment.fg)) {
       return null;
     }
-    if (segment.bold === true || segment.dim === true) return null;
+    if (
+      segment.bold === true ||
+      segment.dim === true ||
+      segment.italic === true ||
+      segment.underline === true ||
+      segment.strike === true
+    ) return null;
     sawParticle = true;
   }
   return background === undefined ? null : { background, sawParticle };
+}
+
+interface AnimatedComposer {
+  /** Particle-free, rstripped text for prompt through the row before status. */
+  texts: string[];
+  background: string;
+}
+
+function composerBackground(line: StyledLine): string | null {
+  const marker = line.segments.find((segment) => segment.text.length > 0);
+  return marker?.text.startsWith("›") && marker.bold === true && marker.bg !== undefined
+    ? marker.bg
+    : null;
+}
+
+/** Replace only sparkle cells with spaces. Textarea content uses the composer background with the
+ * terminal's default foreground; the sparkle pass gives its Braille cells an explicit true-colour
+ * foreground. Keeping the cell as a space preserves wrap alignment. */
+function withoutParticles(line: StyledLine, background: string): { text: string; saw: boolean } {
+  let saw = false;
+  const text = line.segments
+    .map((segment) => {
+      if (
+        segment.bg === background &&
+        segment.fg !== undefined &&
+        TRUE_COLOUR.test(segment.fg) &&
+        segment.bold !== true &&
+        segment.dim !== true &&
+        segment.italic !== true &&
+        segment.underline !== true &&
+        segment.strike !== true &&
+        PARTICLE.test(segment.text)
+      ) {
+        saw = true;
+        return " ".repeat([...segment.text].length);
+      }
+      return segment.text;
+    })
+    .join("");
+  return { text: rstrip(text), saw };
+}
+
+/** Canonicalize a verified composer containing Astra's sparkle overlay. Null means either there
+ * is no overlay or removing RGB particle cells does not leave valid prompt/continuation grammar. */
+function animatedComposer(lines: StyledLine[], box: ComposerBox): AnimatedComposer | null {
+  const background = composerBackground(lines[box.promptRow]!);
+  if (background === null) return null;
+  const texts: string[] = [];
+  let sawParticle = false;
+  for (let i = box.promptRow; i < box.statusRow; i++) {
+    const canonical = withoutParticles(lines[i]!, background);
+    texts.push(canonical.text);
+    sawParticle ||= canonical.saw;
+    if (i === box.promptRow) {
+      if (promptText(canonical.text) === null) return null;
+    } else if (!isBlank(canonical.text) && !CONTINUATION.test(canonical.text)) {
+      return null;
+    }
+  }
+  return sawParticle ? { texts, background } : null;
 }
 
 // Codex 0.153.4 replaces its statusline with this ONE suggestion after a complete slash command.
@@ -97,15 +184,34 @@ function locateQueuedComposer(lines: StyledLine[], texts: string[], tail: number
   if (footer < 0 || !QUEUE_FOOTER.test(texts[footer] ?? "")) return null;
   const top = skipBlanksUp(texts, footer - 1);
   if (top < 0) return null;
+  let sawParticleRow = false;
   for (let i = top; i >= 0 && top - i < MAX_DRAFT_ROWS; i--) {
     const t = texts[i]!;
-    if (promptText(t) !== null) {
+    const background = composerBackground(lines[i]!);
+    const canonicalPrompt =
+      background === null ? t : withoutParticles(lines[i]!, background).text;
+    if (promptText(canonicalPrompt) !== null) {
+      const box: ComposerBox = { chromeStartRow: i, promptRow: i, statusRow: footer };
+      const animation = animatedComposer(lines, box);
+      if (sawParticleRow && animation === null) return null;
+      const above =
+        i > 0 && animation !== null
+          ? particleSurface(lines[i - 1]!, animation.background)
+          : null;
+      if (above?.sawParticle === true) box.chromeStartRow = i - 1;
       const marker = lines[i]!.segments.find((segment) => segment.text.length > 0);
-      return marker?.text.startsWith("›") && marker.bold === true
-        ? { chromeStartRow: i, promptRow: i, statusRow: footer }
-        : null;
+      return marker?.text.startsWith("›") && marker.bold === true ? box : null;
     }
     if (isBlank(t)) continue;
+    const candidateBackground = particleBackground(lines[i]!);
+    const candidateText =
+      candidateBackground === null
+        ? null
+        : withoutParticles(lines[i]!, candidateBackground).text;
+    if (candidateText !== null && (isBlank(candidateText) || CONTINUATION.test(candidateText))) {
+      sawParticleRow = true;
+      continue;
+    }
     if (!CONTINUATION.test(t)) return null;
   }
   return null;
@@ -127,47 +233,8 @@ function locateCommandAutocomplete(lines: StyledLine[], texts: string[], tail: n
 /** The exact placeholder text is still a valid thing an operator might deliberately type. Codex
  * distinguishes its empty hint by painting the whole body dim, so extraction should use that
  * renderer evidence too instead of discarding an ordinary non-dim draft with those words. */
-function emptyPlaceholderBackground(line: StyledLine): string | null {
-  const text = rstrip(lineText(line));
-  if (!text.startsWith(`${PROMPT_PREFIX}${PLACEHOLDER}`)) return null;
-
-  const marker = line.segments.find((segment) => segment.text.includes("›"));
-  if (marker?.bold !== true || marker.bg === undefined) return null;
-
-  const bodyStart = PROMPT_PREFIX.length;
-  const bodyEnd = bodyStart + PLACEHOLDER.length;
-  let offset = 0;
-  let sawBody = false;
-  const background = marker.bg;
-  for (const segment of line.segments) {
-    const next = offset + segment.text.length;
-    if (Math.max(offset, bodyStart) < Math.min(next, bodyEnd)) {
-      sawBody = true;
-      if (segment.dim !== true || segment.bg === undefined) return null;
-      if (segment.bg !== background) return null;
-    }
-    offset = next;
-    if (offset >= bodyEnd) break;
-  }
-  if (!sawBody) return null;
-
-  // The suffix is padding plus particles on the same surface. Slice at the exact text offset so a
-  // future renderer may coalesce adjacent runs without weakening the style check.
-  offset = 0;
-  const suffixSegments = line.segments.flatMap((segment) => {
-    const next = offset + segment.text.length;
-    const from = Math.max(0, bodyEnd - offset);
-    offset = next;
-    if (from >= segment.text.length) return [];
-    return [{ ...segment, text: segment.text.slice(from) }];
-  });
-  const suffix = particleSurface({ segments: suffixSegments }, background);
-  return suffix === null ? null : background;
-}
-
-function isDimPlaceholder(line: StyledLine): boolean {
-  const text = rstrip(lineText(line));
-  if (promptText(text) !== PLACEHOLDER) return false;
+function isDimPlaceholder(line: StyledLine, canonicalText = rstrip(lineText(line))): boolean {
+  if (promptText(canonicalText) !== PLACEHOLDER) return false;
   const bodyStart = PROMPT_PREFIX.length;
   const bodyEnd = bodyStart + PLACEHOLDER.length;
   let offset = 0;
@@ -182,16 +249,6 @@ function isDimPlaceholder(line: StyledLine): boolean {
     if (offset >= bodyEnd) break;
   }
   return sawBody;
-}
-
-function isEmptyAnimatedComposer(lines: StyledLine[], box: ComposerBox): boolean {
-  const background = emptyPlaceholderBackground(lines[box.promptRow]!);
-  if (background === null) return false;
-  for (let i = box.promptRow + 1; i < box.statusRow; i++) {
-    if (isBlank(lineText(lines[i]!))) continue;
-    if (particleSurface(lines[i]!, background) === null) return false;
-  }
-  return true;
 }
 
 /** The composer at the buffer tail, or null (a dialog owns the screen, or the frame is torn). */
@@ -212,22 +269,33 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   let sawParticleRow = false;
   for (let i = top; i >= 0 && top - i < MAX_DRAFT_ROWS; i--) {
     const t = texts[i]!;
-    if (promptText(t) !== null) {
+    const background = composerBackground(lines[i]!);
+    const canonicalPrompt =
+      background === null ? t : withoutParticles(lines[i]!, background).text;
+    if (promptText(canonicalPrompt) !== null) {
       const box: ComposerBox = { chromeStartRow: i, promptRow: i, statusRow };
-      const animatedEmpty = isEmptyAnimatedComposer(lines, box);
-      // A particle-only row is a continuation only after the bold/dim placeholder and shared
-      // surface prove this is the empty animation. A normal draft followed by styled Braille stays
-      // fail-closed rather than having those glyphs silently folded into verification.
-      if (sawParticleRow && !animatedEmpty) return null;
+      const animation = animatedComposer(lines, box);
+      // A column-zero particle row is admitted only after the bold prompt, shared background and
+      // particle-free continuation grammar prove it belongs to this composer.
+      if (sawParticleRow && animation === null) return null;
       let chromeStartRow = i;
-      const background = animatedEmpty ? emptyPlaceholderBackground(lines[i]!) : null;
-      const above = i > 0 && background !== null ? particleSurface(lines[i - 1]!, background) : null;
+      const above =
+        i > 0 && animation !== null
+          ? particleSurface(lines[i - 1]!, animation.background)
+          : null;
       if (above?.sawParticle === true) chromeStartRow = i - 1;
       return { chromeStartRow, promptRow: i, statusRow };
     }
     if (isBlank(t)) continue;
-    // Ambient particles can start at column zero; their paint, not indentation, identifies them.
-    if (particleSurface(lines[i]!)?.sawParticle === true) {
+    // A star can replace either gutter cell, so a real continuation may temporarily start with a
+    // Braille glyph. Admit it provisionally; the prompt-level check above later requires one shared
+    // composer background and valid grammar after every star is restored to a space.
+    const candidateBackground = particleBackground(lines[i]!);
+    const candidateText =
+      candidateBackground === null
+        ? null
+        : withoutParticles(lines[i]!, candidateBackground).text;
+    if (candidateText !== null && (isBlank(candidateText) || CONTINUATION.test(candidateText))) {
       sawParticleRow = true;
       continue;
     }
@@ -265,18 +333,17 @@ export function extractStatusLines(lines: StyledLine[]): StyledLine[] {
 export function extractInputDraft(lines: StyledLine[]): string | null {
   const box = locateComposer(lines);
   if (box === null) return null;
-  const texts = lines.map((l) => rstrip(lineText(l)));
-  const first = promptText(texts[box.promptRow]!) ?? "";
+  const animation = animatedComposer(lines, box);
+  const texts = animation?.texts ?? lines
+    .slice(box.promptRow, box.statusRow)
+    .map((line) => rstrip(lineText(line)));
+  const first = promptText(texts[0]!) ?? "";
   const parts = [first.trim()];
-  for (let i = box.promptRow + 1; i < box.statusRow; i++) {
+  for (let i = 1; i < texts.length; i++) {
     parts.push(texts[i]!.trim());
   }
   const draft = parts.filter((p) => p !== "").join(" ");
-  if (
-    draft === "" ||
-    (draft === PLACEHOLDER && isDimPlaceholder(lines[box.promptRow]!)) ||
-    isEmptyAnimatedComposer(lines, box)
-  ) {
+  if (draft === "" || (draft === PLACEHOLDER && isDimPlaceholder(lines[box.promptRow]!, texts[0]))) {
     return null;
   }
   return draft;
@@ -287,12 +354,40 @@ export function composerReady(lines: StyledLine[]): boolean {
   return locateComposer(lines) !== null;
 }
 
-/** The literal on-screen prompt/draft run a destructive write is bound to. Ending at the last draft
- * continuation keeps a wrapped message inside the bridge's bounded tail window; naming only the
- * first `›` row would permanently 409 once six or more non-blank wrap rows sat beneath it. */
+export interface AnimatedComposerRegion {
+  /** Particle-free prompt/draft run, with star cells restored to their original spaces. */
+  prompt: string;
+  /** Original pane row containing the final canonical prompt/draft text. */
+  endRow: number;
+}
+
+/** Canonical prompt plus its physical end row, only for a style-verified animated composer. */
+export function animatedComposerRegion(lines: StyledLine[]): AnimatedComposerRegion | null {
+  const box = locateComposer(lines);
+  if (box === null) return null;
+  const animation = animatedComposer(lines, box);
+  if (animation === null) return null;
+  let end = animation.texts.length;
+  while (end > 1 && isBlank(animation.texts[end - 1]!)) end--;
+  return {
+    prompt: animation.texts.slice(0, end).join("\n"),
+    endRow: box.promptRow + end - 1,
+  };
+}
+
+/** Canonical prompt only for a style-verified animated composer. */
+export function animatedComposerPrompt(lines: StyledLine[]): string | null {
+  return animatedComposerRegion(lines)?.prompt ?? null;
+}
+
+/** The prompt/draft run a destructive write is bound to. Animated star cells are restored to the
+ * spaces they replaced so renderer frames cannot stale the binding; every other screen stays
+ * literal. Ending at the final real draft row keeps wrapped messages inside the bounded tail. */
 export function composerPrompt(lines: StyledLine[]): string | null {
   const box = locateComposer(lines);
   if (box === null) return null;
+  const canonical = animatedComposerPrompt(lines);
+  if (canonical !== null) return canonical;
   let end = box.statusRow;
   while (end > box.promptRow + 1 && isBlank(lineText(lines[end - 1]!))) end--;
   return lines

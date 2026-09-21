@@ -50,6 +50,48 @@ describe("normalizePromptRegion", () => {
 });
 
 describe("verifyExpectedPrompt", () => {
+  const reset = "\x1b[0m";
+  const background = "\x1b[48;2;65;69;76m";
+  const particle = (dot = "⠁") => `${reset}\x1b[38;2;130;133;137m${background}${dot}${reset}${background}`;
+  const animatedDraft = (draft = "hello world", dot = "⠁") => [
+    "Transcript above",
+    `${background}${particle(dot)}${reset}`,
+    `${reset}\x1b[1m${background}›${reset}${background} ${draft.replaceAll(" ", particle(dot))}${reset}`,
+    `${background}${particle(dot)}${reset}`,
+    "  model · project · Context 50% left",
+  ].join("\n");
+
+  test("binds an animated Codex draft across sparkle frames while preserving word spaces", () => {
+    for (const dot of ["⠁", "⠄", "⡀"]) {
+      expect(verifyExpectedPrompt(animatedDraft("hello world", dot), "› hello world")).toEqual({ ok: true });
+    }
+  });
+
+  test("finds the live animated draft even when identical text appears in older transcript", () => {
+    const older = ["› hello world", ...Array(10).fill("old transcript")].join("\n");
+    expect(verifyExpectedPrompt(`${older}\n${animatedDraft()}`, "› hello world")).toEqual({ ok: true });
+  });
+
+  test("refuses a changed draft, a dialog, or a genuine typed Braille character", () => {
+    expect(verifyExpectedPrompt(animatedDraft("hello changed"), "› hello world").ok).toBe(false);
+    expect(verifyExpectedPrompt(`${animatedDraft()}\nChoose an option\nEscape to cancel`, "› hello world").ok).toBe(false);
+    expect(verifyExpectedPrompt(animatedDraft("hello⠁world"), "› hello world").ok).toBe(false);
+  });
+
+  test("keeps the tail bound for canonical animated matches", () => {
+    expect(verifyExpectedPrompt(animatedDraft(), "› hello world", 0)).toEqual({ ok: false, reason: "not_in_tail" });
+    expect(verifyExpectedPrompt(animatedDraft(), "› hello world", 2)).toEqual({ ok: false, reason: "not_in_tail" });
+    expect(verifyExpectedPrompt(animatedDraft(), "› hello world", 3)).toEqual({ ok: true });
+  });
+
+  test("accepts a wrapped animated draft longer than the tail window when its end remains in the tail", () => {
+    const rows = Array.from({ length: 8 }, (_, index) => `line ${index}`);
+    const painted = `${reset}\x1b[1m${background}›${reset}${background} ` +
+      rows.map((row) => row.replaceAll(" ", particle())).join(`\n${reset}${background}  `) + reset;
+    const fresh = `${painted}\n${background}${particle()}${reset}\n  model · project · Context 50% left`;
+    expect(verifyExpectedPrompt(fresh, `› ${rows.join("\n  ")}`)).toEqual({ ok: true });
+  });
+
   test("accepts an exact contiguous match", () => {
     expect(verifyExpectedPrompt("older output\nApprove?\n1. Yes\n2. No", "Approve?\n1. Yes\n2. No")).toEqual({
       ok: true,
