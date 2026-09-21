@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.41.2] - 2026-09-21
+
+### Fixed
+
+- Verify typed Codex messages while Astra sparkle remains active, restoring decorative cells to spaces (`70c92b0`).
+- Bind terminal draft replacement to the same text across animation frames, retaining dialog and tail guards (`70c92b0`).
+
 ## [0.41.1] - 2026-09-21
 
 ### Fixed
