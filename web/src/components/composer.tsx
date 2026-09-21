@@ -229,7 +229,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     if (!working) setInterrupting(false);
   }, [working]);
-  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string } | null>(null);
+  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; typeAttempted: boolean } | null>(null);
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | null>(null);
   const [uploading, setUploading] = useState(false);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
@@ -354,9 +354,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // alike (during the echo both carry our text). Recomputed each render (each poll re-renders), so it
   // lapses on its own once the grace expires or the echo resolves; a genuinely stranded draft (never
   // matches a recent send) is untouched.
-  const suppressEcho = (draft: string | null): string | null => {
-    const pending = pendingDeliveryRef.current;
-    if (draft !== null && pending !== null && pending.paneId === paneId && isSelfEcho(draft, pending.text, adapter?.draftCarriesSend)) return null;
+  const suppressEcho = (draft: string | null, pending = pendingDeliveryRef.current): string | null => {
+    if (draft !== null && pending?.typeAttempted && pending.paneId === paneId && isSelfEcho(draft, pending.text, adapter?.draftCarriesSend)) return null;
     if (
       draft !== null &&
       lastSentRef.current !== null &&
@@ -367,8 +366,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     }
     return draft;
   };
-  // effectiveStable gates the preview's APPEARANCE (stabilised value); effectiveRaw is the live line
-  // its text tracks and that the send()-time pre-clear sweeps.
+  // effectiveStable gates the preview's appearance; effectiveRaw tracks its displayed text.
+  // Sending gets a separate live draft from the guard, since display polls can be stale.
   const effectiveStable = suppressEcho(terminalDraft);
   const effectiveRaw = suppressEcho(rawTerminalDraft);
   // One provider-scoped catalogue feeds both inline completion and the command palette.
@@ -513,7 +512,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const previous = pendingDeliveryRef.current;
     const delivery = previous?.paneId === paneId && previous.text === t
       ? previous
-      : { paneId, text: t, id: crypto.randomUUID() };
+      : { paneId, text: t, id: crypto.randomUUID(), typeAttempted: false };
     pendingDeliveryRef.current = delivery;
     if (!action) setDeliveryPhase("queued");
     try {
@@ -528,11 +527,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         session,
         force,
         requestId: delivery.id,
+        onTypeAttempt: () => { delivery.typeAttempted = true; },
         onAck: (ack) => { if (!action) setDeliveryPhase(ack === "typed" ? "typed" : null); },
         // Clear a stranded draft on the terminal's "❯" line before pane.send_text appends at cursor —
         // ctrl+k kills cursor→end, Backspace sweep kills the head (preview-action.ts pattern). Skip
-        // when there's no draft: a blind sweep races the TUI and Enter can fire before the PTY
-        // settles. Keys on effectiveRaw (the actual current line, echo-suppressed), so our own
+        // when there's no live draft: a blind sweep races the TUI and Enter can fire before the PTY
+        // settles. Uses the pre-flight's current draft, echo-suppressed, so our own
         // in-flight echo never triggers a (destructive) clear of a message that's already on its way,
         // and a live host draft is swept exactly once whether or not the user took it over first.
         //
@@ -548,8 +548,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // owns the keyboard. A forced send therefore types without sweeping and stalls if the line
         // really did hold a draft — which is what it did anyway, since the same detector that could
         // not see the box cannot read our text back out of it either.
-        onComposerSeen: async ({ promptRegion }) => {
-          if (effectiveRaw === null) return { ok: true as const, keysSent: false };
+        onComposerSeen: async ({ promptRegion, draft }) => {
+          // Display polls can lag or be frozen. Clear only a draft from the guard's live read.
+          // Suppress a previous delivery's echo, never the new delivery just allocated above:
+          // a first Send after Take over must still replace its matching terminal draft.
+          const liveDraft = suppressEcho(draft, previous);
+          if (liveDraft === null) return { ok: true as const, keysSent: false };
           // The props that lock this composer are a SNAPSHOT too, and `send()` read them before the
           // pre-flight's round-trip. A pane that died or a device that lost write access inside that
           // window leaves the composer rendered locked while this burst is still queued behind an
@@ -558,11 +562,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           if (lockedRef.current) {
             return { ok: false as const, error: "Pane is no longer writable — nothing was sent" };
           }
-          // Overshoot well past the snapshotted length: the count comes from the LAST-POLLED line, so
-          // anything the host typed inside the poll gap (~1.5s) isn't counted. Extra Backspace on an
-          // already-empty input is a no-op, so a generous margin costs nothing and shrinks the window
-          // where a mid-gap host burst leaves a remnant that corrupts the send.
-          const clearCount = [...effectiveRaw].length + 32;
+          // Size the sweep from the same live draft the prompt binding protects. Extra Backspace
+          // on an empty input is a no-op; retain the existing margin for renderer wrap differences.
+          const clearCount = [...liveDraft].length + 32;
           // BOUND to the prompt row the pre-flight's read actually saw. Ordering is not a freshness
           // bound: the read's answer describes the pane at the moment the BRIDGE snapshotted it, and
           // these keys go out when the answer arrives — a whole network round-trip later, capped only
@@ -1065,6 +1067,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               direct.active
                 ? direct.onKeyDown
                 : (e) => {
+                    // The IME owns Enter while committing a word. Safari can expose only 229
+                    // on the final event, with isComposing already false.
+                    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                     if (skills.onKeyDown(e)) return;
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();

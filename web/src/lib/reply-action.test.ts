@@ -699,6 +699,30 @@ describe("onComposerSeen — destructive pre-type work needs positive evidence",
 // bind the write to the region it was authorised against and let the bridge re-read and 409. So the
 // pre-flight hands its evidence forward, not just its permission.
 describe("the pre-type work is handed the region its keys must be bound to", () => {
+  it("marks a type attempt only after the preflight and preparation permit it", async () => {
+    let screen = paneWithDialog;
+    harness(() => screen);
+    const onTypeAttempt = vi.fn();
+    const args = { paneId: "w1:p1", text: "my reply", agent: "claude", onTypeAttempt, ...instant };
+    expect((await sendGuardedReply(args)).status).toBe("blocked");
+    expect(onTypeAttempt).not.toHaveBeenCalled();
+    screen = paneWithDraft("");
+    await sendGuardedReply({ ...args, onComposerSeen: async () => ({ ok: false, error: "refused" }) });
+    expect(onTypeAttempt).not.toHaveBeenCalled();
+    screen = paneWithDraft("my reply");
+    expect((await sendGuardedReply(args)).status).toBe("sent");
+    expect(onTypeAttempt).toHaveBeenCalledOnce();
+  });
+
+  it.each(["current host draft", ""])("passes the live draft alongside its prompt (%j)", async (draft) => {
+    harness(() => paneWithDraft(draft));
+    const onComposerSeen = vi.fn(async () => ({ ok: true as const, keysSent: false }));
+    await sendGuardedReply({
+      paneId: "w1:p1", text: "new message", agent: "claude", onComposerSeen, ...instant,
+    });
+    expect(onComposerSeen).toHaveBeenCalledExactlyOnceWith({ promptRegion: null, draft: draft || null });
+  });
+
   const ompPane = (draft: string, below: string[] = []): string => {
     const width = 120;
     const fill = (open: string, body: string, close: string, filler: string): string =>

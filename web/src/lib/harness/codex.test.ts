@@ -14,6 +14,7 @@ import { detectTrustRegion } from "./codex/trust";
 import { describeAdapterConformance } from "./conformance";
 
 const PANES_DIR = join(import.meta.dirname, "..", "..", "fixtures", "panes");
+const CODEX_FIXTURES_DIR = join(import.meta.dirname, "codex", "fixtures");
 
 const allCodexFixtures = readdirSync(PANES_DIR)
   .filter((f) => f.startsWith("codex--") && f.endsWith(".txt"))
@@ -97,6 +98,67 @@ describe("composerReady — the gate the reply path pre-flights on", () => {
 });
 
 describe("chrome", () => {
+  it("treats the captured ambient particles as empty composer chrome", () => {
+    // Reduced from the live 0.153.1 capture: a particle begins at column zero above the prompt,
+    // more particles trail the dim placeholder and fill the row below it, all on the same surface.
+    const lines = splitLines(
+      parseAnsi(readFileSync(join(CODEX_FIXTURES_DIR, "empty-composer-particles.txt"), "utf8")),
+    );
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+    expect(lineText(codexAdapter.extractStatusLines(lines)[0]!)).toContain(
+      "/tmp/nenu-codex-sandbox",
+    );
+
+    const mirror = stripChrome(lines).map(lineText).join("\n");
+    expect(mirror).toContain("Sanitized transcript output");
+    expect(mirror).not.toContain(PLACEHOLDER);
+    expect(mirror).not.toMatch(/[\u2801\u2802\u2804\u2808\u2810\u2820\u2840\u2880]/);
+  });
+
+  it("retains a dim placeholder from renderers without a painted composer background", () => {
+    const lines = splitLines(
+      parseAnsi(
+        [
+          `\u001b[1m›\u001b[0m \u001b[2m${PLACEHOLDER}\u001b[0m`,
+          "",
+          "  model x · /some/dir · Context 50% left",
+        ].join("\n"),
+      ),
+    );
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+  });
+
+  it("recognizes an empty animated frame when a lower particle moves to column zero", () => {
+    const capture = readFileSync(join(CODEX_FIXTURES_DIR, "empty-composer-particles.txt"), "utf8");
+    const rows = capture.split("\n");
+    rows[4] = "\u001b[38;2;101;105;110m\u001b[48;2;65;69;76m⠁\u001b[0m";
+    const lines = splitLines(parseAnsi(rows.join("\n")));
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+  });
+
+  it("keeps genuine Braille typed into the draft", () => {
+    const lines = splitLines(
+      parseAnsi(["› ⠁⠂⠄", "", "  model x · /some/dir · Context 50% left"].join("\n")),
+    );
+    expect(codexAdapter.extractInputDraft(lines)).toBe("⠁⠂⠄");
+  });
+
+  it("does not admit a particle-painted row beneath an ordinary draft", () => {
+    const lines = splitLines(
+      parseAnsi(
+        [
+          "› keep this draft",
+          "\u001b[38;2;101;105;110m\u001b[48;2;65;69;76m⠁\u001b[0m",
+          "  model x · /some/dir · Context 50% left",
+        ].join("\n"),
+      ),
+    );
+    expect(codexAdapter.composerReady!(lines)).toBe(false);
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+  });
+
   it("strips the prompt row and status row; the transcript stays", () => {
     const lines = fixtureLines("codex--fresh-idle.txt");
     const stripped = stripChrome(lines);

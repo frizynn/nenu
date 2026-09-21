@@ -232,11 +232,15 @@ export interface GuardedReplyArgs {
   onComposerSeen?: (seen: ComposerSeen) => Promise<ComposerPrepResult>;
   /** Stable across retries. The bridge deduplicates type and submit as separate phases. */
   requestId?: string;
+  /** A type request is about to leave, including attempts whose response may be lost. */
+  onTypeAttempt?: () => void;
   onAck?: (ack: "typed" | "submitted") => void;
 }
 
 /** What the pre-flight's live read saw, handed to the caller's pre-type work. */
 export interface ComposerSeen {
+  /** Draft extracted from the same live read, never the caller's older display snapshot. */
+  draft: string | null;
   /**
    * The composer's own prompt/draft tail, verbatim on screen, for binding a destructive write to it
    * (`api.sendKeys(..., expectedPrompt)`). `null` when the adapter has no `composerPrompt` — then the
@@ -280,6 +284,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
 
   let typed;
   try {
+    args.onTypeAttempt?.();
     typed = await sendReply(args.paneId, args.text, false, args.session, undefined, args.requestId ? `${args.requestId}:type` : undefined);
   } catch (e) {
     return { status: "error", error: message(e) };
@@ -423,6 +428,7 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promi
   // answered about, so the caller cannot bind its keys to anything but the screen that authorised
   // them — and cannot forget to, since it arrives as the argument.
   const promptRegion = adapter.composerPrompt?.(seen) ?? null;
+  const draft = adapter.extractInputDraft(seen);
 
   return {
     refuse: null,
@@ -430,7 +436,7 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promi
       if (!args.onComposerSeen) return null;
       let prep;
       try {
-        prep = await args.onComposerSeen({ promptRegion });
+        prep = await args.onComposerSeen({ promptRegion, draft });
       } catch (e) {
         return { status: "error", error: message(e) };
       }

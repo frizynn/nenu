@@ -19,6 +19,8 @@ import {
 } from "./markers";
 
 export interface ComposerBox {
+  /** First renderer-owned row; particles may paint one row above the prompt. */
+  chromeStartRow: number;
   /** The `› ` prompt row. */
   promptRow: number;
   /** The status or exact-command autocomplete row at the tail. */
@@ -47,6 +49,39 @@ const MAX_DRAFT_ROWS = 100;
 const CONTINUATION = /^ {2}\s*\S/;
 const PROMPT_PREFIX = "› ";
 
+// The captured renderer paints an ambient animation through the three-row composer surface. Each
+// particle is one dot from a Braille cell, in a true-colour foreground over the composer's exact
+// background. This is deliberately narrower than “Braille”: an operator may type any of these
+// characters, and ordinary draft text does not receive the particle renderer's per-glyph RGB.
+const PARTICLE = /^[\u2801\u2802\u2804\u2808\u2810\u2820\u2840\u2880]+$/;
+const TRUE_COLOUR = /^rgb\(\d+,\d+,\d+\)$/;
+
+interface ParticleSurface {
+  background: string;
+  sawParticle: boolean;
+}
+
+/** A row painted only by the ambient composer surface (padding plus RGB Braille particles). */
+function particleSurface(line: StyledLine, expectedBackground?: string): ParticleSurface | null {
+  let background = expectedBackground;
+  let sawParticle = false;
+  for (const segment of line.segments) {
+    if (segment.text.length === 0) continue;
+    if (segment.bg === undefined || (background !== undefined && segment.bg !== background)) return null;
+    background ??= segment.bg;
+    if (segment.text.trim() === "") {
+      if (segment.fg !== undefined || segment.bold === true || segment.dim === true) return null;
+      continue;
+    }
+    if (!PARTICLE.test(segment.text) || segment.fg === undefined || !TRUE_COLOUR.test(segment.fg)) {
+      return null;
+    }
+    if (segment.bold === true || segment.dim === true) return null;
+    sawParticle = true;
+  }
+  return background === undefined ? null : { background, sawParticle };
+}
+
 // Codex 0.153.4 replaces its statusline with this ONE suggestion after a complete slash command.
 // Enter executes that exact command. Partial/multiple suggestions and skill insertion pickers do
 // not establish that meaning, so they stay refused. See SLASH_NOTES.md and the captured fixtures.
@@ -66,7 +101,9 @@ function locateQueuedComposer(lines: StyledLine[], texts: string[], tail: number
     const t = texts[i]!;
     if (promptText(t) !== null) {
       const marker = lines[i]!.segments.find((segment) => segment.text.length > 0);
-      return marker?.text.startsWith("›") && marker.bold === true ? { promptRow: i, statusRow: footer } : null;
+      return marker?.text.startsWith("›") && marker.bold === true
+        ? { chromeStartRow: i, promptRow: i, statusRow: footer }
+        : null;
     }
     if (isBlank(t)) continue;
     if (!CONTINUATION.test(t)) return null;
@@ -84,16 +121,53 @@ function locateCommandAutocomplete(lines: StyledLine[], texts: string[], tail: n
   // The live composer marker is bold. A plain-text transcript lookalike must not claim a composer.
   const marker = lines[promptRow]!.segments.find((segment) => segment.text.length > 0);
   if (!marker?.text.startsWith("›") || marker.bold !== true) return null;
-  return { promptRow, statusRow: tail, autocomplete: true };
+  return { chromeStartRow: promptRow, promptRow, statusRow: tail, autocomplete: true };
 }
 
 /** The exact placeholder text is still a valid thing an operator might deliberately type. Codex
  * distinguishes its empty hint by painting the whole body dim, so extraction should use that
  * renderer evidence too instead of discarding an ordinary non-dim draft with those words. */
-function isEmptyPlaceholder(line: StyledLine): boolean {
+function emptyPlaceholderBackground(line: StyledLine): string | null {
+  const text = rstrip(lineText(line));
+  if (!text.startsWith(`${PROMPT_PREFIX}${PLACEHOLDER}`)) return null;
+
+  const marker = line.segments.find((segment) => segment.text.includes("›"));
+  if (marker?.bold !== true || marker.bg === undefined) return null;
+
+  const bodyStart = PROMPT_PREFIX.length;
+  const bodyEnd = bodyStart + PLACEHOLDER.length;
+  let offset = 0;
+  let sawBody = false;
+  const background = marker.bg;
+  for (const segment of line.segments) {
+    const next = offset + segment.text.length;
+    if (Math.max(offset, bodyStart) < Math.min(next, bodyEnd)) {
+      sawBody = true;
+      if (segment.dim !== true || segment.bg === undefined) return null;
+      if (segment.bg !== background) return null;
+    }
+    offset = next;
+    if (offset >= bodyEnd) break;
+  }
+  if (!sawBody) return null;
+
+  // The suffix is padding plus particles on the same surface. Slice at the exact text offset so a
+  // future renderer may coalesce adjacent runs without weakening the style check.
+  offset = 0;
+  const suffixSegments = line.segments.flatMap((segment) => {
+    const next = offset + segment.text.length;
+    const from = Math.max(0, bodyEnd - offset);
+    offset = next;
+    if (from >= segment.text.length) return [];
+    return [{ ...segment, text: segment.text.slice(from) }];
+  });
+  const suffix = particleSurface({ segments: suffixSegments }, background);
+  return suffix === null ? null : background;
+}
+
+function isDimPlaceholder(line: StyledLine): boolean {
   const text = rstrip(lineText(line));
   if (promptText(text) !== PLACEHOLDER) return false;
-
   const bodyStart = PROMPT_PREFIX.length;
   const bodyEnd = bodyStart + PLACEHOLDER.length;
   let offset = 0;
@@ -108,6 +182,16 @@ function isEmptyPlaceholder(line: StyledLine): boolean {
     if (offset >= bodyEnd) break;
   }
   return sawBody;
+}
+
+function isEmptyAnimatedComposer(lines: StyledLine[], box: ComposerBox): boolean {
+  const background = emptyPlaceholderBackground(lines[box.promptRow]!);
+  if (background === null) return false;
+  for (let i = box.promptRow + 1; i < box.statusRow; i++) {
+    if (isBlank(lineText(lines[i]!))) continue;
+    if (particleSurface(lines[i]!, background) === null) return false;
+  }
+  return true;
 }
 
 /** The composer at the buffer tail, or null (a dialog owns the screen, or the frame is torn). */
@@ -125,10 +209,28 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   // owned continuation, which keeps the status anchor fail-closed.
   const top = skipBlanksUp(texts, statusRow - 1);
   if (top < 0) return null;
+  let sawParticleRow = false;
   for (let i = top; i >= 0 && top - i < MAX_DRAFT_ROWS; i--) {
     const t = texts[i]!;
-    if (promptText(t) !== null) return { promptRow: i, statusRow };
+    if (promptText(t) !== null) {
+      const box: ComposerBox = { chromeStartRow: i, promptRow: i, statusRow };
+      const animatedEmpty = isEmptyAnimatedComposer(lines, box);
+      // A particle-only row is a continuation only after the bold/dim placeholder and shared
+      // surface prove this is the empty animation. A normal draft followed by styled Braille stays
+      // fail-closed rather than having those glyphs silently folded into verification.
+      if (sawParticleRow && !animatedEmpty) return null;
+      let chromeStartRow = i;
+      const background = animatedEmpty ? emptyPlaceholderBackground(lines[i]!) : null;
+      const above = i > 0 && background !== null ? particleSurface(lines[i - 1]!, background) : null;
+      if (above?.sawParticle === true) chromeStartRow = i - 1;
+      return { chromeStartRow, promptRow: i, statusRow };
+    }
     if (isBlank(t)) continue;
+    // Ambient particles can start at column zero; their paint, not indentation, identifies them.
+    if (particleSurface(lines[i]!)?.sawParticle === true) {
+      sawParticleRow = true;
+      continue;
+    }
     // A foreign-shaped or nested status row means this status row is not under a composer.
     if (!CONTINUATION.test(t) || isStatusRow(t, lines[i])) return null;
   }
@@ -142,7 +244,7 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
 export function stripChrome(lines: StyledLine[]): StyledLine[] {
   const box = locateComposer(lines);
   if (box === null) return lines;
-  return lines.slice(0, box.promptRow);
+  return lines.slice(0, box.chromeStartRow);
 }
 
 /** The status row, styled, for the strip above the phone composer. Empty when no composer. */
@@ -170,7 +272,11 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
     parts.push(texts[i]!.trim());
   }
   const draft = parts.filter((p) => p !== "").join(" ");
-  if (draft === "" || (draft === PLACEHOLDER && isEmptyPlaceholder(lines[box.promptRow]!))) {
+  if (
+    draft === "" ||
+    (draft === PLACEHOLDER && isDimPlaceholder(lines[box.promptRow]!)) ||
+    isEmptyAnimatedComposer(lines, box)
+  ) {
     return null;
   }
   return draft;
