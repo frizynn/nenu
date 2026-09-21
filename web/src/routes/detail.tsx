@@ -4,7 +4,7 @@ import { useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData 
 import { AgentChat } from "@/components/agent-chat";
 import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
-import { homePath, panePath } from "@/lib/nav";
+import { homePath, panePath, projectPath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 import type { AgentView } from "@/lib/types";
 
@@ -46,6 +46,9 @@ export function DetailRoute() {
     root.shellPanes.find((p) => p.paneId === paneId) ??
     (fresh && fresh.paneId === paneId && !seen ? fresh : undefined);
   const tabLabel = root.tabs.find((t) => t.tabId === agent?.tabId)?.label;
+  const project = root.projects?.find((candidate) =>
+    candidate.coordinator?.paneId === paneId || candidate.threads.some((thread) => thread.paneId === paneId)
+  );
   const gone = !agent;
 
   // Recover from a closed pane: once a healthy snapshot no longer has it, bounce Home instead of
@@ -64,6 +67,7 @@ export function DetailRoute() {
       paneId={paneId}
       session={session}
       agent={agent}
+      project={project ? { slug: project.slug, name: project.name } : undefined}
       agents={root.agents}
       shellPanes={root.shellPanes}
       tabs={root.tabs}
@@ -75,7 +79,7 @@ export function DetailRoute() {
       bridge={root.bridge}
       error={root.error}
       stalled={stalled}
-      onBack={() => navigate(homePath(session))}
+      onBack={() => navigate(project ? projectPath(project.slug, session) : homePath(session))}
       onSelect={(id) => navigate(panePath(id, session))}
     />
   );

@@ -31,8 +31,8 @@ async function setup(value = data) {
 it("organizes work by project instead of duplicating a flat thread list", async () => {
   const { user, router } = await setup();
   expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
-  expect(screen.getByText("Overview")).toBeInTheDocument();
-  expect(screen.getByText("1 project")).toBeInTheDocument();
+  expect(screen.getByText("Home")).toBeInTheDocument();
+  expect(screen.getByText("0 projects")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Open workspace Nenu" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Collapse tab Other panes" })).toBeInTheDocument();

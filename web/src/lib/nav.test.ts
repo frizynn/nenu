@@ -1,4 +1,10 @@
-import { homePath, panePath } from "./nav";
+import { homePath, panePath, projectPath } from "./nav";
+
+describe("projectPath", () => {
+  test("encodes the slug and keeps session scope", () => {
+    expect(projectPath("my project", "team a")).toBe("/project/my%20project?s=team%20a");
+  });
+});
 
 describe("panePath", () => {
   it("URL-encodes the colon in a pane id", () => {

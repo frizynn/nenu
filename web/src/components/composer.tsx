@@ -47,6 +47,8 @@ interface ComposerProps {
   agent: string | undefined | null;
   /** True for a bare shell pane (tweaks the placeholder copy). */
   isShell: boolean;
+  /** Codex is generating; the primary action becomes an explicit interrupt control. */
+  working?: boolean;
   /** Pane is gone (no agent) — locks the composer with a distinct placeholder. */
   gone: boolean;
   /** This device isn't authorised to type — locks the composer with a distinct placeholder. */
@@ -150,7 +152,7 @@ function ComposerDock({
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, gone, readOnly, disconnected = false, onDraftStateChange, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
+  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, onDraftStateChange, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -223,6 +225,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     noticeNoEcho(null); // it described the pane we just left
   }, [session, paneId]);
   const [sending, setSending] = useState(false);
+  const [interrupting, setInterrupting] = useState(false);
+  useEffect(() => {
+    if (!working) setInterrupting(false);
+  }, [working]);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string } | null>(null);
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -692,6 +698,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     sendConfirm.reset();
     send(input, true);
   }
+
+  async function interruptGeneration() {
+    if (locked || interrupting || agent !== "codex") return;
+    setInterrupting(true);
+    try {
+      const result = await api.interruptPane(paneId, session);
+      if (!result.ok) {
+        setInterrupting(false);
+        setStatus(result.error, "error");
+        return;
+      }
+      setStatus("Stopping Codex…", "info");
+      revalidator.revalidate();
+    } catch (error) {
+      setInterrupting(false);
+      setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";
 
@@ -1111,7 +1135,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               title="Display settings" aria-label="Display settings" aria-expanded={drawer === "display"}
               onClick={() => requestDrawer(drawer === "display" ? null : "display")}><Settings2 className="size-4" /></Button>
           </div>}
-          {!direct.active && forcingSend ? (
+          {working && agent === "codex" ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "md:size-8")}
+              onClick={() => { void interruptGeneration(); }}
+              disabled={locked || interrupting}
+              aria-label="Stop generation"
+            >
+              {interrupting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                  <rect x="2" y="2" width="8" height="8" rx="1.5" />
+                </svg>
+              )}
+            </Button>
+          ) : !direct.active && forcingSend ? (
             // The pre-flight refused and the user is being offered the override. Labelled for what it
             // actually does — TYPE the text into whatever is on screen — not "send", because the
             // submit key is still conditional on the verify step behind it.

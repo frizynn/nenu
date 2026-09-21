@@ -12,6 +12,7 @@ import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { BottomSheet } from "@/components/ui/sheet";
 import { AppHeader } from "@/components/app-header";
+import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
 import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,7 @@ import type { PreviewBlockAction } from "@/components/preview-select-block";
 import { type MenuBlockAction } from "@/components/menu-block";
 import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
-import { historyPath, spacePath } from "@/lib/nav";
+import { historyPath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, TabView } from "@/lib/types";
 import type {
@@ -70,6 +71,8 @@ interface AgentChatProps {
   tabs: TabView[];
   /** Label of the pane's tab, shown in the header as "space › tab". */
   tabLabel?: string;
+  /** Owning project, when this pane is one of its coordinator/agent threads. */
+  project?: { slug: string; name: string };
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
   /** The scrollback window `text` was fetched with — tells a grown fetch from a stale in-flight poll. */
@@ -109,6 +112,7 @@ export function AgentChat({
   shellPanes,
   tabs,
   tabLabel,
+  project,
   text,
   requestedLines = 0,
   revision = 0,
@@ -302,8 +306,17 @@ export function AgentChat({
   }, [dialogPresent, text, revision, agent?.hasSession]);
   // Approvals and native pickers own the terminal keyboard. Bring their verified controls into
   // view even while the journal is selected; transcript text never impersonates an approval UI.
+  // Herdr can classify a shell as Codex one poll before the SessionStart hook supplies a journal id
+  // (and sometimes before its status leaves `unknown`). Treat the harness classification itself as
+  // enough to mount the workbench; otherwise a newly launched Codex stays in the raw terminal until
+  // a later navigation remounts this view.
   const conversationCapable = !isShell && Boolean(adapterFor(agent?.agent)) &&
-    Boolean(agent?.hasSession || agent?.status === "idle" || agent?.status === "working");
+    Boolean(
+      agent?.agent === "codex" ||
+      agent?.hasSession ||
+      agent?.status === "idle" ||
+      agent?.status === "working"
+    );
   const showConversation = conversationCapable && !prefs.rawTerminal;
 
   // Both are threaded to the composer: the RAW value (live) plus a stabilised one. extractInputDraft
@@ -654,7 +667,7 @@ export function AgentChat({
   // back up out of the pane, so it slides backward.
   function openSpace(workspaceId: string) {
     closeDrawer();
-    navigate(spacePath(workspaceId, session));
+    navigate(project ? projectPath(project.slug, session) : spacePath(workspaceId, session));
   }
 
   // Tapping the terminal mirror focuses the composer so you can start typing right away. Three bails:
@@ -709,7 +722,7 @@ export function AgentChat({
             />
           ) : undefined
         }
-        // Right cluster, in reading order: Find, History, then the agent status pill. The pill is the
+        // Right cluster, in reading order: Find, Files, History, then the agent status pill. The pill is the
         // rightmost item on every pane screen (it's the thing you glance at), so the buttons sit to
         // its LEFT rather than trailing it. All ride in `rightLead` because AppHeader renders
         // `rightLead` before `rightTrail` — the order here IS the on-screen order.
@@ -738,6 +751,13 @@ export function AgentChat({
                 >
                   <Search className="size-3.5 sm:size-4" />
                 </button>
+              )}
+              {conversationCapable && (
+                <ChatFilesBrowser
+                  paneId={paneId}
+                  session={session}
+                  history={conversation.history}
+                />
               )}
               {agent.hasSession && (
                 <button
@@ -776,7 +796,7 @@ export function AgentChat({
           <button
             type="button"
             onClick={() => openSpace(agent.workspaceId)}
-            aria-label={`Open ${agent.workspaceLabel} overview`}
+            aria-label={`Open ${project?.name ?? agent.workspaceLabel} overview`}
             className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left transition-colors active:bg-muted/60 lg:-mx-1 lg:gap-2.5 lg:px-1 lg:py-0.5"
           >
             {isShell ? (
@@ -793,7 +813,8 @@ export function AgentChat({
                   own /rename session name, otherwise the default space › tab. The cwd subline keeps
                   context either way. */}
               <div className="truncate text-sm font-semibold leading-tight sm:text-base">
-                {agent.paneLabel ??
+                {project?.name ??
+                  agent.paneLabel ??
                   agent.sessionName ??
                   `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
               </div>
@@ -1047,6 +1068,7 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
+            working={agent?.agent === "codex" && agent.status === "working"}
             gone={gone}
             readOnly={readOnly}
             disconnected={connecting}

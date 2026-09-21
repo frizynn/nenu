@@ -29,6 +29,9 @@ Nenu runs on your machine and is normally exposed only inside your
 ## What it provides
 
 - Conversation-first timelines with compact thinking and tool-call groups.
+- Automatic Herdr Projects discovery, with project overviews, coordinators, and thread status.
+- A per-chat files and photos browser for references in the available conversation history.
+- A Stop control for interrupting an active Codex turn without closing its terminal.
 - Local, cached model and reasoning selectors for Codex CLI and Claude Code.
 - Searchable skills and command palettes tailored to each agent.
 - Context-window and reported-usage visibility.

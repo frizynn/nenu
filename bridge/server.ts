@@ -2,6 +2,7 @@ import { historyResponse } from "./history-response.ts";
 import { discoverPaneSkills } from "./skills.ts";
 import { discoverPaneModels } from "./models.ts";
 import { paneFileResponse } from "./pane-files.ts";
+import { chatUploadPreviewResponse, isChatUploadPath } from "./chat-upload-preview.ts";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, normalize, sep } from "node:path";
@@ -27,8 +28,10 @@ import type { UpdateMonitor } from "./update.ts";
 import type { StateEngine } from "./state-engine.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
 import { TranscriptStore } from "./journal/store.ts";
+import { stripAnsi } from "./journal/text.ts";
 import type { JournalAdapter } from "./journal/types.ts";
 import { toPaneWire } from "./types.ts";
+import { ProjectRegistry } from "./projects.ts";
 import type {
   ActionResponse,
   AgentView,
@@ -62,6 +65,7 @@ const PROMPT_BINDING_BLANK_LINE_HEADROOM = 6;
 // The built PWA lives in web/dist (Vite output). If it's missing, the bridge still runs the API
 // — only the static UI 503s with a hint to build.
 const WEB_DIR = join(import.meta.dir, "..", "web", "dist");
+const projects = new ProjectRegistry();
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -111,7 +115,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(reply|keys|upload|close|rename|history|skills|models|file))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(reply|keys|interrupt|upload|close|rename|history|skills|models|file))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -236,6 +240,7 @@ export function startServer(opts: {
             shellPanes: shellPanes.map((p) => toPaneWire(withActivity(p), hasJournal)),
             workspaces,
             tabs,
+            projects: projects.list(rt.name, rt.isPrimary, [...agents, ...shellPanes]),
             sessions: registry.list(),
             notifications: { snoozedUntil: snooze.until() },
             update: updateMonitor.status(),
@@ -308,7 +313,17 @@ export function startServer(opts: {
         if (action === "file" && req.method === "GET") {
           const current = rt.engine.current();
           const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
-          return secure(await paneFileResponse(pane?.cwd, url.searchParams.get("path")));
+          const requestedPath = url.searchParams.get("path");
+          if (isChatUploadPath(cfg.stateDir, requestedPath)) {
+            const adapter = pane && journals ? adapterFor(journals, pane.agent) : undefined;
+            // The store already bounds and contains source reads. Request its whole available
+            // parsed window so an upload in an older turn can be verified without browser claims.
+            const page = cfg.transcript && pane?.agentSession && adapter && transcripts
+              ? await transcripts.page(adapter, pane.agentSession, { limit: Number.MAX_SAFE_INTEGER }).catch(() => null)
+              : null;
+            return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, page?.entries ?? []));
+          }
+          return secure(await paneFileResponse(pane?.cwd, requestedPath));
         }
         if (action === "models" && req.method === "GET") {
           const snapshot = rt.engine.current();
@@ -325,6 +340,7 @@ export function startServer(opts: {
           return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req);
         if (action === "reply" && req.method === "POST") return replyPane(herdr, cfg, paneId, req, audit, device, session);
         if (action === "keys" && req.method === "POST") return keysPane(herdr, cfg, paneId, req, audit, device, session);
+        if (action === "interrupt" && req.method === "POST") return interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session);
         if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit, device, session);
         if (action === "close" && req.method === "POST") return closePane(herdr, paneId, req, audit, device, session);
         if (action === "rename" && req.method === "POST") return renamePane(herdr, paneId, req, audit, device, session);
@@ -682,6 +698,106 @@ export async function sendReplySteps(
       };
     }
     return { ok: false, textDelivered, error: (err as Error).message };
+  }
+}
+
+/**
+ * Codex paints this instruction only while a turn can be interrupted. It also appears in question
+ * dialogs, so the cue alone is insufficient: the handler below additionally requires Herdr's cached
+ * classification to say this exact Codex pane is working, then re-reads the live pane for this
+ * renderer-observed line. Exported to pin the terminal grammar
+ * without standing up Bun.serve in unit tests.
+ */
+export function hasCodexInterruptCue(text: string): boolean {
+  return text.split(/\r\n?|\n/).some((rawLine) => {
+    const plain = stripAnsi(rawLine).trimEnd();
+    if (!/^• Working \([^\r\n)]* • esc to interrupt\)$/i.test(plain)) return false;
+    // The same words can occur in transcript prose. Bind the cue to Codex's renderer paint: bold
+    // bullet, bold `Working`, then a dim parenthesized hint. A copied/plain historical line fails.
+    const painted: Array<{ char: string; bold: boolean; dim: boolean }> = [];
+    let bold = false;
+    let dim = false;
+    let cursor = 0;
+    const sgr = /\x1b\[([0-9;?]*)m/g;
+    for (let match = sgr.exec(rawLine); match !== null; match = sgr.exec(rawLine)) {
+      for (const char of rawLine.slice(cursor, match.index)) painted.push({ char, bold, dim });
+      const codes = match[1]!.split(";").map((value) => Number.parseInt(value.replace("?", ""), 10));
+      for (const code of codes) {
+        if (code === 0 || Number.isNaN(code)) { bold = false; dim = false; }
+        else if (code === 1) bold = true;
+        else if (code === 2) dim = true;
+        else if (code === 22) { bold = false; dim = false; }
+      }
+      cursor = sgr.lastIndex;
+    }
+    for (const char of rawLine.slice(cursor)) painted.push({ char, bold, dim });
+    const visible = painted.map((entry) => entry.char).join("").trimEnd();
+    if (visible !== plain) return false;
+    const hint = plain.indexOf("(");
+    return painted[0]?.bold === true &&
+      painted.slice(2, 9).every((entry) => entry.bold) &&
+      hint >= 0 && painted.slice(hint, plain.length).every((entry) => entry.dim);
+  });
+}
+
+/**
+ * Interrupt one active Codex turn through the transport Nenu actually owns: Herdr's terminal key
+ * API. This is deliberately narrower than a generic key sender. A stale mobile snapshot must not
+ * turn a late Stop tap into Escape at an idle composer or a dialog, so we require both Herdr's
+ * cached Codex/working classification and a just-read, renderer-shaped interrupt cue before
+ * sending. The live pane read is the decisive stale-tap check; the cached classification narrows the
+ * action to the intended harness and state.
+ */
+export async function interruptCodexPane(
+  herdr: HerdrClient,
+  engine: StateEngine,
+  cfg: Config,
+  paneId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+  session: string,
+): Promise<Response> {
+  const ae = req.headers.get("accept-encoding");
+  const pane = engine.current().agents.find((candidate) => candidate.paneId === paneId);
+  if (!pane || pane.agent !== "codex" || pane.status !== "working") {
+    return json({ ok: false, error: "Codex is no longer generating" } satisfies ActionResponse, ae);
+  }
+
+  let live: PaneRead;
+  try {
+    live = await herdr.readPane(
+      paneId,
+      "recent",
+      Math.min(MAX_READ_LINES, Math.max(cfg.readLines, 120)),
+      "ansi",
+    );
+  } catch (err) {
+    return json({ ok: false, error: `herdr read failed: ${(err as Error).message}` } satisfies ActionResponse, ae);
+  }
+  if (!hasCodexInterruptCue(live.text)) {
+    return json({ ok: false, error: "Codex is no longer showing an interruptible turn" } satisfies ActionResponse, ae);
+  }
+
+  try {
+    await herdr.sendPaneKeys(paneId, ["Escape"]);
+    audit.record({
+      action: "agent.interrupt",
+      paneId,
+      session,
+      device,
+      detail: { keys: ["Escape"], sent: true },
+    });
+    return json({ ok: true } satisfies ActionResponse, ae);
+  } catch (err) {
+    audit.record({
+      action: "agent.interrupt",
+      paneId,
+      session,
+      device,
+      detail: { keys: ["Escape"], sent: false },
+    });
+    return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
   }
 }
 

@@ -147,6 +147,27 @@ export interface SessionSummary {
   blocked: number;
 }
 
+export interface ProjectThreadView {
+  id: string;
+  title: string;
+  parentId: string;
+  role: "worker" | "coordinator";
+  status: "starting" | "open" | "failed" | "resolved";
+  updated?: string;
+  paneId?: string;
+  agent?: string;
+  liveStatus?: AgentStatus;
+}
+
+export interface ProjectView {
+  slug: string;
+  name: string;
+  goal?: string;
+  status: "active" | "paused";
+  coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
+  threads: ProjectThreadView[];
+}
+
 /**
  * Version / upgrade status for the running Nenu (mirrors UpdateInfo in bridge/types.ts). Optional
  * on the snapshot — an older bridge omits it entirely, which the client treats as "no info" (the
@@ -183,6 +204,7 @@ export interface SnapshotResponse {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
+  projects?: ProjectView[];
   /** Notification quiet-hours: the active snooze deadline (epoch ms) or null. Absent on older bridges. */
   notifications?: { snoozedUntil: number | null };
   /** The bridge's session registry (primary-first). Absent on a single-session / older bridge. */

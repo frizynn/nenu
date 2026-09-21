@@ -425,6 +425,14 @@ export function sendKeys(
   );
 }
 
+/** Interrupt the currently-running Codex turn after the bridge revalidates its live terminal cue. */
+export function interruptPane(paneId: string, session?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(
+    withSession(`/api/pane/${encodeURIComponent(paneId)}/interrupt`, session),
+    { method: "POST", body: "{}" },
+  );
+}
+
 /** Close a pane ("kill the agent"). */
 export function closePane(paneId: string, session?: string): Promise<ActionResponse> {
   return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/close`, session), {

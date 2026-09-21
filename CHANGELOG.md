@@ -8,6 +8,22 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-09-21
+
+### Added
+
+- Discover Herdr Projects in Home and navigation, with coordinator and thread views (`52eafcf`).
+- Browse files and local photos across available chat history, including journal-verified Nenu uploads (`52eafcf`).
+- Interrupt an active Codex turn with a guarded Stop control (`52eafcf`).
+
+### Fixed
+
+- Open the chat view when a new mobile shell becomes Codex, without leaving and reopening the pane (`52eafcf`).
+
+### Known limits
+
+- Uploaded photos retain the existing 48-hour lifetime; deleted files and images without saved local paths are unavailable.
+
 ## [0.40.5] - 2026-09-12
 
 ### Changed

@@ -32,6 +32,7 @@ import type {
   DeviceAuth,
   PaneHistoryResponse,
   PaneReadResponse,
+  ProjectView,
   SessionSummary,
   SnapshotResponse,
   TabView,
@@ -80,6 +81,7 @@ export interface HomeData {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
+  projects?: ProjectView[];
   /** The bridge's session registry (primary-first); empty on a single-session / older bridge. */
   sessions: SessionSummary[];
   /** The session this snapshot was fetched for (undefined = primary) — so children don't re-derive. */
@@ -174,6 +176,7 @@ function toHomeData(
     shellPanes: snap.shellPanes ?? [],
     workspaces: snap.workspaces ?? [],
     tabs: snap.tabs ?? [],
+    projects: snap.projects ?? [],
     sessions: snap.sessions ?? [],
     session,
     snoozedUntil: snap.notifications?.snoozedUntil ?? null,
@@ -211,6 +214,7 @@ function staleHome(session: string | undefined): HomeData {
     shellPanes: [],
     workspaces: [],
     tabs: [],
+    projects: [],
     sessions: [],
     session,
     snoozedUntil: null,

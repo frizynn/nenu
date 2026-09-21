@@ -213,6 +213,83 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     expect(screen.getByRole("button", { name: "Show conversation" })).toBeInTheDocument();
   });
 
+  it("promotes a newly-created shell to the Codex workbench without remounting the pane", async () => {
+    const user = userEvent.setup();
+    const shell = {
+      ...fixtureAgents[1]!,
+      agent: "shell",
+      kind: "shell" as const,
+      status: "unknown" as const,
+      hasSession: false,
+    };
+
+    function ShellToCodex() {
+      const [phase, setPhase] = useState<"shell" | "classified" | "journal">("shell");
+      const current = phase === "shell"
+        ? shell
+        : {
+            ...shell,
+            agent: "codex",
+            kind: "agent" as const,
+            status: phase === "classified" ? "unknown" as const : "idle" as const,
+            hasSession: phase === "journal",
+          };
+      return (
+        <>
+          <button type="button" onClick={() => setPhase("classified")}>Classify Codex</button>
+          <button type="button" onClick={() => setPhase("journal")}>Attach journal</button>
+          <AgentChat
+            paneId={current.paneId}
+            agent={current}
+            agents={current.kind === "agent" ? [current] : []}
+            shellPanes={current.kind === "shell" ? [current] : []}
+            tabs={[]}
+            text={phase === "shell" ? "$ codex" : "Codex is starting"}
+            onBack={vi.fn()}
+            onSelect={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    const router = createMemoryRouter([{ path: "/", element: <ShellToCodex /> }]);
+    render(<RouterProvider router={router} />);
+
+    expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Classify Codex" }));
+    expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
+    expect(screen.getByText(/waiting for the first conversation entry/i)).toBeInTheDocument();
+
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "first message from the phone");
+    expect(box).toHaveValue("first message from the phone");
+
+    await user.click(screen.getByRole("button", { name: "Attach journal" }));
+    expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
+    expect(box).toHaveValue("first message from the phone");
+  });
+
+  it("shows a 44px Stop control while Codex is generating and routes the interrupt to its session", async () => {
+    const user = userEvent.setup();
+    const requests: string[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/interrupt/, ({ request }) => {
+        requests.push(request.url);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const working = { ...fixtureAgents[1]!, status: "working" as const, hasSession: false };
+    renderChat({ agent: working, agents: [working], session: "phone", text: "Codex is working" });
+
+    const stop = screen.getByRole("button", { name: "Stop generation" });
+    expect(stop).toHaveClass("size-11");
+    await user.click(stop);
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(new URL(requests[0]!).searchParams.get("session")).toBe("phone");
+    expect(await screen.findByText("Stopping Codex…")).toBeInTheDocument();
+  });
+
   it("shows the plain mirror (no buttons, menu as raw text) when raw terminal is on", () => {
     enableRawTerminal();
     renderChat({ text: MENU_TEXT });
