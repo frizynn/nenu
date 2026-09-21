@@ -6,7 +6,7 @@ import { parseAnsi } from "../ansi";
 import { splitLines, type StyledLine } from "../blocks";
 import { draftCarriesSend } from "../reply-action";
 import { codexAdapter } from "./codex";
-import { locateComposer, stripChrome } from "./codex/chrome";
+import { animatedComposerRegion, locateComposer, stripChrome } from "./codex/chrome";
 import { isStatusRow, lineText, PLACEHOLDER } from "./codex/markers";
 import { detectApprovalRegion } from "./codex/approval";
 import { detectAskRegion } from "./codex/ask";
@@ -98,8 +98,8 @@ describe("composerReady — the gate the reply path pre-flights on", () => {
 });
 
 describe("chrome", () => {
-  it("treats the captured ambient particles as empty composer chrome", () => {
-    // Reduced from the live 0.153.1 capture: a particle begins at column zero above the prompt,
+  it("treats the captured sparkle cells as empty composer chrome", () => {
+    // Reduced from the live capture: a particle begins at column zero above the prompt,
     // more particles trail the dim placeholder and fill the row below it, all on the same surface.
     const lines = splitLines(
       parseAnsi(readFileSync(join(CODEX_FIXTURES_DIR, "empty-composer-particles.txt"), "utf8")),
@@ -145,18 +145,21 @@ describe("chrome", () => {
     expect(codexAdapter.extractInputDraft(lines)).toBe("⠁⠂⠄");
   });
 
-  it("does not admit a particle-painted row beneath an ordinary draft", () => {
+  it("restores sparkle cells to spaces in a real draft without hiding typed Braille", () => {
+    // Source-grounded composite of the live paint: stars replace original spaces with RGB Braille
+    // cells after the textarea has rendered. One replaces a word-space, another the first gutter
+    // cell; the user's own Braille remains in the default-foreground text segment.
     const lines = splitLines(
-      parseAnsi(
-        [
-          "› keep this draft",
-          "\u001b[38;2;101;105;110m\u001b[48;2;65;69;76m⠁\u001b[0m",
-          "  model x · /some/dir · Context 50% left",
-        ].join("\n"),
-      ),
+      parseAnsi(readFileSync(join(CODEX_FIXTURES_DIR, "typed-composer-particles.txt"), "utf8")),
     );
-    expect(codexAdapter.composerReady!(lines)).toBe(false);
-    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(codexAdapter.extractInputDraft(lines)).toBe("keep going typed ⠁ second line");
+    expect(codexAdapter.composerPrompt!(lines)).toBe("› keep going typed ⠁\n  second line");
+    expect(animatedComposerRegion(lines)).toEqual({
+      prompt: "› keep going typed ⠁\n  second line",
+      endRow: 4,
+    });
+    expect(stripChrome(lines).map(lineText).join("\n")).toContain("Sanitized transcript output");
   });
 
   it("strips the prompt row and status row; the transcript stays", () => {

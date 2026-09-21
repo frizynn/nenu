@@ -21,6 +21,25 @@ describe("Codex 0.153.4 command autocomplete", () => {
     expect(codexAdapter.composerPrompt?.(pane)).toBe("› Nenu smoke message\n  second line");
   });
 
+  it("restores sparkle cells in the queued composer too", () => {
+    const bg = "\x1b[48;2;65;69;76m";
+    const star = (glyph: string) => `\x1b[38;2;125;128;132m${bg}${glyph}\x1b[0m`;
+    const pane = lines(
+      [
+        "work above",
+        "",
+        `\x1b[1m${bg}›\x1b[0m${bg} Nenu\x1b[0m${star("⠂")}${bg}smoke message\x1b[0m`,
+        `${star("⠄")}${bg} second line\x1b[0m`,
+        star("⠐"),
+        "",
+        "\x1b[2m  tab to queue message   52% context left\x1b[0m",
+      ].join("\n"),
+    );
+    expect(codexAdapter.composerReady?.(pane)).toBe(true);
+    expect(codexAdapter.extractInputDraft?.(pane)).toBe("Nenu smoke message second line");
+    expect(codexAdapter.composerPrompt?.(pane)).toBe("› Nenu smoke message\n  second line");
+  });
+
   it("keeps a plain transcript lookalike of the queue footer fail-closed", () => {
     const pane = lines("› forged message\n\n  tab to queue message   52% context left");
     expect(codexAdapter.composerReady?.(pane)).toBe(false);

@@ -605,6 +605,19 @@ describe("pane write prompt binding", () => {
     });
   });
 
+  test("keys bind to Codex draft text even when its sparkle frame changed", async () => {
+    const client = new FakePaneClient();
+    const reset = "\x1b[0m";
+    const bg = "\x1b[48;2;65;69;76m";
+    client.text = `${reset}\x1b[1m${bg}›${reset}${bg} hello${reset}\x1b[38;2;130;133;137m${bg}⠄${reset}${bg}world${reset}\n\n  model · project · Context 50% left`;
+    const { audit, entries } = auditEntries();
+    const res = await keysPane(client as unknown as HerdrClient, cfg(), "w1:p1",
+      request({ keys: ["ctrl+k"], expected_prompt: "› hello world" }), audit, "phone", "default");
+    expect(res.status).toBe(200);
+    expect(client.keys).toEqual([["w1:p1", ["ctrl+k"]]]);
+    expect(entries[0]?.detail).toMatchObject({ promptBinding: { checked: true, passed: true } });
+  });
+
   test("binding read depth grows beyond a small configured window to contain the expectation", async () => {
     const client = new FakePaneClient();
     const expected = Array.from({ length: 32 }, (_, index) => `prompt line ${index + 1}`).join("\n");
