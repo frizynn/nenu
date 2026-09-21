@@ -82,7 +82,7 @@ describe("SpaceOverview — folding", () => {
   it("hides the list when folded, keeping the count on the header", () => {
     render(view({ workspaces: spaces, open: false }));
     expect(screen.queryByText("anchorgenius")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /projects/i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /workspaces/i })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
@@ -101,7 +101,7 @@ describe("SpaceOverview — folding", () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     render(view({ workspaces: spaces, open: true, onOpenChange }));
-    await user.click(screen.getByRole("button", { name: /projects/i }));
+    await user.click(screen.getByRole("button", { name: /workspaces/i }));
     expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
   });
 

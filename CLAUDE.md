@@ -218,6 +218,12 @@ defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and t
 same-origin, forms, popups, top navigation or downloads. Never execute it in Nenu's origin or turn
 the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md)).
 
+The chat gallery also previews Nenu-generated raster uploads outside cwd through
+`bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under the
+configured uploads directory and the exact path in a user message from the current pane's contained
+journal. Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
+never generalize it to arbitrary transcript paths or all files under the state directory.
+
 ## Security posture (don't regress)
 
 Loopback bind only · exactly one hardened front door — `tailscale serve` (never `funnel`) or a

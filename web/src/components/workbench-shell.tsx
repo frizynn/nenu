@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { ChevronRight, Folder, House, PanelLeft, Search, Settings, Terminal } from "lucide-react";
+import { ChevronRight, Folder, FolderKanban, House, PanelLeft, Search, Settings, Terminal } from "lucide-react";
 
 import { SessionSwitcher } from "@/components/session-switcher";
 import { BottomSheet } from "@/components/ui/sheet";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, panePath, settingsPath, spacePath } from "@/lib/nav";
+import { homePath, panePath, projectPath, settingsPath, spacePath } from "@/lib/nav";
 import { paneDisplayName, STATUS_LABEL } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
@@ -126,10 +126,16 @@ function WorkspaceNavigation({
   onTabToggle,
 }: WorkspaceNavigationProps) {
   const [query, setQuery] = useState("");
-  const { paneId, spaceId } = useParams();
+  const { paneId, projectSlug, spaceId } = useParams();
+  const navLocation = useLocation();
   const navInstance = useId().replaceAll(":", "");
   const needle = query.trim().toLocaleLowerCase();
   const panes = [...data.agents, ...data.shellPanes];
+  const registeredProjects = (data.projects ?? []).filter((project) => {
+    if (!needle) return true;
+    return [project.name, project.slug, project.goal ?? "", ...project.threads.flatMap((thread) => [thread.id, thread.title])]
+      .some((value) => value.toLocaleLowerCase().includes(needle));
+  });
 
   // Keep the bridge's tab order, then append a small metadata fallback for older snapshots that only
   // expose panes. This preserves the previous pane links instead of dropping them when `tabs` is
@@ -187,7 +193,27 @@ function WorkspaceNavigation({
         </label>
       </div>
       <div className="workbench-projects">
-        <div className="workbench-section-label">Projects <span>{data.workspaces.length}</span></div>
+        <div className="workbench-section-label">Projects <span>{registeredProjects.length}</span></div>
+        {registeredProjects.map((project) => (
+          <section className="workbench-project" key={project.slug}>
+            <div className="workbench-project-title-row">
+              <Link
+                className="workbench-project-title"
+                to={projectPath(project.slug, data.session)}
+                onClick={onNavigate}
+                aria-current={projectSlug === project.slug || navLocation.pathname === `/project/${encodeURIComponent(project.slug)}` ? "page" : undefined}
+              >
+                <FolderKanban aria-hidden="true" size={15} />
+                <span>{project.name}</span>
+                <span className="workbench-count" aria-hidden="true">
+                  {project.threads.filter((thread) => thread.status !== "resolved").length}
+                </span>
+              </Link>
+            </div>
+          </section>
+        ))}
+        {registeredProjects.length === 0 && !needle && <p className="workbench-empty-project">Registered Herdr projects will appear here.</p>}
+        <div className="workbench-section-label">Workspaces <span>{groups.length}</span></div>
         {groups.map((space) => {
           const workspaceCanExpand = space.tabs.length > 1;
           const workspaceOpen = !workspaceCanExpand || (expandedWorkspaces[space.workspaceId] ?? true);
@@ -255,7 +281,7 @@ function WorkspaceNavigation({
             </section>
           );
         })}
-        {groups.length === 0 && <p className="workbench-empty-project">{needle ? "No matching threads" : "Your Herdr workspaces will appear here."}</p>}
+        {groups.length === 0 && <p className="workbench-empty-project">{needle && registeredProjects.length === 0 ? "No matching projects or threads" : needle ? "No matching workspaces" : "Your Herdr workspaces will appear here."}</p>}
       </div>
       <div className="workbench-sidebar-footer">
         <SessionSwitcher sessions={data.sessions ?? []} current={data.session} />

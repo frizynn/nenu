@@ -8,6 +8,7 @@ import {
   createTab,
   fetchPane,
   fetchSnapshot,
+  interruptPane,
   sendKeys,
   sendReply,
   uploadImage,
@@ -26,6 +27,22 @@ describe("api client", () => {
   it("createTab posts and returns the created pane", async () => {
     const res = await createTab("w2");
     expect(res.ok).toBe(true);
+  });
+
+  it("interruptPane targets the pane and Herdr session without sending arbitrary keys", async () => {
+    let body: unknown;
+    let session: string | null = null;
+    server.use(
+      http.post(/\/api\/pane\/w1%3Ap1\/interrupt$/, async ({ request }) => {
+        body = await request.json();
+        session = new URL(request.url).searchParams.get("session");
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    await expect(interruptPane("w1:p1", "phone")).resolves.toEqual({ ok: true });
+    expect(body).toEqual({});
+    expect(session).toBe("phone");
   });
 
   it("throws with the status and body on a non-2xx response", async () => {

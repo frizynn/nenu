@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   BUILD_HEADER,
@@ -9,6 +11,8 @@ import {
   deviceAuth,
   guard,
   historyParams,
+  hasCodexInterruptCue,
+  interruptCodexPane,
   isHostAllowed,
   isLoopbackPeer,
   isReservedAuthPath,
@@ -26,6 +30,16 @@ import {
 import { AuditLog } from "./audit.ts";
 import type { Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
+import type { StateEngine } from "./state-engine.ts";
+
+const CODEX_WORKING = readFileSync(
+  join(import.meta.dirname, "..", "web", "src", "fixtures", "panes", "codex--working.txt"),
+  "utf8",
+);
+const CODEX_QUESTION = readFileSync(
+  join(import.meta.dirname, "..", "web", "src", "fixtures", "panes", "codex--ask-fruit.txt"),
+  "utf8",
+);
 
 // checkAccess is the API security gate (same-origin/CSRF + optional Tailscale identity). A
 // regression here silently opens remote shell access, so it gets the most direct coverage.
@@ -80,6 +94,85 @@ function cfg(overrides: Partial<Config> = {}): Config {
     ...overrides,
   };
 }
+
+describe("Codex interrupt cue", () => {
+  test("accepts the live working footer through ANSI paint", () => {
+    expect(hasCodexInterruptCue(CODEX_WORKING)).toBe(true);
+  });
+
+  test("refuses an idle composer without the live interrupt affordance", () => {
+    expect(hasCodexInterruptCue("› Ask Codex to do anything\n\n  gpt-5.6 · project")).toBe(false);
+  });
+
+  test("refuses copied prose and a question dialog that also advertises Escape", () => {
+    expect(hasCodexInterruptCue("• Working (3s • esc to interrupt)")).toBe(false);
+    expect(hasCodexInterruptCue(CODEX_QUESTION)).toBe(false);
+  });
+
+  test("revalidates a working Codex pane before sending Escape", async () => {
+    const sent: string[][] = [];
+    const herdr = {
+      readPane: async () => ({
+        text: CODEX_WORKING,
+        revision: 4,
+        truncated: false,
+      }),
+      sendPaneKeys: async (_paneId: string, keys: string[]) => { sent.push(keys); },
+    } as unknown as HerdrClient;
+    const pane = {
+      paneId: "w1:p1", workspaceId: "w1", workspaceLabel: "demo", workspaceNumber: 1,
+      tabId: "t1", agent: "codex", status: "working", cwd: "/tmp", focused: false,
+      kind: "agent",
+    } as const;
+    const engine = {
+      current: () => ({ agents: [pane], shellPanes: [], workspaces: [], tabs: [], bridge: "connected" }),
+    } as unknown as StateEngine;
+
+    const response = await interruptCodexPane(
+      herdr,
+      engine,
+      cfg(),
+      pane.paneId,
+      new Request("http://localhost/api/pane/w1%3Ap1/interrupt", { method: "POST" }),
+      new AuditLog(() => {}),
+      "phone",
+      "default",
+    );
+
+    expect(await response.json()).toEqual({ ok: true });
+    expect(sent).toEqual([["Escape"]]);
+  });
+
+  test("a stale working snapshot cannot interrupt after the live cue disappears", async () => {
+    const sent: string[][] = [];
+    const herdr = {
+      readPane: async () => ({ text: CODEX_QUESTION, revision: 5, truncated: false }),
+      sendPaneKeys: async (_paneId: string, keys: string[]) => { sent.push(keys); },
+    } as unknown as HerdrClient;
+    const pane = {
+      paneId: "w1:p1", workspaceId: "w1", workspaceLabel: "demo", workspaceNumber: 1,
+      tabId: "t1", agent: "codex", status: "working", cwd: "/tmp", focused: false,
+      kind: "agent",
+    } as const;
+    const engine = {
+      current: () => ({ agents: [pane], shellPanes: [], workspaces: [], tabs: [], bridge: "connected" }),
+    } as unknown as StateEngine;
+
+    const response = await interruptCodexPane(
+      herdr,
+      engine,
+      cfg(),
+      pane.paneId,
+      new Request("http://localhost/api/pane/w1%3Ap1/interrupt", { method: "POST" }),
+      new AuditLog(() => {}),
+      null,
+      "default",
+    );
+
+    expect(await response.json()).toEqual({ ok: false, error: "Codex is no longer showing an interruptible turn" });
+    expect(sent).toEqual([]);
+  });
+});
 
 describe("checkAccess — same-origin / CSRF gate", () => {
   test("allows a request with no Origin header (same-origin GET)", () => {

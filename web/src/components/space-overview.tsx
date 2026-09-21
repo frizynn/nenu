@@ -63,7 +63,7 @@ export function SpaceOverview({
   return (
     <section className="flex flex-col gap-2 px-3 py-4">
       <SectionHeader
-        label="Projects"
+        label="Workspaces"
         // While filtering, the count reports what you can SEE — a header reading (45) above four
         // rows makes you doubt the filter rather than trust it.
         count={query.trim() ? visible.length : workspaces.length}

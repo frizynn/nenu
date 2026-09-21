@@ -21,6 +21,10 @@ export function spacePath(spaceId: string, session?: string): string {
   return `/space/${encodeURIComponent(spaceId)}${sessionSearch(session)}`;
 }
 
+export function projectPath(slug: string, session?: string): string {
+  return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
+}
+
 /** The dashboard path, carrying the current session so "go home" doesn't drop you back to primary. */
 export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;

@@ -181,6 +181,27 @@ On the phone: your agents are listed, and the footer build stamp (`vX.Y.Z · deb
 `scripts/collie-ctl.sh version`. If the page loads but stays empty, that's the same-origin gate —
 see [Troubleshooting](#troubleshooting).
 
+## Projects and chat controls
+
+Nenu discovers registered Herdr Projects automatically. Open a project from Overview or the sidebar
+to see its coordinator and threads. Only currently matched panes get chat links; a registered project
+still appears when its agents are offline. Ordinary workspaces remain available alongside projects.
+Discovery follows `HERDR_PROJECTS_ROOT`, then `root` in `~/.config/herdr-projects/config.toml`, then
+`~/.herdr-projects`. Projects are scoped to their recorded Herdr session. The overview reads existing
+project records and live panes; it does not create projects or start agents.
+
+In a chat, open **Files and photos** to browse file references and images from its available journal.
+The browser can load older entries and reports when the underlying journal is truncated. File
+previews retain the existing workspace and private-file restrictions; a reference does not guarantee
+that a file still exists or is accessible. Photos uploaded through Nenu can also be previewed when
+their exact saved path appears in a user message in this chat. Images need a saved local file to
+appear here. Uploads are currently retained for 48 hours; deleted uploads and remote image URLs are
+unavailable.
+
+While Codex is working, **Stop** interrupts its current turn and leaves the terminal open. The bridge
+checks the live terminal before sending the interruption. An acknowledged request means the interrupt
+was sent; the next status update confirms whether Codex has stopped.
+
 ## Configure
 
 Out of the box Nenu runs **open single-user**: anyone on your tailnet who can reach the URL has

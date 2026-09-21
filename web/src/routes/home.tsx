@@ -5,12 +5,13 @@ import { Plus } from "lucide-react";
 import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { SpaceOverview } from "@/components/space-overview";
+import { ProjectOverview } from "@/components/project-overview";
 import { NewSpaceSheet } from "@/components/new-space-sheet";
 import { openForCount, useDashPrefs } from "@/hooks/use-dash-prefs";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { panePath, spacePath } from "@/lib/nav";
+import { panePath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
 
 // T3's index route centers the next useful action. Existing Nenu sessions are opened explicitly;
@@ -27,8 +28,8 @@ export function HomeRoute() {
 
   return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
     <AppHeader bridge={data.bridge} error={data.error} stalled={stalled}
-      rightTrail={<><span className="text-xs tabular-nums text-muted-foreground">{data.workspaces.length} {data.workspaces.length === 1 ? "project" : "projects"}</span><SettingsGear session={data.session} /></>}>
-      <span className="truncate text-sm font-medium">Overview</span>
+      rightTrail={<><span className="text-xs tabular-nums text-muted-foreground">{data.projects?.length ?? 0} {(data.projects?.length ?? 0) === 1 ? "project" : "projects"}</span><SettingsGear session={data.session} /></>}>
+      <span className="truncate text-sm font-medium">Home</span>
     </AppHeader>
     <ReadOnlyBanner device={data.device} />
     <main className="min-h-0 flex-1 overflow-y-auto px-5 py-10 sm:px-8 sm:py-14">
@@ -38,8 +39,9 @@ export function HomeRoute() {
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {data.error ? "Showing your last workspace snapshot. Reconnect to see current activity."
               : data.bridge !== "connected" ? "Waiting for your workspaces to connect."
-              : data.agents.length ? "Choose a project, then a tab or pane."
-              : data.workspaces.length ? "Open a project to start or resume an agent."
+              : data.projects?.length ? "Choose a project to see its coordinator and threads."
+              : data.agents.length ? "Choose a workspace, then a tab or pane."
+              : data.workspaces.length ? "Open a workspace to start or resume an agent."
               : "Create a workspace to start your first thread."}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -48,6 +50,8 @@ export function HomeRoute() {
             </button>
           </div>
         </div>
+
+        <ProjectOverview projects={data.projects ?? []} onOpen={(slug) => navigate(projectPath(slug, data.session))} />
 
         <SpaceOverview
           workspaces={data.workspaces}

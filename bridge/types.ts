@@ -153,6 +153,27 @@ export interface SessionSummary {
   blocked: number;
 }
 
+export interface ProjectThreadView {
+  id: string;
+  title: string;
+  parentId: string;
+  role: "worker" | "coordinator";
+  status: "starting" | "open" | "failed" | "resolved";
+  updated?: string;
+  paneId?: string;
+  agent?: string;
+  liveStatus?: AgentStatus;
+}
+
+export interface ProjectView {
+  slug: string;
+  name: string;
+  goal?: string;
+  status: "active" | "paused";
+  coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
+  threads: ProjectThreadView[];
+}
+
 /**
  * Per-device authorisation state for the requesting client (see `deviceAuth()` in server.ts).
  * Reported in the snapshot so the UI can show a read-only state. Optional on the wire so an older
@@ -181,6 +202,8 @@ export interface SnapshotResponse {
   /** All spaces (workspaces) and their tabs, for the space/tab navigator. */
   workspaces: WorkspaceView[];
   tabs: TabView[];
+  /** Registered Herdr Projects belonging to this session. Absent on older bridges. */
+  projects?: ProjectView[];
   /**
    * Every herdr session this bridge fronts (primary first, then alphabetical). Always present; a
    * single-session deployment lists just the primary, so the switcher UI can stay hidden.

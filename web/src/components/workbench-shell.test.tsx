@@ -13,8 +13,8 @@ const data: HomeData = {
   agents: [{ paneId: "w:1:p2", workspaceId: "w:1", workspaceLabel: "Nenu", workspaceNumber: 1, tabId: "t1", agent: "codex", status: "working", cwd: "/dev/collie", focused: true, paneLabel: "Improve interface" }],
 };
 
-function setup(testData: HomeData = data) {
-  const router = createMemoryRouter([{ path: "*", element: <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell> }], { initialEntries: ["/?s=work"] });
+function setup(testData: HomeData = data, initialEntry = "/?s=work") {
+  const router = createMemoryRouter([{ path: "*", element: <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell> }], { initialEntries: [initialEntry] });
   render(<RouterProvider router={router} />);
   return { router, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
 }
@@ -34,6 +34,27 @@ it("keeps project, pane and settings links scoped to the active session", () => 
   expect(sidebar.getByRole("link", { name: /Improve interface/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(sidebar.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/space/w%3A1?s=work");
   expect(sidebar.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
+});
+
+it("lists registered projects, marks the current project and searches their thread metadata", async () => {
+  const projectData: HomeData = {
+    ...data,
+    projects: [{
+      slug: "nenu", name: "Nenu Project", goal: "A focused project hub", status: "active",
+      threads: [{ id: "t-0007", title: "Project navigation", parentId: "root", role: "worker", status: "open" }],
+    }],
+  };
+  const { sidebar, user } = setup(projectData, "/project/nenu?s=work");
+  const link = sidebar.getByRole("link", { name: "Nenu Project" });
+  expect(link).toHaveAttribute("href", "/project/nenu?s=work");
+  expect(link).toHaveAttribute("aria-current", "page");
+
+  const search = sidebar.getByRole("searchbox");
+  await user.type(search, "t-0007");
+  expect(sidebar.getByRole("link", { name: "Nenu Project" })).toBeInTheDocument();
+  await user.clear(search);
+  await user.type(search, "unrelated");
+  expect(sidebar.queryByRole("link", { name: "Nenu Project" })).not.toBeInTheDocument();
 });
 
 it("renders a keyboard-accessible workspace, tab and pane tree", async () => {
@@ -93,7 +114,7 @@ it("filters projects without disturbing a mounted composer draft", async () => {
   const draft = screen.getByRole("textbox", { name: "Draft" });
   await user.type(draft, " plus edits");
   await user.type(sidebar.getByRole("searchbox"), "missing");
-  expect(sidebar.getByText("No matching threads")).toBeInTheDocument();
+  expect(sidebar.getByText("No matching projects or threads")).toBeInTheDocument();
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
   expect(draft).toHaveValue("Keep this draft plus edits");
