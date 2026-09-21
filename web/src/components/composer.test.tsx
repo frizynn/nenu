@@ -116,6 +116,21 @@ function renderComposerWithStatus(overrides: Partial<ComponentProps<typeof Compo
 }
 
 describe("Composer — send", () => {
+  it.each([{ isComposing: true }, { keyCode: 229 }])("does not submit an unfinished IME composition (%j)", async (event) => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    server.use(replyHandler((text) => calls.push(text)));
+    const props = renderComposer();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "mensaje en composición");
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true, ...event });
+    expect(box).toHaveValue("mensaje en composición");
+    expect(calls).toEqual([]);
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(calls).toEqual(["mensaje en composición"]);
+  });
+
   // #34: a dialog owns the TUI's keyboard. Sending free text at one loses the message AND makes the
   // submit key answer the dialog, approving whatever was highlighted. Nothing may leave the phone.
   it("refuses to send while a dialog is on screen, and keeps the draft", async () => {
@@ -269,8 +284,8 @@ describe("Composer — send", () => {
         return HttpResponse.json({ ok: true });
       }),
     );
-    // The pre-clear keys on the RAW line (the actual current "❯" content), independent of whether the
-    // draft ever stabilised into a visible preview — a stranded raw draft is still swept before send.
+    recordReply({ text: "leftover" });
+    // A real draft in the live terminal is cleared even before its preview stabilises.
     renderComposerWithStatus({ terminalDraft: null, rawTerminalDraft: "leftover" });
     const box = screen.getByPlaceholderText(/type a reply/i);
 
@@ -284,6 +299,117 @@ describe("Composer — send", () => {
     expect(sentKeys!.slice(1).every((k) => k === "Backspace")).toBe(true);
     await awaitTerminalStall(); // see the helper: an unawaited stall lands in a later test
   }, 15000);
+
+  it("sends without destructive keys when the displayed draft is stale but the live input is empty", async () => {
+    const user = userEvent.setup();
+    const wire: string[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, () => {
+        wire.push("keys");
+        return HttpResponse.json({ ok: false, code: "prompt_changed" }, { status: 409 });
+      }),
+      replyHandler(() => wire.push("type"), () => wire.push("submit")),
+    );
+    const props = renderComposer({ rawTerminalDraft: "stale draft from an earlier poll" });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "my message");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(wire).toEqual(["type", "submit"]);
+    expect(box).toHaveValue("");
+  });
+
+  it("sizes the clear from a live host draft that appeared after an empty display poll", async () => {
+    const user = userEvent.setup();
+    const hostDraft = "a longer draft typed on the computer after the last poll";
+    const wire: string[] = [];
+    let sentKeys: string[] = [];
+    recordReply({ text: hostDraft });
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        sentKeys = ((await request.json()) as { keys: string[] }).keys;
+        wire.push("keys");
+        recordReply({ text: "" });
+        return HttpResponse.json({ ok: true });
+      }),
+      replyHandler(() => wire.push("type"), () => wire.push("submit")),
+    );
+    const props = renderComposer({ rawTerminalDraft: null });
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "mobile message");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(wire).toEqual(["keys", "type", "submit"]);
+    expect(sentKeys).toEqual(["ctrl+k", ...Array([...hostDraft].length + 32).fill("Backspace")]);
+  });
+
+  it("retries a failed submit without clearing or duplicating the already typed draft", async () => {
+    const user = userEvent.setup();
+    const typeIds: string[] = [];
+    const submitIds: string[] = [];
+    let keys = 0;
+    let typed = 0;
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, () => {
+        keys++;
+        recordReply({ text: "" });
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
+        const body = await request.json() as { text: string; submit: boolean; request_id: string };
+        if (!body.submit) {
+          const replayed = typeIds.includes(body.request_id);
+          typeIds.push(body.request_id);
+          if (!replayed) { typed++; recordReply(body); }
+          return HttpResponse.json({ ok: true, replayed });
+        }
+        submitIds.push(body.request_id);
+        if (submitIds.length === 1) return HttpResponse.json({ ok: false, error: "temporary submit failure" });
+        recordReply(body);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const props = renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "keep this message");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("typed into the pane but not submitted"));
+    expect(box).toHaveValue("keep this message");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(keys).toBe(0);
+    expect(typed).toBe(1);
+    expect(typeIds).toHaveLength(2);
+    expect(new Set(typeIds).size).toBe(1);
+    expect(submitIds).toHaveLength(2);
+    expect(new Set(submitIds).size).toBe(1);
+    expect(box).toHaveValue("");
+  });
+
+  it("does not mistake an unattempted delivery for a typed echo after preparation refused", async () => {
+    const user = userEvent.setup();
+    const wire: string[] = [];
+    const prepareSend = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, () => {
+        wire.push("clear");
+        recordReply({ text: "" });
+        return HttpResponse.json({ ok: true });
+      }),
+      replyHandler(() => wire.push("type"), () => wire.push("submit")),
+    );
+    const props = renderComposer({ prepareSend });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "same message");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(prepareSend).toHaveBeenCalledOnce());
+    expect(wire).toEqual([]);
+    // The computer acquires a real matching draft; the first attempt never typed it.
+    recordReply({ text: "same message" });
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(wire).toEqual(["clear", "type", "submit"]);
+    expect(box).toHaveValue("");
+  });
 
   // The burst is the only destructive keystroke path in the app not bound to the screen that
   // authorised it. Ordering ("the read happens first") is not a freshness bound: the read's answer
@@ -1439,6 +1565,7 @@ describe("Composer — terminal-draft preview", () => {
     expect(box).toHaveValue("adopted line");
 
     // The host line still holds the draft (takeover never touched it), so Send sweeps it once first.
+    recordReply({ text: "adopted line" });
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(callOrder).toEqual(["keys", "reply:adopted line"]));
     expect(sentKeys![0]).toBe("ctrl+k");
@@ -1569,6 +1696,7 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
     callLog.length = 0;
     await user.click(screen.getByRole("button", { name: /take over/i }));
     expect(box).toHaveValue("someone else's leftover");
+    recordReply({ text: "someone else's leftover" });
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(callLog).toContain("reply:someone else's leftover"));
     expect(callLog).toContain("keys");
