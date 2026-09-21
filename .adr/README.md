@@ -77,6 +77,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0020](./0020-a-major-upgrade-is-consented-by-flag.md) | A major upgrade is consented by flag; routine update follows tags within the major | Accepted |
 | [0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) | HTML previews run in an opaque, no-network sandbox | Accepted |
 | [0048](./0048-the-input-box-is-found-by-its-own-frame.md) | The input box is found by its own frame; the statusline bound only bounds what is stripped (amends 0004) | Accepted |
+| [0053](./0053-an-unread-dialog-still-has-a-way-out.md) | An unread dialog still has a way out: a footer phrase never silences a grammar (only that half is in Nenu) | Proposed |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never
