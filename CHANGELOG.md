@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.41.1] - 2026-09-21
+
+### Fixed
+
+- Send from an empty Codex composer without mistaking its animated background for a terminal draft (`cf283b5`).
+- Clear only a freshly read terminal draft and preserve safe retries after a send was refused before typing (`cf283b5`).
+- Keep keyboard composition from triggering an early message submission (`cf283b5`).
+
 ## [0.41.0] - 2026-09-21
 
 ### Added
