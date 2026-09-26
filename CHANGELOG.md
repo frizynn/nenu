@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.46.2] - 2026-09-26
 
 ### Fixed
-- Discover native Claude sessions when the background service has a minimal PATH.
+- Discover native Claude sessions when the background service has a minimal PATH. (a38fe7f)
 
 ## [0.46.1] - 2026-09-26
 
