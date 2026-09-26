@@ -93,7 +93,7 @@ describe("useLiveConversation", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(8_000); });
-    expect(result.current.error).toBe(true);
+    expect(result.current.error).toBe(false);
     expect(result.current.history?.paneId).toBe("w1:p1");
     await act(async () => result.current.refresh());
     expect(result.current.error).toBe(false);
@@ -227,4 +227,40 @@ describe("useLiveConversation", () => {
     unmount();
   });
 
+});
+
+
+it("keeps the cached conversation quiet during a brief failed refresh", async () => {
+  const hook = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true, busy: true }));
+  await act(async () => {});
+  fetchMock.mockRejectedValue(new Error("weak signal"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+  expect(hook.result.current.history?.available).toBe(true);
+  expect(hook.result.current.error).toBe(false);
+  hook.unmount();
+});
+
+
+it("surfaces a sustained history-only failure while retaining cached messages", async () => {
+  const hook = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true, busy: true }));
+  await act(async () => {});
+  fetchMock.mockRejectedValue(new Error("history unavailable"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+  expect(hook.result.current.history?.available).toBe(true);
+  expect(hook.result.current.error).toBe(true);
+  hook.unmount();
+});
+
+
+it("keeps the last history while its view is paused and catches up on return", async () => {
+  const hook = renderHook(({ paused }) => useLiveConversation({ paneId: "w1:p1", enabled: true, paused }), { initialProps: { paused: false } });
+  await act(async () => {});
+  const before = hook.result.current.history;
+  await act(async () => hook.rerender({ paused: true }));
+  await act(async () => vi.advanceTimersByTimeAsync(24_000));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(hook.result.current.history).toBe(before);
+  await act(async () => hook.rerender({ paused: false }));
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  hook.unmount();
 });

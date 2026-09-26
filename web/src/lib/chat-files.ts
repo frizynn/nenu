@@ -2,13 +2,14 @@ import { localFilePath } from "./file-links";
 import { parseMarkdown, type MdBlock, type MdSpan } from "./markdown";
 import type { TranscriptEntry, TranscriptPart } from "./types";
 
-export type ChatFileKind = "file" | "photo";
+export type ChatFileKind = "file" | "photo" | "video";
 
 export interface ChatFileReference {
   path: string;
   name: string;
   kind: ChatFileKind;
   mentions: number;
+  edited: boolean;
   firstSeen: { entryId: string; timestamp: string; role: TranscriptEntry["role"] };
 }
 
@@ -17,8 +18,9 @@ const QUOTED_CANDIDATE = /(["'`])([^"'`\n]{1,4096})\1/g;
 // This deliberately recognises only the extensions already accepted by localFilePath. The bridge
 // remains authoritative about whether the named file exists, is inside the pane cwd, is private,
 // and is small enough to preview.
-const BARE_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|]+\/)*[^\s"'`<>()[\]{}|]+\.(?:md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
-const SPECIAL_NAME_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|]+\/)*(?:readme|licen[sc]e|dockerfile|makefile|\.gitignore|\.gitattributes|\.editorconfig)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
+// Directory segments exclude separators so a missing extension cannot trigger exponential backtracking.
+const BARE_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|\/\\]+\/)*[^\s"'`<>()[\]{}|\/\\]+\.(?:md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp|mp4|m4v|mov|webm)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
+const SPECIAL_NAME_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|\/\\]+\/)*(?:readme|licen[sc]e|dockerfile|makefile|\.gitignore|\.gitattributes|\.editorconfig)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
 
 function normalisePath(path: string): string {
   const absolute = path.startsWith("/");
@@ -90,17 +92,26 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
           const path = localFilePath(candidate);
           if (!path) continue;
           const normal = normalisePath(path);
-          if (perEntry.has(normal)) continue;
+          if (perEntry.has(normal)) {
+            if (part.kind === "tool" && !part.result?.isError && /write|edit|patch|file.?change/i.test(part.name)) {
+              const existing = references.get(normal);
+              if (existing) existing.edited = true;
+            }
+            continue;
+          }
           perEntry.add(normal);
           const existing = references.get(normal);
+          const edited = part.kind === "tool" && !part.result?.isError && /write|edit|patch|file.?change/i.test(part.name);
           if (existing) {
+            existing.edited ||= edited;
             existing.mentions++;
             continue;
           }
           references.set(normal, {
             path: normal,
             name: normal.split("/").at(-1) ?? normal,
-            kind: PHOTO_EXTENSION.test(normal) ? "photo" : "file",
+            kind: PHOTO_EXTENSION.test(normal) ? "photo" : /\.(mp4|m4v|mov|webm)$/i.test(normal) ? "video" : "file",
+            edited,
             mentions: 1,
             firstSeen: { entryId: entry.uuid, timestamp: entry.ts, role: entry.role },
           });

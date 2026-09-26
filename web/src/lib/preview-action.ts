@@ -22,7 +22,8 @@ import { sendKeys, sendReply } from "./api";
 import { type PreviewOption, type PreviewSelectModel } from "./blocks";
 import { guardDialog, pollDialog, type DialogTarget } from "./dialog-guard";
 import { previewCoreEqual, previewStructureEqual } from "./harness/preview-model";
-import { sanitizeTypedText, type ActionResult, type Sleep } from "./harness/guard";
+import { sanitizeTypedText, type ActionResult } from "./harness/guard";
+import { type Sleep } from "./harness/poll";
 
 /** This module's slice of the generic guard: the preview dialog the tap is aimed at. */
 function target(args: GuardArgs): DialogTarget<"preview-select"> & { sleep?: Sleep } {

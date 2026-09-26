@@ -1480,4 +1480,24 @@ test_update_judges_a_clones_own_upstream
 test_update_leaves_a_branch_without_an_upstream_to_git
 test_registry_refresh_skips_a_managed_checkout
 
+test_subagent_hooks_use_service_state() {
+  setup_case subagent-hooks
+  printf '#!/bin/sh\necho Darwin\n' > "${BIN_DIR}/uname"
+  chmod +x "${BIN_DIR}/uname"
+  local settings="${CASE_DIR}/settings.json" output expected
+  printf '{"hooks":{}}\n' > "$settings"
+  HERDR_PLUGIN_STATE_DIR="${CASE_DIR}/action-only" run_ctl subagent-hooks "$settings" > /dev/null
+  output="$(cat "$settings")"
+  assert_contains "$output" "${HOME_DIR}/.local/state/collie"
+  case "$output" in *action-only*) fail "hook used action state instead of service state" ;; esac
+  printf 'COLLIE_STATE_DIR=%s\n' "${CASE_DIR}/configured" > "${CONFIG_DIR}/.env"
+  chmod 600 "${CONFIG_DIR}/.env"
+  HERDR_PLUGIN_STATE_DIR="${CASE_DIR}/action-only" run_ctl subagent-hooks "$settings" > /dev/null
+  assert_contains "$(cat "$settings")" "${CASE_DIR}/configured"
+  printf 'HERDR_PLUGIN_STATE_DIR=%s\n' "${CASE_DIR}/explicit-plugin-state" >> "${CONFIG_DIR}/.env"
+  run_ctl subagent-hooks "$settings" > /dev/null
+  assert_contains "$(cat "$settings")" "${CASE_DIR}/explicit-plugin-state"
+}
+test_subagent_hooks_use_service_state
+
 echo "collie-ctl lifecycle tests: passed"

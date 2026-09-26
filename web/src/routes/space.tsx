@@ -7,8 +7,6 @@ import { SpaceStrip } from "@/components/space-strip";
 import { SpaceView } from "@/components/space-view";
 import { TabStrip } from "@/components/tab-strip";
 import { NewSpaceSheet } from "@/components/new-space-sheet";
-import { BuildStamp } from "@/components/build-stamp";
-import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath, spacePath } from "@/lib/nav";
@@ -21,7 +19,6 @@ import { isReadOnly } from "@/lib/types";
 export function SpaceRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { spaceId = "" } = useParams();
-  const stalled = useLoadingStalled();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const { newTab, newSpace } = useSpaceActions();
@@ -69,7 +66,6 @@ export function SpaceRoute() {
       <AppHeader
         bridge={data.bridge}
         error={data.error}
-        stalled={stalled}
         onHome={toDashboard}
         wordmark
         rightTrail={<SettingsGear session={data.session} />}
@@ -120,7 +116,6 @@ export function SpaceRoute() {
         )}
 
         {/* The interface build in use; server maintenance details stay in Settings. */}
-        <BuildStamp className="px-3 pt-3 pb-[calc(env(safe-area-inset-bottom)_+_0.5rem)]" />
       </div>
 
       <NewSpaceSheet open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} onCreate={newSpace} />

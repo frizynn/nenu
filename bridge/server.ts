@@ -1,3 +1,8 @@
+import { WebAssetArchive } from "./web-assets.ts";
+import { renderedHtmlResponse } from "./html-preview.ts";
+import { QueueService } from "./queue-service.ts";
+import { projectFiles } from "./project-files.ts";
+import { Subagents } from "./subagents.ts";
 import { historyResponse } from "./history-response.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { launchAgent, startPaneAgent } from "./agent-start.ts";
@@ -12,7 +17,7 @@ import type { ActivityLedger } from "./activity.ts";
 import type { AuditLog } from "./audit.ts";
 import { isLoopbackBindHost, type Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
-import { computeEtag, gzipJsonResponse, notModified } from "./http-cache.ts";
+import { computeEtag, gzipJsonResponse, JsonBody, notModified } from "./http-cache.ts";
 import type { NotifyPrefs, NotifyPrefsStore } from "./notify-prefs.ts";
 import { createOperatorCommands } from "./operator-commands.ts";
 import { createOperatorKeys } from "./operator-keys.ts";
@@ -117,7 +122,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history|files|queue|html-preview))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -156,7 +161,7 @@ export const SEEN_HEADER = "x-collie-seen";
  */
 export function marksPaneSeen(req: Request, action: string | undefined): boolean {
   if (req.headers.get(SEEN_HEADER) !== null) return true;
-  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file";
+  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file" && action !== "subagents" && action !== "subagent-history" && action !== "files" && action !== "queue" && action !== "html-preview";
 }
 
 export function startServer(opts: {
@@ -170,6 +175,8 @@ export function startServer(opts: {
   activity: ActivityLedger;
 }) {
   const { cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity } = opts;
+  const assets = new WebAssetArchive(join(cfg.stateDir, "web-assets"));
+  void assets.retain(WEB_DIR).catch((error: unknown) => console.warn("[assets] could not retain current build:", error instanceof Error ? error.message : "unknown error"));
   // One journal registry + store for the process. The store's cache is keyed by absolute path, so
   // sharing it across herdr sessions AND across harnesses is correct — two sessions can front panes
   // whose agents write into the same root. Which harnesses have journals at all is decided in
@@ -182,7 +189,27 @@ export function startServer(opts: {
   const operatorQuickReplies = createOperatorQuickReplies(cfg.quickRepliesFile);
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
+  const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
+  const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
+    const rt = registry.get(session);
+    if (!rt) return null;
+    const snapshot = rt.engine.current();
+    let original = snapshot.agents.find(pane => pane.paneId === paneId);
+    if (!original) return null;
+    if (fresh) {
+      const live = (await rt.herdr.listPanes()).find(pane => pane.pane_id === paneId);
+      if (!live || live.agent !== original.agent) return null;
+      const ref = live.agent_session;
+      original = { ...original, status: live.agent_status, agentSession: ref?.kind === "id" && typeof ref.value === "string" && (!ref.agent || ref.agent === original.agent) ? { kind: "id", value: ref.value } : undefined };
+    }
+    return { pane: await conversations.resolve(original, rt.herdr, session), herdr: rt.herdr, connected: snapshot.bridge === "connected" };
+  }, async (row, text, submit, requestId, paste) => {
+    const rt = registry.get(row.session);
+    if (!rt) return { ok: false, error: "Session unavailable." };
+    const response = await replyPane(rt.herdr, cfg, row.paneId, new Request("http://localhost/queue-delivery", { method: "POST", body: JSON.stringify({ text, submit, request_id: requestId, paste }) }), audit, row.device, row.session);
+    return await response.json() as ActionResponse;
+  });
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -291,7 +318,7 @@ export function startServer(opts: {
         // Reading a pane is allowed for any access-gated client; every action (reply/keys/upload/
         // close) types into or restructures a terminal, so it additionally needs an authorised device.
         // History and skill discovery are READ actions; neither drives a terminal.
-        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file";
+        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file" || action === "subagents" || action === "subagent-history" || action === "files" || action === "html-preview" || (action === "queue" && req.method === "GET");
         const denied = guard(req, cfg, isRead ? "read" : "write");
         if (denied) return denied;
         const rt = registry.get(sessionName);
@@ -312,6 +339,17 @@ export function startServer(opts: {
         // `history` is a read, so it gets no device attribution (nothing is written to attribute).
         const device = isRead ? null : deviceAuth(req, cfg).device;
 
+        if (action === "queue" && (req.method === "GET" || req.method === "POST")) return secure(await queue.handle(req, session, paneId, device));
+        if ((action === "subagents" || action === "subagent-history") && req.method === "GET") {
+          if (!cfg.transcript) return action === "subagents" ? json({ available: false, reason: "disabled" }, null) : jsonError("Conversation history is disabled.", 409, null);
+          const original = rt.engine.current().agents.find((entry) => entry.paneId === paneId);
+          if (!original) return action === "subagents" ? json({ available: false, reason: "no-session" }, null) : jsonError("Session is unavailable.", 404, null);
+          try {
+            const pane = await conversations.resolve(original, herdr, session);
+            const result = action === "subagents" ? await subagents.list(pane) : await subagents.history(pane, url.searchParams.get("id") ?? "");
+            return json(result, req.headers.get("accept-encoding"));
+          } catch { return jsonError("Could not read subagents for this session.", 503, null); }
+        }
         if (!action && req.method === "GET") return readPane(herdr, cfg, paneId, url, req);
         if (action === "start" && req.method === "POST") {
           const kind = launchAgent(await req.json().catch(() => null));
@@ -355,7 +393,18 @@ export function startServer(opts: {
               : null;
             return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, page?.entries ?? []));
           }
-          return secure(await paneFileResponse(pane?.cwd, requestedPath));
+          return secure(await paneFileResponse(pane?.cwd, requestedPath, req.headers.get("range")));
+        }
+        if (action === "html-preview" && req.method === "GET") {
+          const current = rt.engine.current();
+          const pane = [...current.agents, ...current.shellPanes].find(entry => entry.paneId === paneId);
+          return secure(await renderedHtmlResponse(pane?.cwd, url.searchParams.get("path")));
+        }
+        if (action === "files" && req.method === "GET") {
+          const current = rt.engine.current();
+          const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+          try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? "."), null); }
+          catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
         }
         if (action === "models" && req.method === "GET") {
           const snapshot = rt.engine.current();
@@ -496,7 +545,7 @@ export function startServer(opts: {
       if (isReservedAuthPath(pathname)) return reservedAuthPlaceholder();
 
       // ── Static PWA (with SPA fallback) ───────────────────────────────────
-      return serveStatic(pathname);
+      return serveStatic(pathname, assets);
     },
   });
 
@@ -588,8 +637,8 @@ async function readPane(
     const data = paneReadResponse(paneId, read);
     // ETag is derived from the serialised body — if content hasn't changed the client gets a 304
     // and skips the whole transfer (the big win on a cellular link).
-    const bodyStr = JSON.stringify(data);
-    const etag = computeEtag(bodyStr);
+    const body = new JsonBody(data);
+    const etag = body.etag;
     // Tag pane polls too (both the 304 and the full body), so a client that only has a pane open —
     // not the home snapshot — still observes a live rebuild between polls.
     const build = await buildId();
@@ -606,7 +655,7 @@ async function readPane(
       );
     }
     return withBuildHeader(
-      secure(gzipJsonResponse(data, req.headers.get("accept-encoding"), { etag })),
+      secure(body.response(req.headers.get("accept-encoding"), { etag })),
       build,
     );
   } catch (err) {
@@ -1676,12 +1725,18 @@ behind your own reverse proxy</em> in the README.</p>
   );
 }
 
-async function serveStatic(pathname: string): Promise<Response> {
+async function serveStatic(pathname: string, assets: WebAssetArchive): Promise<Response> {
+  // An archive failure must not take the current frontend offline.
+  await assets.retain(WEB_DIR).catch(() => {});
   const resolved = resolveStaticPath(pathname);
   if (!resolved) return text("forbidden", 403);
   let { rel, full } = resolved;
 
   let file = Bun.file(full);
+  if (!(await file.exists())) {
+    const retained = await assets.resolve(rel);
+    if (retained) { full = retained; file = Bun.file(full); }
+  }
   if (!(await file.exists())) {
     // SPA fallback: extension-less paths fall back to index.html; missing assets 404.
     if (extname(rel) === "") {

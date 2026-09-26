@@ -40,9 +40,8 @@ import { useSyncExternalStore } from "react";
 export const CONNECTION_LOST_MS = 15_000;
 
 // How long the app must stay continuously not-live before the connection bar fades IN as an ambient
-// amber "reconnecting…" (and the header dog starts to gallop). Short enough to catch a genuine stall,
-// long enough that a single slow poll (the stall itself only trips at 2.5s) or one failed fetch never
-// flashes a bar — the flicker fix. Measured from the SAME shared anchor as CONNECTION_LOST_MS (via
+// amber "reconnecting…" (and the header dog starts to gallop). Brief failures that recover before
+// this threshold stay quiet. Measured from the SAME shared anchor as CONNECTION_LOST_MS (via
 // useConnectionTrouble), just far shorter and, crucially, NON-latching: only the 15s escalation latches.
 export const TROUBLE_MS = 4_000;
 

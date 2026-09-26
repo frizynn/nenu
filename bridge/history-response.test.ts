@@ -70,3 +70,35 @@ describe("conditional history response", () => {
     expect(historyResponse(initial, "two", etag, null).status).toBe(200);
   });
 });
+
+
+test("multiple readers reuse the encoded history without serializing or compressing again", async () => {
+  const data = page("Repeatable message ".repeat(1000));
+  const first = historyResponse(data, "one", null, "gzip");
+  const bytes = await first.arrayBuffer();
+  const stringify = spyOn(JSON, "stringify");
+  const gzip = spyOn(Bun, "gzipSync");
+  try {
+    const next = historyResponse(data, "one", null, "gzip");
+    expect(await next.arrayBuffer()).toEqual(bytes);
+    expect(stringify).not.toHaveBeenCalled();
+    expect(gzip).not.toHaveBeenCalled();
+    const plain = historyResponse(data, "one", null, null);
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect((await plain.json()).entries).toEqual(data.entries);
+  } finally { stringify.mockRestore(); gzip.mockRestore(); }
+});
+
+
+test("large pages do not retain their encoded body but keep conditional reads cheap", async () => {
+  const data = page("large ".repeat(60_000));
+  const first = historyResponse(data, "one", null, "gzip");
+  const expected = await first.arrayBuffer();
+  const stringify = spyOn(JSON, "stringify");
+  try {
+    expect(historyResponse(data, "one", first.headers.get("etag"), "gzip").status).toBe(304);
+    expect(stringify).not.toHaveBeenCalled();
+    expect(await historyResponse(data, "one", null, "gzip").arrayBuffer()).toEqual(expected);
+    expect(stringify).toHaveBeenCalledTimes(1);
+  } finally { stringify.mockRestore(); }
+});

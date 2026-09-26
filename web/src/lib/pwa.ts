@@ -10,21 +10,20 @@ import { isReloadHeld, subscribeReloadHeld } from "@/lib/reload-guard";
 // the worker lifecycle ourselves and reload once a new worker activates and unsent work is safe. Two entry
 // points share that watcher:
 //   1. a periodic update check, so a tab left open discovers and auto-applies a new build on its own;
-//   2. checkForUpdate(), so the footer's "tap to update" can force the check on demand.
+//   2. checkForUpdate(), so Settings' "Reload interface" can force the check on demand.
 
 // How often an open tab re-checks for a newer service worker. Frequent enough to feel automatic,
 // cheap enough to ignore (a conditional GET of sw.js that 304s when nothing changed).
 const UPDATE_CHECK_MS = 60_000;
 
-// Hard cap so the manual button can never get stuck on "updating…": if no worker has activated by
-// now, reload anyway (served by whatever SW is active). The activated-watcher below almost always
-// fires first (install+activate is usually 1–2s); this is pure insurance.
-const STUCK_GUARD_MS = 8_000;
+// Bound the update attempt without navigating back onto an incomplete or offline build.
+const UPDATE_TIMEOUT_MS = 60_000;
+let updateInFlight: Promise<boolean> | undefined;
 
 let registration: ServiceWorkerRegistration | undefined;
 let reloaded = false;
 let manualUpdate = false;
-let forceReloading = false;
+let forceReloading: Promise<void> | undefined;
 let pendingReload: "plain" | "force" | undefined;
 let stopWaiting: (() => void) | undefined;
 
@@ -67,17 +66,18 @@ function requestReload(force = false) {
 // bundle — the "keeps saying new build, won't update" trap). The SW re-registers clean on the fresh
 // load. Used ONLY when the normal worker-swap didn't confirm a newly-activated worker — never on the
 // happy path, where the new precache is already in place and a plain reload is correct and lighter.
-async function forceReload(): Promise<void> {
-  if (reloaded || forceReloading) return;
-  forceReloading = true;
-  try {
-    const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
-    await Promise.all(regs.map((r) => r.unregister()));
-  } catch {
-    /* ignore — reload regardless */
-  }
-  // An upload or draft may have started while unregistering. Check again before navigation.
-  requestReload();
+function forceReload(): Promise<void> {
+  if (reloaded) return Promise.resolve();
+  forceReloading ??= (async () => {
+    try {
+      const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
+      await Promise.all(regs.map((r) => r.unregister()));
+    } catch {
+      // An explicit reload can still recover if the browser refused worker removal.
+    }
+    requestReload();
+  })();
+  return forceReloading;
 }
 
 function onControllerChange() {
@@ -87,11 +87,11 @@ function onControllerChange() {
 
 // Request a guarded reload when a freshly-installed worker reaches "activated". Used by the periodic
 // auto-check and the manual button, so neither depends on vite-plugin-pwa's (unreliable) auto-reload.
-function watchWorker(worker: ServiceWorker | null, requested = false) {
+function watchWorker(worker: ServiceWorker | null) {
   if (!worker) return;
   // Capture this before initial clientsClaim changes hadController: installing the first worker
   // must not flash/reload an already-current first visit, regardless of lifecycle event order.
-  const shouldReload = requested || hadController;
+  const shouldReload = hadController;
   if (worker.state === "activated") {
     if (shouldReload) requestReload();
     return;
@@ -117,45 +117,71 @@ registerSW({
     // *replaces* a prior controller (see onControllerChange); the first-visit initial claim is not
     // an update and must not reload.
     navigator.serviceWorker?.addEventListener("controllerchange", onControllerChange);
-    setInterval(() => void r.update().catch(() => {}), UPDATE_CHECK_MS);
+    setInterval(() => {
+      if (!document.hidden && !updateInFlight) void r.update().catch(() => {});
+    }, UPDATE_CHECK_MS);
   },
 });
 
-// Force an immediate update check — the footer's manual "tap to update". A newer SW installs,
-// skip-waits, activates, and watchWorker reloads us onto it (the happy path). The ONE path that
-// forceReload()s — unregistering the worker so the reload bypasses a stale precache — is when
-// update() SUCCEEDS (so we're online) but finds nothing to activate while the footer shows us stale:
-// the wedged-precache trap. Network-failure paths (a thrown update(), or the stuck-guard) fall back to
-// a PLAIN reload instead — unregistering there would strand an offline PWA on an error page with its
-// precache gone. With no SW at all (plain HTTP / insecure context) a plain reload already re-fetches.
-export async function checkForUpdate({ automatic = false }: { automatic?: boolean } = {}): Promise<void> {
-  // A deliberate update click authorizes navigation; background discovery must still respect
-  // holds acquired after update() began, not just the self-updater's initial safety check.
+/** One update attempt at a time. A failed download leaves the current page intact. */
+export function checkForUpdate({ automatic = false }: { automatic?: boolean } = {}): Promise<boolean> {
+  if (updateInFlight) return updateInFlight;
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<boolean>((resolve) => {
+    timeout = setTimeout(() => { controller.abort(); resolve(false); }, UPDATE_TIMEOUT_MS);
+  });
+  updateInFlight = Promise.race([applyUpdate(automatic, controller.signal), deadline]).finally(() => {
+    clearTimeout(timeout);
+    controller.abort();
+    manualUpdate = false;
+    updateInFlight = undefined;
+  });
+  return updateInFlight;
+}
+
+async function applyUpdate(automatic: boolean, signal: AbortSignal): Promise<boolean> {
   if (!automatic) manualUpdate = true;
   if (!("serviceWorker" in navigator) || !registration) {
     requestReload();
-    return;
+    return true;
   }
   const reg = registration;
-  // Stuck-guard: if no fresh worker has activated in time, reload from the active worker so the button
-  // never hangs. A plain reload (not forceReload) — a hung activation may just be a flaky network, and
-  // dropping the precache offline would be worse than staying on the current build.
-  setTimeout(() => requestReload(), STUCK_GUARD_MS);
   try {
     await reg.update();
+    if (signal.aborted) return false;
+    const worker = reg.installing ?? reg.waiting;
+    if (worker) {
+      const activated = await waitForActivation(worker, signal);
+      if (!activated) return false;
+      requestReload();
+    } else {
+      // An online check found no replacement. Bypass a stale precache on the next navigation.
+      // Automatic attempts still wait for all open-session/draft holds before unregistering.
+      if (automatic) requestReload(true);
+      else { await forceReload(); requestReload(); }
+    }
+    return true;
   } catch {
-    // A thrown update() is a NETWORK failure (the browser fetches sw.js directly, bypassing the SW) —
-    // not a wedged worker. Keep the precache and reload from it, so an offline PWA still works.
-    requestReload();
-    return;
+    return false;
   }
-  watchWorker(reg.installing, true);
-  if (reg.waiting) {
-    watchWorker(reg.waiting, true);
-    reg.waiting.postMessage({ type: "SKIP_WAITING" });
-  }
-  // update() succeeded yet found nothing to activate, while the button only shows when we're provably
-  // stale → the active worker is behind and won't self-update. The one place unregister-then-reload is
-  // both safe (we're online) and necessary — bypass the wedged precache rather than re-serve it.
-  if (!reg.installing && !reg.waiting) requestReload(true);
+}
+
+function waitForActivation(worker: ServiceWorker, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    const finish = (ready: boolean) => {
+      worker.removeEventListener("statechange", changed);
+      signal.removeEventListener("abort", cancelled);
+      resolve(ready);
+    };
+    const cancelled = () => finish(false);
+    const changed = () => {
+      if (signal.aborted || worker.state === "redundant") finish(false);
+      else if (worker.state === "activated") finish(true);
+      else if (worker.state === "installed") worker.postMessage({ type: "SKIP_WAITING" });
+    };
+    worker.addEventListener("statechange", changed);
+    signal.addEventListener("abort", cancelled, { once: true });
+    changed();
+  });
 }

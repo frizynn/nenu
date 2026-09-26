@@ -1,3 +1,4 @@
+import { videoResponse, MAX_VIDEO_BYTES } from "./media-preview.ts";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, extname, isAbsolute, resolve, sep } from "node:path";
@@ -27,9 +28,10 @@ function fileError(message: string, status: number): Response {
   return new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 }
 
-function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | null {
+function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | "video" | null {
   const ext = extname(path).toLowerCase();
   if ([".md", ".markdown"].includes(ext)) return "markdown";
+  if ([".mp4", ".m4v", ".mov", ".webm"].includes(ext)) return "video";
   if (ext === ".pdf") return "pdf";
   if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) return "image";
   if (TEXT_EXTENSIONS.has(ext) || TEXT_NAMES.has(basename(path).toLowerCase())) return "text";
@@ -42,7 +44,7 @@ function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | null {
  * then read a bounded regular file through one descriptor (never reopen its name while serving).
  * HTML/SVG/source code remain text/plain; none of the project's markup is executed by the browser.
  */
-export async function paneFileResponse(cwd: string | undefined, requestedPath: string | null): Promise<Response> {
+export async function paneFileResponse(cwd: string | undefined, requestedPath: string | null, range: string | null = null): Promise<Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
   }
@@ -55,13 +57,19 @@ export async function paneFileResponse(cwd: string | undefined, requestedPath: s
   if (!path || isPrivateProjectPath(path)) return unavailable();
   const kind = fileKind(path);
   if (!kind) return fileError("This file type cannot be previewed.", 415);
-  const limit = kind === "text" || kind === "markdown" ? MAX_TEXT_FILE_BYTES : MAX_PREVIEW_FILE_BYTES;
+  const limit = kind === "video" ? MAX_VIDEO_BYTES : kind === "text" || kind === "markdown" ? MAX_TEXT_FILE_BYTES : MAX_PREVIEW_FILE_BYTES;
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
   if (!handle) return unavailable();
+  let streaming = false;
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || await containedRealpath(path, root) !== path) return unavailable();
     if (stat.size > limit) return fileError(`File is too large to preview (maximum ${limit / 1024 / 1024} MB).`, 413);
+    if (kind === "video") {
+      const response = await videoResponse(handle, stat.size, range, basename(path));
+      streaming = true;
+      return response;
+    }
     // A growing file stays capped, even when it changes after the initial stat.
     const bytes = Buffer.alloc(stat.size);
     let length = 0;
@@ -96,6 +104,6 @@ export async function paneFileResponse(cwd: string | undefined, requestedPath: s
   } catch {
     return unavailable();
   } finally {
-    await handle.close();
+    if (!streaming) await handle.close();
   }
 }

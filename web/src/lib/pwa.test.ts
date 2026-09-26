@@ -105,9 +105,11 @@ describe("background service-worker updates", () => {
   it("respects a draft created after an automatic update starts, including its timeout", async () => {
     await register();
     registration.installing = new Worker();
-    await pwa.checkForUpdate({ automatic: true });
+    const updating = pwa.checkForUpdate({ automatic: true });
+    await vi.advanceTimersByTimeAsync(0);
     guard.holdReload("draft");
     registration.installing.activate();
+    await updating;
     vi.advanceTimersByTime(8_000);
     expect(reload).not.toHaveBeenCalled();
     guard.releaseReload("draft");
@@ -166,6 +168,53 @@ describe("explicit update click", () => {
     registration.update.mockRejectedValue(new Error("offline"));
     await pwa.checkForUpdate();
     expect(unregister).not.toHaveBeenCalled();
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
   });
+});
+
+it("does not reload the old app while an update check is still downloading", async () => {
+  await register();
+  let finish!: () => void;
+  registration.update.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const pending = pwa.checkForUpdate();
+  await vi.advanceTimersByTimeAsync(9_000);
+  expect(reload).not.toHaveBeenCalled();
+  finish();
+  await pending;
+});
+
+it("keeps the current page when the update cannot be downloaded", async () => {
+  await register();
+  registration.update.mockRejectedValue(new Error("weak signal"));
+  await pwa.checkForUpdate();
+  expect(reload).not.toHaveBeenCalled();
+  expect(unregister).not.toHaveBeenCalled();
+});
+
+
+it("shares repeated update clicks and clears a timed-out attempt without reloading", async () => {
+  await register();
+  guard.holdReload("chat");
+  registration.update.mockImplementation(() => new Promise(() => {}));
+  const first = pwa.checkForUpdate();
+  const second = pwa.checkForUpdate();
+  expect(registration.update).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await first).toBe(false);
+  expect(await second).toBe(false);
+  expect(reload).not.toHaveBeenCalled();
+  expect(unregister).not.toHaveBeenCalled();
+});
+
+
+it("skips automatic update checks while the app is hidden", async () => {
+  await register();
+  Object.defineProperty(document, "hidden", { configurable: true, value: true });
+  try {
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(registration.update).not.toHaveBeenCalled();
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(registration.update).toHaveBeenCalledTimes(1);
+  } finally { Object.defineProperty(document, "hidden", { configurable: true, value: false }); }
 });

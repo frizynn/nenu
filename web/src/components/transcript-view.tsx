@@ -1,3 +1,4 @@
+import { ChatMedia } from "./chat-media";
 import { useMemo, useState } from "react";
 import { ChevronRight, Info, User } from "lucide-react";
 
@@ -61,6 +62,7 @@ function Part({ part, query, focused = false, active = false }: { part: Transcri
         text={part.text}
         query={query}
       />
+      <ChatMedia text={part.text} />
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
     </div>
   );

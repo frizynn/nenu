@@ -44,6 +44,7 @@ export function pageEntries(
 
 export class TranscriptStore {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly loading = new Map<string, Promise<CacheEntry>>();
 
   /**
    * Read one page of a pane's journal.
@@ -73,17 +74,13 @@ export class TranscriptStore {
       this.cache.delete(path);
       this.cache.set(path, entry);
     } else {
-      const { text, complete, size, mtimeMs } = await adapter.source.load(path);
-      const usage = adapter.parseUsage?.(text);
-      entry = {
-        size, mtimeMs, complete, entries: adapter.parse(text), pages: new Map(),
-        ...(usage ? { telemetry: { ...usage, fileTruncated: !complete } } : {}),
-      };
-      this.cache.set(path, entry);
-      if (this.cache.size > CACHE_MAX) {
-        const oldest = this.cache.keys().next().value;
-        if (oldest !== undefined) this.cache.delete(oldest);
+      // Multiple phones can request the same changed log before its first read settles.
+      let pending = this.loading.get(path);
+      if (!pending) {
+        pending = this.load(adapter, path).finally(() => this.loading.delete(path));
+        this.loading.set(path, pending);
       }
+      entry = await pending;
     }
     const key = JSON.stringify([opts.limit, opts.before ?? null]);
     const cachedPage = entry.pages.get(key);
@@ -102,5 +99,17 @@ export class TranscriptStore {
     entry.pages.set(key, page);
     if (entry.pages.size > 8) entry.pages.delete(entry.pages.keys().next().value!);
     return page;
+  }
+
+  private async load(adapter: JournalAdapter, path: string): Promise<CacheEntry> {
+    const { text, complete, size, mtimeMs } = await adapter.source.load(path);
+    const usage = adapter.parseUsage?.(text);
+    const entry: CacheEntry = {
+      size, mtimeMs, complete, entries: adapter.parse(text), pages: new Map(),
+      ...(usage ? { telemetry: { ...usage, fileTruncated: !complete } } : {}),
+    };
+    this.cache.set(path, entry);
+    if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value!);
+    return entry;
   }
 }

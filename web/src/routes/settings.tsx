@@ -3,7 +3,6 @@ import { Bell, Loader2 } from "lucide-react";
 import { useNavigate, useRouteLoaderData } from "react-router";
 
 import { AppHeader } from "@/components/app-header";
-import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { BuildStamp } from "@/components/build-stamp";
 import { UpdateBanner } from "@/components/update-banner";
 import { ConnectionInfo } from "@/components/connection-info";
@@ -26,7 +25,6 @@ import type { PushAvailability } from "@/lib/push";
 export function SettingsRoute() {
   const navigate = useNavigate();
   const session = useSession();
-  const stalled = useLoadingStalled();
   const { state, busy, setEnabled } = usePushControl();
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +57,7 @@ export function SettingsRoute() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-screen-sm flex-1 flex-col">
-      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)} stalled={stalled}
+      <AppHeader bridge={root?.bridge} error={Boolean(root?.error)}
         onHome={() => navigate(homePath(session))}>
         <h1 className="truncate text-sm font-semibold tracking-tight">Settings</h1>
       </AppHeader>

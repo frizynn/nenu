@@ -1179,6 +1179,13 @@ describe("marksPaneSeen — CSRF guard on marking a pane seen", () => {
     expect(marksPaneSeen(withHeader({ [SEEN_HEADER]: "1" }), "file")).toBe(true);
   });
 
+  test("subagent polling never clears unseen activity without the client header", () => {
+    for (const action of ["subagents", "subagent-history"]) {
+      expect(marksPaneSeen(withHeader(), action)).toBe(false);
+      expect(marksPaneSeen(withHeader({ [SEEN_HEADER]: "1" }), action)).toBe(true);
+    }
+  });
+
   test("write actions count without it — they already cleared the Origin-requiring write gate", () => {
     for (const action of ["reply", "keys", "upload", "close", "rename"]) {
       expect(marksPaneSeen(withHeader(), action)).toBe(true);

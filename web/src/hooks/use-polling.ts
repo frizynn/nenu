@@ -108,12 +108,18 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
       // Already loading: normally we leave it be, but a revalidation stuck past SUPERSEDE_MS is
       // almost certainly a black-holed fetch — kick a fresh one to supersede it and self-heal.
       const since = loadingSince.current;
-      if (since !== null && Date.now() - since >= SUPERSEDE_MS) r.revalidate();
+      if (since !== null && Date.now() - since >= SUPERSEDE_MS) { loadingSince.current = Date.now(); r.revalidate(); }
     };
     const id = window.setInterval(tick, ms);
     const onWake = () => tick();
+    let wasHidden = document.hidden;
     const onVisible = () => {
-      if (!document.hidden) tick();
+      const resumed = wasHidden && !document.hidden;
+      wasHidden = document.hidden;
+      if (resumed && !isLocked() && ref.current.state === "loading") {
+        loadingSince.current = Date.now();
+        ref.current.revalidate();
+      } else if (!document.hidden) tick();
     };
     window.addEventListener("focus", onWake);
     window.addEventListener("online", onWake);

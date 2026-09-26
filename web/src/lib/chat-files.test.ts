@@ -31,3 +31,19 @@ describe("chat file references", () => {
     expect(chatFileReferences(entries)[0]).toMatchObject({ path: "README.md", mentions: 1 });
   });
 });
+
+it("keeps file edit provenance when prose already mentioned the same path", () => {
+  const references = chatFileReferences([{ uuid: "edit", ts: "", role: "assistant", parts: [
+    { kind: "text", text: "Updating report.md" },
+    { kind: "tool", name: "Write", summary: "report.md", result: { text: "Written" } },
+  ] }]);
+  expect(references).toEqual([expect.objectContaining({ path: "report.md", edited: true, mentions: 1 })]);
+});
+
+it("scans slash-heavy tool output without blocking the chat", () => {
+  const output = ` ${Array(24).fill("folder").join("/")}/noextension `;
+  const start = performance.now();
+  expect(filePathsInText(output)).toEqual([]);
+  expect(performance.now() - start).toBeLessThan(500);
+  expect(filePathsInText('Saved src/one.ts\\nweb/src/two.ts\\n')).not.toContain('src/one.ts\\nweb/src/two.ts');
+});

@@ -1,4 +1,4 @@
-import { defaultSleep } from "./harness/guard";
+import { defaultSleep } from "./harness/poll";
 import type { MenuModel } from "./blocks";
 import { menusSameIdentity, submitMenuKeys } from "./menu-action";
 import { modelRowKeys } from "./native-model-menu";

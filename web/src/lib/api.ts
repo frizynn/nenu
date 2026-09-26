@@ -1,3 +1,4 @@
+import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
@@ -574,4 +575,25 @@ export function fetchConversations(paneId: string, session?: string, signal?: Ab
 
 export function connectConversation(paneId: string, id: string, session?: string): Promise<ActionResponse> {
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/connect`, session), { method: "POST", body: JSON.stringify({ id }) });
+}
+
+export function fetchSubagents(paneId: string, session?: string, signal?: AbortSignal): Promise<SubagentsResponse> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/subagents`, session), { signal });
+}
+export function fetchSubagentHistory(paneId: string, id: string, session?: string, signal?: AbortSignal): Promise<SubagentHistoryResponse> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/subagent-history?id=${encodeURIComponent(id)}`, session), { signal });
+}
+
+export interface ProjectFilesPage { path: string; files: Array<{ name: string; path: string; kind: "file" | "directory"; size: number; updatedAt: string }>; truncated: boolean }
+export function fetchProjectFiles(paneId: string, path: string, session?: string, signal?: AbortSignal): Promise<ProjectFilesPage> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/files?path=${encodeURIComponent(path)}`, session), { signal });
+}
+
+export interface QueueMessage { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; error?: string }
+export type MessageQueuePage = { available: false; messages: [] } | { available: true; scope: string; messages: QueueMessage[] };
+export function fetchMessageQueue(paneId: string, session?: string, signal?: AbortSignal): Promise<MessageQueuePage> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{signal});
+}
+export function changeMessageQueue(paneId:string, body:{scope:string;action:"add"|"edit"|"remove"|"send";id:string;text?:string;revision?:number},session?:string):Promise<MessageQueuePage>{
+  return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
 }

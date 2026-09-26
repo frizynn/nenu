@@ -95,7 +95,14 @@ the unit name; the Herdr action runs from anywhere.
   `systemctl --user restart collie`. Forgetting this is the #1 "my change didn't take" trap.
 - `bun run build` (root) and `collie-ctl.sh build` **typecheck both sides first** (root tsc + web
   tsc), then build web to `dist-staging` and swap it in atomically — a failed build never empties a
-  live `web/dist`. Bare `cd web && bun run build` still skips typechecking; don't ship from it.
+  live `web/dist`. Root `build:web` uses that same staged pipeline. Bare `cd web && bun run build`
+  still skips typechecking and staging; don't ship from it.
+- Open chat/terminal views defer automatic page reloads. Hashed frontend assets are retained in
+  the bridge state directory for up to seven days / 128 MiB so older clients can load deferred
+  viewers after updates. See [ADR 0026](.adr/0026-open-clients-survive-frontend-updates.md).
+- Update discovery never shows a floating notice. Settings owns manual updating; downloads must
+  finish before navigation, and a failed update preserves the current page. See
+  [ADR 0027](.adr/0027-quiet-recovery-on-intermittent-networks.md).
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
@@ -122,11 +129,22 @@ the unit name; the Herdr action runs from anywhere.
   followed by `revalidator.revalidate()`. There is **no TanStack Query** — don't reintroduce it.
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
+- A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
+  failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
+  describe connection health. Brief failures retry quietly; only sustained outages show the
+  connection notice and block the composer. Herdr unavailability and access restrictions still
+  block immediately. Do not feed elapsed poll time into connection state.
 - **The idle lock pauses; it does not gate.** It only appears when Nenu is left *open, visible and
   untouched* — a hidden page never locks, and returning to the foreground auto-resumes. It covers a
   still-mounted router (unmounting it ate in-progress composer drafts) and pauses polling through
   `lib/idle.ts`. Don't restore it as a security control or re-describe it as one
   ([ADR 0007](./.adr/0007-the-idle-lock-is-a-pause-not-a-gate.md)).
+- Journal reads pause while the raw terminal is selected and resume immediately on return to chat.
+  Queue and subagent reads respect the idle cover. A hidden page skips periodic update checks.
+- Concurrent readers share one journal load/parse; every request still resolves and stats its source.
+  Encoded history pages are reused only up to 256 KiB; larger history responses stay uncached in
+  encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
+  without printing transcript content.
 - **"Type into terminal" is armed by a named choice and dies with the pane view.** Long-pressing Send
   opens a menu; the hold never arms it alone. It disarms on a pane switch, a composer lock (gone pane,
   read-only, idle pause), a hidden page, and a failed batch — never persisted, never restored. Don't

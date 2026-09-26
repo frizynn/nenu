@@ -851,3 +851,38 @@ it("connects a chosen history without sending a message to the terminal", async 
   expect(await screen.findByText("Recovered answer")).toBeInTheDocument();
   expect(writes).not.toHaveBeenCalled();
 });
+
+it("keeps an open session on screen when a newer build is announced, even without a draft", async () => {
+  const { startSelfUpdate, __resetSelfUpdate, __setReloadImpl } = await import("@/lib/self-update");
+  const { observeServerBuild, __resetServerBuild } = await import("@/lib/server-build");
+  __resetServerBuild(); __resetSelfUpdate();
+  const reload = vi.fn(); __setReloadImpl(reload);
+  const stop = startSelfUpdate();
+  try {
+    renderChat({ agent: { ...fixtureAgents[0]!, status: "idle" } });
+    act(() => { observeServerBuild("new-release"); observeServerBuild("new-release"); });
+    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("");
+    expect(reload).not.toHaveBeenCalled();
+  } finally { stop(); __resetServerBuild(); __resetSelfUpdate(); }
+});
+
+
+it("allows a send attempt during a brief signal loss and retains the draft if it fails", async () => {
+  __resetConnectionHealth();
+  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
+  renderChat({ error: true });
+  const box = screen.getByPlaceholderText(/type a reply/i);
+  await userEvent.type(box, "keep this during weak signal");
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(send).toBeEnabled();
+  await userEvent.click(send);
+  await waitFor(() => expect(send).toBeEnabled());
+  expect(box).toHaveValue("keep this during weak signal");
+});
+
+
+it("blocks sending immediately after access is refused, without waiting for the outage grace", async () => {
+  __resetConnectionHealth();
+  renderChat({ error: true, authError: true });
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+});

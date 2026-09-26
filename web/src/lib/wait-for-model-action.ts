@@ -2,7 +2,7 @@ import { fetchPane } from "./api";
 import { parseAnsi } from "./ansi";
 import { splitLines, type MenuModel } from "./blocks";
 import { adapterFor } from "./harness/registry";
-import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS } from "./harness/guard";
+import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS } from "./harness/poll";
 import { parseNativeModelMenu } from "./native-model-menu";
 import type { WaitForNativeModelMenuArgs, WaitForNativeModelMenuResult } from "./wait-for-native-model-menu";
 import type { PaneReadResponse } from "./types";

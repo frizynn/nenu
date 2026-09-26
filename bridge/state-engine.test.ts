@@ -615,3 +615,12 @@ describe("StateEngine — pane capability fields", () => {
     expect(engine.current().agents[0]!.readableLines).toBeUndefined();
   });
 });
+
+test("retries a transient snapshot failure before the idle cadence expires", async () => {
+  const { herdr, engine } = makeEngine();
+  const snapshot = herdr.sessionSnapshot.bind(herdr); let calls = 0;
+  herdr.sessionSnapshot = async () => { if (++calls === 1) throw new Error("temporary socket timeout"); return snapshot(); };
+  engine.start(); engine.setCadence(12_000);
+  try { await new Promise(resolve => setTimeout(resolve, 1200)); expect(engine.current().bridge).toBe("connected"); }
+  finally { engine.stop(); }
+});

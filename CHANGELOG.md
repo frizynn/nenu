@@ -8,6 +8,68 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.45.7] - 2026-09-26
+
+### Fixed
+- Keep the server reply guard independent of React and browser transport dependencies. (4a406a2)
+
+## [0.45.6] - 2026-09-26
+
+### Fixed
+- Pause hidden conversation, queue, subagent and update reads; catch up when their view resumes. (6bb1a5b)
+- Share concurrent journal reads and reuse bounded history encoding across clients. (6bb1a5b)
+
+
+## [0.45.5] - 2026-09-26
+
+### Fixed
+- Retry brief signal losses quietly, preserving drafts and cached conversations. (d76b531)
+- Keep interface updates in Settings and wait for downloads before reloading. (d76b531)
+
+## [0.45.4] - 2026-09-26
+
+### Fixed
+- Keep Send enabled and connection status stable during slow successful refreshes. (9a6ff29)
+
+## [0.45.3] - 2026-09-26
+
+### Fixed
+- Avoid freezing the chat while scanning tool output for artifacts. (24a09cc)
+- Keep document modules available across updates and checkout changes. (24a09cc)
+- Defer automatic page reloads while a chat or terminal is open. (24a09cc)
+- Stage root frontend builds before replacing the served app. (24a09cc)
+
+## [0.45.2] - 2026-09-26
+
+### Fixed
+- Recover Claude subagent task names, nested relationships and native completion states. (6b747f9)
+- Separate current subagent activity from history and show readable Claude model names. (6b747f9)
+
+## [0.45.1] - 2026-09-26
+
+### Fixed
+- Preserve drafts and enqueue identities across connection loss and reloads. (d20721e)
+
+## [0.45.0] - 2026-09-26
+
+### Added
+- Inline image/video previews, project browsing and session artifacts. (5180a75)
+- Persistent message queue with editing, explicit delivery and background dispatch. (5180a75)
+
+### Fixed
+- Resume live polling immediately after the phone returns from background. (5180a75)
+
+## [0.44.1] - 2026-09-26
+
+### Fixed
+- Claude hook installation uses the same configured state directory as the supervised bridge. (255ec79)
+
+## [0.44.0] - 2026-09-26
+
+### Added
+- Per-session subagent inspector with live status and separate read-only conversations for Codex and Claude. (3f487bf)
+- Claude lifecycle hooks, incremental transcript reads and session-bound child access. (3f487bf)
+
 ## [0.43.0] - 2026-09-26
 
 ### Added

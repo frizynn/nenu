@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { __resetServerBuild, observeServerBuild } from "@/lib/server-build";
+import { checkForUpdate } from "@/lib/pwa";
+vi.mock("@/lib/pwa", () => ({ checkForUpdate: vi.fn() }));
 import { BuildStamp } from "./build-stamp";
 
 // BUILD.id under vitest is "test" (vitest.config `define`). The footer nag is driven live by the
@@ -26,4 +28,15 @@ describe("BuildStamp — live staleness from the server-build store", () => {
     act(() => observeServerBuild("test")); // back in sync (e.g. this bundle was reloaded)
     expect(screen.queryByText(/tap to update/i)).not.toBeInTheDocument();
   });
+});
+
+
+it("lets a failed update be retried without leaving an endless updating label", async () => {
+  vi.mocked(checkForUpdate).mockResolvedValue(false);
+  render(<BuildStamp />);
+  act(() => observeServerBuild("next-build"));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Reload interface" })));
+  expect(screen.getByRole("status")).toHaveTextContent("Your session is unchanged");
+  expect(screen.getByRole("button", { name: "Reload interface" })).toBeEnabled();
+  expect(screen.queryByText("updating…")).not.toBeInTheDocument();
 });

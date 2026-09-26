@@ -1334,6 +1334,21 @@ cmd_push_test() {
   "$BUN" run "${PLUGIN_ROOT}/scripts/push-test.ts" "$@"
 }
 
+# Match the supervised bridge's environment, not Herdr's action-only state directory.
+cmd_subagent_hooks() (
+  [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
+  export_bridge_env
+  if have_systemd || have_launchd; then
+    for key in HERDR_PLUGIN_STATE_DIR COLLIE_STATE_DIR; do
+      case " $COLLIE_ENV_KEYS " in
+        *" $key "*) ;;
+        *) unset "$key" ;;
+      esac
+    done
+  fi
+  "$BUN" run "${PLUGIN_ROOT}/scripts/install-subagent-hooks.ts" "$@"
+)
+
 # Generate the VAPID keypair Web Push needs and write it into the plugin .env. This exists because the
 # config dir is the hard part: it is resolved four different ways (see resolve_config_dir), so an
 # operator following a "put these in your .env" instruction has to first work out WHICH .env — and
@@ -1369,6 +1384,7 @@ case "${1:-}" in
   version) cmd_version ;;
   push-keys) shift || true; cmd_push_keys "$@" ;;
   push-test) shift || true; cmd_push_test "$@" ;;
+  subagent-hooks) shift || true; cmd_subagent_hooks "$@" ;;
   logs)    cmd_logs "${2:-50}" ;;
-  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
+  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|subagent-hooks|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
 esac

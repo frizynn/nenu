@@ -13,7 +13,7 @@ export { CONNECTION_LOST_MS, TROUBLE_MS };
 
 /**
  * Shared implementation for both connection thresholds: true once `connecting` (isConnecting —
- * offline / snapshot error / Herdr down / stalled) has stayed true continuously for `thresholdMs`,
+ * snapshot error / Herdr down / no first snapshot) has stayed true continuously for `thresholdMs`,
  * measured from the last PROVABLY LIVE moment. Resets to false the instant `connecting` goes false.
  *
  * Derives entirely from the module-scoped lib/connection-health store — NOT a per-instance timer. The
