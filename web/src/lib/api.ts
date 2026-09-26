@@ -1,3 +1,4 @@
+import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
@@ -574,4 +575,11 @@ export function fetchConversations(paneId: string, session?: string, signal?: Ab
 
 export function connectConversation(paneId: string, id: string, session?: string): Promise<ActionResponse> {
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/connect`, session), { method: "POST", body: JSON.stringify({ id }) });
+}
+
+export function fetchSubagents(paneId: string, session?: string, signal?: AbortSignal): Promise<SubagentsResponse> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/subagents`, session), { signal });
+}
+export function fetchSubagentHistory(paneId: string, id: string, session?: string, signal?: AbortSignal): Promise<SubagentHistoryResponse> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/subagent-history?id=${encodeURIComponent(id)}`, session), { signal });
 }

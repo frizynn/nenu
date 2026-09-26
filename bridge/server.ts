@@ -1,3 +1,4 @@
+import { Subagents } from "./subagents.ts";
 import { historyResponse } from "./history-response.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { launchAgent, startPaneAgent } from "./agent-start.ts";
@@ -117,7 +118,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -156,7 +157,7 @@ export const SEEN_HEADER = "x-collie-seen";
  */
 export function marksPaneSeen(req: Request, action: string | undefined): boolean {
   if (req.headers.get(SEEN_HEADER) !== null) return true;
-  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file";
+  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file" && action !== "subagents" && action !== "subagent-history";
 }
 
 export function startServer(opts: {
@@ -182,6 +183,7 @@ export function startServer(opts: {
   const operatorQuickReplies = createOperatorQuickReplies(cfg.quickRepliesFile);
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
+  const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
@@ -291,7 +293,7 @@ export function startServer(opts: {
         // Reading a pane is allowed for any access-gated client; every action (reply/keys/upload/
         // close) types into or restructures a terminal, so it additionally needs an authorised device.
         // History and skill discovery are READ actions; neither drives a terminal.
-        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file";
+        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file" || action === "subagents" || action === "subagent-history";
         const denied = guard(req, cfg, isRead ? "read" : "write");
         if (denied) return denied;
         const rt = registry.get(sessionName);
@@ -312,6 +314,16 @@ export function startServer(opts: {
         // `history` is a read, so it gets no device attribution (nothing is written to attribute).
         const device = isRead ? null : deviceAuth(req, cfg).device;
 
+        if ((action === "subagents" || action === "subagent-history") && req.method === "GET") {
+          if (!cfg.transcript) return action === "subagents" ? json({ available: false, reason: "disabled" }, null) : jsonError("Conversation history is disabled.", 409, null);
+          const original = rt.engine.current().agents.find((entry) => entry.paneId === paneId);
+          if (!original) return action === "subagents" ? json({ available: false, reason: "no-session" }, null) : jsonError("Session is unavailable.", 404, null);
+          try {
+            const pane = await conversations.resolve(original, herdr, session);
+            const result = action === "subagents" ? await subagents.list(pane) : await subagents.history(pane, url.searchParams.get("id") ?? "");
+            return json(result, req.headers.get("accept-encoding"));
+          } catch { return jsonError("Could not read subagents for this session.", 503, null); }
+        }
         if (!action && req.method === "GET") return readPane(herdr, cfg, paneId, url, req);
         if (action === "start" && req.method === "POST") {
           const kind = launchAgent(await req.json().catch(() => null));

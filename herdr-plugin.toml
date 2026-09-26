@@ -1,6 +1,6 @@
 id = "herdr.collie"
 name = "Nenu"
-version = "0.43.0"
+version = "0.44.0"
 min_herdr_version = "0.7.0"
 description = "Herdr agent workbench for mobile and web, served over Tailscale"
 platforms = ["linux", "macos"]
@@ -102,3 +102,9 @@ id = "push-test"
 title = "Send a test notification"
 contexts = ["workspace"]
 command = ["bash", "scripts/collie-ctl.sh", "push-test"]
+
+[[actions]]
+id = "subagent-hooks"
+title = "Enable Claude subagent activity"
+contexts = ["workspace"]
+command = ["bun", "run", "scripts/install-subagent-hooks.ts"]

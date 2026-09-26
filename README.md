@@ -196,3 +196,24 @@ The message box keeps attachments, model selection and Send together. **More mes
 actions** opens commands, quick replies, terminal keys and usage/context details. Drafts
 survive switching between chat and terminal. If verification fails, keep the draft and
 retry after inspecting the terminal; a typing acknowledgement is not a model response.
+
+### Subagents within a conversation
+
+The **Agents** button beside Terminal opens the current conversation's delegated tasks. Each row
+shows its last known state, task and reported model. Open a row to read that child's conversation;
+the parent terminal and draft remain in place. The list includes nested children when their parent
+relationship is available. A disconnected or unobserved runtime is shown as unknown, not working.
+
+Codex uses its local App Server and native journal lifecycle events. Claude discovers transcripts under the exact parent
+session and can additionally track live start/finish events. To enable those events while preserving
+your other Claude hooks, run:
+
+```sh
+herdr plugin action invoke subagent-hooks --plugin herdr.collie
+```
+
+The action backs up Claude's user settings before adding Nenu's hooks. Existing sessions that have
+not loaded the hooks can still expose history, but their live status may remain unknown. The hook
+stores session/agent IDs, agent type, event and timestamp, never prompts or tool arguments. Custom
+profiles can run `bun run scripts/install-subagent-hooks.ts /path/to/settings.json /path/to/nenu-state`.
+See [the subagent inspector decision](.adr/0024-session-subagent-inspector.md) for scope and limits.

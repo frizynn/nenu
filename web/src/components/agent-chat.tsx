@@ -1,3 +1,4 @@
+import { SessionSubagents } from "@/components/session-subagents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate, useRevalidator } from "react-router";
@@ -711,6 +712,7 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
+              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} agent={agent.agent} enabled={!connecting && !gone} />}
               {conversationCapable && (
                 <button
                   type="button"
