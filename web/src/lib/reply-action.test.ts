@@ -207,6 +207,27 @@ describe("sendGuardedReply", () => {
     ]);
   });
 
+  // The canary's busy send (M37/03): while Codex streams its first reply, the status row ends in a
+  // spinner frame. That row used to hide the composer, so the pre-flight refused the send as
+  // `blocked`, where Codex queues it. The pane holds the busy screen until the text is typed, then
+  // the same pane with the draft in the box and the queue hint under it.
+  it("types, verifies, and submits to a Codex that is still working", async () => {
+    const text = "a draft typed while codex works";
+    const calls = harness(() =>
+      fixtureText(calls.length === 0 ? "codex--v0156-busy-streaming.txt" : "codex--v0156-busy-draft.txt"),
+    );
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text, agent: "codex", ...instant });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      // Nenu delivers a Codex reply as a bracketed paste, and its submit is not bound to the
+      // verified prompt (upstream e7c1c787 is not in Nenu).
+      { text, submit: false, paste: true },
+      { text: "", submit: true },
+    ]);
+  });
+
   // The 82-column stall: Claude's slash popup clipped a command name to "…ugin:…", the box went
   // undetected, and the guard typed the text and withheld Enter. The same screen now verifies.
   it("verifies a slash command under a popup with a clipped command name, then submits", async () => {
