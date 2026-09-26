@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.45.1] - 2026-09-26
 
 ### Fixed
-- Preserve drafts and enqueue identities across connection loss and reloads.
+- Preserve drafts and enqueue identities across connection loss and reloads. (d20721e)
 
 ## [0.45.0] - 2026-09-26
 
