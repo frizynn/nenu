@@ -228,3 +228,14 @@ describe("useLiveConversation", () => {
   });
 
 });
+
+
+it("keeps the cached conversation quiet during a brief failed refresh", async () => {
+  const hook = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true, busy: true }));
+  await act(async () => {});
+  fetchMock.mockRejectedValue(new Error("weak signal"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+  expect(hook.result.current.history?.available).toBe(true);
+  expect(hook.result.current.error).toBe(false);
+  hook.unmount();
+});

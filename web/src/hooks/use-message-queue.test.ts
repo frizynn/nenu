@@ -58,3 +58,18 @@ describe("queue acknowledgements", () => {
     hook.unmount();
   });
 });
+
+it("keeps cached queue refresh failures quiet while a brief drop recovers", async () => {
+  vi.useFakeTimers();
+  const hook = renderHook(() => useMessageQueue("pane", "session", true));
+  try {
+    await act(async () => {});
+    vi.mocked(fetchMessageQueue).mockRejectedValue(new Error("weak signal"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(hook.result.current.page).toEqual(page);
+    expect(hook.result.current.error).toBe("");
+    vi.mocked(fetchMessageQueue).mockResolvedValue(page);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(hook.result.current.error).toBe("");
+  } finally { hook.unmount(); vi.useRealTimers(); }
+});
