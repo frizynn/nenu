@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.44.1] - 2026-09-26
 
 ### Fixed
-- Claude hook installation uses the same configured state directory as the supervised bridge.
+- Claude hook installation uses the same configured state directory as the supervised bridge. (255ec79)
 
 ## [0.44.0] - 2026-09-26
 
