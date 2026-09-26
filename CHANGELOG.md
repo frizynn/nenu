@@ -11,8 +11,8 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.45.5] - 2026-09-26
 
 ### Fixed
-- Retry brief signal losses quietly, preserving drafts and cached conversations.
-- Keep interface updates in Settings and wait for downloads before reloading.
+- Retry brief signal losses quietly, preserving drafts and cached conversations. (d76b531)
+- Keep interface updates in Settings and wait for downloads before reloading. (d76b531)
 
 ## [0.45.4] - 2026-09-26
 
