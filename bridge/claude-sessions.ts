@@ -1,4 +1,11 @@
+import { homedir } from "node:os";
+import { delimiter, join } from "node:path";
 import { record } from "./codex-rpc.ts";
+
+/** launchd does not inherit the user's interactive shell PATH. */
+export function findClaudeExecutable(path = process.env.PATH, home = homedir()): string | null {
+  return Bun.which("claude", { PATH: [path, join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(delimiter) });
+}
 
 export interface ClaudeSession { id: string; sessionId: string; pid: number; cwd: string; startedAt?: number }
 
@@ -36,7 +43,9 @@ export class ClaudeSessions {
     return value;
   }
   private async read(): Promise<ClaudeSession[]> {
-    const child = Bun.spawn(["claude", "agents", "--json"], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
+    const executable = findClaudeExecutable();
+    if (!executable) throw new Error("Claude executable is unavailable.");
+    const child = Bun.spawn([executable, "agents", "--json"], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
     const timer = setTimeout(() => child.kill(), 4_000);
     try {
       const reader = child.stdout.getReader();
