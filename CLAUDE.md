@@ -139,6 +139,12 @@ the unit name; the Herdr action runs from anywhere.
   still-mounted router (unmounting it ate in-progress composer drafts) and pauses polling through
   `lib/idle.ts`. Don't restore it as a security control or re-describe it as one
   ([ADR 0007](./.adr/0007-the-idle-lock-is-a-pause-not-a-gate.md)).
+- Journal reads pause while the raw terminal is selected and resume immediately on return to chat.
+  Queue and subagent reads respect the idle cover. A hidden page skips periodic update checks.
+- Concurrent readers share one journal load/parse; every request still resolves and stats its source.
+  Encoded history pages are reused only up to 256 KiB; larger history responses stay uncached in
+  encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
+  without printing transcript content.
 - **"Type into terminal" is armed by a named choice and dies with the pane view.** Long-pressing Send
   opens a menu; the hold never arms it alone. It disarms on a pane switch, a composer lock (gone pane,
   read-only, idle pause), a hidden page, and a failed batch — never persisted, never restored. Don't

@@ -1,3 +1,4 @@
+import { setLocked } from "@/lib/idle";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -76,4 +77,18 @@ it("separates completed history from live activity and displays the readable mod
   expect(screen.getByRole("heading", { name: "Finished (1)" })).toBeInTheDocument();
   expect(screen.getAllByText("Review checkout")).toHaveLength(1);
   expect(screen.getByText("Opus 5.5")).toBeInTheDocument();
+});
+
+
+it("does not read subagents behind the idle cover and refreshes on resume", async () => {
+  let calls = 0;
+  server.use(http.get("/api/pane/parent/subagents", () => { calls++; return HttpResponse.json(list); }));
+  setLocked(true);
+  const view = render(<SessionSubagents paneId="parent" agent="claude" />);
+  try {
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    expect(calls).toBe(0);
+    await act(async () => setLocked(false));
+    await waitFor(() => expect(calls).toBe(1));
+  } finally { view.unmount(); setLocked(false); }
 });

@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.45.6] - 2026-09-26
+
+### Fixed
+- Pause hidden conversation, queue, subagent and update reads; catch up when their view resumes.
+- Share concurrent journal reads and reuse bounded history encoding across clients.
+
+
 ## [0.45.5] - 2026-09-26
 
 ### Fixed

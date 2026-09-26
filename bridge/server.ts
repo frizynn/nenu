@@ -17,7 +17,7 @@ import type { ActivityLedger } from "./activity.ts";
 import type { AuditLog } from "./audit.ts";
 import { isLoopbackBindHost, type Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
-import { computeEtag, gzipJsonResponse, notModified } from "./http-cache.ts";
+import { computeEtag, gzipJsonResponse, JsonBody, notModified } from "./http-cache.ts";
 import type { NotifyPrefs, NotifyPrefsStore } from "./notify-prefs.ts";
 import { createOperatorCommands } from "./operator-commands.ts";
 import { createOperatorKeys } from "./operator-keys.ts";
@@ -637,8 +637,8 @@ async function readPane(
     const data = paneReadResponse(paneId, read);
     // ETag is derived from the serialised body — if content hasn't changed the client gets a 304
     // and skips the whole transfer (the big win on a cellular link).
-    const bodyStr = JSON.stringify(data);
-    const etag = computeEtag(bodyStr);
+    const body = new JsonBody(data);
+    const etag = body.etag;
     // Tag pane polls too (both the 304 and the full body), so a client that only has a pane open —
     // not the home snapshot — still observes a live rebuild between polls.
     const build = await buildId();
@@ -655,7 +655,7 @@ async function readPane(
       );
     }
     return withBuildHeader(
-      secure(gzipJsonResponse(data, req.headers.get("accept-encoding"), { etag })),
+      secure(body.response(req.headers.get("accept-encoding"), { etag })),
       build,
     );
   } catch (err) {

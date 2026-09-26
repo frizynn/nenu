@@ -42,24 +42,32 @@ export function gzipJsonResponse(
   acceptEncoding: string | null,
   extraHeaders: Record<string, string> = {},
 ): Response {
-  const body = JSON.stringify(data);
-  const useGzip =
-    acceptEncoding !== null &&
-    acceptEncoding.includes("gzip") &&
-    body.length >= GZIP_MIN_BYTES;
+  return new JsonBody(data).response(acceptEncoding, extraHeaders);
+}
 
-  const headers: Record<string, string> = {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    ...extraHeaders,
-  };
+/** Immutable JSON bytes shared by readers until the source representation changes. */
+export class JsonBody {
+  private readonly body: string;
+  private compressed?: ReturnType<typeof Bun.gzipSync>;
 
-  if (useGzip) {
-    const compressed = Bun.gzipSync(body);
-    headers["content-encoding"] = "gzip";
-    headers["vary"] = "accept-encoding";
-    return new Response(compressed, { headers });
+  constructor(data: unknown) { this.body = JSON.stringify(data); }
+
+  get byteLength(): number { return Buffer.byteLength(this.body); }
+
+  get etag(): string { return computeEtag(this.body); }
+
+  response(acceptEncoding: string | null, extraHeaders: Record<string, string> = {}): Response {
+    const headers = {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...extraHeaders,
+    };
+    if (acceptEncoding?.includes("gzip") && this.body.length >= GZIP_MIN_BYTES) {
+      this.compressed ??= Bun.gzipSync(this.body);
+      return new Response(this.compressed, {
+        headers: { ...headers, "content-encoding": "gzip", vary: "accept-encoding" },
+      });
+    }
+    return new Response(this.body, { headers });
   }
-
-  return new Response(body, { headers });
 }

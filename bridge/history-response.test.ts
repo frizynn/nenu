@@ -88,3 +88,17 @@ test("multiple readers reuse the encoded history without serializing or compress
     expect((await plain.json()).entries).toEqual(data.entries);
   } finally { stringify.mockRestore(); gzip.mockRestore(); }
 });
+
+
+test("large pages do not retain their encoded body but keep conditional reads cheap", async () => {
+  const data = page("large ".repeat(60_000));
+  const first = historyResponse(data, "one", null, "gzip");
+  const expected = await first.arrayBuffer();
+  const stringify = spyOn(JSON, "stringify");
+  try {
+    expect(historyResponse(data, "one", first.headers.get("etag"), "gzip").status).toBe(304);
+    expect(stringify).not.toHaveBeenCalled();
+    expect(await historyResponse(data, "one", null, "gzip").arrayBuffer()).toEqual(expected);
+    expect(stringify).toHaveBeenCalledTimes(1);
+  } finally { stringify.mockRestore(); }
+});

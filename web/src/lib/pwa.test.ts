@@ -205,3 +205,16 @@ it("shares repeated update clicks and clears a timed-out attempt without reloadi
   expect(reload).not.toHaveBeenCalled();
   expect(unregister).not.toHaveBeenCalled();
 });
+
+
+it("skips automatic update checks while the app is hidden", async () => {
+  await register();
+  Object.defineProperty(document, "hidden", { configurable: true, value: true });
+  try {
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(registration.update).not.toHaveBeenCalled();
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(registration.update).toHaveBeenCalledTimes(1);
+  } finally { Object.defineProperty(document, "hidden", { configurable: true, value: false }); }
+});

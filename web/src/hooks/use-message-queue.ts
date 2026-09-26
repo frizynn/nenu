@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isLocked, useLocked } from "@/lib/idle";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import {
   fetchMessageQueue,
@@ -42,6 +43,7 @@ export function useMessageQueue(
   session: string | undefined,
   enabled: boolean,
 ) {
+  const locked = useLocked();
   const [page, setPage] = useState<MessageQueuePage | null>(null);
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
@@ -58,14 +60,14 @@ export function useMessageQueue(
     pending.current = null;
   }, [paneId, session]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || locked) return;
     const scope = current.current;
     let stopped = false;
     let failedAt: number | null = null;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
     const poll = async () => {
-      if (stopped || document.hidden || controller) return;
+      if (stopped || document.hidden || isLocked() || controller) return;
       controller = new AbortController();
       try {
         const next = await fetchMessageQueue(
@@ -102,7 +104,7 @@ export function useMessageQueue(
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", wake);
     };
-  }, [paneId, session, enabled]);
+  }, [paneId, session, enabled, locked]);
   const mutate = useCallback(
     async (
       action: "add" | "edit" | "remove" | "send",

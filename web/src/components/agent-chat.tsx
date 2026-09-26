@@ -159,7 +159,7 @@ export function AgentChat({
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
   const conversation = useLiveConversation({
-    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), busy: agent?.status === "working",
+    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), paused: prefs.rawTerminal, busy: agent?.status === "working",
   });
   const hasConversation = Boolean(agent?.hasSession || conversation.history?.available);
   const operatorCommands = useOperatorCommands();

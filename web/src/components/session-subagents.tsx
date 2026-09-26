@@ -1,3 +1,4 @@
+import { isLocked, useLocked } from "@/lib/idle";
 import { modelDisplayName } from "@/lib/model-display";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Bot, ChevronRight, RefreshCw, Users } from "lucide-react";
@@ -69,6 +70,7 @@ export function SessionSubagents({
   agent: string;
   enabled?: boolean;
 }) {
+  const locked = useLocked();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [list, setList] = useState<SubagentsResponse | null>(null);
@@ -88,12 +90,12 @@ export function SessionSubagents({
     loadedSessionKey.current = null;
   }, [scope]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || locked) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     async function poll() {
-      if (disposed || document.hidden || controller) return;
+      if (disposed || document.hidden || isLocked() || controller) return;
       controller = new AbortController();
       const request = controller;
       try {
@@ -183,7 +185,7 @@ export function SessionSubagents({
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [scope, paneId, session, enabled, open, selected, refresh]);
+  }, [scope, paneId, session, enabled, open, selected, refresh, locked]);
   const stale = error || !enabled;
   const agents = list?.available ? list.agents : [];
   const active = (entry: SubagentView) =>

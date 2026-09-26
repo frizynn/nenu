@@ -10,7 +10,7 @@ import { isReloadHeld, subscribeReloadHeld } from "@/lib/reload-guard";
 // the worker lifecycle ourselves and reload once a new worker activates and unsent work is safe. Two entry
 // points share that watcher:
 //   1. a periodic update check, so a tab left open discovers and auto-applies a new build on its own;
-//   2. checkForUpdate(), so the footer's "tap to update" can force the check on demand.
+//   2. checkForUpdate(), so Settings' "Reload interface" can force the check on demand.
 
 // How often an open tab re-checks for a newer service worker. Frequent enough to feel automatic,
 // cheap enough to ignore (a conditional GET of sw.js that 304s when nothing changed).
@@ -117,7 +117,9 @@ registerSW({
     // *replaces* a prior controller (see onControllerChange); the first-visit initial claim is not
     // an update and must not reload.
     navigator.serviceWorker?.addEventListener("controllerchange", onControllerChange);
-    setInterval(() => void r.update().catch(() => {}), UPDATE_CHECK_MS);
+    setInterval(() => {
+      if (!document.hidden && !updateInFlight) void r.update().catch(() => {});
+    }, UPDATE_CHECK_MS);
   },
 });
 

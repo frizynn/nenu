@@ -1,9 +1,10 @@
-import { computeEtag, gzipJsonResponse, notModified } from "./http-cache.ts";
+import { JsonBody, notModified } from "./http-cache.ts";
 import type { TranscriptPage } from "./journal/types.ts";
 import type { PaneHistoryResponse } from "./types.ts";
 
 type Page = Omit<TranscriptPage, "paneId">;
-type Representation = { etag: string; data: PaneHistoryResponse };
+type Representation = { etag: string; data: PaneHistoryResponse; body?: JsonBody };
+const MAX_ENCODED_PAGE_BYTES = 256 * 1024;
 // Journal pages retain identity until their log changes. A weak cache cannot retain an evicted log.
 // Pane id remains part of the representation: two panes can point at one agent session's journal.
 const representations = new WeakMap<Page, Map<string, Representation>>();
@@ -14,15 +15,20 @@ export function historyResponse(page: Page, paneId: string, ifNoneMatch: string 
   if (!panes) { panes = new Map(); representations.set(page, panes); }
   const key = `${paneId}\0${sessionKey ?? ""}`;
   let representation = panes.get(key);
+  let encoded: JsonBody | undefined;
   if (!representation) {
     const data: PaneHistoryResponse = { paneId, available: true, ...page, ...(sessionKey ? { sessionKey } : {}) };
-    representation = { data, etag: computeEtag(JSON.stringify(data)) };
+    encoded = new JsonBody(data);
+    representation = {
+      data, etag: encoded.etag,
+      ...(encoded.byteLength <= MAX_ENCODED_PAGE_BYTES ? { body: encoded } : {}),
+    };
     panes.set(key, representation);
     if (panes.size > 8) panes.delete(panes.keys().next().value!);
   }
-  const { etag, data } = representation;
+  const { etag } = representation;
   if (notModified(ifNoneMatch, etag)) {
     return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
   }
-  return gzipJsonResponse(data, acceptEncoding, { etag });
+  return (representation.body ?? encoded ?? new JsonBody(representation.data)).response(acceptEncoding, { etag });
 }

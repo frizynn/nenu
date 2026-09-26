@@ -10,6 +10,7 @@ interface LiveConversationOptions {
   session?: string;
   enabled: boolean;
   busy?: boolean;
+  paused?: boolean;
 }
 
 interface ConversationState {
@@ -25,6 +26,7 @@ export function useLiveConversation({
   session,
   enabled,
   busy = false,
+  paused = false,
 }: LiveConversationOptions) {
   const scope = JSON.stringify([paneId, session ?? null]);
   const [state, setState] = useState<ConversationState>({
@@ -42,7 +44,7 @@ export function useLiveConversation({
   const previousActivity = useRef({ scope, enabled, locked, busy });
 
   useEffect(() => {
-    if (!enabled || !paneId || locked) return;
+    if (!enabled || !paneId || locked || paused) return;
     let disposed = false;
     const publish = (next: ConversationState) => { stateRef.current = next; setState(next); };
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -122,7 +124,7 @@ export function useLiveConversation({
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [paneId, session, scope, enabled, locked]);
+  }, [paneId, session, scope, enabled, locked, paused]);
 
   useEffect(() => {
     const before = previousActivity.current;
@@ -138,7 +140,7 @@ export function useLiveConversation({
   const current = state.scope === scope && enabled;
   return {
     history: current ? state.history : null,
-    loading: current && !locked ? state.loading : false,
+    loading: current && !locked && !paused ? state.loading : false,
     error: current ? state.error : false,
     refresh,
   };

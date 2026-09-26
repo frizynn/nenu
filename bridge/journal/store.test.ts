@@ -184,3 +184,30 @@ describe("pageEntries", () => {
     expect(pageEntries([], { limit: 10 })).toEqual({ window: [], hasMore: false });
   });
 });
+
+
+test("concurrent history readers share one load and refresh after an append", async () => {
+  const { adapter, calls, append } = fakeAdapter(["one", "two"]);
+  const store = new TranscriptStore();
+  const pages = await Promise.all(Array.from({ length: 8 }, () => store.page(adapter, REF, { limit: 2 })));
+  expect(calls.load).toBe(1);
+  expect(calls.parse).toBe(1);
+  expect(pages.every(page => page === pages[0])).toBe(true);
+  append("three");
+  const changed = await store.page(adapter, REF, { limit: 2 });
+  expect(changed?.entries.map(row => row.uuid)).toEqual(["two", "three"]);
+  expect(calls.load).toBe(2);
+});
+
+
+test("a failed shared journal read does not prevent retry", async () => {
+  const { adapter } = fakeAdapter(["one"]);
+  const load = adapter.source.load;
+  let fail = true;
+  adapter.source.load = async path => { if (fail) throw new Error("temporarily unavailable"); return load(path); };
+  const store = new TranscriptStore();
+  const attempts = await Promise.allSettled([store.page(adapter, REF, { limit: 2 }), store.page(adapter, REF, { limit: 2 })]);
+  expect(attempts.every(row => row.status === "rejected")).toBe(true);
+  fail = false;
+  expect((await store.page(adapter, REF, { limit: 2 }))?.entries[0]?.uuid).toBe("one");
+});
