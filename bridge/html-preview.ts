@@ -1,3 +1,4 @@
+import { designboardPreview } from "./designboard.ts";
 import { paneFileResponse } from "./pane-files.ts";
 import { HTML_PREVIEW_CSP } from "../web/src/lib/html-preview.ts";
 
@@ -10,7 +11,7 @@ export async function renderedHtmlResponse(
     return new Response("An HTML file is required.", { status: 400 });
   const source = await paneFileResponse(cwd, path);
   if (!source.ok) return source;
-  return new Response(source.body, {
+  return new Response(designboardPreview(await source.text()), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",

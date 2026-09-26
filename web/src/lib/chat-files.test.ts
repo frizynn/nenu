@@ -1,4 +1,4 @@
-import { chatFileReferences, filePathsInText } from "./chat-files";
+import { chatFileReferences, filePathsInText, artifactKind } from "./chat-files";
 import type { TranscriptEntry } from "./types";
 
 describe("chat file references", () => {
@@ -46,4 +46,15 @@ it("scans slash-heavy tool output without blocking the chat", () => {
   expect(filePathsInText(output)).toEqual([]);
   expect(performance.now() - start).toBeLessThan(500);
   expect(filePathsInText('Saved src/one.ts\\nweb/src/two.ts\\n')).not.toContain('src/one.ts\\nweb/src/two.ts');
+});
+
+it("tracks latest mentions and separates delivered documents from edited sources and HTML", () => {
+  const refs = chatFileReferences([
+    { uuid: "old", ts: "2026-09-25", role: "assistant", parts: [{ kind: "text", text: "[Report](report.pdf) and [entry](index.html)" }] },
+    { uuid: "edit", ts: "2026-09-26", role: "assistant", parts: [{ kind: "tool", name: "Edit", summary: "src/main.ts", result: { text: "Done" } }] },
+    { uuid: "latest", ts: "2026-09-26", role: "assistant", parts: [{ kind: "text", text: "[Report](report.pdf)" }] },
+  ]);
+  expect(refs.filter(file => artifactKind(file, false)).map(r => r.path)).toEqual(["report.pdf"]);
+  expect(refs.find(r => r.path === "report.pdf")?.lastSeen).toMatchObject({ entryId: "latest", order: 2 });
+  expect(refs.find(r => r.path === "src/main.ts")?.edited).toBe(true);
 });

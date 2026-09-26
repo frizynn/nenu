@@ -1,4 +1,6 @@
 import { useHoldReload } from "@/lib/reload-guard";
+import { SubagentConversation } from "@/components/subagent-conversation";
+import type { SubagentSelection } from "@/components/session-subagents";
 import { SessionSubagents } from "@/components/session-subagents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -158,8 +160,14 @@ export function AgentChat({
   const composerRef = useRef<ComposerHandle>(null);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
+  const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
+  useEffect(() => setSubagent(null), [displayScope, agent?.agent]);
+  const selectSubagent = useCallback((next: SubagentSelection | null) => {
+    setSubagent(next);
+    if (next) setRawTerminal(false);
+  }, [setRawTerminal]);
   const conversation = useLiveConversation({
-    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), paused: prefs.rawTerminal, busy: agent?.status === "working",
+    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), paused: prefs.rawTerminal || Boolean(subagent), busy: agent?.status === "working",
   });
   const hasConversation = Boolean(agent?.hasSession || conversation.history?.available);
   const operatorCommands = useOperatorCommands();
@@ -716,12 +724,12 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
-              {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
-              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} agent={agent.agent} enabled={!connecting && !gone} />}
+              {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
+              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} />}
               {conversationCapable && (
                 <button
                   type="button"
-                  onClick={() => setRawTerminal(!prefs.rawTerminal)}
+                  onClick={() => { setSubagent(null); setRawTerminal(!prefs.rawTerminal); }}
                   aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                   aria-pressed={prefs.rawTerminal}
                   title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
@@ -731,13 +739,13 @@ export function AgentChat({
                   <span>{prefs.rawTerminal ? "Chat" : "Terminal"}</span>
                 </button>
               )}
-              <ConversationActions
+              {!subagent && <ConversationActions
                 onFind={display ? openFind : undefined}
                 onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
                 onDisplay={() => composerRef.current?.openDisplayPrefs()}
                 files={conversationCapable ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} labeled /> : undefined}
                 recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
-              />
+              />}
             </>
           ) : undefined
         }
@@ -838,7 +846,7 @@ export function AgentChat({
             straight into terminal output — the chrome and the mirror read as one surface. Drawing it
             here rather than as a border-b on PaneStrip covers the case where that strip is absent
             (a tab holding a single pane), which is the common one. */}
-        {showConversation ? (
+        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} agent={agent?.agent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
             <LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
@@ -918,15 +926,15 @@ export function AgentChat({
         </div>}
 
         {/* Composer and its controls stay mounted while the workbench's inspectors open and close. */}
-        <div className="workbench-composer relative">
-          {showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
+        <div className="workbench-composer relative" hidden={Boolean(subagent)} inert={Boolean(subagent)}>
+          {!subagent && showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
             open={panels.panel === "model"} anchorRef={modelTriggerRef} agent={agent?.agent}
             text={modelSource.text} menu={liveModelBlock} modelPresent={modelPresent} catalog={catalog}
             reportedModel={conversation.history?.available ? conversation.history.telemetry?.model : undefined}
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
-          {showConversation && dialogPresent && !modelPresent && (
+          {!subagent && showConversation && dialogPresent && !modelPresent && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
               <AnsiOutput text={text} nativeOnly agent={agent?.agent}
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
@@ -1001,7 +1009,7 @@ export function AgentChat({
             isShell={isShell}
             working={agent?.agent === "codex" && agent.status === "working"}
             gone={gone}
-            readOnly={readOnly}
+            readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}

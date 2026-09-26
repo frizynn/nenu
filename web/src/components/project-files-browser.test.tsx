@@ -1,0 +1,22 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
+import { ProjectFilesBrowser } from "./project-files-browser";
+const fetchFiles = vi.fn();
+vi.mock("@/lib/api", () => ({ fetchProjectFiles: (...args: unknown[]) => fetchFiles(...args) }));
+it("expands folders in place, retains siblings and reads each folder only when first opened", async () => {
+  const open = vi.fn();
+  fetchFiles.mockImplementation(async (_pane: string, path: string) => ({ path, truncated: false, files: path === "." ? [{ name: "src", path: "src", kind: "directory" }, { name: "README.md", path: "README.md", kind: "file" }] : [{ name: "app.ts", path: "src/app.ts", kind: "file" }] }));
+  render(<ProjectFilesBrowser paneId="p" onOpen={open} />);
+  const folder = await screen.findByRole("button", { name: "src" });
+  expect(fetchFiles).toHaveBeenCalledTimes(1);
+  await userEvent.click(folder);
+  await userEvent.click(await screen.findByRole("button", { name: "app.ts" }));
+  expect(open).toHaveBeenCalledWith("src/app.ts");
+  expect(screen.getByRole("button", { name: "README.md" })).toBeVisible();
+  await userEvent.click(folder);
+  expect(screen.queryByRole("button", { name: "app.ts" })).not.toBeInTheDocument();
+  await userEvent.click(folder);
+  expect(screen.getByRole("button", { name: "app.ts" })).toBeVisible();
+  expect(fetchFiles).toHaveBeenCalledTimes(2);
+});

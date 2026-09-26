@@ -1,3 +1,4 @@
+import { artifactMetadata } from "./artifact-metadata.ts";
 import { WebAssetArchive } from "./web-assets.ts";
 import { renderedHtmlResponse } from "./html-preview.ts";
 import { QueueService } from "./queue-service.ts";
@@ -403,6 +404,10 @@ export function startServer(opts: {
         if (action === "files" && req.method === "GET") {
           const current = rt.engine.current();
           const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+          if (url.searchParams.has("inspect")) {
+            try { return json(await artifactMetadata(pane?.cwd, url.searchParams.getAll("inspect")), null); }
+            catch { return jsonError("At most 20 artifact paths per request.", 400, null); }
+          }
           try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? "."), null); }
           catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
         }

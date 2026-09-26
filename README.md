@@ -221,11 +221,17 @@ See [the subagent inspector decision](.adr/0024-session-subagent-inspector.md) f
 
 ### Artifacts, media and queued messages
 
-Use the paperclip in the session header to open **Artifacts and files**. Artifacts collects HTML
-references and files mentioned by editing tools. **Project** browses the current workspace;
-**Files** and **Media** collect conversation references. Images and MP4/WebM videos also appear
+Use the paperclip in the session header to open **Project**, a folder tree rooted at the agent's
+working directory. Expand folders in place; each folder loads only when first opened.
+**Artifacts** collects verified designboard canvases and documents explicitly linked by the agent.
+Editing a source file or mentioning an HTML path does not make it an artifact. **Files** and **Media**
+keep all conversation references. Search names and paths, filter by artifact type and extension, and sort by the most
+recent conversation mention (default), extension or name. Designboard titles come from their embedded
+`canvas-doc` data; inspection reads at most 20 contained HTML files per request, with 60 per UI batch.
+Older candidates can be inspected on demand. Images and MP4/WebM videos also appear
 inside messages. Videos support seeking, and file previews can be refreshed or downloaded.
 HTML has Render and Code views in an isolated offline document; external assets remain blocked.
+Designboards open in view mode; downloading preserves the original editable document.
 
 Use **Add to queue** beside Attach to stage a message. While an agent works, Send queues the
 current draft. The list above the composer lets you edit, remove or send an individual message now.
@@ -233,3 +239,8 @@ The bridge saves the queue and dispatches when the agent is ready even with the 
 Questions, host drafts and uncertain deliveries pause sending; inspect Terminal before retrying.
 Queues stay attached to the connected conversation and never migrate to a replacement session.
 See [the implementation decision](.adr/0025-artifacts-and-server-message-queue.md) for limits.
+
+The **Agents** switcher keeps **Main · Parent** available alongside its children. Running agents
+are expanded; Finished and other inactive groups start collapsed each time the switcher opens.
+Selecting a child opens its live journal in the main chat. Main's draft stays intact when returning.
+Child journals currently have no independent input transport: send instructions through Main.

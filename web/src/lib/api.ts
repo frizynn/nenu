@@ -597,3 +597,10 @@ export function fetchMessageQueue(paneId: string, session?: string, signal?: Abo
 export function changeMessageQueue(paneId:string, body:{scope:string;action:"add"|"edit"|"remove"|"send";id:string;text?:string;revision?:number},session?:string):Promise<MessageQueuePage>{
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
 }
+
+export interface ArtifactMetadata { path: string; kind: "designboard"; title: string }
+export function fetchArtifactMetadata(paneId: string, paths: string[], session?: string, signal?: AbortSignal): Promise<ArtifactMetadata[]> {
+  const query = new URLSearchParams();
+  paths.forEach(path => query.append("inspect", path));
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/files?${query}`, session), { signal });
+}
