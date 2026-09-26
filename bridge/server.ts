@@ -1,3 +1,4 @@
+import { WebAssetArchive } from "./web-assets.ts";
 import { renderedHtmlResponse } from "./html-preview.ts";
 import { QueueService } from "./queue-service.ts";
 import { projectFiles } from "./project-files.ts";
@@ -174,6 +175,8 @@ export function startServer(opts: {
   activity: ActivityLedger;
 }) {
   const { cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity } = opts;
+  const assets = new WebAssetArchive(join(cfg.stateDir, "web-assets"));
+  void assets.retain(WEB_DIR).catch((error: unknown) => console.warn("[assets] could not retain current build:", error instanceof Error ? error.message : "unknown error"));
   // One journal registry + store for the process. The store's cache is keyed by absolute path, so
   // sharing it across herdr sessions AND across harnesses is correct — two sessions can front panes
   // whose agents write into the same root. Which harnesses have journals at all is decided in
@@ -542,7 +545,7 @@ export function startServer(opts: {
       if (isReservedAuthPath(pathname)) return reservedAuthPlaceholder();
 
       // ── Static PWA (with SPA fallback) ───────────────────────────────────
-      return serveStatic(pathname);
+      return serveStatic(pathname, assets);
     },
   });
 
@@ -1722,12 +1725,18 @@ behind your own reverse proxy</em> in the README.</p>
   );
 }
 
-async function serveStatic(pathname: string): Promise<Response> {
+async function serveStatic(pathname: string, assets: WebAssetArchive): Promise<Response> {
+  // An archive failure must not take the current frontend offline.
+  await assets.retain(WEB_DIR).catch(() => {});
   const resolved = resolveStaticPath(pathname);
   if (!resolved) return text("forbidden", 403);
   let { rel, full } = resolved;
 
   let file = Bun.file(full);
+  if (!(await file.exists())) {
+    const retained = await assets.resolve(rel);
+    if (retained) { full = retained; file = Bun.file(full); }
+  }
   if (!(await file.exists())) {
     // SPA fallback: extension-less paths fall back to index.html; missing assets 404.
     if (extname(rel) === "") {

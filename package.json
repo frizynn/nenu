@@ -1,6 +1,6 @@
 {
   "name": "collie",
-  "version": "0.45.2",
+  "version": "0.45.3",
   "private": true,
   "license": "MIT",
   "description": "Nenu — a mobile web UI to monitor and reply to your Herdr agent herd over Tailscale",
@@ -8,8 +8,8 @@
   "scripts": {
     "start": "bun run bridge/index.ts",
     "dev": "bun --watch bridge/index.ts",
-    "build": "bun run typecheck && cd web && bun install && bun run typecheck && bun run build",
-    "build:web": "cd web && bun run build",
+    "build": "bash scripts/collie-ctl.sh build",
+    "build:web": "bash scripts/collie-ctl.sh build",
     "web:dev": "cd web && bun run dev",
     "test": "bun test ./bridge ./scripts && bash scripts/collie-ctl.test.sh",
     "test:ctl": "bash scripts/collie-ctl.test.sh",

@@ -1,3 +1,4 @@
+import { useHoldReload } from "@/lib/reload-guard";
 import { SessionSubagents } from "@/components/session-subagents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -127,6 +128,7 @@ export function AgentChat({
   onBack,
   onSelect,
 }: AgentChatProps) {
+  useHoldReload("open-agent-session", true);
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive

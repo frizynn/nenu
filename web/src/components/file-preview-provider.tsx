@@ -1,3 +1,4 @@
+import { checkForUpdate } from "@/lib/pwa";
 import { paneFileUrl } from "@/lib/api";
 import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 import { FilePreviewContext, FileMediaContext } from "@/lib/file-preview-context";
@@ -9,8 +10,8 @@ class PreviewBoundary extends Component<{ children: ReactNode; onClose: () => vo
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
     if (this.state.failed) return <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-[calc(100vw-32px)] rounded-lg border bg-background p-4 text-sm">
-      <p>The document viewer could not load. Reopen Nenu and try again.</p>
-      <button type="button" className="mt-2 min-h-11 px-3" onClick={this.props.onClose}>Close</button>
+      <p>The document viewer could not load. Reload Nenu to try again.</p>
+      <div className="mt-2 flex gap-2"><button type="button" className="min-h-11 rounded-md border px-3" onClick={() => { void checkForUpdate(); }}>Reload Nenu</button><button type="button" className="min-h-11 px-3" onClick={this.props.onClose}>Close</button></div>
     </div>;
     return this.props.children;
   }

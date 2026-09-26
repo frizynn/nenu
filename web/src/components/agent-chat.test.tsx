@@ -851,3 +851,17 @@ it("connects a chosen history without sending a message to the terminal", async 
   expect(await screen.findByText("Recovered answer")).toBeInTheDocument();
   expect(writes).not.toHaveBeenCalled();
 });
+
+it("keeps an open session on screen when a newer build is announced, even without a draft", async () => {
+  const { startSelfUpdate, __resetSelfUpdate, __setReloadImpl } = await import("@/lib/self-update");
+  const { observeServerBuild, __resetServerBuild } = await import("@/lib/server-build");
+  __resetServerBuild(); __resetSelfUpdate();
+  const reload = vi.fn(); __setReloadImpl(reload);
+  const stop = startSelfUpdate();
+  try {
+    renderChat({ agent: { ...fixtureAgents[0]!, status: "idle" } });
+    act(() => { observeServerBuild("new-release"); observeServerBuild("new-release"); });
+    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("");
+    expect(reload).not.toHaveBeenCalled();
+  } finally { stop(); __resetServerBuild(); __resetSelfUpdate(); }
+});

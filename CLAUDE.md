@@ -95,7 +95,11 @@ the unit name; the Herdr action runs from anywhere.
   `systemctl --user restart collie`. Forgetting this is the #1 "my change didn't take" trap.
 - `bun run build` (root) and `collie-ctl.sh build` **typecheck both sides first** (root tsc + web
   tsc), then build web to `dist-staging` and swap it in atomically — a failed build never empties a
-  live `web/dist`. Bare `cd web && bun run build` still skips typechecking; don't ship from it.
+  live `web/dist`. Root `build:web` uses that same staged pipeline. Bare `cd web && bun run build`
+  still skips typechecking and staging; don't ship from it.
+- Open chat/terminal views defer automatic page reloads. Hashed frontend assets are retained in
+  the bridge state directory for up to seven days / 128 MiB so older clients can load deferred
+  viewers after updates. See [ADR 0026](.adr/0026-open-clients-survive-frontend-updates.md).
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
