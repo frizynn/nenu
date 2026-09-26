@@ -11,10 +11,10 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.45.3] - 2026-09-26
 
 ### Fixed
-- Avoid freezing the chat while scanning tool output for artifacts.
-- Keep document modules available across updates and checkout changes.
-- Defer automatic page reloads while a chat or terminal is open.
-- Stage root frontend builds before replacing the served app.
+- Avoid freezing the chat while scanning tool output for artifacts. (24a09cc)
+- Keep document modules available across updates and checkout changes. (24a09cc)
+- Defer automatic page reloads while a chat or terminal is open. (24a09cc)
+- Stage root frontend builds before replacing the served app. (24a09cc)
 
 ## [0.45.2] - 2026-09-26
 
