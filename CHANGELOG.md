@@ -11,8 +11,8 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.45.2] - 2026-09-26
 
 ### Fixed
-- Recover Claude subagent task names, nested relationships and native completion states.
-- Separate current subagent activity from history and show readable Claude model names.
+- Recover Claude subagent task names, nested relationships and native completion states. (6b747f9)
+- Separate current subagent activity from history and show readable Claude model names. (6b747f9)
 
 ## [0.45.1] - 2026-09-26
 
