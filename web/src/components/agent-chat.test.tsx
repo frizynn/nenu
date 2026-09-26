@@ -808,3 +808,19 @@ it("waits for reasoning selection and confirmation repaints before enabling the 
   expect(dismissModelPicker).not.toHaveBeenCalled();
   expect(writes).toEqual([["Down", "Down"], ["Enter"]]);
 });
+
+
+describe("mobile session startup", () => {
+  it.each(["Codex", "Claude Code"])("starts %s from a shell without typing a command", async (label) => {
+    const user = userEvent.setup();
+    const calls: unknown[] = [];
+    server.use(http.post("/api/pane/:id/start", async ({ request }) => {
+      calls.push(await request.json());
+      return HttpResponse.json({ ok: true });
+    }));
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", hasSession: false };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    await user.click(screen.getByRole("button", { name: `Start ${label}` }));
+    await waitFor(() => expect(calls).toEqual([{ agent: label === "Codex" ? "codex" : "claude" }]));
+  });
+});
