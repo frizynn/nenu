@@ -42,3 +42,8 @@ script execution to satisfy this capability and historically has a much wider ac
 Revisit only if browsers provide a narrower capability than `allow-scripts` for self-contained
 documents, or if a required canvas feature cannot work without widening a directive. Any widening
 must preserve the opaque origin and must not admit network schemes or Nenu's origin.
+
+
+## Superseded transport, 2026-09-26
+
+The srcdoc transport is superseded by [ADR 0025](0025-artifacts-and-server-message-queue.md). A real browser demonstrated that the parent application CSP blocks inline scripts inherited by srcdoc. The replacement is a contained network document with its own response CSP and the same opaque sandbox and no-network policy.

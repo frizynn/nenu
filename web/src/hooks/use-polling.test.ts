@@ -221,3 +221,15 @@ describe("usePolling — superseding a wedged revalidation", () => {
     }
   });
 });
+
+it("replaces a request stranded by backgrounding immediately on return", () => {
+  vi.useFakeTimers(); resetIdleLock(); rr.state = "loading"; rr.revalidate.mockClear();
+  Object.defineProperty(document, "hidden", { configurable: true, value: false });
+  const view = renderHook(() => usePolling(makeData([]), "w1:p1"));
+  Object.defineProperty(document, "hidden", { configurable: true, value: true });
+  act(() => document.dispatchEvent(new Event("visibilitychange")));
+  Object.defineProperty(document, "hidden", { configurable: true, value: false });
+  act(() => document.dispatchEvent(new Event("visibilitychange")));
+  expect(rr.revalidate).toHaveBeenCalledTimes(1);
+  view.unmount(); vi.useRealTimers();
+});

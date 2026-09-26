@@ -92,6 +92,8 @@ export class StateEngine {
   private timer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private polling = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private failures = 0;
   // One follow-up poll queued when pokeNow lands mid-poll: an event may describe state the
   // in-flight poll already read past, so we must re-poll once it settles.
   private queuedPoll = false;
@@ -147,6 +149,8 @@ export class StateEngine {
     this.started = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   /**
@@ -337,6 +341,9 @@ export class StateEngine {
       this.workspaces = workspaceViews;
       this.tabs = tabViews;
       this.bridge = "connected";
+      this.failures = 0;
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.retryTimer = null;
 
       // After all transition/removal bookkeeping so listeners see a consistent, current snapshot.
       const snap = this.current();
@@ -346,6 +353,10 @@ export class StateEngine {
         console.warn(`[state] poll failed, marking disconnected: ${(err as Error).message}`);
       }
       this.bridge = "disconnected";
+      if (this.started && !this.retryTimer) {
+        const delay = Math.min(1000 * 2 ** Math.min(this.failures++, 3), 5000);
+        this.retryTimer = setTimeout(() => { this.retryTimer = null; if (this.started) void this.poll(); }, delay);
+      }
     } finally {
       this.polling = false;
       // Run the single follow-up an event-poke asked for while this poll was in flight.

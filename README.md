@@ -217,3 +217,19 @@ not loaded the hooks can still expose history, but their live status may remain 
 stores session/agent IDs, agent type, event and timestamp, never prompts or tool arguments. Custom
 profiles can run `bun run scripts/install-subagent-hooks.ts /path/to/settings.json /path/to/nenu-state`.
 See [the subagent inspector decision](.adr/0024-session-subagent-inspector.md) for scope and limits.
+
+
+### Artifacts, media and queued messages
+
+Use the paperclip in the session header to open **Artifacts and files**. Artifacts collects HTML
+references and files mentioned by editing tools. **Project** browses the current workspace;
+**Files** and **Media** collect conversation references. Images and MP4/WebM videos also appear
+inside messages. Videos support seeking, and file previews can be refreshed or downloaded.
+HTML has Render and Code views in an isolated offline document; external assets remain blocked.
+
+Use **Add to queue** beside Attach to stage a message. While an agent works, Send queues the
+current draft. The list above the composer lets you edit, remove or send an individual message now.
+The bridge saves the queue and dispatches when the agent is ready even with the browser closed.
+Questions, host drafts and uncertain deliveries pause sending; inspect Terminal before retrying.
+Queues stay attached to the connected conversation and never migrate to a replacement session.
+See [the implementation decision](.adr/0025-artifacts-and-server-message-queue.md) for limits.

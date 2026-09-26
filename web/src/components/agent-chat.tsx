@@ -712,6 +712,7 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
+              {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
               {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} agent={agent.agent} enabled={!connecting && !gone} />}
               {conversationCapable && (
                 <button

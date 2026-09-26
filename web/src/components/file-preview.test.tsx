@@ -5,7 +5,7 @@ import { MarkdownText } from "./markdown-text";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { fetchPaneFile } from "@/lib/api";
 
-vi.mock("@/lib/api", () => ({ fetchPaneFile: vi.fn() }));
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn() }));
 vi.mock("./pdf-preview", () => ({ default: () => <div>PDF canvas</div> }));
 const fetchFile = vi.mocked(fetchPaneFile);
 beforeEach(() => {
@@ -82,11 +82,8 @@ it("renders HTML only in an opaque-origin script sandbox and keeps a literal cod
   for (const forbidden of ["allow-same-origin", "allow-forms", "allow-popups", "allow-top-navigation", "allow-downloads"]) {
     expect(frame.getAttribute("sandbox")).not.toContain(forbidden);
   }
-  const srcdoc = frame.getAttribute("srcdoc") ?? "";
-  expect(srcdoc).toContain("connect-src 'none'");
-  expect(srcdoc).toContain("form-action 'none'");
-  expect(srcdoc).toContain("object-src 'none'");
-  expect(srcdoc.indexOf("Content-Security-Policy")).toBeLessThan(srcdoc.indexOf("top.location"));
+  expect(frame).toHaveAttribute("src", "/api/pane/w1%3Ap1/html-preview?path=attack.html");
+  expect(frame).not.toHaveAttribute("srcdoc");
 
   fireEvent.click(screen.getByRole("tab", { name: "Código" }));
   expect(screen.getByText(attack)).toBeInTheDocument();

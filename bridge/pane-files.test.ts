@@ -104,3 +104,17 @@ describe("pane project files", () => {
     }
   });
 });
+
+test("video previews validate content and honor seek ranges", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nenu-video-"));
+  try {
+    const bytes = Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from("ftypisom"),Buffer.alloc(100,7)]);
+    await writeFile(join(root,"demo.mp4"),bytes);
+    const response = await paneFileResponse(root,"demo.mp4","bytes=12-19");
+    expect(response.status).toBe(206);expect(response.headers.get("content-range")).toBe(`bytes 12-19/${bytes.length}`);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(bytes.subarray(12,20)));
+    expect((await paneFileResponse(root,"demo.mp4","bytes=9999-")).status).toBe(416);
+    await writeFile(join(root,"bad.mp4"),"<script>bad</script>");
+    expect((await paneFileResponse(root,"bad.mp4")).status).toBe(415);
+  } finally { await rm(root,{recursive:true,force:true}); }
+});

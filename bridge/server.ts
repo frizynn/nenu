@@ -1,3 +1,6 @@
+import { renderedHtmlResponse } from "./html-preview.ts";
+import { QueueService } from "./queue-service.ts";
+import { projectFiles } from "./project-files.ts";
 import { Subagents } from "./subagents.ts";
 import { historyResponse } from "./history-response.ts";
 import { ConversationService } from "./conversation-service.ts";
@@ -118,7 +121,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history|files|queue|html-preview))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -157,7 +160,7 @@ export const SEEN_HEADER = "x-collie-seen";
  */
 export function marksPaneSeen(req: Request, action: string | undefined): boolean {
   if (req.headers.get(SEEN_HEADER) !== null) return true;
-  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file" && action !== "subagents" && action !== "subagent-history";
+  return action !== undefined && action !== "history" && action !== "skills" && action !== "models" && action !== "file" && action !== "subagents" && action !== "subagent-history" && action !== "files" && action !== "queue" && action !== "html-preview";
 }
 
 export function startServer(opts: {
@@ -185,6 +188,25 @@ export function startServer(opts: {
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
   const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
+  const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
+    const rt = registry.get(session);
+    if (!rt) return null;
+    const snapshot = rt.engine.current();
+    let original = snapshot.agents.find(pane => pane.paneId === paneId);
+    if (!original) return null;
+    if (fresh) {
+      const live = (await rt.herdr.listPanes()).find(pane => pane.pane_id === paneId);
+      if (!live || live.agent !== original.agent) return null;
+      const ref = live.agent_session;
+      original = { ...original, status: live.agent_status, agentSession: ref?.kind === "id" && typeof ref.value === "string" && (!ref.agent || ref.agent === original.agent) ? { kind: "id", value: ref.value } : undefined };
+    }
+    return { pane: await conversations.resolve(original, rt.herdr, session), herdr: rt.herdr, connected: snapshot.bridge === "connected" };
+  }, async (row, text, submit, requestId, paste) => {
+    const rt = registry.get(row.session);
+    if (!rt) return { ok: false, error: "Session unavailable." };
+    const response = await replyPane(rt.herdr, cfg, row.paneId, new Request("http://localhost/queue-delivery", { method: "POST", body: JSON.stringify({ text, submit, request_id: requestId, paste }) }), audit, row.device, row.session);
+    return await response.json() as ActionResponse;
+  });
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -293,7 +315,7 @@ export function startServer(opts: {
         // Reading a pane is allowed for any access-gated client; every action (reply/keys/upload/
         // close) types into or restructures a terminal, so it additionally needs an authorised device.
         // History and skill discovery are READ actions; neither drives a terminal.
-        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file" || action === "subagents" || action === "subagent-history";
+        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file" || action === "subagents" || action === "subagent-history" || action === "files" || action === "html-preview" || (action === "queue" && req.method === "GET");
         const denied = guard(req, cfg, isRead ? "read" : "write");
         if (denied) return denied;
         const rt = registry.get(sessionName);
@@ -314,6 +336,7 @@ export function startServer(opts: {
         // `history` is a read, so it gets no device attribution (nothing is written to attribute).
         const device = isRead ? null : deviceAuth(req, cfg).device;
 
+        if (action === "queue" && (req.method === "GET" || req.method === "POST")) return secure(await queue.handle(req, session, paneId, device));
         if ((action === "subagents" || action === "subagent-history") && req.method === "GET") {
           if (!cfg.transcript) return action === "subagents" ? json({ available: false, reason: "disabled" }, null) : jsonError("Conversation history is disabled.", 409, null);
           const original = rt.engine.current().agents.find((entry) => entry.paneId === paneId);
@@ -367,7 +390,18 @@ export function startServer(opts: {
               : null;
             return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, page?.entries ?? []));
           }
-          return secure(await paneFileResponse(pane?.cwd, requestedPath));
+          return secure(await paneFileResponse(pane?.cwd, requestedPath, req.headers.get("range")));
+        }
+        if (action === "html-preview" && req.method === "GET") {
+          const current = rt.engine.current();
+          const pane = [...current.agents, ...current.shellPanes].find(entry => entry.paneId === paneId);
+          return secure(await renderedHtmlResponse(pane?.cwd, url.searchParams.get("path")));
+        }
+        if (action === "files" && req.method === "GET") {
+          const current = rt.engine.current();
+          const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+          try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? "."), null); }
+          catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
         }
         if (action === "models" && req.method === "GET") {
           const snapshot = rt.engine.current();

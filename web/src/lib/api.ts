@@ -583,3 +583,17 @@ export function fetchSubagents(paneId: string, session?: string, signal?: AbortS
 export function fetchSubagentHistory(paneId: string, id: string, session?: string, signal?: AbortSignal): Promise<SubagentHistoryResponse> {
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/subagent-history?id=${encodeURIComponent(id)}`, session), { signal });
 }
+
+export interface ProjectFilesPage { path: string; files: Array<{ name: string; path: string; kind: "file" | "directory"; size: number; updatedAt: string }>; truncated: boolean }
+export function fetchProjectFiles(paneId: string, path: string, session?: string, signal?: AbortSignal): Promise<ProjectFilesPage> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/files?path=${encodeURIComponent(path)}`, session), { signal });
+}
+
+export interface QueueMessage { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; error?: string }
+export type MessageQueuePage = { available: false; messages: [] } | { available: true; scope: string; messages: QueueMessage[] };
+export function fetchMessageQueue(paneId: string, session?: string, signal?: AbortSignal): Promise<MessageQueuePage> {
+  return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{signal});
+}
+export function changeMessageQueue(paneId:string, body:{scope:string;action:"add"|"edit"|"remove"|"send";id:string;text?:string;revision?:number},session?:string):Promise<MessageQueuePage>{
+  return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
+}

@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-09-26
+
+### Added
+- Inline image/video previews, project browsing and session artifacts.
+- Persistent message queue with editing, explicit delivery and background dispatch.
+
+### Fixed
+- Resume live polling immediately after the phone returns from background.
+
 ## [0.44.1] - 2026-09-26
 
 ### Fixed

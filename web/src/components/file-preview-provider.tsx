@@ -1,5 +1,6 @@
+import { paneFileUrl } from "@/lib/api";
 import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from "react";
-import { FilePreviewContext } from "@/lib/file-preview-context";
+import { FilePreviewContext, FileMediaContext } from "@/lib/file-preview-context";
 
 const FilePreview = lazy(() => import("./file-preview"));
 
@@ -20,10 +21,10 @@ export function FilePreviewProvider({ paneId, session, children }: { paneId?: st
   const open = useCallback((path: string) => { if (paneId) setSelection({ paneId, session, path }); }, [paneId, session]);
   const close = useCallback(() => setSelection(null), []);
   const visible = selection?.paneId === paneId && selection?.session === session ? selection : null;
-  return <FilePreviewContext.Provider value={paneId ? open : null}>
+  return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}>
     {children}
     {visible && <PreviewBoundary key={visible.path} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-sm">Opening document…</div>}>
       <FilePreview key={`${paneId}:${session}:${visible.path}`} paneId={visible.paneId} session={session} path={visible.path} onClose={close} />
     </Suspense></PreviewBoundary>}
-  </FilePreviewContext.Provider>;
+  </FilePreviewContext.Provider></FileMediaContext.Provider>;
 }

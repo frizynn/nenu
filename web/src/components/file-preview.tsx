@@ -1,15 +1,14 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Code2, Download, Eye, FileText, Loader2, X } from "lucide-react";
-import { fetchPaneFile } from "@/lib/api";
+import { Code2, Download, Eye, RefreshCw, FileText, Loader2, X } from "lucide-react";
+import { fetchPaneFile, paneFileUrl } from "@/lib/api";
 import { FilePreviewContext } from "@/lib/file-preview-context";
-import { htmlPreviewDocument } from "@/lib/html-preview";
 import { useHoldReload } from "@/lib/reload-guard";
 import { MarkdownText } from "./markdown-text";
 import "./file-preview.css";
 
 const PdfPreview = lazy(() => import("./pdf-preview"));
-type DocumentData = { kind: "pdf"; bytes: ArrayBuffer; url: string } | { kind: "image"; url: string } | { kind: "text"; text: string; markdown: boolean; url: string };
+type DocumentData = { kind: "video"; url: string } | { kind: "pdf"; bytes: ArrayBuffer; url: string } | { kind: "image"; url: string } | { kind: "text"; text: string; markdown: boolean; url: string };
 type HtmlView = "render" | "code";
 
 export default function FilePreview({ paneId, session, path, onClose }: { paneId: string; session?: string; path: string; onClose: () => void }) {
@@ -26,6 +25,7 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
     const controller = new AbortController();
     let url: string | undefined;
     setError(""); setData(null); setHtmlView("render");
+    if (/\.(mp4|m4v|mov|webm)$/i.test(path)) { setData({ kind: "video", url: paneFileUrl(paneId, path, session) }); return () => controller.abort(); }
     void (async () => {
       const response = await fetchPaneFile(paneId, path, session, controller.signal);
       const blob = await response.blob();
@@ -63,6 +63,7 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
       <header className="file-preview-header">
         <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-medium">{name}</h2><p className="truncate text-xs text-muted-foreground" title={path}>{path}</p></div>
+        <button type="button" aria-label="Refresh preview" onClick={() => setAttempt(n=>n+1)} className="file-preview-action"><RefreshCw className="size-4" /></button>
         {data && <a href={data.url} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-4" /></a>}
         <button type="button" aria-label="Close document" onClick={onClose} className="file-preview-action"><X className="size-5" /></button>
       </header>
@@ -79,17 +80,19 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
         {error ? <div role="alert" className="p-6 text-sm">
           <p>{error}</p>
           <button type="button" className="mt-3 min-h-11 rounded-md border px-4" onClick={() => setAttempt((value) => value + 1)}>Retry</button>
-        </div> : <DocumentContent data={data} name={name} openRelated={openRelated} html={/\.html?$/i.test(path) ? htmlView : null} onError={setError} />}
+        </div> : <DocumentContent data={data} name={name} openRelated={openRelated} html={/\.html?$/i.test(path) ? htmlView : null} renderUrl={paneFileUrl(paneId, path, session).replace("/file?", "/html-preview?")} onError={setError} />}
       </div>
     </div>
   </div>, document.body);
 }
 
-function DocumentContent({ data, name, openRelated, html, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; html: HtmlView | null; onError: (message: string) => void }) {
+function DocumentContent({ data, name, openRelated, html, renderUrl, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; html: HtmlView | null; renderUrl: string; onError: (message: string) => void }) {
   if (!data) return <Loading />;
   switch (data.kind) {
     case "pdf":
       return <Suspense fallback={<Loading />}><PdfPreview bytes={data.bytes} /></Suspense>;
+    case "video":
+      return <video src={data.url} controls playsInline preload="metadata" aria-label={name} className="max-h-full w-full" onError={() => onError("Could not play this video. Download it to open in another player.")} />;
     case "image":
       return <img src={data.url} alt={name} className="mx-auto h-auto max-w-full" />;
     case "text":
@@ -97,7 +100,7 @@ function DocumentContent({ data, name, openRelated, html, onError }: { data: Doc
         title={`Rendered preview of ${name}`}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
-        srcDoc={htmlPreviewDocument(data.text)}
+        src={renderUrl}
         className="file-preview-html"
         onError={() => onError("Could not render this HTML file.")}
       />;
