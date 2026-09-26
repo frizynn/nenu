@@ -96,3 +96,14 @@ describe("Codex 0.153.4 command autocomplete", () => {
     expect(locateComposer(pane)?.autocomplete).toBeUndefined();
   });
 });
+
+// Captured from Codex 0.157 after a mobile paste, before any submit key.
+it("keeps the real composer readable when typing replaces shortcuts with the queue hint", () => {
+  const text = capture("draft-queue-hint-v0157");
+  const pane = lines(text);
+  const sent = "/tmp/nenu-test-image.png Respond only NENU_IMAGE_OK. Do not run tools or read files. This is a test of the attached image in the mobile composer.";
+  expect(codexAdapter.composerReady?.(pane)).toBe(true);
+  expect(draftCarriesSend(sent, codexAdapter.extractInputDraft?.(pane) ?? null)).toBe(true);
+  expect(codexAdapter.composerReady?.(lines(text.replace(/\x1b\[1m\x1b\[38;2;255;255;255mtab/, "tab")))).toBe(false);
+  expect(codexAdapter.composerReady?.(lines(text + "\n  Press enter to approve"))).toBe(false);
+});
