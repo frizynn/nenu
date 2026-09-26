@@ -12,9 +12,9 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- Keep chat and terminal navigation visible while drafting; group secondary editor actions.
-- Recognize Codex's typed-message footer before verifying and submitting replies.
-- Paste Codex multiline replies atomically and wait for cleared terminal drafts before replacement.
+- Keep chat and terminal navigation visible while drafting; group secondary editor actions (`b9051ca`).
+- Recognize Codex's typed-message footer before verifying and submitting replies (`b9051ca`).
+- Paste Codex multiline replies atomically and wait for cleared terminal drafts before replacement (`b9051ca`).
 
 ## [0.42.0] - 2026-09-26
 
