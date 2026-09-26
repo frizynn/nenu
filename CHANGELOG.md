@@ -11,8 +11,8 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.44.0] - 2026-09-26
 
 ### Added
-- Per-session subagent inspector with live status and separate read-only conversations for Codex and Claude.
-- Claude lifecycle hooks, incremental transcript reads and session-bound child access.
+- Per-session subagent inspector with live status and separate read-only conversations for Codex and Claude. (3f487bf)
+- Claude lifecycle hooks, incremental transcript reads and session-bound child access. (3f487bf)
 
 ## [0.43.0] - 2026-09-26
 
