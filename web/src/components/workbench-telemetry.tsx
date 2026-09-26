@@ -1,3 +1,4 @@
+import { modelDisplayName } from "@/lib/model-display";
 import { ChevronDown, Cpu, Gauge } from "lucide-react";
 import { Fragment, useRef, useState, type RefObject } from "react";
 import { WorkbenchContextMeter } from "@/components/workbench-context-meter";
@@ -57,7 +58,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         title={modelAvailable ? "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
         <Cpu className="size-3.5 shrink-0" />
-        <span className="truncate">{telemetry?.model ?? "Model not reported"}</span>
+        <span className="truncate" title={telemetry?.model}>{telemetry?.model ? modelDisplayName(telemetry.model) : "Model not reported"}</span>
         {telemetry?.effort && <span className="hidden shrink-0 text-muted-foreground sm:inline">{telemetry.effort}</span>}
         <ChevronDown className="size-3 shrink-0" />
       </button>}

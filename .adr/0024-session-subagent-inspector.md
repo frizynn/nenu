@@ -21,3 +21,9 @@ The inspector reuses the existing transcript renderer and popover. List reads ar
 No additional agent engine, duplicate agent process, terminal resizing or input ownership is needed. Separate native runtimes may expose history without live status. Historical Claude sessions without hooks can show their children but may have unknown status; new lifecycle observations improve that state without fabricating it.
 
 Cross-session children, malformed IDs and symlinks are covered by focused tests. Native Claude lifecycle and both mobile and desktop layouts must also be checked in a running bridge before activation.
+
+## Native Claude metadata correction (2026-09-26)
+
+Claude also writes a contained `agent-<id>.meta.json` beside each transcript. Read its description/name and parentAgentId only after the matching child transcript passes session ownership checks. This keeps names and nested relationships available when the parent launch falls outside the bounded tail.
+
+A final assistant `end_turn`, an explicit API error, or a native task-notification terminal status is lifecycle evidence even without hooks. A newer user/assistant turn or start invalidates the older completion; a stop hook does not overwrite a reported failure. File activity alone still never proves running. The UI counts confirmed active children separately from finished history and leaves unconfirmed states explicit. Model labels are display-only; native IDs remain unchanged for model selection and are visible in child details.

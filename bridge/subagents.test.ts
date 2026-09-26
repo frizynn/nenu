@@ -49,7 +49,7 @@ test("Claude lifecycle hooks distinguish running/finished, expose child history,
   expect((await reader.list(parent)).agents[0]?.status).toBe("unknown");
   await recordSubagentEvent({ session_id: parent, agent_id: "child", agent_type: "reviewer", hook_event_name: "SubagentStart", prompt: "not persisted" }, f.dir);
   const running = (await reader.list(parent)).agents[0]!;
-  expect(running).toMatchObject({ status: "running", name: "reviewer", task: "Review test files", model: "test-model" });
+  expect(running).toMatchObject({ status: "running", name: "Review test files", task: "Review test files", model: "test-model" });
   expect((await reader.history(parent, running)).entries[0]?.parts).toContainEqual({ kind: "text", text: "Subagent output" });
   const stored = await Bun.file(join(f.dir, "subagents", parent, "child.json")).json();
   expect(stored.prompt).toBeUndefined();
@@ -105,4 +105,54 @@ test("Codex native lifecycle wins over an unloaded server and handles resuming",
   expect(codexJournalState(event("task_started", now - 180_000), now)).toBe("unknown");
   expect(codexJournalState(event("task_started") + "\n" + event("task_complete"), now)).toBe("completed");
   expect(codexJournalState(event("task_complete") + "\n" + event("task_started"), now)).toBe("running");
+});
+
+test("Claude reads native names and lineage even when the parent launch is outside the tail", async () => {
+  const f = await fixture();
+  await writeFile(join(f.project, `${parent}.jsonl`), `${JSON.stringify({ type: "progress", padding: "x".repeat(600_000) })}\n`);
+  await writeFile(join(f.children, "agent-child.meta.json"), JSON.stringify({ agentType: "Explore", description: "Map client screens", parentAgentId: "owner" }));
+  const reader = new ClaudeSubagents([f.root], join(f.dir, "events"));
+  expect((await reader.list(parent)).agents[0]).toMatchObject({ name: "Map client screens", task: "Map client screens", parentId: "owner" });
+});
+
+test("Claude native end_turn proves completion without hooks, but a resumed turn invalidates it", async () => {
+  const f = await fixture();
+  const ended = { type: "assistant", sessionId: parent, agentId: "child", timestamp: "2026-09-26T10:00:00Z", message: { role: "assistant", stop_reason: "end_turn", model: "claude-opus-5-5", content: [{ type: "text", text: "Done" }] } };
+  await writeFile(f.child, JSON.stringify(ended) + "\n");
+  const reader = new ClaudeSubagents([f.root], join(f.dir, "events"));
+  expect((await reader.list(parent)).agents[0]?.status).toBe("completed");
+  await writeFile(f.child, JSON.stringify(ended) + "\n" + JSON.stringify({ type: "user", sessionId: parent, agentId: "child", timestamp: "2026-09-26T10:01:00Z", message: { role: "user", content: "Continue" } }) + "\n");
+  expect((await reader.list(parent)).agents[0]?.status).toBe("unknown");
+});
+
+test("Claude metadata cannot follow a symlink into another session", async () => {
+  const f = await fixture();
+  const outside = join(f.dir, "foreign.meta.json");
+  await writeFile(outside, JSON.stringify({ name: "Private name", description: "Private task" }));
+  await symlink(outside, join(f.children, "agent-child.meta.json"));
+  const agents = (await new ClaudeSubagents([f.root], join(f.dir, "events")).list(parent)).agents;
+  expect(agents[0]?.name).not.toBe("Private name");
+  expect(agents[0]?.task).not.toBe("Private task");
+});
+
+test("Claude native failure notifications override an older final turn", async () => {
+  const f = await fixture();
+  await writeFile(f.child, JSON.stringify({ type: "assistant", sessionId: parent, agentId: "child", timestamp: "2026-09-26T10:00:00Z", message: { stop_reason: "end_turn", content: [] } }) + "\n");
+  const notification = { type: "user", sessionId: parent, timestamp: "2026-09-26T10:01:00Z", origin: { kind: "task-notification" }, message: { content: "<task-notification><task-id>child</task-id><status>failed</status><summary>Agent failed</summary></task-notification>" } };
+  await writeFile(join(f.project, `${parent}.jsonl`), JSON.stringify(notification) + "\n");
+  expect((await new ClaudeSubagents([f.root], join(f.dir, "events")).list(parent)).agents[0]?.status).toBe("failed");
+});
+
+test("Claude does not turn a reported API failure into success when the stop hook arrives", async () => {
+  const f = await fixture();
+  await writeFile(f.child, JSON.stringify({ type: "assistant", sessionId: parent, agentId: "child", isApiErrorMessage: true, timestamp: new Date(Date.now() - 1000).toISOString(), message: { stop_reason: "end_turn", content: [] } }) + "\n");
+  await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStop" }, f.dir);
+  expect((await new ClaudeSubagents([f.root], join(f.dir, "subagents")).list(parent)).agents[0]?.status).toBe("failed");
+});
+
+test("a new Claude start supersedes an old completed transcript", async () => {
+  const f = await fixture();
+  await writeFile(f.child, JSON.stringify({ type: "assistant", sessionId: parent, agentId: "child", timestamp: new Date(Date.now() - 60_000).toISOString(), message: { stop_reason: "end_turn", content: [] } }) + "\n");
+  await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStart" }, f.dir);
+  expect((await new ClaudeSubagents([f.root], join(f.dir, "subagents")).list(parent)).agents[0]?.status).toBe("running");
 });
