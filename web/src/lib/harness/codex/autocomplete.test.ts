@@ -11,6 +11,12 @@ import { locateComposer } from "./chrome";
 const capture = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", `${name}.txt`), "utf8");
 const lines = (text: string) => splitLines(parseAnsi(text));
 
+it("accepts the real 0.157 shortcuts footer under an empty composer", () => {
+  const pane = lines(capture("idle-shortcuts-v0157"));
+  expect(codexAdapter.composerReady?.(pane)).toBe(true);
+  expect(codexAdapter.extractInputDraft?.(pane)).toBeNull();
+});
+
 describe("Codex 0.153.4 command autocomplete", () => {
   it("recognises the working-state queued composer, including its narrow wrapped footer", () => {
     const pane = lines(
