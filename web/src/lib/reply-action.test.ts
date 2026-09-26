@@ -354,7 +354,7 @@ describe("sendGuardedReply", () => {
     expect(calls).toEqual([{ text: "please do not approve anything", submit: false }]);
   });
 
-  it("the stalled message warns that a key answer probably landed", async () => {
+  it("the stalled message states uncertainty and keeps the draft recoverable", async () => {
     harness(() => paneWithDialog);
     const out = await sendGuardedReply({
       paneId: "w1:p1",
@@ -363,7 +363,7 @@ describe("sendGuardedReply", () => {
       force: true,
       ...instant,
     });
-    expect(out).toMatchObject({ error: expect.stringMatching(/that key likely landed/i) });
+    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
   });
 
   it("#34: does not mistake somebody else's stranded draft for our text", async () => {
@@ -804,4 +804,21 @@ describe("the pre-type work is handed the region its keys must be bound to", () 
     expect(out.status).toBe("blocked");
     expect(log).toEqual([]);
   });
+});
+
+it("waits for the cleared draft to disappear before typing, including a stale identical echo", async () => {
+  let reads = 0;
+  let typed = false;
+  let cleared = false;
+  const calls = harness(() => {
+    reads++;
+    if (typed) return paneWithDraft("same message");
+    if (reads >= 4) { cleared = true; return paneWithDraft(""); }
+    return paneWithDraft("same message");
+  });
+  const result = await sendGuardedReply({ paneId: "w1:p1", text: "same message", agent: "claude",
+    onComposerSeen: async () => ({ ok: true, keysSent: true }),
+    onTypeAttempt: () => { expect(cleared).toBe(true); typed = true; }, ...instant });
+  expect(result.status).toBe("sent");
+  expect(calls.filter((c) => c.submit)).toHaveLength(1);
 });
