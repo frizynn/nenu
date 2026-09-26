@@ -77,9 +77,9 @@ export interface TranscriptTurn {
   durationMs?: number;
 }
 
-/** Last reported journal metrics. Missing values are unknown, never inferred model limits. */
+/** Last reported provider metrics. Missing values are unknown, never inferred model limits. */
 export interface SessionTelemetry {
-  source: "journal";
+  source: "journal" | "statusline";
   observedAt?: string;
   model?: string;
   effort?: string;
@@ -90,7 +90,7 @@ export interface SessionTelemetry {
     total?: number;
     scope: "session" | "last-message";
   };
-  context?: { usedTokens?: number; windowTokens?: number };
+  context?: { usedTokens?: number; windowTokens?: number; usedPercent?: number };
   rateLimits?: Array<{
     name: "primary" | "secondary";
     usedPercent: number;

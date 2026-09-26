@@ -181,3 +181,10 @@ it("keeps the configured confirmation when a disruptive slash command is typed i
   await user.click(screen.getByRole("button", { name: "Really send?" }));
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "/new", force: false }));
 });
+
+it("keeps session usage visible without opening More actions", async () => {
+  const { user } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
+  expect(screen.getByRole("button", { name: "Session metrics" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "More message actions" }));
+  expect(screen.getAllByRole("button", { name: "Session metrics" })).toHaveLength(1);
+});

@@ -1,5 +1,6 @@
+import { AgentIcon } from "@/components/agent-icon";
 import { modelDisplayName } from "@/lib/model-display";
-import { ChevronDown, Cpu, Gauge } from "lucide-react";
+import { ChevronDown, Gauge } from "lucide-react";
 import { Fragment, useRef, useState, type RefObject } from "react";
 import { WorkbenchContextMeter } from "@/components/workbench-context-meter";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
@@ -8,6 +9,7 @@ import type { SessionTelemetry } from "@/lib/types";
 export type WorkbenchPanel = "model" | "usage" | "context" | null;
 
 interface Props {
+  agent?: string;
   mode?: "model" | "metrics";
   telemetry?: SessionTelemetry;
   stale?: boolean;
@@ -25,7 +27,7 @@ function tokens(value: number | undefined): string {
   return value === undefined ? "Not reported" : value.toLocaleString();
 }
 
-export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
+export function WorkbenchTelemetry({ agent, mode, telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
   const context = telemetry?.context;
   const [localPanel, setLocalPanel] = useState<WorkbenchPanel>(null);
   const panel = controlledPanel === undefined ? localPanel : controlledPanel;
@@ -57,19 +59,19 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         aria-haspopup="dialog"
         title={modelAvailable ? "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
-        <Cpu className="size-3.5 shrink-0" />
+        <AgentIcon agent={agent} className="size-5 shrink-0" />
         <span className="truncate" title={telemetry?.model}>{telemetry?.model ? modelDisplayName(telemetry.model) : "Model not reported"}</span>
         {telemetry?.effort && <span className="hidden shrink-0 text-muted-foreground sm:inline">{telemetry.effort}</span>}
         <ChevronDown className="size-3 shrink-0" />
       </button>}
       {mode !== "model" && <>
-      <WorkbenchContextMeter usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
+      <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
         onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
         onOpenChange={(open) => changePanel(open ? "context" : null)} />
       <div className="relative min-w-0">
-        <button ref={usageRef} type="button" aria-expanded={panel === "usage"} aria-haspopup="dialog" onClick={() => changePanel(panel === "usage" ? null : "usage")} className="flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-1.5 hover:bg-accent">
+        <button ref={usageRef} type="button" aria-label={stale ? "Usage · stale" : "Usage"} aria-expanded={panel === "usage"} aria-haspopup="dialog" onClick={() => changePanel(panel === "usage" ? null : "usage")} className="flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-1.5 hover:bg-accent">
           <Gauge className="size-3.5" />
-          <span>Usage{stale ? " · stale" : ""}</span>
+          {telemetry?.rateLimits?.length ? <span className="tabular-nums">{telemetry.rateLimits.map(limit => `${limit.windowMinutes === 10080 ? "Weekly" : limit.windowMinutes ? `${limit.windowMinutes / 60}h` : limit.name} ${Math.round(limit.usedPercent)}%`).join(" · ")}{stale ? " · stale" : ""}</span> : <span>Usage{stale ? " · stale" : ""}</span>}
         </button>
         <WorkbenchPopover open={panel === "usage"} onDismiss={() => changePanel(null)} anchorRef={usageRef} label="Last reported usage">
           {!hasMetrics ? <p>Usage is not available yet.</p> : <>
@@ -81,7 +83,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
           {Boolean(telemetry?.rateLimits?.length) && <div className="mt-3 border-t border-border pt-3">
             {telemetry?.rateLimits?.map((limit) => (
               <div key={limit.name} className="mb-2">
-                <div className="flex justify-between gap-2"><span>{limit.windowMinutes ? `${limit.windowMinutes / 60}h window` : limit.name}</span><span>{limit.usedPercent}% used</span></div>
+                <div className="flex justify-between gap-2"><span>{limit.windowMinutes ? (limit.windowMinutes === 10080 ? "Weekly" : `${limit.windowMinutes / 60}h window`) : limit.name}</span><span>{limit.usedPercent}% used</span></div>
                 <progress aria-label={`${limit.name} rate limit used`} className="h-1 w-full" max={100} value={limit.usedPercent} />
                 {limit.resetsAt !== undefined && <p className="mt-1 text-muted-foreground">Resets {new Date(limit.resetsAt * 1000).toLocaleString()}</p>}
               </div>
@@ -92,7 +94,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
           </>}
         </WorkbenchPopover>
       </div>
-      {telemetry?.tokens?.total !== undefined && <span className="hidden shrink-0 tabular-nums sm:inline">{tokens(telemetry.tokens.total)} tokens</span>}
+      {mode !== "metrics" && telemetry?.tokens?.total !== undefined && <span className="hidden shrink-0 tabular-nums sm:inline">{tokens(telemetry.tokens.total)} tokens</span>}
       </>}
     </div>
   );

@@ -1,10 +1,12 @@
+import { AgentIcon } from "@/components/agent-icon";
 import { useId, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Cpu, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { MenuModel } from "@/lib/blocks";
 import { modelRowKeys, type NativeModelMenu as ParsedModelMenu } from "@/lib/native-model-menu";
 import type { MenuBlockAction } from "./menu-block";
 
 interface Props {
+  agent?: string;
   menu: MenuModel;
   parsed: ParsedModelMenu;
   onAction: (action: MenuBlockAction) => void | Promise<void>;
@@ -13,7 +15,7 @@ interface Props {
 
 // Row styling adapted from T3 Code ModelListRow.tsx at 191a4ef (MIT; THIRD_PARTY_NOTICES.md).
 // The catalogue and selection come exclusively from the currently observed agent menu.
-export function NativeModelMenu({ menu, parsed, onAction, disabled }: Props) {
+export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Props) {
   const id = useId();
   const [sending, setSending] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -40,7 +42,7 @@ export function NativeModelMenu({ menu, parsed, onAction, disabled }: Props) {
   return (
     <section aria-label={menu.title} className="native-model-menu overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Cpu aria-hidden="true" className="size-4 text-muted-foreground" />
+        <AgentIcon agent={agent} className="size-5" />
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
           <p className="mt-0.5 text-[11px] text-muted-foreground">{parsed.kind === "reasoning" ? menu.title.replace(/^Select Reasoning Level for /i, "") : "Choose a model, then apply your selection."}</p>

@@ -215,6 +215,7 @@ export interface SnapshotResponse {
 }
 
 export interface PaneReadResponse {
+  nativeTelemetry?: { sessionKey: string; telemetry: SessionTelemetry };
   paneId: string;
   text: string;
   truncated: boolean;
@@ -269,9 +270,9 @@ export interface TranscriptTurn {
  * false` is an ordinary answer (a shell pane, a harness with no session log, or the feature off) —
  * the UI hides the History affordance rather than showing an error.
  */
-/** Last reported journal metrics. Missing values are unknown, never inferred model limits. */
+/** Last reported provider metrics. Missing values are unknown, never inferred model limits. */
 export interface SessionTelemetry {
-  source: "journal";
+  source: "journal" | "statusline";
   observedAt?: string;
   model?: string;
   effort?: string;
@@ -282,7 +283,7 @@ export interface SessionTelemetry {
     total?: number;
     scope: "session" | "last-message";
   };
-  context?: { usedTokens?: number; windowTokens?: number };
+  context?: { usedTokens?: number; windowTokens?: number; usedPercent?: number };
   rateLimits?: Array<{
     name: "primary" | "secondary";
     usedPercent: number;

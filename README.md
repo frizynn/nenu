@@ -244,3 +244,23 @@ The **Agents** switcher keeps **Main · Parent** available alongside its childre
 are expanded; Finished and other inactive groups start collapsed each time the switcher opens.
 Selecting a child opens its live journal in the main chat. Main's draft stays intact when returning.
 Child journals currently have no independent input transport: send instructions through Main.
+
+
+### Claude context and account usage
+
+The composer shows context, five-hour usage and weekly usage without opening More actions.
+Claude supplies these values through its native status line. Enable the local capture from this
+checkout with `bun scripts/install-claude-statusline.ts`. It backs up user settings, preserves the
+existing status-line command and its output, and is safe to run again. Custom profiles may pass
+`/path/to/settings.json /path/to/nenu-state` as the two arguments. Project overrides of `statusLine`
+need the same installer applied to that settings file. No credentials or conversation text are stored.
+
+The bridge reads a bounded per-session metadata file alongside the existing pane refresh, so the
+phone makes no extra polling requests and does not wait for the conversation history. Values remain
+provider-reported, with their observation time and reset times in the usage popover. Claude versions
+or accounts that omit a limit leave it unavailable; Nenu never estimates account limits from tokens.
+
+For background Claude sessions, subagent lifecycle hooks are matched to the live runtime's native
+start time. Long tools stay running without a two-minute activity timeout; restarting the parent
+cannot revive children from its previous process. If that runtime cannot be verified, stale children
+remain Unconfirmed. Explicit stop/completion records still take precedence.

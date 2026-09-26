@@ -103,6 +103,7 @@ export interface HomeData {
 }
 
 export interface PaneData {
+  nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   paneId: string;
   /** The session this pane was fetched for (undefined = primary) — threaded into every write. */
   session: string | undefined;
@@ -408,6 +409,7 @@ export async function paneLoader({
       truncated: read.truncated,
       requestedLines: lines,
       revision: read.revision,
+      nativeTelemetry: read.nativeTelemetry,
       error: false,
       authError: false,
     };

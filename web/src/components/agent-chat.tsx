@@ -60,7 +60,7 @@ import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
-import type { AgentView, BridgeStatus, DeviceAuth, TabView } from "@/lib/types";
+import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
 import type {
   MenuModel,
   MultiSelectModel,
@@ -81,6 +81,7 @@ interface AgentChatProps {
   tabLabel?: string;
   /** Owning project, when this pane is one of its coordinator/agent threads. */
   project?: { slug: string; name: string };
+  nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
   /** The scrollback window `text` was fetched with — tells a grown fetch from a stale in-flight poll. */
@@ -122,6 +123,7 @@ export function AgentChat({
   tabLabel,
   project,
   text,
+  nativeTelemetry,
   requestedLines = 0,
   revision = 0,
   device,
@@ -683,8 +685,11 @@ export function AgentChat({
     composerRef.current?.focusInput();
   }
 
+  const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
+  const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
   const telemetryProps = {
-    telemetry: conversation.history?.available ? conversation.history.telemetry : undefined,
+    agent: agent?.agent,
+    telemetry,
     stale: conversation.error || connecting,
     modelAvailable,
     disabled: readOnly || gone || connecting || dialogPresent,
@@ -930,7 +935,7 @@ export function AgentChat({
           {!subagent && showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
             open={panels.panel === "model"} anchorRef={modelTriggerRef} agent={agent?.agent}
             text={modelSource.text} menu={liveModelBlock} modelPresent={modelPresent} catalog={catalog}
-            reportedModel={conversation.history?.available ? conversation.history.telemetry?.model : undefined}
+            reportedModel={telemetry?.model}
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}

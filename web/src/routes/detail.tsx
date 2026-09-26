@@ -71,6 +71,7 @@ export function DetailRoute() {
       tabs={root.tabs}
       tabLabel={tabLabel}
       text={pane.text}
+      nativeTelemetry={pane.nativeTelemetry}
       requestedLines={pane.requestedLines}
       revision={pane.revision}
       device={root.device}

@@ -68,3 +68,18 @@ it("lets the parent own model toggling and one active inspection panel", async (
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
 });
+
+it.each(["claude", "codex"])("shows the %s brand before history or model metadata arrives", (agent) => {
+  render(<WorkbenchTelemetry agent={agent} modelAvailable disabled={false} onChooseModel={vi.fn()} />);
+  expect(screen.getByRole("img", { name: `${agent} logo` })).toBeVisible();
+});
+
+it("shows the native context percentage and both quota windows", async () => {
+  render(<WorkbenchTelemetry agent="claude" modelAvailable disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, context: { usedTokens: 397000, windowTokens: 1000000, usedPercent: 40 }, rateLimits: [{ name: "primary", windowMinutes: 300, usedPercent: 8 }, { name: "secondary", windowMinutes: 10080, usedPercent: 19 }] }} />);
+  expect(screen.getByRole("button", { name: "Context window 40% used" })).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "Usage" }));
+  expect(screen.getByText("5h window")).toBeVisible();
+  expect(screen.getByText("Weekly")).toBeVisible();
+  expect(screen.getByText("8% used")).toBeVisible();
+  expect(screen.getByText("19% used")).toBeVisible();
+});

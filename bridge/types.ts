@@ -251,6 +251,7 @@ export interface UpdateStatus {
 
 /** GET /api/pane/:id — recent terminal output for one agent (ANSI/SGR, rendered colored). */
 export interface PaneReadResponse {
+  nativeTelemetry?: { sessionKey: string; telemetry: SessionTelemetry };
   paneId: string;
   text: string;
   truncated: boolean;

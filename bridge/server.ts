@@ -1,3 +1,4 @@
+import { ClaudeTelemetry } from "./claude-telemetry.ts";
 import { artifactMetadata } from "./artifact-metadata.ts";
 import { WebAssetArchive } from "./web-assets.ts";
 import { renderedHtmlResponse } from "./html-preview.ts";
@@ -190,6 +191,7 @@ export function startServer(opts: {
   const operatorQuickReplies = createOperatorQuickReplies(cfg.quickRepliesFile);
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
+  const claudeTelemetry = new ClaudeTelemetry(cfg.stateDir);
   const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
   const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
@@ -351,7 +353,11 @@ export function startServer(opts: {
             return json(result, req.headers.get("accept-encoding"));
           } catch { return jsonError("Could not read subagents for this session.", 503, null); }
         }
-        if (!action && req.method === "GET") return readPane(herdr, cfg, paneId, url, req);
+        if (!action && req.method === "GET") {
+          const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
+          const native = original ? conversations.resolve(original, herdr, session).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : Promise.resolve(undefined);
+          return readPane(herdr, cfg, paneId, url, req, native);
+        }
         if (action === "start" && req.method === "POST") {
           const kind = launchAgent(await req.json().catch(() => null));
           if (!kind) return jsonError("Choose Codex or Claude Code.", 400, null);
@@ -625,6 +631,7 @@ async function readPane(
   paneId: string,
   url: URL,
   req: Request,
+  native: Promise<PaneReadResponse["nativeTelemetry"]> = Promise.resolve(undefined),
 ): Promise<Response> {
   const linesParam = Number.parseInt(url.searchParams.get("lines") ?? "", 10);
   // Clamp to a sane ceiling — don't trust the client (or Herdr) to bound an enormous read.
@@ -640,6 +647,8 @@ async function readPane(
     // to "text" would move someone's screen on every revalidate. See HERDR_API.md → `pane.read`.
     const read = await herdr.readPane(paneId, "recent", lines, "ansi");
     const data = paneReadResponse(paneId, read);
+    const nativeTelemetry = await native;
+    if (nativeTelemetry) data.nativeTelemetry = nativeTelemetry;
     // ETag is derived from the serialised body — if content hasn't changed the client gets a 304
     // and skips the whole transfer (the big win on a cellular link).
     const body = new JsonBody(data);
