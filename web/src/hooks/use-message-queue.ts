@@ -6,6 +6,36 @@ import {
   type QueueMessage,
 } from "@/lib/api";
 
+type PendingMessage = { id: string; text: string; scope: string };
+function readPending(key: string): PendingMessage | null {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
+    if (
+      value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      /^[a-zA-Z0-9_-]{1,80}$/.test(value.id) &&
+      "text" in value &&
+      typeof value.text === "string" &&
+      "scope" in value &&
+      typeof value.scope === "string"
+    )
+      return value as PendingMessage;
+  } catch {
+    /* Storage can be unavailable in private browsing. */
+  }
+  return null;
+}
+function savePending(key: string, value: PendingMessage | null) {
+  try {
+    if (value) sessionStorage.setItem(key, JSON.stringify(value));
+    else sessionStorage.removeItem(key);
+  } catch {
+    /* In-memory retries remain available without storage. */
+  }
+}
+
 export function useMessageQueue(
   paneId: string,
   session: string | undefined,
@@ -16,9 +46,8 @@ export function useMessageQueue(
   const [busy, setBusy] = useState(false);
   const current = useRef(`${paneId}:${session}`);
   current.current = `${paneId}:${session}`;
-  const pending = useRef<{ id: string; text: string; scope: string } | null>(
-    null,
-  );
+  const pending = useRef<PendingMessage | null>(null);
+  const storageKey = `collie.queue.pending:${JSON.stringify([paneId, session])}`;
   useEffect(() => {
     setPage(null);
     setBusy(false);
@@ -77,6 +106,8 @@ export function useMessageQueue(
       const key = current.current;
       setBusy(true);
       setError("");
+      if (action === "add" && !pending.current)
+        pending.current = readPending(storageKey);
       if (
         action === "add" &&
         (!pending.current ||
@@ -88,6 +119,7 @@ export function useMessageQueue(
           text: text!,
           scope: page.scope,
         };
+      if (action === "add") savePending(storageKey, pending.current);
       try {
         const next = await changeMessageQueue(
           paneId,
@@ -100,11 +132,16 @@ export function useMessageQueue(
           },
           session,
         );
+        if (!next.available)
+          throw new Error(
+            "The connected conversation is unavailable. Your draft was kept.",
+          );
+        if (action === "add") savePending(storageKey, null);
         if (current.current === key) {
           setPage(next);
           if (action === "add") pending.current = null;
         }
-        return true;
+        return current.current === key;
       } catch (failure) {
         if (current.current === key)
           setError(
@@ -117,7 +154,7 @@ export function useMessageQueue(
         if (current.current === key) setBusy(false);
       }
     },
-    [page, busy, paneId, session],
+    [page, busy, paneId, session, storageKey],
   );
   return { page, error, busy, mutate };
 }

@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-09-26
+
+### Fixed
+- Preserve drafts and enqueue identities across connection loss and reloads.
+
 ## [0.45.0] - 2026-09-26
 
 ### Added

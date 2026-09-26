@@ -82,7 +82,15 @@ export class QueueService {
       !conversation ||
       !["claude", "codex"].includes(current.pane.agent)
     )
-      return Response.json({ available: false, messages: [] });
+      return req.method === "POST"
+        ? Response.json(
+            {
+              error:
+                "The connected conversation is unavailable. Your message was not queued.",
+            },
+            { status: 409 },
+          )
+        : Response.json({ available: false, messages: [] });
     const scope = scopeFor(session, current.pane);
     try {
       if (req.method === "POST") {
