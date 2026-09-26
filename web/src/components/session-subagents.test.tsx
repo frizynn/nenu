@@ -1,9 +1,19 @@
+import { vi } from "vitest";
 import { setLocked } from "@/lib/idle";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
-import { SessionSubagents } from "./session-subagents";
+import { useState } from "react";
+import { SessionSubagents as Switcher, type SubagentSelection } from "./session-subagents";
+import { SubagentConversation } from "./subagent-conversation";
+function SessionSubagents({ paneId, agent }: { paneId: string; agent: string }) {
+  const [selection, setSelection] = useState<SubagentSelection | null>(null);
+  return <><Switcher paneId={paneId} selected={selection} onSelect={setSelection} />
+    {selection && <SubagentConversation key={selection.agent.id} paneId={paneId} agent={agent} selection={selection} onMain={() => setSelection(null)} />}</>;
+}
+
+beforeAll(() => { HTMLElement.prototype.scrollTo = vi.fn(); });
 
 const child = { id: "child", parentId: "parent", name: "Reviewer", task: "Review the session", status: "running", model: "test-model" };
 const list = { available: true, sessionKey: "parent-key", agents: [child], truncated: false };
@@ -24,7 +34,15 @@ it("opens a child's transcript without sending input or navigating away", async 
   await user.click(screen.getByRole("button", { name: /Reviewer/ }));
   expect(await screen.findByText("Child result")).toBeInTheDocument();
   expect(requests).toEqual(["child"]);
-  await user.click(screen.getByRole("button", { name: "All agents" }));
+  expect(screen.queryByRole("dialog", { name: "Subagents" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Subagents (1 active, 1 total)" }));
+  expect(screen.getByRole("button", { name: "Main Parent" })).toHaveAttribute("aria-pressed", "false");
+  await user.click(screen.getByRole("button", { name: "Main Parent" }));
+  expect(screen.queryByText("Child result")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Subagents (1 active, 1 total)" }));
+  await user.click(screen.getByRole("button", { name: /Reviewer/ }));
+  await screen.findByText("Child result");
+  await user.click(screen.getByRole("button", { name: "Back to Main" }));
   expect(screen.queryByText("Child result")).not.toBeInTheDocument();
 });
 
@@ -64,6 +82,7 @@ it("clears an open child when the same pane connects to a different conversation
   await screen.findByText("Previous child result");
   changed = true;
   act(() => { window.dispatchEvent(new Event("online")); });
+  await user.click(await screen.findByRole("button", { name: "Subagents" }));
   await screen.findByText(/No subagents in this session/);
   expect(screen.queryByText("Previous child result")).not.toBeInTheDocument();
 });
@@ -74,7 +93,11 @@ it("separates completed history from live activity and displays the readable mod
   render(<SessionSubagents paneId="parent" agent="claude" />);
   await user.click(await screen.findByRole("button", { name: "Subagents (0 active, 1 total)" }));
   expect(screen.getByText("No agents running")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Finished (1)" })).toBeInTheDocument();
+  const finished = screen.getByText("Finished (1)");
+  expect(finished.closest("details")).not.toHaveAttribute("open");
+  expect(screen.getByText("Review checkout")).not.toBeVisible();
+  await user.click(finished);
+  expect(screen.getByText("Review checkout")).toBeVisible();
   expect(screen.getAllByText("Review checkout")).toHaveLength(1);
   expect(screen.getByText("Opus 5.5")).toBeInTheDocument();
 });
@@ -91,4 +114,17 @@ it("does not read subagents behind the idle cover and refreshes on resume", asyn
     await act(async () => setLocked(false));
     await waitFor(() => expect(calls).toBe(1));
   } finally { view.unmount(); setLocked(false); }
+});
+
+it("discards a child's cached transcript when access is revoked", async () => {
+  let denied = false;
+  server.use(
+    http.get("/api/pane/parent/subagent-history", () => denied ? new HttpResponse(null, { status: 403 }) : HttpResponse.json({ sessionKey: "parent-key", agent: child, entries: [{ uuid: "reply", ts: "", role: "assistant", parts: [{ kind: "text", text: "Private child" }] }], truncated: false })),
+  );
+  render(<SubagentConversation paneId="parent" agent="claude" selection={{ parentKey: "parent-key", agent: { ...child, status: "running" } }} onMain={() => {}} />);
+  await screen.findByText("Private child");
+  denied = true;
+  act(() => window.dispatchEvent(new Event("online")));
+  await waitFor(() => expect(screen.queryByText("Private child")).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 });

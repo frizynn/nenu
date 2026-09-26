@@ -10,6 +10,8 @@ export interface ChatFileReference {
   kind: ChatFileKind;
   mentions: number;
   edited: boolean;
+  delivered: boolean;
+  lastSeen: { entryId: string; timestamp: string; order: number };
   firstSeen: { entryId: string; timestamp: string; role: TranscriptEntry["role"] };
 }
 
@@ -34,13 +36,13 @@ function normalisePath(path: string): string {
   return absolute ? `/${joined}` : joined || ".";
 }
 
-function markdownPaths(text: string): string[] {
+function markdownPaths(text: string, includeCode = true): string[] {
   const paths: string[] = [];
   const spans = (items: MdSpan[]) => {
     for (const span of items) {
       if (span.kind === "file") paths.push(span.path);
       else if (span.kind === "bold" || span.kind === "italic" || span.kind === "link") spans(span.spans);
-      else if (span.kind === "code") {
+      else if (span.kind === "code" && includeCode) {
         const path = localFilePath(span.text);
         if (path) paths.push(path);
       }
@@ -84,14 +86,18 @@ function textInPart(part: TranscriptPart): string[] {
 /** Oldest-first input produces stable first-seen ordering; repeat mentions collapse by path. */
 export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReference[] {
   const references = new Map<string, ChatFileReference>();
-  for (const entry of entries) {
+  for (const [order, entry] of entries.entries()) {
     const perEntry = new Set<string>();
     for (const part of entry.parts) {
+      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? markdownPaths(part.text, false).map(normalisePath) : []);
       for (const text of textInPart(part)) {
         for (const candidate of filePathsInText(text)) {
           const path = localFilePath(candidate);
           if (!path) continue;
           const normal = normalisePath(path);
+          const delivered = deliveredPaths.has(normal);
+          const known = references.get(normal);
+          if (known) known.delivered ||= delivered;
           if (perEntry.has(normal)) {
             if (part.kind === "tool" && !part.result?.isError && /write|edit|patch|file.?change/i.test(part.name)) {
               const existing = references.get(normal);
@@ -105,6 +111,7 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
           if (existing) {
             existing.edited ||= edited;
             existing.mentions++;
+            existing.lastSeen = { entryId: entry.uuid, timestamp: entry.ts, order };
             continue;
           }
           references.set(normal, {
@@ -112,6 +119,8 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
             name: normal.split("/").at(-1) ?? normal,
             kind: PHOTO_EXTENSION.test(normal) ? "photo" : /\.(mp4|m4v|mov|webm)$/i.test(normal) ? "video" : "file",
             edited,
+            delivered,
+            lastSeen: { entryId: entry.uuid, timestamp: entry.ts, order },
             mentions: 1,
             firstSeen: { entryId: entry.uuid, timestamp: entry.ts, role: entry.role },
           });
@@ -120,4 +129,14 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
     }
   }
   return [...references.values()];
+}
+
+export function fileExtension(file: ChatFileReference): string {
+  return file.name.includes(".") ? file.name.split(".").at(-1)!.toLowerCase() : "no extension";
+}
+export type ArtifactKind = "designboard" | "document" | "media";
+export function artifactKind(file: ChatFileReference, designboard: boolean): ArtifactKind | null {
+  if (designboard) return "designboard";
+  if (!file.delivered || !/\.(pdf|md|markdown|csv|tsv|png|jpe?g|gif|webp|svg|mp4|m4v|mov|webm)$/i.test(file.path)) return null;
+  return file.kind === "file" ? "document" : "media";
 }

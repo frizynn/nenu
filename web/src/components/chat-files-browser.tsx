@@ -1,3 +1,4 @@
+import { useArtifactMetadata } from "@/hooks/use-artifact-metadata";
 import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
@@ -5,7 +6,7 @@ import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 import { BottomSheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { fetchHistory, paneFileUrl } from "@/lib/api";
-import { chatFileReferences, type ChatFileKind } from "@/lib/chat-files";
+import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 
@@ -50,7 +51,11 @@ export function ChatFilesBrowser({
   labeled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<ChatFileKind | "artifacts" | "project">("artifacts");
+  const [filter, setFilter] = useState<ChatFileKind | "artifacts" | "project">("project");
+  const [query, setQuery] = useState("");
+  const [extension, setExtension] = useState("all");
+  const [sort, setSort] = useState("recent");
+  const [artifactType, setArtifactType] = useState("all");
   const [runKey, setRunKey] = useState(0);
   const [scan, setScan] = useState<ScanState>(EMPTY_SCAN);
   const seed = useRef<PaneHistoryResponse | null>(history);
@@ -77,8 +82,9 @@ export function ChatFilesBrowser({
     if (!open) seed.current = history;
   }, [history, open]);
 
+  const scanning = open && filter !== "project";
   useEffect(() => {
-    if (!open) return;
+    if (!scanning) return;
     const controller = new AbortController();
     let active = true;
     const update = (value: ScanState) => { if (active) setScan(value); };
@@ -156,7 +162,7 @@ export function ChatFilesBrowser({
       active = false;
       controller.abort();
     };
-  }, [open, paneId, session, runKey]);
+  }, [scanning, paneId, session, runKey]);
 
   function openReference(path: string) {
     // Avoid stacking the preview dialog over this modal. Closing first restores focus to the trigger;
@@ -167,8 +173,22 @@ export function ChatFilesBrowser({
 
   const references = useMemo(() => chatFileReferences(scan.entries), [scan.entries]);
 
-  const files = references.filter((reference) => reference.kind === "file");
-  const shown = filter === "photo" ? references.filter(r => r.kind === "photo" || r.kind === "video") : filter === "artifacts" ? references.filter(r => r.edited || /\.html?$/i.test(r.path)) : files;
+  const files = references.filter(reference => reference.kind === "file");
+  const candidates = references.filter(reference => /\.html?$/i.test(reference.path))
+    .sort((a, b) => b.lastSeen.order - a.lastSeen.order).map(reference => reference.path);
+  const metadata = useArtifactMetadata(paneId, session, candidates, open && filter === "artifacts" && !scan.loading);
+  const boards = new Map(metadata.found.map(item => [item.path, item]));
+  const category = filter === "photo" ? references.filter(r => r.kind !== "file")
+    : filter === "artifacts" ? references.filter(r => {
+      const kind = artifactKind(r, boards.has(r.path));
+      return kind !== null && (artifactType === "all" || kind === artifactType);
+    }) : files;
+  const extensions = [...new Set(category.map(fileExtension))].sort();
+  const shown = category.filter(r => (extension === "all" || fileExtension(r) === extension)
+    && `${r.path} ${boards.get(r.path)?.title ?? ""}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => (sort === "extension" ? fileExtension(a).localeCompare(fileExtension(b))
+      : sort === "name" ? a.name.localeCompare(b.name) : 0) || b.lastSeen.order - a.lastSeen.order);
+  function changeFilter(next: typeof filter) { setFilter(next); setExtension("all"); }
 
   return (
     <>
@@ -183,6 +203,7 @@ export function ChatFilesBrowser({
           knownTotal.current = 0;
           knownFileTruncated.current = false;
           setScan(EMPTY_SCAN);
+          setFilter("project"); setQuery(""); setExtension("all"); setArtifactType("all");
           setOpen(true);
         }}
         className={labeled ? "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-accent active:bg-muted" : "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"}
@@ -193,17 +214,33 @@ export function ChatFilesBrowser({
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" className="max-h-[82dvh]">
         <div className="mb-4 grid grid-cols-4 gap-1" role="group" aria-label="File type">
-          <FilterButton active={filter === "artifacts"} onClick={() => setFilter("artifacts")} icon={null}>Artifacts</FilterButton>
-          <FilterButton active={filter === "project"} onClick={() => setFilter("project")} icon={null}>Project</FilterButton>
-          <FilterButton active={filter === "file"} onClick={() => setFilter("file")} icon={null}>
+          <FilterButton active={filter === "artifacts"} onClick={() => changeFilter("artifacts")} icon={null}>Artifacts</FilterButton>
+          <FilterButton active={filter === "project"} onClick={() => changeFilter("project")} icon={null}>Project</FilterButton>
+          <FilterButton active={filter === "file"} onClick={() => changeFilter("file")} icon={null}>
             Files{!scan.loading ? ` · ${files.length}` : ""}
           </FilterButton>
-          <FilterButton active={filter === "photo"} onClick={() => setFilter("photo")} icon={null}>
+          <FilterButton active={filter === "photo"} onClick={() => changeFilter("photo")} icon={null}>
             Media
           </FilterButton>
         </div>
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <input aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
+          {filter === "artifacts" && <select aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+            <option value="all">All types</option><option value="designboard">Designboards</option><option value="document">Documents</option><option value="media">Media</option>
+          </select>}
+          <select aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+            <option value="all">Any format</option>{extensions.map(ext => <option key={ext} value={ext}>.{ext}</option>)}
+          </select>
+          <select aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+            <option value="recent">Recent first</option><option value="extension">Extension</option><option value="name">Name</option>
+          </select>
+        </div>
+        {filter === "artifacts" && <p className="mb-3 text-xs text-muted-foreground">Designboards and documents shared by the agent. Source files stay in Files and Project.</p>}
+        {filter === "artifacts" && metadata.loading && <p role="status" className="mb-2 text-xs text-muted-foreground">Checking designboards…</p>}
+        {filter === "artifacts" && metadata.error && <p role="status" className="mb-2 text-xs text-muted-foreground">Some designboards could not be checked.<button className="min-h-11 px-2 underline" onClick={metadata.retry}>Retry</button></p>}
+        {filter === "artifacts" && metadata.more && <button className="min-h-11 text-xs underline" onClick={metadata.loadMore}>Check older HTML files</button>}
         {scan.loading && (
           <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground">
             <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
@@ -245,19 +282,22 @@ export function ChatFilesBrowser({
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{reference.name}</span>
+                    <span className="block truncate text-sm font-medium">{boards.get(reference.path)?.title ?? reference.name}</span>
                     <span className="block truncate font-mono text-[11px] text-muted-foreground">{reference.path}</span>
                   </span>
-                  {reference.mentions > 1 && <span className="shrink-0 text-xs text-muted-foreground">{reference.mentions} mentions</span>}
+                  <span className="shrink-0 text-right text-xs text-muted-foreground">
+                    <span className="block">{boards.has(reference.path) ? "Designboard" : fileExtension(reference).toUpperCase()}</span>
+                    {reference.lastSeen.timestamp && <time className="block" dateTime={reference.lastSeen.timestamp}>{new Date(reference.lastSeen.timestamp).toLocaleDateString([], { month: "short", day: "numeric" })}</time>}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
-        ) : !scan.loading && (
+        ) : !scan.loading && !(filter === "artifacts" && metadata.loading) && (
           <div className="rounded-xl border border-dashed px-5 py-10 text-center">
             {filter === "photo" ? <Image aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" /> : <FileText aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" />}
-            <p className="text-sm font-medium">No {filter === "photo" ? "media" : filter === "artifacts" ? "artifacts" : "files"} in this conversation</p>
-            <p className="mt-1 text-xs text-muted-foreground">Created or edited files and HTML previews appear in Artifacts. Browse Project for other files.</p>
+            <p className="text-sm font-medium">{query || extension !== "all" || artifactType !== "all" ? "No matching files" : `No ${filter === "photo" ? "media" : filter === "artifacts" ? "artifacts" : "files"} in this conversation`}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Browse Project for the working directory, or Files for all conversation references.</p>
           </div>
         )}
 

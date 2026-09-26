@@ -27,3 +27,11 @@ Cross-session children, malformed IDs and symlinks are covered by focused tests.
 Claude also writes a contained `agent-<id>.meta.json` beside each transcript. Read its description/name and parentAgentId only after the matching child transcript passes session ownership checks. This keeps names and nested relationships available when the parent launch falls outside the bounded tail.
 
 A final assistant `end_turn`, an explicit API error, or a native task-notification terminal status is lifecycle evidence even without hooks. A newer user/assistant turn or start invalidates the older completion; a stop hook does not overwrite a reported failure. File activity alone still never proves running. The UI counts confirmed active children separately from finished history and leaves unconfirmed states explicit. Model labels are display-only; native IDs remain unchanged for model selection and are visible in child details.
+
+## Main conversation selection (2026-09-26)
+
+The switcher now selects a child journal in the main conversation area and retains a Main / Parent
+entry. The selection carries the verified parent's session key; a replaced parent or denied read
+clears the child. This changes the viewing surface, not input ownership. Main's composer remains
+mounted with its draft, hidden and read-only while a child is selected. Returning resumes Main's
+history immediately. Finished, errors and unconfirmed groups start collapsed on every menu open.
