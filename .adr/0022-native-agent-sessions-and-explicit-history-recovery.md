@@ -38,3 +38,11 @@ Prefer the existing bounded, contained journal reader and its mtime/ETag caches.
 - Local `codex --help`, `codex app-server generate-json-schema`, `claude --help` and Herdr protocol 22.
 - `bridge/conversation-service.test.ts`, `bridge/conversation-bindings.test.ts`, `bridge/codex-rpc.test.ts`.
 - Real mobile-sized browser recovery and native replies recorded in the project task `WIP/nenu-sesiones-compartidas-20260926`.
+
+## Local verification
+
+The mobile browser flow passed at 390 × 844 for both agents: empty terminal, Start action, first reply, response in the conversation and round trip through the raw terminal. A separate shared-daemon Codex session reproduced the missing-hook failure on the installed 0.41.2 build and recovered through the new picker. A page reload preserved the connection. Claude identity resolution was also checked against a real native process with the hook reference omitted at the resolver boundary.
+
+The first native Codex send exposed a separate 0.157 renderer change: a styled shortcuts row now follows the status line. Captured fixtures reproduce the refusal. The parser accepts only that exact styled hint and still rejects plain lookalikes and trailing dialogs.
+
+Local checks: 823 bridge/script tests, ctl lifecycle sandbox, 4384 web tests with 30 existing todos, bridge/web typechecks, production build and real Codex/Claude journal probe. Cross-origin requests to both new write routes return 403. Physical-phone acceptance and activation of this build are separate from these checks.
