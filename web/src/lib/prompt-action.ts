@@ -27,7 +27,8 @@ import {
   type DialogTarget,
 } from "./dialog-guard";
 import { promptsSameIdentity } from "./harness/prompt-model";
-import { sanitizeTypedText, type ActionResult, type Sleep } from "./harness/guard";
+import { sanitizeTypedText, type ActionResult } from "./harness/guard";
+import { type Sleep } from "./harness/poll";
 
 /** The prompt-select identity comparators, part of the neutral contract (harness/prompt-model.ts).
  *  Re-exported under their original names so existing call sites and tests keep one import site. */

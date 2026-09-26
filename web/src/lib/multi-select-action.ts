@@ -26,7 +26,8 @@ import {
   type DialogTarget,
 } from "./dialog-guard";
 import { multiSelectIdentity } from "./harness/multi-select-model";
-import { defaultSleep, type ActionResult, type Sleep } from "./harness/guard";
+import { type ActionResult } from "./harness/guard";
+import { defaultSleep, type Sleep } from "./harness/poll";
 
 /** One tap's intent, resolved to keystrokes by {@link submitMultiSelectIntent}. Shared with the
  *  MultiSelectBlock renderer (its `onAction` emits exactly these). */

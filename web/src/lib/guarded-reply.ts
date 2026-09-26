@@ -25,7 +25,7 @@ export interface ReplyTransport {
 import { parseAnsi } from "./ansi";
 import { splitLines } from "./blocks";
 import { adapterFor, type HarnessAdapter } from "./harness";
-import { POLL_ATTEMPTS, POLL_DELAY_MS, defaultSleep, type Sleep } from "./harness/guard";
+import { POLL_ATTEMPTS, POLL_DELAY_MS, defaultSleep, type Sleep } from "./harness/poll";
 import { detectNoEchoPrompt } from "./no-echo";
 
 export type ReplyOutcome =

@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.45.7] - 2026-09-26
+
+### Fixed
+- Keep the server reply guard independent of React and browser transport dependencies.
+
 ## [0.45.6] - 2026-09-26
 
 ### Fixed

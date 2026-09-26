@@ -33,14 +33,8 @@ import {
   type DialogKind,
   type DialogModels,
 } from "./harness/dialog-contract";
-import {
-  entryGuard,
-  pollUntil,
-  readModel,
-  type ActionResult,
-  type GuardOutcome,
-  type Sleep,
-} from "./harness/guard";
+import { entryGuard, pollUntil, readModel, type ActionResult, type GuardOutcome } from "./harness/guard";
+import { type Sleep } from "./harness/poll";
 
 /** What identifies the dialog a tap is aimed at: where it lives, when it was seen, and what it was. */
 export interface DialogTarget<K extends DialogKind> {
