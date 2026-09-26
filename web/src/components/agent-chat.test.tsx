@@ -27,6 +27,17 @@ import { fixtureAgents } from "@/test/handlers";
 import { AgentChat } from "./agent-chat";
 import { StatusArea } from "./status-area";
 
+it.each(["codex", "claude"])("recovers %s history without a SessionStart hook", async (kind) => {
+  const paneId = `missing-hook-${kind}`;
+  server.use(http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
+    paneId, available: true, entries: [{ uuid: "recovered", ts: "", role: "assistant", parts: [{ kind: "text", text: "Recovered conversation" }] }],
+    total: 1, hasMore: false, fileTruncated: false,
+  })));
+  const agent = { ...fixtureAgents[0]!, paneId, agent: kind, status: "unknown" as const, hasSession: false };
+  renderChat({ paneId, agent, agents: [agent], text: "" });
+  expect(await screen.findByText("Recovered conversation")).toBeInTheDocument();
+});
+
 // The detail view's core job: type a reply and submit it to the bridge. This drives the whole wired
 // path (composer → api.sendReply → MSW → optimistic clear / error surfacing) end-to-end, which no
 // other test covers. AgentChat uses useRevalidator, so it needs a data router (createMemoryRouter).
