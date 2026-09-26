@@ -483,6 +483,12 @@ export function createTab(
   });
 }
 
+export function startAgent(paneId: string, agent: "codex" | "claude", session?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/start`, session), {
+    method: "POST", body: JSON.stringify({ agent }),
+  });
+}
+
 /** Create a new space (workspace) with a fresh shell pane. `cwd` omitted = the host's home dir. */
 export function createWorkspace(
   opts: { label?: string; cwd?: string } = {},
@@ -558,4 +564,12 @@ export function uploadImage(paneId: string, file: File, session?: string): Promi
       return (await res.json()) as UploadResponse;
     })(),
   );
+}
+
+export function fetchConversations(paneId: string, session?: string, signal?: AbortSignal): Promise<{ conversations: Array<{ id: string; title: string }> }> {
+  return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/conversations`, session), { signal });
+}
+
+export function connectConversation(paneId: string, id: string, session?: string): Promise<ActionResponse> {
+  return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/connect`, session), { method: "POST", body: JSON.stringify({ id }) });
 }

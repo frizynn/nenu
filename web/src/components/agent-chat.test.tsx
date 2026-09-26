@@ -216,7 +216,7 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     renderChat({ agent: fresh, agents: [fresh], text: "Codex is ready" });
 
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
-    expect(screen.getByText(/waiting for the first conversation entry/i)).toBeInTheDocument();
+    expect(await screen.findByText("what changed today?")).toBeInTheDocument();
     expect(screen.queryByText("Codex is ready")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show raw terminal" }));
@@ -269,7 +269,7 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     expect(screen.queryByRole("region", { name: "Live conversation" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Classify Codex" }));
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
-    expect(screen.getByText(/waiting for the first conversation entry/i)).toBeInTheDocument();
+    expect(await screen.findByText("what changed today?")).toBeInTheDocument();
 
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "first message from the phone");
@@ -822,6 +822,13 @@ it("waits for reasoning selection and confirmation repaints before enabling the 
 
 
 describe("mobile session startup", () => {
+  it("waits for shell output before enabling launch", () => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell" };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "" });
+    expect(screen.getByRole("button", { name: "Start Codex" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
+    expect(screen.getByText("Preparing the terminal…")).toBeInTheDocument();
+  });
   it.each(["Codex", "Claude Code"])("starts %s from a shell without typing a command", async (label) => {
     const user = userEvent.setup();
     const calls: unknown[] = [];
@@ -834,4 +841,27 @@ describe("mobile session startup", () => {
     await user.click(screen.getByRole("button", { name: `Start ${label}` }));
     await waitFor(() => expect(calls).toEqual([{ agent: label === "Codex" ? "codex" : "claude" }]));
   });
+});
+
+it("connects a chosen history without sending a message to the terminal", async () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+  let connected = false;
+  const writes = vi.fn();
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json(connected ? {
+      paneId: "recovery", available: true, sessionKey: id, entries: [{ uuid: "answer", role: "assistant", ts: "", parts: [{ kind: "text", text: "Recovered answer" }] }], hasMore: false, total: 1, fileTruncated: false,
+    } : { paneId: "recovery", available: false, reason: "no-session" })),
+    http.get(/\/api\/pane\/[^/]+\/conversations$/, () => HttpResponse.json({ conversations: [{ id, title: "My terminal session" }] })),
+    http.post(/\/api\/pane\/[^/]+\/connect$/, async ({ request }) => {
+      expect(await request.json()).toEqual({ id }); connected = true; return HttpResponse.json({ ok: true });
+    }),
+    http.post(/\/api\/pane\/[^/]+\/(reply|keys)$/, () => { writes(); return HttpResponse.json({ ok: true }); }),
+  );
+  const agent = { ...fixtureAgents[1]!, paneId: "recovery", hasSession: false };
+  renderChat({ paneId: agent.paneId, agent, agents: [agent] });
+  await userEvent.click(await screen.findByRole("button", { name: "Find Codex conversations" }));
+  await userEvent.selectOptions(await screen.findByLabelText("Conversation to connect"), id);
+  await userEvent.click(screen.getByRole("button", { name: "Connect history" }));
+  expect(await screen.findByText("Recovered answer")).toBeInTheDocument();
+  expect(writes).not.toHaveBeenCalled();
 });

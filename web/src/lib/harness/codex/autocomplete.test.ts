@@ -11,10 +11,17 @@ import { locateComposer } from "./chrome";
 const capture = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", `${name}.txt`), "utf8");
 const lines = (text: string) => splitLines(parseAnsi(text));
 
-it("accepts the real 0.157 shortcuts footer under an empty composer", () => {
-  const pane = lines(capture("idle-shortcuts-v0157"));
+it.each(["idle-shortcuts-v0157", "shared-shortcuts-v0157"])("accepts the real 0.157 shortcuts footer in %s", (fixture) => {
+  const pane = lines(capture(fixture));
   expect(codexAdapter.composerReady?.(pane)).toBe(true);
   expect(codexAdapter.extractInputDraft?.(pane)).toBeNull();
+});
+
+it("does not treat plain shortcut prose or a trailing dialog as an input box", () => {
+  const captureText = capture("idle-shortcuts-v0157");
+  const unstyledHint = captureText.replace(/\x1b\[1m\x1b\[38;2;255;255;255m\?/, "?");
+  expect(codexAdapter.composerReady?.(lines(unstyledHint))).toBe(false);
+  expect(codexAdapter.composerReady?.(lines(`${captureText}\n  Press enter to confirm or esc to go back`))).toBe(false);
 });
 
 describe("Codex 0.153.4 command autocomplete", () => {

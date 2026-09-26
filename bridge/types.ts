@@ -278,6 +278,7 @@ export type PaneHistoryResponse =
       /** The log exceeded the read cap, so only its tail was parsed. */
       fileTruncated: boolean;
       telemetry?: SessionTelemetry;
+      sessionKey?: string;
     };
 
 /**

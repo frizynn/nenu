@@ -9,14 +9,15 @@ type Representation = { etag: string; data: PaneHistoryResponse };
 const representations = new WeakMap<Page, Map<string, Representation>>();
 
 /** Called only AFTER access checks, live pane resolution, and the contained journal stat/read. */
-export function historyResponse(page: Page, paneId: string, ifNoneMatch: string | null, acceptEncoding: string | null): Response {
+export function historyResponse(page: Page, paneId: string, ifNoneMatch: string | null, acceptEncoding: string | null, sessionKey?: string): Response {
   let panes = representations.get(page);
   if (!panes) { panes = new Map(); representations.set(page, panes); }
-  let representation = panes.get(paneId);
+  const key = `${paneId}\0${sessionKey ?? ""}`;
+  let representation = panes.get(key);
   if (!representation) {
-    const data: PaneHistoryResponse = { paneId, available: true, ...page };
+    const data: PaneHistoryResponse = { paneId, available: true, ...page, ...(sessionKey ? { sessionKey } : {}) };
     representation = { data, etag: computeEtag(JSON.stringify(data)) };
-    panes.set(paneId, representation);
+    panes.set(key, representation);
     if (panes.size > 8) panes.delete(panes.keys().next().value!);
   }
   const { etag, data } = representation;

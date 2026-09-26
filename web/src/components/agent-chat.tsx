@@ -4,6 +4,7 @@ import { useNavigate, useRevalidator } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, MessageSquareText, ScrollText, Search, TerminalSquare } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
+import { StartAgent } from "@/components/start-agent";
 import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
@@ -21,6 +22,7 @@ import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
 import { FindBar } from "@/components/find-bar";
 import { Composer, type ComposerHandle } from "@/components/composer";
+import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
@@ -180,8 +182,9 @@ export function AgentChat({
     return () => { delete root.dataset.collieComposerFocus; };
   }, [focusMode]);
   const conversation = useLiveConversation({
-    paneId, session, enabled: Boolean(agent?.hasSession), busy: agent?.status === "working",
+    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), busy: agent?.status === "working",
   });
+  const hasConversation = Boolean(agent?.hasSession || conversation.history?.available);
   const operatorCommands = useOperatorCommands();
   const modelAvailable = commandsFor(agent?.agent, operatorCommands).some((c) => c.command === "/model" && !c.dangerous);
 
@@ -261,7 +264,7 @@ export function AgentChat({
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
   const catalog = useModelCatalog({ paneId, session, agent: agent?.agent, live: liveModelBlock,
-    enabled: !!agent?.hasSession && !isShell && !gone && !connecting });
+    enabled: hasConversation && !isShell && !gone && !connecting });
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
   const writableRef = useRef(false);
   writableRef.current = !readOnly && !gone && !connecting;
@@ -312,7 +315,7 @@ export function AgentChat({
   // a later navigation remounts this view.
   const conversationCapable = !isShell && Boolean(adapterFor(agent?.agent)) &&
     Boolean(
-      agent?.agent === "codex" ||
+      agent?.agent === "codex" || (agent?.agent === "claude" && agent.status === "unknown") ||
       agent?.hasSession ||
       agent?.status === "idle" ||
       agent?.status === "working"
@@ -360,7 +363,7 @@ export function AgentChat({
   // `moreScrollback`: Herdr says this pane can still yield lines beyond the window we've asked for,
   // AND we're under the cap Herdr's own read clamp imposes. `readableLines` is undefined on an older
   // bridge/Herdr; treat that as "no idea" and stay hidden rather than offer a tap that fetches nothing.
-  const historyAvailable = Boolean(agent?.hasSession);
+  const historyAvailable = hasConversation;
   const moreScrollback =
     agent?.readableLines !== undefined &&
     requestedLines < agent.readableLines &&
@@ -759,7 +762,7 @@ export function AgentChat({
                   history={conversation.history}
                 />
               )}
-              {agent.hasSession && (
+              {hasConversation && (
                 <button
                   type="button"
                   onClick={() => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session))}
@@ -889,6 +892,8 @@ export function AgentChat({
           />
         )}
 
+        {isShell && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
+
         {/* Terminal mirror — tapping it focuses the composer so you can start typing right away
             (unless you're selecting text to copy, which the tap must not collapse). */}
         {/* min-w-0 only — do NOT set overflow-x-hidden here: that forces overflow-y to `auto` (CSS
@@ -902,6 +907,7 @@ export function AgentChat({
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
             <LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error}
+              recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
               onMatchCount={findOpen ? handleMatchCount : undefined} />

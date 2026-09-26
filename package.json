@@ -1,6 +1,6 @@
 {
   "name": "collie",
-  "version": "0.41.2",
+  "version": "0.42.0",
   "private": true,
   "license": "MIT",
   "description": "Nenu — a mobile web UI to monitor and reply to your Herdr agent herd over Tailscale",
@@ -19,11 +19,13 @@
     "@types/bun": "latest",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "8.18.1",
     "jsqr": "^1.4.0",
     "typescript": "^5"
   },
   "dependencies": {
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "ws": "8.18.3"
   },
   "optionalDependencies": {
     "web-push": "^3.6.7"

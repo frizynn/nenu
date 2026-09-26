@@ -254,7 +254,11 @@ function isDimPlaceholder(line: StyledLine, canonicalText = rstrip(lineText(line
 /** The composer at the buffer tail, or null (a dialog owns the screen, or the frame is torn). */
 export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   const texts = lines.map((l) => rstrip(lineText(l)));
-  const statusRow = lastNonBlankIndex(texts);
+  let statusRow = lastNonBlankIndex(texts);
+  if (statusRow < 0) return null;
+  // 0.157 adds a shortcuts hint below the status row, including an agents link in daemon mode.
+  // Require the captured wording and the renderer's bold question mark before skipping that row.
+  if (isShortcutsFooter(lines[statusRow]!, texts[statusRow]!)) statusRow--;
   if (statusRow < 0) return null;
   if (!isStatusRow(texts[statusRow]!, lines[statusRow])) {
     return locateQueuedComposer(lines, texts, statusRow) ?? locateCommandAutocomplete(lines, texts, statusRow);
@@ -303,6 +307,18 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
     if (!CONTINUATION.test(t) || isStatusRow(t, lines[i])) return null;
   }
   return null;
+}
+
+function isShortcutsFooter(line: StyledLine, text: string): boolean {
+  if (!/^ {2}(?:← for agents · )?\? for shortcuts$/.test(text)) return false;
+  const marker = text.indexOf("?");
+  let offset = 0;
+  for (const segment of line.segments) {
+    const end = offset + segment.text.length;
+    if (offset <= marker && marker < end) return segment.bold === true && segment.fg !== undefined;
+    offset = end;
+  }
+  return false;
 }
 
 /**

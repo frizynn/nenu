@@ -306,6 +306,7 @@ export type PaneHistoryResponse =
       total: number;
       fileTruncated: boolean;
       telemetry?: SessionTelemetry;
+      sessionKey?: string;
     };
 
 export type ActionResponse =

@@ -147,7 +147,7 @@ export class HerdrClient {
   ) {}
 
   /** One request, one reply, one connection. Rejects on error reply, timeout, or early close. */
-  private request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  private request<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = this.timeoutMs): Promise<T> {
     const id = `b${++idCounter}`;
     return new Promise<T>((resolve, reject) => {
       let buf = "";
@@ -186,8 +186,8 @@ export class HerdrClient {
         cancelDial = null;
       };
       const timer = setTimeout(
-        () => finish(() => reject(new Error(`herdr ${method}: timed out after ${this.timeoutMs}ms`))),
-        this.timeoutMs,
+        () => finish(() => reject(new Error(`herdr ${method}: timed out after ${timeoutMs}ms`))),
+        timeoutMs,
       );
 
       dialHerdr(this.socketPath, {
@@ -435,6 +435,19 @@ export class HerdrClient {
       format,
     });
     return r.read;
+  }
+
+  /** Herdr atomically refuses launch when the foreground process is not a shell. */
+  async startAgent(paneId: string, kind: "codex" | "claude", args: string[] = []): Promise<void> {
+    await this.request("agent.start", {
+      pane_id: paneId, kind, name: `nenu-${crypto.randomUUID().slice(0, 8)}`,
+      timeout_ms: 12_000, args,
+    }, 15_000);
+  }
+
+  async processInfo(paneId: string): Promise<unknown> {
+    const result = await this.request<{ process_info: unknown }>("pane.process_info", { pane_id: paneId });
+    return result.process_info;
   }
 
   /** Type literal text into a pane's terminal (does not submit). */

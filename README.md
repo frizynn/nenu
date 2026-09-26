@@ -173,3 +173,15 @@ Security vulnerabilities must follow [SECURITY.md](SECURITY.md) and must not be 
 
 Nenu is available under the [MIT License](LICENSE). Original copyright and third-party notices are
 preserved.
+
+## Starting and recovering conversations
+
+Open an empty terminal in Nenu and tap **Start Codex** or **Start Claude Code**. The buttons wait for terminal output before enabling. Complete any native trust or login prompts, then send the first message. Use the terminal icon to switch between conversation and terminal views.
+
+New Codex launches use `--no-daemon`, keeping the session hook in the terminal's own process. Claude launches get an explicit session ID. Both views control the same native session; Nenu does not start a second agent when switching views.
+
+If an existing Codex terminal has no connected history, tap **Find Codex conversations** and select the conversation already running there, or enter the session ID shown by `/status`. **Connect history** restores the chat without sending a prompt or resuming another process. **Change connected conversation** lets you correct that choice later. The connection survives a bridge restart but is discarded if the terminal process or hook identity changes.
+
+Recovery uses the existing local Codex daemon socket under `$CODEX_HOME/app-server-control/`; it does not expose that socket over the network. Claude background sessions can be identified by `claude agents --json` and their exact `attach` target. Older CLIs can still be launched manually and read through their installed Herdr integration.
+
+See [the session architecture decision](.adr/0022-native-agent-sessions-and-explicit-history-recovery.md) for verified versions and limitations.

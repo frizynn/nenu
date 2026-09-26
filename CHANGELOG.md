@@ -8,6 +8,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-09-26
+
+### Added
+
+- Start Codex and Claude Code from an empty mobile terminal.
+- Recover a missing Codex history connection using the local app server.
+
+### Fixed
+
+- Load conversations even when the session hook is missing; recover Claude identities from native processes.
+- Keep new Codex session hooks scoped to their terminal and reset history when the connected session changes.
+- Recognize Codex 0.157 shortcuts footers so the first mobile message can be sent safely.
+
 ## [0.41.2] - 2026-09-21
 
 ### Fixed

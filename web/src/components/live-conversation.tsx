@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -16,6 +16,7 @@ interface LiveConversationProps {
   loading: boolean;
   error: boolean;
   onRetry?: () => void;
+  recovery?: ReactNode;
   /** Change after a successful send to release the reading window and follow the latest turn. */
   followKey?: number;
   historyRequest?: number;
@@ -29,17 +30,17 @@ type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 const OLDER_PAGE_SIZE = 120;
 const UNAVAILABLE_COPY = {
   disabled: "Conversation history is disabled on this bridge.",
-  "no-session": "This pane has no conversation session yet.",
+  "no-session": "Send the first message to start the conversation, or connect an existing session.",
   "no-log": "Waiting for the first conversation entry…",
 };
 
 /** Scope pagination to a pane/session without remounting the surrounding live composer. */
 export const LiveConversation = memo(function LiveConversation(props: LiveConversationProps) {
-  return <ScopedConversation key={JSON.stringify([props.paneId, props.session])} {...props} />;
+  return <ScopedConversation key={JSON.stringify([props.paneId, props.session, props.history?.available ? props.history.sessionKey : null])} {...props} />;
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, agent, activityStatus, history, loading, error, onRetry, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, agent, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -231,6 +232,10 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
 
   return (
     <section aria-label="Live conversation" className="flex h-full min-h-0 min-w-0 flex-col">
+      {shown?.available && recovery && <details className="border-b px-4 text-sm text-muted-foreground">
+        <summary className="min-h-11 cursor-pointer content-center">Change connected conversation</summary>
+        <div className="max-h-[50dvh] overflow-y-auto pb-4">{recovery}</div>
+      </details>}
       {error && (
         <div role="status" className="flex items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
           <span>{entries.length ? "Conversation refresh failed. Showing the last update." : "Couldn't load the conversation."}</span>
@@ -255,6 +260,7 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
             </> : <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
               <p>{emptyCopy}</p>
+              {shown && !shown.available && shown.reason !== "disabled" && recovery}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
             </div>}
           </div>

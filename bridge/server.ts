@@ -1,4 +1,6 @@
 import { historyResponse } from "./history-response.ts";
+import { ConversationService } from "./conversation-service.ts";
+import { launchAgent, startPaneAgent } from "./agent-start.ts";
 import { discoverPaneSkills } from "./skills.ts";
 import { discoverPaneModels } from "./models.ts";
 import { paneFileResponse } from "./pane-files.ts";
@@ -115,7 +117,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(reply|keys|interrupt|upload|close|rename|history|skills|models|file))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -180,6 +182,7 @@ export function startServer(opts: {
   const operatorQuickReplies = createOperatorQuickReplies(cfg.quickRepliesFile);
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
+  const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -288,7 +291,7 @@ export function startServer(opts: {
         // Reading a pane is allowed for any access-gated client; every action (reply/keys/upload/
         // close) types into or restructures a terminal, so it additionally needs an authorised device.
         // History and skill discovery are READ actions; neither drives a terminal.
-        const isRead = !action || action === "history" || action === "skills" || action === "models" || action === "file";
+        const isRead = !action || action === "history" || action === "conversations" || action === "skills" || action === "models" || action === "file";
         const denied = guard(req, cfg, isRead ? "read" : "write");
         if (denied) return denied;
         const rt = registry.get(sessionName);
@@ -310,9 +313,38 @@ export function startServer(opts: {
         const device = isRead ? null : deviceAuth(req, cfg).device;
 
         if (!action && req.method === "GET") return readPane(herdr, cfg, paneId, url, req);
+        if (action === "start" && req.method === "POST") {
+          const kind = launchAgent(await req.json().catch(() => null));
+          if (!kind) return jsonError("Choose Codex or Claude Code.", 400, null);
+          try {
+            await startPaneAgent(rt.engine.current().shellPanes.find((p) => p.paneId === paneId), kind, herdr);
+            audit.record({ action: "agent.start", paneId, session, device, detail: { agent: kind } });
+            return json({ ok: true }, null);
+          } catch (err) {
+            return jsonError(err instanceof Error ? err.message : "Agent startup failed.", 409, null);
+          } finally {
+            rt.engine.pokeNow();
+          }
+        }
+        if ((action === "conversations" && req.method === "GET") || (action === "connect" && req.method === "POST")) {
+          if (!cfg.transcript) return jsonError("Conversation history is disabled on this bridge.", 409, null);
+          const pane = rt.engine.current().agents.find((entry) => entry.paneId === paneId);
+          if (!pane) return jsonError("Agent no longer exists.", 409, null);
+          try {
+            if (action === "conversations") return json({ conversations: await conversations.choices(pane) }, null);
+            const body: unknown = await req.json();
+            if (typeof body !== "object" || body === null || !("id" in body) || typeof body.id !== "string")
+              return jsonError("Choose a conversation.", 400, null);
+            await conversations.attach(pane, body.id, herdr, session);
+            rt.engine.pokeNow();
+            audit.record({ action: "conversation.connect", paneId, session, device });
+            return json({ ok: true }, null);
+          } catch (err) { return jsonError(err instanceof Error ? err.message : "Could not connect conversation.", 409, null); }
+        }
         if (action === "file" && req.method === "GET") {
           const current = rt.engine.current();
-          const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+          const original = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+          const pane = original ? await conversations.resolve(original, herdr, session) : undefined;
           const requestedPath = url.searchParams.get("path");
           if (isChatUploadPath(cfg.stateDir, requestedPath)) {
             const adapter = pane && journals ? adapterFor(journals, pane.agent) : undefined;
@@ -327,7 +359,8 @@ export function startServer(opts: {
         }
         if (action === "models" && req.method === "GET") {
           const snapshot = rt.engine.current();
-          const pane = snapshot.agents.find((candidate) => candidate.paneId === paneId);
+          const original = snapshot.agents.find((candidate) => candidate.paneId === paneId);
+          const pane = original ? await conversations.resolve(original, herdr, session) : undefined;
           return json(pane ? await discoverPaneModels(pane, cfg.journalRoots) : { available: false, models: [] }, req.headers.get("accept-encoding"));
         }
         if (action === "skills" && req.method === "GET") {
@@ -337,7 +370,7 @@ export function startServer(opts: {
           return json(await discoverPaneSkills(pane), req.headers.get("accept-encoding"));
         }
         if (action === "history" && req.method === "GET")
-          return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req);
+          return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req, conversations, herdr, session);
         if (action === "reply" && req.method === "POST") return replyPane(herdr, cfg, paneId, req, audit, device, session);
         if (action === "keys" && req.method === "POST") return keysPane(herdr, cfg, paneId, req, audit, device, session);
         if (action === "interrupt" && req.method === "POST") return interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session);
@@ -619,6 +652,9 @@ async function paneHistory(
   paneId: string,
   url: URL,
   req: Request,
+  conversations: ConversationService,
+  herdr: HerdrClient,
+  session: string,
 ): Promise<Response> {
   const accept = req.headers.get("accept-encoding");
   const unavailable = (reason: "disabled" | "no-session" | "no-log") =>
@@ -627,7 +663,8 @@ async function paneHistory(
   if (!cfg.transcript || transcripts === null || journals === null) return unavailable("disabled");
 
   const { agents, shellPanes } = engine.current();
-  const pane = [...agents, ...shellPanes].find((a) => a.paneId === paneId);
+  const original = [...agents, ...shellPanes].find((a) => a.paneId === paneId);
+  const pane = original ? await conversations.resolve(original, herdr, session) : undefined;
   // No pane, or an agent that named no session (a shell, or a harness whose integration isn't
   // installed): nothing to read, and that's an ordinary answer rather than an error.
   if (!pane?.agentSession) return unavailable("no-session");
@@ -637,9 +674,10 @@ async function paneHistory(
   if (adapter === undefined) return unavailable("no-session");
 
   try {
-    const page = await transcripts.page(adapter, pane.agentSession, historyParams(url));
+    const page = await transcripts.page(adapter, pane.agentSession, historyParams(url))
+      ?? await conversations.page(pane, historyParams(url));
     if (page === null) return unavailable("no-log");
-    return secure(historyResponse(page, paneId, req.headers.get("if-none-match"), accept));
+    return secure(historyResponse(page, paneId, req.headers.get("if-none-match"), accept, computeEtag(JSON.stringify(pane.agentSession))));
   } catch (err) {
     return text(`transcript read failed: ${(err as Error).message}`, 502);
   }

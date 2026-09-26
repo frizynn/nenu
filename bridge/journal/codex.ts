@@ -138,16 +138,16 @@ function codexToolSummary(args: unknown): string {
  * Rendering either wrapper as "You" would be actively wrong — the operator never typed it — so it
  * is dropped exactly like Claude's `system-reminder`.
  */
-function isInjectedContext(text: string): boolean {
+export function isInjectedContext(text: string): boolean {
   const body = text.trim();
   if (body.startsWith("<environment_context>")) return true;
-  return body.startsWith("# AGENTS.md instructions for ")
+  return (body.startsWith("# AGENTS.md instructions for ") || body.startsWith("# AGENTS.md instructions\n"))
     && body.includes("\n<INSTRUCTIONS>\n")
-    && body.endsWith("</INSTRUCTIONS>");
+    && /<\/INSTRUCTIONS>(?:\s*<environment_context>[\s\S]*<\/environment_context>)?$/.test(body);
 }
 
 /** Codex app metadata appended to final answers is not part of the visible assistant message. */
-function visibleAssistantText(text: string, phase: unknown): string {
+export function visibleAssistantText(text: string, phase: unknown): string {
   if (phase !== "final_answer") return text;
   const marker = "<oai-mem-citation>";
   const start = text.lastIndexOf(marker);
