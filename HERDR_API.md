@@ -181,6 +181,15 @@ against a real pane). Empirically enumerated against Herdr 0.7.0 — it is **NOT
   e.g. `{keys:["Down","Enter"]}`.
 - Re-checked against 0.7.2's bundled schema: unchanged.
 
+### Mac keys, rechecked on Herdr 0.9.1 (2026-09-26)
+
+An isolated raw PTY capture verified `cmd+k` → `ESC[107;9u`, `alt+Left` →
+`ESC[1;3D`, `alt+Backspace` → `ESC DEL`, and `Backspace` → `DEL`.
+Nenu exposes Command as `cmd`, Option as `alt`, and Mac's backward-delete key as
+`Backspace`. Command handling depends on the terminal application; these are not macOS
+menu/clipboard shortcuts. `Home`, `End`, `Delete`, `PageUp`, and `PageDown` still return
+`invalid_key`; the keypad does not substitute a destructive Ctrl chord for them.
+
 ## Rename methods — set an object's label (verified)
 
 Three sibling RPCs set a display label on a workspace, tab, or pane. Live-verified 2026-07-18.

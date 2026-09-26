@@ -134,13 +134,13 @@ function ComposerDock({
   children: ReactNode;
 }) {
   return (
-    <div className="-mx-3 mb-2 flex flex-col border-t border-border bg-background">
-      <div className="flex items-center justify-between px-3 pt-2">
+    <div className="-mx-3 mb-2 flex flex-col border-t border-border/50 bg-background">
+      <div className="flex items-center justify-between px-3">
         <SectionLabel>{title}</SectionLabel>
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground"
+          className="size-11 text-muted-foreground"
           onClick={onClose}
           aria-label={`Close ${title}`}
         >
@@ -849,9 +849,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {drawer === "actions" && (
           <ComposerDock title="Message actions" onClose={closeDrawer}>
             <div className="flex flex-col gap-1">
-              {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
-              <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
-              <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
+              {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
+              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
+              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
               {usageControls}
             </div>
           </ComposerDock>
@@ -1145,7 +1145,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               type="button"
               variant="destructive"
               size="icon"
-              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "md:size-8")}
+              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8")}
               onClick={() => { void interruptGeneration(); }}
               disabled={locked || interrupting}
               aria-label="Stop generation"
@@ -1184,7 +1184,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : (
             <Button
               size="icon"
-              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "md:size-8")}
+              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-primary/15 text-primary shadow-none hover:bg-primary/25 md:size-8")}
               onClick={direct.active ? () => direct.deactivate() : onSendClick}
               disabled={locked || sending}
               aria-label={direct.active ? "Stop typing into terminal" : "Send"}

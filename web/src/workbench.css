@@ -110,7 +110,7 @@ body { font-family: var(--font-sans); }
 .workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
 .workbench-composer { width: calc(100% - 16px); margin-bottom: 8px; max-width: 960px; align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
-.workbench-composer-surface { background: var(--card); border: 1px solid var(--border); border-radius: 16px; }
+.workbench-composer-surface { background: var(--card); border: 1px solid color-mix(in srgb, var(--border) 65%, transparent); border-radius: 12px; }
 .workbench-composer textarea { background: transparent; border-color: transparent; box-shadow: none; }
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 

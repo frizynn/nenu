@@ -6,12 +6,12 @@
 // The modifiers Nenu surfaces in the tray. Multi-modifier chords in ANY order — `ctrl+shift+p`,
 // the triple `ctrl+alt+shift+p`, `alt+Up` — are now LIVE-VERIFIED against Herdr (0.7.3 sandbox +
 // 0.7.4 by the issue reporter), so compose freely combines them. The wire grammar also accepts
-// `cmd`/`super`, which we don't surface here (keyLabel still labels them if they ever appear).
-export type Modifier = "ctrl" | "alt" | "shift";
+// `cmd`/`super`; Command is exposed as `cmd` and Option uses the `alt` wire name.
+export type Modifier = "ctrl" | "alt" | "shift" | "cmd";
 
 // Canonical compose order. The wire accepts modifiers in any order, but we pick ONE so display is
 // stable and dedupe is trivial (filtering MODIFIER_ORDER by membership both orders and de-dupes).
-export const MODIFIER_ORDER: readonly Modifier[] = ["ctrl", "alt", "shift"];
+export const MODIFIER_ORDER: readonly Modifier[] = ["ctrl", "alt", "shift", "cmd"];
 
 // A modifier's arm state in the tray. Tapping cycles off → once → locked → off: `once` is the
 // classic one-shot (consumed by the next staged key), `locked` stays armed across presses and Sends
@@ -40,21 +40,20 @@ export function composeKey(mods: readonly Modifier[], base: string): string {
   return `${ordered.join("+")}+${base}`;
 }
 
-// Display label for a single surfaced modifier: `ctrl → "Ctrl"`, `alt → "Alt"`, `shift → "⇧"`.
+// Compact labels match the Mac modifier names in the tray.
 // Shared by keyLabel and the strip's ghost chip so the mapping lives in one place.
 export function modifierLabel(m: Modifier): string {
   if (m === "ctrl") return "Ctrl";
-  if (m === "alt") return "Alt";
+  if (m === "alt") return "⌥";
+  if (m === "cmd") return "⌘";
   return "⇧"; // shift
 }
 
 // Label a leading modifier TOKEN off the wire, or null if the token isn't a modifier. Broader than
-// modifierLabel: also covers the `cmd`/`super` the grammar allows but we don't surface, so a chord
-// that arrives with them still reads nicely.
+// modifierLabel: also covers the `super` alias accepted by the grammar.
 function leadingModLabel(token: string): string | null {
   const lower = token.toLowerCase();
-  if (lower === "ctrl" || lower === "alt" || lower === "shift") return modifierLabel(lower);
-  if (lower === "cmd") return "Cmd";
+  if (lower === "ctrl" || lower === "alt" || lower === "shift" || lower === "cmd") return modifierLabel(lower);
   if (lower === "super") return "Super";
   return null;
 }

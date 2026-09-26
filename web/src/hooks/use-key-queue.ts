@@ -13,7 +13,7 @@ export type PressResult = { mode: "fire"; keys: string[] } | { mode: "queued" };
 
 type ModState = Record<Modifier, ModMode>;
 
-const ALL_OFF: ModState = { ctrl: "off", alt: "off", shift: "off" };
+const ALL_OFF: ModState = { ctrl: "off", alt: "off", shift: "off", cmd: "off" };
 
 // After a key is staged (press / pushBase) or the queue is sent (take), every `once` modifier is
 // spent → back to off, but `locked` modifiers stay armed. That's the whole point of locking: fire
@@ -23,6 +23,7 @@ function settleMods(cur: ModState): ModState {
     ctrl: cur.ctrl === "once" ? "off" : cur.ctrl,
     alt: cur.alt === "once" ? "off" : cur.alt,
     shift: cur.shift === "once" ? "off" : cur.shift,
+    cmd: cur.cmd === "once" ? "off" : cur.cmd,
   };
 }
 

@@ -57,12 +57,12 @@ describe("keyLabel", () => {
 
   it("labels multi-modifier chords in leading order", () => {
     expect(keyLabel("ctrl+shift+p")).toBe("Ctrl ⇧ P");
-    expect(keyLabel("ctrl+alt+shift+p")).toBe("Ctrl Alt ⇧ P");
-    expect(keyLabel("alt+Up")).toBe("Alt Up");
+    expect(keyLabel("ctrl+alt+shift+p")).toBe("Ctrl ⌥ ⇧ P");
+    expect(keyLabel("alt+Up")).toBe("⌥ Up");
   });
 
-  it("labels the cmd/super modifiers the grammar allows but the tray doesn't surface", () => {
-    expect(keyLabel("cmd+k")).toBe("Cmd K");
+  it("labels Command and the Super alias", () => {
+    expect(keyLabel("cmd+k")).toBe("⌘ K");
     expect(keyLabel("super+l")).toBe("Super L");
   });
 
@@ -80,7 +80,7 @@ describe("keyLabel", () => {
 describe("modifierLabel", () => {
   it("labels each surfaced modifier", () => {
     expect(modifierLabel("ctrl")).toBe("Ctrl");
-    expect(modifierLabel("alt")).toBe("Alt");
+    expect(modifierLabel("alt")).toBe("⌥");
     expect(modifierLabel("shift")).toBe("⇧");
   });
 });

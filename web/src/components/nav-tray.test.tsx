@@ -109,7 +109,7 @@ describe("NavTray", () => {
     const onSend = vi.fn();
     render(<NavTray onSend={onSend} />);
 
-    const shiftBtn = screen.getByRole("button", { name: /Shift/ });
+    const shiftBtn = screen.getByRole("button", { name: "⇧ Shift" });
     expect(shiftBtn).toHaveAttribute("aria-pressed", "false");
 
     await user.click(shiftBtn); // once
@@ -136,7 +136,7 @@ describe("NavTray", () => {
     const onSend = vi.fn();
     render(<NavTray onSend={onSend} />);
 
-    await user.click(screen.getByRole("button", { name: /Shift/ }));
+    await user.click(screen.getByRole("button", { name: "⇧ Shift" }));
     await user.click(screen.getByRole("button", { name: "123" }));
     await user.click(screen.getByRole("button", { name: "7" }));
 
@@ -218,14 +218,14 @@ describe("NavTray", () => {
     render(<NavTray onSend={vi.fn()} />);
     expect(screen.getByRole("button", { name: "⇧ Shift" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ctrl" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Alt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Option (Alt)" })).toBeInTheDocument();
   });
 
   it("tapping a modifier cycles off → once → locked → off (aria-pressed + Lock glyph)", async () => {
     const user = userEvent.setup();
     render(<NavTray onSend={vi.fn()} />);
 
-    const alt = () => screen.getByRole("button", { name: "Alt" });
+    const alt = () => screen.getByRole("button", { name: "Option (Alt)" });
     const isLocked = () => alt().querySelector(".lucide-lock") !== null;
 
     // off
@@ -253,7 +253,7 @@ describe("NavTray", () => {
     const onSend = vi.fn();
     render(<NavTray onSend={onSend} />);
 
-    const shiftBtn = screen.getByRole("button", { name: /Shift/ });
+    const shiftBtn = screen.getByRole("button", { name: "⇧ Shift" });
     const ctrlBtn = screen.getByRole("button", { name: "Ctrl" });
 
     await user.click(ctrlBtn);
@@ -413,16 +413,16 @@ describe("NavTray", () => {
     render(<NavTray onSend={onSend} />);
 
     const enter = screen.getByRole("button", { name: /Enter/ });
-    expect(enter).toHaveClass("border"); // outline variant at rest
+    expect(enter).toHaveClass("bg-muted/35"); // quiet key at rest
     await user.click(enter);
 
     // Filled the instant it's tapped — synchronous, no network wait. That IS the fix.
-    expect(screen.getByRole("button", { name: /Enter/ })).toHaveClass("bg-primary");
+    expect(screen.getByRole("button", { name: /Enter/ })).toHaveClass("bg-secondary");
 
     release();
     // Settles back to the resting outline once the ✓ window elapses.
     await vi.waitFor(
-      () => expect(screen.getByRole("button", { name: /Enter/ })).not.toHaveClass("bg-primary"),
+      () => expect(screen.getByRole("button", { name: /Enter/ })).not.toHaveClass("bg-secondary"),
       { timeout: 3000 },
     );
   });
@@ -435,7 +435,7 @@ describe("NavTray", () => {
     await user.click(screen.getByRole("button", { name: "Esc" }));
 
     await vi.waitFor(() =>
-      expect(screen.getByRole("button", { name: "Esc" })).not.toHaveClass("bg-primary"),
+      expect(screen.getByRole("button", { name: "Esc" })).not.toHaveClass("bg-secondary"),
     );
   });
 
@@ -449,7 +449,7 @@ describe("NavTray", () => {
 
     expect(onSend).not.toHaveBeenCalled();
     // Tab stays at rest (outline); the chip in the strip carries the feedback instead.
-    expect(screen.getByRole("button", { name: "Tab" })).not.toHaveClass("bg-primary");
+    expect(screen.getByRole("button", { name: "Tab" })).not.toHaveClass("bg-secondary");
     expect(screen.getByRole("button", { name: /Remove Ctrl/ })).toBeInTheDocument();
   });
 });
@@ -670,7 +670,7 @@ describe("NavTray — operator preset rows", () => {
     render(<NavTray onSend={onSend} presets={[{ label: "Yes", keys: ["Down", "Enter"] }]} />);
     await openPresets(user);
 
-    await user.click(screen.getByRole("button", { name: /Shift/ }));
+    await user.click(screen.getByRole("button", { name: "⇧ Shift" }));
     await user.click(screen.getByRole("button", { name: "Yes" }));
     expect(onSend).not.toHaveBeenCalled();
     // Every chord of the row is composed with the armed modifier, in order.
@@ -692,4 +692,53 @@ describe("NavTray — operator preset rows", () => {
     expect(screen.queryByRole("button", { name: "Confirm?" })).toBeNull();
     expect(onSend).not.toHaveBeenCalled();
   });
+});
+
+describe("Mac terminal keys", () => {
+  it("locks Command across Send and releases it with Clear", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(true);
+    render(<NavTray onSend={onSend} />);
+    const command = screen.getByRole("button", { name: "Command" });
+    await user.click(command);
+    await user.click(command);
+    await user.click(screen.getByRole("button", { name: "Left" }));
+    expect(onSend).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenLastCalledWith(["cmd+Left"]);
+    expect(command).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Right" }));
+    await user.click(screen.getByRole("button", { name: /Clear/i }));
+    expect(command).toHaveAttribute("aria-pressed", "false");
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends backward delete and composes Option-delete", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(true);
+    render(<NavTray onSend={onSend} />);
+    await user.click(screen.getByRole("button", { name: "Delete backward" }));
+    expect(onSend).toHaveBeenLastCalledWith(["Backspace"]);
+    await user.click(screen.getByRole("button", { name: "Option (Alt)" }));
+    await user.click(screen.getByRole("button", { name: "Delete backward" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenLastCalledWith(["alt+Backspace"]);
+  });
+});
+
+
+it("blocks immediate keys until an explicit queued chord is acknowledged", async () => {
+  const user = userEvent.setup();
+  let release = (_ok: boolean) => {};
+  const onSend = vi.fn(() => new Promise<boolean>((resolve) => { release = resolve; }));
+  render(<NavTray onSend={onSend} />);
+  await user.click(screen.getByRole("button", { name: "Command" }));
+  await user.click(screen.getByRole("button", { name: "Left" }));
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  const backspace = screen.getByRole("button", { name: "Delete backward" });
+  expect(backspace).toBeDisabled();
+  await user.click(backspace);
+  expect(onSend).toHaveBeenCalledTimes(1);
+  release(true);
+  await vi.waitFor(() => expect(backspace).toBeEnabled());
 });

@@ -86,7 +86,7 @@ export function StatusBadge({
         "gap-1.5 transition-opacity",
         CHIP[status],
         stale && "opacity-40",
-        compactOnMobile && "max-lg:size-6 max-lg:justify-center max-lg:gap-0 max-lg:rounded-full max-lg:p-0",
+        compactOnMobile && "max-lg:size-3 max-lg:justify-center max-lg:gap-0 max-lg:border-0 max-lg:bg-transparent max-lg:p-0",
         className,
       )}
     >

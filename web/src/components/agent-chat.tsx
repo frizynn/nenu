@@ -718,7 +718,7 @@ export function AgentChat({
                   aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                   aria-pressed={prefs.rawTerminal}
                   title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                  className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground active:bg-muted"
+                  className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground active:bg-muted"
                 >
                   {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
                   <span>{prefs.rawTerminal ? "Chat" : "Terminal"}</span>

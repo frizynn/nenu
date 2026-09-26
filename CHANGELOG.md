@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-09-26
+
+### Added
+- Command and Option modifiers, backward delete and Shift+Tab in Terminal keys.
+
+### Fixed
+- Wait for a queued terminal chord to finish before accepting another key.
+
+### Changed
+- Quieter chat tabs, header, composer and terminal keypad with mobile touch targets preserved.
+
 ## [0.42.1] - 2026-09-26
 
 ### Fixed

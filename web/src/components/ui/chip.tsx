@@ -6,6 +6,8 @@ import { STATUS_LABEL } from "@/lib/types";
 
 interface ChipProps {
   label: string;
+  /** Flat tabs inside a conversation; overview chips retain their filled treatment. */
+  quiet?: boolean;
   active: boolean;
   /** Subtle ring marking the item focused in the desktop TUI. */
   ring?: boolean;
@@ -37,7 +39,7 @@ interface ChipProps {
 // The dot leads the label rather than riding the corner as a badge: a corner badge needs a ring in
 // the chip's own fill, and the chip has two fills (active/inactive). Inline, it just works, and it
 // matches how the space rows and section headings already read.
-export function Chip({ label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
+export function Chip({ quiet = false, label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
   const longPress = useLongPress(onLongPress);
 
   // A long-press already suppresses the ensuing click (via longPress.onClickCapture), so this only
@@ -61,10 +63,14 @@ export function Chip({ label, active, ring, status, onClick, onLongPress, onTapA
         // select-none + -webkit-touch-callout:none stop iOS Safari's selection loupe / touch callout,
         // whose native long-press gesture otherwise fires pointercancel and kills the hold timer.
         "relative flex shrink-0 select-none items-center gap-1 [-webkit-touch-callout:none] whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium transition-colors active:scale-95 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm",
-        active
+        quiet
+          ? "min-h-11 min-w-11 rounded-none border-b-2 border-transparent bg-transparent text-muted-foreground hover:text-foreground"
+          : active
           ? "bg-primary text-primary-foreground"
           : "bg-muted text-muted-foreground hover:bg-muted/70",
-        ring && !active && "ring-1 ring-inset ring-primary/40",
+        quiet && active && "border-primary text-foreground",
+        quiet && ring && !active && "border-dashed border-muted-foreground/40",
+        !quiet && ring && !active && "ring-1 ring-inset ring-primary/40",
       )}
     >
       {status && (
@@ -72,7 +78,7 @@ export function Chip({ label, active, ring, status, onClick, onLongPress, onTapA
           {/* A hollow resting dot is filled with the chip's own fill, which differs when active. */}
           <StatusDot
             status={TRIAGE_STATUS[status]}
-            surface={active ? "bg-primary" : "bg-muted"}
+            surface={quiet ? "bg-background" : active ? "bg-primary" : "bg-muted"}
             className="size-2"
           />
           {/* The dot is colour-only; say it in words for screen readers. */}
