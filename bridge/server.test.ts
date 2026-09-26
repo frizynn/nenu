@@ -576,6 +576,17 @@ describe("pane write prompt binding", () => {
     expect(client.texts).toEqual([["w1:p-idempotent", "one durable message"]]);
   });
 
+  test("retries cannot change between raw typing and bracketed paste", async () => {
+    const client = new FakePaneClient();
+    const { audit } = auditEntries();
+    const body = { text: "same text", submit: false, request_id: "delivery-mode-test" };
+    await replyPane(client as unknown as HerdrClient, cfg(), "w1:p-mode", request(body), audit, null, "default");
+    const retry = await replyPane(client as unknown as HerdrClient, cfg(), "w1:p-mode", request({ ...body, paste: true }), audit, null, "default");
+    expect(retry.status).toBe(409);
+    expect(await retry.text()).toBe("request_id payload mismatch");
+    expect(client.texts).toEqual([["w1:p-mode", "same text"]]);
+  });
+
   test("request_id cannot be reused with a different payload", async () => {
     const client = new FakePaneClient();
     const { audit } = auditEntries();

@@ -75,6 +75,11 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
   **`format: "text"` returns clean plain text (no ANSI escapes)** → safe to render, no XSS surface.
 - `agent.send` writes literal text only; to submit a reply, follow with an Enter keypress
   (`pane.send_keys {keys: ["Enter"]}`) — submit-key name needs live confirmation per agent.
+- Nenu's guarded Codex reply now explicitly frames the complete text as bracketed paste
+  before calling `pane.send_text` (verified with Herdr 0.9.1 / Codex 0.157.0 on
+  2026-09-26). `/reply` accepts `paste: true`; its default stays raw, including direct
+  terminal typing. Embedded ESC/C1-CSI characters are refused in paste mode.
+  See [ADR 0023](.adr/0023-codex-replies-use-bracketed-paste.md).
 - **`pane.send_text` writes RAW bytes — no bracketed paste.** Live-probed 2026-07-27 (herdr 0.7.4) by
   sending into a pane running `/usr/bin/cat -v`, which renders control bytes visibly: the text came
   back bare, with no `^[[200~` / `^[[201~` framing. Two consequences worth keeping:

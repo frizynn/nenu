@@ -70,7 +70,7 @@ function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}
  */
 async function awaitTerminalStall() {
   await waitFor(
-    () => expect(screen.getByTestId("status")).toHaveTextContent(/didn't reach the input box/i),
+    () => expect(screen.getByTestId("status")).toHaveTextContent(/couldn't verify the message/i),
     { timeout: 5000 },
   );
 }
@@ -246,7 +246,7 @@ describe("Composer — send", () => {
     // ~2.8s after the type (POLL_ATTEMPTS × POLL_DELAY_MS), and a test that ended first would have
     // it write into whichever test was running by then, past this file's `clearStatus()`.
     await waitFor(
-      () => expect(screen.getByTestId("status")).toHaveTextContent(/didn't reach the input box/i),
+      () => expect(screen.getByTestId("status")).toHaveTextContent(/couldn't verify the message/i),
       { timeout: 5000 },
     );
     // No `ctrl+k` + 41 Backspaces into the picker. The override is about the MESSAGE; the keys the
@@ -277,6 +277,7 @@ describe("Composer — send", () => {
         const body = (await request.json()) as { keys: string[] };
         sentKeys = body.keys;
         callOrder.push("keys");
+        recordReply({ text: "" });
         return HttpResponse.json({ ok: true });
       }),
       http.post(/\/api\/pane\/[^/]+\/reply$/, async () => {
@@ -438,7 +439,7 @@ describe("Composer — send", () => {
         http.get(/\/api\/pane\/[^/]+$/, () =>
           HttpResponse.json({
             paneId: "w1:p1",
-            text: ompComposer("new message"), // the composer echoes our text back, so the send lands
+            text: ompComposer(wire.includes("keys") && !wire.some((step) => step.startsWith("type:")) ? "" : "new message"),
             truncated: false,
             revision: 2,
           }),
@@ -1552,6 +1553,7 @@ describe("Composer — terminal-draft preview", () => {
       http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
         sentKeys = ((await request.json()) as { keys: string[] }).keys;
         callOrder.push("keys");
+        recordReply({ text: "" });
         return HttpResponse.json({ ok: true });
       }),
       replyHandler((typed) => callOrder.push(`reply:${typed}`)),
@@ -1675,6 +1677,7 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/keys$/, async () => {
         callLog.push("keys");
+        recordReply({ text: "" });
         return HttpResponse.json({ ok: true });
       }),
       replyHandler((typed) => callLog.push(`reply:${typed}`)),

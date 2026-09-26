@@ -185,3 +185,14 @@ If an existing Codex terminal has no connected history, tap **Find Codex convers
 Recovery uses the existing local Codex daemon socket under `$CODEX_HOME/app-server-control/`; it does not expose that socket over the network. Claude background sessions can be identified by `claude agents --json` and their exact `attach` target. Older CLIs can still be launched manually and read through their installed Herdr integration.
 
 See [the session architecture decision](.adr/0022-native-agent-sessions-and-explicit-history-recovery.md) for verified versions and limitations.
+
+### Mobile editor
+
+The chat header keeps **Terminal / Chat** visible while writing. **Conversation actions**
+contains search, files, history, display settings and the option to reconnect an existing
+Codex conversation. Typing no longer hides navigation behind a separate button.
+
+The message box keeps attachments, model selection and Send together. **More message
+actions** opens commands, quick replies, terminal keys and usage/context details. Drafts
+survive switching between chat and terminal. If verification fails, keep the draft and
+retry after inspecting the terminal; a typing acknowledgement is not a model response.

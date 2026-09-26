@@ -848,7 +848,7 @@ export async function replyPane(
   device: string | null,
   session: string,
 ): Promise<Response> {
-  let body: { text?: string; submit?: boolean; expected_prompt?: unknown; request_id?: unknown };
+  let body: { text?: string; submit?: boolean; paste?: unknown; expected_prompt?: unknown; request_id?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -858,6 +858,10 @@ export async function replyPane(
   if (!expected.ok) return text("bad expected_prompt", 400);
   const txt = body.text ?? "";
   const submit = body.submit ?? true;
+  if (typeof txt !== "string" || (body.paste !== undefined && typeof body.paste !== "boolean")) return text("bad paste body", 400);
+  // A closing escape embedded in a paste would turn the remaining content back into keystrokes.
+  if (body.paste && /[\x1b\x9b]/.test(txt)) return text("paste contains terminal escape sequences", 400);
+  const wireText = body.paste && txt ? `\x1b[200~${txt}\x1b[201~` : txt;
   const requestId = body.request_id;
   if (requestId !== undefined && (typeof requestId !== "string" || requestId.length < 1 || requestId.length > MAX_REPLY_REQUEST_ID_CHARS || !/^[A-Za-z0-9._:-]+$/.test(requestId))) {
     return text("bad request_id", 400);
@@ -882,8 +886,8 @@ export async function replyPane(
     });
     return promptBindingFailure(binding, ae);
   }
-  const operation = () => sendReplySteps(herdr, paneId, txt, submit, cfg.submitKeys);
-  const fingerprint = JSON.stringify([session, paneId, txt, submit, expected.present ? expected.value : null]);
+  const operation = () => sendReplySteps(herdr, paneId, wireText, submit, cfg.submitKeys);
+  const fingerprint = JSON.stringify([session, paneId, txt, submit, body.paste === true, expected.present ? expected.value : null]);
   const deduped = requestId === undefined
     ? { outcome: await operation(), replayed: false }
     : await runReplyOnce(`${session}\0${paneId}\0${requestId}`, fingerprint, operation);

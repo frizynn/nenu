@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-09-26
+
+### Fixed
+
+- Keep chat and terminal navigation visible while drafting; group secondary editor actions.
+- Recognize Codex's typed-message footer before verifying and submitting replies.
+- Paste Codex multiline replies atomically and wait for cleared terminal drafts before replacement.
+
 ## [0.42.0] - 2026-09-26
 
 ### Added

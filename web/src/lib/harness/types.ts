@@ -14,6 +14,8 @@ import type { Block, StyledLine } from "../blocks";
 export interface HarnessAdapter {
   /** The exact Herdr snapshot `agent` string this adapter claims (its registry key). */
   agent: string;
+  /** The native TUI accepts bracketed paste, preserving newlines as text until verified submit. */
+  bracketedPaste?: true;
   /** The adapter's OWN full block pipeline over the pane's styled lines — for Claude that is the
    *  raw-or-dialog result (dialog lift + chrome strip, else a single raw block). */
   buildBlocks(lines: StyledLine[]): Block[];

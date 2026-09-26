@@ -41,10 +41,12 @@ export function ChatFilesBrowser({
   paneId,
   session,
   history,
+  labeled = false,
 }: {
   paneId: string;
   session?: string;
   history: PaneHistoryResponse | null;
+  labeled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<ChatFileKind>("file");
@@ -182,9 +184,10 @@ export function ChatFilesBrowser({
           setScan(EMPTY_SCAN);
           setOpen(true);
         }}
-        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground active:bg-muted lg:-mr-1 lg:size-8"
+        className={labeled ? "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-accent active:bg-muted" : "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"}
       >
         <Paperclip aria-hidden="true" className="size-4" />
+        {labeled && <span>Files and photos</span>}
       </button>
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Files and photos" className="max-h-[82dvh]">

@@ -77,6 +77,7 @@ export { extractStatusLines, extractInputDraft };
 
 export const codexAdapter: HarnessAdapter = {
   agent: "codex",
+  bracketedPaste: true,
   buildBlocks: codexBuildBlocks,
   extractStatusLines,
   extractInputDraft,

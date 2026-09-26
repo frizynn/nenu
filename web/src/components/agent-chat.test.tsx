@@ -99,7 +99,7 @@ describe("AgentChat — reply flow", () => {
 
   it("keeps navigation available while drafting and after clearing", async () => {
     const user = userEvent.setup();
-    renderChat();
+    renderChat({ agent: { ...fixtureAgents[0]!, status: "idle" } });
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "read this while I draft");
     expect(document.documentElement).not.toHaveAttribute("data-collie-composer-focus");
@@ -431,6 +431,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
 
     // Freeze the mirror (opening find pins the tail — the same `following=false` state a scroll-up
     // freeze produces).
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("button", { name: "Find in output" }));
 
     // The pane advances while frozen: new output below the menu + a bumped revision.
@@ -461,6 +462,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     const user = userEvent.setup();
     const advance = renderWithLivePane({ text: MENU_TEXT, revision: 1 });
     expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("button", { name: "Find in output" }));
     act(() => advance({ text: STATUS_TEXT, revision: 2 }));
     expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
@@ -484,6 +486,7 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     // The real detector lifted the multi-question tail into a wizard with option buttons.
     await screen.findByRole("button", { name: /Parser/ });
 
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("button", { name: "Find in output" })); // freeze the tail
     act(() => advance({ text: `${WIZARD_TEXT}\n● advancing…\n`, revision: 2 }));
 
@@ -639,10 +642,11 @@ describe("AgentChat — shared header: stale-status dimming", () => {
 // viewport. It's gated on the pane actually reporting an agent session, so the button can never
 // lead to an empty screen.
 describe("AgentChat — history affordance", () => {
-  it("is offered when the pane reports an agent session id", () => {
+  it("is offered in conversation actions when the pane reports an agent session id", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
-    expect(screen.getByRole("button", { name: /conversation history/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.getByRole("button", { name: /conversation history/i })).toBeVisible();
   });
 
   it("is hidden when the pane has no agent session (a shell, or a harness without one)", () => {
@@ -650,17 +654,13 @@ describe("AgentChat — history affordance", () => {
     expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
   });
 
-  // Deliberate placement, not an accident of slot order: the status pill stays the rightmost thing on
-  // the pane screen (it's what you glance at), so History sits to its LEFT.
-  //
-  // (The top-of-mirror affordance is covered separately below.)
-  it("sits to the LEFT of the status pill", () => {
+  it("keeps history behind actions and the terminal switch directly accessible", async () => {
     const agent = { ...fixtureAgents[0]!, hasSession: true };
     renderChat({ agent, agents: [agent] });
-    const history = screen.getByRole("button", { name: /conversation history/i });
-    const pill = screen.getByText("needs you"); // fixtureAgents[0] is blocked → "needs you"
-    // Node.compareDocumentPosition: FOLLOWING (4) means the pill comes after History in the DOM.
-    expect(history.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /conversation history/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show raw terminal" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.getByRole("button", { name: /conversation history/i })).toBeVisible();
   });
 });
 

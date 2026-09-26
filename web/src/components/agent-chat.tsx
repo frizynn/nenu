@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, ChevronDown, ChevronUp, Loader2, MessageSquareText, ScrollText, Search, TerminalSquare } from "lucide-react";
+import { ArrowUpToLine, Loader2, MessageSquareText, ScrollText, TerminalSquare } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
@@ -12,6 +12,7 @@ import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { BottomSheet } from "@/components/ui/sheet";
+import { ConversationActions } from "@/components/conversation-actions";
 import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
@@ -41,7 +42,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { TabStrip } from "@/components/tab-strip";
 import { PaneStrip } from "@/components/pane-strip";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
-import { ShellBadge, StatusBadge } from "@/components/status-badge";
+import { StatusBadge } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { submitPreviewKeys, submitPreviewNote, submitPreviewOption } from "@/lib/preview-action";
@@ -151,36 +152,6 @@ export function AgentChat({
   const composerRef = useRef<ComposerHandle>(null);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
-  // Mobile focus mode is driven by the phone-owned draft, not by textarea focus: iOS can keep focus
-  // after the keyboard closes, and a draft restored from storage has no focus event at all. The
-  // dismiss latch lets the operator bring the navigation back without it immediately disappearing
-  // again on the next keystroke; clearing/sending the draft resets that choice for the next draft.
-  const [hasDraft, setHasDraft] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
-  const [focusModeDismissed, setFocusModeDismissed] = useState(false);
-  const handleDraftStateChange = useCallback((next: boolean) => {
-    setHasDraft(next);
-    if (!next) {
-      setFocusMode(false);
-      setFocusModeDismissed(false);
-      return;
-    }
-    setFocusMode((current) => focusModeDismissed ? current : true);
-  }, [focusModeDismissed]);
-  const toggleFocusMode = useCallback(() => {
-    if (!hasDraft) return;
-    setFocusMode((current) => !current);
-    setFocusModeDismissed(true);
-  }, [hasDraft]);
-  // The global mobile bar belongs to WorkbenchShell, outside this pane component. A document state
-  // attribute keeps the focus-mode contract local to the active pane while allowing CSS to collapse
-  // that sibling bar; cleanup prevents a stale hidden header after navigation/unmount.
-  useEffect(() => {
-    const root = document.documentElement;
-    if (focusMode) root.dataset.collieComposerFocus = "true";
-    else delete root.dataset.collieComposerFocus;
-    return () => { delete root.dataset.collieComposerFocus; };
-  }, [focusMode]);
   const conversation = useLiveConversation({
     paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), busy: agent?.status === "working",
   });
@@ -698,10 +669,22 @@ export function AgentChat({
     composerRef.current?.focusInput();
   }
 
+  const telemetryProps = {
+    telemetry: conversation.history?.available ? conversation.history.telemetry : undefined,
+    stale: conversation.error || connecting,
+    modelAvailable,
+    disabled: readOnly || gone || connecting || dialogPresent,
+    panel: panels.panel,
+    onPanelChange: (next: Parameters<typeof panels.changePanel>[0]) => { void panels.changePanel(next); },
+    modelOpen: panels.panel === "model",
+    modelTriggerRef,
+    onChooseModel: panels.toggleModel,
+    onCompact: () => { void composerRef.current?.compactContext(); },
+  };
+
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
-      data-composer-focus={focusMode ? "true" : "false"}
     >
       {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
           identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
@@ -725,53 +708,9 @@ export function AgentChat({
             />
           ) : undefined
         }
-        // Right cluster, in reading order: Find, Files, History, then the agent status pill. The pill is the
-        // rightmost item on every pane screen (it's the thing you glance at), so the buttons sit to
-        // its LEFT rather than trailing it. All ride in `rightLead` because AppHeader renders
-        // `rightLead` before `rightTrail` — the order here IS the on-screen order.
-        //
-        // Find lives HERE, not in the composer, because the find bar it opens takes over this very
-        // header row (see `override` above) — trigger and surface in the same place. It sat in the
-        // composer's old View row, which put the button at the bottom of the screen and its UI at the
-        // top. Offered only when there's buffered output to search; opening it freezes the tail.
-        //
-        // History opens the agent's own transcript, the only real conversation history a Claude pane
-        // has: its terminal runs on the alternate screen, so the mirror below can never show more
-        // than the visible viewport. Offered only when the pane reported an agent session id (i.e. a
-        // transcript can exist at all), so the button never leads to an empty screen.
-        //
-        // The status pill is dimmed while the connection isn't live, so a frozen "working"/"idle"
-        // from the last snapshot doesn't masquerade as current. A bare shell shows a muted "shell" tag.
         rightLead={
           agent ? (
             <>
-              {display && (
-                <button
-                  type="button"
-                  onClick={openFind}
-                  aria-label="Find in output"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted/60 lg:-mr-1 lg:size-8"
-                >
-                  <Search className="size-3.5 sm:size-4" />
-                </button>
-              )}
-              {conversationCapable && (
-                <ChatFilesBrowser
-                  paneId={paneId}
-                  session={session}
-                  history={conversation.history}
-                />
-              )}
-              {hasConversation && (
-                <button
-                  type="button"
-                  onClick={() => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session))}
-                  aria-label="Conversation history"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted/60 lg:-mr-1 lg:size-8"
-                >
-                  <ScrollText className="size-3.5 sm:size-4" />
-                </button>
-              )}
               {conversationCapable && (
                 <button
                   type="button"
@@ -779,16 +718,19 @@ export function AgentChat({
                   aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                   aria-pressed={prefs.rawTerminal}
                   title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground active:bg-muted lg:-mr-1 lg:size-8"
+                  className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground active:bg-muted"
                 >
                   {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
+                  <span>{prefs.rawTerminal ? "Chat" : "Terminal"}</span>
                 </button>
               )}
-              {isShell ? (
-                <ShellBadge stale={connecting} />
-              ) : (
-                <StatusBadge status={agent.status} stale={connecting} compactOnMobile />
-              )}
+              <ConversationActions
+                onFind={display ? openFind : undefined}
+                onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
+                onDisplay={() => composerRef.current?.openDisplayPrefs()}
+                files={conversationCapable ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} labeled /> : undefined}
+                recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
+              />
             </>
           ) : undefined
         }
@@ -815,11 +757,14 @@ export function AgentChat({
               {/* A user-set pane label leads when present (the identifier they chose), then Claude's
                   own /rename session name, otherwise the default space › tab. The cwd subline keeps
                   context either way. */}
-              <div className="truncate text-sm font-semibold leading-tight sm:text-base">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-semibold leading-tight sm:text-base">
+                {!isShell && <StatusBadge status={agent.status} stale={connecting} compactOnMobile className="shrink-0" />}
+                <span className="truncate">
                 {project?.name ??
                   agent.paneLabel ??
                   agent.sessionName ??
                   `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
+                </span>
               </div>
               <div className="hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
                 {shortCwd(agent.cwd)}
@@ -832,23 +777,6 @@ export function AgentChat({
           </div>
         )}
       </AppHeader>
-
-      {/* Draft-driven, fixed mobile control. It survives while the four navigation bands collapse so
-          the user can always restore context; once the draft is empty the normal layout returns and
-          this control disappears. */}
-      {hasDraft && (
-        <button
-          type="button"
-          className="workbench-focus-toggle"
-          onClick={toggleFocusMode}
-          aria-expanded={!focusMode}
-          aria-label={focusMode ? "Show navigation" : "Hide navigation"}
-          title={focusMode ? "Show navigation" : "Hide navigation"}
-        >
-          {focusMode ? <ChevronDown aria-hidden="true" className="size-4" /> : <ChevronUp aria-hidden="true" className="size-4" />}
-          <span>{focusMode ? "Show navigation" : "Hide navigation"}</span>
-        </button>
-      )}
 
       {/* Content region below the header — the mirror inside is the scroller. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1058,16 +986,6 @@ export function AgentChat({
             </div>
           )}
 
-          {!isShell && <WorkbenchTelemetry
-            telemetry={conversation.history?.available ? conversation.history.telemetry : undefined}
-            stale={conversation.error || connecting}
-            modelAvailable={modelAvailable}
-            disabled={readOnly || gone || connecting || dialogPresent}
-            panel={panels.panel} onPanelChange={(next) => { void panels.changePanel(next); }}
-            modelOpen={panels.panel === "model"} modelTriggerRef={modelTriggerRef}
-            onChooseModel={panels.toggleModel}
-            onCompact={() => { void composerRef.current?.compactContext(); }}
-          />}
           <Composer
             ref={composerRef}
             paneId={paneId}
@@ -1078,7 +996,8 @@ export function AgentChat({
             gone={gone}
             readOnly={readOnly}
             disconnected={connecting}
-            onDraftStateChange={handleDraftStateChange}
+            modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
+            usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
             prepareSend={showConversation ? panels.prepareSend : undefined}
             onInputFocus={() => { void panels.changePanel(null); }}

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
@@ -501,12 +503,13 @@ describe("onComposerSeen — destructive pre-type work needs positive evidence",
 
   it("runs after the pre-flight's read and before the first byte typed", async () => {
     const log: string[] = [];
+    let typed = false;
     server.use(
       http.get(/\/api\/pane\/[^/]+$/, () => {
         log.push("read");
         return HttpResponse.json({
           paneId: "w1:p1",
-          text: paneWithDraft("ship it please"),
+          text: paneWithDraft(log.includes("sweep") && !typed ? "" : "ship it please"),
           truncated: false,
           revision: 1,
         });
@@ -514,6 +517,7 @@ describe("onComposerSeen — destructive pre-type work needs positive evidence",
       http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
         const body = (await request.json()) as { submit?: boolean };
         log.push(body.submit ? "submit" : "type");
+        if (!body.submit) typed = true;
         return HttpResponse.json({ ok: true });
       }),
     );
@@ -821,4 +825,26 @@ it("waits for the cleared draft to disappear before typing, including a stale id
     onTypeAttempt: () => { expect(cleared).toBe(true); typed = true; }, ...instant });
   expect(result.status).toBe("sent");
   expect(calls.filter((c) => c.submit)).toHaveLength(1);
+});
+
+it("frames Codex text as a paste and submits once after recognizing its typed footer", async () => {
+  const fixture = (name: string) => readFileSync(join(import.meta.dirname, "harness/codex/fixtures", `${name}.txt`), "utf8");
+  const typedScreen = fixture("draft-queue-hint-v0157");
+  let typed = false;
+  const calls = harness(() => typed ? typedScreen : fixture("idle-shortcuts-v0157"));
+  const result = await sendGuardedReply({ paneId: "w1:p1", agent: "codex",
+    text: "/tmp/nenu-test-image.png Respond only NENU_IMAGE_OK. Do not run tools or read files. This is a test of the attached image in the mobile composer.",
+    onTypeAttempt: () => { typed = true; }, ...instant });
+  expect(result.status).toBe("sent");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]).toMatchObject({ paste: true, submit: false });
+  expect(calls[1]).toEqual({ text: "", submit: true });
+});
+
+it("never types over a draft whose clearing was not observed", async () => {
+  const calls = harness(() => paneWithDraft("host draft"));
+  const result = await sendGuardedReply({ paneId: "w1:p1", text: "replacement", agent: "claude",
+    onComposerSeen: async () => ({ ok: true, keysSent: true }), ...instant });
+  expect(result).toMatchObject({ status: "error", error: expect.stringMatching(/has not cleared/) });
+  expect(calls).toEqual([]);
 });

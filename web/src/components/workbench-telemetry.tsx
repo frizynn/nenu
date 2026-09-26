@@ -7,6 +7,7 @@ import type { SessionTelemetry } from "@/lib/types";
 export type WorkbenchPanel = "model" | "usage" | "context" | null;
 
 interface Props {
+  mode?: "model" | "metrics";
   telemetry?: SessionTelemetry;
   stale?: boolean;
   modelAvailable: boolean;
@@ -23,7 +24,7 @@ function tokens(value: number | undefined): string {
   return value === undefined ? "Not reported" : value.toLocaleString();
 }
 
-export function WorkbenchTelemetry({ telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
+export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
   const context = telemetry?.context;
   const [localPanel, setLocalPanel] = useState<WorkbenchPanel>(null);
   const panel = controlledPanel === undefined ? localPanel : controlledPanel;
@@ -40,8 +41,8 @@ export function WorkbenchTelemetry({ telemetry, stale, modelAvailable, disabled,
   const reported = values.filter((entry): entry is [string, number] => entry[1] !== undefined);
   const hasMetrics = reported.length > 0 || Boolean(telemetry?.rateLimits?.length);
   return (
-    <div className="workbench-telemetry flex flex-nowrap items-center gap-1 overflow-hidden border-t border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground">
-      <button
+    <div className="workbench-telemetry flex min-w-0 flex-1 flex-nowrap items-center gap-1 text-xs text-muted-foreground">
+      {mode !== "metrics" && <button
         ref={modelTriggerRef}
         type="button"
         className="flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent disabled:opacity-50"
@@ -59,7 +60,8 @@ export function WorkbenchTelemetry({ telemetry, stale, modelAvailable, disabled,
         <span className="truncate">{telemetry?.model ?? "Model not reported"}</span>
         {telemetry?.effort && <span className="hidden shrink-0 text-muted-foreground sm:inline">{telemetry.effort}</span>}
         <ChevronDown className="size-3 shrink-0" />
-      </button>
+      </button>}
+      {mode !== "model" && <>
       <WorkbenchContextMeter usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
         onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
         onOpenChange={(open) => changePanel(open ? "context" : null)} />
@@ -90,6 +92,7 @@ export function WorkbenchTelemetry({ telemetry, stale, modelAvailable, disabled,
         </WorkbenchPopover>
       </div>
       {telemetry?.tokens?.total !== undefined && <span className="hidden shrink-0 tabular-nums sm:inline">{tokens(telemetry.tokens.total)} tokens</span>}
+      </>}
     </div>
   );
 }

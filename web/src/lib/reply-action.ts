@@ -218,8 +218,8 @@ export interface GuardedReplyArgs {
    * types without sweeping and leans on type-then-verify, which still withholds the submit key.
    *
    * Resolving `{ ok: false }` aborts the send with that error and nothing typed. `keysSent` says
-   * whether anything actually reached the pane: when it did, the pre-flight's evidence is stale and
-   * the guard re-confirms before typing.
+   * whether the draft-clearing keys were sent. If so, the guard waits for a live, empty composer
+   * before typing the replacement.
    *
    * The argument carries the evidence FORWARD, not just the permission. `promptRegion` is the prompt
    * tail the adapter saw on the pane the pre-flight just read, and a caller that sends destructive
@@ -285,7 +285,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
   let typed;
   try {
     args.onTypeAttempt?.();
-    typed = await sendReply(args.paneId, args.text, false, args.session, undefined, args.requestId ? `${args.requestId}:type` : undefined);
+    typed = await sendReply(args.paneId, args.text, false, args.session, undefined, args.requestId ? `${args.requestId}:type` : undefined, adapter.bracketedPaste);
   } catch (e) {
     return { status: "error", error: message(e) };
   }
@@ -351,7 +351,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
   return {
     status: "stalled",
     error:
-      "Message didn't reach the input box — a dialog may be waiting, and if you were answering it by key that key likely landed. Nothing was submitted.",
+      "Couldn't verify the message in the terminal. Nothing was submitted. Your draft is saved; retry or open Terminal.",
   };
 }
 
@@ -443,21 +443,24 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promi
       if (!prep.ok) return { status: "error", error: prep.error };
       if (!prep.keysSent) return null; // the read above is still the freshest thing there is
 
-      // The caller put keys on the wire and waited for the TUI to settle, so the evidence that
-      // authorised them is now an RPC and a settle old. Re-confirm before the MESSAGE goes out —
-      // otherwise this ordering, which exists to stop keys reaching a dialog, would hand the dialog
-      // the reply instead. Still fail-open on a throw: the submit key is guarded downstream.
-      try {
-        const fresh = await fetchPane(args.paneId, args.requestedLines, args.session);
-        if (composerReady(splitLines(parseAnsi(fresh.text)))) return null;
-      } catch {
-        return null;
+      // A write ack can precede the TUI consuming a large Backspace sweep. Waiting for an empty
+      // editor prevents the previous draft (even identical text) from verifying the next send.
+      const sleep = args.sleep ?? defaultSleep;
+      for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+        if (attempt > 0) await sleep(POLL_DELAY_MS);
+        try {
+          const fresh = await fetchPane(args.paneId, args.requestedLines, args.session);
+          const lines = splitLines(parseAnsi(fresh.text));
+          if (!composerReady(lines)) return {
+            status: "blocked",
+            error: "The agent's input box left the screen while its input line was being cleared. Your message wasn't typed.",
+          };
+          if (adapter.extractInputDraft(lines) === null) return null;
+        } catch {
+          // No new message may be typed until a live read confirms the destructive clear finished.
+        }
       }
-      return {
-        status: "blocked",
-        error:
-          "The agent's input box left the screen while its input line was being cleared — a menu or dialog is probably up. Your message wasn't typed.",
-      };
+      return { status: "error", error: "The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready." };
     },
   };
 }

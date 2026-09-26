@@ -390,6 +390,7 @@ export function sendReply(
   session?: string,
   expectedPrompt?: string,
   requestId?: string,
+  paste?: boolean,
 ): Promise<ActionResponse> {
   return req<ActionResponse>(
     withSession(`/api/pane/${encodeURIComponent(paneId)}/reply`, session),
@@ -400,6 +401,7 @@ export function sendReply(
         submit,
         ...(expectedPrompt !== undefined ? { expected_prompt: expectedPrompt } : {}),
         ...(requestId !== undefined ? { request_id: requestId } : {}),
+        ...(paste ? { paste: true } : {}),
       }),
     },
     recoverPromptChanged,

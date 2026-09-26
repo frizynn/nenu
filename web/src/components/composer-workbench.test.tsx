@@ -83,16 +83,17 @@ it("keeps composing available while disconnected or a dialog is open", async () 
   expect(sendGuardedReply).not.toHaveBeenCalled();
 });
 
-it("reports draft presence independently of textarea focus", async () => {
-  const onDraftStateChange = vi.fn();
-  const { user } = setup({ onDraftStateChange });
+it("groups secondary actions while leaving the model and send visible", async () => {
+  const { user } = setup({ nativeWorkbench: true, modelControl: <button>Choose model</button> });
   const input = screen.getByRole("textbox");
-
-  expect(onDraftStateChange).toHaveBeenLastCalledWith(false);
-  await user.type(input, "draft survives keyboard changes");
-  expect(onDraftStateChange).toHaveBeenLastCalledWith(true);
-  await user.clear(input);
-  expect(onDraftStateChange).toHaveBeenLastCalledWith(false);
+  await user.type(input, "draft survives navigation");
+  expect(screen.getByRole("button", { name: "Choose model" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Send" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Display settings" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Quick replies" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "More message actions" }));
+  expect(screen.getByRole("button", { name: "Quick replies" })).toBeVisible();
+  expect(input).toHaveValue("draft survives navigation");
 });
 
 it("does not convert a rejected picker command into a forced send on retry", async () => {
@@ -150,8 +151,7 @@ it("keeps native composing free of the old labelled controls row", () => {
   expect(screen.queryByText("Quick")).not.toBeInTheDocument();
   expect(screen.queryByText("Agent")).not.toBeInTheDocument();
   const actions = screen.getByRole("toolbar", { name: "Message actions" });
-  expect(actions).toContainElement(screen.getByRole("button", { name: "Quick replies" }));
-  expect(actions).toContainElement(screen.getByRole("button", { name: "Commands" }));
+  expect(actions).toContainElement(screen.getByRole("button", { name: "More message actions" }));
   expect(actions).toContainElement(screen.getByRole("button", { name: "Attach image" }));
   expect(screen.getByRole("textbox").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
@@ -160,13 +160,12 @@ it("opens compact quick actions without changing or sending the draft", async ()
   const { user } = setup();
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
-  const toggle = screen.getByRole("button", { name: "Quick replies" });
-  await user.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await user.click(screen.getByRole("button", { name: "More message actions" }));
+  await user.click(screen.getByRole("button", { name: "Quick replies" }));
+  expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
   expect(sendGuardedReply).not.toHaveBeenCalled();
-  await user.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await user.click(screen.getByRole("button", { name: "Close Quick" }));
   expect(input).toBeEnabled();
 });
 

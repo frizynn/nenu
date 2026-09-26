@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { Check, ImagePlus, Keyboard, Loader2, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
+import { Check, ImagePlus, Keyboard, Loader2, MoreHorizontal, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -37,6 +37,7 @@ export interface ComposerHandle {
   /** Opens the harness's own model picker through the same verified send as a reply. */
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
+  openDisplayPrefs: () => void;
 }
 
 interface ComposerProps {
@@ -55,8 +56,8 @@ interface ComposerProps {
   readOnly: boolean;
   /** Transport unavailable: stop terminal writes while keeping the local draft editable. */
   disconnected?: boolean;
-  /** Announces whether the phone-owned composer contains a draft so mobile chrome can enter focus mode. */
-  onDraftStateChange?: (hasDraft: boolean) => void;
+  modelControl?: ReactNode;
+  usageControls?: ReactNode;
   nativeWorkbench?: boolean;
   prepareSend?: () => Promise<boolean>;
   onInputFocus?: () => void;
@@ -97,7 +98,7 @@ interface ComposerProps {
 // decode. They now live behind the ⚙ on the single Controls row, as labelled rows in the same
 // in-flow dock (they change how the mirror LOOKS, so the mirror has to stay visible while you flip
 // them). Find moved the other way — to the header, where its find bar already takes over the row.
-type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | null;
+type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "actions" | null;
 
 // The Controls row's "on" look, authored once so an open dock and an armed mode can never drift
 // apart. `hover:` is pinned to the same tint: without it, hovering an already-on control repaints it
@@ -152,7 +153,7 @@ function ComposerDock({
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, onDraftStateChange, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
+  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -174,14 +175,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // functional update AND to persist the result, without either reading stale state or doing the
   // save inside a (double-invoked) state updater.
   const inputValueRef = useRef(input);
-  const hasDraft = input.trim().length > 0;
-
-  // Draft presence, rather than focus, is the stable signal for mobile reading mode. The keyboard
-  // can keep a textarea focused after it collapses, and a restored draft may be present before the
-  // user focuses anything; both cases still deserve the same compact navigation chrome.
-  useEffect(() => {
-    onDraftStateChange?.(hasDraft);
-  }, [hasDraft, onDraftStateChange]);
   // Which pane the current `input` belongs to. DetailRoute keys AgentChat by paneId, so in the app a
   // pane→pane navigation remounts this component and the lazy initialiser above does the work — but
   // the component must not depend on that: if it is ever rendered with a changed paneId/session in
@@ -396,6 +389,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     focusInput: focusInputImmediately,
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
+    openDisplayPrefs: () => requestDrawer("display"),
   }));
 
   useEffect(
@@ -852,6 +846,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             mounts the NavTray (unmounts on close, so tab/queue reset each open); Quick mounts the two
             one-tap reply grids; Display mounts the labelled mirror prefs. Agent stays a covering
             BottomSheet below (it's a palette, not a pad). */}
+        {drawer === "actions" && (
+          <ComposerDock title="Message actions" onClose={closeDrawer}>
+            <div className="flex flex-col gap-1">
+              {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
+              <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
+              <Button variant="ghost" className="min-h-11 justify-start gap-3" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
+              {usageControls}
+            </div>
+          </ComposerDock>
+        )}
         {drawer === "keys" && (
           <ComposerDock title="Keys" onClose={closeDrawer}>
             <NavTray
@@ -1035,9 +1039,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
+        {!nativeWorkbench && modelControl}
         {/* gap-3, not gap-2: with the attach button moved inside the field this row is only the
             field and Send, and the old spacing left them looking joined. */}
-        <div className={cn("items-end gap-3", nativeWorkbench ? "grid grid-cols-[1fr_auto] gap-y-1" : "flex")}>
+        <div className={cn("items-end gap-1", nativeWorkbench ? "grid grid-cols-[minmax(0,1fr)_auto] gap-y-1" : "flex")}>
           {/* The input and its attach button share one box: the button is positioned INSIDE the
               field, messenger-style, rather than sitting beside it as a third control in the row.
               It used to occupy a full-height slot to the left, which spent the widest part of the
@@ -1130,15 +1135,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               disabled={uploading || locked} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
             </Button>
-            <Button type="button" variant="ghost" size="icon" className={cn("size-11 shrink-0 md:size-8", drawer === "quick" ? CONTROL_ON : CONTROL_OFF)}
-              title="Quick replies" aria-label="Quick replies" disabled={locked} aria-expanded={drawer === "quick"}
-              onClick={() => requestDrawer(drawer === "quick" ? null : "quick")}><Zap className="size-4" /></Button>
-            {commands.length > 0 && <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground md:size-8"
-              title="Commands" aria-label="Commands" disabled={locked} aria-expanded={drawer === "cmd"}
-              onClick={() => requestDrawer(drawer === "cmd" ? null : "cmd")}><Slash className="size-4" /></Button>}
-            <Button type="button" variant="ghost" size="icon" className={cn("size-11 shrink-0 md:size-8", drawer === "display" ? CONTROL_ON : CONTROL_OFF)}
-              title="Display settings" aria-label="Display settings" aria-expanded={drawer === "display"}
-              onClick={() => requestDrawer(drawer === "display" ? null : "display")}><Settings2 className="size-4" /></Button>
+            {modelControl}
+            <Button type="button" variant="ghost" size="icon" className={cn("size-11 shrink-0", drawer === "actions" ? CONTROL_ON : CONTROL_OFF)}
+              title="More message actions" aria-label="More message actions" aria-expanded={drawer === "actions"}
+              onClick={() => requestDrawer(drawer === "actions" ? null : "actions")}><MoreHorizontal className="size-4" /></Button>
           </div>}
           {working && agent === "codex" ? (
             <Button

@@ -232,10 +232,6 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
 
   return (
     <section aria-label="Live conversation" className="flex h-full min-h-0 min-w-0 flex-col">
-      {shown?.available && recovery && <details className="border-b px-4 text-sm text-muted-foreground">
-        <summary className="min-h-11 cursor-pointer content-center">Change connected conversation</summary>
-        <div className="max-h-[50dvh] overflow-y-auto pb-4">{recovery}</div>
-      </details>}
       {error && (
         <div role="status" className="flex items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
           <span>{entries.length ? "Conversation refresh failed. Showing the last update." : "Couldn't load the conversation."}</span>

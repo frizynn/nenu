@@ -107,3 +107,9 @@ it("keeps the real composer readable when typing replaces shortcuts with the que
   expect(codexAdapter.composerReady?.(lines(text.replace(/\x1b\[1m\x1b\[38;2;255;255;255mtab/, "tab")))).toBe(false);
   expect(codexAdapter.composerReady?.(lines(text + "\n  Press enter to approve"))).toBe(false);
 });
+
+it("accepts the compact queue hint with the same style and status evidence", () => {
+  const pane = lines(capture("draft-queue-hint-v0157").replace(" to queue message", " to queue"));
+  expect(codexAdapter.composerReady?.(pane)).toBe(true);
+  expect(codexAdapter.extractInputDraft?.(pane)).toContain("NENU_IMAGE_OK");
+});

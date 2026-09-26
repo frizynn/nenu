@@ -256,9 +256,9 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   const texts = lines.map((l) => rstrip(lineText(l)));
   let statusRow = lastNonBlankIndex(texts);
   if (statusRow < 0) return null;
-  // 0.157 adds a shortcuts hint below the status row, including an agents link in daemon mode.
-  // Require the captured wording and the renderer's bold question mark before skipping that row.
-  if (isShortcutsFooter(lines[statusRow]!, texts[statusRow]!)) statusRow--;
+  // 0.157 keeps status above a separate hint. Typing replaces shortcuts with the queue hint.
+  // Skip only the exact renderer-owned text and key paint; the status anchor remains required.
+  if (isComposerHint(lines[statusRow]!, texts[statusRow]!)) statusRow--;
   if (statusRow < 0) return null;
   if (!isStatusRow(texts[statusRow]!, lines[statusRow])) {
     return locateQueuedComposer(lines, texts, statusRow) ?? locateCommandAutocomplete(lines, texts, statusRow);
@@ -309,16 +309,19 @@ export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   return null;
 }
 
-function isShortcutsFooter(line: StyledLine, text: string): boolean {
-  if (!/^ {2}(?:← for agents · )?\? for shortcuts$/.test(text)) return false;
-  const marker = text.indexOf("?");
+function isComposerHint(line: StyledLine, text: string): boolean {
+  const shortcut = /^ {2}(?:← for agents · )?\? for shortcuts$/.test(text);
+  const queue = /^ {2}tab to queue(?: message)?$/.test(text);
+  if (!shortcut && !queue) return false;
+  const marker = shortcut ? text.indexOf("?") : 2;
+  const endMarker = marker + (shortcut ? 1 : 3);
   let offset = 0;
   for (const segment of line.segments) {
     const end = offset + segment.text.length;
-    if (offset <= marker && marker < end) return segment.bold === true && segment.fg !== undefined;
+    if (offset < endMarker && marker < end && (segment.bold !== true || segment.fg === undefined)) return false;
     offset = end;
   }
-  return false;
+  return offset >= endMarker;
 }
 
 /**

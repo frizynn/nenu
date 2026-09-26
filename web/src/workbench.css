@@ -108,7 +108,7 @@ body { font-family: var(--font-sans); }
 .workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
 .workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
 .workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
-.workbench-composer { width: 100%; max-width: 960px; align-self: center; flex-shrink: 0; }
+.workbench-composer { width: calc(100% - 16px); margin-bottom: 8px; max-width: 960px; align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
 .workbench-composer-surface { background: var(--card); border: 1px solid var(--border); border-radius: 16px; }
 .workbench-composer textarea { background: transparent; border-color: transparent; box-shadow: none; }
@@ -125,38 +125,8 @@ body { font-family: var(--font-sans); }
   scrollbar-gutter: stable;
 }
 
-.workbench-focus-toggle { display: none; }
-
 @media (max-width: 1023px), (pointer: coarse) {
-  /* Focus mode is intentionally an opt-in data state rather than :focus. A mobile browser can keep
-     focus on a textarea after hiding its keyboard, and a restored draft has no focus event at all. */
-  .workbench-chat[data-composer-focus="true"] > header,
-  .workbench-chat[data-composer-focus="true"] [data-workbench-navigation-band] { display: none; }
-
-  .workbench-focus-toggle {
-    position: fixed;
-    top: calc(var(--app-viewport-top, 0px) + env(safe-area-inset-top) + 6px);
-    right: max(8px, env(safe-area-inset-right));
-    z-index: 40;
-    display: inline-flex;
-    min-height: 44px;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--card);
-    background: color-mix(in srgb, var(--card) 94%, transparent);
-    padding: 0 12px;
-    color: var(--muted-foreground);
-    font-size: 11px;
-    font-weight: 600;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
-    backdrop-filter: blur(10px);
-    transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out;
-  }
-  .workbench-focus-toggle:hover { background: var(--accent); color: var(--foreground); }
-  .workbench-focus-toggle:active { scale: 0.96; }
-
+  .workbench-chat [data-workbench-navigation-band="tabs"] > button { min-height: 44px; min-width: 44px; }
   .workbench-composer [data-slot="chat-input"] {
     /* Keep at least four comfortable lines even in a short landscape visual viewport, while the
        outer cap leaves room for the 44px action row and safe-area padding. */
@@ -165,8 +135,7 @@ body { font-family: var(--font-sans); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workbench-focus-toggle, .workbench-tree-toggle, .workbench-tree-toggle svg, .workbench-tab-toggle > svg { transition: none; }
-  .workbench-focus-toggle:active { scale: none; }
+  .workbench-tree-toggle, .workbench-tree-toggle svg, .workbench-tab-toggle > svg { transition: none; }
 }
 
 @media (min-width: 1024px) {
