@@ -213,3 +213,20 @@ describe("ConnectionBanner — the single connection surface", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
+
+it("keeps brief signal losses quiet", () => {
+  h.trouble = true;
+  h.lost = false;
+  renderBanner({ bridge: "connected", error: true });
+  expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+it("recovers without a Connected celebration on each signal change", async () => {
+  h.lost = true;
+  renderBanner({ bridge: "connected", error: true });
+  await act(async () => {});
+  h.lost = false;
+  act(() => rerenderBanner());
+  expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
+});

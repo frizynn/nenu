@@ -169,3 +169,22 @@ describe("explicit update click", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 });
+
+it("does not reload the old app while an update check is still downloading", async () => {
+  await register();
+  let finish!: () => void;
+  registration.update.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const pending = pwa.checkForUpdate();
+  await vi.advanceTimersByTimeAsync(9_000);
+  expect(reload).not.toHaveBeenCalled();
+  finish();
+  await pending;
+});
+
+it("keeps the current page when the update cannot be downloaded", async () => {
+  await register();
+  registration.update.mockRejectedValue(new Error("weak signal"));
+  await pwa.checkForUpdate();
+  expect(reload).not.toHaveBeenCalled();
+  expect(unregister).not.toHaveBeenCalled();
+});

@@ -5,6 +5,8 @@ import { ConnectionBanner } from "@/components/connection-banner";
 import { __resetConnectionHealth, markLive } from "@/lib/connection-health";
 import { PANE_ROUTE_ID, ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import type { AgentView } from "@/lib/types";
+import { RootLayout } from "./root";
+import { observeServerBuild, __resetServerBuild } from "@/lib/server-build";
 import { DetailRoute } from "./detail";
 
 const shell: AgentView = {
@@ -69,3 +71,19 @@ it("keeps a slow successful poll usable, but reports a failed poll and recovers 
     vi.useRealTimers();
   }
 }, 10_000);
+
+
+it("does not interrupt an open chat with interface update prompts", async () => {
+  const router = createMemoryRouter([{
+    id: ROOT_ROUTE_ID, path: "/", element: <RootLayout />, loader: () => home,
+    children: [{ id: PANE_ROUTE_ID, path: "pane/:paneId", loader: () => pane, element: <DetailRoute /> }],
+  }], { initialEntries: [`/pane/${shell.paneId}`] });
+  const view = render(<RouterProvider router={router} />);
+  try {
+    await screen.findByRole("textbox");
+    act(() => { observeServerBuild("next-build"); observeServerBuild("next-build"); });
+    expect(screen.queryByText("Interface updated")).not.toBeInTheDocument();
+  } finally {
+    view.unmount(); router.dispose(); __resetServerBuild();
+  }
+});
