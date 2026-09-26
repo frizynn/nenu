@@ -30,6 +30,7 @@ function transcriptStatus(
   relation: Relation | undefined,
   now: number,
   updatedAt: string,
+  runtimeStartedAt?: number,
 ): SubagentStatus {
   const last = records.findLast(
     (row) => row.type === "user" || row.type === "assistant",
@@ -57,6 +58,9 @@ function transcriptStatus(
     event.event === "SubagentStart" &&
     (hookAt > observedAt || status === "unknown")
   ) {
+    // A quiet tool is still running while its original owner is alive. A resumed
+    // conversation must not revive children started by its previous process.
+    if (runtimeStartedAt !== undefined) return hookAt >= runtimeStartedAt && hookAt <= now + 5000 ? "running" : "unknown";
     const age = now - Math.max(hookAt, observedAt);
     return age >= -5000 && age < FRESH_MS ? "running" : "unknown";
   }
@@ -126,6 +130,7 @@ export class ClaudeSubagents {
 
   async list(
     sessionId: string,
+    runtimeStartedAt?: number,
   ): Promise<{ agents: SubagentView[]; truncated: boolean }> {
     const location = await this.locate(sessionId);
     if (!location) return { agents: [], truncated: false };
@@ -265,6 +270,7 @@ export class ClaudeSubagents {
         relation,
         this.now(),
         updatedAt,
+        runtimeStartedAt,
       );
       const task = shortText(metadata.description) || relation?.task || "";
       const parentId = shortText(metadata.parentAgentId);

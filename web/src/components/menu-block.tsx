@@ -22,6 +22,7 @@ export interface MenuBlockAction {
 }
 
 export interface MenuBlockProps {
+  agent?: string;
   /** The detected menu: its title, the keys its footer named, and the nav it advertised. */
   menu: MenuModel;
   /** The region's content, displayed as native text and rows above the verified controls. */
@@ -45,7 +46,7 @@ export interface MenuBlockProps {
 // persists the choice as the user's default (.adr/0009). Only footer-named keys and arrows ship.
 export function MenuBlock(props: MenuBlockProps) {
   const parsed = parseNativeModelMenu(props.menu, props.lines);
-  return parsed ? <NativeModelMenu menu={props.menu} parsed={parsed} onAction={props.onAction} disabled={props.disabled} /> : <GenericMenuBlock {...props} />;
+  return parsed ? <NativeModelMenu agent={props.agent} menu={props.menu} parsed={parsed} onAction={props.onAction} disabled={props.disabled} /> : <GenericMenuBlock {...props} />;
 }
 
 function GenericMenuBlock({ menu, lines, onAction, disabled }: MenuBlockProps) {

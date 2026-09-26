@@ -156,3 +156,16 @@ test("a new Claude start supersedes an old completed transcript", async () => {
   await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStart" }, f.dir);
   expect((await new ClaudeSubagents([f.root], join(f.dir, "subagents")).list(parent)).agents[0]?.status).toBe("running");
 });
+
+
+test("Claude keeps a long tool running only within its live owning runtime", async () => {
+  const f = await fixture();
+  const startedAt = Date.now() - 60_000;
+  await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStart" }, f.dir);
+  const reader = new ClaudeSubagents([f.root], join(f.dir, "subagents"), () => Date.now() + 600_000);
+  expect((await reader.list(parent, startedAt)).agents[0]?.status).toBe("running");
+  expect((await reader.list(parent, Date.now() + 300_000)).agents[0]?.status).toBe("unknown");
+  expect((await reader.list(parent)).agents[0]?.status).toBe("unknown");
+  await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStop" }, f.dir);
+  expect((await reader.list(parent, startedAt)).agents[0]?.status).toBe("completed");
+});

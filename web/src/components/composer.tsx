@@ -862,7 +862,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
-              {usageControls}
+              {!nativeWorkbench && usageControls}
             </div>
           </ComposerDock>
         )}
@@ -1051,6 +1051,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
         {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
         {!nativeWorkbench && modelControl}
+        {nativeWorkbench && usageControls && <div className="flex min-w-0 items-center px-1" aria-label="Session usage">{usageControls}</div>}
         {/* gap-3, not gap-2: with the attach button moved inside the field this row is only the
             field and Send, and the old spacing left them looking joined. */}
         <div className={cn("items-end gap-1", nativeWorkbench ? "grid grid-cols-[minmax(0,1fr)_auto] gap-y-1" : "flex")}>

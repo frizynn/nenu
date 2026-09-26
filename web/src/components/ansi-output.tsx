@@ -247,6 +247,7 @@ export const AnsiOutput = memo(function AnsiOutput({
     />
   ) : menuBlock ? (
     <MenuBlock
+      agent={agent}
       menu={menuBlock.menu}
       lines={menuBlock.lines}
       disabled={promptDisabled || !onMenuAction}

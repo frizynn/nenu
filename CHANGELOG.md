@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-09-26
+
+### Fixed
+- Keep Claude background agents visible during long tools while their original runtime is alive. (991060f)
+- Show native Claude context and five-hour/weekly usage before history loads, directly above the composer. (991060f)
+- Use Claude and OpenAI logos in the model selector. (991060f)
+
 ## [0.46.0] - 2026-09-26
 
 ### Added

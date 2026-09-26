@@ -1,6 +1,6 @@
 import { record } from "./codex-rpc.ts";
 
-export interface ClaudeSession { id: string; sessionId: string; pid: number; cwd: string }
+export interface ClaudeSession { id: string; sessionId: string; pid: number; cwd: string; startedAt?: number }
 
 export function decodeClaudeSessions(value: unknown): ClaudeSession[] {
   if (!Array.isArray(value)) throw new Error("Invalid Claude session list.");
@@ -8,7 +8,7 @@ export function decodeClaudeSessions(value: unknown): ClaudeSession[] {
     const row = record(raw);
     if (typeof row.id !== "string" || typeof row.sessionId !== "string" ||
         typeof row.pid !== "number" || typeof row.cwd !== "string") return [];
-    return [{ id: row.id, sessionId: row.sessionId, pid: row.pid, cwd: row.cwd }];
+    return [{ id: row.id, sessionId: row.sessionId, pid: row.pid, cwd: row.cwd, ...(typeof row.startedAt === "number" && Number.isFinite(row.startedAt) && row.startedAt > 0 ? { startedAt: row.startedAt } : {}) }];
   });
 }
 

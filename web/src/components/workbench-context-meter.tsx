@@ -11,7 +11,8 @@ export function formatContextTokens(value: number | null): string {
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
 }
 
-export function WorkbenchContextMeter({ usedTokens, maxTokens, totalProcessedTokens = null, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
+export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, totalProcessedTokens = null, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
+  reportedPercent?: number;
   usedTokens: number | null;
   maxTokens: number | null;
   totalProcessedTokens?: number | null;
@@ -29,7 +30,7 @@ export function WorkbenchContextMeter({ usedTokens, maxTokens, totalProcessedTok
   };
   const used = usedTokens !== null && Number.isFinite(usedTokens) && usedTokens >= 0 ? usedTokens : null;
   const max = maxTokens !== null && Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : null;
-  const percentage = used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
+  const percentage = reportedPercent !== undefined && Number.isFinite(reportedPercent) && reportedPercent >= 0 && reportedPercent <= 100 ? reportedPercent : used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - ((percentage ?? 0) / 100) * circumference;
