@@ -4,7 +4,7 @@ import { usePollBusy, NAV_BUSY_THRESHOLD_MS, POLL_BUSY_THRESHOLD_MS } from "./us
 import { isBusy } from "@/lib/busy";
 
 // Drive useRevalidator/useNavigation directly (hoisted so the vi.mock factory can close over the
-// holder), mirroring use-loading-stalled.test — no real router needed to pin loading states.
+// holder), with no real router needed to pin loading states.
 const h = vi.hoisted(() => ({
   rev: "idle" as "idle" | "loading",
   nav: "idle" as "idle" | "loading" | "submitting",

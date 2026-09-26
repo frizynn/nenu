@@ -12,7 +12,6 @@ vi.mock("@/hooks/use-connection-lost", () => ({
   useConnectionTrouble: () => h.trouble,
   useConnectionLost: () => h.lost,
 }));
-vi.mock("@/hooks/use-loading-stalled", () => ({ useLoadingStalled: () => false }));
 
 // The /api/config probe (red only) — controllable + counted, so we don't lean on MSW timing under fake
 // timers. `reachable` false makes fetchConfig throw (bridge unreachable).

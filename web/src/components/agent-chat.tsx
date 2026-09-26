@@ -91,7 +91,6 @@ interface AgentChatProps {
   // live. Defaults describe a healthy link so tests that don't care render "live".
   bridge?: BridgeStatus | undefined;
   error?: boolean;
-  stalled?: boolean;
   onBack: () => void;
   onSelect: (paneId: string) => void;
 }
@@ -124,7 +123,6 @@ export function AgentChat({
   device,
   bridge = "connected",
   error = false,
-  stalled = false,
   onBack,
   onSelect,
 }: AgentChatProps) {
@@ -134,7 +132,7 @@ export function AgentChat({
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
   // the Nenu mark + pill; here we use it to dim the StatusBadge, so the badge stops presenting the
   // last snapshot's status as current while we're reconnecting/lost, and restores instantly on recovery.
-  const connecting = isConnecting({ bridge, error, stalled });
+  const connecting = isConnecting({ bridge, error });
   const { newTab } = useSpaceActions();
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
   const displayScope = JSON.stringify([session ?? "default", paneId]);
@@ -696,7 +694,6 @@ export function AgentChat({
       <AppHeader
         bridge={bridge}
         error={error}
-        stalled={stalled}
         onHome={onBack}
         override={
           findOpen ? (

@@ -42,13 +42,13 @@ it("keeps a slow successful poll usable, but reports a failed poll and recovers 
   try {
     const box = await screen.findByRole("textbox");
     fireEvent.change(box, { target: { value: "unsent draft" } });
-    expect(screen.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
     vi.useFakeTimers();
     pending = new Promise<HomeData>((done) => { resolve = done; });
     act(() => { void router.revalidate(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(4_200); });
     expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
     await act(async () => { resolve?.(home); });
     pending = undefined;
     expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
@@ -57,10 +57,10 @@ it("keeps a slow successful poll usable, but reports a failed poll and recovers 
     await act(async () => { await router.revalidate(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(4_200); });
     expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     response = home;
     await act(async () => { await router.revalidate(); });
-    expect(screen.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
     expect(box).toHaveValue("unsent draft");
   } finally {
     resolve?.(home);

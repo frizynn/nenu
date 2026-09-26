@@ -9,7 +9,6 @@ import { ProjectOverview } from "@/components/project-overview";
 import { NewSpaceSheet } from "@/components/new-space-sheet";
 import { openForCount, useDashPrefs } from "@/hooks/use-dash-prefs";
 import { useSpaceActions } from "@/hooks/use-spaces";
-import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
@@ -22,12 +21,11 @@ export function HomeRoute() {
   const { newSpace } = useSpaceActions();
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const { prefs, setSpacesOpen } = useDashPrefs();
-  const stalled = useLoadingStalled();
   const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
   const spacesOpen = openForCount(prefs.spacesOpen, data.workspaces.length);
 
   return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
-    <AppHeader bridge={data.bridge} error={data.error} stalled={stalled}
+    <AppHeader bridge={data.bridge} error={data.error}
       rightTrail={<><span className="text-xs tabular-nums text-muted-foreground">{data.projects?.length ?? 0} {(data.projects?.length ?? 0) === 1 ? "project" : "projects"}</span><SettingsGear session={data.session} /></>}>
       <span className="truncate text-sm font-medium">Home</span>
     </AppHeader>

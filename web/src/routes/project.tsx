@@ -5,7 +5,6 @@ import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { AgentIcon } from "@/components/agent-icon";
 import { StatusDot } from "@/components/status-badge";
-import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import type { ProjectThreadView } from "@/lib/types";
@@ -14,12 +13,11 @@ export function ProjectRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "" } = useParams();
   const navigate = useNavigate();
-  const stalled = useLoadingStalled();
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
   const back = () => navigate(homePath(data.session));
 
   return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
-    <AppHeader bridge={data.bridge} error={data.error} stalled={stalled} onHome={back}
+    <AppHeader bridge={data.bridge} error={data.error} onHome={back}
       rightTrail={<SettingsGear session={data.session} />}>
       <span className="truncate text-sm font-medium">{project?.name ?? "Project"}</span>
     </AppHeader>

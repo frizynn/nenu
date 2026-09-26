@@ -1,6 +1,6 @@
 id = "herdr.collie"
 name = "Nenu"
-version = "0.45.3"
+version = "0.45.4"
 min_herdr_version = "0.7.0"
 description = "Herdr agent workbench for mobile and web, served over Tailscale"
 platforms = ["linux", "macos"]

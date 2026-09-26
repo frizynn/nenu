@@ -126,6 +126,9 @@ the unit name; the Herdr action runs from anywhere.
   followed by `revalidator.revalidate()`. There is **no TanStack Query** — don't reintroduce it.
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
+- A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
+  failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
+  drive connection banners and disable Send. Do not feed elapsed poll time into connection state.
 - **The idle lock pauses; it does not gate.** It only appears when Nenu is left *open, visible and
   untouched* — a hidden page never locks, and returning to the foreground auto-resumes. It covers a
   still-mounted router (unmounting it ate in-progress composer drafts) and pauses polling through

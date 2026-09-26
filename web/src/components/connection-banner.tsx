@@ -15,7 +15,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { useConnectionLost, useConnectionTrouble } from "@/hooks/use-connection-lost";
-import { useLoadingStalled } from "@/hooks/use-loading-stalled";
 import { useOnline } from "@/hooks/use-online";
 import { isConnecting } from "@/lib/connection";
 import { clockTime } from "@/lib/format";
@@ -124,8 +123,7 @@ function ConnectionStateBanner({
   error,
   lastSeenAt,
 }: Omit<ConnectionBannerProps, "authError">) {
-  const stalled = useLoadingStalled();
-  const connecting = isConnecting({ bridge, error, stalled });
+  const connecting = isConnecting({ bridge, error });
   const trouble = useConnectionTrouble(connecting);
   const lost = useConnectionLost(connecting);
 
