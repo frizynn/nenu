@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.45.4] - 2026-09-26
 
 ### Fixed
-- Keep Send enabled and connection status stable during slow successful refreshes.
+- Keep Send enabled and connection status stable during slow successful refreshes. (9a6ff29)
 
 ## [0.45.3] - 2026-09-26
 
