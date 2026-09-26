@@ -84,6 +84,60 @@ row. That is an ordinary draft, not a dialog.
 |---|---|---|
 | `codex--v0151-draft-indented-line.txt` | Two-line draft: the `› ` row, then a hard line break whose text starts with two spaces, painted as a four-space-indented continuation above the two-field status row. `composerReady` must be TRUE — `/^ {2}\S/` refused it, `locateComposer` returned null, and the pane refused every send with "the agent's input box isn't on screen" until the draft was cleared | `idle` |
 
+## Codex 0.156.1 corpus (captured 2026-09-26, herdr, Linux sandbox panes)
+
+Byte-faithful `format:ansi` captures from throwaway panes in `/tmp/collie-codex-debug`, each cut to
+the rows its test needs, then scrubbed of the username and hostname (none survived the cut). Dialog
+captures ran with `-a on-request -s read-only -c approvals_reviewer=user`. No key was pressed on
+these screens while capturing. The new recipes (trust `Enter` / `Down, Enter`, patch `y` /
+`Escape`, two-row exec `2`) were probed afterwards the same day in a fresh sandbox pane, see
+`APPROVAL_NOTES.md` and `TRUST_NOTES.md`. **The
+headline: 0.156.1's default status row drops SGR 2.** Its ` · ` separators carry the theme's
+muted foreground (`38;2;135;140;164`), and there is still no `Context` field, so neither acceptor
+matched. No default pane had a composer, and the unread-dialog card sat over a live input box. The
+styled acceptor now takes either quiet paint, never by colour value (see `isStatusRow` in
+`lib/harness/codex/markers.ts`). The composer band now sits on a `48;2;57;57;71` fill.
+
+| Fixture | State / what's in it | Herdr status |
+|---|---|---|
+| `codex--v0156-idle.txt` | Empty dim `› Ask Codex to do anything` composer on its fill, over the two-field status row whose separator is a foreground, not SGR 2. `composerReady` must be TRUE | `idle` |
+| `codex--v0156-idle-50.txt` | The same idle screen with the pane at 50 columns | `idle` |
+| `codex--v0156-draft-multiline.txt` | Three-line draft typed with hard breaks. The status row carries a third field (`Ask one question`) and a right-aligned `⚠ 1 warning · f2 to view` notice after a run of spaces | `idle` |
+| `codex--v0156-draft-blank-line.txt` | Two-paragraph draft with a blank row inside the composer | `idle` |
+| `codex--v0156-paste-placeholder.txt` | A typed paragraph, a blank row, then `[Pasted Content 1024 chars]`. The draft reads as both; it is not paste evidence on its own | `idle` |
+| `codex--v0156-trust.txt` | Rewritten trust prompt: `Folder access`, the folder, `Trust this folder? …`, `› 1. Trust and continue` / `2. Quit`, footer `enter continue · esc quit`. Read as a pointer walk plus Enter (ADR 0055), no digit | `blocked` |
+| `codex--v0156-approval-exec-2opt.txt` | Exec approval for a heredoc: the full `$ cat <<'EOF'` block, then only two options, `1. Yes, proceed (y)` / `2. No, and tell Codex what to do differently (esc)` | `blocked` |
+| `codex--v0156-approval-exec-wrapped.txt` | Exec approval for a long `echo`: the persistent row 2 wraps onto two rows indented to the label column | `blocked` |
+| `codex--v0156-approval-exec-wrapped-50.txt` | Exec approval for `touch` at 50 columns: rows 2 and 3 both wrap, and `(p)` and `(esc)` land on rows of their own | `blocked` |
+| `codex--v0156-approval-patch.txt` | Patch approval: `Would you like to make the following edits?`, `Description:` / `Destination:`, `1. Yes, proceed (y)` / `2. Yes, and don't ask again for these files (a)` / `3. No… (esc)`. Buttons send the printed `y` and Escape | `blocked` |
+
+Three more 0.156.1 screens were captured and are NOT in the corpus yet: the update prompt
+(`Update now` / `Skip` / `Skip until next version`, footer `enter continue · esc skip`) and the
+`/model` and `/permissions` pickers (footer `enter select · esc back`). No grammar reads them, by
+decision. The footer names only Enter and Esc. Enter acts on the pointed row, which on the update
+prompt runs an installer, and what Esc skips is not stated. So the unread-dialog card, with its one
+Escape, is their way out. As fixtures they would show that card, and `unread-dialog.test.ts` lists
+every Codex screen that does, so they land together with that list. Their footers are pinned
+byte-exact in `codex.test.ts` meanwhile.
+
+## Codex 0.156.1 headless (captured 2026-09-26, herdr 0.9.0, no Herdr client attached, #294)
+
+Byte-faithful `format:ansi` captures from a throwaway Herdr session whose server never had a client
+attached, read the way the bridge reads a pane. Codex asks the terminal for its colours at start,
+and with no client nothing answers. It then paints the status row's ` · ` separator with no SGR at
+all and the composer with no `48;2;57;57;71` fill; the fields keep their colours, and the
+placeholder is still SGR 2. Before #294 the acceptor refused a separator with no paint, so every
+Codex started this way had no composer and the unread-dialog card sat over a live input box. A
+client attached later does not repaint the row; a Codex started after a client has attached once
+paints the 0.156.1 client shape above. Each file is cut to the rows from the header box down; the
+update notice above it is left out. **No scrubbing was needed**: the sandbox folder is
+`/tmp/i294-proj-codex`, and no username, hostname or session UUID is on the kept rows.
+
+| Fixture | State / what's in it | Herdr status |
+|---|---|---|
+| `codex--v0156-headless-idle.txt` | Empty dim `› Ask Codex to do anything` with no fill, over `  GPT-6-Luna low · /tmp/i294-proj-codex` whose separator carries no paint. `composerReady` must be TRUE, the draft is null, and no unread-dialog card | `idle` |
+| `codex--v0156-headless-draft.txt` | The same pane holding the typed draft `hello from the phone probe`. The draft reads back | `idle` |
+
 ## Grok corpus (live panes 2026-08-21–23)
 
 Grok's composer is a rounded box at the tail: `╭─…─╮` / `│ ❯ … │` / `╰─ <status> ─╯`, then a blank and a key-hint row. The status run is opaque (display name, optional effort, optional permission mode). User-message bubbles use **square** corners (`┌ ┐ └ ┘`) and must never be read as the composer. **All identifying content genericized** per the repo's public-repo rule.
