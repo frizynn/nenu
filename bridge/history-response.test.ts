@@ -70,3 +70,21 @@ describe("conditional history response", () => {
     expect(historyResponse(initial, "two", etag, null).status).toBe(200);
   });
 });
+
+
+test("multiple readers reuse the encoded history without serializing or compressing again", async () => {
+  const data = page("Repeatable message ".repeat(1000));
+  const first = historyResponse(data, "one", null, "gzip");
+  const bytes = await first.arrayBuffer();
+  const stringify = spyOn(JSON, "stringify");
+  const gzip = spyOn(Bun, "gzipSync");
+  try {
+    const next = historyResponse(data, "one", null, "gzip");
+    expect(await next.arrayBuffer()).toEqual(bytes);
+    expect(stringify).not.toHaveBeenCalled();
+    expect(gzip).not.toHaveBeenCalled();
+    const plain = historyResponse(data, "one", null, null);
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect((await plain.json()).entries).toEqual(data.entries);
+  } finally { stringify.mockRestore(); gzip.mockRestore(); }
+});

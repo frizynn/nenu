@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchMessageQueue, changeMessageQueue } from "@/lib/api";
+import { setLocked } from "@/lib/idle";
 import { useMessageQueue } from "./use-message-queue";
 
 vi.mock("@/lib/api", () => ({
@@ -89,4 +90,19 @@ it("keeps mutation failures separate from background refreshes and reports susta
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
     expect(hook.result.current.refreshError).toBe("Could not refresh the queue.");
   } finally { hook.unmount(); vi.useRealTimers(); }
+});
+
+
+it("stops queue reads during the idle pause and catches up on resume", async () => {
+  vi.useFakeTimers();
+  const hook = renderHook(() => useMessageQueue("pane", "session", true));
+  try {
+    await act(async () => {});
+    await act(async () => setLocked(true));
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(fetchMessageQueue).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.page).toEqual(page);
+    await act(async () => setLocked(false));
+    expect(fetchMessageQueue).toHaveBeenCalledTimes(2);
+  } finally { hook.unmount(); setLocked(false); vi.useRealTimers(); }
 });
