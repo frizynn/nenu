@@ -10,6 +10,7 @@ import { StartAgent } from "@/components/start-agent";
 import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
+import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
@@ -91,6 +92,7 @@ interface AgentChatProps {
   // live. Defaults describe a healthy link so tests that don't care render "live".
   bridge?: BridgeStatus | undefined;
   error?: boolean;
+  authError?: boolean;
   onBack: () => void;
   onSelect: (paneId: string) => void;
 }
@@ -123,6 +125,7 @@ export function AgentChat({
   device,
   bridge = "connected",
   error = false,
+  authError = false,
   onBack,
   onSelect,
 }: AgentChatProps) {
@@ -133,6 +136,8 @@ export function AgentChat({
   // the Nenu mark + pill; here we use it to dim the StatusBadge, so the badge stops presenting the
   // last snapshot's status as current while we're reconnecting/lost, and restores instantly on recovery.
   const connecting = isConnecting({ bridge, error });
+  const lost = useConnectionLost(connecting);
+  const unavailable = bridge !== "connected" || lost;
   const { newTab } = useSpaceActions();
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
   const displayScope = JSON.stringify([session ?? "default", paneId]);
@@ -143,7 +148,7 @@ export function AgentChat({
   const isShell = agent?.kind === "shell";
   // This device isn't allowlisted to type into agents: the backend rejects every write, so the
   // composer drops to read-only (and shows a banner). The mirror still polls (reading is fine).
-  const readOnly = isReadOnly(device);
+  const readOnly = authError || isReadOnly(device);
 
   // Drawers/sheets are mutually exclusive — at most one open. A single value makes that invariant
   // unrepresentable to violate.
@@ -836,7 +841,7 @@ export function AgentChat({
         {showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
             <LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
-              history={conversation.history} loading={conversation.loading} error={conversation.error}
+              history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
@@ -997,7 +1002,7 @@ export function AgentChat({
             working={agent?.agent === "codex" && agent.status === "working"}
             gone={gone}
             readOnly={readOnly}
-            disconnected={connecting}
+            disconnected={unavailable}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}

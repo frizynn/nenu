@@ -58,7 +58,10 @@ it("keeps a slow successful poll usable, but reports a failed poll and recovers 
     response = { ...home, error: true };
     await act(async () => { await router.revalidate(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(4_200); });
-    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(screen.getByText("Connection is unstable. Retrying…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     response = home;
     await act(async () => { await router.revalidate(); });

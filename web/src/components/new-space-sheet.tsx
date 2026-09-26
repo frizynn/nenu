@@ -18,7 +18,7 @@ export function NewSpaceSheet({ open, onClose, onCreate }: NewSpaceSheetProps) {
   const [cwd, setCwd] = useState("");
 
   // Don't let a self-update reload yank this tab/space form out from under a half-typed
-  // directory/label — hold while it's open; the self-updater shows the banner and updates on close.
+  // directory/label. Keep the update pending until the form closes.
   useHoldReload("new-space", open);
 
   useEffect(() => {

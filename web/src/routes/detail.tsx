@@ -76,6 +76,7 @@ export function DetailRoute() {
       device={root.device}
       bridge={root.bridge}
       error={root.error}
+      authError={root.authError || pane.authError}
       onBack={() => navigate(project ? projectPath(project.slug, session) : homePath(session))}
       onSelect={(id) => navigate(panePath(id, session))}
     />

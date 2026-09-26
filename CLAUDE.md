@@ -100,6 +100,9 @@ the unit name; the Herdr action runs from anywhere.
 - Open chat/terminal views defer automatic page reloads. Hashed frontend assets are retained in
   the bridge state directory for up to seven days / 128 MiB so older clients can load deferred
   viewers after updates. See [ADR 0026](.adr/0026-open-clients-survive-frontend-updates.md).
+- Update discovery never shows a floating notice. Settings owns manual updating; downloads must
+  finish before navigation, and a failed update preserves the current page. See
+  [ADR 0027](.adr/0027-quiet-recovery-on-intermittent-networks.md).
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
@@ -128,7 +131,9 @@ the unit name; the Herdr action runs from anywhere.
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
-  drive connection banners and disable Send. Do not feed elapsed poll time into connection state.
+  describe connection health. Brief failures retry quietly; only sustained outages show the
+  connection notice and block the composer. Herdr unavailability and access restrictions still
+  block immediately. Do not feed elapsed poll time into connection state.
 - **The idle lock pauses; it does not gate.** It only appears when Nenu is left *open, visible and
   untouched* — a hidden page never locks, and returning to the foreground auto-resumes. It covers a
   still-mounted router (unmounting it ate in-progress composer drafts) and pauses polling through

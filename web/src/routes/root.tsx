@@ -6,7 +6,7 @@ import { usePollBusy } from "@/hooks/use-poll-busy";
 import { useAgentTransitions } from "@/hooks/use-transitions";
 import { usePushSetup } from "@/hooks/use-push";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
-import { UpdateAvailableBanner } from "@/components/update-available-banner";
+import { useSelfUpdate } from "@/lib/self-update";
 import { ConnectionBanner } from "@/components/connection-banner";
 import { DogGallop } from "@/components/dog-gallop";
 import { StatusArea } from "@/components/status-area";
@@ -41,6 +41,7 @@ export function shownLastSeenAt(home: HomeData, pane: PaneData | undefined): num
 // idle-lock in App swaps the whole RouterProvider out), so polling pauses when the app is locked.
 export function RootLayout() {
   useAppViewport();
+  useSelfUpdate();
   // SAFETY: this component IS the element of the route whose `loader` is rootLoader (router.tsx pairs
   // the two), and it renders only after that loader settles — so useLoaderData returns its HomeData.
   const data = useLoaderData() as HomeData;
@@ -67,13 +68,6 @@ export function RootLayout() {
   // from covering the route's sticky header — it reserves real space instead of overlaying.
   return (
     <div className="app-viewport flex flex-col">
-      {/* The self-updater stays mounted; its dismissible notice renders in a portal so publishing
-          an interface update never changes the conversation's height or scroll position. */}
-      <UpdateAvailableBanner />
-      {/* The app's ONE connection surface: a thin, animated bar that stays hidden while healthy, fades
-          in amber "reconnecting…" only after ≥4s of sustained trouble (the flicker fix), escalates to a
-          red "not connected" cause + Retry/Reload at ≥15s, and flashes green on recovery. Reads the
-          same shared-clock signals as the header dog, so the two always agree. */}
       <ConnectionBanner
         bridge={data.bridge}
         error={data.error}

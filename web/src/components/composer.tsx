@@ -423,8 +423,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Block a self-update reload while there's unsent work here: real typed text OR an upload in flight.
   // The composer input is phone-owned, so any non-empty value is genuine unsent work. A terminal draft
   // is SAFE on its own — it lives on the "❯" line and its preview re-derives after a reload — so it
-  // never holds. When held, the self-updater shows the "tap to update" banner instead and updates once
-  // the hold clears (see lib/self-update.ts). Keyed by pane so panes don't clobber each other's hold.
+  // never holds. The update waits until the hold clears. Keyed by pane so panes do not clobber
+  // each other's hold.
   useHoldReload(
     `composer:${paneId}`,
     input.trim() !== "" || direct.active || direct.value !== "" || direct.busy || uploading,
@@ -1049,7 +1049,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error} change={queue.mutate} />}
+        {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
         {!nativeWorkbench && modelControl}
         {/* gap-3, not gap-2: with the attach button moved inside the field this row is only the
             field and Send, and the old spacing left them looking joined. */}

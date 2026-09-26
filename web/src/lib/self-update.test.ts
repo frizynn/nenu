@@ -6,7 +6,6 @@ import { __resetReloadGuard, holdReload, releaseReload } from "./reload-guard";
 import {
   __resetSelfUpdate,
   __setReloadImpl,
-  selfUpdateBannerVisible,
   startSelfUpdate,
 } from "./self-update";
 
@@ -49,19 +48,17 @@ describe("hysteresis — two consecutive stale observations required", () => {
     observeServerBuild("0.13.0+other.2"); // a DIFFERENT stale id → pending resets, no confirm
     observeServerBuild("test"); // settles back to the current build → cleared
     expect(reload).not.toHaveBeenCalled();
-    expect(selfUpdateBannerVisible()).toBe(false);
   });
 });
 
 describe("loop guard — auto-reload at most once per build id", () => {
-  it("shows the banner instead of reloading when already auto-reloaded for this id", () => {
+  it("does not repeat an automatic update for the same build", () => {
     const reload = vi.fn();
     __setReloadImpl(reload);
     sessionStorage.setItem(`collie:auto-reloaded-for=${STALE}`, "1"); // pretend we already reloaded
     observeServerBuild(STALE);
     observeServerBuild(STALE); // confirmed, but already-reloaded → banner, NOT another reload
     expect(reload).not.toHaveBeenCalled();
-    expect(selfUpdateBannerVisible()).toBe(true);
   });
 
   it("sets the sessionStorage guard when it does auto-reload", () => {
@@ -73,18 +70,16 @@ describe("loop guard — auto-reload at most once per build id", () => {
 });
 
 describe("safety gate — never reload over unsent work", () => {
-  it("shows the banner while a hold is active, then auto-reloads when the hold clears", () => {
+  it("waits while a hold is active, then updates when it clears", () => {
     const reload = vi.fn();
     __setReloadImpl(reload);
     holdReload("composer:w1:p1"); // e.g. unsent composer text
     observeServerBuild(STALE);
     observeServerBuild(STALE); // confirmed but held → banner, no reload
     expect(reload).not.toHaveBeenCalled();
-    expect(selfUpdateBannerVisible()).toBe(true);
 
     releaseReload("composer:w1:p1"); // hold clears while still stale → reload now
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(selfUpdateBannerVisible()).toBe(false);
   });
 });
 
@@ -101,6 +96,5 @@ describe("update path — fires regardless of service-worker presence (checkForU
     observeServerBuild(STALE);
     observeServerBuild(STALE);
     expect(vi.mocked(checkForUpdate)).not.toHaveBeenCalled();
-    expect(selfUpdateBannerVisible()).toBe(true);
   });
 });

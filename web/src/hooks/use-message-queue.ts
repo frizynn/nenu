@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import {
   fetchMessageQueue,
   changeMessageQueue,
@@ -43,6 +44,7 @@ export function useMessageQueue(
 ) {
   const [page, setPage] = useState<MessageQueuePage | null>(null);
   const [error, setError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
   const [busy, setBusy] = useState(false);
   const current = useRef(`${paneId}:${session}`);
   current.current = `${paneId}:${session}`;
@@ -52,12 +54,14 @@ export function useMessageQueue(
     setPage(null);
     setBusy(false);
     setError("");
+    setRefreshError("");
     pending.current = null;
   }, [paneId, session]);
   useEffect(() => {
     if (!enabled) return;
     const scope = current.current;
     let stopped = false;
+    let failedAt: number | null = null;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
     const poll = async () => {
@@ -71,11 +75,14 @@ export function useMessageQueue(
         );
         if (!stopped && current.current === scope) {
           setPage(next);
-          setError("");
+          failedAt = null;
+          setRefreshError("");
         }
       } catch {
-        if (!stopped && !controller.signal.aborted)
-          setError("Could not refresh the queue.");
+        if (!stopped && !controller.signal.aborted) {
+          failedAt ??= Date.now();
+          if (Date.now() - failedAt >= CONNECTION_LOST_MS) setRefreshError("Could not refresh the queue.");
+        }
       } finally {
         controller = undefined;
         if (!stopped) timer = setTimeout(poll, 3000);
@@ -156,5 +163,5 @@ export function useMessageQueue(
     },
     [page, busy, paneId, session, storageKey],
   );
-  return { page, error, busy, mutate };
+  return { page, error, refreshError, busy, mutate };
 }

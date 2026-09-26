@@ -16,6 +16,7 @@ import { checkForUpdate } from "@/lib/pwa";
 export function BuildStamp({ className }: { className?: string }) {
   const serverBuild = useServerBuild();
   const [updating, setUpdating] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
     // Initial fill: the poll-driven header normally seeds the store first, but fetch config once so
@@ -36,11 +37,11 @@ export function BuildStamp({ className }: { className?: string }) {
 
   const stale = isStaleBuild(BUILD.id, serverBuild);
 
-  function update() {
-    // Hand off to the SW update flow: force a check, then let the new worker activate and reload us
-    // (see lib/pwa.ts). The reload navigates away, so `updating` is just feedback until it does.
+  async function update() {
     setUpdating(true);
-    void checkForUpdate();
+    setFailed(false);
+    const ready = await checkForUpdate();
+    if (!ready) { setFailed(true); setUpdating(false); }
   }
 
   return (
@@ -50,6 +51,7 @@ export function BuildStamp({ className }: { className?: string }) {
         className,
       )}
     >
+      {failed && <p role="status" className="mb-1">Update could not finish. Your session is unchanged. Try again when the connection improves.</p>}
       <span className="font-mono">{buildLabel()}</span>
       {stale && (
         <>

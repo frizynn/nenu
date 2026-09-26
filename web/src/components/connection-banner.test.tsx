@@ -1,232 +1,91 @@
 import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
+import { __resetConnectionHealth, markLive, CONNECTION_LOST_MS } from "@/lib/connection-health";
+import { ConnectionBanner, RECOVERY_QUIET_MS } from "./connection-banner";
 
-import { ConnectionBanner, EXIT_MS, GREEN_MS } from "./connection-banner";
-
-// Drive the two shared-clock thresholds directly so the amber→red→green STATE MACHINE can be tested
-// without burning real seconds; the 4s/15s wall-clock lockstep itself is proven in
-// use-connection-lost.test.ts. The mocks ignore their arg and return the staged values.
-const h = vi.hoisted(() => ({ trouble: false, lost: false }));
-vi.mock("@/hooks/use-connection-lost", () => ({
-  useConnectionTrouble: () => h.trouble,
-  useConnectionLost: () => h.lost,
-}));
-
-// The /api/config probe (red only) — controllable + counted, so we don't lean on MSW timing under fake
-// timers. `reachable` false makes fetchConfig throw (bridge unreachable).
-const cfg = vi.hoisted(() => ({ reachable: true, calls: 0 }));
-vi.mock("@/lib/api", () => ({
-  fetchConfig: vi.fn(async () => {
-    cfg.calls += 1;
-    if (!cfg.reachable) throw new Error("unreachable");
-    return { push: false, vapidPublicKey: "" };
-  }),
-}));
-
-function setOnline(value: boolean) {
-  Object.defineProperty(navigator, "onLine", { configurable: true, get: () => value });
-}
-
-// A harness whose own state forces the banner to re-render (creating a fresh element so the mocked
-// hooks are re-read) — RouterProvider re-rendered with the same static route element would bail out.
-let rerenderBanner: () => void = () => {};
-
-function renderBanner(
-  props: {
-    bridge?: "connected" | "disconnected";
-    error?: boolean;
-    authError?: boolean;
-    lastSeenAt?: number;
-  } = {},
-) {
+type Props = Parameters<typeof ConnectionBanner>[0];
+function renderBanner(initial: Partial<Props> = {}) {
+  let update: (props: Partial<Props>) => void = () => {};
   function Harness() {
-    const [, setN] = useState(0);
-    rerenderBanner = () => setN((n) => n + 1);
-    return (
-      <ConnectionBanner
-        bridge={props.bridge ?? "disconnected"}
-        error={props.error ?? false}
-        authError={props.authError ?? false}
-        lastSeenAt={props.lastSeenAt}
-      />
-    );
+    const [props, setProps] = useState<Props>({ bridge: "connected", error: false, authError: false, ...initial });
+    update = (next) => setProps((old) => ({ ...old, ...next }));
+    return <ConnectionBanner {...props} />;
   }
-  const router = createMemoryRouter([{ path: "/", element: <Harness /> }]);
-  return render(<RouterProvider router={router} />);
+  const loader = vi.fn(() => null);
+  const router = createMemoryRouter([{ path: "/", loader, element: <Harness /> }], {
+    hydrationData: { loaderData: { "0": null } },
+  });
+  const view = render(<RouterProvider router={router} />);
+  return { update, loader, close: () => { view.unmount(); router.dispose(); } };
 }
+beforeEach(() => { vi.useFakeTimers(); __resetConnectionHealth(); });
+afterEach(() => vi.useRealTimers());
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  h.trouble = false;
-  h.lost = false;
-  cfg.reachable = true;
-  cfg.calls = 0;
-  setOnline(true);
-});
-afterEach(() => {
-  vi.useRealTimers();
-  setOnline(true);
-});
-
-describe("ConnectionBanner — the single connection surface", () => {
-  it("shows the auth refusal with Reload and no connection treatment", () => {
-    h.trouble = true;
-    h.lost = true;
-    renderBanner({ authError: true });
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Access refused. This is not a connection problem.",
-    );
-    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
-    expect(screen.queryByText("Reconnecting…")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-    expect(document.querySelector(".animate-spin")).toBeNull();
-    expect(cfg.calls).toBe(0);
-  });
-
-  // The escape hatch for an installed PWA, which has no address bar: a real link to the one path the
-  // service worker always passes to the network. It must stay an <a> with a real href — a button
-  // with an onClick would be a same-document action the SW never sees as a navigation, which is the
-  // whole bug (#31). If this assertion is ever "fixed" by swapping in a Button, the PWA is bricked
-  // again behind a refused session and nothing else will fail.
-  it("offers a real link to the reserved proxy path, not a click handler", () => {
-    renderBanner({ authError: true });
-
-    const signIn = screen.getByRole("link", { name: "Sign in" });
-    expect(signIn).toHaveAttribute("href", "/auth/");
-  });
-
-  it("renders nothing while healthy — no bar at all", () => {
-    renderBanner({ bridge: "connected" });
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("fades in amber 'Reconnecting…' on sustained trouble — ambient, no Retry button", () => {
-    h.trouble = true;
-    renderBanner();
-    const row = screen.getByRole("status");
-    expect(row).toHaveTextContent("Reconnecting…");
-    expect(row.className).toMatch(/bg-status-working/); // amber = checking
-    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull(); // ambient → no actions
-  });
-
-  it("escalates to a red alert with Retry + Reload once lost, naming Herdr when the bridge answers", async () => {
-    h.trouble = true;
-    h.lost = true;
-    cfg.reachable = true; // the config probe succeeds → the bridge is up, so Herdr is the outage
-    renderBanner();
-    await act(async () => {}); // flush the probe microtask
-    const row = screen.getByRole("alert");
-    expect(row.className).toMatch(/bg-status-blocked/); // red = failed
-    expect(row).toHaveTextContent("Herdr is down on the host");
-    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /reload/i })).toBeInTheDocument();
-  });
-
-  it("says 'Offline' in red when the probe fails AND the browser reports offline", async () => {
-    h.lost = true;
-    cfg.reachable = false;
-    setOnline(false);
-    renderBanner();
-    await act(async () => {});
-    expect(screen.getByText("Offline — can't reach Nenu")).toBeInTheDocument();
-    expect(screen.getByRole("alert").className).toMatch(/bg-status-blocked/); // offline is always red
-  });
-
-  it("says 'Can't reach Nenu' when the probe fails but the browser still reports online", async () => {
-    h.lost = true;
-    cfg.reachable = false;
-    setOnline(true);
-    renderBanner();
-    await act(async () => {});
-    expect(screen.getByText("Can't reach Nenu")).toBeInTheDocument();
-  });
-
-  // A cold boot with the tunnel down re-renders the whole herd from cache, which looks exactly like a
-  // live one. The red row is where that gets named.
-  it("dates the red row when the data on screen came from the cache", async () => {
-    h.lost = true;
-    cfg.reachable = false;
-    setOnline(true);
-    renderBanner({ error: true, lastSeenAt: new Date(2026, 0, 2, 14, 32).getTime() });
-    await act(async () => {});
-    expect(screen.getByRole("alert")).toHaveTextContent(/Can't reach Nenu — last seen \d/);
-  });
-
-  it("leaves the red row undated when nothing can date it", async () => {
-    h.lost = true;
-    cfg.reachable = false;
-    renderBanner({ error: true });
-    await act(async () => {});
-    expect(screen.getByRole("alert")).not.toHaveTextContent(/last seen/);
-  });
-
-  it("Retry re-probes the bridge", async () => {
-    h.lost = true;
-    renderBanner();
-    await act(async () => {});
-    expect(cfg.calls).toBe(1); // probed once when it appeared
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-    });
-    expect(cfg.calls).toBe(2); // Retry ran a fresh probe
-  });
-
-  it("is one crisp, non-wrapping row (text-xs, a single truncating flex-1 copy span)", async () => {
-    h.lost = true;
-    renderBanner();
-    await act(async () => {});
-    const row = screen.getByRole("alert");
-    expect(row.className).toMatch(/text-xs/);
-    expect(row.className).not.toMatch(/flex-wrap/);
-    expect(row.querySelector("span.truncate.flex-1")).not.toBeNull();
-  });
-
-  it("flashes green 'Connected' only after a visible bar recovers, then collapses and unmounts", () => {
-    h.trouble = true;
-    renderBanner();
-    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
-
-    // Recover: the signals go healthy → because a bar WAS visible, a green confirmation appears.
-    h.trouble = false;
-    act(() => rerenderBanner());
-    const green = screen.getByRole("status");
-    expect(green).toHaveTextContent("Connected");
-    expect(green.className).toMatch(/bg-status-done/); // green = established
-
-    // It lingers ~1.8s, then the row collapses and the DOM node unmounts (delayed-unmount exit).
-    act(() => vi.advanceTimersByTime(GREEN_MS));
-    expect(screen.getByText("Connected")).toBeInTheDocument(); // still there, collapsing
-    act(() => vi.advanceTimersByTime(EXIT_MS));
-    expect(screen.queryByText("Connected")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("shows nothing on a blip that never reached trouble — green needs a visible bar first", () => {
-    renderBanner({ bridge: "connected" });
-    // Never troubled → never showed a bar → a later 'recovery' re-render must not flash green.
-    act(() => rerenderBanner());
-    act(() => vi.advanceTimersByTime(GREEN_MS + EXIT_MS));
-    expect(screen.queryByText("Connected")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-  });
+it("keeps repeated brief signal losses quiet", () => {
+  const h = renderBanner();
+  for (let cycle = 0; cycle < 3; cycle++) {
+    act(() => h.update({ error: true }));
+    act(() => vi.advanceTimersByTime(6_000));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    act(() => { markLive(); h.update({ error: false }); });
+    expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
+  }
+  h.close();
 });
 
-it("keeps brief signal losses quiet", () => {
-  h.trouble = true;
-  h.lost = false;
-  renderBanner({ bridge: "connected", error: true });
-  expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
+it("shows one notice for a sustained outage, with Retry and without Reload", () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  expect(screen.getByRole("status")).toHaveTextContent("Connection is unstable. Retrying…");
+  expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+  h.close();
+});
+
+it("keeps the notice stable until successful reads remain stable, without a Connected flash", () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  act(() => { markLive(); h.update({ error: false }); });
+  act(() => vi.advanceTimersByTime(RECOVERY_QUIET_MS - 1));
+  expect(screen.getByRole("status")).toBeInTheDocument();
+  act(() => h.update({ error: true }));
+  act(() => vi.advanceTimersByTime(2_000));
+  expect(screen.getByRole("status")).toBeInTheDocument();
+  act(() => { markLive(); h.update({ error: false }); });
+  act(() => vi.advanceTimersByTime(RECOVERY_QUIET_MS));
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
+  h.close();
 });
 
-it("recovers without a Connected celebration on each signal change", async () => {
-  h.lost = true;
-  renderBanner({ bridge: "connected", error: true });
-  await act(async () => {});
-  h.lost = false;
-  act(() => rerenderBanner());
-  expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
+it("names Herdr only when the snapshot reports Herdr unavailable", () => {
+  const h = renderBanner({ bridge: "disconnected" });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  expect(screen.getByRole("status")).toHaveTextContent("Herdr is unavailable. Retrying…");
+  h.close();
+});
+
+it("dates stale content without claiming it was freshly fetched", () => {
+  const h = renderBanner({ error: true, lastSeenAt: new Date(2026, 0, 2, 14, 32).getTime() });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  expect(screen.getByRole("status")).toHaveTextContent(/Last synced \d/);
+  h.close();
+});
+
+it("Retry refreshes data without reloading the page", async () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+  expect(h.loader).toHaveBeenCalledTimes(1);
+  h.close();
+});
+
+it("shows access refusal immediately with the real sign-in escape", () => {
+  const h = renderBanner({ authError: true });
+  expect(screen.getByRole("alert")).toHaveTextContent("Access refused. This is not a connection problem.");
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/");
+  expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  h.close();
 });

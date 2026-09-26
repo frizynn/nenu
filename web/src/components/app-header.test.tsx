@@ -117,7 +117,7 @@ describe("AppHeader — the dog keys on trouble/lost, not the first not-live fra
   });
   afterEach(() => vi.useRealTimers());
 
-  it("stays a static icon during a brief not-live spell, gallops at 4s, rests muted at 15s", () => {
+  it("stays static through brief signal losses and becomes muted only for a sustained outage", () => {
     const { container } = renderHeader(<AppHeader bridge="connected" error onHome={() => {}} />);
     // A single not-live frame is NOT trouble yet: the mark stays the static, full-color icon.
     expect(container.querySelector(".dog-gallop")).toBeNull();
@@ -126,7 +126,7 @@ describe("AppHeader — the dog keys on trouble/lost, not the first not-live fra
 
     // Sustained trouble (4s) → the dog gallops (agreeing with the amber bar).
     act(() => vi.advanceTimersByTime(TROUBLE_MS));
-    expect(container.querySelector(".dog-gallop")).toHaveClass("dog-gallop--running");
+    expect(container.querySelector(".dog-gallop")).toBeNull();
 
     // Escalated to lost (15s) → the gallop stops and the mark rests on the muted static icon.
     act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS - TROUBLE_MS));

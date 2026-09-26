@@ -68,8 +68,25 @@ it("keeps cached queue refresh failures quiet while a brief drop recovers", asyn
     await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
     expect(hook.result.current.page).toEqual(page);
     expect(hook.result.current.error).toBe("");
+    expect(hook.result.current.refreshError).toBe("");
     vi.mocked(fetchMessageQueue).mockResolvedValue(page);
     await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
     expect(hook.result.current.error).toBe("");
+  } finally { hook.unmount(); vi.useRealTimers(); }
+});
+
+
+it("keeps mutation failures separate from background refreshes and reports sustained queue errors", async () => {
+  vi.useFakeTimers();
+  const hook = renderHook(() => useMessageQueue("pane", "session", true));
+  try {
+    await act(async () => {});
+    vi.mocked(changeMessageQueue).mockRejectedValue(new Error("Message was not acknowledged"));
+    await act(async () => { await hook.result.current.mutate("add", "draft"); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(hook.result.current.error).toBe("Message was not acknowledged");
+    vi.mocked(fetchMessageQueue).mockRejectedValue(new Error("queue unavailable"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(hook.result.current.refreshError).toBe("Could not refresh the queue.");
   } finally { hook.unmount(); vi.useRealTimers(); }
 });

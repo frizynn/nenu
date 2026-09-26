@@ -865,3 +865,24 @@ it("keeps an open session on screen when a newer build is announced, even withou
     expect(reload).not.toHaveBeenCalled();
   } finally { stop(); __resetServerBuild(); __resetSelfUpdate(); }
 });
+
+
+it("allows a send attempt during a brief signal loss and retains the draft if it fails", async () => {
+  __resetConnectionHealth();
+  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
+  renderChat({ error: true });
+  const box = screen.getByPlaceholderText(/type a reply/i);
+  await userEvent.type(box, "keep this during weak signal");
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(send).toBeEnabled();
+  await userEvent.click(send);
+  await waitFor(() => expect(send).toBeEnabled());
+  expect(box).toHaveValue("keep this during weak signal");
+});
+
+
+it("blocks sending immediately after access is refused, without waiting for the outage grace", async () => {
+  __resetConnectionHealth();
+  renderChat({ error: true, authError: true });
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+});
