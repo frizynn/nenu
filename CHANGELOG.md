@@ -11,12 +11,12 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.46.0] - 2026-09-26
 
 ### Added
-- Open subagent conversations in the main chat and return to Main with the draft preserved.
-- Browse the working directory as an expandable tree; search and filter recent artifacts by type and extension.
+- Open subagent conversations in the main chat and return to Main with the draft preserved. (b95a893)
+- Browse the working directory as an expandable tree; search and filter recent artifacts by type and extension. (b95a893)
 
 ### Fixed
-- Collapse inactive agents and distinguish designboard canvases from HTML source files.
-- Preview designboards in view mode so their editor does not cover the canvas on phones.
+- Collapse inactive agents and distinguish designboard canvases from HTML source files. (b95a893)
+- Preview designboards in view mode so their editor does not cover the canvas on phones. (b95a893)
 
 ## [0.45.7] - 2026-09-26
 
