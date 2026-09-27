@@ -17,11 +17,19 @@ it.each(["idle-shortcuts-v0157", "shared-shortcuts-v0157"])("accepts the real 0.
   expect(codexAdapter.extractInputDraft?.(pane)).toBeNull();
 });
 
-it("does not treat plain shortcut prose or a trailing dialog as an input box", () => {
+// The row under a 0.157 status row is read by its SHAPE, with the status row straight above it as the
+// evidence (upstream 8139d9fb, #294): a Codex started with no Herdr client paints the hint with no
+// colour, and a right-aligned notice (`⚠ 1 warning · f2 to view`) shares the row. So an unstyled hint
+// is still a composer. What stays refused is a tail the status row does not sit straight above.
+it("reads the hint row by shape, and only straight under the status row", () => {
   const captureText = capture("idle-shortcuts-v0157");
   const unstyledHint = captureText.replace(/\x1b\[1m\x1b\[38;2;255;255;255m\?/, "?");
-  expect(codexAdapter.composerReady?.(lines(unstyledHint))).toBe(false);
+  expect(unstyledHint).not.toBe(captureText);
+  expect(codexAdapter.composerReady?.(lines(unstyledHint))).toBe(true);
+  // Two rows under the status row, or a column-0 row under it, is not the hint row.
   expect(codexAdapter.composerReady?.(lines(`${captureText}\n  Press enter to confirm or esc to go back`))).toBe(false);
+  expect(codexAdapter.composerReady?.(lines(`${unstyledHint}\n  Press enter to confirm or esc to go back`))).toBe(false);
+  expect(codexAdapter.composerReady?.(lines(`${captureText}\nPress enter to confirm`))).toBe(false);
 });
 
 describe("Codex 0.153.4 command autocomplete", () => {
@@ -104,7 +112,8 @@ it("keeps the real composer readable when typing replaces shortcuts with the que
   const sent = "/tmp/nenu-test-image.png Respond only NENU_IMAGE_OK. Do not run tools or read files. This is a test of the attached image in the mobile composer.";
   expect(codexAdapter.composerReady?.(pane)).toBe(true);
   expect(draftCarriesSend(sent, codexAdapter.extractInputDraft?.(pane) ?? null)).toBe(true);
-  expect(codexAdapter.composerReady?.(lines(text.replace(/\x1b\[1m\x1b\[38;2;255;255;255mtab/, "tab")))).toBe(false);
+  // An unstyled queue hint is read by shape under the status row (see the hint-row test above).
+  expect(codexAdapter.composerReady?.(lines(text.replace(/\x1b\[1m\x1b\[38;2;255;255;255mtab/, "tab")))).toBe(true);
   expect(codexAdapter.composerReady?.(lines(text + "\n  Press enter to approve"))).toBe(false);
 });
 

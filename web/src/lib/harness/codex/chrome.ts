@@ -9,6 +9,7 @@
 import type { StyledLine } from "../../blocks";
 import {
   isBlank,
+  isHintRow,
   isStatusRow,
   lastNonBlankIndex,
   lineText,
@@ -254,11 +255,18 @@ function isDimPlaceholder(line: StyledLine, canonicalText = rstrip(lineText(line
 /** The composer at the buffer tail, or null (a dialog owns the screen, or the frame is torn). */
 export function locateComposer(lines: StyledLine[]): ComposerBox | null {
   const texts = lines.map((l) => rstrip(lineText(l)));
-  let statusRow = lastNonBlankIndex(texts);
-  if (statusRow < 0) return null;
+  const last = lastNonBlankIndex(texts);
+  if (last < 0) return null;
+  let statusRow = last;
   // 0.157 keeps status above a separate hint. Typing replaces shortcuts with the queue hint.
-  // Skip only the exact renderer-owned text and key paint; the status anchor remains required.
-  if (isComposerHint(lines[statusRow]!, texts[statusRow]!)) statusRow--;
+  // The exact renderer-owned text and key paint is skipped on its own evidence. Any other row under
+  // the status row (a right-aligned notice, `← for agents`, a hint a client-less Codex paints with no
+  // colour) is skipped by its SHAPE, and only when the row straight above it is a whole status row:
+  // the status anchor remains required either way (`isHintRow`, #294).
+  if (isComposerHint(lines[last]!, texts[last]!)) statusRow--;
+  else if (last > 0 && isHintRow(texts[last]!, lines[last]) && isStatusRow(texts[last - 1]!, lines[last - 1])) {
+    statusRow--;
+  }
   if (statusRow < 0) return null;
   if (!isStatusRow(texts[statusRow]!, lines[statusRow])) {
     return locateQueuedComposer(lines, texts, statusRow) ?? locateCommandAutocomplete(lines, texts, statusRow);
