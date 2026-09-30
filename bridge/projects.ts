@@ -152,6 +152,7 @@ function threadView(record: TomlObject, pane: AgentView | undefined): ProjectThr
     parentId,
     role,
     status: safeStatus,
+    ...(typeof record.template === "string" ? { template: record.template } : {}),
     updated: string(record.updated) || undefined,
     ...(pane ? { paneId: pane.paneId, agent: pane.agent, liveStatus: pane.status } : {}),
   };

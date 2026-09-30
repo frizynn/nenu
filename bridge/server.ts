@@ -41,6 +41,13 @@ import { stripAnsi } from "./journal/text.ts";
 import type { JournalAdapter } from "./journal/types.ts";
 import { toPaneWire } from "./types.ts";
 import { ProjectRegistry } from "./projects.ts";
+import {
+  defaultOrgRun,
+  listTemplates,
+  OrgValidationError,
+  resolveNode,
+  startFromTemplate,
+} from "./org-cli.ts";
 import type {
   ActionResponse,
   AgentView,
@@ -75,6 +82,7 @@ const PROMPT_BINDING_BLANK_LINE_HEADROOM = 6;
 // — only the static UI 503s with a hint to build.
 const WEB_DIR = join(import.meta.dir, "..", "web", "dist");
 const projects = new ProjectRegistry();
+const orgRun = defaultOrgRun();
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -240,6 +248,90 @@ export function startServer(opts: {
       const sessionName = url.searchParams.get("session") ?? undefined;
       const unknownSession = () =>
         jsonError(`unknown session: ${sessionName ?? ""}`, 404, req.headers.get("accept-encoding"));
+
+      if (pathname === "/api/org/templates" && req.method === "GET") {
+        const gate = checkAccess(req, cfg);
+        if (!gate.ok) return text(gate.reason, 403);
+        try {
+          const templates = await listTemplates(orgRun, url.searchParams.get("project") ?? "");
+          return json({ ok: true, templates }, req.headers.get("accept-encoding"));
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not list templates.",
+          }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
+
+      if (pathname === "/api/org/node/start" && req.method === "POST") {
+        const denied = guard(req, cfg, "write");
+        if (denied) return denied;
+        const rt = registry.get(sessionName);
+        if (!rt) return unknownSession();
+        const acceptEncoding = req.headers.get("accept-encoding");
+        const body: unknown = await req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
+        }
+        const project = "project" in body ? body.project : undefined;
+        const template = "template" in body ? body.template : undefined;
+        const title = "title" in body ? body.title : undefined;
+        const parent = "parent" in body ? body.parent : undefined;
+        const task = "task" in body ? body.task : undefined;
+        if (
+          typeof project !== "string" || typeof template !== "string" || typeof title !== "string" ||
+          typeof parent !== "string" || typeof task !== "string"
+        ) {
+          return json({ ok: false, error: "Project, template, title, parent, and task must be text." }, acceptEncoding, 400);
+        }
+        try {
+          const node = await startFromTemplate(orgRun, rt.socketPath, { project, template, title, parent, task });
+          audit.record({
+            action: "org.node.start",
+            session: rt.name,
+            device: deviceAuth(req, cfg).device,
+            detail: { project, template, title, parent },
+          });
+          return json({ ok: true, node }, acceptEncoding);
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not start node.",
+          }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
+
+      if (pathname === "/api/org/node/resolve" && req.method === "POST") {
+        const denied = guard(req, cfg, "write");
+        if (denied) return denied;
+        const rt = registry.get(sessionName);
+        if (!rt) return unknownSession();
+        const acceptEncoding = req.headers.get("accept-encoding");
+        const body: unknown = await req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
+        }
+        const project = "project" in body ? body.project : undefined;
+        const id = "id" in body ? body.id : undefined;
+        if (typeof project !== "string" || typeof id !== "string") {
+          return json({ ok: false, error: "Project and node ID must be text." }, acceptEncoding, 400);
+        }
+        try {
+          await resolveNode(orgRun, rt.socketPath, { project, id });
+          audit.record({
+            action: "org.node.resolve",
+            session: rt.name,
+            device: deviceAuth(req, cfg).device,
+            detail: { project, id },
+          });
+          return json({ ok: true }, acceptEncoding);
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not close node.",
+          }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
 
       // ── Live state (polled by the client) ────────────────────────────────
       if (pathname === "/api/snapshot") {

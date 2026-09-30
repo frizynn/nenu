@@ -190,6 +190,11 @@ Discovery follows `HERDR_PROJECTS_ROOT`, then `root` in `~/.config/herdr-project
 `~/.herdr-projects`. Projects are scoped to their recorded Herdr session. The overview reads existing
 project records and live panes; it does not create projects or start agents.
 
+On a project page, **Templates** lists available `herdr-organizations` templates. Choose **Open** to
+enter a title, parent, and task, then choose **Start** to open the node. Choose **Close** on an active
+thread to close its node and view while keeping its branch, worktree, and report. These actions
+require a device with write access and a `herdr-organizations` CLI that supports templates.
+
 In a chat, open **Files and photos** to browse file references and images from its available journal.
 The browser can load older entries and reports when the underlying journal is truncated. File
 previews retain the existing workspace and private-file restrictions; a reference does not guarantee

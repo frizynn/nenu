@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-09-30
+
+### Added
+- Show project templates and let operators start or close organization nodes. (12ff937)
+
 ## [0.46.3] - 2026-09-30
 
 ### Fixed
