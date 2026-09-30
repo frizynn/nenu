@@ -14,6 +14,7 @@ import type {
   PaneSkillsResponse,
   PaneReadResponse,
   SnapshotResponse,
+  TemplateView,
   UpdateInfo,
   UploadResponse,
 } from "./types";
@@ -75,6 +76,8 @@ export function isApiErrorStatus(error: unknown, status: number): boolean {
 const GET_TIMEOUT_MS = 10_000;
 //   - Mutations drive a real terminal on the host, which can legitimately take a beat — more slack.
 const MUTATION_TIMEOUT_MS = 20_000;
+const ORG_LIST_TIMEOUT_MS = 15_000;
+const ORG_MUTATION_TIMEOUT_MS = 35_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -193,10 +196,10 @@ function captureBuild(res: Response): void {
  */
 type Recover<T> = (status: number, detail: string) => T | null;
 
-async function doReq<T>(path: string, init?: RequestInit, recover?: Recover<T>): Promise<T> {
+async function doReq<T>(path: string, init?: RequestInit, recover?: Recover<T>, timeoutOverride?: number): Promise<T> {
   // GET reads get the short leash; anything mutating gets the longer mutation budget.
   const method = init?.method?.toUpperCase() ?? "GET";
-  const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : MUTATION_TIMEOUT_MS;
+  const timeoutMs = timeoutOverride ?? (method === "GET" ? GET_TIMEOUT_MS : MUTATION_TIMEOUT_MS);
   const res = await apiFetch(path, {
     ...init,
     signal: withTimeout(init?.signal, timeoutMs),
@@ -220,8 +223,8 @@ async function doReq<T>(path: string, init?: RequestInit, recover?: Recover<T>):
 // Every mutating request (non-GET) feeds the app-wide busy signal so the top progress bar shows
 // while it's in flight; GET reads (snapshot/config polling) don't, or the bar would never rest.
 // trackBusy increments synchronously, so a caller sees `isBusy()` true the instant it fires.
-function req<T>(path: string, init?: RequestInit, recover?: Recover<T>): Promise<T> {
-  const op = doReq<T>(path, init, recover);
+function req<T>(path: string, init?: RequestInit, recover?: Recover<T>, timeoutOverride?: number): Promise<T> {
+  const op = doReq<T>(path, init, recover, timeoutOverride);
   const method = init?.method?.toUpperCase() ?? "GET";
   return method === "GET" ? op : trackBusy(op);
 }
@@ -484,6 +487,33 @@ export function createTab(
     method: "POST",
     body: JSON.stringify({ workspaceId, ...opts }),
   });
+}
+
+export function fetchOrgTemplates(
+  project: string,
+  session?: string,
+): Promise<{ ok: true; templates: TemplateView[] }> {
+  return req(withSession(`/api/org/templates?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+export function startOrgNode(
+  input: { project: string; template: string; title: string; parent: string; task: string },
+  session?: string,
+): Promise<{ ok: true; node: { id: string; parentId: string; role: string; template: string } }> {
+  return req(withSession("/api/org/node/start", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
+export function resolveOrgNode(
+  input: { project: string; id: string },
+  session?: string,
+): Promise<{ ok: true }> {
+  return req(withSession("/api/org/node/resolve", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
 export function startAgent(paneId: string, agent: "codex" | "claude", session?: string): Promise<ActionResponse> {

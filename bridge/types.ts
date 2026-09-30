@@ -135,6 +135,20 @@ export interface TabView {
 
 export type BridgeStatus = "connected" | "disconnected";
 
+export interface TemplateView {
+  name: string;
+  scope: "global" | "project";
+  description: string;
+  role: "worker" | "coordinator";
+  canSpawn: boolean;
+  harness: string;
+  model: string;
+  reasoningEffort: string;
+  rulesChars: number;
+  memoryChars: number;
+  updated: string;
+}
+
 /**
  * One entry in the snapshot's `sessions` list — a herdr session this bridge fronts. Additive: a
  * single-session deployment reports exactly one (the primary), so nothing about the UI changes.
@@ -159,6 +173,7 @@ export interface ProjectThreadView {
   parentId: string;
   role: "worker" | "coordinator";
   status: "starting" | "open" | "failed" | "resolved";
+  template?: string;
   updated?: string;
   paneId?: string;
   agent?: string;
