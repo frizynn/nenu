@@ -656,3 +656,35 @@ Two byte-faithful captures from upstream's 2.1.283 sweep, kept for the input-box
 |---|---|
 | `claude--v2283-draft-rule.txt` | Live box, draft `see this output:` / `────────────────────` / `some text` / `────────────────────` / `end`. The two rules are indented continuation rows; the box stands and the whole draft reads back |
 | `claude--v2283-draft-prompt.txt` | Live box, draft `my shell said:` / `❯ ls -la` / `and then nothing`. The indented `❯` row is draft text, not the prompt row |
+
+## Claude Code 2.1.285 and Codex 0.159.0 (captured 2026-09-30, herdr 0.9.1, macOS sandbox pane)
+
+Byte-faithful `herdr pane read --source recent --format ansi` captures from one throwaway, unfocused
+Herdr workspace in a scratch git directory, with the operator's own config (statusline included),
+while a Herdr client was attached. Each is cut to the rows its test needs. One sanitization pass,
+every substitution LENGTH-PRESERVING: the sandbox path (whole, or cut short by the pane edge)
+becomes `/private/tmp/nenu-harness-sandbox/project-directory-used-only-for-captures/…`, and the
+quota percentages on the Claude statusline become zeroes. The drafts were typed with
+`herdr pane send-text` (Codex through a bracketed paste, as the bridge does) and cleared with one
+`ctrl+c`; the only turns run were a `sleep`, and questions asked through AskUserQuestion.
+
+| Fixture | State / what's in it |
+|---|---|
+| `claude--v2285-draft-adversarial.txt` | Live box, six-row draft: `mira esta salida:` / a `────` rule / `❯ ls -la` / `1. primera opcion` / an indented row / `fin del mensaje`. Before the frame walk learned that an indented row is draft text, the `❯ ls -la` row read as the prompt and the draft came back cut short, so the send never verified |
+| `claude--v2285-shell-empty.txt` | Shell mode, empty: the prompt row is a bare `!`, and the one statusline row reads `! for shell mode`. One `ctrl+c` clears a shell-mode draft and STAYS in shell mode |
+| `claude--v2285-shell-draft.txt` | Shell mode with `ls -1 docs` typed |
+| `claude--v2285-ask-question.txt` | AskUserQuestion, one question with descriptions: `Type something.` above a rule, `Chat about this` under it, the select footer, two blank rows, then the input box's TOP BORDER carrying the session label (`── … ── Sleep 14 ─`) as the last row. Digit `2` was pressed on this dialog: it answered and submitted |
+| `claude--v2285-ask-wizard.txt` | The same closing row under a two-question stepper (`←  ☐ Fruit  ☐ Color  ✔ Submit  →`) |
+| `claude--v2285-ask-multi.txt` | The same closing row under a multiSelect question |
+| `codex--v0159-idle.txt` | Fresh thread: dim placeholder on the fill, a TWO-field status row (`GPT-6.1-Sol medium · <cwd>`, no Context field, muted-foreground separator), and the `← for agents · ? for shortcuts` hint row |
+| `codex--v0159-idle-after-turn.txt` | The same composer after one turn (`• OK`, `Worked for 36s`): still no Context field |
+| `codex--v0159-busy.txt` | `• Working (7s • esc to interrupt) · 1 background terminal running …` above the empty composer |
+| `codex--v0159-busy-draft.txt` | A three-row draft with a blank row, typed while the turn runs; the hint row reads `tab to queue message` |
+| `codex--v0159-draft-multiline.txt` | Draft holding a `────` rule, a `❯ ls -la` row and an indented `› 1. primera opcion` row. With a draft and no notice the hint row is blank |
+| `codex--v0159-slash-model.txt` | `/model` typed: 0.159.0 paints the completion ABOVE the prompt as its own column-0 `› /model  choose what model …` row, and keeps the status row |
+| `codex--v0159-trust.txt` | Trust prompt as 0.159.0 words it: `› 1. Trust and continue` / `2. Back to Agent Command Center`, footer `enter continue · esc back`. Not lifted |
+| `codex--v0159-update-dialog.txt` | `Update available · 0.159.0 → 0.159.2` with three numbered rows, footer `enter continue · esc skip`. Not lifted, on purpose |
+
+Seen and NOT captured into the corpus: Claude's background-agents screen (it lists the operator's
+other sessions by title), and the slash and `@` completion popups, which 2.1.285 paints ABOVE the
+input box where they read as transcript.

@@ -58,6 +58,11 @@ const NEUTRAL = [
   // text (ADR 0048 addendum 2026-09-26).
   "claude--v2283-draft-prompt.txt",
   "claude--v2283-draft-rule.txt",
+  // Claude Code 2.1.285 (captured 2026-09-30): the same draft shape on the installed version, and
+  // shell mode. Live input boxes, never a dialog.
+  "claude--v2285-draft-adversarial.txt",
+  "claude--v2285-shell-draft.txt",
+  "claude--v2285-shell-empty.txt",
 ];
 
 const allClaudeFixtures = readdirSync(PANES_DIR)

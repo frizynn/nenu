@@ -66,6 +66,14 @@ const PINNED = [
   "codex--v0157-draft-notice.txt",
   "codex--v0157-idle-50.txt",
   "codex--v0157-idle.txt",
+  "codex--v0159-busy-draft.txt",
+  "codex--v0159-busy.txt",
+  "codex--v0159-draft-multiline.txt",
+  "codex--v0159-idle-after-turn.txt",
+  "codex--v0159-idle.txt",
+  "codex--v0159-slash-model.txt",
+  "codex--v0159-trust.txt",
+  "codex--v0159-update-dialog.txt",
   "codex--working.txt",
 ];
 
@@ -1253,5 +1261,76 @@ describe("the quiet-foreground separator paint (0.156.1)", () => {
     const left = `  ${FIELD}model${OFF}${sep(MUTED)}${FIELD2}/dir${OFF}        `;
     expect(accepts(`${left}${NOTICE} plain words`)).toBe(false);
     expect(accepts(`${left}${BG}${MUTED}⚠ 1 warning${OFF}`)).toBe(false);
+  });
+});
+
+// Codex 0.159.0, the version on the operator's machine (captured 2026-09-30 in a sandbox pane,
+// fixtures README → "Codex 0.159.0 corpus"). A NEW thread's status row is two fields with no Context
+// field, separated by the theme's muted foreground, and one key-hint row sits under it. Before the
+// 0.156.1 and 0.157 readers were brought over, none of these screens had a composer: the phone
+// refused every message to a fresh Codex, the first one included.
+describe("Codex 0.159.0", () => {
+  const DRAFT =
+    "mira esta salida: ──────────────────── ❯ ls -la › 1. primera opcion con sangria fin del mensaje";
+  const SENT = "mira esta salida:\n────────────────────\n❯ ls -la\n› 1. primera opcion\n  con sangria\n\nfin del mensaje";
+  const QUEUED = "un borrador mientras codex trabaja segunda linea en cola tercera";
+
+  const READY = [
+    ["codex--v0159-idle.txt", null, "  ← for agents · ? for shortcuts"],
+    ["codex--v0159-idle-after-turn.txt", null, "  ← for agents · ? for shortcuts"],
+    ["codex--v0159-busy.txt", null, "  ← for agents · ? for shortcuts"],
+    ["codex--v0159-busy-draft.txt", QUEUED, "  tab to queue message"],
+  ] as const;
+
+  it.each(READY)("%s: the composer is found above the hint row", (name, draft, hint) => {
+    const lines = fixtureLines(name);
+    const texts = lines.map((l) => lineText(l).trimEnd());
+    const last = texts.findLastIndex((t) => t.trim() !== "");
+    expect(texts[last]).toBe(hint);
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(locateComposer(lines)!.statusRow).toBe(last - 1);
+    expect(codexAdapter.extractInputDraft(lines)).toBe(draft);
+    expect(buildBlocks(lines, { agent: "codex" }).map((b) => b.kind)).toEqual(["raw"]);
+    expect(lineText(codexAdapter.extractStatusLines(lines)[0]!)).toMatch(/^ {2}GPT-6\.1-Sol medium · \//);
+  });
+
+  it("a draft typed while Codex works reads back whole, blank row included, and is send evidence", () => {
+    const lines = fixtureLines("codex--v0159-busy-draft.txt");
+    const sent = "un borrador mientras codex trabaja\nsegunda linea en cola\n\ntercera";
+    expect(draftCarriesSend(sent, codexAdapter.extractInputDraft(lines))).toBe(true);
+    // The turn above stays in the mirror; the composer leaves it.
+    const kept = stripChrome(lines).map(lineText).join("\n");
+    expect(kept).toContain("• Working (11s • esc to interrupt)");
+    expect(kept).not.toContain("tab to queue message");
+  });
+
+  it("a draft holding a rule, a `❯` row and a `›` row is one draft, with no hint row under it", () => {
+    const lines = fixtureLines("codex--v0159-draft-multiline.txt");
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    const draft = codexAdapter.extractInputDraft(lines);
+    expect(draft).toBe(DRAFT);
+    expect(draftCarriesSend(SENT, draft)).toBe(true);
+    // The pasted `› 1. primera opcion` row is indented, so the prompt row is still the first one.
+    expect(codexAdapter.composerPrompt!(lines)!.split("\n")[0]).toBe("› mira esta salida:");
+  });
+
+  it("a slash command under its completion row: the LOWEST `›` row is the prompt", () => {
+    // 0.159.0 paints the completion above the prompt, as its own column-0 `› /model  …` row.
+    const lines = fixtureLines("codex--v0159-slash-model.txt");
+    const rows = lines.map(lineText).filter((t) => t.trim() !== "");
+    expect(rows[0]).toMatch(/^› \/model {2}choose what model/);
+    expect(codexAdapter.composerReady!(lines)).toBe(true);
+    expect(codexAdapter.extractInputDraft(lines)).toBe("/model");
+    expect(codexAdapter.composerPrompt!(lines)).toBe("› /model");
+  });
+
+  // The two dialogs a fresh 0.159.0 opens with. Neither is lifted: the trust prompt's second row is
+  // now `2. Back to Agent Command Center`, a recipe nobody has pressed, and the update prompt is left
+  // to the terminal on purpose. What matters for a send is that neither reads as a composer.
+  it.each(["codex--v0159-trust.txt", "codex--v0159-update-dialog.txt"])("%s: no composer, and no buttons", (name) => {
+    const lines = fixtureLines(name);
+    expect(codexAdapter.composerReady!(lines)).toBe(false);
+    expect(codexAdapter.extractInputDraft(lines)).toBeNull();
+    expect(buildBlocks(lines, { agent: "codex" }).map((b) => b.kind)).toEqual(["raw"]);
   });
 });
