@@ -844,6 +844,9 @@ describe("real corpus — pinned so any change to the walk shows up as a diff", 
     // Claude Code 2.1.285, captured 2026-09-30 in a sandbox pane: the three question dialogs that end
     // on the input box's top border, a draft holding a pasted rule and a pasted shell prompt, and
     // shell mode (one statusline row: `! for shell mode`).
+    { fixture: "v2285-ask-multi", statusRows: 0, draft: null, stripped: 0 },
+    { fixture: "v2285-ask-question", statusRows: 0, draft: null, stripped: 0 },
+    { fixture: "v2285-ask-wizard", statusRows: 0, draft: null, stripped: 0 },
     { fixture: "v2285-draft-adversarial", statusRows: 2, draft: "mira esta salida: ──────────────────── ❯ ls -la 1. primera opcion con sangria fin del mensaje", stripped: 11 },
     { fixture: "v2285-shell-draft", statusRows: 1, draft: "ls -1 docs", stripped: 4 },
     { fixture: "v2285-shell-empty", statusRows: 1, draft: null, stripped: 4 },

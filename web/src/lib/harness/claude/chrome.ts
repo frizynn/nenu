@@ -21,6 +21,7 @@ import {
   isInputBoxTopBorder,
   isMultiStepHeader,
   lineText,
+  withoutDialogClosingRule,
 } from "./markers";
 import { detectMultiSelectRegion } from "./multi-select";
 import { detectPreviewSelectRegion } from "./preview-select";
@@ -505,7 +506,9 @@ function tailLooksModal(text: string): boolean {
 
 /** Whether any of Claude's specific dialog grammars claims the screen. Each is tail-anchored on its
  *  own footer and reads the full screen, independent of where this module thinks the box is. */
-function dialogOnScreen(lines: StyledLine[]): boolean {
+function dialogOnScreen(screen: StyledLine[]): boolean {
+  // The same view of the screen claudeBuildBlocks reads: without a question dialog's closing rule.
+  const lines = withoutDialogClosingRule(screen);
   return (
     detectPreviewSelectRegion(lines) !== null ||
     detectWizardRegion(lines) !== null ||

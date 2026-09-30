@@ -9,6 +9,7 @@ import { detectPreviewSelect } from "./claude/preview-select";
 import { detectPromptSelect } from "./claude/prompt-select";
 import { detectWizard } from "./claude/wizard";
 import { detectMenu } from "./claude/menu";
+import { withoutDialogClosingRule } from "./claude/markers";
 
 // The client half of the prompt-binding contract. See the sibling test in
 // bridge/prompt-binding.test.ts for the full reasoning; in short:
@@ -39,7 +40,9 @@ const REGIONS = JSON.parse(
 
 /** The region each detector hands to the bridge, or null when it does not recognise the pane. The
  *  order mirrors the precedence the action layer uses, so a pane is attributed to one detector. */
-function detectRegion(lines: StyledLine[]): { detector: string; region: string } | null {
+function detectRegion(screen: StyledLine[]): { detector: string; region: string } | null {
+  // The view claudeBuildBlocks reads: without the row 2.1.285 paints under a question dialog.
+  const lines = withoutDialogClosingRule(screen);
   const prompt = detectPromptSelect(lines);
   if (prompt) return { detector: "prompt-select", region: prompt.signature };
   const wizard = detectWizard(lines);

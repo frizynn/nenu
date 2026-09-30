@@ -248,5 +248,20 @@
     "fixture": "claude-lab--tasks-panel--w82.txt",
     "detector": "menu",
     "region": "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\n   Background\n\n   No tasks currently running\n\n   ↑/↓ to select · Enter to view · Esc to close"
+  },
+  {
+    "fixture": "claude--v2285-ask-question.txt",
+    "detector": "prompt-select",
+    "region": "❯ Use the AskUserQuestion tool now to ask me a single question \"Which fruit?\" with two options: Apple and Banana. Do nothing else.                                            \n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n ☐ Fruit \n\nWhich fruit?\n\n❯ 1. Apple\n     A red or green fruit\n  2. Banana\n     A yellow tropical fruit\n  3. Type something.\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  4. Chat about this\n\nEnter to select · ↑/↓ to navigate · Esc to cancel"
+  },
+  {
+    "fixture": "claude--v2285-ask-wizard.txt",
+    "detector": "wizard",
+    "region": "←  ☐ Fruit  ☐ Color  ✔ Submit  →\n\nWhich fruit?\n     \n❯ 1. Apple\n  2. Banana\n  3. Type something.\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  4. Chat about this\n\nEnter to select · Tab/Arrow keys to navigate · Esc to cancel"
+  },
+  {
+    "fixture": "claude--v2285-ask-multi.txt",
+    "detector": "multi-select",
+    "region": "←  ☐ Fruits  ✔ Submit  →\n     \nWhich fruits?\n\n❯ 1. [ ] Apple\n  2. [ ] Banana\n  3. [ ] Cherry\n  4. [ ] Type something\n     Submit\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  5. Chat about this"
   }
 ]

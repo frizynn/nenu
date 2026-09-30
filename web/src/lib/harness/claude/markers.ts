@@ -4,7 +4,7 @@
 // *between* glyphs, so a regex over the raw buffer would miss (e.g. the `❯` pointer and the `1.` are
 // separate styled segments). Pure functions, no I/O, no React.
 
-import { isBlank, lineText } from "../../blocks";
+import { isBlank, lineText, type StyledLine } from "../../blocks";
 import { CLAUDE_RULE_GLYPH_CLASS } from "../../rule-glyphs";
 import { displayWidth } from "../../text-width";
 import type { PromptFamily } from "../prompt-model";
@@ -228,4 +228,36 @@ export function classifyFooter(text: string, texts: string[]): PromptFamily | nu
   if (/ctrl\+g to edit\b/.test(t) || /\.claude\/plans\//.test(t)) return "plan";
   if (/\btab to amend\b/.test(t)) return "permission";
   return null;
+}
+
+// Claude Code 2.1.285 paints one more row under an AskUserQuestion dialog: the input box's own TOP
+// BORDER, two blank rows under the key-hint footer, with nothing of the box below it. It is a bare
+// full-width rule on an untitled session and carries the session label once there is one
+// (`──── … ── Sleep 14 ─`; claude--v2285-ask-question / -ask-wizard / -ask-multi, captured
+// 2026-09-30). Up to 2.1.283 the footer was the last row of the screen, and every dialog grammar
+// anchors on exactly that, so the one extra row left all three question shapes unread.
+const MAX_CLOSING_RULE_GAP = 3;
+
+/**
+ * `lines` without the closing rule a question dialog paints under its footer, or the SAME reference
+ * when the tail is anything else. The rule is dropped only when all of this holds: it is the last
+ * non-blank row, starts at column 0 and reads as an input-box top border (bare, or carrying a
+ * session label), sits at most MAX_CLOSING_RULE_GAP blank rows under the previous non-blank row, and
+ * that row is a `select` footer ("Enter to select"). Nothing else is measured to paint it: a
+ * permission dialog still ends on its footer, and a live input box has its prompt row and bottom
+ * border under that top border, so its top border is never the last row.
+ *
+ * The grammars then see the footer as the tail again, so a dialog that has scrolled up (any row
+ * under the rule) is still refused by their own tail anchor.
+ */
+export function withoutDialogClosingRule(lines: StyledLine[]): StyledLine[] {
+  const texts = lines.map(lineText);
+  let rule = texts.length - 1;
+  while (rule >= 0 && isBlank(texts[rule]!)) rule--;
+  if (rule < 1 || /^\s/.test(texts[rule]!) || !isInputBoxTopBorder(texts[rule]!)) return lines;
+  let footer = rule - 1;
+  while (footer >= 0 && isBlank(texts[footer]!)) footer--;
+  if (footer < 0 || rule - 1 - footer > MAX_CLOSING_RULE_GAP) return lines;
+  if (classifyFooter(texts[footer]!, texts) !== "select") return lines;
+  return lines.slice(0, rule);
 }

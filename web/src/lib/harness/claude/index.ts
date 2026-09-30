@@ -25,6 +25,7 @@ import {
   hasInputBox,
   inputBoxTail,
 } from "./chrome";
+import { withoutDialogClosingRule } from "./markers";
 import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
 
 /**
@@ -33,7 +34,11 @@ import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
  * miss falls back to a single raw block — the universal T1 behaviour. The registry only ever hands
  * this function a Claude pane, so there is no per-agent gate here.
  */
-export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
+export function claudeBuildBlocks(screen: StyledLine[]): Block[] {
+  // 2.1.285 leaves the input box's top border under a question dialog's footer; the grammars below
+  // all anchor on the footer being the tail, so they read the screen without it (markers.ts). Every
+  // other screen comes back as the same reference.
+  const lines = withoutDialogClosingRule(screen);
   // The preview variant runs FIRST: its footer is the most specific anchor ("n to add notes"),
   // and although the wizard/prompt-select detectors can't match its layout (their footer-gap
   // guards fail on the tall preview pane), ordering by specificity keeps the arbitration obvious.
@@ -87,12 +92,12 @@ export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
   // claim but cannot read: the value lives in the `▲`'s column, and the arrows are advertised by the
   // footer itself, which the generic detector never scans (and must not, since MENU_ARROW_ROW
   // matches that line with an empty value and the rest of the footer as its verb).
-  const effortRegion = detectEffortRegion(lines);
+  const effortRegion = detectEffortRegion(screen);
   if (effortRegion) {
-    const before = trimTrailingBlank(lines.slice(0, effortRegion.startLine));
+    const before = trimTrailingBlank(screen.slice(0, effortRegion.startLine));
     const blocks: Block[] = [];
     if (before.length > 0) blocks.push({ kind: "raw", lines: before });
-    blocks.push({ kind: "menu", menu: effortRegion.model, lines: lines.slice(effortRegion.startLine) });
+    blocks.push({ kind: "menu", menu: effortRegion.model, lines: screen.slice(effortRegion.startLine) });
     return blocks;
   }
 
@@ -101,12 +106,12 @@ export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
   // VERIFIED keystroke recipe for a dialog it recognises, and this one only knows what the screen
   // printed. It must never pre-empt them; it exists to catch what they decline (the `/model` picker),
   // where the alternative is no buttons at all and a composer send typed into the picker.
-  const menuRegion = detectMenuRegion(lines);
+  const menuRegion = detectMenuRegion(screen);
   if (menuRegion) {
-    const before = trimTrailingBlank(lines.slice(0, menuRegion.startLine));
+    const before = trimTrailingBlank(screen.slice(0, menuRegion.startLine));
     const blocks: Block[] = [];
     if (before.length > 0) blocks.push({ kind: "raw", lines: before });
-    blocks.push({ kind: "menu", menu: menuRegion.model, lines: lines.slice(menuRegion.startLine) });
+    blocks.push({ kind: "menu", menu: menuRegion.model, lines: screen.slice(menuRegion.startLine) });
     return blocks;
   }
 
@@ -121,22 +126,22 @@ export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
   // the popup is simply lifted out of the mirror, where a 220-column list soft-wrapped into an
   // unreadable wall on a phone, and rendered as a list. An `unknown` tail gets no block of its own: it
   // is left on the raw mirror by stripChrome, below the transcript.
-  if (inputBoxTail(lines) === "autocomplete") {
-    const autoRegion = detectAutocompleteRegion(lines);
+  if (inputBoxTail(screen) === "autocomplete") {
+    const autoRegion = detectAutocompleteRegion(screen);
     if (autoRegion) {
-      const before = trimTrailingBlank(stripChrome(lines));
+      const before = trimTrailingBlank(stripChrome(screen));
       const blocks: Block[] = [];
       if (before.length > 0) blocks.push({ kind: "raw", lines: before });
       blocks.push({
         kind: "autocomplete",
         autocomplete: autoRegion.model,
-        lines: lines.slice(autoRegion.startLine),
+        lines: screen.slice(autoRegion.startLine),
       });
       return blocks;
     }
   }
 
-  return [{ kind: "raw", lines: stripChrome(lines) }];
+  return [{ kind: "raw", lines: stripChrome(screen) }];
 }
 
 export { extractStatusLines, extractAgentsFooter, extractInputDraft };
