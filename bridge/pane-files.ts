@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { basename, extname, isAbsolute, resolve, sep } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
+import type { TranscriptEntry } from "./journal/types.ts";
 import { imageExtFromBytes } from "./uploads.ts";
 
 export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
@@ -39,12 +40,31 @@ function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | "video"
 }
 
 /**
+ * Absolute paths Claude Code confirmed it delivered through SendUserFile, read from the harness's
+ * own tool result ("N files delivered to user." then one "  <path> → file_uuid: …" line per file),
+ * never from the model's prose or the call's input.
+ */
+export function deliveredFilePaths(entries: readonly TranscriptEntry[]): string[] {
+  return entries.flatMap((entry) => entry.parts.flatMap((part) =>
+    part.kind === "tool" && part.name === "SendUserFile" && part.result && !part.result.isError
+      ? [...part.result.text.matchAll(/^ {2}(\/.+) → file_uuid: /gm)].map((match) => resolve(match[1]!))
+      : []));
+}
+
+/**
  * Project previews are an explicit exception to journal-only reads: the client may name a file,
  * but the live pane supplies its root. Resolve both names, refuse escapes and sensitive paths,
  * then read a bounded regular file through one descriptor (never reopen its name while serving).
  * HTML/SVG/source code remain text/plain; none of the project's markup is executed by the browser.
+ * A file outside the root is served only when the pane's journal shows the agent delivered that
+ * exact path (`delivered`, loaded lazily); the private-path policy and bounded read still apply.
  */
-export async function paneFileResponse(cwd: string | undefined, requestedPath: string | null, range: string | null = null): Promise<Response> {
+export async function paneFileResponse(
+  cwd: string | undefined,
+  requestedPath: string | null,
+  range: string | null = null,
+  delivered: () => Promise<readonly string[]> = async () => [],
+): Promise<Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
   }
@@ -53,7 +73,11 @@ export async function paneFileResponse(cwd: string | undefined, requestedPath: s
   const root = await realpath(cwd).catch(() => null);
   if (!root || root === sep) return unavailable();
   const candidate = resolve(cwd, requestedPath);
-  const path = await containedRealpath(candidate, root);
+  let outside: Promise<boolean> | undefined;
+  const locate = async () => await containedRealpath(candidate, root) ??
+    (await (outside ??= delivered().then((paths) => paths.includes(candidate), () => false))
+      ? await realpath(candidate).catch(() => null) : null);
+  const path = await locate();
   if (!path || isPrivateProjectPath(path)) return unavailable();
   const kind = fileKind(path);
   if (!kind) return fileError("This file type cannot be previewed.", 415);
@@ -63,7 +87,7 @@ export async function paneFileResponse(cwd: string | undefined, requestedPath: s
   let streaming = false;
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || await containedRealpath(path, root) !== path) return unavailable();
+    if (!stat.isFile() || await locate() !== path) return unavailable();
     if (stat.size > limit) return fileError(`File is too large to preview (maximum ${limit / 1024 / 1024} MB).`, 413);
     if (kind === "video") {
       const response = await videoResponse(handle, stat.size, range, basename(path));
