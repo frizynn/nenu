@@ -12,6 +12,8 @@ import { draftCarriesSend, sendGuardedReply } from "./reply-action";
 // approving whatever option was highlighted, while the bridge still reported {ok:true}.
 
 const BOX_RULE = "─".repeat(40); // clears the 20-glyph border threshold in harness/claude/markers
+const PANES_DIR = join(import.meta.dirname, "..", "fixtures", "panes");
+const fixtureText = (name: string) => readFileSync(join(PANES_DIR, name), "utf8");
 const paneWithDraft = (draft: string) => `some output\n${BOX_RULE}\n❯ ${draft}\n${BOX_RULE}`;
 // A focused permission dialog: no input box at the tail at all, so extractInputDraft sees nothing.
 const paneWithDialog = "Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel";
@@ -185,6 +187,79 @@ describe("draftCarriesSend", () => {
 });
 
 describe("sendGuardedReply", () => {
+  // RED-FIRST regression: the visible Codex composer used to be classified as absent when its queue
+  // hint and context percentage shared one raw terminal row. This must still verify before submit.
+  it("types, verifies, and submits on Codex's inline queue/context footer", async () => {
+    const calls = harness(() => fixtureText("codex--queue-context-inline.txt"));
+
+    const out = await sendGuardedReply({
+      paneId: "w1:p1",
+      text: "continue the release checklist",
+      agent: "codex",
+      ...instant,
+    });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      // Nenu delivers a Codex reply as a bracketed paste, hence `paste`.
+      { text: "continue the release checklist", submit: false, paste: true },
+      { text: "", submit: true },
+    ]);
+  });
+
+  // The canary's busy send (M37/03): while Codex streams its first reply, the status row ends in a
+  // spinner frame. That row used to hide the composer, so the pre-flight refused the send as
+  // `blocked`, where Codex queues it. The pane holds the busy screen until the text is typed, then
+  // the same pane with the draft in the box and the queue hint under it.
+  it("types, verifies, and submits to a Codex that is still working", async () => {
+    const text = "a draft typed while codex works";
+    const calls = harness(() =>
+      fixtureText(calls.length === 0 ? "codex--v0156-busy-streaming.txt" : "codex--v0156-busy-draft.txt"),
+    );
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text, agent: "codex", ...instant });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      // Nenu delivers a Codex reply as a bracketed paste, and its submit is not bound to the
+      // verified prompt (upstream e7c1c787 is not in Nenu).
+      { text, submit: false, paste: true },
+      { text: "", submit: true },
+    ]);
+  });
+
+  // The 82-column stall: Claude's slash popup clipped a command name to "…ugin:…", the box went
+  // undetected, and the guard typed the text and withheld Enter. The same screen now verifies.
+  it("verifies a slash command under a popup with a clipped command name, then submits", async () => {
+    const calls = harness(() => fixtureText("claude--autocomplete-slash-clipped.txt"));
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "/model", agent: "claude", ...instant });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      { text: "/model", submit: false },
+      { text: "", submit: true },
+    ]);
+  });
+
+  // A stale box echoed above a live dialog must never read as the composer: nothing is typed, and no
+  // submit key can answer the dialog.
+  it("refuses a dialog screen with a stale box triple above it, and never sends Enter", async () => {
+    const dialog = fixtureText("claude--permission-bash.txt");
+    const calls = harness(() => `● earlier\n${BOX_RULE}\n❯ please run the migration\n${BOX_RULE}\n\n${dialog}`);
+
+    const out = await sendGuardedReply({
+      paneId: "w1:p1",
+      text: "please run the migration",
+      agent: "claude",
+      ...instant,
+    });
+
+    expect(out.status).toBe("blocked");
+    expect(calls.some((c) => c.submit)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
   it("types, verifies the text on the input line, then submits", async () => {
     const calls = harness(() => paneWithDraft("ship it please"));
 
@@ -247,6 +322,33 @@ describe("sendGuardedReply", () => {
       { text: "ship it please", submit: false },
       { text: "", submit: true },
     ]);
+  });
+
+  // GHOST TEXT must never vouch for a send. A newer Claude Code paints a generated "suggested next
+  // prompt" into an otherwise empty box, faint (SGR 2). `draftCarriesSend` accepts any draft whose
+  // visible characters appear contiguously in the sent text, so a suggestion that happens to be an
+  // 8+-character substring of the message would satisfy the guard against a box our text never
+  // reached — Collie would fire the submit key and report `sent` for a message that was lost.
+  //
+  // The defense is that the ghost never becomes a draft at all: the adapter classifies it by STYLE
+  // and returns null, so `draftCarriesSend` is never handed one to be fooled by. This drives the whole
+  // guard rather than the predicate, because the predicate on its own would still say `true` here —
+  // the fix has to hold at the seam that produces its argument.
+  it("a faint suggestion that is a substring of the send never verifies it", async () => {
+    const SENT = "fix the parser bug in the tokenizer";
+    // The suggestion is a clean 14-character prefix of what we typed: it clears MIN_MATCH_CHARS and
+    // matches contiguously, so nothing but the ghost classification rejects it.
+    expect(draftCarriesSend(SENT, "fix the parser")).toBe(true);
+    const calls = harness(
+      () => `some output\n${BOX_RULE}\n❯ \x1b[0m\x1b[2mfix the parser\x1b[0m\n${BOX_RULE}`,
+    );
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: SENT, agent: "claude", ...instant });
+
+    expect(out.status).toBe("stalled");
+    // The text was typed (the pre-flight sees a real, typeable box — a ghost box IS one), but the
+    // submit key was withheld and the caller keeps the draft.
+    expect(calls).toEqual([{ text: SENT, submit: false }]);
   });
 
   // The PRE-FLIGHT (.adr/0009). The verify-after guard below already kept Enter from answering a

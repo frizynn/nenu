@@ -1,0 +1,11 @@
+ 
+[0m[1m[38;2;61;65;72m• [0m[38;2;147;149;153mWorking [0m[2m(11s • [0m[1m[38;2;255;255;255mesc[0m[2m to interrupt) · 1 background terminal running · /ps to view · /stop to close[0m
+ 
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+[0m[1m[48;2;65;69;76m›[0m[48;2;65;69;76m un borrador mientras codex trabaja                                                                                                                                          [0m
+[0m[48;2;65;69;76m  segunda linea en cola                                                                                                                                                       [0m
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+[0m[48;2;65;69;76m  tercera                                                                                                                                                                     [0m
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+  [0m[38;2;246;226;183mGPT-6.1-Sol medium[0m[38;2;169;170;173m · [0m[38;2;171;223;167m/private/tmp/nenu-harness-sandbox/project-directory-used-only-for-captures/project-directory-used-only-for-captures/project-directory[0m[38;2;169;170;173m · [0m[38;2;242;181;144mContext 0% use…[0m
+  [0m[1m[38;2;255;255;255mtab[0m[38;2;169;170;173m to queue message[0m

@@ -1,0 +1,11 @@
+
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+[0m[1m[48;2;65;69;76m›[0m[48;2;65;69;76m mira esta salida:                                                                                                                                                           [0m
+[0m[48;2;65;69;76m  ────────────────────                                                                                                                                                        [0m
+[0m[48;2;65;69;76m  ❯ ls -la                                                                                                                                                                    [0m
+[0m[48;2;65;69;76m  › 1. primera opcion                                                                                                                                                         [0m
+[0m[48;2;65;69;76m    con sangria                                                                                                                                                               [0m
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+[0m[48;2;65;69;76m  fin del mensaje                                                                                                                                                             [0m
+[0m[48;2;65;69;76m                                                                                                                                                                              [0m
+  [0m[38;2;246;226;183mGPT-6.1-Sol medium[0m[38;2;169;170;173m · [0m[38;2;171;223;167m/private/tmp/nenu-harness-sandbox/project-directory-used-only-for-captures/project-directory-used-only-for-captures/project-directory[0m[38;2;169;170;173m · [0m[38;2;242;181;144mContext 0% use…[0m
