@@ -184,6 +184,32 @@ case "$BUN" in
     esac
     ;;
 esac
+
+# Find the Tailscale CLI the same way: on PATH, then where installs put it.
+#
+# launchd starts the agent with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and the macOS app ships its CLI
+# inside the bundle rather than on any PATH. `_exec-bridge` therefore never found a bare `tailscale`,
+# host discovery failed on every start of a Mac install, and only an operator who had also listed the
+# host by hand in COLLIE_PUBLIC_HOSTS could reach the bridge at all.
+#
+# A function rather than a PATH entry: the bundle's binary is named `Tailscale`, which a PATH lookup
+# for `tailscale` only finds on a case-insensitive volume. COLLIE_CTL_TAILSCALE_FALLBACKS
+# (colon-separated) replaces the list; it exists for the test suite, which must be able to stage a
+# host with no CLI on a machine that has one.
+if ! command -v tailscale >/dev/null 2>&1; then
+  TAILSCALE_FALLBACKS="${COLLIE_CTL_TAILSCALE_FALLBACKS-${HOME}/.local/bin/tailscale:/opt/homebrew/bin/tailscale:/usr/local/bin/tailscale:/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+  while [ -n "$TAILSCALE_FALLBACKS" ]; do
+    TAILSCALE_BIN="${TAILSCALE_FALLBACKS%%:*}"
+    if [ -x "$TAILSCALE_BIN" ]; then
+      tailscale() { "$TAILSCALE_BIN" "$@"; }
+      break
+    fi
+    case "$TAILSCALE_FALLBACKS" in
+      *:*) TAILSCALE_FALLBACKS="${TAILSCALE_FALLBACKS#*:}" ;;
+      *) TAILSCALE_FALLBACKS="" ;;
+    esac
+  done
+fi
 WEB_DIST="${PLUGIN_ROOT}/web/dist/index.html"
 
 have_systemd() { command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; }
@@ -293,10 +319,18 @@ discover_tailscale_hosts() {
     COLLIE_TAILSCALE_HOSTS="$(self_hosts || true)"
     if [ -z "$COLLIE_TAILSCALE_HOSTS" ]; then
       COLLIE_TAILSCALE_HOSTS="$(unit_tailscale_hosts || true)"
-      echo "error: 'tailscale status' named no host for this node — the allowlist was not discovered." >&2
+      local why="'tailscale status' named no host for this node"
+      command -v tailscale >/dev/null 2>&1 || why="the tailscale CLI was not found"
       if [ -n "$COLLIE_TAILSCALE_HOSTS" ]; then
+        echo "error: ${why} — the allowlist was not discovered." >&2
         echo "       keeping the one already in the unit: ${COLLIE_TAILSCALE_HOSTS}" >&2
+      elif [ -n "${COLLIE_PUBLIC_HOSTS:-}${COLLIE_ALLOWED_ORIGINS:-}" ]; then
+        # The gate also answers to what the operator listed by hand, so this is not a lockout —
+        # and calling it one on every start of a working install teaches the operator to ignore it.
+        echo "note: ${why} — the allowlist was not discovered. The Host gate answers only to" >&2
+        echo "      the hosts .env lists in COLLIE_PUBLIC_HOSTS / COLLIE_ALLOWED_ORIGINS." >&2
       else
+        echo "error: ${why} — the allowlist was not discovered." >&2
         echo "       no allowlist is set, so the Host gate will refuse every request. Set" >&2
         echo "       COLLIE_TAILSCALE_HOSTS (or COLLIE_PUBLIC_HOSTS) in .env, or fix Tailscale and retry." >&2
       fi
