@@ -1,3 +1,4 @@
+import { servicePath } from "./claude-sessions.ts";
 import type { TemplateView } from "./types.ts";
 
 export type OrgRun = (
@@ -63,14 +64,15 @@ export function validateTask(value: unknown): string {
 export function defaultOrgRun(): OrgRun {
   return async (argv, opts) => {
     const configured = process.env.COLLIE_HERDR_ORGANIZATIONS_BIN?.trim();
-    const binary = configured || Bun.which("herdr-organizations");
+    const PATH = servicePath();
+    const binary = configured || Bun.which("herdr-organizations", { PATH });
     if (!binary) throw new OrgCliError("herdr-organizations not found");
 
     const child = Bun.spawn([binary, ...argv], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
-      env: { ...process.env, ...opts.env },
+      env: { ...process.env, PATH, ...opts.env },
     });
     if (opts.stdin !== undefined) child.stdin.write(opts.stdin);
     child.stdin.end();
