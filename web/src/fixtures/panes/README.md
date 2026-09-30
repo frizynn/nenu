@@ -529,3 +529,13 @@ AGY renders a framed input box bounded by horizontal rules (`─`), with status 
   states — and `❯` sitting on it means the field has focus, where every digit is swallowed as
   text rather than answering ([`PLAN_FEEDBACK_NOTES.md`](../../lib/grammar/PLAN_FEEDBACK_NOTES.md)).
   The row's DIGIT is install-dependent too (3 or 4), so it is read off the screen, never assumed.
+
+## Draft-frame corpus (captured 2026-09-26, Claude Code 2.1.283, herdr 0.9.0, throwaway Herdr panes)
+
+Two byte-faithful captures from upstream's 2.1.283 sweep, kept for the input-box frame walk
+(ADR 0048 addendum 2026-09-26). Upstream's dialog captures from the same sweep are not in Nenu.
+
+| Fixture | State / what's in it |
+|---|---|
+| `claude--v2283-draft-rule.txt` | Live box, draft `see this output:` / `────────────────────` / `some text` / `────────────────────` / `end`. The two rules are indented continuation rows; the box stands and the whole draft reads back |
+| `claude--v2283-draft-prompt.txt` | Live box, draft `my shell said:` / `❯ ls -la` / `and then nothing`. The indented `❯` row is draft text, not the prompt row |

@@ -53,6 +53,11 @@ const NEUTRAL = [
   // thing separating it from a draft; see harness/claude/chrome.ts.
   "claude--ghost-suggestion.txt",
   "claude--ghost-typed-over.txt",
+  // Claude Code 2.1.283 input boxes whose multi-line draft holds a pasted `────` rule or a pasted
+  // `❯ ls -la` shell prompt. Idle screens with a draft, never a dialog: the indented rows are draft
+  // text (ADR 0048 addendum 2026-09-26).
+  "claude--v2283-draft-prompt.txt",
+  "claude--v2283-draft-rule.txt",
 ];
 
 const allClaudeFixtures = readdirSync(PANES_DIR)

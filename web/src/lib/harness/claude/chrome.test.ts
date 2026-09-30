@@ -832,6 +832,15 @@ describe("real corpus — pinned so any change to the walk shows up as a diff", 
     // The same slider at 120 columns, the second capture width the Effort grammar is proven against.
     // Same reading: a modal, no box, nothing under it to re-surface or peel.
     { fixture: "menu-effort-slider--w120", statusRows: 0, draft: null, stripped: 0 },
+    // Claude Code 2.1.283 drafts holding a pasted shell prompt and a pasted rule: an indented row
+    // inside the frame is draft text, so the box stands (ADR 0048 addendum 2026-09-26).
+    { fixture: "v2283-draft-prompt", statusRows: 2, draft: "my shell said: ❯ ls -la and then nothing", stripped: 7 },
+    {
+      fixture: "v2283-draft-rule",
+      statusRows: 3,
+      draft: "see this output: ──────────────────── some text ──────────────────── end",
+      stripped: 10,
+    },
     { fixture: "plan-approval--numbered-body", statusRows: 0, draft: null, stripped: 0 },
     { fixture: "plan-approval--feedback-focused", statusRows: 0, draft: null, stripped: 0 },
     { fixture: "plan-approval--feedback-typed", statusRows: 0, draft: null, stripped: 0 },
