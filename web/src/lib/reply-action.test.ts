@@ -950,3 +950,121 @@ it("never types over a draft whose clearing was not observed", async () => {
   expect(result).toMatchObject({ status: "error", error: expect.stringMatching(/has not cleared/) });
   expect(calls).toEqual([]);
 });
+
+// A send that does not end in "sent" used to leave no trace outside the phone's screen. These pin
+// the account the bridge is given, and that the operator is told which of the two stalls happened.
+describe("an unsent reply reports itself and names its cause", () => {
+  /** Capture every report POSTed to the bridge. */
+  function reports() {
+    const seen: Array<Record<string, unknown>> = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/send-report$/, async ({ request }) => {
+        seen.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    return seen;
+  }
+
+  it("a stall with working reads says the text was not seen, and reports what each read saw", async () => {
+    harness(() => paneWithDraft("an unrelated leftover line"));
+    const seen = reports();
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
+
+    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/wasn't seen in the agent's input box/i) });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({
+      status: "stalled",
+      phase: "verify",
+      error: out.status === "stalled" ? out.error : "",
+      preflight: "composer",
+      attempts: Array(8).fill("other-draft"),
+      noEcho: false,
+      text: "please do the thing",
+      draft: "an unrelated leftover line",
+    });
+    expect(seen[0]!.screen).toEqual(["some output", BOX_RULE, "❯ an unrelated leftover line", BOX_RULE]);
+    expect(seen[0]!.elapsedMs).toEqual(expect.any(Number));
+  });
+
+  it("a stall where every read failed says the terminal could not be read", async () => {
+    const seen = reports();
+    server.use(
+      http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.error()),
+      http.post(/\/api\/pane\/[^/]+\/reply$/, () => HttpResponse.json({ ok: true })),
+    );
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
+
+    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/couldn't read the terminal.*connection/i) });
+    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({ phase: "verify", preflight: "read-failed", attempts: Array(8).fill("read-failed") });
+    expect(seen[0]).not.toHaveProperty("screen");
+    expect(seen[0]).not.toHaveProperty("draft");
+  });
+
+  it("a refused pre-flight reports the screen that refused it, with nothing typed", async () => {
+    const calls = harness(() => paneWithDialog);
+    const seen = reports();
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
+
+    expect(out.status).toBe("blocked");
+    expect(calls).toEqual([]);
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({ status: "blocked", phase: "preflight", preflight: "no-composer", attempts: [] });
+    expect(seen[0]!.screen).toEqual(["Do you want to proceed?", " ❯ 1. Yes", "   2. No", "", " Esc to cancel"]);
+  });
+
+  it("a password prompt is reported as a fact, never with the message or the screen", async () => {
+    harness(() => "[sudo] password for altan:");
+    const seen = reports();
+
+    await sendGuardedReply({ paneId: "w1:p1", text: "hunter2hunter2", agent: "claude", force: true, ...instant });
+
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({ status: "stalled", noEcho: true });
+    expect(JSON.stringify(seen[0])).not.toContain("hunter2");
+    expect(seen[0]).not.toHaveProperty("screen");
+    expect(seen[0]).not.toHaveProperty("draft");
+  });
+
+  it("a failed submit key is reported as the submit phase", async () => {
+    const seen = reports();
+    server.use(
+      http.get(/\/api\/pane\/[^/]+$/, () =>
+        HttpResponse.json({ paneId: "w1:p1", text: paneWithDraft("please do the thing"), truncated: false, revision: 1 }),
+      ),
+      http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
+        const body = (await request.json()) as { submit: boolean };
+        return HttpResponse.json(body.submit ? { ok: false, error: "herdr gone" } : { ok: true });
+      }),
+    );
+
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", force: true, ...instant });
+
+    expect(out).toMatchObject({ status: "error", textDelivered: true });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({ status: "error", phase: "submit" });
+  });
+
+  it("a sent reply reports nothing, and a report that cannot be delivered changes nothing", async () => {
+    let typed = false;
+    const calls = harness(() => (typed ? paneWithDraft("please do the thing") : paneWithDraft("")));
+    const seen = reports();
+    const sent = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", onTypeAttempt: () => { typed = true; }, ...instant });
+    expect(sent.status).toBe("sent");
+    expect(calls.filter((c) => c.submit)).toHaveLength(1);
+    expect(seen).toEqual([]);
+
+    let posts = 0;
+    harness(() => paneWithDialog);
+    server.use(http.post(/\/api\/pane\/[^/]+\/send-report$/, () => { posts += 1; return HttpResponse.error(); }));
+    const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
+    expect(out.status).toBe("blocked");
+    // Re-posted a bounded number of times, then dropped.
+    await vi.waitFor(() => expect(posts).toBe(3));
+  });
+});

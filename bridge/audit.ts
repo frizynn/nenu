@@ -37,13 +37,17 @@ export type AuditContent = "preview" | "none";
  * "ctrl+c", not a body).
  */
 const METADATA_KEYS: ReadonlySet<string> = new Set([
+  "attempts",
   "checked",
   "keys",
   "passed",
+  "phase",
+  "preflight",
   "reason",
   "saved",
   "sent",
   "size",
+  "status",
   "submit",
   "submitted",
   "tabId",

@@ -3,6 +3,7 @@ import { artifactMetadata } from "./artifact-metadata.ts";
 import { WebAssetArchive } from "./web-assets.ts";
 import { renderedHtmlResponse } from "./html-preview.ts";
 import { QueueService } from "./queue-service.ts";
+import { reportUnsentReply } from "./send-report.ts";
 import { projectFiles } from "./project-files.ts";
 import { Subagents } from "./subagents.ts";
 import { historyResponse } from "./history-response.ts";
@@ -124,7 +125,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v4);
 }
 
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history|files|queue|html-preview))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(start|reply|keys|interrupt|upload|close|rename|history|skills|models|file|conversations|connect|subagents|subagent-history|files|queue|html-preview|send-report))?$/;
 // Turns per history page. "Show entire history" means the WHOLE conversation, so the client asks for
 // everything and this ceiling is a safety net against a pathological log, not the normal path — a
 // 1400-turn session is ~1.4 MB raw / ~400 KB gzipped, which a tailnet link serves fine. The default
@@ -435,6 +436,7 @@ export function startServer(opts: {
         if (action === "history" && req.method === "GET")
           return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req, conversations, herdr, session);
         if (action === "reply" && req.method === "POST") return replyPane(herdr, cfg, paneId, req, audit, device, session);
+        if (action === "send-report" && req.method === "POST") return secure(await reportUnsentReply(paneId, req, audit, device, session));
         if (action === "keys" && req.method === "POST") return keysPane(herdr, cfg, paneId, req, audit, device, session);
         if (action === "interrupt" && req.method === "POST") return interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session);
         if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit, device, session);
