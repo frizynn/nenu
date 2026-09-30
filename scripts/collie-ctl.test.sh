@@ -236,10 +236,12 @@ test_missing_tailscale_cli() {
 COLLIE_PORT=8787
 EOF
 
+  # No fallback locations either, or a Mac with the Tailscale app installed finds the real CLI.
   set +e
   HOME="$HOME_DIR" \
   HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR" \
   PATH="$BIN_DIR" \
+  COLLIE_CTL_TAILSCALE_FALLBACKS="" \
   /bin/bash "$CTL" serve > "${CASE_DIR}/missing.out" 2>&1
   rc=$?
   set -e
@@ -1446,8 +1448,75 @@ EOF
   case "$out" in *"HOSTS=host"*) fail "a removed unit still supplied hosts" ;; esac
 }
 
+
+# The lockout message is a claim about the Host gate, and the gate also answers to the hosts the
+# operator listed by hand. With COLLIE_PUBLIC_HOSTS set, a failed discovery locks nobody out — saying
+# "will refuse every request" on every start of a working install teaches the operator to ignore it.
+test_failed_discovery_with_operator_hosts_is_not_called_a_lockout() {
+  setup_case ts-discovery-operator-hosts
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BIN_DIR}/tailscale"
+  chmod +x "${BIN_DIR}/tailscale"
+  printf 'COLLIE_PUBLIC_HOSTS=host.example\n' > "${CONFIG_DIR}/.env"
+  chmod 600 "${CONFIG_DIR}/.env"
+
+  local harness="${CASE_DIR}/harness.sh"
+  cat > "$harness" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export HOME="$HOME_DIR"
+export HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
+export PATH="$BIN_DIR:$BASE_PATH"
+source "$CTL"
+discover_tailscale_hosts
+echo "HOSTS=\$COLLIE_TAILSCALE_HOSTS"
+EOF
+  local out; out="$(bash "$harness" 2>&1)" || fail "discovery aborted: $out"
+  case "$out" in *"refuse every request"*|*"error:"*) fail "a working operator allowlist was reported as a lockout: $out" ;; esac
+  assert_contains "$out" "named no host for this node"
+  assert_contains "$out" "COLLIE_PUBLIC_HOSTS"
+  assert_contains "$out" "HOSTS="
+}
+
+# launchd starts the agent with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and the macOS app keeps its CLI
+# inside the bundle, so a bare `tailscale` was never found at login: discovery failed on every start
+# of a Mac install. The CLI is looked up where installs put it, exactly as Bun is.
+test_tailscale_is_found_outside_a_minimal_path() {
+  setup_case ts-outside-path
+  ln -s "$(command -v dirname)" "${BIN_DIR}/dirname"
+  local cli="${HOME_DIR}/.local/bin/tailscale"
+  mkdir -p "$(dirname "$cli")"
+  cat > "$cli" <<'EOF'
+#!/bin/bash
+echo '{"Self":{"DNSName":"host.example.","TailscaleIPs":["100.64.0.1"]}}'
+EOF
+  chmod +x "$cli"
+
+  local harness="${CASE_DIR}/harness.sh"
+  cat > "$harness" <<EOF
+#!/bin/bash
+set -euo pipefail
+export HOME="$HOME_DIR"
+export HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
+export PATH="$BIN_DIR:$(dirname "$(command -v bun)"):/usr/bin:/bin"
+export COLLIE_CTL_TAILSCALE_FALLBACKS="\${1-$cli}"
+source "$CTL"
+discover_tailscale_hosts
+echo "HOSTS=\$COLLIE_TAILSCALE_HOSTS"
+EOF
+  local out; out="$(/bin/bash "$harness" 2>&1)" || fail "discovery aborted: $out"
+  assert_contains "$out" "HOSTS=host.example,100.64.0.1"
+  case "$out" in *"not discovered"*) fail "a CLI outside PATH was not used: $out" ;; esac
+
+  # With no CLI anywhere, say THAT — "tailscale status named no host" blames a command that never ran.
+  out="$(/bin/bash "$harness" "" 2>&1)" || fail "discovery aborted: $out"
+  assert_contains "$out" "tailscale CLI was not found"
+  assert_contains "$out" "refuse every request"
+}
+
 test_env_strips_an_unquoted_trailing_comment
 test_failed_discovery_keeps_the_units_host_allowlist
+test_failed_discovery_with_operator_hosts_is_not_called_a_lockout
+test_tailscale_is_found_outside_a_minimal_path
 test_env_is_parsed_not_executed
 test_suite_ignores_an_inherited_git_dir
 test_push_keys_writes_the_resolved_env
