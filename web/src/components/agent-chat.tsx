@@ -21,11 +21,13 @@ import { ConversationActions } from "@/components/conversation-actions";
 import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
+import { AgentsFooter } from "@/components/agents-footer";
 import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space";
 import { cn } from "@/lib/utils";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
+import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { FindBar } from "@/components/find-bar";
 import { Composer, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
@@ -222,6 +224,17 @@ export function AgentChat({
     [display, agent?.agent, grammarsOn],
   );
 
+  // The background-agents block the harness paints under its statusline (issue #242). stripChrome
+  // peels it off the mirror with the box, and the strip stops above it, so this is its one surface.
+  // Same adapter and same parse source as the strip, so the two cannot disagree on where it starts.
+  const agentsFooter = useMemo(
+    () =>
+      grammarsOn
+        ? adapterFor(agent?.agent)?.extractAgentsFooter?.(splitLines(parseAnsi(display))) ?? []
+        : [],
+    [display, agent?.agent, grammarsOn],
+  );
+
   // A user draft stranded on the input box's "❯" line — a message queued while the agent was busy
   // then recalled, which persists across turns. stripChrome peels the box off the mirror so it goes
   // invisible, and (worse) pane.send_text appends to it, corrupting the next send. We surface it to
@@ -247,7 +260,9 @@ export function AgentChat({
     () => grammarsOn ? adapterFor(agent?.agent)?.buildBlocks(inputLines) ?? [] : [],
     [inputLines, agent?.agent, grammarsOn],
   );
-  const dialogPresent = liveBlocks.some((block) => block.kind !== "raw");
+  // "Owns the keyboard" is asked of the dialog contract, not spelled as `kind !== "raw"`: the
+  // slash-command `autocomplete` popup is a non-raw block painted while the input box is live.
+  const dialogPresent = liveBlocks.some(blockOwnsKeyboard);
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
   const catalog = useModelCatalog({ paneId, session, agent: agent?.agent, live: liveModelBlock,
@@ -1005,6 +1020,10 @@ export function AgentChat({
               ))}
             </div>
           )}
+
+          {/* Background agents, under the statusline as the TUI drew them: stripChrome peels the block
+              off the mirror, so this is its one surface. One row until tapped (agents-footer.tsx). */}
+          {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
           <Composer
             ref={composerRef}

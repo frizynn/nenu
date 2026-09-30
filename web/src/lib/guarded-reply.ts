@@ -21,9 +21,12 @@ import type { ActionResponse } from "./types";
 export interface ReplyTransport {
   fetchPane(paneId: string, lines?: number, session?: string): Promise<{ text: string }>;
   sendReply(paneId: string, text: string, submit: boolean, session?: string, expectedPrompt?: string, requestId?: string, paste?: boolean): Promise<ActionResponse>;
+  /** Tell the bridge about a send that did not end in "sent", for its audit trail. Optional: a
+   *  transport without it simply leaves the outcome where it always was, on the caller's screen. */
+  reportUnsent?(paneId: string, report: UnsentReport, session?: string): Promise<unknown>;
 }
 import { parseAnsi } from "./ansi";
-import { splitLines } from "./blocks";
+import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "./blocks";
 import { adapterFor, type HarnessAdapter } from "./harness";
 import { POLL_ATTEMPTS, POLL_DELAY_MS, defaultSleep, type Sleep } from "./harness/poll";
 import { detectNoEchoPrompt } from "./no-echo";
@@ -49,6 +52,94 @@ export type ReplyOutcome =
   | { status: "stalled"; error: string; noEcho?: string }
   /** Transport/RPC failure. `textDelivered` = text is in the pane but unsubmitted; don't resend. */
   | { status: "error"; error: string; textDelivered?: boolean };
+
+/** Where a send gave up. */
+export type SendPhase = "preflight" | "pre-type" | "type" | "verify" | "submit";
+
+/** What one verification read saw: the read itself failed, the screen could not be parsed, or it
+ *  showed no composer / an empty input box / a draft that was not the message. */
+export type VerifyRead = "read-failed" | "unreadable" | "no-composer" | "empty-draft" | "other-draft";
+
+/**
+ * The account of a send that did not end in "sent", as posted to the bridge (bridge/send-report.ts
+ * validates and bounds it again). It exists so a stall can be diagnosed after the fact: a run of
+ * `read-failed` is a connection problem, `no-composer` is a dialog or an unrecognised screen, and
+ * `other-draft` with the draft and screen tail attached is a verifier false negative.
+ *
+ * `noEcho` = a read saw a password prompt. The report then carries no message, draft or screen.
+ */
+export interface UnsentReport {
+  status: "blocked" | "stalled" | "error";
+  phase: SendPhase;
+  error: string;
+  preflight: "skipped" | "read-failed" | "no-composer" | "composer";
+  attempts: VerifyRead[];
+  elapsedMs: number;
+  noEcho: boolean;
+  text?: string;
+  draft?: string;
+  screen?: string[];
+}
+
+/** Everything the guard learns on the way, kept only to build an {@link UnsentReport}. */
+interface SendTrace {
+  phase: SendPhase;
+  preflight: UnsentReport["preflight"];
+  attempts: VerifyRead[];
+  /** The last screen any read returned, and the draft the adapter extracted from it. */
+  lastLines: StyledLine[] | null;
+  draft: string | null;
+  noEcho: boolean;
+}
+
+const REPORT_SCREEN_LINES = 15;
+const REPORT_LINE_CHARS = 120;
+const REPORT_TEXT_CHARS = 500;
+/** Waits before each re-post of a report. The stall most worth recording is the one where the
+ *  connection was down, which is exactly when the first post fails too. */
+const REPORT_RETRY_DELAYS_MS = [3_000, 15_000];
+
+function observe(trace: SendTrace, lines: StyledLine[], draft: string | null): void {
+  trace.lastLines = lines;
+  trace.draft = draft;
+  if (detectNoEchoPrompt(lines) !== null) trace.noEcho = true;
+}
+
+function unsentReport(args: GuardedReplyArgs, trace: SendTrace, outcome: Exclude<ReplyOutcome, { status: "sent" }>, elapsedMs: number): UnsentReport {
+  const report: UnsentReport = {
+    status: outcome.status,
+    phase: trace.phase,
+    error: outcome.error,
+    preflight: trace.preflight,
+    attempts: trace.attempts,
+    elapsedMs,
+    noEcho: trace.noEcho || ("noEcho" in outcome && outcome.noEcho !== undefined),
+  };
+  if (report.noEcho) return report;
+  report.text = args.text.slice(0, REPORT_TEXT_CHARS);
+  if (trace.draft !== null) report.draft = trace.draft.slice(0, REPORT_TEXT_CHARS);
+  if (trace.lastLines !== null) {
+    report.screen = trimTrailingBlank(trace.lastLines)
+      .slice(-REPORT_SCREEN_LINES)
+      .map((line) => lineText(line).trimEnd().slice(0, REPORT_LINE_CHARS));
+  }
+  return report;
+}
+
+/** Fire-and-forget: a report that cannot be delivered must never change what the send returned. */
+async function postReport(args: GuardedReplyArgs, report: UnsentReport): Promise<void> {
+  const sleep = args.sleep ?? defaultSleep;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await args.transport.reportUnsent?.(args.paneId, report, args.session);
+      return;
+    } catch {
+      const delay = REPORT_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) return;
+      await sleep(delay);
+    }
+  }
+}
 
 /** Minimum visible characters that must match before we believe the input box holds OUR text. */
 export const MIN_MATCH_CHARS = 8;
@@ -262,21 +353,35 @@ export type ComposerPrepResult =
   | { ok: false; error: string };
 
 export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOutcome> {
+  const trace: SendTrace = { phase: "preflight", preflight: "skipped", attempts: [], lastLines: null, draft: null, noEcho: false };
+  const started = Date.now();
+  const outcome = await guardedReply(args, trace);
+  if (outcome.status !== "sent" && args.transport.reportUnsent) {
+    void postReport(args, unsentReport(args, trace, outcome, Date.now() - started));
+  }
+  return outcome;
+}
+
+async function guardedReply(args: GuardedReplyArgs, trace: SendTrace): Promise<ReplyOutcome> {
   const adapter = adapterFor(args.agent ?? undefined);
   // No grammar for this harness → the input box is unreadable, so there is nothing to verify
   // against and the guard cannot run. Keep the legacy one-shot send rather than guess: a heuristic
   // over the raw mirror has a false-negative that is worse than the bug — a no-echo input (a shell's
   // sudo prompt) would never show the text, so the submit key would be withheld forever. Non-Claude
   // harnesses gain this safety exactly when they gain an adapter.
-  if (!adapter) return oneShot(args);
+  if (!adapter) {
+    trace.phase = "type";
+    return oneShot(args);
+  }
 
   // PRE-FLIGHT. The verify-after guard below is enough to keep Enter from answering a dialog, but it
   // is not enough to keep the MESSAGE out of one: it types first and checks second, so a modal that
   // owns the keyboard (Claude's `/model` picker — no input box at the tail at all) receives the
   // user's text before anything notices. One read up front is the difference between "nothing
   // happened" and "your reply is now sitting in a picker".
-  const { refuse, runPreType } = await preflight(adapter, args);
+  const { refuse, runPreType } = await preflight(adapter, args, trace);
   if (refuse !== null) return refuse;
+  trace.phase = "pre-type";
 
   // The ONE call site of the caller's destructive pre-type work — and it is not guarded by a
   // condition, it is guarded by whether the runner exists at all. `preflight` returns one only from
@@ -287,6 +392,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
   const aborted = await runPreType?.();
   if (aborted) return aborted;
 
+  trace.phase = "type";
   let typed;
   try {
     args.onTypeAttempt?.();
@@ -296,6 +402,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
   }
   if (!typed.ok) return { status: "error", error: typed.error };
   args.onAck?.("typed");
+  trace.phase = "verify";
 
   const sleep = args.sleep ?? defaultSleep;
   // The last screen a verification read actually saw, kept only so the stall below can be named. The
@@ -309,8 +416,9 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
     // POLL_DELAY_MS off the common path — the old blind flow always paid a fixed 350ms here.
     if (attempt > 0) await sleep(POLL_DELAY_MS);
     let draft: string | null = null;
+    let fresh: { text: string } | null = null;
     try {
-      const fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
+      fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
       const lines = splitLines(parseAnsi(fresh.text));
       // Only a screen the adapter does NOT recognise as its composer can be a raw password prompt.
       // Without that gate a match on the tail is dangerous rather than merely wrong: the notice this
@@ -322,10 +430,13 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
       const composerVisible = adapter.composerReady?.(lines) ?? false;
       lastSeen = composerVisible ? null : detectNoEchoPrompt(lines);
       draft = adapter.extractInputDraft(lines);
+      observe(trace, lines, draft);
+      trace.attempts.push(draft !== null ? "other-draft" : adapter.composerReady && !composerVisible ? "no-composer" : "empty-draft");
     } catch {
+      trace.attempts.push(fresh === null ? "read-failed" : "unreadable");
       continue; // transient read failure — the bounded loop is the timeout
     }
-    if (draftCarriesSend(args.text, draft)) return submitOnly(args);
+    if (draftCarriesSend(args.text, draft)) return submitOnly(args, trace);
     // The adapter gets a second look, and only a second look: a harness can SWALLOW what we typed and
     // paint a token of its own instead (Claude collapses anything past its paste threshold into
     // `[Pasted text #N +M lines]`), so the box never holds our words and the match above structurally
@@ -333,7 +444,7 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
     // thing that knows its harness's token and whether this one is consistent with THIS send
     // (.adr/0010). It can only widen the evidence, never narrow it, so a harness without the
     // capability is untouched.
-    if (draft !== null && adapter.draftCarriesSend?.(args.text, draft)) return submitOnly(args);
+    if (draft !== null && adapter.draftCarriesSend?.(args.text, draft)) return submitOnly(args, trace);
   }
 
   // The text never showed up on the input line. The likeliest cause is a dialog holding focus and
@@ -353,12 +464,20 @@ export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOut
       noEcho: lastSeen,
     };
   }
+  // Two different failures end here and the operator's next move differs: when every read failed
+  // there is no evidence either way (the text may well be in the box), when reads worked the box was
+  // looked at and the message was not in it.
   return {
     status: "stalled",
-    error:
-      "Couldn't verify the message in the terminal. Nothing was submitted. Your draft is saved; retry or open Terminal.",
+    error: trace.attempts.every((read) => read === "read-failed") ? UNREAD : UNSEEN,
   };
 }
+
+const UNREAD =
+  "Couldn't read the terminal to confirm your message: the connection failed. Nothing was submitted. Your draft is saved; the text may already be typed, so check Terminal before retrying.";
+
+const UNSEEN =
+  "Your message wasn't seen in the agent's input box. Nothing was submitted. Your draft is saved; retry or open Terminal.";
 
 const NO_BOX =
   "The agent's input box isn't on screen — a menu or dialog is probably up. Nothing was typed.";
@@ -399,7 +518,7 @@ interface Preflight {
  * `ctrl+k` + 40×Backspace burst is not, because those keys are not withheld by anything downstream —
  * once sent they have already landed in whatever owns the keyboard.
  */
-async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promise<Preflight> {
+async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs, trace: SendTrace): Promise<Preflight> {
   const blind = (refuse: ReplyOutcome | null): Preflight => ({ refuse, runPreType: null });
 
   // Nothing here can read this harness's input box, so there is no evidence to be had — and no
@@ -412,10 +531,14 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promi
   try {
     probe = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
   } catch {
+    trace.preflight = "read-failed";
     return blind(null); // transient read failure
   }
   const seen = splitLines(parseAnsi(probe.text));
-  if (!composerReady(seen)) {
+  observe(trace, seen, adapter.extractInputDraft(seen));
+  const ready = composerReady(seen);
+  trace.preflight = ready ? "composer" : "no-composer";
+  if (!ready) {
     // `force` is the user's deliberate "type anyway", so it overrides the refusal — but this is the
     // one screen we have POSITIVE evidence about, and what it says is "no composer". Keys stay home.
     if (args.force) return blind(null);
@@ -456,6 +579,7 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs): Promi
         try {
           const fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
           const lines = splitLines(parseAnsi(fresh.text));
+          observe(trace, lines, adapter.extractInputDraft(lines));
           if (!composerReady(lines)) return {
             status: "blocked",
             error: "The agent's input box left the screen while its input line was being cleared. Your message wasn't typed.",
@@ -490,7 +614,8 @@ async function oneShot(args: GuardedReplyArgs): Promise<ReplyOutcome> {
  * bridge's configured submit keys (COLLIE_SUBMIT_KEYS). So the submit-key contract stays
  * server-owned and this whole guard needs no bridge change.
  */
-async function submitOnly(args: GuardedReplyArgs): Promise<ReplyOutcome> {
+async function submitOnly(args: GuardedReplyArgs, trace: SendTrace): Promise<ReplyOutcome> {
+  trace.phase = "submit";
   try {
     const res = await args.transport.sendReply(args.paneId, "", true, args.session, undefined, args.requestId ? `${args.requestId}:submit` : undefined);
     if (res.ok) { args.onAck?.("submitted"); return { status: "sent" }; }

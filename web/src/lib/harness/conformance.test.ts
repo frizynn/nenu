@@ -47,6 +47,22 @@ const NEUTRAL = [
   // negative control for the generic menu grammar — its statusline is `·`-separated like a key-hint
   // footer, and the input-box gate is the only thing that keeps it raw.
   "claude--menu-model-picker-dismissed.txt",
+  // GHOST TEXT: an input box holding the generated "suggested next prompt" Claude paints when the box
+  // is empty, and the same box after typing over it. Both are ordinary idle screens — composer chrome,
+  // never a dialog. They exist to pin how the suggestion is PAINTED (faint, SGR 2), which is the only
+  // thing separating it from a draft; see harness/claude/chrome.ts.
+  "claude--ghost-suggestion.txt",
+  "claude--ghost-typed-over.txt",
+  // Claude Code 2.1.283 input boxes whose multi-line draft holds a pasted `────` rule or a pasted
+  // `❯ ls -la` shell prompt. Idle screens with a draft, never a dialog: the indented rows are draft
+  // text (ADR 0048 addendum 2026-09-26).
+  "claude--v2283-draft-prompt.txt",
+  "claude--v2283-draft-rule.txt",
+  // Claude Code 2.1.285 (captured 2026-09-30): the same draft shape on the installed version, and
+  // shell mode. Live input boxes, never a dialog.
+  "claude--v2285-draft-adversarial.txt",
+  "claude--v2285-shell-draft.txt",
+  "claude--v2285-shell-empty.txt",
 ];
 
 const allClaudeFixtures = readdirSync(PANES_DIR)

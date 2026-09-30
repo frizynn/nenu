@@ -13,6 +13,13 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 - Show project templates and let operators start or close organization nodes. (12ff937)
 
+## [0.46.4] - 2026-09-30
+
+### Fixed
+- Record every send that was typed but not submitted (or refused, or failed) as a `reply.unsent` audit entry with the phase, each verification read, the last draft and a short screen tail. (126da2b)
+- Say whether a stalled send could not read the terminal (connection) or did not see the message in the input box. (8ecab5c)
+- macOS: find the Tailscale CLI under launchd's minimal PATH, and stop reporting a lockout when `COLLIE_PUBLIC_HOSTS` already lists the host. (0042e3f)
+
 ## [0.46.3] - 2026-09-30
 
 ### Fixed

@@ -6,6 +6,7 @@ import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS } from "./harness/poll";
 import { parseNativeModelMenu } from "./native-model-menu";
 import type { WaitForNativeModelMenuArgs, WaitForNativeModelMenuResult } from "./wait-for-native-model-menu";
 import type { PaneReadResponse } from "./types";
+import { blockOwnsKeyboard } from "./harness/dialog-contract";
 
 export type ModelActionObservation =
   | (Extract<WaitForNativeModelMenuResult, { ok: true }> & { kind: "menu" })
@@ -27,7 +28,7 @@ export async function waitForModelAction(args: WaitForNativeModelMenuArgs & { pr
       if (args.signal?.aborted) return aborted();
       if (pane.paneId !== args.paneId) return { ok: false, reason: "error", error: "The response belongs to another pane." };
       const lines = splitLines(parseAnsi(pane.text));
-      const dialogs = adapter.buildBlocks(lines).filter((block) => block.kind !== "raw");
+      const dialogs = adapter.buildBlocks(lines).filter(blockOwnsKeyboard);
       if (dialogs.length === 0) {
         if (adapter.composerReady(lines)) return { ok: true, kind: "closed", pane };
         continue;

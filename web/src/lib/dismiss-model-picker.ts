@@ -8,6 +8,7 @@ import type { Sleep } from "./harness/poll";
 import { submitMenuKeys } from "./menu-action";
 import { parseNativeModelMenu } from "./native-model-menu";
 import type { PaneReadResponse } from "./types";
+import { blockOwnsKeyboard } from "./harness/dialog-contract";
 
 export interface DismissModelPickerArgs {
   paneId: string;
@@ -43,7 +44,7 @@ export async function dismissModelPicker(args: DismissModelPickerArgs): Promise<
     : fetchPane(args.paneId, args.requestedLines, args.session);
   function classify(fresh: PaneReadResponse): { kind: "composer" | "unknown" | "different-dialog" } | { kind: "menu"; menu: MenuModel } {
     const lines = splitLines(parseAnsi(fresh.text));
-    const dialogs = adapter!.buildBlocks(lines).filter((block) => block.kind !== "raw");
+    const dialogs = adapter!.buildBlocks(lines).filter(blockOwnsKeyboard);
     if (dialogs.length === 0) return { kind: adapter!.composerReady!(lines) ? "composer" : "unknown" };
     const block = dialogs[0];
     if (dialogs.length === 1 && block?.kind === "menu" && parseNativeModelMenu(block.menu, block.lines)) {

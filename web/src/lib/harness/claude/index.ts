@@ -14,8 +14,18 @@ import { detectPreviewSelectRegion } from "./preview-select";
 import { detectWizardRegion } from "./wizard";
 import { detectMultiSelectRegion } from "./multi-select";
 import { detectPromptSelectRegion } from "./prompt-select";
+import { detectEffortRegion } from "./effort";
 import { detectMenuRegion } from "./menu";
-import { stripChrome, extractStatusLines, extractInputDraft, hasInputBox } from "./chrome";
+import { detectAutocompleteRegion } from "./autocomplete";
+import {
+  stripChrome,
+  extractStatusLines,
+  extractAgentsFooter,
+  extractInputDraft,
+  hasInputBox,
+  inputBoxTail,
+} from "./chrome";
+import { withoutDialogClosingRule } from "./markers";
 import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
 
 /**
@@ -24,7 +34,11 @@ import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
  * miss falls back to a single raw block — the universal T1 behaviour. The registry only ever hands
  * this function a Claude pane, so there is no per-agent gate here.
  */
-export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
+export function claudeBuildBlocks(screen: StyledLine[]): Block[] {
+  // 2.1.285 leaves the input box's top border under a question dialog's footer; the grammars below
+  // all anchor on the footer being the tail, so they read the screen without it (markers.ts). Every
+  // other screen comes back as the same reference.
+  const lines = withoutDialogClosingRule(screen);
   // The preview variant runs FIRST: its footer is the most specific anchor ("n to add notes"),
   // and although the wizard/prompt-select detectors can't match its layout (their footer-gap
   // guards fail on the tall preview pane), ordering by specificity keeps the arbitration obvious.
@@ -74,29 +88,69 @@ export function claudeBuildBlocks(lines: StyledLine[]): Block[] {
     return blocks;
   }
 
-  // LAST RESORT: a modal screen none of the specific grammars claimed, driven by the keys its own
-  // footer names (menu.ts). It runs after all four deliberately — every grammar above encodes a
-  // VERIFIED keystroke recipe for a dialog it recognises, and this one only knows what the screen
-  // printed. It must never pre-empt them; it exists to catch what they decline (the `/model` picker),
-  // where the alternative is no buttons at all and a composer send typed into the picker.
-  const menuRegion = detectMenuRegion(lines);
-  if (menuRegion) {
-    const before = trimTrailingBlank(lines.slice(0, menuRegion.startLine));
+  // The `/effort` slider (effort.ts) — a specific grammar for a screen the generic one below CAN
+  // claim but cannot read: the value lives in the `▲`'s column, and the arrows are advertised by the
+  // footer itself, which the generic detector never scans (and must not, since MENU_ARROW_ROW
+  // matches that line with an empty value and the rest of the footer as its verb).
+  const effortRegion = detectEffortRegion(screen);
+  if (effortRegion) {
+    const before = trimTrailingBlank(screen.slice(0, effortRegion.startLine));
     const blocks: Block[] = [];
     if (before.length > 0) blocks.push({ kind: "raw", lines: before });
-    blocks.push({ kind: "menu", menu: menuRegion.model, lines: lines.slice(menuRegion.startLine) });
+    blocks.push({ kind: "menu", menu: effortRegion.model, lines: screen.slice(effortRegion.startLine) });
     return blocks;
   }
 
-  return [{ kind: "raw", lines: stripChrome(lines) }];
+  // LAST RESORT: a modal screen none of the specific grammars claimed, driven by the keys its own
+  // footer names (menu.ts). It runs after all five deliberately — every grammar above encodes a
+  // VERIFIED keystroke recipe for a dialog it recognises, and this one only knows what the screen
+  // printed. It must never pre-empt them; it exists to catch what they decline (the `/model` picker),
+  // where the alternative is no buttons at all and a composer send typed into the picker.
+  const menuRegion = detectMenuRegion(screen);
+  if (menuRegion) {
+    const before = trimTrailingBlank(screen.slice(0, menuRegion.startLine));
+    const blocks: Block[] = [];
+    if (before.length > 0) blocks.push({ kind: "raw", lines: before });
+    blocks.push({ kind: "menu", menu: menuRegion.model, lines: screen.slice(menuRegion.startLine) });
+    return blocks;
+  }
+
+  // The COMPLETION POPUP (autocomplete.ts) — the one non-raw block that is not a dialog. It runs last
+  // because it is the least specific tail shape, and it is gated on the input box's tail being
+  // CLASSIFIED as the popup (chrome.ts), because that is what separates a live composer with a popup
+  // under it from a modal, and from popup-shaped rows under a box whose draft is not a slash command.
+  // `stripChrome` below has already had to find the same box and the same tail, so the two answers
+  // cannot disagree.
+  //
+  // The transcript above stays raw and the box stays stripped, exactly as on any other idle screen —
+  // the popup is simply lifted out of the mirror, where a 220-column list soft-wrapped into an
+  // unreadable wall on a phone, and rendered as a list. An `unknown` tail gets no block of its own: it
+  // is left on the raw mirror by stripChrome, below the transcript.
+  if (inputBoxTail(screen) === "autocomplete") {
+    const autoRegion = detectAutocompleteRegion(screen);
+    if (autoRegion) {
+      const before = trimTrailingBlank(stripChrome(screen));
+      const blocks: Block[] = [];
+      if (before.length > 0) blocks.push({ kind: "raw", lines: before });
+      blocks.push({
+        kind: "autocomplete",
+        autocomplete: autoRegion.model,
+        lines: screen.slice(autoRegion.startLine),
+      });
+      return blocks;
+    }
+  }
+
+  return [{ kind: "raw", lines: stripChrome(screen) }];
 }
 
-export { extractStatusLines, extractInputDraft };
+export { extractStatusLines, extractAgentsFooter, extractInputDraft };
 
 export const claudeAdapter: HarnessAdapter = {
   agent: "claude",
   buildBlocks: claudeBuildBlocks,
   extractStatusLines,
+  extractAgentsFooter,
   extractInputDraft,
   // The reply path's pre-flight: Claude's input box is exactly what `hasInputBox` finds, and its
   // absence is exactly the condition under which typing lands in a modal instead (#34's shape).

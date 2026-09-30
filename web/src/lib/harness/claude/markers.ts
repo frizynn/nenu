@@ -4,7 +4,7 @@
 // *between* glyphs, so a regex over the raw buffer would miss (e.g. the `❯` pointer and the `1.` are
 // separate styled segments). Pure functions, no I/O, no React.
 
-import { isBlank, lineText } from "../../blocks";
+import { isBlank, lineText, type StyledLine } from "../../blocks";
 import { CLAUDE_RULE_GLYPH_CLASS } from "../../rule-glyphs";
 import { displayWidth } from "../../text-width";
 import type { PromptFamily } from "../prompt-model";
@@ -103,6 +103,16 @@ export function isBoxBorder(text: string): boolean {
   return !RULE_OR_SPACE_ONLY.test(m[1]!); // label must hold a real (non-rule, non-blank) character
 }
 
+/**
+ * True when the line is a BARE input-box border: U+2500 only, no label, at least BARE_BORDER_MIN
+ * display cells. Claude splices a session label into the TOP border only, so this is the test for
+ * the BOTTOM border — the anchor `locateInputBox` (chrome.ts) looks for first.
+ */
+export function isBareBoxBorder(text: string): boolean {
+  const trimmed = text.trim();
+  return displayWidth(trimmed) >= BARE_BORDER_MIN && BARE_BORDER.test(trimmed);
+}
+
 // The LOOSER labelled-border shape a Claude input-box TOP border can actually take, per the bundled
 // renderer's own label-placement math (traced from the shipped binary): it picks a left offset `a`
 // clamped `Math.max(1, Math.min(a, borderWidth - labelWidth - 1))` and draws `a` rule glyphs, the
@@ -170,25 +180,84 @@ export function isMultiStepHeader(text: string): boolean {
 // `classifyFooter`, the Claude-specific act of reading a footer, is what produces one.
 export type { PromptFamily };
 
+// The folder-trust dialog's own words, read off `fixtures/panes/claude--trust-prompt.txt`: the
+// safety question it asks, and the option row it offers. Either one identifies THAT dialog; the
+// footer phrase "Enter to confirm" identifies nothing, because any screen may print it.
+const TRUST_QUESTION = /is this a project you created or one you trust/i;
+const TRUST_OPTION = /yes,\s*i trust this folder/i;
+
+/**
+ * True when the folder-trust dialog's own title or option row is somewhere on screen. This is the
+ * evidence `classifyFooter` requires before it may claim the `trust` family — a family claim is a
+ * statement about a whole dialog, so it must be answerable from that dialog.
+ */
+export function namesTrustDialog(texts: string[]): boolean {
+  return texts.some((t) => TRUST_QUESTION.test(t) || TRUST_OPTION.test(t));
+}
+
 /**
  * Classify a candidate footer line — the hint bar at the very bottom of a Claude dialog — into a
  * dialog family, or null when it isn't a recognised menu footer. The footer is the single most
- * stable discriminator: Claude Code generates it (unlike the user-configured statusline), and the
- * confirm phrase pins the keystroke recipe:
+ * stable discriminator for three of the four families: Claude Code generates it (unlike the
+ * user-configured statusline), and the confirm phrase pins the keystroke recipe:
  *
  *   - "Enter to select …"  → select     (AskUserQuestion: the digit THEN Enter)
- *   - "Enter to confirm …" → trust      (folder-trust prompt: the digit alone)
  *   - "… Tab to amend …"   → permission (edit/bash "Do you want to proceed?": the digit alone)
  *   - "ctrl+g to edit …" or a "~/.claude/plans/…" path → plan (ExitPlanMode: the digit alone)
+ *
+ * The fourth, `trust` (folder-trust prompt: the digit alone), needs MORE than its footer. Its phrase
+ * "Enter to confirm" is ordinary Claude wording that other screens print — the /effort slider prints
+ * it — and `menu.ts` reads any family claim as "a specific grammar owns this screen", so a wrong
+ * `trust` takes every button off a screen nobody owns (ADR 0053). So the trust arm fires only when
+ * `namesTrustDialog(texts)` finds that dialog's own words. Without them the phrase classifies as
+ * nothing at all.
+ *
+ * `texts` is the pane's line texts, and it is REQUIRED: a caller that cannot see the screen cannot
+ * be told the trust family, and making it required turns that into a compile error rather than a
+ * family that quietly stops being reported.
  *
  * Case-insensitive and anchored only on the confirm phrase, so per-install extra hints
  * (ctrl+e to explain, ↑/↓ to navigate, …) don't disturb the classification.
  */
-export function classifyFooter(text: string): PromptFamily | null {
+export function classifyFooter(text: string, texts: string[]): PromptFamily | null {
   const t = text.toLowerCase();
   if (/\benter to select\b/.test(t)) return "select";
-  if (/\benter to confirm\b/.test(t)) return "trust";
+  if (/\benter to confirm\b/.test(t)) {
+    return namesTrustDialog(texts) ? "trust" : null;
+  }
   if (/ctrl\+g to edit\b/.test(t) || /\.claude\/plans\//.test(t)) return "plan";
   if (/\btab to amend\b/.test(t)) return "permission";
   return null;
+}
+
+// Claude Code 2.1.285 paints one more row under an AskUserQuestion dialog: the input box's own TOP
+// BORDER, two blank rows under the key-hint footer, with nothing of the box below it. It is a bare
+// full-width rule on an untitled session and carries the session label once there is one
+// (`──── … ── Sleep 14 ─`; claude--v2285-ask-question / -ask-wizard / -ask-multi, captured
+// 2026-09-30). Up to 2.1.283 the footer was the last row of the screen, and every dialog grammar
+// anchors on exactly that, so the one extra row left all three question shapes unread.
+const MAX_CLOSING_RULE_GAP = 3;
+
+/**
+ * `lines` without the closing rule a question dialog paints under its footer, or the SAME reference
+ * when the tail is anything else. The rule is dropped only when all of this holds: it is the last
+ * non-blank row, starts at column 0 and reads as an input-box top border (bare, or carrying a
+ * session label), sits at most MAX_CLOSING_RULE_GAP blank rows under the previous non-blank row, and
+ * that row is a `select` footer ("Enter to select"). Nothing else is measured to paint it: a
+ * permission dialog still ends on its footer, and a live input box has its prompt row and bottom
+ * border under that top border, so its top border is never the last row.
+ *
+ * The grammars then see the footer as the tail again, so a dialog that has scrolled up (any row
+ * under the rule) is still refused by their own tail anchor.
+ */
+export function withoutDialogClosingRule(lines: StyledLine[]): StyledLine[] {
+  const texts = lines.map(lineText);
+  let rule = texts.length - 1;
+  while (rule >= 0 && isBlank(texts[rule]!)) rule--;
+  if (rule < 1 || /^\s/.test(texts[rule]!) || !isInputBoxTopBorder(texts[rule]!)) return lines;
+  let footer = rule - 1;
+  while (footer >= 0 && isBlank(texts[footer]!)) footer--;
+  if (footer < 0 || rule - 1 - footer > MAX_CLOSING_RULE_GAP) return lines;
+  if (classifyFooter(texts[footer]!, texts) !== "select") return lines;
+  return lines.slice(0, rule);
 }
