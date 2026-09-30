@@ -187,6 +187,26 @@ describe("draftCarriesSend", () => {
 });
 
 describe("sendGuardedReply", () => {
+  // RED-FIRST regression: the visible Codex composer used to be classified as absent when its queue
+  // hint and context percentage shared one raw terminal row. This must still verify before submit.
+  it("types, verifies, and submits on Codex's inline queue/context footer", async () => {
+    const calls = harness(() => fixtureText("codex--queue-context-inline.txt"));
+
+    const out = await sendGuardedReply({
+      paneId: "w1:p1",
+      text: "continue the release checklist",
+      agent: "codex",
+      ...instant,
+    });
+
+    expect(out).toEqual({ status: "sent" });
+    expect(calls).toEqual([
+      // Nenu delivers a Codex reply as a bracketed paste, hence `paste`.
+      { text: "continue the release checklist", submit: false, paste: true },
+      { text: "", submit: true },
+    ]);
+  });
+
   // The 82-column stall: Claude's slash popup clipped a command name to "…ugin:…", the box went
   // undetected, and the guard typed the text and withheld Enter. The same screen now verifies.
   it("verifies a slash command under a popup with a clipped command name, then submits", async () => {
