@@ -464,12 +464,20 @@ async function guardedReply(args: GuardedReplyArgs, trace: SendTrace): Promise<R
       noEcho: lastSeen,
     };
   }
+  // Two different failures end here and the operator's next move differs: when every read failed
+  // there is no evidence either way (the text may well be in the box), when reads worked the box was
+  // looked at and the message was not in it.
   return {
     status: "stalled",
-    error:
-      "Couldn't verify the message in the terminal. Nothing was submitted. Your draft is saved; retry or open Terminal.",
+    error: trace.attempts.every((read) => read === "read-failed") ? UNREAD : UNSEEN,
   };
 }
+
+const UNREAD =
+  "Couldn't read the terminal to confirm your message: the connection failed. Nothing was submitted. Your draft is saved; the text may already be typed, so check Terminal before retrying.";
+
+const UNSEEN =
+  "Your message wasn't seen in the agent's input box. Nothing was submitted. Your draft is saved; retry or open Terminal.";
 
 const NO_BOX =
   "The agent's input box isn't on screen — a menu or dialog is probably up. Nothing was typed.";

@@ -851,7 +851,7 @@ it("never types over a draft whose clearing was not observed", async () => {
 
 // A send that does not end in "sent" used to leave no trace outside the phone's screen. These pin
 // the account the bridge is given, and that the operator is told which of the two stalls happened.
-describe("an unsent reply reports itself", () => {
+describe("an unsent reply reports itself and names its cause", () => {
   /** Capture every report POSTed to the bridge. */
   function reports() {
     const seen: Array<Record<string, unknown>> = [];
@@ -864,13 +864,13 @@ describe("an unsent reply reports itself", () => {
     return seen;
   }
 
-  it("a stall with working reads reports what each read saw", async () => {
+  it("a stall with working reads says the text was not seen, and reports what each read saw", async () => {
     harness(() => paneWithDraft("an unrelated leftover line"));
     const seen = reports();
 
     const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
 
-    expect(out.status).toBe("stalled");
+    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/wasn't seen in the agent's input box/i) });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
     expect(seen[0]).toMatchObject({
       status: "stalled",
@@ -886,7 +886,7 @@ describe("an unsent reply reports itself", () => {
     expect(seen[0]!.elapsedMs).toEqual(expect.any(Number));
   });
 
-  it("a stall where every read failed reports the failed reads", async () => {
+  it("a stall where every read failed says the terminal could not be read", async () => {
     const seen = reports();
     server.use(
       http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.error()),
@@ -895,7 +895,8 @@ describe("an unsent reply reports itself", () => {
 
     const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
 
-    expect(out.status).toBe("stalled");
+    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/couldn't read the terminal.*connection/i) });
+    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
     expect(seen[0]).toMatchObject({ phase: "verify", preflight: "read-failed", attempts: Array(8).fill("read-failed") });
     expect(seen[0]).not.toHaveProperty("screen");
