@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.46.3] - 2026-09-30
+
+### Fixed
+- Preview files Claude sent with SendUserFile from outside the pane's folder instead of "File unavailable in this workspace." (2e458ca)
+
 ## [0.46.2] - 2026-09-26
 
 ### Fixed

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, paneFileResponse } from "./pane-files.ts";
+import type { TranscriptEntry } from "./journal/types.ts";
+import { deliveredFilePaths, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, paneFileResponse } from "./pane-files.ts";
 
 describe("pane project files", () => {
   let dir: string;
@@ -92,6 +93,36 @@ describe("pane project files", () => {
     expect((await paneFileResponse(root, "huge.pdf")).status).toBe(413);
     expect((await paneFileResponse(root, "binary.txt")).status).toBe(415);
     expect((await paneFileResponse(root, "binary.zip")).status).toBe(415);
+  });
+
+  test("previews a file the agent delivered from outside the workspace, and nothing else outside it", async () => {
+    const outside = join(dir, "downloads");
+    await mkdir(outside);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0]);
+    for (const name of ["sent.jpg", "mentioned.jpg", "failed.jpg"]) await writeFile(join(outside, name), jpeg);
+    await mkdir(join(outside, ".ssh"));
+    await writeFile(join(outside, ".ssh", "key.jpg"), jpeg);
+    await symlink(join(outside, ".ssh", "key.jpg"), join(outside, "innocent.jpg"));
+    const sent = (paths: string[], isError = false): TranscriptEntry["parts"][number] => ({
+      kind: "tool", name: "SendUserFile", summary: "caption",
+      result: { text: `${paths.length} files delivered to user.\n${paths.map((p) => `  ${p} → file_uuid: 1795c2da-acf0-4e82-b3d8-ccf28783bcfc`).join("\n")}`, ...(isError ? { isError } : {}) },
+    });
+    const entries: TranscriptEntry[] = [
+      { uuid: "a", ts: "", role: "assistant", parts: [{ kind: "text", text: `See ${join(outside, "mentioned.jpg")}` }] },
+      { uuid: "b", ts: "", role: "assistant", parts: [sent([join(outside, "sent.jpg"), join(outside, "innocent.jpg"), join(outside, ".ssh", "key.jpg")]), sent([join(outside, "failed.jpg")], true)] },
+    ];
+    const delivered = async () => deliveredFilePaths(entries);
+
+    const response = await paneFileResponse(root, join(outside, "sent.jpg"), null, delivered);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(jpeg));
+
+    for (const name of ["mentioned.jpg", "failed.jpg", "innocent.jpg", ".ssh/key.jpg"]) {
+      const denied = await paneFileResponse(root, join(outside, name), null, delivered);
+      expect(denied.status).toBe(404);
+      expect(await denied.text()).toBe("File unavailable in this workspace.");
+    }
   });
 
   test("rejects missing panes, directories, filesystem root and malformed input", async () => {
