@@ -1,7 +1,7 @@
 import { videoResponse, MAX_VIDEO_BYTES } from "./media-preview.ts";
 import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
-import { basename, extname, isAbsolute, resolve, sep } from "node:path";
+import { basename, extname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
 import type { TranscriptEntry } from "./journal/types.ts";
 import { imageExtFromBytes } from "./uploads.ts";
@@ -56,8 +56,9 @@ export function deliveredFilePaths(entries: readonly TranscriptEntry[]): string[
  * but the live pane supplies its root. Resolve both names, refuse escapes and sensitive paths,
  * then read a bounded regular file through one descriptor (never reopen its name while serving).
  * HTML/SVG/source code remain text/plain; none of the project's markup is executed by the browser.
- * A file outside the root is served only when the pane's journal shows the agent delivered that
- * exact path (`delivered`, loaded lazily); the private-path policy and bounded read still apply.
+ * A file outside the root is served only when the pane's journal shows the agent delivered it
+ * (`delivered`, loaded lazily), named by its exact path or by a trailing part of it; the
+ * private-path policy and bounded read still apply.
  */
 export async function paneFileResponse(
   cwd: string | undefined,
@@ -73,10 +74,17 @@ export async function paneFileResponse(
   const root = await realpath(cwd).catch(() => null);
   if (!root || root === sep) return unavailable();
   const candidate = resolve(cwd, requestedPath);
-  let outside: Promise<boolean> | undefined;
-  const locate = async () => await containedRealpath(candidate, root) ??
-    (await (outside ??= delivered().then((paths) => paths.includes(candidate), () => false))
-      ? await realpath(candidate).catch(() => null) : null);
+  // Prose names a delivered file loosely ("ai.jpg", "ronda-2/ai.jpg"), so a relative name that
+  // is not in the project falls back to the newest delivery whose path ends with it.
+  const suffix = isAbsolute(requestedPath) ? null : sep + normalize(requestedPath);
+  let outside: Promise<string | undefined> | undefined;
+  const locate = async () => {
+    const contained = await containedRealpath(candidate, root);
+    if (contained) return contained;
+    const sent = await (outside ??= delivered().then((paths) => paths.includes(candidate)
+      ? candidate : suffix ? paths.findLast((path) => path.endsWith(suffix)) : undefined, () => undefined));
+    return sent ? await realpath(sent).catch(() => null) : null;
+  };
   const path = await locate();
   if (!path || isPrivateProjectPath(path)) return unavailable();
   const kind = fileKind(path);

@@ -118,6 +118,16 @@ describe("pane project files", () => {
     expect(response.headers.get("content-type")).toBe("image/jpeg");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(jpeg));
 
+    // The assistant's prose names a delivered file by its bare name or a trailing part of its path.
+    for (const name of ["sent.jpg", "downloads/sent.jpg"]) {
+      const named = await paneFileResponse(root, name, null, delivered);
+      expect(named.status).toBe(200);
+      expect(new Uint8Array(await named.arrayBuffer())).toEqual(new Uint8Array(jpeg));
+    }
+    for (const name of ["mentioned.jpg", "failed.jpg", "ent.jpg"]) {
+      expect((await paneFileResponse(root, name, null, delivered)).status).toBe(404);
+    }
+
     for (const name of ["mentioned.jpg", "failed.jpg", "innocent.jpg", ".ssh/key.jpg"]) {
       const denied = await paneFileResponse(root, join(outside, name), null, delivered);
       expect(denied.status).toBe(404);
