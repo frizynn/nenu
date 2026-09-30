@@ -10,7 +10,7 @@ import { ConversationService } from "./conversation-service.ts";
 import { launchAgent, startPaneAgent } from "./agent-start.ts";
 import { discoverPaneSkills } from "./skills.ts";
 import { discoverPaneModels } from "./models.ts";
-import { paneFileResponse } from "./pane-files.ts";
+import { deliveredFilePaths, paneFileResponse } from "./pane-files.ts";
 import { chatUploadPreviewResponse, isChatUploadPath } from "./chat-upload-preview.ts";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -391,16 +391,19 @@ export function startServer(opts: {
           const original = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
           const pane = original ? await conversations.resolve(original, herdr, session) : undefined;
           const requestedPath = url.searchParams.get("path");
-          if (isChatUploadPath(cfg.stateDir, requestedPath)) {
+          // The store already bounds and contains source reads. Request its whole available parsed
+          // window so an upload or delivery in an older turn can be verified without browser claims.
+          const journalEntries = async () => {
             const adapter = pane && journals ? adapterFor(journals, pane.agent) : undefined;
-            // The store already bounds and contains source reads. Request its whole available
-            // parsed window so an upload in an older turn can be verified without browser claims.
             const page = cfg.transcript && pane?.agentSession && adapter && transcripts
               ? await transcripts.page(adapter, pane.agentSession, { limit: Number.MAX_SAFE_INTEGER }).catch(() => null)
               : null;
-            return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, page?.entries ?? []));
-          }
-          return secure(await paneFileResponse(pane?.cwd, requestedPath, req.headers.get("range")));
+            return page?.entries ?? [];
+          };
+          if (isChatUploadPath(cfg.stateDir, requestedPath))
+            return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, await journalEntries()));
+          return secure(await paneFileResponse(pane?.cwd, requestedPath, req.headers.get("range"),
+            async () => deliveredFilePaths(await journalEntries())));
         }
         if (action === "html-preview" && req.method === "GET") {
           const current = rt.engine.current();

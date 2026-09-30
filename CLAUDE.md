@@ -230,7 +230,8 @@ paths, including paths derived from one already checked. The client never suppli
 grammar, the probe catches on-disk format drift.
 
 Project file previews (`bridge/pane-files.ts`) separately accept a client path under the live pane's
-cwd only. Every read is bounded and contained after realpath resolution; private paths are refused.
+cwd, or an exact path Claude Code's own SendUserFile result in the current pane's contained journal
+reports as delivered (never a path the model merely mentions). Every read is bounded and contained after realpath resolution; private paths are refused.
 SVG and source render as text. HTML may execute only in the opaque-origin `allow-scripts` iframe
 defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and the sandbox grants no
 same-origin, forms, popups, top navigation or downloads. Never execute it in Nenu's origin or turn
