@@ -143,6 +143,8 @@ export function paneTextWithDraft(base = "hello from the pane"): string {
 
 // Default happy-path handlers; individual tests can override via server.use(...).
 export const handlers = [
+  // A send that does not end in "sent" reports itself; tests that care override this.
+  http.post(/\/api\/pane\/[^/]+\/send-report$/, () => HttpResponse.json({ ok: true })),
   http.get(/\/api\/pane\/[^/]+\/models$/, () => HttpResponse.json({ available: false, models: [] })),
   http.get("/api/snapshot", () => HttpResponse.json(fixtureSnapshot)),
   http.get(/\/api\/pane\/[^/]+$/, () =>

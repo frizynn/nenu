@@ -251,6 +251,10 @@ Also shipped, as defence in depth:
   to `<stateDir>/audit.log`, mode 0600 since it may echo reply text. An audit failure never fails the
   user's action. `COLLIE_AUDIT_CONTENT=none` keeps the trail and drops the bodies — what survives is
   an allowlist of action parameters, documented at the list itself (`bridge/audit.ts`).
+  A guarded send that does not end in "sent" is recorded too, as `reply.unsent`: the client posts
+  which phase gave up, what each verification read saw (or that the read failed), the last draft and
+  a short screen tail, and `bridge/send-report.ts` bounds all of it. A password prompt is recorded as
+  a fact only.
 - **Destructive-action confirm** — a browser-side prompt when input pattern-matches `rm`, `sudo`,
   `git push --force`, `dd`, etc. (`web/src/lib/destructive.ts`). Prevents catastrophic mistaps.
 
