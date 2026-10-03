@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-10-03
+
+### Fixed
+- Recover existing Codex conversations automatically from unique live terminal titles and loaded session metadata (0c3e03ea).
+
 ## [0.47.0] - 2026-09-30
 
 ### Added
