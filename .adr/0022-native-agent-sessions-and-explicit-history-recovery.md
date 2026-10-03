@@ -2,6 +2,9 @@
 
 Status: accepted locally, 2026-09-26.
 
+The manual-only Codex recovery requirement is superseded by [ADR 0028](./0028-automatic-codex-history-recovery.md).
+The native terminal ownership and launch decisions remain in effect.
+
 ## Context
 
 A recognized terminal is not a conversation identity. The installed shared Codex daemon can inherit a different Herdr pane's environment. On the reported session, Herdr recognized Codex but had no `agent_session`; the browser never requested history because it required `hasSession` first.

@@ -33,12 +33,58 @@ describe("native launch", () => {
 });
 
 describe("identity recovery", () => {
+  test("automatically recovers the loaded Codex conversation named by this terminal", async () => {
+    const methods: string[] = [];
+    const service = new ConversationService({ request: async (method, params) => {
+      methods.push(method);
+      if (method === "thread/loaded/list") return { data: [id, other], nextCursor: null };
+      if (method === "thread/read") return { thread: { id: params?.threadId, cwd: "/tmp", name: params?.threadId === id ? "Fix parser" : "Other session", parentThreadId: null } };
+      throw new Error(`Unexpected request: ${method}`);
+    } });
+    const resolved = await service.resolve({ ...pane, terminalTitle: "Fix parser | tmp" }, herdr);
+    expect(resolved.agentSession).toEqual({ kind: "id", value: id });
+    expect(methods).toContain("thread/loaded/list");
+    expect(methods.every(method => method === "thread/loaded/list" || method === "thread/read")).toBe(true);
+  });
   test("matches explicit native arguments, never a same-directory guess", () => {
     expect(explicitSession(info(["/bin/claude", "--session-id", id]), "claude")).toBe(id);
     expect(explicitSession(info(["/bin/codex", "resume", "--remote", "unix://", id]), "codex")).toBe(id);
     expect(explicitSession(info(["echo", "resume", id]), "codex")).toBeNull();
     expect(explicitSession(info(["codex", "resume", "--last"]), "codex")).toBeNull();
     expect(explicitSession(info(["codex", "resume", id, other]), "codex")).toBeNull();
+  });
+  test("retains explicit and manual recovery when the daemon is unavailable", async () => {
+    const explicit = new ConversationService({ request: async () => { throw new Error("Offline"); } });
+    expect((await explicit.resolve(pane, { processInfo: async () => info(["codex", "resume", id]) })).agentSession?.value).toBe(id);
+    let offline = false;
+    const manual = new ConversationService({ request: async () => {
+      if (offline) throw new Error("Offline");
+      return { thread: { id, cwd: "/tmp" } };
+    } });
+    await manual.attach(pane, id, herdr);
+    offline = true;
+    expect((await manual.resolve({ ...pane, terminalTitle: "Fix parser | tmp" }, herdr)).agentSession?.value).toBe(id);
+  });
+  test("a live conversation switch overrides the original resume argument and saved selection", async () => {
+    let recovering = false;
+    const service = new ConversationService({ request: async (method, params) => {
+      if (!recovering) return { thread: { id, cwd: "/tmp" } };
+      if (method === "thread/loaded/list") return { data: [other], nextCursor: null };
+      return { thread: { id: params?.threadId, cwd: "/tmp", name: "New task" } };
+    } });
+    const client = { processInfo: async () => info(["codex", "resume", id]) };
+    await service.attach(pane, id, client);
+    recovering = true;
+    expect((await service.resolve({ ...pane, terminalTitle: "New task | tmp" }, client)).agentSession?.value).toBe(other);
+  });
+  test("does not attach automatically when the foreground process changes during discovery", async () => {
+    let pid = 123;
+    const service = new ConversationService({ request: async (method) => {
+      if (method === "thread/loaded/list") return { data: [id], nextCursor: null };
+      pid++;
+      return { thread: { id, cwd: "/tmp", name: "Fix parser" } };
+    } });
+    expect((await service.resolve({ ...pane, terminalTitle: "Fix parser | tmp" }, { processInfo: async () => info(["codex"], pid) })).agentSession).toBeUndefined();
   });
   test("Claude attach follows the authoritative process or short id", () => {
     const sessions = [{ id: "abc123", sessionId: id, cwd: "/tmp", pid: 100 }];
