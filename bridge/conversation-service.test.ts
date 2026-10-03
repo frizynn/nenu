@@ -33,6 +33,19 @@ describe("native launch", () => {
 });
 
 describe("identity recovery", () => {
+  test("automatically recovers the loaded Codex conversation named by this terminal", async () => {
+    const methods: string[] = [];
+    const service = new ConversationService({ request: async (method) => {
+      methods.push(method);
+      if (method === "thread/loaded/list") return { data: [id, other], nextCursor: null };
+      if (method === "thread/read") return { thread: { id, cwd: "/tmp", name: "Fix parser", parentThreadId: null } };
+      throw new Error(`Unexpected request: ${method}`);
+    } });
+    const resolved = await service.resolve({ ...pane, terminalTitle: "Fix parser | tmp" }, herdr);
+    expect(resolved.agentSession).toEqual({ kind: "id", value: id });
+    expect(methods).toContain("thread/loaded/list");
+    expect(methods.every(method => method === "thread/loaded/list" || method === "thread/read")).toBe(true);
+  });
   test("matches explicit native arguments, never a same-directory guess", () => {
     expect(explicitSession(info(["/bin/claude", "--session-id", id]), "claude")).toBe(id);
     expect(explicitSession(info(["/bin/codex", "resume", "--remote", "unix://", id]), "codex")).toBe(id);
