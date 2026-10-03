@@ -4,6 +4,7 @@ import { realpath } from "node:fs/promises";
 import { CodexRpc, record } from "./codex-rpc.ts";
 import { codexEntries } from "./codex-history.ts";
 import { ClaudeSessions, matchClaudeSession } from "./claude-sessions.ts";
+import { CodexSessions } from "./codex-sessions.ts";
 import { pageEntries } from "./journal/store.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import type { AgentView } from "./types.ts";
@@ -18,8 +19,10 @@ type SessionClient = Pick<HerdrClient, "processInfo">;
 export class ConversationService {
   private readonly pages = new Map<string, { expires: number; value: Promise<Record<string, unknown>> }>();
   private readonly bindings: ConversationBindings;
+  private readonly codexSessions: CodexSessions;
   constructor(private readonly codex: Rpc = new CodexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string) {
     this.bindings = new ConversationBindings(stateFile);
+    this.codexSessions = new CodexSessions(codex);
   }
 
   async resolve(pane: AgentView, herdr: SessionClient, session = "default"): Promise<AgentView> {
@@ -28,6 +31,13 @@ export class ConversationService {
     if (pane.agentSession && !this.bindings.has(key)) return pane;
     try {
       const info = await herdr.processInfo(pane.paneId);
+      if (!pane.agentSession && pane.agent === "codex") {
+        const id = await this.codexSessions.match(pane, info).catch(() => null) ?? explicitSession(info, "codex");
+        if (id) {
+          if (JSON.stringify(info) !== JSON.stringify(await herdr.processInfo(pane.paneId))) return pane;
+          return { ...pane, agentSession: { kind: "id", value: id } };
+        }
+      }
       const connected = this.bindings.get(key, computeEtag(JSON.stringify(info)), JSON.stringify(pane.agentSession ?? null));
       if (connected) return { ...pane, agentSession: { kind: "id", value: connected } };
       if (pane.agentSession) return pane;
