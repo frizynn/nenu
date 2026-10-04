@@ -1,3 +1,4 @@
+import { detectUpdateMenu } from "./update-menu";
 // The Codex adapter. Chrome/status/draft are Tier 1: the boxless `› ` composer plus its
 // dot-separated status row are stripped from the mirror and re-surfaced natively. Interactive
 // kinds with dated captures and notes (all under this directory): the folder-trust prompt
@@ -15,7 +16,7 @@
 // `canonicalAgent`, never here. The 0.156.1 screens (captured 2026-09-26) follow the same bar: the
 // patch approval sends the shortcuts it prints (`y`, Escape), the rewritten trust prompt sends a
 // pointer walk and the Enter its footer names, and each of those was pressed live the same day
-// (APPROVAL_NOTES.md, TRUST_NOTES.md). The update prompt and the `/model` and `/permissions`
+// (APPROVAL_NOTES.md, TRUST_NOTES.md). The `/model` and `/permissions`
 // pickers are deliberately left to the unread-dialog card.
 
 import { trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
@@ -34,6 +35,8 @@ import { codexDraftCarriesSend } from "./paste";
 import { detectModelMenuRegion } from "./model-menu";
 
 export function codexBuildBlocks(lines: StyledLine[]): Block[] {
+  const update = detectUpdateMenu(lines);
+  if (update) return [{kind: "menu", menu: update, lines}];
   const trust = detectTrustRegion(lines);
   if (trust) {
     const before = trimTrailingBlank(lines.slice(0, trust.startLine));

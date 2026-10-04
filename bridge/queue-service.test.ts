@@ -29,3 +29,57 @@ describe("unavailable queue", () => {
     expect(response.status).toBe(409);
   });
 });
+
+it("refuses a stale conversation scope when the live session changes before enqueue", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { HerdrClient } = await import("./herdr-client");
+  const { computeEtag } = await import("./http-cache");
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-live-"));
+  const cached = {
+    paneId: "pane",
+    workspaceId: "workspace",
+    workspaceLabel: "test",
+    workspaceNumber: 1,
+    tabId: "tab",
+    agent: "claude",
+    status: "idle" as const,
+    cwd: "/tmp",
+    focused: true,
+    agentSession: { kind: "id" as const, value: "old" },
+  };
+  const service = new QueueService(
+    dir,
+    async (_session, _pane, fresh) => ({
+      pane: fresh
+        ? { ...cached, agentSession: { kind: "id", value: "new" } }
+        : cached,
+      herdr: new HerdrClient("/tmp/unused-qa.sock"),
+      connected: true,
+    }),
+    async () => ({ ok: true }),
+  );
+  try {
+    const scope = computeEtag(
+      JSON.stringify(["session", "pane", "claude:old"]),
+    );
+    const response = await service.handle(
+      new Request("http://localhost/queue", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "add",
+          id: "saved",
+          scope,
+          text: "Preserve this draft",
+        }),
+      }),
+      "session",
+      "pane",
+      null,
+    );
+    expect(response.status).toBe(409);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

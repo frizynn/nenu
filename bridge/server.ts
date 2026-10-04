@@ -1,3 +1,4 @@
+import { PaneWrites } from "./pane-writes.ts";
 import { ClaudeTelemetry } from "./claude-telemetry.ts";
 import { artifactMetadata } from "./artifact-metadata.ts";
 import { WebAssetArchive } from "./web-assets.ts";
@@ -203,6 +204,7 @@ export function startServer(opts: {
   const claudeTelemetry = new ClaudeTelemetry(cfg.stateDir);
   const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
+  const input = new PaneWrites();
   const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
     const rt = registry.get(session);
     if (!rt) return null;
@@ -221,7 +223,7 @@ export function startServer(opts: {
     if (!rt) return { ok: false, error: "Session unavailable." };
     const response = await replyPane(rt.herdr, cfg, row.paneId, new Request("http://localhost/queue-delivery", { method: "POST", body: JSON.stringify({ text, submit, request_id: requestId, paste }) }), audit, row.device, row.session);
     return await response.json() as ActionResponse;
-  });
+  }, input);
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -527,10 +529,15 @@ export function startServer(opts: {
         }
         if (action === "history" && req.method === "GET")
           return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req, conversations, herdr, session);
-        if (action === "reply" && req.method === "POST") return replyPane(herdr, cfg, paneId, req, audit, device, session);
+        if (["reply", "keys", "interrupt"].includes(action ?? "") && req.method === "POST") {
+          const result = await input.run(session, paneId, () => action === "reply"
+            ? replyPane(herdr, cfg, paneId, req, audit, device, session)
+            : action === "keys"
+              ? keysPane(herdr, cfg, paneId, req, audit, device, session)
+              : interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session));
+          return result.busy ? jsonError("A saved message is being delivered. Wait before using terminal controls.", 409, null) : result.value;
+        }
         if (action === "send-report" && req.method === "POST") return secure(await reportUnsentReply(paneId, req, audit, device, session));
-        if (action === "keys" && req.method === "POST") return keysPane(herdr, cfg, paneId, req, audit, device, session);
-        if (action === "interrupt" && req.method === "POST") return interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session);
         if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit, device, session);
         if (action === "close" && req.method === "POST") return closePane(herdr, paneId, req, audit, device, session);
         if (action === "rename" && req.method === "POST") return renamePane(herdr, paneId, req, audit, device, session);

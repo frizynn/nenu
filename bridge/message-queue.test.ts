@@ -124,3 +124,86 @@ test("retention never discards old unsent messages", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("waits through a pre-type dialog and continues once without a second Send", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-wait-"));
+  try {
+    const queue = new MessageQueue(join(dir, "queue.json"));
+    await queue.add(row);
+    await queue.tick(
+      async () => "ready",
+      async () => ({ status: "blocked", error: "Answer the notice first." }),
+    );
+    expect((await queue.list("scope"))[0]!.state).toBe("queued");
+    let calls = 0;
+    const recovered = new MessageQueue(join(dir, "queue.json"));
+    await recovered.tick(
+      async () => "ready",
+      async () => {
+        calls++;
+        return { status: "sent" };
+      },
+    );
+    await recovered.tick(
+      async () => "ready",
+      async () => {
+        calls++;
+        return { status: "sent" };
+      },
+    );
+    expect(calls).toBe(1);
+    expect(await recovered.list("scope")).toEqual([]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uncertain delivery cannot be edited or resent without checking the terminal", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-paused-"));
+  try {
+    const queue = new MessageQueue(join(dir, "queue.json"));
+    await queue.add(row);
+    await queue.tick(
+      async () => "ready",
+      async () => ({ status: "uncertain" }),
+    );
+    const item = (await queue.list("scope"))[0]!;
+    await expect(
+      queue.change("scope", item.id, item.revision, "send"),
+    ).rejects.toThrow("Check Terminal");
+    await expect(
+      queue.change("scope", item.id, item.revision, "edit", "Again"),
+    ).rejects.toThrow("Check Terminal");
+    await queue.change("scope", item.id, item.revision, "remove");
+    expect(await queue.list("scope")).toEqual([]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("recent delivery receipts survive more than one hundred newer messages", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-receipts-"));
+  try {
+    const path = join(dir, "queue.json");
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      path,
+      JSON.stringify(
+        Array.from({ length: 110 }, (_, i) => ({
+          ...row,
+          id: `sent-${i}`,
+          state: "sent",
+          createdAt: 1,
+          sentAt: Date.now(),
+          revision: 1,
+        })),
+      ),
+    );
+    const queue = new MessageQueue(path);
+    await queue.add({ ...row, id: "new" });
+    await queue.add({ ...row, id: "sent-0" });
+    expect((await queue.list("scope")).map((item) => item.id)).toEqual(["new"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

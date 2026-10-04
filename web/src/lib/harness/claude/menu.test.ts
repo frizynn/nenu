@@ -139,3 +139,19 @@ describe("detectMenuRegion — the /effort slider", () => {
     }
   });
 });
+
+
+describe("overlay menus above a visible composer", () => {
+  const overlay = lines([BOX_RULE, "  Teach auto mode about your environment?", "", "  Auto mode works better when it knows your environment.", "", "  ❯ 1. Yes", "    2. Not now", "    3. Don't show again", "", "  Enter to confirm · Esc to cancel", BOX_RULE, "❯", BOX_RULE, "  Opus 5.5 | Context 13% used", "  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents"].join("\n"));
+  it("shows the overlay and refuses free text even though the input frame remains visible", async () => {
+    const { claudeAdapter } = await import("./index");
+    expect(claudeAdapter.composerReady!(overlay)).toBe(false);
+    const menu = claudeBuildBlocks(overlay).find(b => b.kind === "menu");
+    expect(menu?.kind).toBe("menu");
+    if (menu?.kind === "menu") {
+      expect(menu.menu.title).toBe("Teach auto mode about your environment?");
+      expect(menu.menu.signature).toContain("\n  Enter to confirm · Esc to cancel");
+      expect(menu.menu.actions.flatMap(a => a.keys)).toEqual(["Enter", "Escape"]);
+    }
+  });
+});

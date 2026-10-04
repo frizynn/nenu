@@ -3,7 +3,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ListPlus, Check, ImagePlus, Keyboard, Loader2, MoreHorizontal, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
+import { Check, ImagePlus, Keyboard, Loader2, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -40,6 +40,7 @@ export interface ComposerHandle {
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
   openDisplayPrefs: () => void;
+  openTools: () => void;
 }
 
 interface ComposerProps {
@@ -220,11 +221,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     noticeNoEcho(null); // it described the pane we just left
   }, [session, paneId]);
   const queue = useMessageQueue(paneId, session, nativeWorkbench && !gone && !readOnly);
-  async function enqueueDraft() {
-    const value = input;
-    if (!value.trim() || sending || queue.busy) return;
-    if (!queue.page?.available) { setStatus("Connect a conversation to queue follow-up messages.", "info"); return; }
-    if (await queue.mutate("add", value)) updateInput(current => current === value ? "" : current);
+  useEffect(() => {
+    const accepted = queue.accepted;
+    if (accepted) updateInput(current => current === accepted.text ? "" : current);
+  }, [queue.accepted]);
+  async function enqueueDraft(value = input, isDraft = true): Promise<boolean> {
+    if (!value.trim() || sending || queue.busy) return false;
+    if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
+    const saved = await queue.mutate("add", value);
+    if (saved && isDraft) updateInput(current => current === value ? "" : current);
+    if (saved) setStatus("Message saved. It will send when the terminal is ready.", "success");
+    return saved;
   }
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
@@ -399,6 +406,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
     openDisplayPrefs: () => requestDrawer("display"),
+    openTools: () => requestDrawer("actions"),
   }));
 
   useEffect(
@@ -501,6 +509,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact"): Promise<boolean> {
     const t = value.trim();
     if (!t || locked || sending) return false;
+    if (nativeWorkbench && queue.page?.available && !action && !force) return enqueueDraft(value, isDraft);
     // A dialog on screen owns the TUI's keyboard: our text is swallowed and the submit key ANSWERS
     // the dialog, approving whatever option was highlighted (#34). Refuse BEFORE the destructive
     // pre-clear sweep below — those ctrl+k/Backspaces would land in the dialog too. The input is
@@ -687,7 +696,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // "Really send?" state instead of sending; the confirming second tap goes through. Non-destructive
   // input sends immediately (and any stray armed state is cleared).
   function onSendClick() {
-    if (working && nativeWorkbench) { void enqueueDraft(); return; }
     // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
     // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
     if (forceConfirm.pending === "force") {
@@ -862,7 +870,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
-              {!nativeWorkbench && usageControls}
+              {modelControl}
+              {usageControls}
+              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || sending} onClick={() => { requestDrawer(null); direct.activate(); }}><Terminal className="size-4" />Type into terminal</Button>
+              {working && agent === "codex" && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
             </div>
           </ComposerDock>
         )}
@@ -1051,7 +1062,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
         {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
         {!nativeWorkbench && modelControl}
-        {nativeWorkbench && usageControls && <div className="flex min-w-0 items-center px-1" aria-label="Session usage">{usageControls}</div>}
+
         {/* gap-3, not gap-2: with the attach button moved inside the field this row is only the
             field and Send, and the old spacing left them looking joined. */}
         <div className={cn("items-end gap-1", nativeWorkbench ? "grid grid-cols-[minmax(0,1fr)_auto] gap-y-1" : "flex")}>
@@ -1147,13 +1158,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               disabled={uploading || locked} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
             </Button>
-            {queue.page?.available && <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground md:size-8" aria-label="Add to queue" title="Add to queue" disabled={!input.trim() || queue.busy || sending || locked} onClick={() => void enqueueDraft()}><ListPlus className="size-4" /></Button>}
-            {modelControl}
-            <Button type="button" variant="ghost" size="icon" className={cn("size-11 shrink-0", drawer === "actions" ? CONTROL_ON : CONTROL_OFF)}
-              title="More message actions" aria-label="More message actions" aria-expanded={drawer === "actions"}
-              onClick={() => requestDrawer(drawer === "actions" ? null : "actions")}><MoreHorizontal className="size-4" /></Button>
           </div>}
-          {working && agent === "codex" && !input.trim() ? (
+          {!nativeWorkbench && working && agent === "codex" && !input.trim() ? (
             <Button
               type="button"
               variant="destructive"
@@ -1199,8 +1205,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               size="icon"
               className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-primary/15 text-primary shadow-none hover:bg-primary/25 md:size-8")}
               onClick={direct.active ? () => direct.deactivate() : onSendClick}
-              disabled={locked || sending}
-              aria-label={direct.active ? "Stop typing into terminal" : working && queue.page?.available ? "Queue message" : "Send"}
+              disabled={locked || sending || queue.busy || (!direct.active && !input.trim())}
+              aria-label={direct.active ? "Stop typing into terminal" : "Send"}
               aria-pressed={direct.active}
             >
               {direct.active ? (

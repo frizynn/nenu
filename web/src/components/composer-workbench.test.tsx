@@ -83,15 +83,15 @@ it("keeps composing available while disconnected or a dialog is open", async () 
   expect(sendGuardedReply).not.toHaveBeenCalled();
 });
 
-it("groups secondary actions while leaving the model and send visible", async () => {
-  const { user } = setup({ nativeWorkbench: true, modelControl: <button>Choose model</button> });
+it("opens secondary tools from the header handle while keeping the composer simple", async () => {
+  const { ref, user } = setup({ nativeWorkbench: true, modelControl: <button>Choose model</button> });
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
-  expect(screen.getByRole("button", { name: "Choose model" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Send" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "Display settings" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Quick replies" })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "More message actions" }));
+  await act(async () => ref.current!.openTools());
   expect(screen.getByRole("button", { name: "Quick replies" })).toBeVisible();
   expect(input).toHaveValue("draft survives navigation");
 });
@@ -151,16 +151,16 @@ it("keeps native composing free of the old labelled controls row", () => {
   expect(screen.queryByText("Quick")).not.toBeInTheDocument();
   expect(screen.queryByText("Agent")).not.toBeInTheDocument();
   const actions = screen.getByRole("toolbar", { name: "Message actions" });
-  expect(actions).toContainElement(screen.getByRole("button", { name: "More message actions" }));
+  expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   expect(actions).toContainElement(screen.getByRole("button", { name: "Attach image" }));
   expect(screen.getByRole("textbox").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it("opens compact quick actions without changing or sending the draft", async () => {
-  const { user } = setup();
+  const { ref, user } = setup();
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
-  await user.click(screen.getByRole("button", { name: "More message actions" }));
+  await act(async () => ref.current!.openTools());
   await user.click(screen.getByRole("button", { name: "Quick replies" }));
   expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
@@ -182,9 +182,9 @@ it("keeps the configured confirmation when a disruptive slash command is typed i
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "/new", force: false }));
 });
 
-it("keeps session usage visible without opening More actions", async () => {
-  const { user } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
-  expect(screen.getByRole("button", { name: "Session metrics" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "More message actions" }));
+it("keeps session usage available in tools without cluttering the composer", async () => {
+  const { ref } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
+  expect(screen.queryByRole("button", { name: "Session metrics" })).not.toBeInTheDocument();
+  await act(async () => ref.current!.openTools());
   expect(screen.getAllByRole("button", { name: "Session metrics" })).toHaveLength(1);
 });

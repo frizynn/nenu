@@ -8,7 +8,12 @@ import {
   type QueueMessage,
 } from "@/lib/api";
 
-type PendingMessage = { id: string; text: string; scope: string };
+type PendingMessage = {
+  id: string;
+  text: string;
+  scope: string;
+  createdAt?: number;
+};
 function readPending(key: string): PendingMessage | null {
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
@@ -48,6 +53,10 @@ export function useMessageQueue(
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [busy, setBusy] = useState(false);
+  const mutating = useRef(false);
+  const [accepted, setAccepted] = useState<{ id: string; text: string } | null>(
+    null,
+  );
   const current = useRef(`${paneId}:${session}`);
   current.current = `${paneId}:${session}`;
   const pending = useRef<PendingMessage | null>(null);
@@ -57,8 +66,10 @@ export function useMessageQueue(
     setBusy(false);
     setError("");
     setRefreshError("");
-    pending.current = null;
-  }, [paneId, session]);
+    pending.current = readPending(storageKey);
+    setAccepted(null);
+    mutating.current = false;
+  }, [paneId, session, storageKey]);
   useEffect(() => {
     if (!enabled || locked) return;
     const scope = current.current;
@@ -70,11 +81,34 @@ export function useMessageQueue(
       if (stopped || document.hidden || isLocked() || controller) return;
       controller = new AbortController();
       try {
-        const next = await fetchMessageQueue(
-          paneId,
-          session,
-          controller.signal,
-        );
+        let next = await fetchMessageQueue(paneId, session, controller.signal);
+        const waiting = pending.current;
+        if (
+          !stopped &&
+          current.current === scope &&
+          !mutating.current &&
+          next.available &&
+          waiting?.scope === next.scope &&
+          typeof waiting.createdAt === "number" &&
+          Date.now() - waiting.createdAt < 5 * 60_000
+        ) {
+          next = await changeMessageQueue(
+            paneId,
+            {
+              scope: waiting.scope,
+              action: "add",
+              id: waiting.id,
+              text: waiting.text,
+            },
+            session,
+          );
+          if (!stopped && current.current === scope && next.available) {
+            savePending(storageKey, null);
+            if (pending.current?.id === waiting.id) pending.current = null;
+            setAccepted({ id: waiting.id, text: waiting.text });
+            setError("");
+          }
+        }
         if (!stopped && current.current === scope) {
           setPage(next);
           failedAt = null;
@@ -83,7 +117,8 @@ export function useMessageQueue(
       } catch {
         if (!stopped && !controller.signal.aborted) {
           failedAt ??= Date.now();
-          if (Date.now() - failedAt >= CONNECTION_LOST_MS) setRefreshError("Could not refresh the queue.");
+          if (Date.now() - failedAt >= CONNECTION_LOST_MS)
+            setRefreshError("Could not refresh the queue.");
         }
       } finally {
         controller = undefined;
@@ -104,17 +139,30 @@ export function useMessageQueue(
       window.removeEventListener("online", wake);
       document.removeEventListener("visibilitychange", wake);
     };
-  }, [paneId, session, enabled, locked]);
+  }, [paneId, session, enabled, locked, storageKey]);
   const mutate = useCallback(
     async (
       action: "add" | "edit" | "remove" | "send",
       text?: string,
       item?: QueueMessage,
     ) => {
-      if (!page?.available || busy) return false;
+      if (!page?.available || mutating.current) return false;
+      mutating.current = true;
       const key = current.current;
       setBusy(true);
       setError("");
+      if (
+        action === "add" &&
+        pending.current &&
+        (pending.current.text !== text || pending.current.scope !== page.scope)
+      ) {
+        setError(
+          "The previous message is still being saved. Keep this draft until it reconnects.",
+        );
+        setBusy(false);
+        mutating.current = false;
+        return false;
+      }
       if (action === "add" && !pending.current)
         pending.current = readPending(storageKey);
       if (
@@ -127,6 +175,7 @@ export function useMessageQueue(
           id: crypto.randomUUID(),
           text: text!,
           scope: page.scope,
+          createdAt: Date.now(),
         };
       if (action === "add") savePending(storageKey, pending.current);
       try {
@@ -148,7 +197,10 @@ export function useMessageQueue(
         if (action === "add") savePending(storageKey, null);
         if (current.current === key) {
           setPage(next);
-          if (action === "add") pending.current = null;
+          if (action === "add") {
+            setAccepted({ id: pending.current?.id ?? "", text: text! });
+            pending.current = null;
+          }
         }
         return current.current === key;
       } catch (failure) {
@@ -160,10 +212,13 @@ export function useMessageQueue(
           );
         return false;
       } finally {
-        if (current.current === key) setBusy(false);
+        if (current.current === key) {
+          setBusy(false);
+          mutating.current = false;
+        }
       }
     },
     [page, busy, paneId, session, storageKey],
   );
-  return { page, error, refreshError, busy, mutate };
+  return { page, error, refreshError, busy, mutate, accepted };
 }

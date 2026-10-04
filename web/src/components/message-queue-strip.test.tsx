@@ -37,3 +37,31 @@ it("edits, selects for delivery and removes a queued message without changing it
   );
   expect(change).toHaveBeenLastCalledWith("remove", undefined, item);
 });
+
+it("keeps uncertain deliveries visible without offering an unsafe retry", () => {
+  render(
+    <MessageQueueStrip
+      messages={[
+        {
+          id: "uncertain",
+          text: "Keep",
+          state: "paused",
+          createdAt: 1,
+          revision: 2,
+        },
+      ]}
+      busy={false}
+      error=""
+      change={vi.fn()}
+    />,
+  );
+  expect(
+    screen.queryByRole("button", { name: "Edit queued message 1" }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Send queued message 1 now" }),
+  ).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Remove queued message 1" }),
+  ).toBeInTheDocument();
+});

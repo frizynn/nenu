@@ -262,7 +262,9 @@ export function AgentChat({
   );
   // "Owns the keyboard" is asked of the dialog contract, not spelled as `kind !== "raw"`: the
   // slash-command `autocomplete` popup is a non-raw block painted while the input box is live.
-  const dialogPresent = liveBlocks.some(blockOwnsKeyboard);
+  const unknownInteraction = grammarsOn && /(?:enter|esc(?:ape)?)\s+(?:to\s+)?(?:confirm|cancel|continue|skip|select|go back)/i.test(modelSource.text.split("\n").slice(-25).join("\n")) &&
+    adapterFor(agent?.agent)?.composerReady?.(inputLines) === false && !liveBlocks.some(blockOwnsKeyboard);
+  const dialogPresent = liveBlocks.some(blockOwnsKeyboard) || unknownInteraction;
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
   const catalog = useModelCatalog({ paneId, session, agent: agent?.agent, live: liveModelBlock,
@@ -762,6 +764,7 @@ export function AgentChat({
                 onFind={display ? openFind : undefined}
                 onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
                 onDisplay={() => composerRef.current?.openDisplayPrefs()}
+                onTools={() => composerRef.current?.openTools()}
                 files={conversationCapable ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} labeled /> : undefined}
                 recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               />}
@@ -959,6 +962,11 @@ export function AgentChat({
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
                 onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
                 onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
+              {unknownInteraction && <div>
+                <p className="px-2 py-2 text-sm">The terminal is waiting. Your message will wait until it is ready.</p>
+                <div className="max-h-60 overflow-auto"><AnsiOutput text={text} agent={agent?.agent} /></div>
+                <button type="button" className="min-h-11 px-3 text-sm underline" onClick={() => { setRawTerminal(true); composerRef.current?.openTools(); }}>Open terminal controls</button>
+              </div>}
             </section>
           )}
 

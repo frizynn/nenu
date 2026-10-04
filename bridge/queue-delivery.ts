@@ -1,3 +1,9 @@
+import {
+  POLL_ATTEMPTS,
+  POLL_DELAY_MS,
+  defaultSleep,
+  type Sleep,
+} from "../web/src/lib/harness/poll.ts";
 import type { HerdrClient } from "./herdr-client.ts";
 import type { QueuedMessage, QueueOutcome } from "./message-queue.ts";
 import {
@@ -11,7 +17,7 @@ import type { ActionResponse } from "./types.ts";
 
 export async function deliverQueuedMessage(
   row: QueuedMessage,
-  herdr: HerdrClient,
+  herdr: Pick<HerdrClient, "readPane">,
   write: (
     text: string,
     submit: boolean,
@@ -19,6 +25,7 @@ export async function deliverQueuedMessage(
     paste: boolean,
   ) => Promise<ActionResponse>,
   sameConversation: () => Promise<boolean>,
+  sleep: Sleep = defaultSleep,
 ): Promise<QueueOutcome> {
   const adapter = adapterFor(row.agent);
   if (!adapter?.composerReady)
@@ -27,7 +34,15 @@ export async function deliverQueuedMessage(
       error: "This agent cannot accept queued messages.",
     };
   const read = () => herdr.readPane(row.paneId, "visible", 100, "ansi");
-  const initial = splitLines(parseAnsi((await read()).text));
+  let initial;
+  try {
+    initial = splitLines(parseAnsi((await read()).text));
+  } catch {
+    return {
+      status: "blocked",
+      error: "Waiting for the terminal connection. Your message is saved.",
+    };
+  }
   if (
     !adapter.composerReady(initial) ||
     adapter.extractInputDraft(initial)?.trim()
@@ -36,11 +51,13 @@ export async function deliverQueuedMessage(
       status: "blocked",
       error: "The terminal has a dialog or draft. Check it before sending.",
     };
+  let writeAttempted = false;
   const result = await sendGuardedReply({
     paneId: row.paneId,
     agent: row.agent,
     text: row.text,
     requestId: `queue:${row.id}:${row.revision}`,
+    sleep,
     transport: {
       fetchPane: read,
       async sendReply(_pane, text, submit, _session, _expected, id, paste) {
@@ -59,14 +76,34 @@ export async function deliverQueuedMessage(
             ok: false,
             error: "The terminal input changed. Check it before sending.",
           };
+        writeAttempted = true;
         return write(text, submit, id!, paste ?? false);
       },
     },
   });
-  return result.status === "sent"
-    ? { status: "sent" }
-    : {
-        status: result.status === "blocked" ? "blocked" : "uncertain",
-        error: result.error,
-      };
+  if (result.status === "sent") {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+      if (attempt > 0) await sleep(POLL_DELAY_MS);
+      try {
+        if (!(await sameConversation())) break;
+        const lines = splitLines(parseAnsi((await read()).text));
+        if (
+          adapter.composerReady(lines) &&
+          adapter.extractInputDraft(lines) === null
+        )
+          return { status: "sent" };
+      } catch {
+        /* A write acknowledgement alone cannot confirm consumption. */
+      }
+    }
+    return {
+      status: "uncertain",
+      error:
+        "The terminal received Enter, but delivery could not be confirmed. Check Terminal before retrying.",
+    };
+  }
+  return {
+    status: !writeAttempted ? "blocked" : "uncertain",
+    error: result.error,
+  };
 }

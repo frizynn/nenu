@@ -2234,3 +2234,27 @@ describe("Composer — draft persistence", () => {
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("");
   });
 });
+
+
+describe("conversation composer", () => {
+  it("only exposes attach and send, and saves Send while a dialog owns the keyboard", async () => {
+    const adds: string[] = [];
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({available:true,scope:"scope",messages:[]})),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({request}) => {
+        const body = await request.json() as {text:string}; adds.push(body.text);
+        return HttpResponse.json({available:true,scope:"scope",messages:[]});
+      }),
+    );
+    renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
+    expect(screen.queryByRole("button",{name:"Choose model"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"More message actions"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Add to queue"})).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Attach image"})).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox"),"keep this message");
+    await userEvent.click(screen.getByRole("button",{name:"Send"}));
+    await waitFor(() => expect(adds).toEqual(["keep this message"]));
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+});

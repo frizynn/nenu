@@ -278,8 +278,10 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     const working = { ...fixtureAgents[1]!, status: "working" as const, hasSession: false };
     renderChat({ agent: working, agents: [working], session: "phone", text: "Codex is working" });
 
+    await user.click(screen.getByRole("button", {name: "Conversation actions"}));
+    await user.click(screen.getByRole("button", {name: "Agent tools"}));
     const stop = screen.getByRole("button", { name: "Stop generation" });
-    expect(stop).toHaveClass("size-11");
+    expect(stop).toHaveClass("min-h-11");
     await user.click(stop);
 
     await waitFor(() => expect(requests).toHaveLength(1));
@@ -465,6 +467,10 @@ describe("AgentChat — prompt-select race guard wiring (frozen {text, revision}
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("button", { name: "Find in output" }));
     act(() => advance({ text: STATUS_TEXT, revision: 2 }));
+    if (!screen.queryByRole("button", {name: "Choose model"})) {
+      await user.click(screen.getByRole("button", {name: "Conversation actions"}));
+      await user.click(screen.getByRole("button", {name: "Agent tools"}));
+    }
     expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
     const input = screen.getByRole("textbox", { name: "" });
     await user.type(input, "Writing while reading older output");
@@ -727,7 +733,7 @@ describe("AgentChat — native workbench interactions", () => {
     renderChat({ paneId: agent.paneId, agent, agents: [agent], text: `Old terminal output that must not become the conversation\n${menu}` });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Model picker" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "gpt-6-astra" })).toBeVisible();
     expect(screen.queryByText("Old terminal output that must not become the conversation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live terminal" })).not.toBeInTheDocument();
@@ -757,6 +763,10 @@ it("preloads once and opens, selects and closes models without terminal requests
   const agent = { ...fixtureAgents[1]!, paneId: "instant-model-qa", hasSession: true };
   renderChat({ paneId: agent.paneId, agent, agents: [agent] });
   await waitFor(() => expect(catalogs).toBe(1));
+  if (!screen.queryByRole("button", {name: "Choose model"})) {
+    fireEvent.click(screen.getByRole("button", {name: "Conversation actions"}));
+    fireEvent.click(screen.getByRole("button", {name: "Agent tools"}));
+  }
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   const option = await screen.findByRole("radio", { name: "gpt-5.6-sol" });
   expect(option).toBeEnabled();
@@ -765,6 +775,10 @@ it("preloads once and opens, selects and closes models without terminal requests
   expect(writes).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+  if (!screen.queryByRole("button", {name: "Choose model"})) {
+    fireEvent.click(screen.getByRole("button", {name: "Conversation actions"}));
+    fireEvent.click(screen.getByRole("button", {name: "Agent tools"}));
+  }
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(screen.getByRole("radio", { name: "gpt-6-astra" })).toBeEnabled();
   expect(catalogs).toBe(1);

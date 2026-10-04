@@ -1,3 +1,4 @@
+import { PaneWrites } from "./pane-writes.ts";
 import { join } from "node:path";
 import { MessageQueue, type QueuedMessage } from "./message-queue.ts";
 import { deliverQueuedMessage } from "./queue-delivery.ts";
@@ -29,6 +30,7 @@ export class QueueService {
       id: string,
       paste: boolean,
     ) => Promise<ActionResponse>,
+    private input = new PaneWrites(),
   ) {
     this.queue = new MessageQueue(join(stateDir, "message-queue.json"));
     const timer = setInterval(() => {
@@ -55,17 +57,27 @@ export class QueueService {
             status: "blocked",
             error: "The connected conversation changed.",
           };
-        return deliverQueuedMessage(
-          row,
-          current.herdr,
-          (text, submit, id, paste) => this.write(row, text, submit, id, paste),
-          async () => {
-            const next = await this.resolve(row.session, row.paneId, true);
-            return (
-              !!next?.connected && identity(next.pane) === row.conversation
-            );
-          },
+        const delivery = await this.input.run(row.session, row.paneId, () =>
+          deliverQueuedMessage(
+            row,
+            current.herdr,
+            (text, submit, id, paste) =>
+              this.write(row, text, submit, id, paste),
+            async () => {
+              const next = await this.resolve(row.session, row.paneId, true);
+              return (
+                !!next?.connected && identity(next.pane) === row.conversation
+              );
+            },
+          ),
         );
+        return delivery.busy
+          ? {
+              status: "blocked",
+              error:
+                "Another terminal action is finishing. Your message is saved.",
+            }
+          : delivery.value;
       },
     );
   }
@@ -75,7 +87,7 @@ export class QueueService {
     paneId: string,
     device: string | null,
   ): Promise<Response> {
-    const current = await this.resolve(session, paneId);
+    const current = await this.resolve(session, paneId, true);
     const conversation = current ? identity(current.pane) : null;
     if (
       !current ||

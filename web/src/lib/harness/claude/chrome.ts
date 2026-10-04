@@ -9,6 +9,7 @@
 // mirror — when unsure it returns the buffer untouched (the T1 raw-mirror fallback). Pure; operates on parsed line text, so a user-configured statusline is
 // matched by POSITION (below the box's bottom border), never by its content strings.
 
+import { detectOverlayMenu } from "./overlay-menu";
 import type { StyledLine } from "../../blocks";
 import { namesAMenuKey } from "../menu-hints";
 import { findAutocompleteRun, MAX_AUTOCOMPLETE_LINES } from "./autocomplete";
@@ -507,6 +508,7 @@ function tailLooksModal(text: string): boolean {
 /** Whether any of Claude's specific dialog grammars claims the screen. Each is tail-anchored on its
  *  own footer and reads the full screen, independent of where this module thinks the box is. */
 function dialogOnScreen(screen: StyledLine[]): boolean {
+  if (detectOverlayMenu(screen)) return true;
   // The same view of the screen claudeBuildBlocks reads: without a question dialog's closing rule.
   const lines = withoutDialogClosingRule(screen);
   return (
