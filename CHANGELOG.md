@@ -43,6 +43,11 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 - Show project templates and let operators start or close organization nodes. (12ff937)
 
+## [0.46.5] - 2026-10-04
+
+### Fixed
+- Recover existing Codex conversations automatically from unique live terminal titles and loaded session metadata (3719999c).
+
 ## [0.46.4] - 2026-09-30
 
 ### Fixed
