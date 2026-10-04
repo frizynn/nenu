@@ -66,32 +66,52 @@ it("keeps cached queue refresh failures quiet while a brief drop recovers", asyn
   try {
     await act(async () => {});
     vi.mocked(fetchMessageQueue).mockRejectedValue(new Error("weak signal"));
-    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
     expect(hook.result.current.page).toEqual(page);
     expect(hook.result.current.error).toBe("");
     expect(hook.result.current.refreshError).toBe("");
     vi.mocked(fetchMessageQueue).mockResolvedValue(page);
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
     expect(hook.result.current.error).toBe("");
-  } finally { hook.unmount(); vi.useRealTimers(); }
+  } finally {
+    hook.unmount();
+    vi.useRealTimers();
+  }
 });
-
 
 it("keeps mutation failures separate from background refreshes and reports sustained queue errors", async () => {
   vi.useFakeTimers();
   const hook = renderHook(() => useMessageQueue("pane", "session", true));
   try {
     await act(async () => {});
-    vi.mocked(changeMessageQueue).mockRejectedValue(new Error("Message was not acknowledged"));
-    await act(async () => { await hook.result.current.mutate("add", "draft"); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    vi.mocked(changeMessageQueue).mockRejectedValue(
+      new Error("Message was not acknowledged"),
+    );
+    await act(async () => {
+      await hook.result.current.mutate("add", "draft");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
     expect(hook.result.current.error).toBe("Message was not acknowledged");
-    vi.mocked(fetchMessageQueue).mockRejectedValue(new Error("queue unavailable"));
-    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
-    expect(hook.result.current.refreshError).toBe("Could not refresh the queue.");
-  } finally { hook.unmount(); vi.useRealTimers(); }
+    vi.mocked(fetchMessageQueue).mockRejectedValue(
+      new Error("queue unavailable"),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(hook.result.current.refreshError).toBe(
+      "Could not refresh the queue.",
+    );
+  } finally {
+    hook.unmount();
+    vi.useRealTimers();
+  }
 });
-
 
 it("stops queue reads during the idle pause and catches up on resume", async () => {
   vi.useFakeTimers();
@@ -104,5 +124,51 @@ it("stops queue reads during the idle pause and catches up on resume", async () 
     expect(hook.result.current.page).toEqual(page);
     await act(async () => setLocked(false));
     expect(fetchMessageQueue).toHaveBeenCalledTimes(2);
-  } finally { hook.unmount(); setLocked(false); vi.useRealTimers(); }
+  } finally {
+    hook.unmount();
+    setLocked(false);
+    vi.useRealTimers();
+  }
+});
+
+it("recovers an unacknowledged enqueue automatically with the same ID", async () => {
+  vi.useFakeTimers();
+  const hook = renderHook(() => useMessageQueue("pane", "session", true));
+  try {
+    await act(async () => {});
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(
+      new Error("lost response"),
+    );
+    await act(async () => {
+      expect(await hook.result.current.mutate("add", "Keep this")).toBe(false);
+    });
+    const id = vi.mocked(changeMessageQueue).mock.calls[0]![1].id;
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(changeMessageQueue).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(changeMessageQueue).mock.calls[1]![1].id).toBe(id);
+    expect(hook.result.current.accepted).toEqual({ id, text: "Keep this" });
+    expect(hook.result.current.error).toBe("");
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(changeMessageQueue).toHaveBeenCalledTimes(2);
+  } finally {
+    hook.unmount();
+    vi.useRealTimers();
+  }
+});
+
+it("does not automatically replay an old saved enqueue", async () => {
+  sessionStorage.setItem(
+    `collie.queue.pending:${JSON.stringify(["pane", "session"])}`,
+    JSON.stringify({
+      id: "old",
+      scope: page.scope,
+      text: "Keep",
+      createdAt: Date.now() - 6 * 60_000,
+    }),
+  );
+  const hook = renderHook(() => useMessageQueue("pane", "session", true));
+  await waitFor(() => expect(hook.result.current.page).toEqual(page));
+  expect(changeMessageQueue).not.toHaveBeenCalled();
+  hook.unmount();
 });

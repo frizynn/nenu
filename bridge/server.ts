@@ -1,3 +1,4 @@
+import { PaneWrites } from "./pane-writes.ts";
 import { ClaudeTelemetry } from "./claude-telemetry.ts";
 import { artifactMetadata } from "./artifact-metadata.ts";
 import { WebAssetArchive } from "./web-assets.ts";
@@ -42,6 +43,13 @@ import { stripAnsi } from "./journal/text.ts";
 import type { JournalAdapter } from "./journal/types.ts";
 import { toPaneWire } from "./types.ts";
 import { ProjectRegistry } from "./projects.ts";
+import {
+  defaultOrgRun,
+  listTemplates,
+  OrgValidationError,
+  resolveNode,
+  startFromTemplate,
+} from "./org-cli.ts";
 import type {
   ActionResponse,
   AgentView,
@@ -76,6 +84,7 @@ const PROMPT_BINDING_BLANK_LINE_HEADROOM = 6;
 // — only the static UI 503s with a hint to build.
 const WEB_DIR = join(import.meta.dir, "..", "web", "dist");
 const projects = new ProjectRegistry();
+const orgRun = defaultOrgRun();
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -195,6 +204,7 @@ export function startServer(opts: {
   const claudeTelemetry = new ClaudeTelemetry(cfg.stateDir);
   const subagents = new Subagents(cfg.journalRoots, cfg.stateDir);
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
+  const input = new PaneWrites();
   const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
     const rt = registry.get(session);
     if (!rt) return null;
@@ -213,7 +223,7 @@ export function startServer(opts: {
     if (!rt) return { ok: false, error: "Session unavailable." };
     const response = await replyPane(rt.herdr, cfg, row.paneId, new Request("http://localhost/queue-delivery", { method: "POST", body: JSON.stringify({ text, submit, request_id: requestId, paste }) }), audit, row.device, row.session);
     return await response.json() as ActionResponse;
-  });
+  }, input);
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -241,6 +251,90 @@ export function startServer(opts: {
       const sessionName = url.searchParams.get("session") ?? undefined;
       const unknownSession = () =>
         jsonError(`unknown session: ${sessionName ?? ""}`, 404, req.headers.get("accept-encoding"));
+
+      if (pathname === "/api/org/templates" && req.method === "GET") {
+        const gate = checkAccess(req, cfg);
+        if (!gate.ok) return text(gate.reason, 403);
+        try {
+          const templates = await listTemplates(orgRun, url.searchParams.get("project") ?? "");
+          return json({ ok: true, templates }, req.headers.get("accept-encoding"));
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not list templates.",
+          }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
+
+      if (pathname === "/api/org/node/start" && req.method === "POST") {
+        const denied = guard(req, cfg, "write");
+        if (denied) return denied;
+        const rt = registry.get(sessionName);
+        if (!rt) return unknownSession();
+        const acceptEncoding = req.headers.get("accept-encoding");
+        const body: unknown = await req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
+        }
+        const project = "project" in body ? body.project : undefined;
+        const template = "template" in body ? body.template : undefined;
+        const title = "title" in body ? body.title : undefined;
+        const parent = "parent" in body ? body.parent : undefined;
+        const task = "task" in body ? body.task : undefined;
+        if (
+          typeof project !== "string" || typeof template !== "string" || typeof title !== "string" ||
+          typeof parent !== "string" || typeof task !== "string"
+        ) {
+          return json({ ok: false, error: "Project, template, title, parent, and task must be text." }, acceptEncoding, 400);
+        }
+        try {
+          const node = await startFromTemplate(orgRun, rt.socketPath, { project, template, title, parent, task });
+          audit.record({
+            action: "org.node.start",
+            session: rt.name,
+            device: deviceAuth(req, cfg).device,
+            detail: { project, template, title, parent },
+          });
+          return json({ ok: true, node }, acceptEncoding);
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not start node.",
+          }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
+
+      if (pathname === "/api/org/node/resolve" && req.method === "POST") {
+        const denied = guard(req, cfg, "write");
+        if (denied) return denied;
+        const rt = registry.get(sessionName);
+        if (!rt) return unknownSession();
+        const acceptEncoding = req.headers.get("accept-encoding");
+        const body: unknown = await req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
+        }
+        const project = "project" in body ? body.project : undefined;
+        const id = "id" in body ? body.id : undefined;
+        if (typeof project !== "string" || typeof id !== "string") {
+          return json({ ok: false, error: "Project and node ID must be text." }, acceptEncoding, 400);
+        }
+        try {
+          await resolveNode(orgRun, rt.socketPath, { project, id });
+          audit.record({
+            action: "org.node.resolve",
+            session: rt.name,
+            device: deviceAuth(req, cfg).device,
+            detail: { project, id },
+          });
+          return json({ ok: true }, acceptEncoding);
+        } catch (error) {
+          return json({
+            ok: false,
+            error: error instanceof Error ? error.message : "Could not close node.",
+          }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
+        }
+      }
 
       // ── Live state (polled by the client) ────────────────────────────────
       if (pathname === "/api/snapshot") {
@@ -310,8 +404,8 @@ export function startServer(opts: {
         const tabId = decodeURIComponent(tabMatch[1]!);
         const action = tabMatch[2];
         const device = deviceAuth(req, cfg).device;
-        if (action === "close") return closeTab(rt.herdr, tabId, req, audit, device, rt.name);
-        return renameTab(rt.herdr, tabId, req, audit, device, rt.name);
+        if (action === "close") return closeTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
+        return renameTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
       }
 
       // ── Per-pane read / send ─────────────────────────────────────────────
@@ -435,13 +529,18 @@ export function startServer(opts: {
         }
         if (action === "history" && req.method === "GET")
           return paneHistory(cfg, journals, transcripts, rt.engine, paneId, url, req, conversations, herdr, session);
-        if (action === "reply" && req.method === "POST") return replyPane(herdr, cfg, paneId, req, audit, device, session);
+        if (["reply", "keys", "interrupt"].includes(action ?? "") && req.method === "POST") {
+          const result = await input.run(session, paneId, () => action === "reply"
+            ? replyPane(herdr, cfg, paneId, req, audit, device, session)
+            : action === "keys"
+              ? keysPane(herdr, cfg, paneId, req, audit, device, session)
+              : interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session));
+          return result.busy ? jsonError("A saved message is being delivered. Wait before using terminal controls.", 409, null) : result.value;
+        }
         if (action === "send-report" && req.method === "POST") return secure(await reportUnsentReply(paneId, req, audit, device, session));
-        if (action === "keys" && req.method === "POST") return keysPane(herdr, cfg, paneId, req, audit, device, session);
-        if (action === "interrupt" && req.method === "POST") return interruptCodexPane(herdr, rt.engine, cfg, paneId, req, audit, device, session);
         if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit, device, session);
-        if (action === "close" && req.method === "POST") return closePane(herdr, paneId, req, audit, device, session);
-        if (action === "rename" && req.method === "POST") return renamePane(herdr, paneId, req, audit, device, session);
+        if (action === "close" && req.method === "POST") return closePane(herdr, rt.engine, paneId, req, audit, device, session);
+        if (action === "rename" && req.method === "POST") return renamePane(herdr, rt.engine, paneId, req, audit, device, session);
         return text("method not allowed", 405);
       }
 
@@ -1161,10 +1260,20 @@ function promptBindingFailure(
   );
 }
 
+// Herdr acknowledged the write even if the follow-up read fails. Do not turn a successful
+// mutation into a retryable action error: retrying a close could target a reused pane id.
+async function refreshStructuralState(engine: StateEngine): Promise<void> {
+  try { await engine.refresh(); }
+  catch (error) {
+    console.warn("[state] structural action succeeded but refresh failed:", error instanceof Error ? error.message : "unknown error");
+  }
+}
+
 // Close a pane ("kill the agent"). Structural op — strictly less powerful than the text/keys
 // injection the bridge already allows, so it stays within the existing remote-shell threat model.
 async function closePane(
   herdr: HerdrClient,
+  engine: StateEngine,
   paneId: string,
   req: Request,
   audit: AuditLog,
@@ -1175,6 +1284,7 @@ async function closePane(
   try {
     await herdr.closePane(paneId);
     audit.record({ action: "pane.close", paneId, session, device, detail: {} });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1187,6 +1297,7 @@ async function closePane(
 // saving an empty field), which we send to Herdr as `label: null`.
 async function renamePane(
   herdr: HerdrClient,
+  engine: StateEngine,
   paneId: string,
   req: Request,
   audit: AuditLog,
@@ -1206,6 +1317,7 @@ async function renamePane(
   try {
     await herdr.renamePane(paneId, label);
     audit.record({ action: "pane.rename", paneId, session, device, detail: { label } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1233,6 +1345,7 @@ export function normalizeTabLabel(
 // "clear" (see normalizeTabLabel): a blank label is a 400, not a reset to the tab number.
 async function renameTab(
   herdr: HerdrClient,
+  engine: StateEngine,
   tabId: string,
   req: Request,
   audit: AuditLog,
@@ -1251,6 +1364,7 @@ async function renameTab(
   try {
     await herdr.renameTab(tabId, parsed.label);
     audit.record({ action: "tab.rename", session, device, detail: { tabId, label: parsed.label } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1263,6 +1377,7 @@ async function renameTab(
 // model. No body: the tab id is in the path.
 async function closeTab(
   herdr: HerdrClient,
+  engine: StateEngine,
   tabId: string,
   req: Request,
   audit: AuditLog,
@@ -1273,6 +1388,7 @@ async function closeTab(
   try {
     await herdr.closeTab(tabId);
     audit.record({ action: "tab.close", session, device, detail: { tabId } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);

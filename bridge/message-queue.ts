@@ -11,6 +11,7 @@ export interface QueuedMessage {
   text: string;
   state: "queued" | "sending" | "sent" | "paused";
   createdAt: number;
+  sentAt?: number;
   revision: number;
   error?: string;
   sendNow?: boolean;
@@ -27,7 +28,6 @@ export class MessageQueue {
   private serial = Promise.resolve();
   private ready: Promise<void>;
   private running = false;
-  private awaitingTurn = new Map<string, QueuedMessage>();
   constructor(private path: string) {
     this.ready = this.restore();
     void this.ready.catch(() => {});
@@ -63,7 +63,10 @@ export class MessageQueue {
         const value = operation();
         await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
         const temp = `${this.path}.${crypto.randomUUID()}.tmp`;
-        await writeFile(temp, JSON.stringify(this.rows), {
+        const encoded = JSON.stringify(this.rows);
+        if (encoded.length > 8 * 1024 * 1024)
+          throw new Error("Queue storage exceeds limit.");
+        await writeFile(temp, encoded, {
           mode: 0o600,
           flag: "wx",
         });
@@ -108,7 +111,10 @@ export class MessageQueue {
           .map((item) => item.id),
       );
       this.rows = this.rows.filter(
-        (item) => item.state !== "sent" || retainedSent.has(item.id),
+        (item) =>
+          item.state !== "sent" ||
+          retainedSent.has(item.id) ||
+          (item.sentAt ?? item.createdAt) > Date.now() - 10 * 60_000,
       );
       this.rows.push({
         ...row,
@@ -136,6 +142,10 @@ export class MessageQueue {
         row.state === "sent"
       )
         throw new Error("The queued message changed. Refresh the queue.");
+      if (row.state === "paused" && action !== "remove")
+        throw new Error(
+          "Check Terminal before sending again. Remove this uncertain delivery after checking.",
+        );
       if (action === "remove")
         this.rows = this.rows.filter((item) => item !== row);
       else {
@@ -165,9 +175,6 @@ export class MessageQueue {
     try {
       await this.ready;
       await this.serial;
-      for (const [scope, row] of this.awaitingTurn)
-        if ((await observed(row)) === "working")
-          this.awaitingTurn.delete(scope);
       const scopes = new Set<string>();
       for (const candidate of [...this.rows].sort(
         (a, b) => Number(!!b.sendNow) - Number(!!a.sendNow),
@@ -176,11 +183,9 @@ export class MessageQueue {
         scopes.add(candidate.scope);
         if (candidate.state !== "queued") continue;
         const state = await observed(candidate);
-        if (state === "working") this.awaitingTurn.delete(candidate.scope);
         if (
           state === "unavailable" ||
-          (!candidate.sendNow &&
-            (state !== "ready" || this.awaitingTurn.has(candidate.scope)))
+          (!candidate.sendNow && state !== "ready")
         )
           continue;
         const claimed = await this.mutate(() => {
@@ -208,12 +213,16 @@ export class MessageQueue {
         }
         await this.mutate(() => {
           const row = this.rows.find((item) => item.id === claimed.id)!;
-          row.state = outcome.status === "sent" ? "sent" : "paused";
+          row.state =
+            outcome.status === "sent"
+              ? "sent"
+              : outcome.status === "blocked"
+                ? "queued"
+                : "paused";
+          if (outcome.status === "sent") row.sentAt = Date.now();
           row.error = outcome.error;
           row.revision++;
         });
-        if (outcome.status === "sent")
-          this.awaitingTurn.set(claimed.scope, claimed);
       }
     } finally {
       this.running = false;

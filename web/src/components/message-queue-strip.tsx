@@ -26,7 +26,7 @@ export function MessageQueueStrip({
       className="mb-2 max-h-52 overflow-y-auto rounded-lg border border-border/50 px-3 py-1"
     >
       <p className="py-1 text-xs text-muted-foreground">
-        Queue · {messages.length} · sends after the current turn
+        Pending · {messages.length} · sends when the terminal is ready
       </p>
       {error && (
         <p role="alert" className="py-1 text-xs text-destructive">
@@ -57,7 +57,7 @@ export function MessageQueueStrip({
                   ? "Sending…"
                   : item.state === "paused"
                     ? item.error || "Paused. Check Terminal."
-                    : "Queued"}
+                    : item.error || "Waiting to send"}
               </span>
               {editing === item.id ? (
                 <button
@@ -71,7 +71,7 @@ export function MessageQueueStrip({
                 >
                   <Check className="size-3.5" />
                 </button>
-              ) : (
+              ) : item.state !== "paused" ? (
                 <>
                   <button
                     type="button"
@@ -96,7 +96,7 @@ export function MessageQueueStrip({
                     <Send className="size-3.5" />
                   </button>
                 </>
-              )}
+              ) : null}
               <button
                 type="button"
                 aria-label={`Remove queued message ${index + 1}`}

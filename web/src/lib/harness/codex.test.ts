@@ -91,6 +91,7 @@ const DIALOG = [
   "codex--v0156-approval-exec-wrapped.txt",
   "codex--v0156-approval-patch.txt",
   "codex--v0156-trust.txt",
+  "codex--v0159-update-dialog.txt",
 ];
 
 const ownFixtures = DIALOG;
@@ -1327,10 +1328,22 @@ describe("Codex 0.159.0", () => {
   // The two dialogs a fresh 0.159.0 opens with. Neither is lifted: the trust prompt's second row is
   // now `2. Back to Agent Command Center`, a recipe nobody has pressed, and the update prompt is left
   // to the terminal on purpose. What matters for a send is that neither reads as a composer.
-  it.each(["codex--v0159-trust.txt", "codex--v0159-update-dialog.txt"])("%s: no composer, and no buttons", (name) => {
+  it.each(["codex--v0159-trust.txt"])("%s: no composer, and no buttons", (name) => {
     const lines = fixtureLines(name);
     expect(codexAdapter.composerReady!(lines)).toBe(false);
     expect(codexAdapter.extractInputDraft(lines)).toBeNull();
     expect(buildBlocks(lines, { agent: "codex" }).map((b) => b.kind)).toEqual(["raw"]);
   });
+});
+
+
+it("shows a Codex update notice with its printed skip key", () => {
+  const lines = fixtureLines("codex--v0159-update-dialog.txt");
+  const block = codexAdapter.buildBlocks(lines).find(b => b.kind === "menu");
+  expect(block?.kind).toBe("menu");
+  if (block?.kind === "menu") {
+    expect(block.menu.actions.find(a => a.cancel)?.keys).toEqual(["Escape"]);
+    expect(block.menu.signature).toContain("\n");
+    expect(block.menu.signature.startsWith("[")).toBe(false);
+  }
 });

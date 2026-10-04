@@ -1,20 +1,36 @@
 import { ArrowLeft, GitBranch } from "lucide-react";
-import { useNavigate, useParams, useRouteLoaderData } from "react-router";
+import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
+import { OrgTemplates } from "@/components/org-templates";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { AgentIcon } from "@/components/agent-icon";
 import { StatusDot } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { resolveOrgNode } from "@/lib/api";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
-import type { ProjectThreadView } from "@/lib/types";
+import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 
 export function ProjectRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "" } = useParams();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
+  const readOnly = isReadOnly(data.device);
   const back = () => navigate(homePath(data.session));
+
+  async function closeThread(thread: ProjectThreadView) {
+    if (!project || !window.confirm(`Close ${thread.id} ${thread.title}? Branch, worktree and report are kept.`)) return;
+    try {
+      await resolveOrgNode({ project: project.slug, id: thread.id }, data.session);
+      revalidator.revalidate();
+    } catch (error) {
+      // A failed close leaves the thread in the current snapshot and gives the operator its cause.
+      window.alert(error instanceof Error ? error.message : "Could not close node.");
+    }
+  }
 
   return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
     <AppHeader bridge={data.bridge} error={data.error} onHome={back}
@@ -46,7 +62,12 @@ export function ProjectRoute() {
             </button> : <div className="rounded-xl border border-dashed px-4 py-4 text-sm text-muted-foreground">Coordinator is not active in this session.</div>}
           </section>
 
-          <ThreadSection title="Active threads" threads={project.threads.filter((thread) => thread.status !== "resolved")} onOpen={(id) => navigate(panePath(id, data.session))} />
+          <section className="mb-10" aria-labelledby="templates-heading">
+            <h2 id="templates-heading" className="mb-3 text-sm font-semibold">Templates</h2>
+            <OrgTemplates project={project} session={data.session} readOnly={readOnly} onChanged={() => { revalidator.revalidate(); }} />
+          </section>
+
+          <ThreadSection title="Active threads" threads={project.threads.filter((thread) => thread.status !== "resolved")} onOpen={(id) => navigate(panePath(id, data.session))} onClose={closeThread} readOnly={readOnly} />
           <ThreadSection title="Thread history" threads={project.threads.filter((thread) => thread.status === "resolved")} onOpen={(id) => navigate(panePath(id, data.session))} quiet />
         </>}
       </div>
@@ -54,14 +75,24 @@ export function ProjectRoute() {
   </div>;
 }
 
-function ThreadSection({ title, threads, onOpen, quiet = false }: { title: string; threads: ProjectThreadView[]; onOpen: (paneId: string) => void; quiet?: boolean }) {
+function ThreadSection({ title, threads, onOpen, onClose, readOnly = false, quiet = false }: {
+  title: string;
+  threads: ProjectThreadView[];
+  onOpen: (paneId: string) => void;
+  onClose?: (thread: ProjectThreadView) => void;
+  readOnly?: boolean;
+  quiet?: boolean;
+}) {
   if (threads.length === 0 && quiet) return null;
   return <section className="mb-10" aria-labelledby={`threads-${quiet ? "history" : "active"}`}>
     <div className="mb-3 flex items-baseline justify-between"><h2 id={`threads-${quiet ? "history" : "active"}`} className="text-sm font-semibold">{title}</h2><span className="text-xs tabular-nums text-muted-foreground">{threads.length}</span></div>
     {threads.length === 0 ? <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No active threads.</p> : <div className="divide-y rounded-xl border bg-card">
       {threads.map((thread) => {
-        const content = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted"><GitBranch className="size-4 text-muted-foreground" aria-hidden /></span><span className="min-w-0 flex-1"><span className="block break-words font-medium">{thread.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"><span className="font-mono">{thread.id}</span><span aria-hidden>·</span><span>{thread.role}</span>{thread.parentId !== "root" && <><span aria-hidden>·</span><span>under {thread.parentId}</span></>}<span aria-hidden>·</span><span>{thread.status}</span>{thread.paneId && <><span aria-hidden>·</span><span>{thread.liveStatus}</span></>}</span></span>{thread.liveStatus ? <StatusDot status={thread.liveStatus} surface="bg-card" /> : <span className="size-2.5 shrink-0 rounded-full border border-muted-foreground/40" aria-hidden />}</>;
-        return thread.paneId ? <button key={thread.id} type="button" onClick={() => onOpen(thread.paneId!)} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left first:rounded-t-xl last:rounded-b-xl hover:bg-muted/50">{content}</button> : <div key={thread.id} className="flex min-h-16 items-center gap-3 px-4 py-3 text-left opacity-75">{content}</div>;
+        const content = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted"><GitBranch className="size-4 text-muted-foreground" aria-hidden /></span><span className="min-w-0 flex-1"><span className="block break-words font-medium">{thread.title}</span><span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"><span className="font-mono">{thread.id}</span><span aria-hidden>·</span><span>{thread.role}</span>{thread.parentId !== "root" && <><span aria-hidden>·</span><span>under {thread.parentId}</span></>}<span aria-hidden>·</span><span>{thread.status}</span>{thread.template && <><span aria-hidden>·</span><span>from {thread.template}</span></>}{thread.paneId && <><span aria-hidden>·</span><span>{thread.liveStatus}</span></>}</span></span>{thread.liveStatus ? <StatusDot status={thread.liveStatus} surface="bg-card" /> : <span className="size-2.5 shrink-0 rounded-full border border-muted-foreground/40" aria-hidden />}</>;
+        return <div key={thread.id} className="flex items-stretch">
+          {thread.paneId ? <button type="button" onClick={() => onOpen(thread.paneId!)} className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left first:rounded-t-xl last:rounded-b-xl hover:bg-muted/50">{content}</button> : <div className="flex min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left opacity-75">{content}</div>}
+          {!quiet && !readOnly && onClose && <Button type="button" size="lg" variant="outline" className="my-2 mr-2" onClick={() => onClose(thread)}>Close</Button>}
+        </div>;
       })}
     </div>}
   </section>;

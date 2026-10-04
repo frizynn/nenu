@@ -8,6 +8,41 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.48.2] - 2026-10-05
+
+### Fixed
+- Publish fresh pane/tab state before acknowledging rename or close; read Claude session names in the background. (e837f9bd)
+- Retain post-send chat refreshes when another history read is pending. (e837f9bd)
+
+## [0.48.1] - 2026-10-04
+
+### Fixed
+- Align chat attachment and Send controls with the text field in one compact row. (c6c7a48e)
+
+## [0.48.0] - 2026-10-04
+
+### Added
+- Save chat messages before delivery, wait through terminal dialogs, and verify input consumption. (cc1196d4)
+- Show Claude overlay menus and Codex update notices in the conversation. (cc1196d4)
+
+### Changed
+- Keep the chat composer for attachments, text and Send; move tools to the header menu. (cc1196d4)
+
+## [0.47.2] - 2026-10-04
+
+### Fixed
+- Keep the header chat/terminal toggle icon-only with its accessible label and 44 px touch target. (698e9ccf)
+
+## [0.47.1] - 2026-10-03
+
+### Fixed
+- Recover existing Codex conversations automatically from unique live terminal titles and loaded session metadata (0c3e03ea).
+
+## [0.47.0] - 2026-09-30
+
+### Added
+- Show project templates and let operators start or close organization nodes. (12ff937)
+
 ## [0.46.5] - 2026-10-04
 
 ### Fixed

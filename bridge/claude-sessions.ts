@@ -2,9 +2,13 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { record } from "./codex-rpc.ts";
 
-/** launchd does not inherit the user's interactive shell PATH. */
+/** launchd does not inherit the user's interactive shell PATH, so add the usual user tool folders. */
+export function servicePath(path = process.env.PATH, home = homedir()): string {
+  return [path, join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(delimiter);
+}
+
 export function findClaudeExecutable(path = process.env.PATH, home = homedir()): string | null {
-  return Bun.which("claude", { PATH: [path, join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(delimiter) });
+  return Bun.which("claude", { PATH: servicePath(path, home) });
 }
 
 export interface ClaudeSession { id: string; sessionId: string; pid: number; cwd: string; startedAt?: number }

@@ -153,6 +153,7 @@ export interface ProjectThreadView {
   parentId: string;
   role: "worker" | "coordinator";
   status: "starting" | "open" | "failed" | "resolved";
+  template?: string;
   updated?: string;
   paneId?: string;
   agent?: string;
@@ -166,6 +167,20 @@ export interface ProjectView {
   status: "active" | "paused";
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
+}
+
+export interface TemplateView {
+  name: string;
+  scope: "global" | "project";
+  description: string;
+  role: "worker" | "coordinator";
+  canSpawn: boolean;
+  harness: string;
+  model: string;
+  reasoningEffort: string;
+  rulesChars: number;
+  memoryChars: number;
+  updated: string;
 }
 
 /**

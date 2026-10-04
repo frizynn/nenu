@@ -1,3 +1,4 @@
+import { detectOverlayMenu } from "./overlay-menu";
 // The Claude Code adapter — the one agent whose TUI shape is VERIFIED (input box, menu footers,
 // stepper header) against the fixture corpus in web/src/fixtures/panes/*.txt. Its detectors
 // (prompt-select, wizard, preview-select, chrome, markers) live alongside this file; this module
@@ -35,6 +36,13 @@ import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
  * this function a Claude pane, so there is no per-agent gate here.
  */
 export function claudeBuildBlocks(screen: StyledLine[]): Block[] {
+  const overlay = detectOverlayMenu(screen);
+  if (overlay) {
+    const blocks: Block[] = [];
+    if (overlay.startLine > 0) blocks.push({kind: "raw", lines: screen.slice(0, overlay.startLine)});
+    blocks.push({kind: "menu", menu: overlay.model, lines: screen.slice(overlay.startLine, overlay.endLine)});
+    return blocks;
+  }
   // 2.1.285 leaves the input box's top border under a question dialog's footer; the grammars below
   // all anchor on the footer being the tail, so they read the screen without it (markers.ts). Every
   // other screen comes back as the same reference.
