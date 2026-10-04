@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-10-04
+
+### Fixed
+- Keep the header chat/terminal toggle icon-only with its accessible label and 44 px touch target.
+
 ## [0.47.1] - 2026-10-03
 
 ### Fixed
