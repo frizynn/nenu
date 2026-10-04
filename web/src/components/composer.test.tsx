@@ -2258,3 +2258,8 @@ describe("conversation composer", () => {
     expect(screen.getByRole("textbox")).toHaveValue("");
   });
 });
+
+it("keeps a real stop action visible in the compact Codex composer while working", () => {
+  renderComposer({ agent: "codex", working: true, nativeWorkbench: true });
+  expect(screen.getByRole("button", { name: "Stop generation" })).toBeInTheDocument();
+});
