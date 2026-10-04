@@ -1,4 +1,4 @@
-import { GitBranch, MoreHorizontal, ScrollText, Search, Settings2 } from "lucide-react";
+import { MoreHorizontal, ScrollText, Search, Settings2 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 
@@ -9,11 +9,10 @@ interface Props {
   onTools?: () => void;
   files?: ReactNode;
   recovery?: ReactNode;
-  agents?: ReactNode;
 }
 
 /** Secondary tools stay named and discoverable without displacing the view switch. */
-export function ConversationActions({ onFind, onHistory, onDisplay, onTools, files, recovery, agents }: Props) {
+export function ConversationActions({ onFind, onHistory, onDisplay, onTools, files, recovery }: Props) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const run = (action: () => void) => { setOpen(false); action(); };
@@ -21,12 +20,11 @@ export function ConversationActions({ onFind, onHistory, onDisplay, onTools, fil
   return <>
     <button ref={trigger} type="button" aria-label="Conversation actions" aria-haspopup="dialog" aria-expanded={open}
       onClick={() => setOpen(!open)} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent active:bg-muted">
-      <GitBranch aria-hidden="true" className="nenu-mobile-actions hidden size-5" /><MoreHorizontal aria-hidden="true" className="nenu-desktop-actions size-5" />
+      <MoreHorizontal aria-hidden="true" className="size-5" />
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions">
       {onFind && <button type="button" className={item} onClick={() => run(onFind)}><Search aria-hidden="true" className="size-4" />Find in output</button>}
       {files}
-      {agents}
       {onTools && <button type="button" className={item} onClick={() => run(onTools)}><Settings2 aria-hidden="true" className="size-4" />Agent tools</button>}
       {onHistory && <button type="button" className={item} onClick={() => run(onHistory)}><ScrollText aria-hidden="true" className="size-4" />Conversation history</button>}
       <button type="button" className={item} onClick={() => run(onDisplay)}><Settings2 aria-hidden="true" className="size-4" />Display settings</button>

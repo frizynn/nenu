@@ -188,3 +188,8 @@ it("keeps session usage available in tools without cluttering the composer", asy
   await act(async () => ref.current!.openTools());
   expect(screen.getAllByRole("button", { name: "Session metrics" })).toHaveLength(1);
 });
+
+ it("shows Stop in the ordinary workbench while Codex works", () => {
+  setup({ working: true });
+  expect(screen.getByRole("button", { name: "Stop generation" })).toBeVisible();
+});

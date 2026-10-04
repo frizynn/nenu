@@ -1,5 +1,5 @@
 import { useContext, type ReactNode } from "react";
-import { ChevronLeft, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
@@ -17,7 +17,6 @@ interface AppHeaderProps {
   /** Tapping the Nenu mark returns to the dashboard. A callback, not a `<Link to="/">`: the
    *  dashboard and the drilled-in space view share the "/" route, so a same-route link would no-op. */
   onHome?: () => void;
-  mobileBack?: boolean;
   /** Show the "Nenu" wordmark beside the mark (dashboard + space). Omit inside a pane — the
    *  breadcrumb in `children` carries the context there, and the mark stands alone to save width. */
   wordmark?: boolean;
@@ -42,7 +41,6 @@ export function AppHeader({
   bridge,
   error,
   onHome,
-  mobileBack,
   wordmark,
   children,
   rightLead,
@@ -56,9 +54,6 @@ export function AppHeader({
     <header className="workbench-app-header sticky top-0 z-20 flex min-h-11 shrink-0 items-center gap-1.5 border-b border-border/60 bg-muted px-2 py-0 sm:gap-2 sm:pl-4 sm:pr-2 sm:py-2">
       {override ?? (
         <>
-          {mobileBack && onHome && <button type="button" aria-label="Back to workspace" onClick={onHome} className="nenu-mobile-back hidden">
-            <ChevronLeft aria-hidden="true" />
-          </button>}
           {navigation && (
             <CollieHome
               onHome={navigation.onOpen}
@@ -84,7 +79,7 @@ export function AppHeader({
           {/* gap-1, not gap-3: the icon buttons now carry their own 12px of padding to reach 44px,
               so a 12px gap on top of that reads as a gulf. 4px keeps the apparent spacing between
               icons close to what it was. */}
-          <div className="workbench-header-actions flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {rightLead}
             {rightTrail}
           </div>

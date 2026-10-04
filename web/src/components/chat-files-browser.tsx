@@ -1,7 +1,7 @@
 import { useArtifactMetadata } from "@/hooks/use-artifact-metadata";
 import { ProjectFilesBrowser } from "./project-files-browser";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Folder, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
+import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
 import { BottomSheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -208,7 +208,7 @@ export function ChatFilesBrowser({
         }}
         className={labeled ? "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-accent active:bg-muted" : "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"}
       >
-        <Folder aria-hidden="true" className="nenu-mobile-folder hidden size-5" /><Paperclip aria-hidden="true" className="nenu-desktop-file size-4" />
+        <Paperclip aria-hidden="true" className="size-4" />
         {labeled && <span>Artifacts and files</span>}
       </button>
 

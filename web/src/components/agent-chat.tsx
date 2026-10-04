@@ -1,4 +1,3 @@
-import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
@@ -719,8 +718,6 @@ export function AgentChat({
     onCompact: () => { void composerRef.current?.compactContext(); },
   };
 
-  const mobileLayout = useMobileLayout();
-
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
@@ -733,7 +730,6 @@ export function AgentChat({
         bridge={bridge}
         error={error}
         onHome={onBack}
-        mobileBack
         override={
           findOpen ? (
             <FindBar
@@ -751,7 +747,7 @@ export function AgentChat({
           agent ? (
             <>
               {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
-              {!mobileLayout && (agent.agent === "codex" || agent.agent === "claude") && <div className="nenu-desktop-subagents"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div>}
+              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} />}
               {conversationCapable && (
                 <button
                   type="button"
@@ -765,7 +761,6 @@ export function AgentChat({
                 </button>
               )}
               {!subagent && <ConversationActions
-                agents={mobileLayout && (agent.agent === "codex" || agent.agent === "claude") ? <div className="nenu-mobile-subagents hidden"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div> : undefined}
                 onFind={display ? openFind : undefined}
                 onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
                 onDisplay={() => composerRef.current?.openDisplayPrefs()}
@@ -808,7 +803,7 @@ export function AgentChat({
                   `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
                 </span>
               </div>
-              <div className="nenu-chat-subtitle hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
+              <div className="hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
                 {shortCwd(agent.cwd)}
               </div>
             </div>

@@ -83,3 +83,10 @@ it("refuses a stale conversation scope when the live session changes before enqu
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("delivers a saved message when status is blocked but the live composer is empty", async () => {
+  const { queueReadiness } = await import("./queue-readiness.ts");
+  const text = await Bun.file("web/src/fixtures/panes/codex--v0157-idle.txt").text();
+  const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("ready");
+});
