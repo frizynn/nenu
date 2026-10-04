@@ -11,11 +11,11 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.48.0] - 2026-10-04
 
 ### Added
-- Save chat messages before delivery, wait through terminal dialogs, and verify input consumption.
-- Show Claude overlay menus and Codex update notices in the conversation.
+- Save chat messages before delivery, wait through terminal dialogs, and verify input consumption. (cc1196d4)
+- Show Claude overlay menus and Codex update notices in the conversation. (cc1196d4)
 
 ### Changed
-- Keep the chat composer for attachments, text and Send; move tools to the header menu.
+- Keep the chat composer for attachments, text and Send; move tools to the header menu. (cc1196d4)
 
 ## [0.47.2] - 2026-10-04
 
