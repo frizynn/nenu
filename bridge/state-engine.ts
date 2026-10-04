@@ -74,6 +74,12 @@ export interface EngineSnapshot {
 type TransitionListener = (agent: AgentView, from: AgentStatus, to: AgentStatus) => void;
 type RemoveListener = (paneId: string) => void;
 type UpdateListener = (snap: EngineSnapshot) => void;
+type SessionName = { identity: string; name?: string };
+type RefreshWaiter = {
+  poll: number;
+  resolve: (snapshot: EngineSnapshot) => void;
+  reject: (error: unknown) => void;
+};
 
 export class StateEngine {
   private agents: AgentView[] = [];
@@ -84,14 +90,19 @@ export class StateEngine {
   private readonly prevStatus = new Map<string, AgentStatus>();
   // Last-known claude `/rename` session name per pane. Kept sticky so the name doesn't flicker away
   // when a pane momentarily hides its input box (a dialog / working spinner) — only cleared when the
-  // pane itself vanishes (see the removal loop). Enriched from pane text each poll (see enrichSessionNames).
-  private readonly sessionNames = new Map<string, string>();
+  // pane or its session changes. Optional reads never delay metadata publication.
+  private readonly sessionNames = new Map<string, SessionName>();
+  private enrichingNames = false;
+  private queuedNames = false;
+  private nameEpoch = 0;
   private readonly transitionListeners = new Set<TransitionListener>();
   private readonly removeListeners = new Set<RemoveListener>();
   private readonly updateListeners = new Set<UpdateListener>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private polling = false;
+  private pollNumber = 0;
+  private refreshWaiters: RefreshWaiter[] = [];
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private failures = 0;
   // One follow-up poll queued when pokeNow lands mid-poll: an event may describe state the
@@ -121,7 +132,7 @@ export class StateEngine {
     return () => this.removeListeners.delete(fn);
   }
 
-  /** Fires after every successful poll (post-transition bookkeeping) with the fresh snapshot. */
+  /** Fires after a successful metadata poll or a background session-name update. */
   onUpdate(fn: UpdateListener): () => void {
     this.updateListeners.add(fn);
     return () => this.updateListeners.delete(fn);
@@ -147,6 +158,8 @@ export class StateEngine {
 
   stop(): void {
     this.started = false;
+    this.nameEpoch++;
+    this.queuedNames = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -165,6 +178,24 @@ export class StateEngine {
       return;
     }
     void this.poll();
+  }
+
+  /** Read metadata after this call, even when an older poll is already in flight. */
+  refresh(): Promise<EngineSnapshot> {
+    return new Promise((resolve, reject) => {
+      this.refreshWaiters.push({ poll: this.pollNumber + 1, resolve, reject });
+      if (this.polling) this.queuedPoll = true;
+      else void this.poll();
+    });
+  }
+
+  private settleRefresh(poll: number, result: { ok: true } | { ok: false; error: unknown }): void {
+    const ready = this.refreshWaiters.filter((waiter) => waiter.poll <= poll);
+    this.refreshWaiters = this.refreshWaiters.filter((waiter) => waiter.poll > poll);
+    for (const waiter of ready) {
+      if (!result.ok) waiter.reject(result.error);
+      else waiter.resolve(this.current());
+    }
   }
 
   /** Re-arm the interval at a new cadence (relaxed while events are healthy). No-op if unchanged or stopped. */
@@ -205,10 +236,13 @@ export class StateEngine {
     // ticks would otherwise stack overlapping in-flight polls.
     if (this.polling) return;
     this.polling = true;
+    const poll = ++this.pollNumber;
+    const nameEpoch = this.nameEpoch;
     try {
       const { workspaces, panes, tabs } = await this.fetchWire();
       const wsById = new Map(workspaces.map((w) => [w.workspace_id, w]));
       const tabById = new Map(tabs.map((t) => [t.tab_id, t]));
+      const terminalByPaneId = new Map(panes.map((p) => [p.pane_id, p.terminal_id]));
 
       const toView = (
         p: (typeof panes)[number],
@@ -332,9 +366,23 @@ export class StateEngine {
         for (const fn of this.removeListeners) fn(id);
       }
 
-      // Enrich claude panes with their own `/rename` session name (read from pane text). Best-effort:
-      // a failed read keeps the last-known name and never fails the poll.
-      await this.enrichSessionNames(agents);
+      const claudeIds = new Set<string>();
+      for (const agent of agents) {
+        if (agent.agent !== "claude") continue;
+        claudeIds.add(agent.paneId);
+        const identity = JSON.stringify([
+          terminalByPaneId.get(agent.paneId), agent.cwd, agent.agentSession ?? null,
+        ]);
+        let cached = this.sessionNames.get(agent.paneId);
+        if (!cached || cached.identity !== identity) {
+          cached = { identity };
+          this.sessionNames.set(agent.paneId, cached);
+        }
+        if (cached.name) agent.sessionName = cached.name;
+      }
+      for (const id of this.sessionNames.keys()) {
+        if (!claudeIds.has(id)) this.sessionNames.delete(id);
+      }
 
       this.agents = agents;
       this.shellPanes = shellPanes;
@@ -348,11 +396,14 @@ export class StateEngine {
       // After all transition/removal bookkeeping so listeners see a consistent, current snapshot.
       const snap = this.current();
       for (const fn of this.updateListeners) fn(snap);
+      this.settleRefresh(poll, { ok: true });
+      if (this.nameEpoch === nameEpoch) this.enrichSessionNames();
     } catch (err) {
       if (this.bridge === "connected") {
         console.warn(`[state] poll failed, marking disconnected: ${(err as Error).message}`);
       }
       this.bridge = "disconnected";
+      this.settleRefresh(poll, { ok: false, error: err });
       if (this.started && !this.retryTimer) {
         const delay = Math.min(1000 * 2 ** Math.min(this.failures++, 3), 5000);
         this.retryTimer = setTimeout(() => { this.retryTimer = null; if (this.started) void this.poll(); }, delay);
@@ -362,7 +413,7 @@ export class StateEngine {
       // Run the single follow-up an event-poke asked for while this poll was in flight.
       if (this.queuedPoll) {
         this.queuedPoll = false;
-        if (this.started) void this.poll();
+        if (this.started || this.refreshWaiters.length > 0) void this.poll();
       }
     }
   }
@@ -372,16 +423,23 @@ export class StateEngine {
    * {@link extractClaudeSessionName}) to the view, exactly parallel to `paneLabel`. The name lives
    * only in the pane's rendered text — Herdr's pane metadata doesn't carry it — so this is the one
    * place all panes can pick it up (the web app only holds text for the open pane). Reads run in
-   * parallel and are individually best-effort: a read that fails or times out keeps the last-known
-   * name (sticky cache) and never fails the poll. Claude-only; other harnesses never set it. A
+   * parallel within one coalesced batch. A read that fails or times out keeps the last-known name
+   * (sticky cache) and never fails the poll. Claude-only; other harnesses never set it. A
    * herdr client without `readPane` (the unit-test fake) short-circuits, so it's a no-op there.
    */
-  private async enrichSessionNames(agents: AgentView[]): Promise<void> {
+  private enrichSessionNames(): void {
     if (typeof this.herdr.readPane !== "function") return;
-    const claude = agents.filter((a) => a.agent === "claude");
+    if (this.enrichingNames) {
+      this.queuedNames = true;
+      return;
+    }
+    const claude = this.agents.filter((a) => a.agent === "claude");
     if (claude.length === 0) return;
-    await Promise.all(
+    this.enrichingNames = true;
+    const epoch = this.nameEpoch;
+    void Promise.all(
       claude.map(async (a) => {
+        const cached = this.sessionNames.get(a.paneId);
         try {
           // `visible` — never `recent`; see SESSION_NAME_READ_LINES for what a `recent` read does
           // to the operator's screen. The visible grid is also strictly safer to parse: `recent`
@@ -389,15 +447,35 @@ export class StateEngine {
           // that the prompt anchor below would have to discriminate against.
           const read = await this.herdr.readPane(a.paneId, "visible", SESSION_NAME_READ_LINES, "text");
           const name = extractClaudeSessionName(read.text);
-          if (name) this.sessionNames.set(a.paneId, name);
+          if (!name || !cached || this.nameEpoch !== epoch ||
+            this.sessionNames.get(a.paneId) !== cached || cached.name === name) return;
+          cached.name = name;
         } catch {
           // Keep whatever's cached (if anything) — a transient read failure must not blank the name.
         }
       }),
-    );
-    for (const a of agents) {
-      const name = this.sessionNames.get(a.paneId);
-      if (name) a.sessionName = name;
-    }
+    ).then(() => {
+      if (this.nameEpoch !== epoch) return;
+      let changed = false;
+      const agents = this.agents.map((agent) => {
+        const name = this.sessionNames.get(agent.paneId)?.name;
+        if (!name || name === agent.sessionName) return agent;
+        changed = true;
+        return { ...agent, sessionName: name };
+      });
+      if (changed) {
+        this.agents = agents;
+        const snap = this.current();
+        for (const fn of this.updateListeners) fn(snap);
+      }
+    }).catch(() => {
+      console.warn("[state] session-name update listener failed");
+    }).finally(() => {
+      this.enrichingNames = false;
+      if (this.queuedNames) {
+        this.queuedNames = false;
+        this.enrichSessionNames();
+      }
+    });
   }
 }

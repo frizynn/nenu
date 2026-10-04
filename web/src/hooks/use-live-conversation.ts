@@ -136,7 +136,7 @@ export function useLiveConversation({
     }
   }, [scope, enabled, locked, busy]);
 
-  const refresh = useCallback(() => refreshRef.current(), []);
+  const refresh = useCallback(() => refreshRef.current(true), []);
   const current = state.scope === scope && enabled;
   return {
     history: current ? state.history : null,

@@ -104,6 +104,149 @@ function makeEngine() {
   return { herdr, engine, transitions, removed, poll };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+describe("StateEngine structural refresh", () => {
+  test("publishes metadata while an optional Claude name read is pending", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    const readStarted = deferred<void>();
+    const nameRead = deferred<{ pane_id: string; text: string; truncated: boolean; revision: number }>();
+    const client = Object.assign(herdr, {
+      readPane() { readStarted.resolve(); return nameRead.promise; },
+    });
+    client.panes = [pane("w1:p1", "w1", "idle", "claude", "new label")];
+    const pending = poll();
+    await readStarted.promise;
+    try {
+      expect(engine.current().agents[0]?.paneLabel).toBe("new label");
+      expect(engine.current().bridge).toBe("connected");
+      await pending;
+    } finally {
+      nameRead.resolve({ pane_id: "w1:p1", text: "", truncated: false, revision: 0 });
+      await pending;
+    }
+  });
+
+  test("refresh waits for a post-request snapshot and coalesces callers", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    const first = deferred<Awaited<ReturnType<FakeHerdr["sessionSnapshot"]>>>();
+    const second = deferred<Awaited<ReturnType<FakeHerdr["sessionSnapshot"]>>>();
+    const secondStarted = deferred<void>();
+    let calls = 0;
+    herdr.sessionSnapshot = () => {
+      if (++calls === 1) return first.promise;
+      secondStarted.resolve();
+      return second.promise;
+    };
+    const stale = poll();
+    const refreshed = engine.refresh();
+    const alsoRefreshed = engine.refresh();
+    expect(calls).toBe(1);
+    let done = false;
+    void refreshed.then(() => { done = true; });
+    const snapshot = (label: string) => ({ version: "0.7.2", protocol: 16, workspaces: herdr.workspaces, tabs: herdr.tabs, panes: [pane("w1:p1", "w1", "idle", "codex", label)] });
+    first.resolve(snapshot("old"));
+    await stale;
+    await secondStarted.promise;
+    expect(done).toBe(false);
+    expect(calls).toBe(2);
+    second.resolve(snapshot("new"));
+    expect((await refreshed).agents[0]?.paneLabel).toBe("new");
+    expect((await alsoRefreshed).agents[0]?.paneLabel).toBe("new");
+    expect(calls).toBe(2);
+  });
+
+  test("a refresh requested during the follow-up waits for another snapshot", async () => {
+    const { herdr, engine } = makeEngine();
+    const first = deferred<Awaited<ReturnType<FakeHerdr["sessionSnapshot"]>>>();
+    const second = deferred<Awaited<ReturnType<FakeHerdr["sessionSnapshot"]>>>();
+    const secondStarted = deferred<void>();
+    let calls = 0;
+    const snapshot = (label: string) => ({ version: "0.7.2", protocol: 16, workspaces: herdr.workspaces, tabs: herdr.tabs, panes: [pane("w1:p1", "w1", "idle", "codex", label)] });
+    herdr.sessionSnapshot = () => {
+      calls++;
+      if (calls === 1) return first.promise;
+      if (calls === 2) { secondStarted.resolve(); return second.promise; }
+      return Promise.resolve(snapshot("latest"));
+    };
+    const initial = engine.refresh();
+    const followUp = engine.refresh();
+    first.resolve(snapshot("old"));
+    await initial;
+    await secondStarted.promise;
+    const latest = engine.refresh();
+    expect(calls).toBe(2);
+    second.resolve(snapshot("new"));
+    expect((await followUp).agents[0]?.paneLabel).toBe("new");
+    expect((await latest).agents[0]?.paneLabel).toBe("latest");
+    expect(calls).toBe(3);
+  });
+
+  test("refresh rejects a failed fresh read and a later refresh can recover", async () => {
+    const { herdr, engine } = makeEngine();
+    const original = herdr.sessionSnapshot.bind(herdr);
+    herdr.sessionSnapshot = () => Promise.reject(new Error("read failed"));
+    await expect(engine.refresh()).rejects.toThrow("read failed");
+    expect(engine.current().bridge).toBe("disconnected");
+    herdr.sessionSnapshot = original;
+    expect((await engine.refresh()).bridge).toBe("connected");
+  });
+
+  test.each(["closed", "session", "harness", "terminal", "stopped"])("ignores pending name results after the pane is %s", async (change) => {
+    const { herdr, engine } = makeEngine();
+    const readStarted = deferred<void>();
+    const readFinished = deferred<void>();
+    const nameRead = deferred<{ pane_id: string; text: string; truncated: boolean; revision: number }>();
+    let active = 0;
+    let maxActive = 0;
+    let reads = 0;
+    Object.assign(herdr, {
+      async readPane() {
+        reads++;
+        active++;
+        maxActive = Math.max(active, maxActive);
+        readStarted.resolve();
+        const read = reads === 1 ? await nameRead.promise : { pane_id: "w1:p1", text: "", truncated: false, revision: 0 };
+        active--;
+        readFinished.resolve();
+        return read;
+      },
+    });
+    const original = pane("w1:p1", "w1", "idle", "claude");
+    original.agent_session = { agent: "claude", kind: "id", value: "old-session" };
+    herdr.panes = [original];
+    await engine.refresh();
+    await readStarted.promise;
+    if (change === "closed") {
+      herdr.panes = [];
+      await engine.refresh();
+      herdr.panes = [{ ...original }];
+    } else if (change === "session") {
+      herdr.panes = [{ ...original, agent_session: { agent: "claude", kind: "id", value: "new-session" } }];
+    } else if (change === "harness") {
+      herdr.panes = [{ ...original, agent: "codex" }];
+    } else if (change === "terminal") {
+      herdr.panes = [{ ...original, terminal_id: "new-terminal" }];
+    } else {
+      engine.stop();
+    }
+    if (change !== "stopped") await engine.refresh();
+    expect(reads).toBe(1);
+    const updates: EngineSnapshot[] = [];
+    engine.onUpdate((snapshot) => updates.push(snapshot));
+    nameRead.resolve({ pane_id: "w1:p1", text: "──────── stale name ──\n❯ ", truncated: false, revision: 0 });
+    await readFinished.promise;
+    await engine.refresh();
+    expect(engine.current().agents[0]?.sessionName).toBeUndefined();
+    expect(updates.every((snapshot) => snapshot.agents.every((agent) => agent.sessionName !== "stale name"))).toBe(true);
+    expect(maxActive).toBe(1);
+  });
+});
+
 describe("StateEngine — transition detection", () => {
   test("does not fire a transition on the first sighting of a pane", async () => {
     const { herdr, transitions, poll } = makeEngine();
@@ -379,11 +522,19 @@ describe("StateEngine — session name enrichment", () => {
   }
 
   test("threads a claude pane's /rename session name onto the view — claude-only", async () => {
-    const { herdr, poll, agent } = makeNameEngine();
+    const { herdr, engine, poll, agent } = makeNameEngine();
     herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "codex")];
     herdr.texts.set("w1:p1", named("my-feature"));
     herdr.texts.set("w1:p2", named("ignored")); // codex is never read, so never named
+    const namedUpdate = new Promise<void>((resolve) => {
+      const unsubscribe = engine.onUpdate((snapshot) => {
+        if (snapshot.agents.find((a) => a.paneId === "w1:p1")?.sessionName !== "my-feature") return;
+        unsubscribe();
+        resolve();
+      });
+    });
     await poll();
+    await namedUpdate;
     expect(agent("w1:p1").sessionName).toBe("my-feature");
     expect(agent("w1:p2").sessionName).toBeUndefined();
   });

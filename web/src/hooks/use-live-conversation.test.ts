@@ -37,10 +37,9 @@ describe("useLiveConversation", () => {
   it("bounds busy polls to the newest 60 turns and never overlaps requests", async () => {
     let resolve!: (value: PaneHistoryResponse) => void;
     fetchMock.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
-    const { result, unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "work", enabled: true, busy: true }));
+    const { unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "work", enabled: true, busy: true }));
     expect(fetchMock).toHaveBeenCalledWith("w1:p1", { limit: 60 }, "work", expect.any(AbortSignal));
     await act(async () => {
-      result.current.refresh();
       window.dispatchEvent(new Event("focus"));
       await vi.advanceTimersByTimeAsync(20_000);
     });
@@ -48,6 +47,20 @@ describe("useLiveConversation", () => {
     await act(async () => resolve(history("w1:p1")));
     await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it("does not lose a post-send refresh behind an in-flight history read", async () => {
+    let release!: (value: PaneHistoryResponse) => void;
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+    const latest = history("after-send");
+    fetchMock.mockResolvedValue(latest);
+    const { result, unmount } = renderHook(() => useLiveConversation({ paneId: "one", enabled: true }));
+    await act(async () => { result.current.refresh(); result.current.refresh(); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => release(history("before-send")));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.history).toBe(latest);
     unmount();
   });
 

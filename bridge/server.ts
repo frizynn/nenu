@@ -404,8 +404,8 @@ export function startServer(opts: {
         const tabId = decodeURIComponent(tabMatch[1]!);
         const action = tabMatch[2];
         const device = deviceAuth(req, cfg).device;
-        if (action === "close") return closeTab(rt.herdr, tabId, req, audit, device, rt.name);
-        return renameTab(rt.herdr, tabId, req, audit, device, rt.name);
+        if (action === "close") return closeTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
+        return renameTab(rt.herdr, rt.engine, tabId, req, audit, device, rt.name);
       }
 
       // ── Per-pane read / send ─────────────────────────────────────────────
@@ -539,8 +539,8 @@ export function startServer(opts: {
         }
         if (action === "send-report" && req.method === "POST") return secure(await reportUnsentReply(paneId, req, audit, device, session));
         if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit, device, session);
-        if (action === "close" && req.method === "POST") return closePane(herdr, paneId, req, audit, device, session);
-        if (action === "rename" && req.method === "POST") return renamePane(herdr, paneId, req, audit, device, session);
+        if (action === "close" && req.method === "POST") return closePane(herdr, rt.engine, paneId, req, audit, device, session);
+        if (action === "rename" && req.method === "POST") return renamePane(herdr, rt.engine, paneId, req, audit, device, session);
         return text("method not allowed", 405);
       }
 
@@ -1260,10 +1260,20 @@ function promptBindingFailure(
   );
 }
 
+// Herdr acknowledged the write even if the follow-up read fails. Do not turn a successful
+// mutation into a retryable action error: retrying a close could target a reused pane id.
+async function refreshStructuralState(engine: StateEngine): Promise<void> {
+  try { await engine.refresh(); }
+  catch (error) {
+    console.warn("[state] structural action succeeded but refresh failed:", error instanceof Error ? error.message : "unknown error");
+  }
+}
+
 // Close a pane ("kill the agent"). Structural op — strictly less powerful than the text/keys
 // injection the bridge already allows, so it stays within the existing remote-shell threat model.
 async function closePane(
   herdr: HerdrClient,
+  engine: StateEngine,
   paneId: string,
   req: Request,
   audit: AuditLog,
@@ -1274,6 +1284,7 @@ async function closePane(
   try {
     await herdr.closePane(paneId);
     audit.record({ action: "pane.close", paneId, session, device, detail: {} });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1286,6 +1297,7 @@ async function closePane(
 // saving an empty field), which we send to Herdr as `label: null`.
 async function renamePane(
   herdr: HerdrClient,
+  engine: StateEngine,
   paneId: string,
   req: Request,
   audit: AuditLog,
@@ -1305,6 +1317,7 @@ async function renamePane(
   try {
     await herdr.renamePane(paneId, label);
     audit.record({ action: "pane.rename", paneId, session, device, detail: { label } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1332,6 +1345,7 @@ export function normalizeTabLabel(
 // "clear" (see normalizeTabLabel): a blank label is a 400, not a reset to the tab number.
 async function renameTab(
   herdr: HerdrClient,
+  engine: StateEngine,
   tabId: string,
   req: Request,
   audit: AuditLog,
@@ -1350,6 +1364,7 @@ async function renameTab(
   try {
     await herdr.renameTab(tabId, parsed.label);
     audit.record({ action: "tab.rename", session, device, detail: { tabId, label: parsed.label } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
@@ -1362,6 +1377,7 @@ async function renameTab(
 // model. No body: the tab id is in the path.
 async function closeTab(
   herdr: HerdrClient,
+  engine: StateEngine,
   tabId: string,
   req: Request,
   audit: AuditLog,
@@ -1372,6 +1388,7 @@ async function closeTab(
   try {
     await herdr.closeTab(tabId);
     audit.record({ action: "tab.close", session, device, detail: { tabId } });
+    await refreshStructuralState(engine);
     return json({ ok: true } satisfies ActionResponse, ae);
   } catch (err) {
     return json({ ok: false, error: (err as Error).message } satisfies ActionResponse, ae);
