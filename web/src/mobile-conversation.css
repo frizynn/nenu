@@ -1,0 +1,81 @@
+/* The reference belongs to Nenu conversations on phones; desktop and other routes keep their theme. */
+@media (max-width: 767px) {
+  .workbench-chat {
+    --background: #090909;
+    --foreground: #e5e5e5;
+    --card: #171717;
+    --card-foreground: #e5e5e5;
+    --muted: #202020;
+    --muted-foreground: #a3a3a3;
+    --border: #333;
+    --accent: #262626;
+    --accent-foreground: #fafafa;
+    --popover: #202020;
+    --popover-foreground: #fafafa;
+    --primary: #f5f5f5;
+    --primary-foreground: #111;
+    --ring: #d4d4d4;
+    position: relative;
+    color-scheme: dark;
+    color: var(--foreground);
+    background: var(--background);
+  }
+  .workbench-chat > .workbench-app-header {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 20;
+    min-height: 88px;
+    gap: 12px;
+    padding: 12px 16px 24px;
+    border: 0;
+    background: linear-gradient(#090909 20%, rgb(9 9 9 / .92) 72%, transparent);
+    pointer-events: none;
+  }
+  .workbench-chat > .workbench-app-header > * { pointer-events: auto; }
+  .workbench-chat .workbench-chat-menu,
+  .workbench-chat .nenu-desktop-subagents,
+  .workbench-chat .nenu-desktop-file,
+  .workbench-chat .nenu-desktop-actions,
+  .workbench-chat [data-workbench-navigation-band] { display: none; }
+  .workbench-chat .nenu-mobile-folder,
+  .workbench-chat .nenu-mobile-actions,
+  .workbench-chat .nenu-mobile-subagents { display: block; }
+  .workbench-chat .nenu-mobile-back {
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+  }
+  .nenu-mobile-back, .workbench-chat .workbench-header-actions {
+    border: 1px solid rgb(255 255 255 / .12);
+    background: rgb(32 32 32 / .86);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 2px 8px rgb(0 0 0 / .24);
+  }
+  .workbench-chat .nenu-mobile-back svg { width: 28px; height: 28px; }
+  .workbench-chat .workbench-header-actions { gap: 0; padding: 2px; border-radius: 999px; }
+  .workbench-chat .workbench-header-actions button[aria-label^="Show"] { order: -1; }
+  .workbench-chat .workbench-header-actions svg { width: 23px; height: 23px; stroke-width: 1.7; }
+  .workbench-chat .nenu-chat-subtitle { display: block; margin-top: 3px; font-family: inherit; font-size: 12px; }
+  .workbench-chat > .workbench-app-header > .flex-1 { min-width: 0; }
+  .workbench-chat > .workbench-app-header > .flex-1 .font-semibold { font-size: 19px; }
+  .workbench-chat > .workbench-app-header + div { padding-top: 88px; }
+  .workbench-chat [aria-label="Live conversation"] { font-size: 17px; line-height: 1.58; }
+  .workbench-chat [aria-label="Live conversation"] .overflow-y-auto { scrollbar-width: none; }
+  .workbench-chat [aria-label="Live conversation"] .overflow-y-auto::-webkit-scrollbar { display: none; }
+  .workbench-chat .workbench-composer { width: calc(100% - 24px); margin-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .workbench-chat .workbench-composer-surface { position: relative; padding: 6px; border-radius: 30px; background: #171717; border-color: #303030; }
+  .workbench-chat .workbench-composer-surface:focus-within { border-color: #666; }
+  .workbench-chat .nenu-composer-row { min-height: 44px; }
+  .workbench-chat .nenu-composer-attach { order: -1; }
+  .workbench-chat .nenu-mobile-plus { display: block; }
+  .workbench-chat .nenu-desktop-attach { display: none; }
+  .workbench-chat .workbench-chat-input { padding-inline: 2px; font-size: 16px; line-height: 24px; }
+  .workbench-chat button[aria-label="Send"] { border-radius: 50%; background: #f4f4f4; color: #111; }
+  .workbench-chat button[aria-label="Stop generation"] { border-radius: 50%; color: #f87171; background: #321717; }
+  .workbench-chat .nenu-mobile-working { display: block; position: absolute; bottom: calc(100% + 12px); left: 50%; translate: -50% 0; padding: 9px 14px; border: 1px solid #303030; border-radius: 999px; background: #161616; color: #d4d4d4; font-size: 13px; white-space: nowrap; }
+  .workbench-chat :is(button, a):active { background-color: #333; }
+}

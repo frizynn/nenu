@@ -1,6 +1,6 @@
 {
   "name": "collie",
-  "version": "0.48.2",
+  "version": "0.48.3",
   "private": true,
   "license": "MIT",
   "description": "Nenu — a mobile web UI to monitor and reply to your Herdr agent herd over Tailscale",
