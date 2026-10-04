@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.48.2] - 2026-10-05
+
+### Fixed
+- Publish fresh pane/tab state before acknowledging rename or close; read Claude session names in the background. (e837f9bd)
+- Retain post-send chat refreshes when another history read is pending. (e837f9bd)
+
 ## [0.48.1] - 2026-10-04
 
 ### Fixed
