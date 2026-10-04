@@ -278,10 +278,8 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     const working = { ...fixtureAgents[1]!, status: "working" as const, hasSession: false };
     renderChat({ agent: working, agents: [working], session: "phone", text: "Codex is working" });
 
-    await user.click(screen.getByRole("button", {name: "Conversation actions"}));
-    await user.click(screen.getByRole("button", {name: "Agent tools"}));
     const stop = screen.getByRole("button", { name: "Stop generation" });
-    expect(stop).toHaveClass("min-h-11");
+    expect(stop).toHaveClass("size-11");
     await user.click(stop);
 
     await waitFor(() => expect(requests).toHaveLength(1));
