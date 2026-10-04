@@ -2260,6 +2260,12 @@ describe("conversation composer", () => {
 });
 
 it("keeps a real stop action visible in the compact Codex composer while working", () => {
-  renderComposer({ agent: "codex", working: true, nativeWorkbench: true });
-  expect(screen.getByRole("button", { name: "Stop generation" })).toBeInTheDocument();
+  const original = window.matchMedia;
+  Object.defineProperty(window, "matchMedia", { configurable: true, writable: true, value: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) });
+  try {
+    renderComposer({ agent: "codex", working: true, nativeWorkbench: true });
+    expect(screen.getByRole("button", { name: "Stop generation" })).toBeInTheDocument();
+  } finally {
+    window.matchMedia = original;
+  }
 });

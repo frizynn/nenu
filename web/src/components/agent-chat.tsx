@@ -750,6 +750,7 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
+              {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
               {!mobileLayout && (agent.agent === "codex" || agent.agent === "claude") && <div className="nenu-desktop-subagents"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div>}
               {conversationCapable && (
                 <button
@@ -763,7 +764,6 @@ export function AgentChat({
                   {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
                 </button>
               )}
-              {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
               {!subagent && <ConversationActions
                 agents={mobileLayout && (agent.agent === "codex" || agent.agent === "claude") ? <div className="nenu-mobile-subagents hidden"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div> : undefined}
                 onFind={display ? openFind : undefined}

@@ -1,3 +1,4 @@
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMessageQueue } from "@/hooks/use-message-queue";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -730,6 +731,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       setStatus(error instanceof Error ? error.message : String(error), "error");
     }
   }
+  const mobileLayout = useMobileLayout();
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";
 
@@ -873,6 +875,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {modelControl}
               {usageControls}
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || sending} onClick={() => { requestDrawer(null); direct.activate(); }}><Terminal className="size-4" />Type into terminal</Button>
+              {!mobileLayout && working && agent === "codex" && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
             </div>
           </ComposerDock>
         )}
@@ -1157,7 +1160,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <><Plus className="nenu-mobile-plus hidden size-6" /><ImagePlus className="nenu-desktop-attach size-4" /></>}
             </Button>
           </div>}
-          {working && agent === "codex" && !input.trim() ? (
+          {(!nativeWorkbench || mobileLayout) && working && agent === "codex" && !input.trim() ? (
             <Button
               type="button"
               variant="destructive"

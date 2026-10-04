@@ -57,6 +57,7 @@
   }
   .workbench-chat .nenu-mobile-back svg { width: 28px; height: 28px; }
   .workbench-chat .workbench-header-actions { gap: 0; padding: 2px; border-radius: 999px; }
+  .workbench-chat .workbench-header-actions button[aria-label^="Show"] { order: -1; }
   .workbench-chat .workbench-header-actions svg { width: 23px; height: 23px; stroke-width: 1.7; }
   .workbench-chat .nenu-chat-subtitle { display: block; margin-top: 3px; font-family: inherit; font-size: 12px; }
   .workbench-chat > .workbench-app-header > .flex-1 { min-width: 0; }
