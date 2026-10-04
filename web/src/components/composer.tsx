@@ -1063,16 +1063,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
         {!nativeWorkbench && modelControl}
 
-        {/* gap-3, not gap-2: with the attach button moved inside the field this row is only the
-            field and Send, and the old spacing left them looking joined. */}
-        <div className={cn("items-end gap-1", nativeWorkbench ? "grid grid-cols-[minmax(0,1fr)_auto] gap-y-1" : "flex")}>
+        <div className={cn("flex gap-1", nativeWorkbench ? "items-center" : "items-end")}>
           {/* The input and its attach button share one box: the button is positioned INSIDE the
               field, messenger-style, rather than sitting beside it as a third control in the row.
               It used to occupy a full-height slot to the left, which spent the widest part of the
               composer on the least-used action; inside the field it costs nothing but a strip of
               padding the text was not using anyway. `pr-11` on the textarea reserves that strip so a
               long line can never run underneath the icon. */}
-          <div className={cn("relative min-w-0 flex-1", nativeWorkbench && "col-span-2")}>
+          <div className="relative min-w-0 flex-1">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
               {skills.loading ? "Loading skills…" : <span>Couldn't load skills. <button type="button" className="min-h-11 px-2 underline" onMouseDown={(e) => e.preventDefault()} onClick={skills.retry}>Retry</button></span>}

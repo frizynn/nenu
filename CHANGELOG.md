@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-10-04
+
+### Fixed
+- Align chat attachment and Send controls with the text field in one compact row.
+
 ## [0.48.0] - 2026-10-04
 
 ### Added
