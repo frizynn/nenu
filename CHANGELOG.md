@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.48.3] - 2026-10-05
+
+### Fixed
+- Apply the floating dark conversation header and compact composer to Nenu phones, preserving desktop controls. (89247d1c)
+- Keep Codex interruption visible in the mobile composer and preserve guarded message delivery.
+
 ## [0.48.2] - 2026-10-05
 
 ### Fixed
