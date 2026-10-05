@@ -12,6 +12,8 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 - Restore the habitual conversation layout. (9c3e55d8)
+- Unblock ready-terminal queues, expose current Codex Stop, and render compact image previews. (39616d3c)
+- Show asynchronous questions outside work logs and share concurrent identity reads without retaining stale inventories. (39616d3c)
 
 
 ## [0.48.2] - 2026-10-05
