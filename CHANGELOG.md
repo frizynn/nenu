@@ -11,7 +11,7 @@ All notable changes to Nenu are recorded here. The format follows
 ## [0.48.5] - 2026-10-05
 
 ### Fixed
-- Resume live conversation following after saving a message and refresh active work sooner.
+- Resume live conversation following after saving a message and refresh active work sooner. (8411159d)
 
 ## [0.48.4] - 2026-10-05
 
