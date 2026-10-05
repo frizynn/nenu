@@ -224,7 +224,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const queue = useMessageQueue(paneId, session, nativeWorkbench && !gone && !readOnly);
   useEffect(() => {
     const accepted = queue.accepted;
-    if (accepted) updateInput(current => current === accepted.text ? "" : current);
+    if (accepted) {
+      updateInput(current => current === accepted.text ? "" : current);
+      onSent();
+    }
   }, [queue.accepted]);
   async function enqueueDraft(value = input, isDraft = true): Promise<boolean> {
     if (!value.trim() || sending || queue.busy) return false;

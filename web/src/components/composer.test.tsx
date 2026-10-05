@@ -2258,3 +2258,25 @@ describe("conversation composer", () => {
     expect(screen.getByRole("textbox")).toHaveValue("");
   });
 });
+
+
+it.each([true, false])("resumes live following only when the queued message is saved (%s)", async (saved) => {
+  server.use(
+    http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ available: true, scope: "test-conversation", messages: [] })),
+    http.post(/\/api\/pane\/[^/]+\/queue$/, () => saved
+      ? HttpResponse.json({ available: true, scope: "test-conversation", messages: [] })
+      : HttpResponse.json({ error: "Queue unavailable" }, { status: 503 })),
+  );
+  const props = renderComposer({ nativeWorkbench: true, agent: "codex" });
+  const input = screen.getByRole("textbox");
+  await userEvent.type(input, "Continue this investigation");
+  await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+  if (saved) {
+    await waitFor(() => expect(input).toHaveValue(""));
+    expect(props.onSent).toHaveBeenCalledOnce();
+  } else {
+    await screen.findByText(/Queue unavailable/);
+    expect(input).toHaveValue("Continue this investigation");
+    expect(props.onSent).not.toHaveBeenCalled();
+  }
+});

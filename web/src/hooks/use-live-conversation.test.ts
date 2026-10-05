@@ -45,7 +45,7 @@ describe("useLiveConversation", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await act(async () => resolve(history("w1:p1")));
-    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     unmount();
   });
@@ -132,7 +132,7 @@ describe("useLiveConversation", () => {
     });
     await act(async () => {});
     const before = renders;
-    await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     expect(fetchMock).toHaveBeenCalledTimes(11);
     expect(result.current.history).toBe(stable);
     expect(renders).toBe(before);
@@ -153,7 +153,7 @@ describe("useLiveConversation", () => {
     unmount();
   });
 
-  it("refreshes immediately on idle to busy and then keeps the four-second cadence", async () => {
+  it("refreshes immediately on idle to busy and then keeps the 1.5-second cadence", async () => {
     const { rerender, unmount } = renderHook(({ busy }) => useLiveConversation({ paneId: "one", enabled: true, busy }), { initialProps: { busy: false } });
     await act(async () => {});
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
@@ -161,7 +161,7 @@ describe("useLiveConversation", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await act(async () => rerender({ busy: true }));
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    await act(async () => { await vi.advanceTimersByTimeAsync(3999); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1499); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(fetchMock).toHaveBeenCalledTimes(3);
