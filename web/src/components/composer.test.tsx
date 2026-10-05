@@ -2270,7 +2270,7 @@ it.each([true, false])("resumes live following only when the queued message is s
   const props = renderComposer({ nativeWorkbench: true, agent: "codex" });
   const input = screen.getByRole("textbox");
   await userEvent.type(input, "Continue this investigation");
-  await userEvent.click(screen.getByRole("button", { name: "Send", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
   if (saved) {
     await waitFor(() => expect(input).toHaveValue(""));
     expect(props.onSent).toHaveBeenCalledOnce();

@@ -55,7 +55,7 @@ export function useLiveConversation({
     const schedule = () => {
       clearTimeout(timer);
       if (!disposed && !document.hidden && !isLocked()) {
-        timer = setTimeout(() => void poll(), failedAt !== null ? 3_000 : stateRef.current.history?.available === false ? 2_000 : busyRef.current ? 4_000 : 12_000);
+        timer = setTimeout(() => void poll(), failedAt !== null ? 3_000 : stateRef.current.history?.available === false ? 2_000 : busyRef.current ? 1_500 : 12_000);
       }
     };
 
