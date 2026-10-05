@@ -90,3 +90,10 @@ it("delivers a saved message when status is blocked but the live composer is emp
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("ready");
 });
+
+it("does not mistake a blocked-status busy Codex composer for an idle terminal", async () => {
+  const { queueReadiness } = await import("./queue-readiness.ts");
+  const text = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+  const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("working");
+});

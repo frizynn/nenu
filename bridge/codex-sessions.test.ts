@@ -38,3 +38,15 @@ describe("Codex terminal identity", () => {
     expect(await resolver.match({ ...pane, terminalTitle: "Codex | tmp" }, info)).toBeNull();
   });
 });
+
+test("shares concurrent identity reads but reloads the inventory on the next poll", async () => {
+  let lists = 0;
+  const resolver = new CodexSessions({ request: async (method) => {
+    if (method === "thread/loaded/list") { lists++; await Bun.sleep(10); return { data: [id], nextCursor: null }; }
+    return { thread };
+  } });
+  expect(await Promise.all([resolver.match(pane, info), resolver.match(pane, info), resolver.match(pane, info)])).toEqual([id, id, id]);
+  expect(lists).toBe(1);
+  expect(await resolver.match(pane, info)).toBe(id);
+  expect(lists).toBe(2);
+});

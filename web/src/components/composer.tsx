@@ -36,6 +36,7 @@ import { NoEchoNotice } from "@/components/no-echo-notice";
 export interface ComposerHandle {
   /** Focus the input and put the caret at the end — used by the mirror-tap-to-focus in AgentChat. */
   focusInput: () => void;
+  prepareAnswer: (text: string) => void;
   /** Opens the harness's own model picker through the same verified send as a reply. */
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
@@ -403,6 +404,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   useImperativeHandle(ref, () => ({
     focusInput: focusInputImmediately,
+    prepareAnswer: (text) => { updateInput((draft) => draft.trim() ? `${draft}\n${text}` : text); focusInputImmediately(); },
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
     openDisplayPrefs: () => requestDrawer("display"),
@@ -873,7 +875,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {modelControl}
               {usageControls}
               <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || sending} onClick={() => { requestDrawer(null); direct.activate(); }}><Terminal className="size-4" />Type into terminal</Button>
-              {working && agent === "codex" && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
+              {working && agent === "codex" && input.trim() && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
             </div>
           </ComposerDock>
         )}
@@ -1157,12 +1159,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
             </Button>
           </div>}
-          {!nativeWorkbench && working && agent === "codex" && !input.trim() ? (
+          {working && agent === "codex" && !input.trim() ? (
             <Button
               type="button"
               variant="destructive"
               size="icon"
-              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8")}
+              className={cn("size-11 min-h-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8")}
               onClick={() => { void interruptGeneration(); }}
               disabled={locked || interrupting}
               aria-label="Stop generation"

@@ -1,3 +1,4 @@
+import { queueReadiness } from "./queue-readiness.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { join } from "node:path";
 import { MessageQueue, type QueuedMessage } from "./message-queue.ts";
@@ -44,11 +45,7 @@ export class QueueService {
         const current = await this.resolve(row.session, row.paneId, true);
         if (!current?.connected || identity(current.pane) !== row.conversation)
           return "unavailable";
-        return current.pane.status === "working"
-          ? "working"
-          : ["idle", "done"].includes(current.pane.status)
-            ? "ready"
-            : "unavailable";
+        return queueReadiness(current.pane, current.herdr);
       },
       async (row) => {
         const current = await this.resolve(row.session, row.paneId, true);
@@ -163,6 +160,7 @@ export class QueueService {
             { status: 400 },
           );
       }
+      if (req.method === "POST") void this.tick().catch(() => {});
       const rows = await this.queue.list(scope);
       return Response.json({
         available: true,

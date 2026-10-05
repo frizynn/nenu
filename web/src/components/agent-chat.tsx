@@ -1,3 +1,5 @@
+import { QuestionReplyContext } from "./transcript-question";
+import { hasCodexInterruptCue } from "@/lib/harness/codex/interrupt";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
@@ -870,12 +872,12 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} agent={agent?.agent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
+            <QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
-              onMatchCount={findOpen ? handleMatchCount : undefined} />
+              onMatchCount={findOpen ? handleMatchCount : undefined} /></QuestionReplyContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -958,7 +960,7 @@ export function AgentChat({
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
           {!subagent && showConversation && dialogPresent && !modelPresent && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
-              <AnsiOutput text={text} nativeOnly agent={agent?.agent}
+              <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
                 onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
                 onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
@@ -1038,7 +1040,7 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
-            working={agent?.agent === "codex" && agent.status === "working"}
+            working={agent?.agent === "codex" && (agent.status === "working" || hasCodexInterruptCue(modelSource.text))}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

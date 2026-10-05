@@ -394,3 +394,8 @@ describe("CodexTranscriptSource — several sessions roots", () => {
     await rm(base, { recursive: true, force: true });
   });
 });
+
+test("preserves asynchronous question text and choices outside the truncated tool summary", () => {
+  const rows = parseCodexTranscript(JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "request_user_input_async", call_id: "question", arguments: JSON.stringify({ questions: [{ title: "Which source?", options: ["Instagram", "Web"] }] }) } }));
+  expect(rows[0]?.parts[0]).toMatchObject({ questions: [{ title: "Which source?", options: ["Instagram", "Web"] }] });
+});
