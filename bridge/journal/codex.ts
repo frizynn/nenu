@@ -1,3 +1,4 @@
+import { toolQuestions } from "./questions.ts";
 // Codex's journal adapter.
 //
 // SHAPE OF THE SOURCE (verified against on-disk rollouts from codex 0.32.0 AND 0.145.0, 2026-07-29 —
@@ -253,6 +254,8 @@ export function parseCodexTranscript(text: string): TranscriptEntry[] {
         // valid JSON). Keep a bounded literal one-line gist instead of guessing its structure.
         summary: p.type === "custom_tool_call" ? typeof p.input === "string" ? oneLine(stripAnsi(p.input)) : "" : codexToolSummary(p.arguments),
       };
+      const questions = toolQuestions(p.name, p.arguments);
+      if (questions) part.questions = questions;
       if (typeof p.call_id === "string") pendingTools.set(p.call_id, part);
       emit({ uuid, ts, role: "assistant", parts: [part] });
       continue;

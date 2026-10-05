@@ -1,5 +1,8 @@
+import { TranscriptQuestion } from "./transcript-question";
+import { FileMediaContext } from "@/lib/file-preview-context";
+import { filePathsInText } from "@/lib/chat-files";
 import { ChatMedia } from "./chat-media";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { ChevronRight, Info, User } from "lucide-react";
 
 import { AgentIcon } from "@/components/agent-icon";
@@ -50,7 +53,8 @@ function ThinkingPart({ part, query, focused = false }: { part: Extract<Transcri
   </div>;
 }
 
-function Part({ part, query, focused = false, active = false }: { part: TranscriptPart; query: string; focused?: boolean; active?: boolean }) {
+function Part({ part, query, focused = false, active = false, compactMedia = false }: { part: TranscriptPart; query: string; focused?: boolean; active?: boolean; compactMedia?: boolean }) {
+  const media = useContext(FileMediaContext);
   // Tool output is COMMAND output, not prose — it stays verbatim in a monospace block (see ToolPart).
   if (part.kind === "tool") return <WorkLogTools calls={[{ id: "single", part }]} query={query} active={active} />;
   if (part.kind === "thinking") return <ThinkingPart part={part} query={query} focused={focused} />;
@@ -59,10 +63,10 @@ function Part({ part, query, focused = false, active = false }: { part: Transcri
   return (
     <div>
       <MarkdownText
-        text={part.text}
+        text={compactMedia && media ? filePathsInText(part.text).filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path)).reduce((text, path) => text.replaceAll(path, ""), part.text).trim() : part.text}
         query={query}
       />
-      <ChatMedia text={part.text} />
+      <ChatMedia text={part.text} compact={compactMedia} />
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
     </div>
   );
@@ -119,7 +123,7 @@ function Turn({
       )}
       <div className="space-y-1.5">
         {entry.parts.map((part, i) => (
-          <Part key={i} part={part} query={query} focused={focused} />
+          <Part key={i} part={part} query={query} focused={focused} compactMedia={isUser} />
         ))}
       </div>
     </div>
@@ -144,7 +148,7 @@ function ActivityLog({ entries, query, focusedUuid, active }: { entries: Transcr
   </div>;
 }
 
-function WorkTurnView({ turn, agent, query, focusedUuid }: { turn: WorkTurn; agent?: string; query: string; focusedUuid?: string }) {
+function WorkTurnView({ turn, agent, query, focusedUuid, questionActive }: { turn: WorkTurn; agent?: string; query: string; focusedUuid?: string; questionActive: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const needle = query.trim().toLowerCase();
   const searching = turn.activity.some((entry) => entry.uuid === focusedUuid || (needle !== "" && searchableText(entry).toLowerCase().includes(needle)));
@@ -165,6 +169,8 @@ function WorkTurnView({ turn, agent, query, focusedUuid }: { turn: WorkTurn; age
       {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} {failures === 1 ? "error" : "errors"}</span>}
       {truncated && <span className="whitespace-nowrap">· truncated</span>}
     </button>
+    {tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
+      <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive} />))}
     {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} />}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
@@ -181,6 +187,8 @@ export function TranscriptView({ entries, agent, query = "", focusedUuid, activi
   activityStatus?: AgentStatus;
   onWorkToggle?: (anchor: HTMLElement) => void;
 }) {
+  const questionIndex = entries.findLastIndex((entry) => entry.parts.some((part) => part.kind === "tool" && part.questions?.length));
+  const pendingQuestion = questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
   const rows = useMemo(() => buildWorkTimeline(entries, activityStatus), [entries, activityStatus]);
   let lastDay = "";
   let lastRole = "";
@@ -202,7 +210,7 @@ export function TranscriptView({ entries, agent, query = "", focusedUuid, activi
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
         {newDay && <div className="flex items-center gap-2 pt-1"><div className="h-px flex-1 bg-border" /><span className="text-[11px] font-medium text-muted-foreground">{day}</span><div className="h-px flex-1 bg-border" /></div>}
         {row.kind === "message" ? <Turn entry={entry} agent={agent} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
-          : <WorkTurnView turn={row} agent={agent} query={query} focusedUuid={focusedUuid} />}
+          : <WorkTurnView turn={row} agent={agent} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} />}
       </div>;
     })}
     {pending && <div className="px-1 py-2" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}

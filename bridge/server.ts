@@ -39,7 +39,8 @@ import type { UpdateMonitor } from "./update.ts";
 import type { StateEngine } from "./state-engine.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
 import { TranscriptStore } from "./journal/store.ts";
-import { stripAnsi } from "./journal/text.ts";
+import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
+export { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import type { JournalAdapter } from "./journal/types.ts";
 import { toPaneWire } from "./types.ts";
 import { ProjectRegistry } from "./projects.ts";
@@ -907,51 +908,12 @@ export async function sendReplySteps(
 }
 
 /**
- * Codex paints this instruction only while a turn can be interrupted. It also appears in question
- * dialogs, so the cue alone is insufficient: the handler below additionally requires Herdr's cached
- * classification to say this exact Codex pane is working, then re-reads the live pane for this
- * renderer-observed line. Exported to pin the terminal grammar
- * without standing up Bun.serve in unit tests.
- */
-export function hasCodexInterruptCue(text: string): boolean {
-  return text.split(/\r\n?|\n/).some((rawLine) => {
-    const plain = stripAnsi(rawLine).trimEnd();
-    if (!/^• Working \([^\r\n)]* • esc to interrupt\)$/i.test(plain)) return false;
-    // The same words can occur in transcript prose. Bind the cue to Codex's renderer paint: bold
-    // bullet, bold `Working`, then a dim parenthesized hint. A copied/plain historical line fails.
-    const painted: Array<{ char: string; bold: boolean; dim: boolean }> = [];
-    let bold = false;
-    let dim = false;
-    let cursor = 0;
-    const sgr = /\x1b\[([0-9;?]*)m/g;
-    for (let match = sgr.exec(rawLine); match !== null; match = sgr.exec(rawLine)) {
-      for (const char of rawLine.slice(cursor, match.index)) painted.push({ char, bold, dim });
-      const codes = match[1]!.split(";").map((value) => Number.parseInt(value.replace("?", ""), 10));
-      for (const code of codes) {
-        if (code === 0 || Number.isNaN(code)) { bold = false; dim = false; }
-        else if (code === 1) bold = true;
-        else if (code === 2) dim = true;
-        else if (code === 22) { bold = false; dim = false; }
-      }
-      cursor = sgr.lastIndex;
-    }
-    for (const char of rawLine.slice(cursor)) painted.push({ char, bold, dim });
-    const visible = painted.map((entry) => entry.char).join("").trimEnd();
-    if (visible !== plain) return false;
-    const hint = plain.indexOf("(");
-    return painted[0]?.bold === true &&
-      painted.slice(2, 9).every((entry) => entry.bold) &&
-      hint >= 0 && painted.slice(hint, plain.length).every((entry) => entry.dim);
-  });
-}
-
-/**
  * Interrupt one active Codex turn through the transport Nenu actually owns: Herdr's terminal key
  * API. This is deliberately narrower than a generic key sender. A stale mobile snapshot must not
  * turn a late Stop tap into Escape at an idle composer or a dialog, so we require both Herdr's
- * cached Codex/working classification and a just-read, renderer-shaped interrupt cue before
- * sending. The live pane read is the decisive stale-tap check; the cached classification narrows the
- * action to the intended harness and state.
+ * Codex identity and a just-read, renderer-shaped interrupt cue before
+ * sending. The live pane read is the decisive stale-tap check; the pane classification narrows the
+ * action to the intended harness.
  */
 export async function interruptCodexPane(
   herdr: HerdrClient,
@@ -965,7 +927,7 @@ export async function interruptCodexPane(
 ): Promise<Response> {
   const ae = req.headers.get("accept-encoding");
   const pane = engine.current().agents.find((candidate) => candidate.paneId === paneId);
-  if (!pane || pane.agent !== "codex" || pane.status !== "working") {
+  if (!pane || pane.agent !== "codex") {
     return json({ ok: false, error: "Codex is no longer generating" } satisfies ActionResponse, ae);
   }
 

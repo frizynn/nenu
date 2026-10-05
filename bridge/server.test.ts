@@ -100,6 +100,11 @@ describe("Codex interrupt cue", () => {
     expect(hasCodexInterruptCue(CODEX_WORKING)).toBe(true);
   });
 
+  test("accepts the current Codex working cue with styled Escape and background activity", async () => {
+    const capture = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+    expect(hasCodexInterruptCue(capture)).toBe(true);
+  });
+
   test("refuses an idle composer without the live interrupt affordance", () => {
     expect(hasCodexInterruptCue("› Ask Codex to do anything\n\n  gpt-5.6 · project")).toBe(false);
   });

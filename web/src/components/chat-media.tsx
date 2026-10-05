@@ -5,7 +5,7 @@ import {
 } from "@/lib/file-preview-context";
 import { filePathsInText } from "@/lib/chat-files";
 
-export function ChatMedia({ text }: { text: string }) {
+export function ChatMedia({ text, compact = false }: { text: string; compact?: boolean }) {
   const url = useContext(FileMediaContext);
   const open = useContext(FilePreviewContext);
   const paths = useMemo(
@@ -24,6 +24,7 @@ export function ChatMedia({ text }: { text: string }) {
         <Media
           key={path}
           path={path}
+          compact={compact}
           url={url(path)}
           open={() => open?.(path)}
         />
@@ -35,10 +36,12 @@ function Media({
   path,
   url,
   open,
+  compact,
 }: {
   path: string;
   url: string;
   open: () => void;
+  compact: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const name = path.split("/").at(-1) ?? path;
@@ -53,7 +56,7 @@ function Media({
       </button>
     );
   return (
-    <figure className="my-2 max-w-lg overflow-hidden rounded-lg border border-border/50">
+    <figure className={`my-2 overflow-hidden rounded-lg border border-border/50 ${compact ? "max-w-40" : "max-w-lg"}`}>
       {/\.(mp4|m4v|mov|webm)$/i.test(path) ? (
         <video
           src={url}
@@ -75,7 +78,7 @@ function Media({
             src={url}
             alt={name}
             loading="lazy"
-            className="max-h-80 w-full object-contain"
+            className={`${compact ? "max-h-32" : "max-h-80"} w-full object-contain`}
             onError={() => setFailed(true)}
           />
         </button>

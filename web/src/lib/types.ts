@@ -251,6 +251,7 @@ export type TranscriptPart =
       kind: "tool";
       name: string;
       summary: string;
+      questions?: Array<{ title: string; options: string[] }>;
       result?: { text: string; truncated?: boolean; isError?: boolean };
     };
 

@@ -22,17 +22,6 @@ function LocationProbe() {
 describe("AppHeader — the one shared header shell", () => {
   beforeEach(() => __resetConnectionHealth());
 
-  it("offers the real back action in a mobile conversation without removing workspace navigation", async () => {
-    const onHome = vi.fn();
-    const onOpen = vi.fn();
-    renderHeader(<WorkbenchNavigationContext value={{ open: false, onOpen }}>
-      <AppHeader bridge="connected" error={false} onHome={onHome} mobileBack />
-    </WorkbenchNavigationContext>);
-    await userEvent.click(screen.getByRole("button", { name: "Back to workspace" }));
-    expect(onHome).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Open workspaces" })).toBeInTheDocument();
-  });
-
   it("is calm in the PANE variant while live — breadcrumb + status badge, no pill, no wordmark", () => {
     // Connection copy lives in the top ConnectionBanner now; the header carries none. A healthy pane
     // header shows its own bits and a resting (static) Nenu mark.

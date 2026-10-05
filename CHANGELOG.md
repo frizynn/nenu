@@ -8,11 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.48.3] - 2026-10-05
+## [0.48.4] - 2026-10-05
 
 ### Fixed
-- Apply the floating dark conversation header and compact composer to Nenu phones, preserving desktop controls. (89247d1c)
-- Keep Codex interruption visible in the mobile composer and preserve guarded message delivery.
+- Restore the habitual conversation layout. (9c3e55d8)
+- Attempt explicit Codex sends immediately through guarded native input; retain dialog and draft protection. (9c9fb2d1)
+- Unblock ready-terminal queues, expose current Codex Stop, and render compact image previews. (39616d3c)
+- Show asynchronous questions outside work logs and share concurrent identity reads without retaining stale inventories. (39616d3c)
+
 
 ## [0.48.2] - 2026-10-05
 

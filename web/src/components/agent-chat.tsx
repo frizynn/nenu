@@ -1,4 +1,5 @@
-import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { QuestionReplyContext } from "./transcript-question";
+import { hasCodexInterruptCue } from "@/lib/harness/codex/interrupt";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
@@ -719,8 +720,6 @@ export function AgentChat({
     onCompact: () => { void composerRef.current?.compactContext(); },
   };
 
-  const mobileLayout = useMobileLayout();
-
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
@@ -733,7 +732,6 @@ export function AgentChat({
         bridge={bridge}
         error={error}
         onHome={onBack}
-        mobileBack
         override={
           findOpen ? (
             <FindBar
@@ -751,7 +749,7 @@ export function AgentChat({
           agent ? (
             <>
               {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
-              {!mobileLayout && (agent.agent === "codex" || agent.agent === "claude") && <div className="nenu-desktop-subagents"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div>}
+              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} />}
               {conversationCapable && (
                 <button
                   type="button"
@@ -765,7 +763,6 @@ export function AgentChat({
                 </button>
               )}
               {!subagent && <ConversationActions
-                agents={mobileLayout && (agent.agent === "codex" || agent.agent === "claude") ? <div className="nenu-mobile-subagents hidden"><SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} /></div> : undefined}
                 onFind={display ? openFind : undefined}
                 onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
                 onDisplay={() => composerRef.current?.openDisplayPrefs()}
@@ -808,7 +805,7 @@ export function AgentChat({
                   `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
                 </span>
               </div>
-              <div className="nenu-chat-subtitle hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
+              <div className="hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
                 {shortCwd(agent.cwd)}
               </div>
             </div>
@@ -875,12 +872,12 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} agent={agent?.agent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
+            <QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
-              onMatchCount={findOpen ? handleMatchCount : undefined} />
+              onMatchCount={findOpen ? handleMatchCount : undefined} /></QuestionReplyContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -963,7 +960,7 @@ export function AgentChat({
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
           {!subagent && showConversation && dialogPresent && !modelPresent && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
-              <AnsiOutput text={text} nativeOnly agent={agent?.agent}
+              <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
                 onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
                 onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
@@ -1043,7 +1040,7 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
-            working={agent?.agent === "codex" && agent.status === "working"}
+            working={agent?.agent === "codex" && (agent.status === "working" || hasCodexInterruptCue(modelSource.text))}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

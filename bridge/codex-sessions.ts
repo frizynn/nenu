@@ -9,6 +9,7 @@ interface LoadedThread { id: string; cwd: string; name: string }
 
 /** Read-only recovery for daemon clients whose SessionStart hook lost the pane environment. */
 export class CodexSessions {
+  private inventory: Promise<LoadedThread[]> | null = null;
   constructor(private readonly rpc: Pick<CodexRpc, "request">) {}
 
   async match(pane: AgentView, info: unknown): Promise<string | null> {
@@ -26,7 +27,12 @@ export class CodexSessions {
     return matches.length === 1 ? matches[0]!.id : null;
   }
 
-  private async read(): Promise<LoadedThread[]> {
+  private read(): Promise<LoadedThread[]> {
+    if (!this.inventory) this.inventory = this.load().finally(() => { this.inventory = null; });
+    return this.inventory;
+  }
+
+  private async load(): Promise<LoadedThread[]> {
     const result = record(await this.rpc.request("thread/loaded/list", { limit: 100 }));
     // A partial list cannot rule out another loaded conversation with the same name.
     if (!Array.isArray(result.data) || result.data.length > 100 || result.nextCursor !== null) return [];

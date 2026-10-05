@@ -1,3 +1,4 @@
+import { toolQuestions } from "./journal/questions.ts";
 import { record } from "./codex-rpc.ts";
 import type { TranscriptEntry, TranscriptPart, TranscriptTurn } from "./journal/types.ts";
 import { isInjectedContext, visibleAssistantText } from "./journal/codex.ts";
@@ -35,7 +36,11 @@ export function codexEntries(thread: Record<string, unknown>): TranscriptEntry[]
         case "commandExecution": parts.push({ kind: "tool", name: "Bash", summary: text(item.command),
           ...(typeof item.aggregatedOutput === "string" ? { result: { text: item.aggregatedOutput.slice(-20_000), truncated: item.aggregatedOutput.length > 20_000, isError: typeof item.exitCode === "number" && item.exitCode !== 0 } } : {}) }); break;
         case "fileChange": parts.push({ kind: "tool", name: "Edit", summary: list(item.changes).map((v) => text(record(v).path)).join(", ") }); break;
-        case "mcpToolCall": case "dynamicToolCall": parts.push({ kind: "tool", name: text(item.tool) || "Tool", summary: text(item.server) }); break;
+        case "mcpToolCall": case "dynamicToolCall": {
+          const questions = toolQuestions(item.tool, typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments));
+          parts.push({ kind: "tool", name: text(item.tool) || "Tool", summary: text(item.server), ...(questions ? { questions } : {}) });
+          break;
+        }
         case "webSearch": parts.push({ kind: "tool", name: "WebSearch", summary: text(item.query) }); break;
         case "contextCompaction": role = "summary"; parts.push({ kind: "text", text: "Conversation compacted" }); break;
         default: if (typeof item.type === "string") parts.push({ kind: "tool", name: item.type, summary: text(item.status) });
