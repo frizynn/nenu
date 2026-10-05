@@ -142,6 +142,7 @@ export class QueueService {
             agent: current.pane.agent,
             text,
             device,
+            sendNow: current.pane.agent === "codex",
           });
         else if (
           ["edit", "remove", "send"].includes(String(body.action)) &&
