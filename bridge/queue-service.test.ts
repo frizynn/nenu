@@ -97,3 +97,31 @@ it("does not mistake a blocked-status busy Codex composer for an idle terminal",
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("working");
 });
+
+it("attempts an explicit Codex message immediately while the agent is working", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { HerdrClient } = await import("./herdr-client.ts");
+  const dir = await mkdtemp(join(tmpdir(), "nenu-explicit-send-"));
+  let reads = 0;
+  class Terminal extends HerdrClient {
+    override async readPane() {
+      reads++;
+      return { pane_id: "pane", text: "A dialog owns this terminal", revision: 1, truncated: false };
+    }
+  }
+  const service = new QueueService(dir, async () => ({
+    pane: { paneId: "pane", workspaceId: "workspace", workspaceLabel: "QA", workspaceNumber: 1, tabId: "tab", agent: "codex", status: "working", cwd: "/tmp", focused: false, agentSession: { kind: "id", value: "active" } },
+    connected: true, herdr: new Terminal("/tmp/unused.sock"),
+  }), async () => { throw new Error("Must not type into a dialog"); });
+  try {
+    const scope = (await (await service.handle(new Request("http://localhost/queue"), "session", "pane", null)).json()).scope;
+    await service.handle(new Request("http://localhost/queue", { method: "POST", body: JSON.stringify({ action: "add", id: "saved", scope, text: "An explicit reply" }) }), "session", "pane", null);
+    await Bun.sleep(30);
+    expect(reads).toBeGreaterThan(0);
+    const response = await service.handle(new Request("http://localhost/queue"), "session", "pane", null);
+    const body = await response.json();
+    expect(body.messages[0].state).toBe("queued");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

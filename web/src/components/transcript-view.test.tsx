@@ -1,3 +1,4 @@
+import { QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -398,4 +399,11 @@ it("keeps the agent question visible when its work log is collapsed", () => {
   render(<TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "request_user_input_async", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })]} />);
   expect(screen.getByRole("region", { name: "Agent question" })).toBeVisible();
   expect(screen.getByText("Which source?")).toBeVisible();
+});
+
+it("prepares a selected question answer without submitting a terminal action", async () => {
+  const prepare = vi.fn();
+  render(<QuestionReplyContext.Provider value={prepare}><TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "request_user_input_async", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })]} /></QuestionReplyContext.Provider>);
+  await userEvent.click(screen.getByRole("button", { name: "Instagram" }));
+  expect(prepare).toHaveBeenCalledWith("Which source?\nInstagram");
 });
