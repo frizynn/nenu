@@ -45,7 +45,7 @@ describe("useLiveConversation", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await act(async () => resolve(history("w1:p1")));
-    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     unmount();
   });
