@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-07
+
+### Added
+- Home is a live command center: what needs you, agents by state, recent activity, project progress, a Start a chat prompt and a ⌘K jump list. (a14a6c84)
+
+### Changed
+- The project Chat | Tasks switch moves into the header as one Tasks button; tab strips hide while the phone keyboard is open. (04a8cc58)
+
 ## [0.49.0] - 2026-10-07
 
 ### Added
