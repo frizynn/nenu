@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import { handlers, resetTypedDraft } from "./handlers";
 import { __resetConnectionHealth } from "@/lib/connection-health";
 import { __resetDraftPrune } from "@/lib/drafts";
+import { resetLocalSends } from "@/lib/local-sends";
 
 // One MSW server for all tests; tests add per-case overrides with `server.use(...)`.
 export const server = setupServer(...handlers);
@@ -33,10 +34,14 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   resetTypedDraft(); // the fake pane's input line, so a draft can't leak into the next test
+  resetLocalSends(); // pending conversation bubbles live in module scope, like the draft memory tier
 });
 afterAll(() => server.close());
 
 // jsdom gaps that the terminal mirror / sheets touch.
+let objectUrls = 0;
+if (!URL.createObjectURL) URL.createObjectURL = () => `blob:test/${++objectUrls}`;
+if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn();
 }

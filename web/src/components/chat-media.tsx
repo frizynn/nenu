@@ -4,6 +4,8 @@ import {
   FilePreviewContext,
 } from "@/lib/file-preview-context";
 import { filePathsInText } from "@/lib/chat-files";
+import { splitMessageImages } from "@/lib/message-images";
+import { MessageImages } from "./message-images";
 
 export function ChatMedia({ text, compact = false }: { text: string; compact?: boolean }) {
   const url = useContext(FileMediaContext);
@@ -18,9 +20,12 @@ export function ChatMedia({ text, compact = false }: { text: string; compact?: b
     [text],
   );
   if (!url) return null;
+  // The operator's own message: its images read as "Image 1…N" thumbnails, not as files.
+  const images = compact ? splitMessageImages(text).images : [];
   return (
     <div className="space-y-2">
-      {paths.map((path) => (
+      <MessageImages paths={images} className="pt-1" />
+      {paths.filter((path) => !images.includes(path)).map((path) => (
         <Media
           key={path}
           path={path}

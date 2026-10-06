@@ -392,7 +392,7 @@ it("shows uploaded images as compact previews instead of local paths", () => {
   </FileMediaContext.Provider>);
   expect(screen.getByRole("img")).toHaveAttribute("src", "/api/preview.png");
   expect(screen.queryByText(path, { exact: false })).not.toBeInTheDocument();
-  expect(screen.getByRole("img")).toHaveClass("max-h-32");
+  expect(screen.getByRole("img")).toHaveAccessibleName("Image 1");
 });
 
 it("keeps the agent question visible when its work log is collapsed", () => {

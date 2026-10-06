@@ -1,6 +1,6 @@
 import { TranscriptQuestion } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { filePathsInText } from "@/lib/chat-files";
+import { splitMessageImages } from "@/lib/message-images";
 import { ChatMedia } from "./chat-media";
 import { useContext, useMemo, useState } from "react";
 import { ChevronRight, Info, User } from "lucide-react";
@@ -63,7 +63,7 @@ function Part({ part, query, focused = false, active = false, compactMedia = fal
   return (
     <div>
       <MarkdownText
-        text={compactMedia && media ? filePathsInText(part.text).filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path)).reduce((text, path) => text.replaceAll(path, ""), part.text).trim() : part.text}
+        text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
       />
       <ChatMedia text={part.text} compact={compactMedia} />
