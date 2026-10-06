@@ -33,6 +33,7 @@ import {
 } from "./prompt-binding.ts";
 import type { Push, PushSubscription } from "./push.ts";
 import { herdTagFor, type SessionRegistry } from "./sessions.ts";
+import { liveEventStream, type LiveEvents } from "./live-events.ts";
 import type { Snooze } from "./snooze.ts";
 import { imageExtFromBytes, SNIFF_BYTES } from "./uploads.ts";
 import type { UpdateMonitor } from "./update.ts";
@@ -186,8 +187,9 @@ export function startServer(opts: {
   updateMonitor: UpdateMonitor;
   audit: AuditLog;
   activity: ActivityLedger;
+  live: LiveEvents;
 }) {
-  const { cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity } = opts;
+  const { cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity, live } = opts;
   const assets = new WebAssetArchive(join(cfg.stateDir, "web-assets"));
   void assets.retain(WEB_DIR).catch((error: unknown) => console.warn("[assets] could not retain current build:", error instanceof Error ? error.message : "unknown error"));
   // One journal registry + store for the process. The store's cache is keyed by absolute path, so
@@ -224,7 +226,17 @@ export function startServer(opts: {
     if (!rt) return { ok: false, error: "Session unavailable." };
     const response = await replyPane(rt.herdr, cfg, row.paneId, new Request("http://localhost/queue-delivery", { method: "POST", body: JSON.stringify({ text, submit, request_id: requestId, paste }) }), audit, row.device, row.session);
     return await response.json() as ActionResponse;
-  }, input);
+  }, input, (row) => {
+    live.publish({ session: row.session, topic: "queue", paneId: row.paneId });
+    if (row.state === "sent") {
+      live.publish({ session: row.session, topic: "pane", paneId: row.paneId });
+      live.publish({ session: row.session, topic: "journal", paneId: row.paneId });
+    }
+  });
+  // A herd change can make a waiting pane ready; deliver now instead of on the fallback tick.
+  live.subscribe((event) => {
+    if (event.topic === "snapshot") queue.kick();
+  });
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   const hasJournal = (agent: string) => adapterFor(journals ?? {}, agent) !== undefined;
   // Per-session background notifications live in each session's runtime (built by the factory in
@@ -377,6 +389,24 @@ export function startServer(opts: {
           } satisfies SnapshotResponse, req.headers.get("accept-encoding")),
           await buildId(),
         );
+      }
+
+      // ── Live invalidations (Server-Sent Events) ─────────────────────────
+      // Read-level like the snapshot: it names what changed and carries no pane content, so the page
+      // re-reads through the routes above. No idle timeout: the stream is quiet between changes.
+      if (pathname === "/api/events" && req.method === "GET") {
+        const denied = guard(req, cfg, "read");
+        if (denied) return denied;
+        const rt = registry.get(sessionName);
+        if (!rt) return unknownSession();
+        server.timeout(req, 0);
+        return secure(new Response(liveEventStream(live, rt.name, { signal: req.signal }), {
+          headers: {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-cache, no-transform",
+            "x-accel-buffering": "no",
+          },
+        }));
       }
 
       // ── Structural creates: new tab / new space (each opens a fresh shell pane) ──

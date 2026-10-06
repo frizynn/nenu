@@ -55,6 +55,13 @@ export function sameIdSet(a: string[], b: string[]): boolean {
   return true;
 }
 
+/**
+ * Default trailing debounce. A herd-wide burst (pane.agent_detected on re-detection) arrives within a
+ * few milliseconds, so this still folds it into one poll, and a status flip now reaches an open page
+ * (through live-events.ts) in about this long rather than a fifth of a second.
+ */
+export const EVENT_DEBOUNCE_MS = 50;
+
 interface EventPokerOpts {
   /** Trailing-debounce window (ms) that coalesces a burst of events into one poke. */
   debounceMs?: number;
@@ -81,7 +88,7 @@ export class EventPoker {
     private readonly client: HerdrClient,
     opts: EventPokerOpts = {},
   ) {
-    this.debounceMs = opts.debounceMs ?? 200;
+    this.debounceMs = opts.debounceMs ?? EVENT_DEBOUNCE_MS;
     this.backoff = opts.backoffMs ?? [1000, 2000, 5000, 15000];
   }
 

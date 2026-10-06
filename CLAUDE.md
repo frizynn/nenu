@@ -127,6 +127,9 @@ the unit name; the Herdr action runs from anywhere.
   (`web/src/lib/loaders.ts`) fetch the snapshot + pane; **polling is `useRevalidator()` on an
   adaptive interval** (`web/src/hooks/use-polling.ts`); mutations are direct `lib/api.ts` calls
   followed by `revalidator.revalidate()`. There is **no TanStack Query** — don't reintroduce it.
+- `/api/events` (SSE) only names what changed; readers re-fetch through the usual routes and polling
+  relaxes to a fallback while it is open. Never put state or pane text on it, and never drop the
+  fallback poll ([ADR 0054](./.adr/0054-the-browser-hears-what-changed-not-the-state.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only

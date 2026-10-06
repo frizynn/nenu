@@ -125,3 +125,29 @@ it("attempts an explicit Codex message immediately while the agent is working", 
     expect(body.messages[0].state).toBe("queued");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+it("a kick during a delivery pass runs exactly one more pass afterwards", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { MessageQueue } = await import("./message-queue");
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-kick-"));
+  // One queued row in storage, so every pass has something to resolve.
+  await new MessageQueue(join(dir, "message-queue.json")).add({ id: "m", scope: "x", session: "s", paneId: "p", conversation: "claude:x", agent: "claude", text: "Hi", device: null });
+  let resolves = 0;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const service = new QueueService(dir, async () => { resolves++; await gate; return null; }, async () => ({ ok: true }));
+  try {
+    service.kick();
+    await Bun.sleep(20);
+    service.kick();
+    service.kick();
+    release();
+    await Bun.sleep(50);
+    expect(resolves).toBe(2);
+  } finally {
+    service.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

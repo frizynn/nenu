@@ -1,6 +1,7 @@
 import { Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
 
 import { usePolling } from "@/hooks/use-polling";
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { useAppViewport } from "@/hooks/use-app-viewport";
 import { usePollBusy } from "@/hooks/use-poll-busy";
 import { useAgentTransitions } from "@/hooks/use-transitions";
@@ -55,6 +56,9 @@ export function RootLayout() {
   // so the only value that can appear under that id is the PaneData that loader returned.
   const pane = useRouteLoaderData(PANE_ROUTE_ID) as PaneData | undefined;
 
+  // One live-events stream per page: herd/queue/transcript changes arrive as they happen, and
+  // polling relaxes to a fallback while it is open (lib/live-events.ts).
+  useLiveEvents(data.session);
   usePolling(data, paneId);
   // Surface the busy bar when a navigation or a poll runs slow, each against its own threshold —
   // routine fast polls/navigations stay invisible. Mounted here so the whole app shares one

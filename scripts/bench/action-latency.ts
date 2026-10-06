@@ -1,3 +1,4 @@
+import { EVENT_DEBOUNCE_MS } from "../../bridge/event-poker.ts";
 import { structuralFixture } from "../../bridge/structural-fixture.test-support.ts";
 
 // Isolated loopback HTTP server, fake Herdr, no operator sessions or terminal messages.
@@ -9,8 +10,8 @@ for (const target of ["pane", "tab"] as const) {
       try {
         const start = performance.now();
         await app.action(`/api/${target}/${target === "pane" ? "w:p" : "tab"}/${action}`, action === "rename" ? { label: "After" } : undefined);
-        // Close emits an event in Herdr; reproduce its existing 200ms debounce.
-        if (action === "close") setTimeout(() => app.engine.pokeNow(), 200);
+        // Close emits an event in Herdr; reproduce the poker's debounce.
+        if (action === "close") setTimeout(() => app.engine.pokeNow(), EVENT_DEBOUNCE_MS);
         while (true) {
           const state = await app.snapshot();
           const visible = action === "close" ? state.agents.length === 0
@@ -24,4 +25,4 @@ for (const target of ["pane", "tab"] as const) {
     }
   }
 }
-console.log(JSON.stringify({ scope: "Controlled real HTTP routes, fake Herdr; 12s cadence, 200ms close event debounce; not phone latency", rows }, null, 2));
+console.log(JSON.stringify({ scope: `Controlled real HTTP routes, fake Herdr; 12s cadence, ${EVENT_DEBOUNCE_MS}ms close event debounce; not phone latency`, rows }, null, 2));

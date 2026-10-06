@@ -124,3 +124,30 @@ test("Enter acknowledgement with a stranded draft is uncertain and never types t
   expect(result.status).toBe("uncertain");
   expect(types).toBe(1);
 });
+test("reads again within tens of milliseconds instead of a fixed 350ms step", async () => {
+  let draft = "";
+  let pendingType = "";
+  let pendingClear = false;
+  const sleeps: number[] = [];
+  const result = await deliverQueuedMessage(
+    row,
+    {
+      // The terminal repaints one read after each write, as a TUI that lags its acknowledgement.
+      async readPane() {
+        const shown = read(screen(draft));
+        if (pendingType) { draft = pendingType; pendingType = ""; }
+        if (pendingClear) { draft = ""; pendingClear = false; }
+        return shown;
+      },
+    },
+    async (text, submit) => {
+      if (submit) pendingClear = true;
+      else pendingType = text;
+      return { ok: true };
+    },
+    async () => true,
+    async (ms) => { sleeps.push(ms); },
+  );
+  expect(result.status).toBe("sent");
+  expect(sleeps).toEqual([40, 40]);
+});

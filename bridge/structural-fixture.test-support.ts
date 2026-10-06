@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.ts";
+import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import type { HerdrClient } from "./herdr-client.ts";
 import { startServer } from "./server.ts";
 import { StateEngine } from "./state-engine.ts";
@@ -22,6 +23,8 @@ export async function structuralFixture(cadenceMs = 12_000) {
     async closeTab() { panes = []; tabs = []; },
   };
   const engine = new StateEngine(herdr as unknown as HerdrClient, cadenceMs);
+  const live = new LiveEvents();
+  engine.onUpdate(snapshotWatcher("default", (event) => live.publish(event)));
   engine.start();
   await new Promise<void>(resolve => engine.onUpdate(() => resolve()));
   const runtime = { name: "default", isPrimary: true, engine, herdr };
@@ -30,10 +33,11 @@ export async function structuralFixture(cadenceMs = 12_000) {
     cfg,
     registry: { get: () => runtime, list: () => [] },
     push: {}, snooze: { until: () => null }, notifyPrefs: {}, updateMonitor: { status: () => ({}) },
-    audit: { record: () => {} }, activity: { get: () => undefined, noteSeen: () => {} },
+    audit: { record: () => {} }, activity: { get: () => undefined, noteSeen: () => {} }, live,
   } as unknown as Parameters<typeof startServer>[0]);
   const url = `http://127.0.0.1:${server.port}`;
   return {
+    url,
     async action(path: string, body?: unknown) {
       const response = await fetch(url + path, { method: "POST", headers: { origin: url, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
       expect(response.status).toBe(200);

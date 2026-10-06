@@ -28,7 +28,7 @@ export interface ReplyTransport {
 import { parseAnsi } from "./ansi";
 import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "./blocks";
 import { adapterFor, type HarnessAdapter } from "./harness";
-import { POLL_ATTEMPTS, POLL_DELAY_MS, defaultSleep, type Sleep } from "./harness/poll";
+import { VERIFY_DELAYS_MS, defaultSleep, type Sleep } from "./harness/poll";
 import { detectNoEchoPrompt } from "./no-echo";
 
 export type ReplyOutcome =
@@ -410,11 +410,11 @@ async function guardedReply(args: GuardedReplyArgs, trace: SendTrace): Promise<R
   // harness with no `composerReady`, and a `force` the operator armed against a mis-detected screen,
   // both arrive here having typed the secret into a prompt that will never echo it.
   let lastSeen: string | null = null;
-  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+  for (const delay of VERIFY_DELAYS_MS) {
     // Read BEFORE the first sleep: pane.read is an on-demand live read, not a cached poll, so the
-    // text is often already on screen by the time the type call returns. That saves a whole
-    // POLL_DELAY_MS off the common path — the old blind flow always paid a fixed 350ms here.
-    if (attempt > 0) await sleep(POLL_DELAY_MS);
+    // text is often already on screen by the time the type call returns. The later reads start
+    // short because a repaint usually lands within tens of milliseconds (harness/poll.ts).
+    if (delay > 0) await sleep(delay);
     let draft: string | null = null;
     let fresh: { text: string } | null = null;
     try {
@@ -574,8 +574,8 @@ async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs, trace:
       // A write ack can precede the TUI consuming a large Backspace sweep. Waiting for an empty
       // editor prevents the previous draft (even identical text) from verifying the next send.
       const sleep = args.sleep ?? defaultSleep;
-      for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-        if (attempt > 0) await sleep(POLL_DELAY_MS);
+      for (const delay of VERIFY_DELAYS_MS) {
+        if (delay > 0) await sleep(delay);
         try {
           const fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
           const lines = splitLines(parseAnsi(fresh.text));

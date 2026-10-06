@@ -112,6 +112,11 @@ function withSession(path: string, session?: string): string {
   return `${path}${sep}session=${encodeURIComponent(s)}`;
 }
 
+/** The session's live-invalidation stream (bridge/live-events.ts). */
+export function liveEventsUrl(session?: string): string {
+  return withSession("/api/events", session);
+}
+
 export function paneFileUrl(paneId: string, path: string, session?: string): string {
   return withSession(`/api/pane/${encodeURIComponent(paneId)}/file?path=${encodeURIComponent(path)}`, session);
 }
