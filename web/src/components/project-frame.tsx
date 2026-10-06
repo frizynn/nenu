@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ListChecks, MessageSquare, PanelRightClose } from "lucide-react";
 
 import { ProjectTasks } from "@/components/project-tasks";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -9,10 +9,10 @@ import { panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly } from "@/lib/types";
 
-/** What a project gives the chat it wraps: a title, a bar under the header, and a replacement body. */
+/** What a project gives the chat it wraps: a title, a header control, and a replacement body. */
 export interface ProjectChatSlots {
   title: string;
-  subheader?: ReactNode;
+  headerAction?: ReactNode;
   overlay?: ReactNode;
 }
 
@@ -29,7 +29,8 @@ function readPanelPref(): boolean {
 /**
  * A pane that belongs to a project renders inside this frame. Wide screens keep the project's task
  * list beside the chat (collapsible); narrower ones switch between Chat and Tasks in place, keeping
- * the chat mounted so its draft and scroll survive the switch.
+ * the chat mounted so its draft and scroll survive the switch. The switch is one header button, not a
+ * band under the header, so the chat keeps every row of height for writing.
  */
 export function ProjectFrame({ owner, paneId, data, children }: {
   owner: PaneProject;
@@ -70,27 +71,24 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   );
 
   const openCount = project.threads.filter(isOpenThread).length;
-  const subheader = panelShown ? undefined : wide ? (
-    <div className="project-bar">
-      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{project.goal ?? project.name}</p>
-      <button ref={toggleFocus} type="button" className="quiet-action" onClick={() => setPanelOpen(true)}><PanelRightOpen aria-hidden className="size-4" />Project</button>
-    </div>
-  ) : (
-    <div className="project-bar">
-      <div role="tablist" aria-label="Project view" className="segmented">
-        <button type="button" role="tab" aria-selected={view === "chat"} onClick={() => setView("chat")}>Chat</button>
-        <button type="button" role="tab" aria-selected={view === "tasks"} onClick={() => setView("tasks")}>
-          Tasks{openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
-        </button>
-      </div>
-    </div>
+  // One button in the header, whichever way the tasks open; it stays the same node, so focus stays.
+  const tasksShown = !wide && view === "tasks";
+  const headerAction = panelShown ? undefined : (
+    <button ref={toggleFocus} type="button" className="project-toggle"
+      aria-label={tasksShown ? "Back to chat" : `Tasks, ${openCount} open`}
+      onClick={() => (wide ? setPanelOpen(true) : setView(tasksShown ? "chat" : "tasks"))}>
+      {tasksShown ? <><MessageSquare aria-hidden className="size-3.5" />Chat</> : <>
+        <ListChecks aria-hidden className="size-3.5" />Tasks
+        {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
+      </>}
+    </button>
   );
 
   return (
     <div className="project-frame">
       {children({
         title: owner.thread?.title ?? project.name,
-        subheader,
+        headerAction,
         overlay: !panelShown && view === "tasks" ? <div className="project-overlay">{tasks()}</div> : undefined,
       })}
       {panelShown && (

@@ -11,10 +11,9 @@ import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, title, subheader, overlay }: { paneId: string; title?: string; subheader?: ReactNode; overlay?: ReactNode }) => (
+  AgentChat: ({ paneId, title, headerAction, overlay }: { paneId: string; title?: string; headerAction?: ReactNode; overlay?: ReactNode }) => (
     <div>
-      <h1>{title ?? "untitled"}</h1>
-      {subheader}
+      <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>
       {overlay ?? <p data-testid="conversation">{`conversation:${paneId}`}</p>}
     </div>
   ),
@@ -50,24 +49,29 @@ function setup(path: string, data: HomeData) {
   return { router, user: userEvent.setup() };
 }
 
-it("opens a project on its coordinator's chat, then switches between Chat and Tasks in place", async () => {
+it("opens a project on its coordinator's chat, then switches to Tasks from one header button", async () => {
   const { router, user } = setup("/project/hub", home([pane("coord"), pane("worker")]));
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:coord");
   expect(router.state.location.pathname).toBe("/pane/coord");
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
 
-  const tasks = screen.getByRole("tab", { name: /Tasks/ });
-  expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
-  await user.click(tasks);
-  expect(tasks).toHaveAttribute("aria-selected", "true");
+  // No band under the header: the switch is one header button that names the open task count.
+  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  const toggle = screen.getByRole("button", { name: "Tasks, 1 open" });
+  await user.click(toggle);
   expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+  // The same button, now the way back, keeps focus.
+  expect(screen.getByRole("button", { name: "Back to chat" })).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Back to chat" }));
+  expect(screen.getByTestId("conversation")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Tasks, 1 open" }));
 
   // Opening a task shows that thread's chat, still framed by its project.
   await user.click(screen.getByRole("button", { name: /^Build/ }));
   expect(router.state.location.pathname).toBe("/pane/worker");
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("button", { name: "Tasks, 1 open" })).toBeInTheDocument();
 });
 
 it("shows the task list as the project page when no coordinator is running", async () => {
