@@ -6,7 +6,6 @@ import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { SpaceStrip } from "@/components/space-strip";
 import { SpaceView } from "@/components/space-view";
 import { TabStrip } from "@/components/tab-strip";
-import { NewSpaceSheet } from "@/components/new-space-sheet";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath, spacePath } from "@/lib/nav";
@@ -22,7 +21,6 @@ export function SpaceRoute() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const { newTab, newSpace } = useSpaceActions();
-  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
 
   // Tab selection is ephemeral view state (no deep-link need). Reset it when the space changes:
   // navigating /space/a → /space/b does NOT remount this route (same element, new param), so without
@@ -82,7 +80,7 @@ export function SpaceRoute() {
               agents={data.agents}
               selected={spaceId}
               onSelect={(id) => (id === null ? toDashboard() : switchSpace(id))}
-              onNewSpace={() => setNewSpaceOpen(true)}
+              onNewSpace={newSpace}
               onBack={toDashboard}
             />
             <TabStrip
@@ -117,8 +115,6 @@ export function SpaceRoute() {
 
         {/* The interface build in use; server maintenance details stay in Settings. */}
       </div>
-
-      <NewSpaceSheet open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} onCreate={newSpace} />
     </div>
   );
 }

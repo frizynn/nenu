@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate, useRouteLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 
@@ -6,7 +5,6 @@ import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { SpaceOverview } from "@/components/space-overview";
 import { ProjectOverview } from "@/components/project-overview";
-import { NewSpaceSheet } from "@/components/new-space-sheet";
 import { openForCount, useDashPrefs } from "@/hooks/use-dash-prefs";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
@@ -19,7 +17,6 @@ export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigate = useNavigate();
   const { newSpace } = useSpaceActions();
-  const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const { prefs, setSpacesOpen } = useDashPrefs();
   const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
   const spacesOpen = openForCount(prefs.spacesOpen, data.workspaces.length);
@@ -43,7 +40,7 @@ export function HomeRoute() {
               : "Create a workspace to start your first thread."}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            <button type="button" disabled={!canCreate} onClick={() => setNewSpaceOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <button type="button" disabled={!canCreate} onClick={newSpace} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               <Plus aria-hidden="true" className="size-3.5" />New workspace
             </button>
           </div>
@@ -58,12 +55,11 @@ export function HomeRoute() {
           shellPanes={data.shellPanes}
           onOpen={(workspaceId) => navigate(spacePath(workspaceId, data.session))}
           onOpenPane={(paneId) => navigate(panePath(paneId, data.session))}
-          onNewSpace={() => setNewSpaceOpen(true)}
+          onNewSpace={newSpace}
           open={spacesOpen}
           onOpenChange={setSpacesOpen}
         />
       </div>
     </main>
-    <NewSpaceSheet open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} onCreate={newSpace} />
   </div>;
 }

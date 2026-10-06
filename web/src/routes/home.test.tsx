@@ -41,13 +41,11 @@ it("organizes work by project instead of duplicating a flat thread list", async 
   expect(router.state.location.search).toBe("?s=work");
 });
 
-it("keeps workspace creation on its explicit existing shell flow", async () => {
+it("opens the shared new-agent flow from New workspace", async () => {
   const { user } = await setup({ ...data, agents: [], workspaces: [] });
   expect(screen.getByText("Create a workspace to start your first thread.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "New workspace" }));
-  expect(screen.getByRole("dialog", { name: "New space" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Create space & open shell" })).toBeInTheDocument();
-  expect(newSpace).not.toHaveBeenCalled();
+  expect(newSpace).toHaveBeenCalledTimes(1);
 });
 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {

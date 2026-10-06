@@ -11,6 +11,8 @@ import { ArrowUpToLine, Loader2, MessageSquareText, ScrollText, TerminalSquare }
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
+import { SpawnStatus } from "@/components/spawn-status";
+import { useSpawnState } from "@/lib/spawn";
 import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
@@ -148,6 +150,7 @@ export function AgentChat({
   const lost = useConnectionLost(connecting);
   const unavailable = bridge !== "connected" || lost;
   const { newTab } = useSpaceActions();
+  const spawning = useSpawnState(paneId);
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
   const displayScope = JSON.stringify([session ?? "default", paneId]);
   const { prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus } = useDisplayPrefs(displayScope);
@@ -866,7 +869,8 @@ export function AgentChat({
           />
         )}
 
-        {isShell && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
+        <SpawnStatus paneId={paneId} />
+        {isShell && !spawning && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
 
         {/* Terminal mirror — tapping it focuses the composer so you can start typing right away
             (unless you're selecting text to copy, which the tap must not collapse). */}
