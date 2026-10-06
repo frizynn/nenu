@@ -17,7 +17,8 @@ export const SPAWN_AGENTS: ReadonlyArray<{ id: SpawnAgent; label: string }> = [
 ];
 export const agentLabel = (agent: SpawnAgent) => SPAWN_AGENTS.find((a) => a.id === agent)!.label;
 
-export type SpawnTarget = { kind: "tab"; workspaceId: string } | { kind: "workspace" };
+/** `message` prefills the first message, e.g. from the prompt on Home. */
+export type SpawnTarget = { kind: "tab"; workspaceId: string; message?: string } | { kind: "workspace"; message?: string };
 
 /** How much a new agent may do without asking. Ids are the bridge's allowlist (bridge/agent-start.ts). */
 export interface PermissionChoice {

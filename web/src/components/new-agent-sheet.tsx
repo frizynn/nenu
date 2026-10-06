@@ -40,6 +40,7 @@ interface NewAgentSheetProps {
   onClose: () => void;
   title: string;
   defaultCwd: string;
+  defaultMessage?: string;
   liveDirs: string[];
   readOnly: boolean;
   /** Resolves to an error to show inline, or null once the new pane is open. */
@@ -77,7 +78,7 @@ function Segmented<T extends string>({ label, options, value, onChange, classNam
   );
 }
 
-export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, readOnly, onSubmit }: NewAgentSheetProps) {
+export function NewAgentSheet({ open, onClose, title, defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit }: NewAgentSheetProps) {
   const [agent, setAgent] = useState<SpawnAgent>("claude");
   const [permissions, setPermissions] = useState({ claude: "ask", codex: "ask" });
   const [cwd, setCwd] = useState("");
@@ -98,7 +99,7 @@ export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, read
     setPermissions({ claude: loadPermission("claude"), codex: loadPermission("codex") });
     setCwd(defaultCwd);
     setName("");
-    setMessage("");
+    setMessage(defaultMessage);
     setRecent(loadDirs());
     setBrowsing(false);
     setBusy(false);
@@ -271,6 +272,7 @@ export function NewAgentHost() {
       onClose={() => openNewAgent(null)}
       title={shown.kind === "tab" ? "New tab" : "New chat"}
       defaultCwd={shown.kind === "tab" ? (workspaceDirs[0] ?? "") : (loadDirs()[0] ?? "")}
+      defaultMessage={shown.message}
       liveDirs={live}
       readOnly={isReadOnly(data?.device)}
       onSubmit={onSubmit}
