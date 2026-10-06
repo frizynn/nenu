@@ -26,6 +26,7 @@ All notable changes to Nenu are recorded here. The format follows
 - Keys, Type, Quick, Commands and Display move from the composer into a grouped ⋯ menu. (5314982d)
 - Chat-style transcript: right-aligned user bubbles, plain agent text, quiet times. (00b239ef)
 - Slimmer mobile header, tabs and segmented controls. (5314982d, e2da197d)
+- The folder picker loads on demand, outside the main bundle. (93d3f579)
 
 ### Fixed
 - Starting an agent on a brand-new pane no longer fails on a stale snapshot. (612a4074)
