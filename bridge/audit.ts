@@ -41,6 +41,7 @@ const METADATA_KEYS: ReadonlySet<string> = new Set([
   "checked",
   "keys",
   "passed",
+  "permission",
   "phase",
   "preflight",
   "reason",

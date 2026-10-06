@@ -6,6 +6,7 @@ import { renderedHtmlResponse } from "./html-preview.ts";
 import { QueueService } from "./queue-service.ts";
 import { reportUnsentReply } from "./send-report.ts";
 import { projectFiles } from "./project-files.ts";
+import { listHomeDirs } from "./home-dirs.ts";
 import { Subagents } from "./subagents.ts";
 import { historyResponse } from "./history-response.ts";
 import { ConversationService } from "./conversation-service.ts";
@@ -409,6 +410,17 @@ export function startServer(opts: {
         }));
       }
 
+      // Folder names under home for the new-chat picker. Read-level: names only, nothing is created.
+      if (pathname === "/api/dirs" && req.method === "GET") {
+        const denied = guard(req, cfg, "read");
+        if (denied) return denied;
+        try {
+          return json(await listHomeDirs(url.searchParams.get("path"), { hidden: url.searchParams.get("hidden") === "1" }), null);
+        } catch {
+          return jsonError("Directory unavailable.", 404, null);
+        }
+      }
+
       // ── Structural creates: new tab / new space (each opens a fresh shell pane) ──
       if (pathname === "/api/tab" && req.method === "POST") {
         const denied = guard(req, cfg, "write");
@@ -485,14 +497,14 @@ export function startServer(opts: {
           return readPane(herdr, cfg, paneId, url, req, native);
         }
         if (action === "start" && req.method === "POST") {
-          const kind = launchAgent(await req.json().catch(() => null));
-          if (!kind) return jsonError("Choose Codex or Claude Code.", 400, null);
+          const launch = launchAgent(await req.json().catch(() => null));
+          if (!launch) return jsonError("Choose Codex or Claude Code and a listed permission level.", 400, null);
           try {
             // A pane created a moment ago is not in the cached snapshot yet; refresh once before refusing it.
             const isPane = (p: { paneId: string }) => p.paneId === paneId;
             const shell = rt.engine.current().shellPanes.find(isPane) ?? (await rt.engine.refresh()).shellPanes.find(isPane);
-            await startPaneAgent(shell, kind, herdr);
-            audit.record({ action: "agent.start", paneId, session, device, detail: { agent: kind } });
+            await startPaneAgent(shell, launch, herdr);
+            audit.record({ action: "agent.start", paneId, session, device, detail: { agent: launch.kind, permission: launch.permission } });
             return json({ ok: true }, null);
           } catch (err) {
             return jsonError(err instanceof Error ? err.message : "Agent startup failed.", 409, null);

@@ -243,6 +243,12 @@ defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and t
 same-origin, forms, popups, top navigation or downloads. Never execute it in Nenu's origin or turn
 the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md)).
 
+The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
+bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories.
+Don't widen it to `/`, other roots or files ([ADR 0055](./.adr/0055-the-folder-picker-lists-names-under-home-only.md)).
+Agent permission flags come only from the allowlist in `bridge/agent-start.ts`; the client names a
+choice and never sends argv.
+
 The chat gallery also previews Nenu-generated raster uploads outside cwd through
 `bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under the
 configured uploads directory and the exact path in a user message from the current pane's contained
