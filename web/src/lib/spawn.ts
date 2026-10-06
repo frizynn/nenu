@@ -188,6 +188,9 @@ export async function spawn(input: SpawnInput, deps: SpawnDeps = liveDeps): Prom
       ? await api.createTab(input.target.workspaceId, { label, cwd }, input.session)
       : await api.createWorkspace({ label, cwd }, input.session);
   if (!created.ok) return created;
+  // The name labels the tab or workspace; it also names the chat itself, which is what the sidebar
+  // and the chat header show. A failed rename only leaves the default name.
+  if (label) void api.renamePane(created.pane.paneId, label, input.session).catch(() => undefined);
   saveAgent(input.agent);
   if (cwd) rememberDir(cwd);
   if (input.agent !== "shell") {
