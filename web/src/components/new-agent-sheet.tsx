@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
+import { ChevronRight, Folder, TriangleAlert } from "lucide-react";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
+import { DirPicker } from "@/components/dir-picker";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { fetchHomeDirs } from "@/lib/api";
+import { baseName, tildePath } from "@/lib/dir-picker";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { useHoldReload } from "@/lib/reload-guard";
 import {
+  PERMISSIONS,
   SPAWN_AGENTS,
   agentLabel,
   loadAgent,
   loadDirs,
+  loadPermission,
   openNewAgent,
   spawn,
   suggestDirs,
@@ -26,6 +32,7 @@ export interface NewAgentValues {
   cwd: string;
   name: string;
   message: string;
+  permission: string;
 }
 
 interface NewAgentSheetProps {
@@ -40,14 +47,45 @@ interface NewAgentSheetProps {
 }
 
 const field =
-  "h-11 w-full rounded-lg border border-border bg-background px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+
+function Segmented<T extends string>({ label, options, value, onChange, className }: {
+  label: string;
+  options: ReadonlyArray<{ id: T; label: string }>;
+  value: T;
+  onChange: (id: T) => void;
+  className?: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className={cn("flex gap-0.5 rounded-lg bg-muted p-0.5", className)}>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={cn(
+            "h-8 flex-auto truncate rounded-md px-1.5 text-[13px] font-medium transition-colors",
+            value === o.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, readOnly, onSubmit }: NewAgentSheetProps) {
   const [agent, setAgent] = useState<SpawnAgent>("claude");
+  const [permissions, setPermissions] = useState({ claude: "ask", codex: "ask" });
   const [cwd, setCwd] = useState("");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
+  const [home, setHome] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,21 +95,32 @@ export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, read
   useEffect(() => {
     if (!open) return;
     setAgent(loadAgent());
+    setPermissions({ claude: loadPermission("claude"), codex: loadPermission("codex") });
     setCwd(defaultCwd);
     setName("");
     setMessage("");
     setRecent(loadDirs());
+    setBrowsing(false);
     setBusy(false);
     setError(null);
     // Only a fresh open resets the form; a poll that changes the default dir must not clobber typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Learn the host's home once, so folders read as ~/… before the picker is ever opened.
+  useEffect(() => {
+    if (!open || home) return;
+    const abort = new AbortController();
+    fetchHomeDirs("~", false, abort.signal).then((d) => setHome(d.home), () => undefined);
+    return () => abort.abort();
+  }, [open, home]);
+
   async function submit() {
     if (busy || readOnly) return;
     setBusy(true);
     setError(null);
-    const failure = await onSubmit({ agent, cwd, name, message });
+    const permission = agent === "shell" ? "ask" : permissions[agent];
+    const failure = await onSubmit({ agent, cwd, name, message, permission });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
@@ -79,94 +128,91 @@ export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, read
   }
 
   const shell = agent === "shell";
-  const dirs = suggestDirs(liveDirs, recent, cwd);
+  const choices = shell ? [] : PERMISSIONS[agent];
+  const chosen = shell ? undefined : choices.find((p) => p.id === permissions[agent]);
+  const shown = cwd.trim() ? tildePath(cwd.trim(), home) : "~";
+  const parent = shown === "~" ? "~" : shown.slice(0, -baseName(shown).length - 1) || "/";
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={title}
-      className="sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4"
+      title={browsing ? "Choose a folder" : title}
+      className={cn("sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4", browsing && "flex h-dvh flex-col sm:h-[min(40rem,85dvh)] [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col")}
     >
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <div role="radiogroup" aria-label="Agent" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-          {SPAWN_AGENTS.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              role="radio"
-              aria-checked={agent === a.id}
-              onClick={() => setAgent(a.id)}
-              className={cn(
-                "min-h-11 rounded-lg px-2 text-sm font-medium transition-colors",
-                agent === a.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-              )}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
+      {browsing ? (
+        <DirPicker
+          home={home}
+          shortcuts={suggestDirs([cwd], liveDirs, recent)}
+          onHome={setHome}
+          onBack={() => setBrowsing(false)}
+          onPick={(path) => {
+            setCwd(path);
+            setBrowsing(false);
+          }}
+        />
+      ) : (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <Segmented label="Agent" options={SPAWN_AGENTS} value={agent} onChange={setAgent} />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Directory</span>
-          <input
-            value={cwd}
-            onChange={(e) => setCwd(e.target.value)}
-            placeholder="~ (home dir)"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            className={cn(field, "font-mono text-sm")}
-          />
-        </label>
-        {dirs.length > 0 && (
-          <div className="-mt-1 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Recent directories">
-            {dirs.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setCwd(d)}
-                className="min-h-11 max-w-[14rem] shrink-0 truncate rounded-lg border border-border px-3 font-mono text-xs text-muted-foreground active:bg-accent"
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        )}
+          <button
+            type="button"
+            aria-label={`Directory: ${shown}`}
+            onClick={() => setBrowsing(true)}
+            className="flex h-12 w-full items-center gap-3 rounded-lg border border-border bg-background px-3 text-left hover:bg-accent/60 active:bg-accent"
+          >
+            <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-medium">{shown === "~" ? "Home" : baseName(shown)}</span>
+              <span className="block truncate text-xs text-muted-foreground">{parent}</span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" aria-hidden />
+          </button>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Name (optional)</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name it" className={field} />
-        </label>
+          {chosen && !shell && (
+            <div className="flex flex-col gap-1.5">
+              <Segmented
+                label="Permissions"
+                options={choices}
+                value={chosen.id}
+                onChange={(id) => setPermissions((p) => ({ ...p, [agent]: id }))}
+              />
+              <p className={cn("flex items-start gap-1.5 px-0.5 text-xs", chosen.danger ? "text-status-working" : "text-muted-foreground")}>
+                {chosen.danger && <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />}
+                {chosen.hint}
+              </p>
+            </div>
+          )}
 
-        {!shell && (
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">First message (optional)</span>
+          <input aria-label="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className={field} />
+
+          {!shell && (
             <textarea
+              aria-label="First message (optional)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
-              placeholder={`Sent to ${agentLabel(agent)} as soon as it is ready`}
+              placeholder={`First message (optional), sent when ${agentLabel(agent)} is ready`}
               className={cn(field, "h-auto resize-none py-2")}
             />
-          </label>
-        )}
+          )}
 
-        {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <Button type="submit" disabled={busy || readOnly} className="h-11">
-          {busy ? "Creating…" : shell ? "Open shell" : `Start ${agentLabel(agent)}`}
-        </Button>
-      </form>
+          {readOnly && <p className="text-sm text-muted-foreground">Read-only: this device is not authorised to create.</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={busy || readOnly} className="h-11">
+            {busy ? "Creating…" : shell ? "Open shell" : `Start ${agentLabel(agent)}`}
+          </Button>
+        </form>
+      )}
     </BottomSheet>
   );
 }

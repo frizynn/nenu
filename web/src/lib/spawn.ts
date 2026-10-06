@@ -19,18 +19,42 @@ export const agentLabel = (agent: SpawnAgent) => SPAWN_AGENTS.find((a) => a.id =
 
 export type SpawnTarget = { kind: "tab"; workspaceId: string } | { kind: "workspace" };
 
+/** How much a new agent may do without asking. Ids are the bridge's allowlist (bridge/agent-start.ts). */
+export interface PermissionChoice {
+  id: string;
+  label: string;
+  hint: string;
+  danger?: boolean;
+}
+export const PERMISSIONS: Record<Exclude<SpawnAgent, "shell">, readonly PermissionChoice[]> = {
+  claude: [
+    { id: "ask", label: "Ask", hint: "Your default mode. Asks before edits and commands." },
+    { id: "acceptEdits", label: "Accept edits", hint: "Edits files without asking. Still asks before commands." },
+    { id: "plan", label: "Plan", hint: "Reads and plans. Changes nothing until you approve." },
+    { id: "bypass", label: "Bypass", hint: "Never asks. Can run any command and change any file.", danger: true },
+  ],
+  codex: [
+    { id: "ask", label: "Ask", hint: "Your default mode. Asks before leaving the sandbox." },
+    { id: "auto", label: "Auto", hint: "Edits and runs commands in this folder without asking. Sandboxed." },
+    { id: "full", label: "Full access", hint: "No sandbox and never asks. Anything on this machine.", danger: true },
+  ],
+};
+
 export interface SpawnInput {
   target: SpawnTarget;
   agent: SpawnAgent;
   cwd: string;
   name: string;
   message: string;
+  /** A {@link PERMISSIONS} id for the chosen agent; ignored for a shell. */
+  permission: string;
   session?: string;
 }
 
 // ── Remembered choices ────────────────────────────────────────────────────────────────────────
 const AGENT_KEY = "collie.spawn.agent";
 const DIRS_KEY = "collie.spawn.dirs";
+const PERMISSION_KEY = "collie.spawn.permission";
 const MAX_DIRS = 6;
 
 function readJson(key: string): unknown {
@@ -54,6 +78,17 @@ export function loadAgent(): SpawnAgent {
 }
 export const saveAgent = (agent: SpawnAgent) => write(AGENT_KEY, agent);
 
+const savedPermissions = (): Record<string, unknown> => {
+  const value = readJson(PERMISSION_KEY);
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+};
+/** The last permission picked for this agent, if it is still a listed choice; else "ask". */
+export function loadPermission(agent: Exclude<SpawnAgent, "shell">): string {
+  const value = savedPermissions()[agent];
+  return PERMISSIONS[agent].some((p) => p.id === value) ? (value as string) : "ask";
+}
+export const savePermission = (agent: Exclude<SpawnAgent, "shell">, id: string) => write(PERMISSION_KEY, { ...savedPermissions(), [agent]: id });
+
 export function loadDirs(): string[] {
   const value = readJson(DIRS_KEY);
   return Array.isArray(value) ? value.filter((d): d is string => typeof d === "string" && !!d).slice(0, MAX_DIRS) : [];
@@ -65,16 +100,16 @@ export function withDir(dirs: string[], cwd: string): string[] {
 }
 export const rememberDir = (cwd: string) => write(DIRS_KEY, withDir(loadDirs(), cwd));
 
-/** Directory shortcuts: where agents are running now, then recents; the current value is not repeated. */
-export function suggestDirs(live: string[], recent: string[], current: string): string[] {
-  const seen = new Set([current.trim()]);
-  return [...live, ...recent].filter((d) => d && !seen.has(d) && !!seen.add(d)).slice(0, 5);
+/** Directory shortcuts in the order given (current, live, then recent), deduplicated, bounded. */
+export function suggestDirs(...groups: string[][]): string[] {
+  return [...new Set(groups.flat().map((d) => d.trim()).filter(Boolean))].slice(0, 5);
 }
 
 // ── Launch tracker ────────────────────────────────────────────────────────────────────────────
 export type SpawnStage = "start" | "queue";
 export interface SpawnState {
   agent: Exclude<SpawnAgent, "shell">;
+  permission: string;
   stage: SpawnStage;
   phase: "working" | "done" | "error";
   error?: string;
@@ -122,7 +157,7 @@ async function startStage(paneId: string, s: SpawnState, deps: SpawnDeps): Promi
   for (let attempt = 0; attempt < START_ATTEMPTS; attempt++) {
     const began = deps.now();
     try {
-      const result = await deps.startAgent(paneId, s.agent, s.session);
+      const result = await deps.startAgent(paneId, s.agent, s.session, s.permission);
       if (result.ok) return null;
       error = result.error;
     } catch (cause) {
@@ -194,7 +229,8 @@ export async function spawn(input: SpawnInput, deps: SpawnDeps = liveDeps): Prom
   saveAgent(input.agent);
   if (cwd) rememberDir(cwd);
   if (input.agent !== "shell") {
-    set(created.pane.paneId, { agent: input.agent, stage: "start", phase: "working", message: input.message.trim(), session: input.session });
+    savePermission(input.agent, input.permission);
+    set(created.pane.paneId, { agent: input.agent, permission: input.permission, stage: "start", phase: "working", message: input.message.trim(), session: input.session });
     void runSpawn(created.pane.paneId, deps);
   }
   return created;
