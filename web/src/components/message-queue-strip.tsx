@@ -28,7 +28,7 @@ export function MessageQueueStrip({
       className="mb-2 max-h-52 overflow-y-auto rounded-lg border border-border/50 px-3 py-1"
     >
       <p className="py-1 text-xs text-muted-foreground">
-        Queued · {messages.length} · sends when the agent is free
+        {messages.length === 1 ? "1 message waits" : `${messages.length} messages wait`} for the agent to be free
       </p>
       {error && (
         <p role="alert" className="py-1 text-xs text-destructive">
@@ -62,8 +62,8 @@ export function MessageQueueStrip({
                 {item.state === "sending"
                   ? "Sending…"
                   : item.state === "paused"
-                    ? item.error || "Paused. Check Terminal."
-                    : item.error || "Waiting to send"}
+                    ? item.error || "Paused. Check the terminal."
+                    : item.error || "Waiting"}
               </span>
               {editing === item.id ? (
                 <button

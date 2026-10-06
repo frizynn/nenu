@@ -18,7 +18,7 @@ export function pendingStatus(send: LocalSend): {
   if (send.state === "queued") {
     if (send.queueState === "sending") return { tone: "busy", label: "Sending…", actions: [] };
     if (send.queueState === "paused") return { tone: "problem", label: send.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
-    return { tone: "waiting", label: "Queued · sends when the agent is free", actions: ["sendNow", "edit", "remove"] };
+    return { tone: "waiting", label: "Waiting. It sends when the agent is free.", actions: ["sendNow", "edit", "remove"] };
   }
   return { tone: "busy", label: "Sending…", actions: [] };
 }

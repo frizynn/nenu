@@ -19,7 +19,7 @@ interface SpaceStripProps {
 
 // A horizontal strip of spaces (Herdr workspaces) above the home list. In the drill-in (`onBack`
 // set), it leads with a Back button to the dashboard, then the sibling spaces for quick switching;
-// otherwise it leads with the "All" triage chip. A trailing + creates a new space. The space focused
+// otherwise it leads with the "All" triage chip. A trailing + starts a new chat in a new workspace. The space focused
 // in the desktop TUI gets a subtle ring; a space with a blocked agent gets a dot.
 export function SpaceStrip({
   workspaces,
@@ -63,7 +63,7 @@ export function SpaceStrip({
       <button
         type="button"
         onClick={onNewSpace}
-        aria-label="New space"
+        aria-label="New chat"
         className="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:bg-accent active:scale-95"
       >
         <Plus className="size-4" />

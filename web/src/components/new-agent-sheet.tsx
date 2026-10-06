@@ -223,7 +223,7 @@ export function NewAgentHost() {
     <NewAgentSheet
       open={target !== null}
       onClose={() => openNewAgent(null)}
-      title={shown.kind === "tab" ? "New tab" : "New workspace"}
+      title={shown.kind === "tab" ? "New tab" : "New chat"}
       defaultCwd={shown.kind === "tab" ? (workspaceDirs[0] ?? "") : (loadDirs()[0] ?? "")}
       liveDirs={live}
       readOnly={isReadOnly(data?.device)}
