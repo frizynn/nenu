@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectView, TemplateView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { OrgTemplates } from "./org-templates";
+import { NewThreadMenu } from "./new-thread-menu";
 
 const project: ProjectView = {
   slug: "nenu",
@@ -35,20 +35,22 @@ function serveTemplates(templates: TemplateView[] = [template]) {
   server.use(http.get("/api/org/templates", () => HttpResponse.json({ ok: true, templates })));
 }
 
-it("lists templates with scope, role, description, and memory size", async () => {
-  serveTemplates();
-  render(<OrgTemplates project={project} session="work" readOnly={false} onChanged={() => {}} />);
+it("loads templates only when the menu opens and lists them with role and scope", async () => {
+  const user = userEvent.setup();
+  let requests = 0;
+  server.use(http.get("/api/org/templates", () => { requests += 1; return HttpResponse.json({ ok: true, templates: [template] }); }));
+  render(<NewThreadMenu project={project} session="work" onStarted={() => {}} />);
 
-  expect(await screen.findByText("review-worker")).toBeInTheDocument();
-  expect(screen.getByText("project")).toBeInTheDocument();
-  expect(screen.getByText("worker")).toBeInTheDocument();
+  expect(requests).toBe(0);
+  await user.click(screen.getByRole("button", { name: "New thread" }));
+  expect(await screen.findByRole("button", { name: /review-worker/ })).toHaveTextContent("review-worker · worker · project");
   expect(screen.getByText("Review a change")).toBeInTheDocument();
-  expect(screen.getByText("memory 15 chars")).toBeInTheDocument();
+  expect(requests).toBe(1);
 });
 
-it("starts a template with the exact form values and notifies the project route", async () => {
+it("starts a template with the exact form values in an in-app dialog", async () => {
   const user = userEvent.setup();
-  const onChanged = vi.fn();
+  const onStarted = vi.fn();
   let posted: unknown;
   let requestUrl = "";
   serveTemplates();
@@ -57,9 +59,12 @@ it("starts a template with the exact form values and notifies the project route"
     requestUrl = request.url;
     return HttpResponse.json({ ok: true, node: { id: "t-1234", parentId: "t-1000", role: "worker", template: "review-worker" } });
   }));
-  render(<OrgTemplates project={project} session="work" readOnly={false} onChanged={onChanged} />);
+  render(<NewThreadMenu project={project} session="work" onStarted={onStarted} />);
 
-  await user.click(await screen.findByRole("button", { name: "Open" }));
+  await user.click(screen.getByRole("button", { name: "New thread" }));
+  await user.click(await screen.findByRole("button", { name: /review-worker/ }));
+  const dialog = screen.getByRole("dialog", { name: "New review-worker thread" });
+  expect(dialog).toBeInTheDocument();
   expect(screen.getByLabelText("Title")).toHaveValue("review-worker");
   expect(screen.getByRole("option", { name: "t-1000 · Coordinator" })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: "t-2000 · Worker" })).not.toBeInTheDocument();
@@ -67,9 +72,9 @@ it("starts a template with the exact form values and notifies the project route"
   await user.type(screen.getByLabelText("Title"), "Review accessibility");
   await user.selectOptions(screen.getByLabelText("Parent"), "t-1000");
   await user.type(screen.getByLabelText("Task"), "Review keyboard navigation.");
-  await user.click(screen.getByRole("button", { name: "Start" }));
+  await user.click(screen.getByRole("button", { name: "Start thread" }));
 
-  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onStarted).toHaveBeenCalledTimes(1));
   expect(posted).toEqual({
     project: "nenu",
     template: "review-worker",
@@ -78,20 +83,14 @@ it("starts a template with the exact form values and notifies the project route"
     task: "Review keyboard navigation.",
   });
   expect(new URL(requestUrl).searchParams.get("session")).toBe("work");
-  expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Start thread" })).not.toBeInTheDocument();
 });
 
-it("hides Open on a read-only device", async () => {
-  serveTemplates();
-  render(<OrgTemplates project={project} session="work" readOnly onChanged={() => {}} />);
-
-  expect(await screen.findByText("review-worker")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
-});
-
-it("shows the API error message", async () => {
+it("shows the API error message in the menu", async () => {
+  const user = userEvent.setup();
   server.use(http.get("/api/org/templates", () => HttpResponse.json({ ok: false, error: "Template CLI unavailable." }, { status: 502 })));
-  render(<OrgTemplates project={project} session="work" readOnly={false} onChanged={() => {}} />);
+  render(<NewThreadMenu project={project} session="work" onStarted={() => {}} />);
 
+  await user.click(screen.getByRole("button", { name: "New thread" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Template CLI unavailable.");
 });

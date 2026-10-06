@@ -5,7 +5,7 @@ import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
 import { SessionSubagents } from "@/components/session-subagents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { ArrowUpToLine, Loader2, MessageSquareText, ScrollText, TerminalSquare } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
@@ -85,6 +85,12 @@ interface AgentChatProps {
   tabLabel?: string;
   /** Owning project, when this pane is one of its coordinator/agent threads. */
   project?: { slug: string; name: string };
+  /** Header title override; a project frame names the thread this pane runs. */
+  title?: string;
+  /** A band under the header (a project's Chat | Tasks switch). */
+  subheader?: ReactNode;
+  /** Replaces the conversation body while set; the chat stays mounted underneath. */
+  overlay?: ReactNode;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
@@ -126,6 +132,9 @@ export function AgentChat({
   tabs,
   tabLabel,
   project,
+  title,
+  subheader,
+  overlay,
   text,
   nativeTelemetry,
   requestedLines = 0,
@@ -799,7 +808,8 @@ export function AgentChat({
               <div className="flex min-w-0 items-center gap-2 text-sm font-semibold leading-tight sm:text-base">
                 {!isShell && <StatusBadge status={agent.status} stale={connecting} compactOnMobile className="shrink-0" />}
                 <span className="truncate">
-                {project?.name ??
+                {title ??
+                  project?.name ??
                   agent.paneLabel ??
                   agent.sessionName ??
                   `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
@@ -816,9 +826,11 @@ export function AgentChat({
           </div>
         )}
       </AppHeader>
+      {subheader}
+      {overlay}
 
       {/* Content region below the header — the mirror inside is the scroller. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col" hidden={Boolean(overlay)}>
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 

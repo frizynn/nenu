@@ -88,7 +88,7 @@
   /* Workbench navigation surfaces. */
   --workbench-sidebar: light-dark(#fafafa, #000);
   --workbench-row-hover: light-dark(#f0f0f2, #191a1d);
-  --workbench-row-selected: light-dark(#fff, #151515);
+  --workbench-row-selected: light-dark(#ebebee, #212226);
 
   /* Agent lifecycle status palette — the app's primary at-a-glance signal, so both halves are
      tuned against their own ground rather than one set being reused. The dark values glow on

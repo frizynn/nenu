@@ -57,7 +57,7 @@ export function AppHeader({
           {navigation && (
             <CollieHome
               onHome={navigation.onOpen}
-              label="Open workspaces"
+              label="Open navigation"
               expanded={navigation.open}
               trouble={lost}
               lost={lost}
