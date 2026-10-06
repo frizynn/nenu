@@ -244,7 +244,8 @@ same-origin, forms, popups, top navigation or downloads. Never execute it in Nen
 the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
-bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories.
+bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and
+only to write-level devices.
 Don't widen it to `/`, other roots or files ([ADR 0055](./.adr/0055-the-folder-picker-lists-names-under-home-only.md)).
 Agent permission flags come only from the allowlist in `bridge/agent-start.ts`; the client names a
 choice and never sends argv.

@@ -410,9 +410,10 @@ export function startServer(opts: {
         }));
       }
 
-      // Folder names under home for the new-chat picker. Read-level: names only, nothing is created.
+      // Folder names under home for the new-chat picker. Write-level: only a device that can start a
+      // chat needs them, so a read-only viewer never learns the home tree.
       if (pathname === "/api/dirs" && req.method === "GET") {
-        const denied = guard(req, cfg, "read");
+        const denied = guard(req, cfg, "write");
         if (denied) return denied;
         try {
           return json(await listHomeDirs(url.searchParams.get("path"), { hidden: url.searchParams.get("hidden") === "1" }), null);

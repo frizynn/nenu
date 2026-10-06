@@ -15,8 +15,9 @@ picker into general host file discovery behind a route any read-level client can
 
 ## Decision
 
-`GET /api/dirs` lists **directory names only** under the bridge user's home directory, gated like
-any read (`bridge/home-dirs.ts`):
+`GET /api/dirs` lists **directory names only** under the bridge user's home directory, gated at
+write level (`bridge/home-dirs.ts`): only a device that can start a chat needs the names, so a
+read-only viewer never learns the home tree.
 
 - The requested path (`~`, `~/x`, relative to home, or absolute) is resolved with `realpath` and must
   stay inside the real home; `..`, absolute paths elsewhere and symlinks out of home are refused the
