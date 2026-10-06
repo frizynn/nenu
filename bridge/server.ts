@@ -458,7 +458,10 @@ export function startServer(opts: {
           const kind = launchAgent(await req.json().catch(() => null));
           if (!kind) return jsonError("Choose Codex or Claude Code.", 400, null);
           try {
-            await startPaneAgent(rt.engine.current().shellPanes.find((p) => p.paneId === paneId), kind, herdr);
+            // A pane created a moment ago is not in the cached snapshot yet; refresh once before refusing it.
+            const isPane = (p: { paneId: string }) => p.paneId === paneId;
+            const shell = rt.engine.current().shellPanes.find(isPane) ?? (await rt.engine.refresh()).shellPanes.find(isPane);
+            await startPaneAgent(shell, kind, herdr);
             audit.record({ action: "agent.start", paneId, session, device, detail: { agent: kind } });
             return json({ ok: true }, null);
           } catch (err) {
