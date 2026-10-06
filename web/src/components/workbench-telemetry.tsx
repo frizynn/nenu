@@ -46,7 +46,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
       {mode !== "metrics" && <button
         ref={modelTriggerRef}
         type="button"
-        className="workbench-model-chip flex min-h-11 min-w-0 max-w-[10rem] items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 aria-expanded:text-foreground md:min-h-8 md:max-w-[16rem]"
+        className="flex min-h-11 min-w-0 max-w-[10rem] items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 aria-expanded:text-foreground md:min-h-8 md:max-w-[16rem]"
         disabled={(disabled && !modelOpen) || !modelAvailable}
         onClick={() => {
           if (controlledPanel === undefined) setLocalPanel(null);

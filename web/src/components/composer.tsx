@@ -1237,7 +1237,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             rows={1}
           />
           </div>
-          {modelControl && <div className="composer-model flex h-11 shrink-0 items-center md:h-8">{modelControl}</div>}
+          {modelControl && <div className="flex h-11 shrink-0 items-center md:h-8">{modelControl}</div>}
           {working && agent === "codex" && !hasDraft ? (
             <Button
               type="button"
