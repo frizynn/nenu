@@ -71,7 +71,9 @@ describe("remembered choices", () => {
     expect(loadPermission("claude")).toBe("ask");
     savePermission("claude", "plan");
     savePermission("codex", "full");
-    expect([loadPermission("claude"), loadPermission("codex")]).toEqual(["plan", "full"]);
+    expect([loadPermission("claude"), loadPermission("codex")]).toEqual(["plan", "ask"]); // a dangerous mode is never preselected
+    savePermission("codex", "auto");
+    expect(loadPermission("codex")).toBe("auto");
     savePermission("claude", "full"); // Codex's id, not Claude's
     expect(loadPermission("claude")).toBe("ask");
     localStorage.setItem("collie.spawn.permission", "[1]");

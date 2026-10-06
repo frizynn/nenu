@@ -83,10 +83,11 @@ const savedPermissions = (): Record<string, unknown> => {
   const value = readJson(PERMISSION_KEY);
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 };
-/** The last permission picked for this agent, if it is still a listed choice; else "ask". */
+/** The last permission picked for this agent, if it is still a listed, safe choice; else "ask".
+ * A dangerous mode is never preselected: running without a sandbox takes a fresh tap each time. */
 export function loadPermission(agent: Exclude<SpawnAgent, "shell">): string {
   const value = savedPermissions()[agent];
-  return PERMISSIONS[agent].some((p) => p.id === value) ? (value as string) : "ask";
+  return PERMISSIONS[agent].some((p) => p.id === value && !p.danger) ? (value as string) : "ask";
 }
 export const savePermission = (agent: Exclude<SpawnAgent, "shell">, id: string) => write(PERMISSION_KEY, { ...savedPermissions(), [agent]: id });
 
