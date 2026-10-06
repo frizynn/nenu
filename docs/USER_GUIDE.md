@@ -319,7 +319,7 @@ A pane your rows match shows only your groups, in place of the shipped ones
 ([ADR 0018](../.adr/0018-operator-command-rows-replace-the-catalog.md)). The shipped phrases are
 English (`yes`, `commit and push`); this is the way to work in another language, or to give a
 harness that wants `approve` the word it wants. `scope = "shell"` reaches a plain shell pane, which
-otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, tap **Quick**, your
+otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, open **⋯ → Quick replies**, your
 groups are there. Rejected row? `journalctl --user -u collie -n 20` names it and why.
 
 ### Multi-session
@@ -658,11 +658,11 @@ custom domain, or a proxy that rewrites `Host`. Allow the exact public origin wi
 the fourth proxy requirement in
 [`DEPLOYMENT.md`](../DEPLOYMENT.md#variant-b--identity-aware-proxy--per-device-authorisation).
 
-**A `sudo` (or SSH passphrase, or `gpg`) prompt won't take your reply.** Use **Type** in the
-Controls row, not Send. Send *verifies* what it typed by reading it back off the screen before it
+**A `sudo` (or SSH passphrase, or `gpg`) prompt won't take your reply.** Use **⋯ → Type into
+terminal** in the pane header, not Send. Send *verifies* what it typed by reading it back off the screen before it
 presses Enter ([upstream #34](https://github.com/AltanS/collie/issues/34)), and a password prompt turns echo
-off, so there is nothing to read back — **Type** sends your keystrokes straight to the pane, Enter
-included. Nothing you type in **Type** is stored, echoed into a draft, or restored later, and the
+off, so there is nothing to read back — typing into the terminal sends your keystrokes straight to the pane, Enter
+included. Nothing you type that way is stored, echoed into a draft, or restored later, and the
 moment Nenu recognises a password prompt it drops the stored draft too
 ([upstream #103](https://github.com/AltanS/collie/issues/103)).
 

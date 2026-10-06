@@ -64,13 +64,15 @@ export function AppHeader({
               className="workbench-chat-menu lg:hidden"
             />
           )}
-          {(onHome || wordmark || !navigation) && (
+          {/* With the workbench navigation, the sidebar carries the brand on a desktop; the header
+              repeating it was a second logo competing with the pane's title. */}
+          {!navigation && (
             <CollieHome
               onHome={onHome}
               trouble={lost}
               lost={lost}
               wordmark={wordmark}
-              className={navigation ? "hidden lg:flex" : !wordmark ? "max-sm:hidden" : undefined}
+              className={!wordmark ? "max-sm:hidden" : undefined}
             />
           )}
           {/* Center region: the breadcrumb (or, on the dashboard/space, an empty flex-1 spacer that

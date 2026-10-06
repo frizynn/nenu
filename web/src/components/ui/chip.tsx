@@ -63,8 +63,10 @@ export function Chip({ quiet = false, label, active, ring, status, onClick, onLo
         // select-none + -webkit-touch-callout:none stop iOS Safari's selection loupe / touch callout,
         // whose native long-press gesture otherwise fires pointercancel and kills the hold timer.
         "relative flex shrink-0 select-none items-center gap-1 [-webkit-touch-callout:none] whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium transition-colors active:scale-95 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm",
+        // Quiet tabs are a slim 36px underline row. The ::after reaches 8px (past the 2px underline) into the strip's
+        // overlapping bottom padding (tab-strip.tsx), so a thumb still gets a 44px target.
         quiet
-          ? "min-h-11 min-w-11 rounded-none border-b-2 border-transparent bg-transparent text-muted-foreground hover:text-foreground"
+          ? "h-9 min-w-11 justify-center rounded-none border-b-2 border-transparent bg-transparent px-2.5 text-[13px] text-muted-foreground after:absolute after:inset-x-0 after:top-0 after:-bottom-2.5 after:content-[''] hover:text-foreground active:scale-100 sm:px-2.5 sm:py-1 sm:text-[13px]"
           : active
           ? "bg-primary text-primary-foreground"
           : "bg-muted text-muted-foreground hover:bg-muted/70",

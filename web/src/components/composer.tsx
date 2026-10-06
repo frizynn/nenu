@@ -3,7 +3,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { Check, ImagePlus, Keyboard, Loader2, Plus, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
+import { Check, Gauge, Keyboard, Loader2, Plus, Send, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -55,8 +55,23 @@ export interface ComposerHandle {
   /** Opens the harness's own model picker through the same verified send as a reply. */
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
-  openDisplayPrefs: () => void;
-  openTools: () => void;
+  /** Open one of the in-flow docks; routed through the same guarded drawer transition as a menu tap. */
+  openDock: (dock: "keys" | "quick" | "display") => void;
+}
+
+/**
+ * One of the composer's secondary controls. The composer owns their state and behaviour; the pane
+ * header's ⋯ menu is where they are reached, so the input row stays one line on every screen.
+ */
+export interface ComposerControl {
+  id: "keys" | "type" | "stop" | "quick" | "commands" | "display" | "usage";
+  group: "Terminal" | "Shortcuts" | "View";
+  label: string;
+  icon: LucideIcon;
+  disabled: boolean;
+  /** An open dock or an armed mode. */
+  on: boolean;
+  run: () => void;
 }
 
 interface ComposerProps {
@@ -102,6 +117,8 @@ interface ComposerProps {
   setTapToFocus: (tapToFocus: boolean) => void;
   /** Snap the mirror to the live tail (follow + revalidate + scroll) after a successful send. */
   onSent: () => void;
+  /** Receives the secondary controls whenever their state changes (see ComposerControl). */
+  onControlsChange?: (controls: ComposerControl[]) => void;
 }
 
 // The composer cluster at the bottom of the pane view — everything a phone keyboard can't do on its
@@ -111,19 +128,11 @@ interface ComposerProps {
 // sheets) is entirely local; it reaches AgentChat only through `onSent` (to re-follow the tail) and
 // exposes `focusInput` so the mirror tap can bring up the keyboard.
 //
-// "display" joined the drawer union when the permanent icon-only View row was retired: wrap / raw
-// terminal / font size are settings you touch once, so they cost a whole row of a phone viewport for
-// nothing, and the raw-terminal toggle in particular was an unlabelled `>_` glyph nobody could
-// decode. They now live behind the ⚙ on the single Controls row, as labelled rows in the same
-// in-flow dock (they change how the mirror LOOKS, so the mirror has to stay visible while you flip
-// them). Find moved the other way — to the header, where its find bar already takes over the row.
-type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "actions" | null;
-
-// The Controls row's "on" look, authored once so an open dock and an armed mode can never drift
-// apart. `hover:` is pinned to the same tint: without it, hovering an already-on control repaints it
-// with the ghost variant's hover background and it reads as switching off under the cursor.
-const CONTROL_ON = "bg-control-on text-control-on-foreground hover:bg-control-on";
-const CONTROL_OFF = "text-muted-foreground";
+// Keys, Quick, Display and Usage open as in-flow docks above the input (they act on, or change how
+// you read, what is on screen, so the conversation stays visible while they are up). Their entry
+// points are the header's ⋯ menu (onControlsChange): the input row itself holds only attach, the
+// draft, the model chip and Send.
+type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
 // Pause after clearing a stranded terminal draft so the TUI settles before pane.send_text.
 const TUI_SETTLE_MS = 350;
@@ -180,7 +189,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
+  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -381,8 +390,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // surface's whole safety story is "you review exactly what is about to go on the wire". So the fix
   // for a mis-tap is a confirm, not persistence.
   //
-  // Routed through here rather than guarding the dock's ✕ alone: the Keys toggle and the Quick /
-  // Agent / Display buttons all unmount the tray just as effectively. An armed-but-EMPTY queue (a
+  // Routed through here rather than guarding the dock's ✕ alone: every ⋯ menu item that opens another
+  // dock, and arming Type, unmount the tray just as effectively. An armed-but-EMPTY queue (a
   // lone `once` modifier, no chips) does not arm the confirm — one tap of setup isn't work worth
   // protecting, and over-guarding just trains you to double-tap through it reflexively.
   function requestDrawer(next: ComposerDrawer) {
@@ -514,8 +523,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     prepareAnswer: (text) => { updateInput((draft) => draft.trim() ? `${draft}\n${text}` : text); focusInputImmediately(); },
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
-    openDisplayPrefs: () => requestDrawer("display"),
-    openTools: () => requestDrawer("actions"),
+    openDock: (dock) => requestDrawer(dock),
   }));
 
   useEffect(
@@ -984,6 +992,43 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     attachFiles(files);
   }
 
+  // The secondary controls, published to the header menu. Their handlers read the latest render
+  // through a ref, so the list is re-published only when something a menu row shows has changed.
+  const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
+  const controlActions = useRef({ toggleDock, type: () => {}, stop: () => {} });
+  controlActions.current = {
+    toggleDock,
+    type: () => {
+      if (direct.active) {
+        direct.deactivate();
+        return;
+      }
+      // The mode needs the phone keyboard, and a dock holding half the viewport is in its way.
+      // Routed through requestDrawer so a staged key queue still gets its discard confirm (ADR 0005).
+      requestDrawer(null);
+      direct.activate();
+    },
+    stop: () => void interruptGeneration(),
+  };
+  const canStopWithDraft = working && agent === "codex" && hasDraft;
+  useEffect(() => {
+    if (!onControlsChange) return;
+    const dock = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
+      disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
+    });
+    const controls: ComposerControl[] = [
+      { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dock("keys", locked) },
+      // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
+      { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
+      { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dock("quick", locked) },
+      { id: "display", group: "View", label: "Display", icon: Settings2, ...dock("display", false) },
+    ];
+    if (canStopWithDraft) controls.splice(2, 0, { id: "stop", group: "Terminal", label: "Stop generation", icon: X, disabled: locked || interrupting, on: false, run: () => controlActions.current.stop() });
+    if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
+    if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dock("usage", false) });
+    onControlsChange(controls);
+  }, [onControlsChange, drawer, direct.active, locked, sending, interrupting, canStopWithDraft, commands.length, Boolean(usageControls)]);
+
   const [dragging, setDragging] = useState(false);
   const dropHandlers = locked || direct.active ? {} : {
     onDragOver: (e: DragEvent) => {
@@ -1004,7 +1049,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   return (
     <>
-      <div {...dropHandlers} className={cn("workbench-composer-surface border-t border-border/60 bg-muted px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 sm:px-3 sm:pt-2.5", dragging && "ring-2 ring-primary/50")}>
+      <div {...dropHandlers} className={cn("workbench-composer-surface border-t border-border/60 bg-muted px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 md:p-1.5", dragging && "ring-2 ring-primary/50")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {deliveryPhase && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
@@ -1028,23 +1073,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             below (always visible, not gated behind the keyboard-open quick keys); structural commands
             (New tab/space, Kill) and Stop (Esc, in the Keys dock) live elsewhere. */}
         <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImage} />
-        {/* Keys / Quick / Display dock — a single in-flow site ABOVE the Controls row (so the toggle
-            you tapped stays put and the panel grows over the mirror, not the input). Whichever of the
-            mutually exclusive drawers is active renders here via the shared ComposerDock chrome. Keys
-            mounts the NavTray (unmounts on close, so tab/queue reset each open); Quick mounts the two
-            one-tap reply grids; Display mounts the labelled mirror prefs. Agent stays a covering
-            BottomSheet below (it's a palette, not a pad). */}
-        {drawer === "actions" && (
-          <ComposerDock title="Message actions" onClose={closeDrawer}>
-            <div className="flex flex-col gap-1">
-              {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
-              {modelControl}
-              {usageControls}
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || sending} onClick={() => { requestDrawer(null); direct.activate(); }}><Terminal className="size-4" />Type into terminal</Button>
-              {working && agent === "codex" && hasDraft && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
-            </div>
+        {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
+            grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
+            active renders here via the shared ComposerDock chrome. Keys mounts the NavTray (unmounts on
+            close, so tab/queue reset each open). Commands stays a covering BottomSheet below (it's a
+            palette, not a pad). */}
+        {drawer === "usage" && usageControls && (
+          <ComposerDock title="Context and usage" onClose={closeDrawer}>
+            <div className="flex flex-wrap items-center gap-1 pb-2">{usageControls}</div>
           </ComposerDock>
         )}
         {drawer === "keys" && (
@@ -1078,103 +1114,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             />
           </ComposerDock>
         )}
-        {/* The one action row: Keys · Quick · Agent · ⚙ (Agent only when the pane's agent has
-            commands). Display prefs used to sit on a second, permanent icon-only "View" row above
-            this one; folding them behind the ⚙ gives the mirror that row back. The gear is icon-only
-            and NOT flex-1 — it's a settings affordance, not a peer of the three action toggles, and
-            keeping it narrow leaves the labelled buttons their width on a 390px phone. */}
-        {/* The "Controls" tag is lifted OUT of the row's flex flow and floated just above it. In
-            flow it was a fixed ~60px of a 390px phone width spent on a word that never changes,
-            which is what squeezed the toggles; absolute costs nothing and the row gets the width
-            back. `pt-3` on the row reserves the space it occupies so it can't collide with whatever
-            sits above. */}
-        {!nativeWorkbench && <div className="relative mb-2 flex items-center gap-2 pt-3">
-          {!nativeWorkbench && <SectionLabel className="absolute left-0 top-0 text-[10px] leading-none opacity-80">
-            Controls
-          </SectionLabel>}
-          {/* Keys and Quick are TOGGLES for the in-flow dock above (not overlays): tap to open, tap
-              again to close. aria-expanded ties each to the dock; secondary variant marks it pressed
-              while open. Both share the single-valued `drawer`, so opening one closes the other. */}
-          {!nativeWorkbench && <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", drawer === "keys" ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked}
-            aria-expanded={drawer === "keys"}
-            onClick={() => requestDrawer(drawer === "keys" ? null : "keys")}
-          >
-            <Keyboard className="size-4" />
-            Keys
-          </Button>}
-          {/* "Type into terminal" lives HERE, beside Keys, rather than on the Send button.
-              It is the same problem split in half: Keys exists because the phone keyboard cannot
-              send Esc/Tab/arrows/chords, this exists because it cannot send bare printable letters —
-              so someone who wants to press `b` looks in this row first. It is also used in bursts
-              (a picker, a y/n prompt) and then not for days, which is the wrong shape for a
-              permanent fixture on the app's most-used control: a split Send button cost a third of
-              the primary action's width every day to serve a mode used on a few of them.
-              Unlike its neighbours this toggles state instead of opening a dock — the armed strip
-              above the input is what makes that visible. Arming is still an explicit NAMED choice,
-              which is what keeps an accidental touch from quietly wiring the keyboard to a live
-              terminal; see use-direct-typing.ts for the rest of that argument. */}
-          {!nativeWorkbench && <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", direct.active ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked || sending}
-            aria-pressed={direct.active}
-            aria-label="Type into terminal"
-            onClick={() => {
-              if (direct.active) {
-                direct.deactivate();
-                return;
-              }
-              // Close whatever dock is open first: the mode needs the phone keyboard, and a dock
-              // holding half the viewport is the thing in its way. Routed through requestDrawer so a
-              // staged key queue still gets its discard confirm (ADR 0005).
-              requestDrawer(null);
-              direct.activate();
-            }}
-          >
-            <Terminal className="size-4" />
-            Type
-          </Button>}
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", drawer === "quick" ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked}
-            aria-expanded={drawer === "quick"}
-            onClick={() => requestDrawer(drawer === "quick" ? null : "quick")}
-          >
-            <Zap className="size-4" />
-            Quick
-          </Button>
-          {commands.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-11 min-w-0 flex-1 gap-1.5 text-muted-foreground sm:h-8"
-              disabled={locked}
-              onClick={() => requestDrawer("cmd")}
-            >
-              <Slash className="size-4" />
-              Agent
-            </Button>
-          )}
-          {/* Display prefs. Not gated on `locked`: wrap/font/raw-terminal are local view state, so a
-              read-only device or a gone pane can still make its mirror readable. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("size-11 shrink-0 sm:size-8", drawer === "display" ? CONTROL_ON : CONTROL_OFF)}
-            aria-label="Display settings"
-            aria-expanded={drawer === "display"}
-            onClick={() => requestDrawer(drawer === "display" ? null : "display")}
-          >
-            <Settings2 className="size-4" />
-          </Button>
-        </div>}
         {/* Terminal-draft preview: a read-only view of a stranded "❯"-line draft (a message queued
             then recalled on the HOST, which stripChrome hides from the mirror). It appears only after
             the draft stabilises (never a blip/self-echo), then its text tracks the live line — host
@@ -1231,23 +1170,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </p>
         )}
         {nativeWorkbench && <MessageQueueStrip messages={strayQueue} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
-        {!nativeWorkbench && modelControl}
 
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
+        {/* One row, like a messenger: attach, the draft (it grows upward), the model chip and Send.
+            Everything else is in the header's ⋯ menu. */}
         <div className="flex items-end gap-1">
-          {/* Conversation view: one surface, attach on the left and send on the right. */}
-          {nativeWorkbench && <div className="flex shrink-0 items-center" role="toolbar" aria-label="Message actions">
-            <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
-              disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-              <Plus className="size-5 md:size-4" />
-            </Button>
-          </div>}
-          {/* Terminal view: the input and its attach button share one box: the button is positioned INSIDE the
-              field, messenger-style, rather than sitting beside it as a third control in the row.
-              It used to occupy a full-height slot to the left, which spent the widest part of the
-              composer on the least-used action; inside the field it costs nothing but a strip of
-              padding the text was not using anyway. `pr-11` on the textarea reserves that strip so a
-              long line can never run underneath the icon. */}
+          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
+            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
+            <Plus className="size-5 md:size-4" />
+          </Button>
           <div className="relative min-w-0 flex-1">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
@@ -1298,39 +1229,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             autoCorrect={direct.active ? "off" : undefined}
             spellCheck={direct.active ? false : undefined}
             className={cn(
-              // Room for the attach button tucked into the bottom-right of the field. `block`
-              // matters: a textarea is inline-level by default, so the wrapper inherits a few px of
-              // baseline gap beneath it and the absolutely-positioned button hangs past the field's
-              // bottom edge.
-              nativeWorkbench ? "workbench-chat-input block min-h-11 px-2 py-2" : "workbench-chat-input block pr-11",
+              "workbench-chat-input block min-h-11 px-1 py-2 md:min-h-8 md:py-1.5",
               direct.active &&
                 "border-primary focus-visible:border-primary focus-visible:ring-primary/30",
             )}
             disabled={gone || readOnly}
             rows={1}
           />
-            {!nativeWorkbench && <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              // bottom-1, not centred: the field grows upward as the draft wraps, and a vertically
-              // centred button would drift up with it, away from the thumb and away from the send
-              // button it pairs with. Pinned to the bottom it stays put at any height.
-              className="absolute bottom-1 right-1 size-11 rounded-full text-muted-foreground sm:size-9"
-              disabled={locked || direct.active}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => fileRef.current?.click()}
-              aria-label="Attach image"
-            >
-              <ImagePlus className="size-4" />
-            </Button>}
           </div>
+          {modelControl && <div className="composer-model flex h-11 shrink-0 items-center md:h-8">{modelControl}</div>}
           {working && agent === "codex" && !hasDraft ? (
             <Button
               type="button"
               variant="destructive"
               size="icon"
-              className={cn("size-11 min-h-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8")}
+              className="size-11 min-h-11 shrink-0 rounded-full bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8 md:min-h-8"
               onClick={() => { void interruptGeneration(); }}
               disabled={locked || interrupting}
               aria-label="Stop generation"
@@ -1349,7 +1262,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             // submit key is still conditional on the verify step behind it.
             <Button
               variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold"
+              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
               onClick={onSendClick}
               disabled={locked || !hasDraft || sending}
               aria-label="Type anyway?"
@@ -1359,7 +1272,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : !direct.active && confirmingSend ? (
             <Button
               variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold"
+              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
               onClick={onSendClick}
               disabled={locked || !hasDraft || sending}
               aria-label="Really send?"
@@ -1369,7 +1282,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : (
             <Button
               size="icon"
-              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-primary/15 text-primary shadow-none hover:bg-primary/25 md:size-8")}
+              className="composer-send size-11 shrink-0 rounded-full shadow-none md:size-8"
               onClick={direct.active ? () => direct.deactivate() : onSendClick}
               disabled={locked || sending || queue.busy || (!direct.active && (!hasDraft || attachments.uploading))}
               aria-label={direct.active ? "Stop typing into terminal" : "Send"}

@@ -1,6 +1,6 @@
 import { isLocked, useLocked } from "@/lib/idle";
 import { modelDisplayName } from "@/lib/model-display";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Bot, ChevronRight, RefreshCw, Users } from "lucide-react";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { fetchSubagents, isApiErrorStatus } from "@/lib/api";
@@ -61,15 +61,28 @@ export function SessionSubagents({
   selected = null,
   onSelect,
   enabled = true,
+  open: openProp,
+  onOpenChange,
+  anchorRef,
 }: {
   paneId: string;
   session?: string;
   selected?: SubagentSelection | null;
   onSelect: (selection: SubagentSelection | null) => void;
   enabled?: boolean;
+  /** Controlled from a menu item: no trigger is rendered and the list anchors to `anchorRef`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  anchorRef?: RefObject<HTMLElement | null>;
 }) {
   const locked = useLocked();
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled ? openProp : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
   const [list, setList] = useState<SubagentsResponse | null>(null);
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -193,7 +206,7 @@ export function SessionSubagents({
 
   return (
     <>
-      <button
+      {!controlled && <button
         ref={trigger}
         type="button"
         aria-label={`Subagents${agents.length ? ` (${activeCount} active, ${agents.length} total)` : ""}`}
@@ -202,16 +215,16 @@ export function SessionSubagents({
         aria-expanded={open}
         disabled={!enabled}
         onClick={() => setOpen(!open)}
-        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50 lg:min-h-8 lg:min-w-8"
       >
         <Users aria-hidden="true" className="size-4" />
         <span className="hidden sm:inline">Agents</span>
         {activeCount > 0 && <span className="tabular-nums">{activeCount}</span>}
-      </button>
+      </button>}
       <WorkbenchPopover
         open={open}
         onDismiss={() => setOpen(false)}
-        anchorRef={trigger}
+        anchorRef={anchorRef ?? trigger}
         label="Subagents"
         className="w-[min(36rem,calc(100vw-2rem))]"
       >

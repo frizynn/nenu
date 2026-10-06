@@ -23,7 +23,7 @@ beforeAll(() => {
 
 describe("LiveConversation", () => {
   it("renders the existing transcript and offers older turns without leaving the live pane", () => {
-    render(<MemoryRouter><LiveConversation paneId="w1:p1" session="work" agent="codex" history={{ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false }} loading={false} error={false} /></MemoryRouter>);
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" session="work" history={{ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false }} loading={false} error={false} /></MemoryRouter>);
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.getByText("One commit: abc1234.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load older messages" })).toBeInTheDocument();

@@ -15,15 +15,22 @@
   }
 }
 
-/* ImageGen delivers the black Nenu mark on white. The dark surface uses the exact inverse so the
-   raster has no visible tile while retaining the generated silhouette and antialiasing. */
+/* ImageGen delivers the black Nenu mark on white. Blending drops that tile on any surface: multiply
+   turns the white to the surface colour, and on dark the exact inverse plus screen does the same for
+   black, keeping the generated silhouette and antialiasing. */
+.nenu-mark {
+  mix-blend-mode: multiply;
+}
+
 .dark .nenu-mark {
   filter: invert(1);
+  mix-blend-mode: screen;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) .nenu-mark {
     filter: invert(1);
+    mix-blend-mode: screen;
   }
 }
 
@@ -58,18 +65,6 @@
   --popover-foreground: var(--foreground);
   --primary: light-dark(oklch(0.488 0.217 264), oklch(0.588 0.217 264));
   --primary-foreground: #fff;
-  /* The "this control is ON" tint — a very light sky. Its own token pair rather than reusing
-     --secondary because the two say different things: secondary is a quieter surface, this is a
-     STATE, and the row needs the difference legible at a glance (an open dock, an armed mode). Kept
-     low-chroma so a row of grey controls doesn't turn into a traffic light when two are on.
-
-     The light half is tuned by CHROMA, not luminance: at "very light sky" lightness the tint is only
-     ~1.2:1 against the page by WCAG, and no value that still reads as light sky does better — what
-     makes it visible is that it is the one saturated thing in a neutral row. Don't "fix" that number
-     by darkening it into a mid blue. Text on the tint is what has to clear a contrast bar, and does:
-     7.3:1 light, 9.2:1 dark. */
-  --control-on: light-dark(oklch(0.90 0.06 235), oklch(0.32 0.05 240));
-  --control-on-foreground: light-dark(oklch(0.38 0.12 245), oklch(0.89 0.06 235));
   --secondary: light-dark(#fafafa, rgb(255 255 255 / 4%));
   --secondary-foreground: var(--foreground);
   --muted: light-dark(#f4f4f5, rgb(255 255 255 / 4%));
@@ -163,8 +158,6 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-control-on: var(--control-on);
-  --color-control-on-foreground: var(--control-on-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

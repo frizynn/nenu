@@ -278,7 +278,6 @@ export function HistoryRoute() {
               )}
               <TranscriptView
                 entries={shown}
-                agent={agent?.agent}
                 query={query}
                 focusedUuid={focusedUuid}
               />
