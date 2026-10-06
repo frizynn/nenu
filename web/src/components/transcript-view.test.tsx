@@ -26,10 +26,9 @@ async function openToolGroup() {
 }
 
 describe("TranscriptView", () => {
-  it("renders a human turn and an assistant turn with their role labels", () => {
+  it("renders your turn as a bubble and the agent's as plain text, with no speaker labels", () => {
     render(
       <TranscriptView
-        agent="claude"
         entries={[
           turn({ uuid: "u1", role: "user", parts: [{ kind: "text", text: "what changed?" }] }),
           turn({
@@ -40,10 +39,10 @@ describe("TranscriptView", () => {
         ]}
       />,
     );
-    expect(screen.getByText("You")).toBeInTheDocument();
-    expect(screen.getByText("claude")).toBeInTheDocument();
-    expect(screen.getByText("what changed?")).toBeInTheDocument();
-    expect(screen.getByText("One commit.")).toBeInTheDocument();
+    expect(screen.getByText("what changed?").closest("[data-speaker]")).toHaveAttribute("data-speaker", "user");
+    expect(screen.getByText("One commit.").closest("[data-speaker]")).toHaveAttribute("data-speaker", "assistant");
+    expect(screen.queryByText("You")).not.toBeInTheDocument();
+    expect(screen.queryByText("claude")).not.toBeInTheDocument();
   });
 
   it("shows a tool call's summary but keeps its output collapsed until tapped", async () => {
@@ -237,48 +236,47 @@ describe("TranscriptView", () => {
 // a run carries the role/time header. Without this the scroll length roughly doubles with nothing
 // new in it.
 describe("TranscriptView — speaker grouping", () => {
-  it("labels only the first turn of a consecutive run", () => {
+  const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const at = "2026-07-25T06:22:21.253Z";
+
+  it("times only the first of your consecutive messages", () => {
     render(
       <TranscriptView
-        agent="claude"
         entries={[
-          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "one" }] }),
-          turn({ uuid: "a2", role: "assistant", parts: [{ kind: "text", text: "two" }] }),
-          turn({ uuid: "a3", role: "assistant", parts: [{ kind: "text", text: "three" }] }),
+          turn({ uuid: "u1", parts: [{ kind: "text", text: "one" }] }),
+          turn({ uuid: "u2", parts: [{ kind: "text", text: "two" }] }),
+          turn({ uuid: "u3", parts: [{ kind: "text", text: "three" }] }),
         ]}
       />,
     );
-    expect(screen.getAllByText("claude")).toHaveLength(1);
-    // Every turn's content still renders — only the repeated header is suppressed.
+    expect(screen.getAllByText(time(at))).toHaveLength(1);
+    // Every turn's content still renders — only the repeated time is suppressed.
     for (const t of ["one", "two", "three"]) expect(screen.getByText(t)).toBeInTheDocument();
   });
 
-  it("re-labels when the speaker changes back", () => {
+  it("times your message again after the agent answers", () => {
     render(
       <TranscriptView
-        agent="claude"
         entries={[
-          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "one" }] }),
-          turn({ uuid: "u1", role: "user", parts: [{ kind: "text", text: "ask" }] }),
-          turn({ uuid: "a2", role: "assistant", parts: [{ kind: "text", text: "two" }] }),
+          turn({ uuid: "u1", parts: [{ kind: "text", text: "ask" }] }),
+          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "answer" }] }),
+          turn({ uuid: "u2", parts: [{ kind: "text", text: "follow up" }] }),
         ]}
       />,
     );
-    expect(screen.getAllByText("claude")).toHaveLength(2);
-    expect(screen.getAllByText("You")).toHaveLength(1);
+    expect(screen.getAllByText(time(at))).toHaveLength(2);
   });
 
   it("a day divider restarts the run even for the same speaker", () => {
     render(
       <TranscriptView
-        agent="claude"
         entries={[
-          turn({ uuid: "a1", role: "assistant", ts: "2026-07-25T06:00:00.000Z" }),
-          turn({ uuid: "a2", role: "assistant", ts: "2026-07-26T06:00:00.000Z" }),
+          turn({ uuid: "u1", ts: "2026-07-25T06:00:00.000Z" }),
+          turn({ uuid: "u2", ts: "2026-07-26T06:00:00.000Z" }),
         ]}
       />,
     );
-    expect(screen.getAllByText("claude")).toHaveLength(2);
+    expect(screen.getAllByText(time("2026-07-25T06:00:00.000Z"))).toHaveLength(2);
   });
 });
 
@@ -288,7 +286,7 @@ describe("TranscriptView — system notes", () => {
   it("renders a note set apart, attributed to neither party", () => {
     render(
       <TranscriptView
-        agent="claude"
+       
         entries={[
           turn({ role: "note", parts: [{ kind: "text", text: 'Agent "issue 8 fixes" finished' }] }),
         ]}
@@ -392,7 +390,7 @@ it("shows uploaded images as compact previews instead of local paths", () => {
   </FileMediaContext.Provider>);
   expect(screen.getByRole("img")).toHaveAttribute("src", "/api/preview.png");
   expect(screen.queryByText(path, { exact: false })).not.toBeInTheDocument();
-  expect(screen.getByRole("img")).toHaveClass("max-h-32");
+  expect(screen.getByRole("img")).toHaveAccessibleName("Image 1");
 });
 
 it("keeps the agent question visible when its work log is collapsed", () => {

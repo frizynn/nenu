@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
 import * as registry from "./harness/registry";
+import { VERIFY_DELAYS_MS } from "./harness/poll";
 import { draftCarriesSend, sendGuardedReply } from "./reply-action";
 
 // The regression suite for #34: a free-text reply must never fire the submit key until the text is
@@ -979,7 +980,7 @@ describe("an unsent reply reports itself and names its cause", () => {
       phase: "verify",
       error: out.status === "stalled" ? out.error : "",
       preflight: "composer",
-      attempts: Array(8).fill("other-draft"),
+      attempts: Array(VERIFY_DELAYS_MS.length).fill("other-draft"),
       noEcho: false,
       text: "please do the thing",
       draft: "an unrelated leftover line",
@@ -1000,7 +1001,7 @@ describe("an unsent reply reports itself and names its cause", () => {
     expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/couldn't read the terminal.*connection/i) });
     expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
-    expect(seen[0]).toMatchObject({ phase: "verify", preflight: "read-failed", attempts: Array(8).fill("read-failed") });
+    expect(seen[0]).toMatchObject({ phase: "verify", preflight: "read-failed", attempts: Array(VERIFY_DELAYS_MS.length).fill("read-failed") });
     expect(seen[0]).not.toHaveProperty("screen");
     expect(seen[0]).not.toHaveProperty("draft");
   });

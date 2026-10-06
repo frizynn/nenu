@@ -1,6 +1,7 @@
 import { Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
 
 import { usePolling } from "@/hooks/use-polling";
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { useAppViewport } from "@/hooks/use-app-viewport";
 import { usePollBusy } from "@/hooks/use-poll-busy";
 import { useAgentTransitions } from "@/hooks/use-transitions";
@@ -9,6 +10,7 @@ import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
 import { ConnectionBanner } from "@/components/connection-banner";
 import { DogGallop } from "@/components/dog-gallop";
+import { NewAgentHost } from "@/components/new-agent-sheet";
 import { StatusArea } from "@/components/status-area";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import { FilePreviewProvider } from "@/components/file-preview-provider";
@@ -55,6 +57,9 @@ export function RootLayout() {
   // so the only value that can appear under that id is the PaneData that loader returned.
   const pane = useRouteLoaderData(PANE_ROUTE_ID) as PaneData | undefined;
 
+  // One live-events stream per page: herd/queue/transcript changes arrive as they happen, and
+  // polling relaxes to a fallback while it is open (lib/live-events.ts).
+  useLiveEvents(data.session);
   usePolling(data, paneId);
   // Surface the busy bar when a navigation or a poll runs slow, each against its own threshold —
   // routine fast polls/navigations stay invisible. Mounted here so the whole app shares one
@@ -75,6 +80,7 @@ export function RootLayout() {
         lastSeenAt={shownLastSeenAt(data, pane)}
       />
       <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session}><Outlet /></FilePreviewProvider></WorkbenchShell>
+      <NewAgentHost />
       <StatusArea />
     </div>
   );

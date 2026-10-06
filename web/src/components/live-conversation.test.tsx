@@ -3,10 +3,11 @@ import { MemoryRouter } from "react-router";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fixtureTranscript } from "@/test/handlers";
-import type { PaneHistoryResponse } from "@/lib/types";
+import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { LiveConversation } from "./live-conversation";
 import { fetchHistory } from "@/lib/api";
 import { TranscriptView } from "./transcript-view";
+import { addLocalSend, localSendScope } from "@/lib/local-sends";
 
 vi.mock("@/lib/api", () => ({ fetchHistory: vi.fn() }));
 vi.mock("@/components/transcript-view", async (original) => {
@@ -22,7 +23,7 @@ beforeAll(() => {
 
 describe("LiveConversation", () => {
   it("renders the existing transcript and offers older turns without leaving the live pane", () => {
-    render(<MemoryRouter><LiveConversation paneId="w1:p1" session="work" agent="codex" history={{ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false }} loading={false} error={false} /></MemoryRouter>);
+    render(<MemoryRouter><LiveConversation paneId="w1:p1" session="work" history={{ paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: true, total: 100, fileTruncated: false }} loading={false} error={false} /></MemoryRouter>);
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
     expect(screen.getByText("One commit: abc1234.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load older messages" })).toBeInTheDocument();
@@ -192,4 +193,20 @@ it("opens older messages from the toolbar without replacing the live draft", asy
   expect(await screen.findByText("An older request")).toBeInTheDocument();
   expect(screen.getByRole("textbox")).toBe(input);
   expect(input).toHaveValue("Still here");
+});
+
+describe("LiveConversation — pending bubbles", () => {
+  it("shows this client's send at the end until the journal has it", async () => {
+    const scope = localSendScope("w1:p1", undefined);
+    const history = (entries: TranscriptEntry[]): PaneHistoryResponse =>
+      ({ paneId: "w1:p1", available: true, entries, hasMore: false, total: entries.length, fileTruncated: false });
+    const { rerender } = render(<LiveConversation paneId="w1:p1" history={history(fixtureTranscript)} loading={false} error={false} />);
+    act(() => { addLocalSend(scope, "ship it"); });
+    expect(await screen.findByText("ship it")).toBeInTheDocument();
+    expect(screen.getByText("Sending…")).toBeInTheDocument();
+
+    rerender(<LiveConversation paneId="w1:p1" history={history([...fixtureTranscript, { uuid: "t9", ts: "2026-07-25T06:30:00.000Z", role: "user", parts: [{ kind: "text", text: "ship it" }] }])} loading={false} error={false} />);
+    await waitFor(() => expect(screen.queryByText("Sending…")).not.toBeInTheDocument());
+    expect(screen.getAllByText("ship it")).toHaveLength(1);
+  });
 });

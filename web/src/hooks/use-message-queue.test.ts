@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchMessageQueue, changeMessageQueue } from "@/lib/api";
 import { setLocked } from "@/lib/idle";
+import { resetLiveEvents } from "@/lib/live-events";
+import { fakeLiveStream } from "@/test/live-stream";
 import { useMessageQueue } from "./use-message-queue";
 
 vi.mock("@/lib/api", () => ({
@@ -171,4 +173,21 @@ it("does not automatically replay an old saved enqueue", async () => {
   await waitFor(() => expect(hook.result.current.page).toEqual(page));
   expect(changeMessageQueue).not.toHaveBeenCalled();
   hook.unmount();
+});
+
+describe("live queue updates", () => {
+  it("re-reads its own pane's queue as soon as the bridge names it", async () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    expect(fetchMessageQueue).toHaveBeenCalledTimes(1);
+    act(() => stream.send({ topic: "queue", paneId: "other" }));
+    expect(fetchMessageQueue).toHaveBeenCalledTimes(1);
+    act(() => stream.send({ topic: "queue", paneId: "pane" }));
+    await waitFor(() => expect(fetchMessageQueue).toHaveBeenCalledTimes(2));
+    hook.unmount();
+    stream.stop();
+    resetLiveEvents();
+  });
 });

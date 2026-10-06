@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isLocked, useLocked } from "@/lib/idle";
+import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import {
   fetchMessageQueue,
@@ -77,8 +78,14 @@ export function useMessageQueue(
     let failedAt: number | null = null;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
+    // A change announced mid-read may postdate it: read once more as soon as this one settles.
+    let again = false;
     const poll = async () => {
-      if (stopped || document.hidden || isLocked() || controller) return;
+      if (stopped || document.hidden || isLocked()) return;
+      if (controller) {
+        again = true;
+        return;
+      }
       controller = new AbortController();
       try {
         let next = await fetchMessageQueue(paneId, session, controller.signal);
@@ -122,7 +129,13 @@ export function useMessageQueue(
         }
       } finally {
         controller = undefined;
-        if (!stopped) timer = setTimeout(poll, 3000);
+        if (!stopped && again) {
+          again = false;
+          void poll();
+        } else if (!stopped) {
+          // Every queue change is announced on the live stream; while it is up this is the fallback.
+          timer = setTimeout(poll, isLiveHealthy() ? 10_000 : 3000);
+        }
       }
     };
     const wake = () => {
@@ -130,10 +143,14 @@ export function useMessageQueue(
       void poll();
     };
     void poll();
+    const unsubscribe = onLiveEvent((event) => {
+      if (concerns(event, "queue", paneId)) wake();
+    });
     window.addEventListener("online", wake);
     document.addEventListener("visibilitychange", wake);
     return () => {
       stopped = true;
+      unsubscribe();
       clearTimeout(timer);
       controller?.abort();
       window.removeEventListener("online", wake);

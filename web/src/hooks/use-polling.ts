@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 
 import { beginCatchUp, endCatchUp, isLocked, useLocked } from "@/lib/idle";
+import { concerns, onLiveEvent, useLiveHealthy, useMirrorShown } from "@/lib/live-events";
 import type { HomeData } from "@/lib/loaders";
 
 // Adaptive polling, the React Router way: a timer that calls `revalidator.revalidate()`, which
@@ -13,6 +14,17 @@ import type { HomeData } from "@/lib/loaders";
 //    and it's kicked immediately on focus/online/visibility as an accelerator.
 const HOT_MS = 1500;
 const COLD_MS = 4000;
+// While the live-events stream is up the bridge announces every herd change, so polling is only the
+// safety net. A terminal mirror on screen is the exception: Herdr announces its output to nobody.
+const SAFETY_MS = 10_000;
+
+/** What the live-events stream can stand in for (lib/live-events.ts). */
+export interface LiveCoverage {
+  /** The stream is open: herd, queue and transcript changes arrive as they happen. */
+  healthy: boolean;
+  /** The open pane shows its raw mirror (or a dialog drawn from it), so output must keep flowing. */
+  mirrorShown: boolean;
+}
 
 // Self-heal a wedged revalidation. Normally a tick no-ops while one is already in flight (see the
 // idle fast-path below), but a black-holed fetch can stay `loading` forever (its timeout aside — the
@@ -32,17 +44,19 @@ export const SUPERSEDE_MS = 12_000;
  *     A shell you've drilled into is implicitly "live" regardless of its status.
  *
  * Returns COLD_MS otherwise (home screen, idle herd, no pane open).
+ *
+ * While the live-events stream is healthy the herd needs no polling of its own: an open pane whose
+ * mirror is on screen stays HOT, an open pane showing its conversation drops to COLD (dialogs arrive
+ * with a pushed status change), and anything else falls back to SAFETY_MS.
  */
-export function intervalFor(data: HomeData | undefined, paneId?: string | null): number {
+export function intervalFor(data: HomeData | undefined, paneId?: string | null, live?: LiveCoverage): number {
+  const paneOpen = !!paneId && [...(data?.agents ?? []), ...(data?.shellPanes ?? [])].some((p) => p.paneId === paneId);
+  if (live?.healthy) return paneOpen ? (live.mirrorShown ? HOT_MS : COLD_MS) : SAFETY_MS;
+
   const anyActive = data?.agents.some((a) => a.status === "blocked" || a.status === "working");
   if (anyActive) return HOT_MS;
 
-  if (paneId) {
-    const allPanes = [...(data?.agents ?? []), ...(data?.shellPanes ?? [])];
-    if (allPanes.some((p) => p.paneId === paneId)) return HOT_MS;
-  }
-
-  return COLD_MS;
+  return paneOpen ? HOT_MS : COLD_MS;
 }
 
 export function usePolling(data: HomeData | undefined, paneId?: string | null): void {
@@ -62,7 +76,20 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
     loadingSince.current = null;
   }
 
-  const ms = intervalFor(data, paneId);
+  const healthy = useLiveHealthy();
+  const mirrorShown = useMirrorShown();
+  const ms = intervalFor(data, paneId, { healthy, mirrorShown });
+  const paneRef = useRef(paneId);
+  paneRef.current = paneId;
+
+  // An invalidation that lands mid-load may describe state that load already read past, so it is
+  // held and replayed once the revalidator comes to rest.
+  const missed = useRef(false);
+  useEffect(() => {
+    if (revalidator.state !== "idle" || !missed.current) return;
+    missed.current = false;
+    if (!document.hidden && !isLocked()) ref.current.revalidate();
+  }, [revalidator.state]);
 
   // Resuming from the idle lock must refetch AT ONCE. The route tree stays mounted through a pause
   // (see App), so unlocking re-runs no loaders by itself — without this the first thing you'd see on
@@ -111,6 +138,11 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
       if (since !== null && Date.now() - since >= SUPERSEDE_MS) { loadingSince.current = Date.now(); r.revalidate(); }
     };
     const id = window.setInterval(tick, ms);
+    const unsubscribe = onLiveEvent((event) => {
+      if (!concerns(event, "snapshot") && !concerns(event, "pane", paneRef.current)) return;
+      if (ref.current.state === "idle") tick();
+      else missed.current = true;
+    });
     const onWake = () => tick();
     let wasHidden = document.hidden;
     const onVisible = () => {
@@ -126,6 +158,7 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
+      unsubscribe();
       window.removeEventListener("focus", onWake);
       window.removeEventListener("online", onWake);
       document.removeEventListener("visibilitychange", onVisible);

@@ -1,11 +1,10 @@
 import { TranscriptQuestion } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { filePathsInText } from "@/lib/chat-files";
+import { splitMessageImages } from "@/lib/message-images";
 import { ChatMedia } from "./chat-media";
 import { useContext, useMemo, useState } from "react";
-import { ChevronRight, Info, User } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 
-import { AgentIcon } from "@/components/agent-icon";
 import { MarkdownText } from "@/components/markdown-text";
 import { searchableText } from "@/lib/transcript-search";
 import { WorkLogTools } from "@/components/work-log-tools";
@@ -63,7 +62,7 @@ function Part({ part, query, focused = false, active = false, compactMedia = fal
   return (
     <div>
       <MarkdownText
-        text={compactMedia && media ? filePathsInText(part.text).filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path)).reduce((text, path) => text.replaceAll(path, ""), part.text).trim() : part.text}
+        text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
       />
       <ChatMedia text={part.text} compact={compactMedia} />
@@ -74,14 +73,12 @@ function Part({ part, query, focused = false, active = false, compactMedia = fal
 
 function Turn({
   entry,
-  agent,
   showHeader,
   query,
   focused = false,
 }: {
   entry: TranscriptEntry;
-  agent?: string;
-  /** False for a turn continuing the same speaker's run — see the grouping note in TranscriptView. */
+  /** False for a turn continuing the same speaker's run: only the run's first bubble shows its time. */
   showHeader: boolean;
   query: string;
   focused?: boolean;
@@ -105,27 +102,26 @@ function Turn({
     );
   }
 
-  const isUser = entry.role === "user";
-  return (
-    <div className={isUser ? "rounded-lg border bg-muted/50 px-3 py-2" : "px-1"}>
-      {showHeader && (
-        <div className="mb-1 flex items-center gap-1.5">
-          {isUser ? (
-            <User className="size-3.5 text-muted-foreground" />
-          ) : (
-            <AgentIcon agent={agent ?? "claude"} className="size-4" />
-          )}
-          <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-            {isUser ? "You" : (agent ?? "agent")}
-          </span>
-          {time && <span className="text-[11px] text-muted-foreground">{time}</span>}
+  // A chat, not a log: your messages are soft bubbles on the right, the agent's are plain text on
+  // the left. The header already names the agent, so neither side repeats a speaker label; the time
+  // sits under your bubble and on hover for the agent.
+  if (entry.role === "user") {
+    return (
+      <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
+        <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
+          {entry.parts.map((part, i) => (
+            <Part key={i} part={part} query={query} focused={focused} compactMedia />
+          ))}
         </div>
-      )}
-      <div className="space-y-1.5">
-        {entry.parts.map((part, i) => (
-          <Part key={i} part={part} query={query} focused={focused} compactMedia={isUser} />
-        ))}
+        {showHeader && time && <span className="mt-1 px-1 text-[11px] leading-none text-muted-foreground/70">{time}</span>}
       </div>
+    );
+  }
+  return (
+    <div data-speaker="assistant" className="space-y-1.5 px-0.5" title={time || undefined}>
+      {entry.parts.map((part, i) => (
+        <Part key={i} part={part} query={query} focused={focused} />
+      ))}
     </div>
   );
 }
@@ -148,7 +144,7 @@ function ActivityLog({ entries, query, focusedUuid, active }: { entries: Transcr
   </div>;
 }
 
-function WorkTurnView({ turn, agent, query, focusedUuid, questionActive }: { turn: WorkTurn; agent?: string; query: string; focusedUuid?: string; questionActive: boolean }) {
+function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const needle = query.trim().toLowerCase();
   const searching = turn.activity.some((entry) => entry.uuid === focusedUuid || (needle !== "" && searchableText(entry).toLowerCase().includes(needle)));
@@ -174,14 +170,13 @@ function WorkTurnView({ turn, agent, query, focusedUuid, questionActive }: { tur
     {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active} />}
     {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
-      <Turn entry={turn.answer} agent={agent} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
+      <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
     </div>}
   </div>;
 }
 
-export function TranscriptView({ entries, agent, query = "", focusedUuid, activityStatus, onWorkToggle }: {
+export function TranscriptView({ entries, query = "", focusedUuid, activityStatus, onWorkToggle }: {
   entries: TranscriptEntry[];
-  agent?: string;
   query?: string;
   focusedUuid?: string;
   activityStatus?: AgentStatus;
@@ -208,11 +203,11 @@ export function TranscriptView({ entries, agent, query = "", focusedUuid, activi
       lastRole = entry.role;
       return <div key={row.kind === "message" ? `message:${entry.uuid}` : `work:${row.id}`} data-turn={row.kind === "message" ? entry.uuid : undefined}
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
-        {newDay && <div className="flex items-center gap-2 pt-1"><div className="h-px flex-1 bg-border" /><span className="text-[11px] font-medium text-muted-foreground">{day}</span><div className="h-px flex-1 bg-border" /></div>}
-        {row.kind === "message" ? <Turn entry={entry} agent={agent} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
-          : <WorkTurnView turn={row} agent={agent} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} />}
+        {newDay && <div className="pt-1 text-center text-[11px] text-muted-foreground/70">{day}</div>}
+        {row.kind === "message" ? <Turn entry={entry} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
+          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} />}
       </div>;
     })}
-    {pending && <div className="px-1 py-2" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
+    {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
   </div>;
 }

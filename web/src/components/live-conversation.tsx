@@ -6,11 +6,12 @@ import { TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
+import { PendingTurns } from "@/components/pending-turns";
+import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 
 interface LiveConversationProps {
   paneId: string;
   session?: string;
-  agent?: string;
   activityStatus?: AgentStatus;
   history: PaneHistoryResponse | null;
   loading: boolean;
@@ -40,7 +41,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, agent, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -62,6 +63,18 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
     latest?.turn?.durationMs !== lastShown?.turn?.durationMs
   );
   const matches = useMemo(() => matchingEntries(entries, query), [entries, query]);
+  // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
+  // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
+  const sendScope = localSendScope(paneId, session);
+  const localSends = useLocalSends(sendScope);
+  const localSendActions = useLocalSendActions(sendScope);
+  const liveEntries = history?.available ? history.entries : null;
+  useEffect(() => {
+    if (liveEntries) reconcileLocalSends(sendScope, liveEntries);
+  }, [sendScope, liveEntries, localSends]);
+  // A new bubble is the operator's own action: bring the tail into view even if they had scrolled up.
+  const localSendCount = localSends.length;
+  const previousSendCount = useRef(localSendCount);
   useEffect(() => { onMatchCount?.(matches.length); }, [matches.length, onMatchCount]);
   useEffect(() => {
     if (searching) {
@@ -95,6 +108,11 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
   }, [cancelOlder]);
+
+  useEffect(() => {
+    if (localSendCount > previousSendCount.current) followLatest();
+    previousSendCount.current = localSendCount;
+  }, [localSendCount, followLatest]);
 
   // Also runs when a successful send occurs during an outstanding history request.
   useLayoutEffect(() => {
@@ -250,10 +268,11 @@ function ScopedConversation({ paneId, session, agent, activityStatus, history, l
                 {olderError && <p role="status">Couldn't load older messages. Your conversation is still live.</p>}
                 {historyBoundary && <p role="status">You've reached the oldest messages available from this session log.</p>}
               </div>}
-              <TranscriptView entries={entries} agent={agent} query={query}
+              <TranscriptView entries={entries} query={query}
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
                 activityStatus={!error && !frozen ? activityStatus : undefined} onWorkToggle={onWorkToggle} />
-            </> : <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+              <PendingTurns sends={localSends} actions={localSendActions} />
+            </> : localSends.length > 0 ? <PendingTurns sends={localSends} actions={localSendActions} /> : <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery}

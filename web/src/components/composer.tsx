@@ -1,9 +1,9 @@
 import { useMessageQueue } from "@/hooks/use-message-queue";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { ChangeEvent, ClipboardEvent, ReactNode } from "react";
+import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { Check, ImagePlus, Keyboard, Loader2, Send, Settings2, Slash, Terminal, X, Zap } from "lucide-react";
+import { Check, Gauge, Keyboard, Loader2, Plus, Send, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -32,6 +32,21 @@ import { sendGuardedReply } from "@/lib/reply-action";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
+import { AttachmentChips } from "@/components/attachment-chips";
+import { readyPaths, useComposerAttachments } from "@/hooks/use-composer-attachments";
+import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
+import {
+  addLocalSend,
+  listLocalSends,
+  localSendScope,
+  removeLocalSend,
+  setLocalSendActions,
+  updateLocalSend,
+  useLocalSends,
+  type LocalSend,
+  type LocalSendActions,
+} from "@/lib/local-sends";
+import type { QueueMessage } from "@/lib/api";
 
 export interface ComposerHandle {
   /** Focus the input and put the caret at the end — used by the mirror-tap-to-focus in AgentChat. */
@@ -40,8 +55,23 @@ export interface ComposerHandle {
   /** Opens the harness's own model picker through the same verified send as a reply. */
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
-  openDisplayPrefs: () => void;
-  openTools: () => void;
+  /** Open one of the in-flow docks; routed through the same guarded drawer transition as a menu tap. */
+  openDock: (dock: "keys" | "quick" | "display") => void;
+}
+
+/**
+ * One of the composer's secondary controls. The composer owns their state and behaviour; the pane
+ * header's ⋯ menu is where they are reached, so the input row stays one line on every screen.
+ */
+export interface ComposerControl {
+  id: "keys" | "type" | "stop" | "quick" | "commands" | "display" | "usage";
+  group: "Terminal" | "Shortcuts" | "View";
+  label: string;
+  icon: LucideIcon;
+  disabled: boolean;
+  /** An open dock or an armed mode. */
+  on: boolean;
+  run: () => void;
 }
 
 interface ComposerProps {
@@ -87,6 +117,8 @@ interface ComposerProps {
   setTapToFocus: (tapToFocus: boolean) => void;
   /** Snap the mirror to the live tail (follow + revalidate + scroll) after a successful send. */
   onSent: () => void;
+  /** Receives the secondary controls whenever their state changes (see ComposerControl). */
+  onControlsChange?: (controls: ComposerControl[]) => void;
 }
 
 // The composer cluster at the bottom of the pane view — everything a phone keyboard can't do on its
@@ -96,19 +128,11 @@ interface ComposerProps {
 // sheets) is entirely local; it reaches AgentChat only through `onSent` (to re-follow the tail) and
 // exposes `focusInput` so the mirror tap can bring up the keyboard.
 //
-// "display" joined the drawer union when the permanent icon-only View row was retired: wrap / raw
-// terminal / font size are settings you touch once, so they cost a whole row of a phone viewport for
-// nothing, and the raw-terminal toggle in particular was an unlabelled `>_` glyph nobody could
-// decode. They now live behind the ⚙ on the single Controls row, as labelled rows in the same
-// in-flow dock (they change how the mirror LOOKS, so the mirror has to stay visible while you flip
-// them). Find moved the other way — to the header, where its find bar already takes over the row.
-type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "actions" | null;
-
-// The Controls row's "on" look, authored once so an open dock and an armed mode can never drift
-// apart. `hover:` is pinned to the same tint: without it, hovering an already-on control repaints it
-// with the ghost variant's hover background and it reads as switching off under the cursor.
-const CONTROL_ON = "bg-control-on text-control-on-foreground hover:bg-control-on";
-const CONTROL_OFF = "text-muted-foreground";
+// Keys, Quick, Display and Usage open as in-flow docks above the input (they act on, or change how
+// you read, what is on screen, so the conversation stays visible while they are up). Their entry
+// points are the header's ⋯ menu (onControlsChange): the input row itself holds only attach, the
+// draft, the model chip and Send.
+type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
 // Pause after clearing a stranded terminal draft so the TUI settles before pane.send_text.
 const TUI_SETTLE_MS = 350;
@@ -156,8 +180,16 @@ function ComposerDock({
   );
 }
 
+/** One line for the mirror view's "You sent" strip: the prose, and how many images went with it. */
+function sentPreview(message: string): string {
+  const { text, images } = splitMessageImages(message);
+  const prose = text.length > 60 ? `${text.slice(0, 57)}…` : text;
+  const count = images.length ? `${images.length} image${images.length === 1 ? "" : "s"}` : "";
+  return [prose, count].filter(Boolean).join(" · ");
+}
+
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent },
+  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -174,7 +206,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
   // message. Lazy initialiser so the restore happens on the mount, before first paint.
-  const [input, setInput] = useState(() => loadDraft(session, paneId) ?? "");
+  // A stored draft is the wire text; Nenu's own upload paths come back out of it as attachments.
+  const [restoredDraft] = useState(() => splitDraftUploads(loadDraft(session, paneId) ?? ""));
+  const [input, setInput] = useState(restoredDraft.text);
   // Mirror of `input` for the write-through path: updateInput needs the previous value to apply a
   // functional update AND to persist the result, without either reading stale state or doing the
   // save inside a (double-invoked) state updater.
@@ -207,34 +241,114 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const value = typeof next === "function" ? next(inputValueRef.current) : next;
     inputValueRef.current = value;
     setInput(value);
+    persistDraft(value, readyPaths(attachments.current()));
+  }
+
+  /** The one writer of the stored draft: text plus attached upload paths, as they would be sent. */
+  function persistDraft(text: string, paths: readonly string[]) {
     if (noEchoRef.current !== null) return;
-    saveDraft(session, paneId, value);
+    saveDraft(session, paneId, paths.length ? serializeMessage(text, paths) : text);
+  }
+
+  const attachments = useComposerAttachments({
+    upload: (file) => api.uploadImage(paneId, file, session),
+    previewUrl: (path) => api.paneFileUrl(paneId, path, session),
+    onPathsChange: (paths) => persistDraft(inputValueRef.current, paths),
+    initialPaths: restoredDraft.uploads,
+  });
+  const hasDraft = input.trim() !== "" || attachments.paths.length > 0;
+
+  /** The composer's content as the wire text — what Send would put on the line right now. */
+  function draftMessage(): string {
+    return serializeMessage(inputValueRef.current, readyPaths(attachments.current())).trim();
+  }
+
+  function clearComposer() {
+    updateInput("");
+    attachments.reset();
+  }
+
+  /** Put a message back into the composer — after a failed send, or to edit a queued one. Anything
+   *  already typed is kept: the message's prose goes on a new line and its images join the chips. */
+  function restoreIntoComposer(message: string) {
+    const { text, uploads } = splitDraftUploads(message);
+    updateInput((prev) => (prev.trim() && text ? `${prev.trimEnd()}\n${text}` : prev.trim() ? prev : text));
+    attachments.append(uploads);
   }
 
   useEffect(() => {
     const prev = draftPaneRef.current;
     if (prev.paneId === paneId && prev.session === session) return;
-    if (noEchoRef.current === null) saveDraft(prev.session, prev.paneId, inputValueRef.current);
+    const outgoing = readyPaths(attachments.current());
+    if (noEchoRef.current === null) saveDraft(prev.session, prev.paneId, outgoing.length ? serializeMessage(inputValueRef.current, outgoing) : inputValueRef.current);
     draftPaneRef.current = { session, paneId };
-    const restored = loadDraft(session, paneId) ?? "";
-    inputValueRef.current = restored;
-    setInput(restored);
+    const restored = splitDraftUploads(loadDraft(session, paneId) ?? "");
+    inputValueRef.current = restored.text;
+    setInput(restored.text);
+    attachments.reset(restored.uploads);
     noticeNoEcho(null); // it described the pane we just left
   }, [session, paneId]);
   const queue = useMessageQueue(paneId, session, nativeWorkbench && !gone && !readOnly);
+  // Pending bubbles in the conversation (lib/local-sends.ts) for what this composer sent.
+  const sendScope = localSendScope(paneId, session);
+  const localSends = useLocalSends(sendScope);
+  const echoes = (text: string) => listLocalSends(sendScope).filter((echo) => echo.text === text);
   useEffect(() => {
     const accepted = queue.accepted;
     if (accepted) {
-      updateInput(current => current === accepted.text ? "" : current);
+      // Also fires for a save the queue retried on its own after a failure put the draft back.
+      if (draftMessage() === accepted.text.trim()) clearComposer();
+      const [echo] = echoes(accepted.text);
+      if (echo) {
+        if (echo.state !== "queued") updateLocalSend(sendScope, echo.id, { state: "queued", queueState: "queued", error: undefined });
+      } else if (nativeWorkbench) {
+        addLocalSend(sendScope, accepted.text, "queued");
+      }
       onSent();
     }
   }, [queue.accepted]);
-  async function enqueueDraft(value = input, isDraft = true): Promise<boolean> {
-    if (!value.trim() || sending || queue.busy) return false;
+  // Follow each queued bubble through the server queue: its row's state while it waits, and "sent"
+  // once the row is gone (delivered; a removal from here drops the bubble first).
+  useEffect(() => {
+    const page = queue.page;
+    if (!page?.available) return;
+    for (const echo of listLocalSends(sendScope)) {
+      if (echo.state !== "queued") continue;
+      const row = page.messages.find((message) => message.text === echo.text);
+      if (!row) updateLocalSend(sendScope, echo.id, { state: "sent", queueState: undefined });
+      else if (row.state !== echo.queueState || row.error !== echo.error) updateLocalSend(sendScope, echo.id, { queueState: row.state, error: row.error });
+    }
+  }, [queue.page, sendScope]);
+  /** Begin an optimistic send. In the conversation view the message moves straight to its pending
+   *  bubble, so the composer clears now; the terminal view has no bubble, so its draft stays put
+   *  until the send is verified. */
+  function beginSend(message: string, isDraft: boolean, echo: boolean) {
+    const taken = isDraft && nativeWorkbench ? draftMessage() : null;
+    if (taken !== null) clearComposer();
+    const id = echo ? addLocalSend(sendScope, message) : null;
+    return { taken, id };
+  }
+  /** A send that did not go through: the message goes back into an empty composer; if the operator
+   *  has already started something new, it stays on its bubble as "Not sent" instead of clobbering it. */
+  function failSend(started: { taken: string | null; id: string | null }, error: string, secret = false) {
+    const composerEmpty = draftMessage() === "" && attachments.current().length === 0;
+    const restored = started.taken !== null && composerEmpty;
+    if (restored) restoreIntoComposer(started.taken!);
+    if (!started.id) return;
+    // A password prompt's text must not linger on screen; a restored draft is already back in the box.
+    if (secret || restored) removeLocalSend(sendScope, started.id);
+    else updateLocalSend(sendScope, started.id, { state: "failed", error: error || "Not sent" });
+  }
+  async function enqueueDraft(value: string, isDraft = true): Promise<boolean> {
+    const t = value.trim();
+    if (!t || sending || queue.busy) return false;
     if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
-    const saved = await queue.mutate("add", value);
-    if (saved && isDraft) updateInput(current => current === value ? "" : current);
-    if (saved) setStatus("Message saved. It will send when the terminal is ready.", "success");
+    const started = beginSend(t, isDraft, !t.startsWith("/"));
+    const saved = await queue.mutate("add", t);
+    if (saved) {
+      if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued" });
+      if (draftMessage() === t) clearComposer();
+    } else failSend(started, "Couldn't queue this message");
     return saved;
   }
   const [sending, setSending] = useState(false);
@@ -244,7 +358,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, [working]);
   const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; typeAttempted: boolean } | null>(null);
   const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | null>(null);
-  const [uploading, setUploading] = useState(false);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -277,8 +390,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // surface's whole safety story is "you review exactly what is about to go on the wire". So the fix
   // for a mis-tap is a confirm, not persistence.
   //
-  // Routed through here rather than guarding the dock's ✕ alone: the Keys toggle and the Quick /
-  // Agent / Display buttons all unmount the tray just as effectively. An armed-but-EMPTY queue (a
+  // Routed through here rather than guarding the dock's ✕ alone: every ⋯ menu item that opens another
+  // dock, and arming Type, unmount the tray just as effectively. An armed-but-EMPTY queue (a
   // lone `once` modifier, no chips) does not arm the confirm — one tap of setup isn't work worth
   // protecting, and over-guarding just trains you to double-tap through it reflexively.
   function requestDrawer(next: ComposerDrawer) {
@@ -332,7 +445,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     inputRef,
     // The ref, not `input`: the password-prompt handoff clears the draft and arms in one tick.
     replyDraft: () => inputValueRef.current,
-    canActivate: () => !(locked || sending || uploading),
+    canActivate: () => !(locked || sending || attachments.uploading),
     // `locked` covers a gone pane, a read-only device, and the idle pause. A LOST CONNECTION is
     // deliberately not added here: the mode already disarms on a failed batch, which is the same
     // event observed directly rather than inferred from a timer, and it fires whether or not any
@@ -410,8 +523,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     prepareAnswer: (text) => { updateInput((draft) => draft.trim() ? `${draft}\n${text}` : text); focusInputImmediately(); },
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
-    openDisplayPrefs: () => requestDrawer("display"),
-    openTools: () => requestDrawer("actions"),
+    openDock: (dock) => requestDrawer(dock),
   }));
 
   useEffect(
@@ -440,7 +552,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // each other's hold.
   useHoldReload(
     `composer:${paneId}`,
-    input.trim() !== "" || direct.active || direct.value !== "" || direct.busy || uploading,
+    hasDraft || attachments.uploading || direct.active || direct.value !== "" || direct.busy,
   );
 
   // Preview appearance latch. A STABLE, non-echo, not-already-handled draft flips the preview on —
@@ -526,6 +638,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return false;
     }
     setSending(true);
+    // Slash commands are not conversation turns, so they get no bubble.
+    const started = beginSend(t, isDraft, !action && nativeWorkbench && !t.startsWith("/"));
     const previous = pendingDeliveryRef.current;
     const delivery = previous?.paneId === paneId && previous.text === t
       ? previous
@@ -533,8 +647,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     pendingDeliveryRef.current = delivery;
     if (!action) setDeliveryPhase("queued");
     try {
-      if (action !== "model" && prepareSend && !(await prepareSend())) return false;
-      if (lockedRef.current) return false;
+      if (action !== "model" && prepareSend && !(await prepareSend())) {
+        failSend(started, "");
+        return false;
+      }
+      if (lockedRef.current) {
+        failSend(started, "");
+        return false;
+      }
       // Guarded: types the text, verifies it reached the input box, and only THEN sends the submit
       // key. A "stalled" outcome means nothing was submitted and the draft must survive (#34).
       const res = await sendGuardedReply({
@@ -619,9 +739,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (res.status === "sent") {
         pendingDeliveryRef.current = null;
         setDeliveryPhase(null);
-        // Phone-owned input — cleared once the reply is on its way. Via updateInput, so the stored
-        // draft goes with it (an empty value removes the key).
-        if (isDraft) updateInput((current) => current === value ? "" : current);
+        // A draft send cleared the composer when it started; a retry from a bubble clears the same
+        // message if it had been put back.
+        if (draftMessage() === t) clearComposer();
+        if (started.id) updateLocalSend(sendScope, started.id, { state: "sent" });
         // Remember what/when we sent, so the next few polls recognise this text echoing on the "❯"
         // line as our own in-flight reply rather than a stranded draft (suppressEcho above).
         lastSentRef.current = { text: t, at: Date.now() };
@@ -643,8 +764,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         if (action !== "model" || !nativeWorkbench) {
           setStatus(action === "model" ? "Opening model picker…" : action === "compact" ? "Compaction requested" : "Message sent", action === "model" ? "info" : "success");
         }
-        const preview = t.length > 60 ? `${t.slice(0, 57)}…` : t;
-        setLastSent(action ? null : preview);
+        // The conversation view shows the pending bubble instead of this strip.
+        setLastSent(action || nativeWorkbench ? null : sentPreview(t));
         if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current);
         lastSentTimerRef.current = setTimeout(() => setLastSent(null), 6000);
         forceConfirm.reset(); // a clean send disarms any leftover override
@@ -667,6 +788,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         // A password prompt gets the notice AND keeps the override: the notice explains the screen and
         // offers the control that works, the override stays for the case where the detection is wrong.
         noticeNoEcho(res.noEcho !== undefined ? { prompt: res.noEcho, typed: false } : null);
+        failSend(started, res.error, res.noEcho !== undefined);
         setStatus(`${res.error} Tap Send again to type anyway.`, "error");
         return false;
       } else {
@@ -684,11 +806,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ? { prompt: res.noEcho, typed: true }
             : null,
         );
+        failSend(started, res.error, res.status === "stalled" && res.noEcho !== undefined);
         setDeliveryPhase("retry");
         setStatus(res.error, "error");
         return false;
       }
     } catch (e) {
+      failSend(started, e instanceof Error ? e.message : String(e));
       setDeliveryPhase("retry");
       setStatus(e instanceof Error ? e.message : String(e), "error");
       return false;
@@ -701,11 +825,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // "Really send?" state instead of sending; the confirming second tap goes through. Non-destructive
   // input sends immediately (and any stray armed state is cleared).
   function onSendClick() {
+    // Never send a message without an image the operator attached to it.
+    if (attachments.uploading) {
+      setStatus("Wait for the image to finish uploading.", "info");
+      return;
+    }
+    if (attachments.failed) {
+      setStatus("An image didn't upload. Tap it to retry, or remove it.", "error");
+      return;
+    }
     // An armed override takes precedence: this tap IS the deliberate "type anyway", so it skips the
     // destructive re-confirm (already answered on the tap that got blocked) and the pre-flight.
     if (forceConfirm.pending === "force") {
       forceConfirm.reset();
-      send(input, true, true);
+      send(draftMessage(), true, true);
       return;
     }
     const command = commands.find((candidate) => candidate.command === input.trimStart().split(/\s/, 1)[0]);
@@ -715,8 +848,46 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     sendConfirm.reset();
-    send(input, true);
+    send(draftMessage(), true);
   }
+
+  // The bubbles' buttons. A queued message is handled through its server queue row; a failed one
+  // locally. Edit puts the message back into the composer for another go.
+  const queueRow = (echo: LocalSend): QueueMessage | undefined =>
+    queue.page?.messages.find((message) => message.text === echo.text);
+  const bubbleActions = useRef<LocalSendActions | null>(null);
+  bubbleActions.current = {
+    retry: (echo) => { if (!sending) void send(echo.text, false); },
+    edit: async (echo) => {
+      const row = echo.state === "queued" ? queueRow(echo) : undefined;
+      if (row && !(await queue.mutate("remove", undefined, row))) return;
+      removeLocalSend(sendScope, echo.id);
+      restoreIntoComposer(echo.text);
+      focusInputEnd();
+    },
+    remove: async (echo) => {
+      const row = queueRow(echo);
+      if (row && !(await queue.mutate("remove", undefined, row))) return;
+      removeLocalSend(sendScope, echo.id);
+    },
+    sendNow: (echo) => {
+      const row = queueRow(echo);
+      if (row) void queue.mutate("send", undefined, row);
+    },
+  };
+  useEffect(() => {
+    if (!nativeWorkbench || locked) return;
+    setLocalSendActions(sendScope, {
+      retry: (echo) => bubbleActions.current?.retry(echo),
+      edit: (echo) => bubbleActions.current?.edit(echo),
+      remove: (echo) => bubbleActions.current?.remove(echo),
+      sendNow: (echo) => bubbleActions.current?.sendNow(echo),
+    });
+    return () => setLocalSendActions(sendScope, null);
+  }, [sendScope, nativeWorkbench, locked]);
+  // The queue strip lists only what has no bubble in the conversation, so nothing shows twice.
+  const echoed = new Set(localSends.filter((echo) => echo.state === "queued").map((echo) => echo.text));
+  const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.text));
 
   async function interruptGeneration() {
     if (locked || interrupting || agent !== "codex") return;
@@ -789,34 +960,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     focusInputEnd();
   }
 
-  // Upload an image; on success append its host path to the composer so the user can add context.
-  // Shared by the file picker and clipboard paste.
-  async function uploadImage(file: File) {
-    if (locked) return;
-    setUploading(true);
-    try {
-      const res = await api.uploadImage(paneId, file, session);
-      if (res.ok) {
-        const path = res.path;
-        direct.deactivateSilently();
-        updateInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${path}` : path));
-        focusInputEnd();
-        setStatus("Image added — path in message", "success");
-      } else {
-        setStatus(res.error, "error");
-      }
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err), "error");
-    } finally {
-      setUploading(false);
-    }
+  // Attach images: picker (multi-select), clipboard paste and drag-and-drop all land here. Each one
+  // uploads straight away and shows as a chip; the paths join the text only when the message is sent.
+  function attachFiles(files: Iterable<File>) {
+    if (locked || direct.active) return;
+    const skipped = attachments.add(files);
+    if (skipped > 0) setStatus(`${skipped} file${skipped === 1 ? "" : "s"} skipped. Only images, up to 10 per message.`, "info");
+    focusInputEnd();
   }
 
-  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+    const files = [...(e.target.files ?? [])];
     e.target.value = ""; // allow re-picking the same file
-    if (!file) return;
-    await uploadImage(file);
+    attachFiles(files);
   }
 
   // Paste an image straight from the clipboard (e.g. a screenshot) the same way the picker does.
@@ -825,26 +981,80 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function onPasteImage(e: ClipboardEvent<HTMLTextAreaElement>) {
     if (locked || direct.active) return;
     const items = e.clipboardData.items;
+    const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (item.kind === "file" && item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          void uploadImage(file);
-          return;
-        }
-      }
+      const file = item.kind === "file" && item.type.startsWith("image/") ? item.getAsFile() : null;
+      if (file) files.push(file);
     }
+    if (!files.length) return;
+    e.preventDefault();
+    attachFiles(files);
   }
+
+  // The secondary controls, published to the header menu. Their handlers read the latest render
+  // through a ref, so the list is re-published only when something a menu row shows has changed.
+  const toggleDock = (dock: Exclude<ComposerDrawer, null>) => requestDrawer(drawer === dock ? null : dock);
+  const controlActions = useRef({ toggleDock, type: () => {}, stop: () => {} });
+  controlActions.current = {
+    toggleDock,
+    type: () => {
+      if (direct.active) {
+        direct.deactivate();
+        return;
+      }
+      // The mode needs the phone keyboard, and a dock holding half the viewport is in its way.
+      // Routed through requestDrawer so a staged key queue still gets its discard confirm (ADR 0005).
+      requestDrawer(null);
+      direct.activate();
+    },
+    stop: () => void interruptGeneration(),
+  };
+  const canStopWithDraft = working && agent === "codex" && hasDraft;
+  useEffect(() => {
+    if (!onControlsChange) return;
+    const dock = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
+      disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
+    });
+    const controls: ComposerControl[] = [
+      { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dock("keys", locked) },
+      // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
+      { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
+      { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dock("quick", locked) },
+      { id: "display", group: "View", label: "Display", icon: Settings2, ...dock("display", false) },
+    ];
+    if (canStopWithDraft) controls.splice(2, 0, { id: "stop", group: "Terminal", label: "Stop generation", icon: X, disabled: locked || interrupting, on: false, run: () => controlActions.current.stop() });
+    if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
+    if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dock("usage", false) });
+    onControlsChange(controls);
+  }, [onControlsChange, drawer, direct.active, locked, sending, interrupting, canStopWithDraft, commands.length, Boolean(usageControls)]);
+
+  const [dragging, setDragging] = useState(false);
+  const dropHandlers = locked || direct.active ? {} : {
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes("Files")) return;
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+    },
+    onDrop: (e: DragEvent) => {
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      setDragging(false);
+      attachFiles(e.dataTransfer.files);
+    },
+  };
 
   return (
     <>
-      <div className="workbench-composer-surface border-t border-border/60 bg-muted px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 sm:px-3 sm:pt-2.5">
-        {deliveryPhase && !lastSent && (
+      <div {...dropHandlers} className={cn("workbench-composer-surface border-t border-border/60 bg-muted px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 md:p-1.5", dragging && "ring-2 ring-primary/50")}>
+        {/* The conversation view narrates delivery on the message's own bubble instead. */}
+        {deliveryPhase && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
             {deliveryPhase !== "retry" && <Loader2 className="size-3 shrink-0 animate-spin" />}
-            <span>{deliveryPhase === "queued" ? "Queued — waiting for Herdr…" : deliveryPhase === "typed" ? "Herdr acknowledged typing — verifying…" : "Not sent — tap Send to retry safely."}</span>
+            <span>{deliveryPhase === "queued" ? "Sending…" : deliveryPhase === "typed" ? "Making sure it arrived…" : "Not sent. Tap Send to try again."}</span>
           </div>
         )}
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
@@ -862,24 +1072,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             callback survives the keyboard collapsing. Attach-image fires it from the reply-input row
             below (always visible, not gated behind the keyboard-open quick keys); structural commands
             (New tab/space, Kill) and Stop (Esc, in the Keys dock) live elsewhere. */}
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
-        {/* Keys / Quick / Display dock — a single in-flow site ABOVE the Controls row (so the toggle
-            you tapped stays put and the panel grows over the mirror, not the input). Whichever of the
-            mutually exclusive drawers is active renders here via the shared ComposerDock chrome. Keys
-            mounts the NavTray (unmounts on close, so tab/queue reset each open); Quick mounts the two
-            one-tap reply grids; Display mounts the labelled mirror prefs. Agent stays a covering
-            BottomSheet below (it's a palette, not a pad). */}
-        {drawer === "actions" && (
-          <ComposerDock title="Message actions" onClose={closeDrawer}>
-            <div className="flex flex-col gap-1">
-              {commands.length > 0 && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("cmd")}><Slash className="size-4" />Commands</Button>}
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("quick")}><Zap className="size-4" />Quick replies</Button>
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked} onClick={() => requestDrawer("keys")}><Keyboard className="size-4" />Terminal keys</Button>
-              {modelControl}
-              {usageControls}
-              <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || sending} onClick={() => { requestDrawer(null); direct.activate(); }}><Terminal className="size-4" />Type into terminal</Button>
-              {working && agent === "codex" && input.trim() && <Button variant="ghost" className="min-h-11 justify-start gap-2 text-[13px] font-normal" disabled={locked || interrupting} onClick={() => void interruptGeneration()}><X className="size-4" />Stop generation</Button>}
-            </div>
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickImage} />
+        {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
+            grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
+            active renders here via the shared ComposerDock chrome. Keys mounts the NavTray (unmounts on
+            close, so tab/queue reset each open). Commands stays a covering BottomSheet below (it's a
+            palette, not a pad). */}
+        {drawer === "usage" && usageControls && (
+          <ComposerDock title="Context and usage" onClose={closeDrawer}>
+            <div className="flex flex-wrap items-center gap-1 pb-2">{usageControls}</div>
           </ComposerDock>
         )}
         {drawer === "keys" && (
@@ -913,103 +1114,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             />
           </ComposerDock>
         )}
-        {/* The one action row: Keys · Quick · Agent · ⚙ (Agent only when the pane's agent has
-            commands). Display prefs used to sit on a second, permanent icon-only "View" row above
-            this one; folding them behind the ⚙ gives the mirror that row back. The gear is icon-only
-            and NOT flex-1 — it's a settings affordance, not a peer of the three action toggles, and
-            keeping it narrow leaves the labelled buttons their width on a 390px phone. */}
-        {/* The "Controls" tag is lifted OUT of the row's flex flow and floated just above it. In
-            flow it was a fixed ~60px of a 390px phone width spent on a word that never changes,
-            which is what squeezed the toggles; absolute costs nothing and the row gets the width
-            back. `pt-3` on the row reserves the space it occupies so it can't collide with whatever
-            sits above. */}
-        {!nativeWorkbench && <div className="relative mb-2 flex items-center gap-2 pt-3">
-          {!nativeWorkbench && <SectionLabel className="absolute left-0 top-0 text-[10px] leading-none opacity-80">
-            Controls
-          </SectionLabel>}
-          {/* Keys and Quick are TOGGLES for the in-flow dock above (not overlays): tap to open, tap
-              again to close. aria-expanded ties each to the dock; secondary variant marks it pressed
-              while open. Both share the single-valued `drawer`, so opening one closes the other. */}
-          {!nativeWorkbench && <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", drawer === "keys" ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked}
-            aria-expanded={drawer === "keys"}
-            onClick={() => requestDrawer(drawer === "keys" ? null : "keys")}
-          >
-            <Keyboard className="size-4" />
-            Keys
-          </Button>}
-          {/* "Type into terminal" lives HERE, beside Keys, rather than on the Send button.
-              It is the same problem split in half: Keys exists because the phone keyboard cannot
-              send Esc/Tab/arrows/chords, this exists because it cannot send bare printable letters —
-              so someone who wants to press `b` looks in this row first. It is also used in bursts
-              (a picker, a y/n prompt) and then not for days, which is the wrong shape for a
-              permanent fixture on the app's most-used control: a split Send button cost a third of
-              the primary action's width every day to serve a mode used on a few of them.
-              Unlike its neighbours this toggles state instead of opening a dock — the armed strip
-              above the input is what makes that visible. Arming is still an explicit NAMED choice,
-              which is what keeps an accidental touch from quietly wiring the keyboard to a live
-              terminal; see use-direct-typing.ts for the rest of that argument. */}
-          {!nativeWorkbench && <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", direct.active ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked || sending}
-            aria-pressed={direct.active}
-            aria-label="Type into terminal"
-            onClick={() => {
-              if (direct.active) {
-                direct.deactivate();
-                return;
-              }
-              // Close whatever dock is open first: the mode needs the phone keyboard, and a dock
-              // holding half the viewport is the thing in its way. Routed through requestDrawer so a
-              // staged key queue still gets its discard confirm (ADR 0005).
-              requestDrawer(null);
-              direct.activate();
-            }}
-          >
-            <Terminal className="size-4" />
-            Type
-          </Button>}
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-11 min-w-0 flex-1 gap-1.5 sm:h-8", drawer === "quick" ? CONTROL_ON : CONTROL_OFF)}
-            disabled={locked}
-            aria-expanded={drawer === "quick"}
-            onClick={() => requestDrawer(drawer === "quick" ? null : "quick")}
-          >
-            <Zap className="size-4" />
-            Quick
-          </Button>
-          {commands.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-11 min-w-0 flex-1 gap-1.5 text-muted-foreground sm:h-8"
-              disabled={locked}
-              onClick={() => requestDrawer("cmd")}
-            >
-              <Slash className="size-4" />
-              Agent
-            </Button>
-          )}
-          {/* Display prefs. Not gated on `locked`: wrap/font/raw-terminal are local view state, so a
-              read-only device or a gone pane can still make its mirror readable. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("size-11 shrink-0 sm:size-8", drawer === "display" ? CONTROL_ON : CONTROL_OFF)}
-            aria-label="Display settings"
-            aria-expanded={drawer === "display"}
-            onClick={() => requestDrawer(drawer === "display" ? null : "display")}
-          >
-            <Settings2 className="size-4" />
-          </Button>
-        </div>}
         {/* Terminal-draft preview: a read-only view of a stranded "❯"-line draft (a message queued
             then recalled on the HOST, which stripChrome hides from the mirror). It appears only after
             the draft stabilises (never a blip/self-echo), then its text tracks the live line — host
@@ -1065,16 +1169,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        {nativeWorkbench && <MessageQueueStrip messages={queue.page?.messages ?? []} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
-        {!nativeWorkbench && modelControl}
+        {nativeWorkbench && <MessageQueueStrip messages={strayQueue} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
 
-        <div className={cn("flex gap-1", nativeWorkbench ? "items-center" : "items-end")}>
-          {/* The input and its attach button share one box: the button is positioned INSIDE the
-              field, messenger-style, rather than sitting beside it as a third control in the row.
-              It used to occupy a full-height slot to the left, which spent the widest part of the
-              composer on the least-used action; inside the field it costs nothing but a strip of
-              padding the text was not using anyway. `pr-11` on the textarea reserves that strip so a
-              long line can never run underneath the icon. */}
+        <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
+        {/* One row, like a messenger: attach, the draft (it grows upward), the model chip and Send.
+            Everything else is in the header's ⋯ menu. */}
+        <div className="flex items-end gap-1">
+          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
+            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
+            <Plus className="size-5 md:size-4" />
+          </Button>
           <div className="relative min-w-0 flex-1">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
@@ -1125,49 +1229,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             autoCorrect={direct.active ? "off" : undefined}
             spellCheck={direct.active ? false : undefined}
             className={cn(
-              // Room for the attach button tucked into the bottom-right of the field. `block`
-              // matters: a textarea is inline-level by default, so the wrapper inherits a few px of
-              // baseline gap beneath it and the absolutely-positioned button hangs past the field's
-              // bottom edge.
-              nativeWorkbench ? "workbench-chat-input block min-h-11 px-2 py-2" : "workbench-chat-input block pr-11",
+              "workbench-chat-input block min-h-11 px-1 py-2 md:min-h-8 md:py-1.5",
               direct.active &&
                 "border-primary focus-visible:border-primary focus-visible:ring-primary/30",
             )}
             disabled={gone || readOnly}
             rows={1}
           />
-            {!nativeWorkbench && <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              // bottom-1, not centred: the field grows upward as the draft wraps, and a vertically
-              // centred button would drift up with it, away from the thumb and away from the send
-              // button it pairs with. Pinned to the bottom it stays put at any height.
-              className="absolute bottom-1 right-1 size-11 rounded-full text-muted-foreground sm:size-9"
-              disabled={uploading || locked || direct.active}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => fileRef.current?.click()}
-              aria-label="Attach image"
-            >
-              {uploading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ImagePlus className="size-4" />
-              )}
-            </Button>}
           </div>
-          {nativeWorkbench && <div className="flex min-w-0 items-center gap-0.5" role="toolbar" aria-label="Message actions">
-            <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
-              disabled={uploading || locked} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-              {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
-            </Button>
-          </div>}
-          {working && agent === "codex" && !input.trim() ? (
+          {modelControl && <div className="flex h-11 shrink-0 items-center md:h-8">{modelControl}</div>}
+          {working && agent === "codex" && !hasDraft ? (
             <Button
               type="button"
               variant="destructive"
               size="icon"
-              className={cn("size-11 min-h-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8")}
+              className="size-11 min-h-11 shrink-0 rounded-full bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8 md:min-h-8"
               onClick={() => { void interruptGeneration(); }}
               disabled={locked || interrupting}
               aria-label="Stop generation"
@@ -1186,9 +1262,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             // submit key is still conditional on the verify step behind it.
             <Button
               variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold"
+              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
               onClick={onSendClick}
-              disabled={locked || !input.trim() || sending}
+              disabled={locked || !hasDraft || sending}
               aria-label="Type anyway?"
             >
               Type anyway?
@@ -1196,9 +1272,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : !direct.active && confirmingSend ? (
             <Button
               variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold"
+              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
               onClick={onSendClick}
-              disabled={locked || !input.trim() || sending}
+              disabled={locked || !hasDraft || sending}
               aria-label="Really send?"
             >
               Really send?
@@ -1206,9 +1282,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : (
             <Button
               size="icon"
-              className={cn("size-11 shrink-0 rounded-full", nativeWorkbench && "rounded-xl bg-primary/15 text-primary shadow-none hover:bg-primary/25 md:size-8")}
+              className="composer-send size-11 shrink-0 rounded-full shadow-none md:size-8"
               onClick={direct.active ? () => direct.deactivate() : onSendClick}
-              disabled={locked || sending || queue.busy || (!direct.active && !input.trim())}
+              disabled={locked || sending || queue.busy || (!direct.active && (!hasDraft || attachments.uploading))}
               aria-label={direct.active ? "Stop typing into terminal" : "Send"}
               aria-pressed={direct.active}
             >

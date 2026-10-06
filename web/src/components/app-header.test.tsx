@@ -65,7 +65,7 @@ describe("AppHeader — the one shared header shell", () => {
         <AppHeader bridge="connected" error={false}><span>Overview</span></AppHeader>
       </WorkbenchNavigationContext>,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Open workspaces" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(onOpen).toHaveBeenCalledOnce();
     expect(screen.getByText("Overview")).toBeInTheDocument();
     expect(screen.queryByText("Nenu")).toBeNull();

@@ -112,6 +112,11 @@ function withSession(path: string, session?: string): string {
   return `${path}${sep}session=${encodeURIComponent(s)}`;
 }
 
+/** The session's live-invalidation stream (bridge/live-events.ts). */
+export function liveEventsUrl(session?: string): string {
+  return withSession("/api/events", session);
+}
+
 export function paneFileUrl(paneId: string, path: string, session?: string): string {
   return withSession(`/api/pane/${encodeURIComponent(paneId)}/file?path=${encodeURIComponent(path)}`, session);
 }
@@ -525,10 +530,17 @@ export function resolveOrgNode(
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
-export function startAgent(paneId: string, agent: "codex" | "claude", session?: string): Promise<ActionResponse> {
+/** `permission` is a choice from the bridge's table (lib/spawn's PERMISSIONS); omitted = the CLI's default. */
+export function startAgent(paneId: string, agent: "codex" | "claude", session?: string, permission?: string): Promise<ActionResponse> {
   return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/start`, session), {
-    method: "POST", body: JSON.stringify({ agent }),
+    method: "POST", body: JSON.stringify({ agent, permission }),
   });
+}
+
+/** Folder names under the bridge host's home directory, for the new-chat picker. */
+export interface HomeDirs { path: string; home: string; entries: string[]; truncated: boolean }
+export function fetchHomeDirs(path: string, hidden: boolean, signal?: AbortSignal): Promise<HomeDirs> {
+  return doReq(`/api/dirs?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`, { signal });
 }
 
 /** Create a new space (workspace) with a fresh shell pane. `cwd` omitted = the host's home dir. */

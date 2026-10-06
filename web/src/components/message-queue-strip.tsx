@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Check, Pencil, Send, X } from "lucide-react";
 import type { QueueMessage } from "@/lib/api";
+import { serializeMessage, splitMessageImages } from "@/lib/message-images";
+import { MessageImages } from "./message-images";
 
 export function MessageQueueStrip({
   messages,
@@ -26,7 +28,7 @@ export function MessageQueueStrip({
       className="mb-2 max-h-52 overflow-y-auto rounded-lg border border-border/50 px-3 py-1"
     >
       <p className="py-1 text-xs text-muted-foreground">
-        Pending · {messages.length} · sends when the terminal is ready
+        {messages.length === 1 ? "1 message waits" : `${messages.length} messages wait`} for the agent to be free
       </p>
       {error && (
         <p role="alert" className="py-1 text-xs text-destructive">
@@ -34,7 +36,10 @@ export function MessageQueueStrip({
         </p>
       )}
       <ol className="divide-y divide-border/40">
-        {messages.map((item, index) => (
+        {messages.map((item, index) => {
+          // The prose is what gets edited; the images ride along unchanged.
+          const { text: prose, images } = splitMessageImages(item.text);
+          return (
           <li key={item.id} className="py-1">
             {editing === item.id ? (
               <textarea
@@ -44,29 +49,30 @@ export function MessageQueueStrip({
                 onChange={(e) => setText(e.target.value)}
               />
             ) : (
-              <p className="line-clamp-2 break-words text-sm">
-                <span className="mr-2 text-xs text-muted-foreground">
-                  {index + 1}
-                </span>
-                {item.text}
-              </p>
+              <div className="flex items-start gap-2">
+                <span className="pt-0.5 text-xs text-muted-foreground">{index + 1}</span>
+                <div className="min-w-0 flex-1 space-y-1">
+                  {prose && <p className="line-clamp-2 break-words text-sm">{prose}</p>}
+                  <MessageImages paths={images} size="sm" />
+                </div>
+              </div>
             )}
             <div className="flex items-center gap-1">
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                 {item.state === "sending"
                   ? "Sending…"
                   : item.state === "paused"
-                    ? item.error || "Paused. Check Terminal."
-                    : item.error || "Waiting to send"}
+                    ? item.error || "Paused. Check the terminal."
+                    : item.error || "Waiting"}
               </span>
               {editing === item.id ? (
                 <button
                   type="button"
                   aria-label="Save queued message"
-                  disabled={busy || !text.trim()}
+                  disabled={busy || (!text.trim() && !images.length)}
                   className="flex size-11 items-center justify-center"
                   onClick={async () => {
-                    if (await change("edit", text, item)) setEditing(null);
+                    if (await change("edit", serializeMessage(text, images), item)) setEditing(null);
                   }}
                 >
                   <Check className="size-3.5" />
@@ -80,7 +86,7 @@ export function MessageQueueStrip({
                     className="flex size-11 items-center justify-center disabled:opacity-40"
                     onClick={() => {
                       setEditing(item.id);
-                      setText(item.text);
+                      setText(prose);
                     }}
                   >
                     <Pencil className="size-3.5" />
@@ -108,7 +114,8 @@ export function MessageQueueStrip({
               </button>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ol>
     </section>
   );

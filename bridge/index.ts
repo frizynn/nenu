@@ -6,6 +6,7 @@ import { ActivityLedger } from "./activity.ts";
 import { AuditLog, fileAuditAppender } from "./audit.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { EventPoker } from "./event-poker.ts";
+import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
 import { NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
@@ -121,6 +122,10 @@ const updateTimer = updateRepo
   : undefined;
 updateTimer?.unref();
 
+// What changed, pushed to open pages so they re-read it at once (live-events.ts). Process-global:
+// every session publishes into it and each stream filters to its own session.
+const live = new LiveEvents();
+
 // ── Per-session runtime factory ──────────────────────────────────────────────
 // One HerdrClient + StateEngine + EventPoker + NotificationCoordinator per herdr session. The
 // registry calls this for the primary at construction and for each session discovered later. Push,
@@ -137,6 +142,7 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
   poker.onPoke(() => engine.pokeNow());
   poker.onHealth((h) => engine.setCadence(h ? cfg.pollIdleMs : cfg.pollMs));
   engine.onUpdate((s) => poker.setAgentPanes(s.agents.map((a) => a.paneId)));
+  engine.onUpdate(snapshotWatcher(name, (event) => live.publish(event)));
 
   // Activity bookkeeping. A status change stamps `activeAt` (the only thing that can make a pane
   // read as unseen); every successful poll reconciles the ledger against the panes that exist, which
@@ -218,7 +224,7 @@ const sweepTimer = setInterval(() => {
 }, SWEEP_INTERVAL_MS);
 sweepTimer.unref();
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity });
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, updateMonitor, audit, activity, live });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");

@@ -15,8 +15,15 @@ const identity = (pane: AgentView) =>
     : null;
 const scopeFor = (session: string, pane: AgentView) =>
   computeEtag(JSON.stringify([session, pane.paneId, identity(pane)]));
+// The fallback tick. Deliveries normally start from kick(): an enqueue, or a herd change that can
+// make a waiting pane ready. The interval only covers a change nothing announced.
+const TICK_FALLBACK_MS = 2000;
+
 export class QueueService {
   private queue: MessageQueue;
+  private timer: ReturnType<typeof setInterval>;
+  private ticking = false;
+  private again = false;
   constructor(
     stateDir: string,
     private resolve: (
@@ -32,12 +39,29 @@ export class QueueService {
       paste: boolean,
     ) => Promise<ActionResponse>,
     private input = new PaneWrites(),
+    changed: (row: Pick<QueuedMessage, "session" | "paneId" | "state">) => void = () => {},
   ) {
-    this.queue = new MessageQueue(join(stateDir, "message-queue.json"));
-    const timer = setInterval(() => {
-      void this.tick().catch(() => {});
-    }, 2000);
-    timer.unref();
+    this.queue = new MessageQueue(join(stateDir, "message-queue.json"), changed);
+    this.timer = setInterval(() => this.kick(), TICK_FALLBACK_MS);
+    this.timer.unref();
+  }
+  /** Run a delivery pass now. A kick during a pass runs one more pass after it, never two at once. */
+  kick(): void {
+    if (this.ticking) {
+      this.again = true;
+      return;
+    }
+    this.ticking = true;
+    void (async () => {
+      do {
+        this.again = false;
+        await this.tick().catch(() => {});
+      } while (this.again);
+      this.ticking = false;
+    })();
+  }
+  dispose(): void {
+    clearInterval(this.timer);
   }
   private async tick() {
     await this.queue.tick(
@@ -161,7 +185,7 @@ export class QueueService {
             { status: 400 },
           );
       }
-      if (req.method === "POST") void this.tick().catch(() => {});
+      if (req.method === "POST") this.kick();
       const rows = await this.queue.list(scope);
       return Response.json({
         available: true,

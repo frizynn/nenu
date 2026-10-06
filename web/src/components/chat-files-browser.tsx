@@ -1,6 +1,6 @@
 import { useArtifactMetadata } from "@/hooks/use-artifact-metadata";
 import { ProjectFilesBrowser } from "./project-files-browser";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
 import { BottomSheet } from "@/components/ui/sheet";
@@ -43,14 +43,23 @@ export function ChatFilesBrowser({
   paneId,
   session,
   history,
-  labeled = false,
+  open: openProp,
+  onOpenChange,
 }: {
   paneId: string;
   session?: string;
   history: PaneHistoryResponse | null;
-  labeled?: boolean;
+  /** Controlled from a menu item: no trigger of its own is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled ? openProp : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
   const [filter, setFilter] = useState<ChatFileKind | "artifacts" | "project">("project");
   const [query, setQuery] = useState("");
   const [extension, setExtension] = useState("all");
@@ -188,29 +197,33 @@ export function ChatFilesBrowser({
     && `${r.path} ${boards.get(r.path)?.title ?? ""}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => (sort === "extension" ? fileExtension(a).localeCompare(fileExtension(b))
       : sort === "name" ? a.name.localeCompare(b.name) : 0) || b.lastSeen.order - a.lastSeen.order);
+  /** Every open starts from the history on screen now, on the project tab, with no filters. */
+  function begin() {
+    seed.current = history;
+    accumulated.current = [];
+    cursor.current = null;
+    knownTotal.current = 0;
+    knownFileTruncated.current = false;
+    setScan(EMPTY_SCAN);
+    setFilter("project"); setQuery(""); setExtension("all"); setArtifactType("all");
+  }
+  const openedFromMenu = controlled && openProp;
+  useLayoutEffect(() => {
+    if (openedFromMenu) begin();
+  }, [openedFromMenu]);
   function changeFilter(next: typeof filter) { setFilter(next); setExtension("all"); }
 
   return (
     <>
-      <button
+      {!controlled && <button
         type="button"
         aria-label="Artifacts and files"
         title="Artifacts and files"
-        onClick={() => {
-          seed.current = history;
-          accumulated.current = [];
-          cursor.current = null;
-          knownTotal.current = 0;
-          knownFileTruncated.current = false;
-          setScan(EMPTY_SCAN);
-          setFilter("project"); setQuery(""); setExtension("all"); setArtifactType("all");
-          setOpen(true);
-        }}
-        className={labeled ? "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-accent active:bg-muted" : "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"}
+        onClick={() => { begin(); setOpen(true); }}
+        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"
       >
         <Paperclip aria-hidden="true" className="size-4" />
-        {labeled && <span>Artifacts and files</span>}
-      </button>
+      </button>}
 
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Artifacts and files" className="max-h-[82dvh]">
         <div className="mb-4 grid grid-cols-4 gap-1" role="group" aria-label="File type">

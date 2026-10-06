@@ -5,6 +5,8 @@ import { fetchHistory, fetchSkills } from "@/lib/api";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
 import { setLocked } from "@/lib/idle";
+import { resetLiveEvents } from "@/lib/live-events";
+import { fakeLiveStream } from "@/test/live-stream";
 import type { PaneHistoryResponse } from "@/lib/types";
 import { useLiveConversation } from "./use-live-conversation";
 
@@ -276,4 +278,21 @@ it("keeps the last history while its view is paused and catches up on return", a
   await act(async () => hook.rerender({ paused: false }));
   expect(fetchMock).toHaveBeenCalledTimes(2);
   hook.unmount();
+});
+
+describe("live transcript updates", () => {
+  it("refreshes an idle conversation when the bridge names its journal", async () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    const { unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { stream.send({ topic: "journal", paneId: "w1:p2" }); await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { stream.send({ topic: "journal", paneId: "w1:p1" }); await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount();
+    stream.stop();
+    resetLiveEvents();
+  });
 });

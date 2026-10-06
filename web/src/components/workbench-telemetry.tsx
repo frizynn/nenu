@@ -1,4 +1,3 @@
-import { AgentIcon } from "@/components/agent-icon";
 import { modelDisplayName } from "@/lib/model-display";
 import { ChevronDown, Gauge } from "lucide-react";
 import { Fragment, useRef, useState, type RefObject } from "react";
@@ -9,7 +8,6 @@ import type { SessionTelemetry } from "@/lib/types";
 export type WorkbenchPanel = "model" | "usage" | "context" | null;
 
 interface Props {
-  agent?: string;
   mode?: "model" | "metrics";
   telemetry?: SessionTelemetry;
   stale?: boolean;
@@ -27,7 +25,7 @@ function tokens(value: number | undefined): string {
   return value === undefined ? "Not reported" : value.toLocaleString();
 }
 
-export function WorkbenchTelemetry({ agent, mode, telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
+export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, disabled, onChooseModel, onCompact, panel: controlledPanel, onPanelChange, modelOpen = false, modelTriggerRef }: Props) {
   const context = telemetry?.context;
   const [localPanel, setLocalPanel] = useState<WorkbenchPanel>(null);
   const panel = controlledPanel === undefined ? localPanel : controlledPanel;
@@ -48,7 +46,7 @@ export function WorkbenchTelemetry({ agent, mode, telemetry, stale, modelAvailab
       {mode !== "metrics" && <button
         ref={modelTriggerRef}
         type="button"
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent disabled:opacity-50"
+        className="flex min-h-11 min-w-0 max-w-[10rem] items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 aria-expanded:text-foreground md:min-h-8 md:max-w-[16rem]"
         disabled={(disabled && !modelOpen) || !modelAvailable}
         onClick={() => {
           if (controlledPanel === undefined) setLocalPanel(null);
@@ -57,12 +55,11 @@ export function WorkbenchTelemetry({ agent, mode, telemetry, stale, modelAvailab
         aria-label="Choose model"
         aria-expanded={modelOpen}
         aria-haspopup="dialog"
-        title={modelAvailable ? "Open the agent's model picker" : "This agent does not expose a model picker"}
+        title={modelAvailable ? [telemetry?.model, telemetry?.effort].filter(Boolean).join(" · ") || "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
-        <AgentIcon agent={agent} className="size-5 shrink-0" />
-        <span className="truncate" title={telemetry?.model}>{telemetry?.model ? modelDisplayName(telemetry.model) : "Model not reported"}</span>
-        {telemetry?.effort && <span className="hidden shrink-0 text-muted-foreground sm:inline">{telemetry.effort}</span>}
-        <ChevronDown className="size-3 shrink-0" />
+        <span className="truncate">{telemetry?.model ? modelDisplayName(telemetry.model) : "Model"}</span>
+        {telemetry?.effort && <span className="shrink-0 capitalize">· {telemetry.effort}</span>}
+        <ChevronDown aria-hidden="true" className="size-3 shrink-0" />
       </button>}
       {mode !== "model" && <>
       <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}

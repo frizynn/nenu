@@ -8,6 +8,31 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-07
+
+### Added
+- Live updates reach the browser over a same-origin event stream; polling becomes a fallback. (1a0c56dc, 380fdf43)
+- Images attach as "Image N" chips with thumbnails, multi-select, paste, retry and remove. (513c2d34, ec2b7fda)
+- Sent messages show at once as pending bubbles that reconcile with the transcript. (513c2d34)
+- One New chat sheet creates a tab or workspace, starts Claude Code, Codex or a shell and queues a first message. (ac88ada9, 4bb8ca75)
+- Project hub: sidebar with projects and chats by recency, coordinator chat with a task panel, Chat | Tasks on mobile. (575840bc)
+- In-app confirm dialog replaces browser confirm and alert on projects. (575840bc)
+- New chat picks a folder by browsing home and starts Claude Code or Codex with a chosen permission mode. (1e5f316a, e2da197d, fa0fbe58)
+- Model and effort chip inside the composer row. (5314982d)
+
+### Changed
+- Send verification re-reads the input box within tens of milliseconds instead of a fixed 350 ms. (f735539c)
+- One theme token set; quieter Home workspaces list; plain queue and delivery copy. (0064b6b5, 61f96119, 1a46e7e2)
+- Keys, Type, Quick, Commands and Display move from the composer into a grouped ⋯ menu. (5314982d)
+- Chat-style transcript: right-aligned user bubbles, plain agent text, quiet times. (00b239ef)
+- Slimmer mobile header, tabs and segmented controls. (5314982d, e2da197d)
+- The folder picker loads on demand, outside the main bundle. (93d3f579)
+
+### Fixed
+- Starting an agent on a brand-new pane no longer fails on a stale snapshot. (612a4074)
+- Destructive buttons are readable in dark mode. (d029b599)
+- Bypass and Full access are never preselected in New chat. (c1830c8f)
+
 ## [0.48.5] - 2026-10-05
 
 ### Fixed

@@ -7,10 +7,10 @@ import { server } from "@/test/setup";
 import { useState } from "react";
 import { SessionSubagents as Switcher, type SubagentSelection } from "./session-subagents";
 import { SubagentConversation } from "./subagent-conversation";
-function SessionSubagents({ paneId, agent }: { paneId: string; agent: string }) {
+function SessionSubagents({ paneId }: { paneId: string; agent: string }) {
   const [selection, setSelection] = useState<SubagentSelection | null>(null);
   return <><Switcher paneId={paneId} selected={selection} onSelect={setSelection} />
-    {selection && <SubagentConversation key={selection.agent.id} paneId={paneId} agent={agent} selection={selection} onMain={() => setSelection(null)} />}</>;
+    {selection && <SubagentConversation key={selection.agent.id} paneId={paneId} selection={selection} onMain={() => setSelection(null)} />}</>;
 }
 
 beforeAll(() => { HTMLElement.prototype.scrollTo = vi.fn(); });
@@ -121,7 +121,7 @@ it("discards a child's cached transcript when access is revoked", async () => {
   server.use(
     http.get("/api/pane/parent/subagent-history", () => denied ? new HttpResponse(null, { status: 403 }) : HttpResponse.json({ sessionKey: "parent-key", agent: child, entries: [{ uuid: "reply", ts: "", role: "assistant", parts: [{ kind: "text", text: "Private child" }] }], truncated: false })),
   );
-  render(<SubagentConversation paneId="parent" agent="claude" selection={{ parentKey: "parent-key", agent: { ...child, status: "running" } }} onMain={() => {}} />);
+  render(<SubagentConversation paneId="parent" selection={{ parentKey: "parent-key", agent: { ...child, status: "running" } }} onMain={() => {}} />);
   await screen.findByText("Private child");
   denied = true;
   act(() => window.dispatchEvent(new Event("online")));
