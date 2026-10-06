@@ -7,7 +7,7 @@ import { SessionSubagents } from "@/components/session-subagents";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, Loader2, MessageSquareText, ScrollText, TerminalSquare } from "lucide-react";
+import { ArrowUpToLine, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
@@ -21,7 +21,8 @@ import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { BottomSheet } from "@/components/ui/sheet";
-import { ConversationActions } from "@/components/conversation-actions";
+import { ConversationActions, type ConversationAction, type ConversationActionGroup } from "@/components/conversation-actions";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
@@ -33,7 +34,7 @@ import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { FindBar } from "@/components/find-bar";
-import { Composer, type ComposerHandle } from "@/components/composer";
+import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
 import { LiveConversation } from "@/components/live-conversation";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
@@ -49,11 +50,10 @@ import { waitForModelAction } from "@/lib/wait-for-model-action";
 import { commandsFor } from "@/lib/agent-commands";
 import { useOperatorCommands } from "@/lib/operator-config";
 import { ThreadSidebar } from "@/components/agent-sidebar";
-import { AgentIcon } from "@/components/agent-icon";
 import { TabStrip } from "@/components/tab-strip";
 import { PaneStrip } from "@/components/pane-strip";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { submitPreviewKeys, submitPreviewNote, submitPreviewOption } from "@/lib/preview-action";
@@ -66,7 +66,7 @@ import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
-import { isReadOnly } from "@/lib/types";
+import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
 import type {
   MenuModel,
@@ -135,7 +135,7 @@ export function AgentChat({
   tabs,
   tabLabel,
   project,
-  title,
+  title: titleOverride,
   subheader,
   overlay,
   text,
@@ -177,6 +177,12 @@ export function AgentChat({
   const closeDrawer = () => setDrawer(null);
   const listRef = useRef<ChatMessageListHandle>(null);
   const composerRef = useRef<ComposerHandle>(null);
+  // The header keeps one ⋯ on a phone; a desktop also shows Subagents and the terminal switch.
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
   const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
@@ -726,7 +732,6 @@ export function AgentChat({
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
   const telemetryProps = {
-    agent: agent?.agent,
     telemetry,
     stale: conversation.error || connecting,
     modelAvailable,
@@ -738,6 +743,28 @@ export function AgentChat({
     onChooseModel: panels.toggleModel,
     onCompact: () => { void composerRef.current?.compactContext(); },
   };
+
+  const harnessWithSubagents = agent?.agent === "codex" || agent?.agent === "claude";
+  const toggleRawTerminal = () => { setSubagent(null); setRawTerminal(!prefs.rawTerminal); };
+  // The ⋯ menu: the composer's controls in their groups, plus the pane's own views. Phone-only rows
+  // stand in for the icon buttons a desktop header has room for.
+  const viewActions: ConversationAction[] = [
+    ...(display ? [{ id: "find", label: "Find in output", icon: Search, run: openFind }] : []),
+    ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
+      run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
+    ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
+    ...(!desktop && harnessWithSubagents ? [{ id: "subagents", label: "Subagents", icon: Users, disabled: connecting || gone, run: () => setSubagentsOpen(true) }] : []),
+    ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal mirror", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
+  ];
+  const menuGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts", "View"] as const).map((group) => ({
+    label: group,
+    actions: [...(group === "View" ? viewActions : []), ...composerControls.filter((control) => control.group === group)],
+  }));
+  const title = titleOverride ??
+    project?.name ??
+    agent?.paneLabel ??
+    agent?.sessionName ??
+    (agent ? `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}` : "");
 
   return (
     <div
@@ -767,71 +794,54 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
-              {!subagent && conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} />}
-              {(agent.agent === "codex" || agent.agent === "claude") && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone} />}
-              {conversationCapable && (
+              {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />}
+              {harnessWithSubagents && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone}
+                {...(desktop ? {} : { open: subagentsOpen, onOpenChange: setSubagentsOpen, anchorRef: moreRef })} />}
+              {desktop && conversationCapable && (
                 <button
                   type="button"
-                  onClick={() => { setSubagent(null); setRawTerminal(!prefs.rawTerminal); }}
+                  onClick={toggleRawTerminal}
                   aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                   aria-pressed={prefs.rawTerminal}
                   title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                  className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground active:bg-muted"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
                 >
                   {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
                 </button>
               )}
               {!subagent && <ConversationActions
-                onFind={display ? openFind : undefined}
-                onHistory={hasConversation ? () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) : undefined}
-                onDisplay={() => composerRef.current?.openDisplayPrefs()}
-                onTools={() => composerRef.current?.openTools()}
-                files={conversationCapable ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} labeled /> : undefined}
+                ref={moreRef}
+                groups={menuGroups}
                 recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               />}
             </>
           ) : undefined
         }
       >
-        {/* Mobile keeps only the title; desktop adds the harness logo and cwd. Tapping either
-            opens the workspace overview (all its tabs + panes). */}
+        {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
+            it opens the workspace overview (all its tabs + panes). */}
         {agent ? (
           <button
             type="button"
             onClick={() => openSpace(agent.workspaceId)}
             aria-label={`Open ${project?.name ?? agent.workspaceLabel} overview`}
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left transition-colors active:bg-muted/60 lg:-mx-1 lg:gap-2.5 lg:px-1 lg:py-0.5"
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left transition-colors active:bg-muted/60 lg:-mx-1 lg:min-h-9"
           >
-            {isShell ? (
-              <div className="hidden size-6 shrink-0 items-center justify-center rounded-full border bg-muted lg:flex">
-                <TerminalSquare className="size-3 text-muted-foreground" />
-              </div>
-            ) : (
-              // Deliberately smaller than the size-8 Nenu mark beside it — the agent logo is the
-              // pane's subject, not a second brand competing with Nenu's for the header.
-              <AgentIcon agent={agent.agent} className="hidden size-6 lg:flex" />
-            )}
+            {isShell
+              ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+              : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
             <div className="min-w-0 flex-1">
-              {/* A user-set pane label leads when present (the identifier they chose), then Claude's
-                  own /rename session name, otherwise the default space › tab. The cwd subline keeps
-                  context either way. */}
-              <div className="flex min-w-0 items-center gap-2 text-sm font-semibold leading-tight sm:text-base">
-                {!isShell && <StatusBadge status={agent.status} stale={connecting} compactOnMobile className="shrink-0" />}
-                <span className="truncate">
-                {title ??
-                  project?.name ??
-                  agent.paneLabel ??
-                  agent.sessionName ??
-                  `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}`}
-                </span>
+              <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
+                {title}
+                {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
               </div>
-              <div className="hidden truncate font-mono text-xs leading-tight text-muted-foreground lg:block">
+              <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
                 {shortCwd(agent.cwd)}
               </div>
             </div>
           </button>
         ) : (
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 px-1">
             <span className="truncate font-semibold">(agent gone)</span>
           </div>
         )}
@@ -893,9 +903,9 @@ export function AgentChat({
             straight into terminal output — the chrome and the mirror read as one surface. Drawing it
             here rather than as a border-b on PaneStrip covers the case where that strip is absent
             (a tab holding a single pane), which is the common one. */}
-        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} agent={agent?.agent} onMain={() => setSubagent(null)} /> : showConversation ? (
+        {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} agent={agent?.agent} activityStatus={connecting ? undefined : agent?.status}
+            <QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
@@ -990,7 +1000,7 @@ export function AgentChat({
               {unknownInteraction && <div>
                 <p className="px-2 py-2 text-sm">The terminal is waiting. Your message will wait until it is ready.</p>
                 <div className="max-h-60 overflow-auto"><AnsiOutput text={text} agent={agent?.agent} /></div>
-                <button type="button" className="min-h-11 px-3 text-sm underline" onClick={() => { setRawTerminal(true); composerRef.current?.openTools(); }}>Open terminal controls</button>
+                <button type="button" className="min-h-11 px-3 text-sm underline" onClick={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}>Open terminal keys</button>
               </div>}
             </section>
           )}
@@ -1082,6 +1092,7 @@ export function AgentChat({
             setRawTerminal={setRawTerminal}
             setTapToFocus={setTapToFocus}
             onSent={() => { onSent(); setFollowKey((key) => key + 1); conversation.refresh(); }}
+            onControlsChange={setComposerControls}
           />
         </div>
       </div>

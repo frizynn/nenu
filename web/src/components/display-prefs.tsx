@@ -6,11 +6,11 @@ import { Switch } from "@/components/ui/switch";
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { FONT_MAX, FONT_MIN } from "@/hooks/use-display-prefs";
 
-// The mirror's display prefs, as LABELLED rows behind the composer's ⚙ toggle.
+// The mirror's display prefs, as LABELLED rows behind the header menu's "Display" row.
 //
-// These used to be a permanent icon-only "View" row above the Controls row — five 28px glyphs that
+// These used to be a permanent icon-only "View" row above the composer — five 28px glyphs that
 // cost a whole row of a phone viewport for settings you touch once and then never again. Behind the
-// gear each persistent mirror preference gets a real name and explanation. The workbench/terminal
+// menu each persistent mirror preference gets a real name and explanation. The workbench/terminal
 // escape hatch lives in the header, where it is reachable without opening another panel.
 //
 // It rides the same in-flow ComposerDock as Keys/Quick rather than a covering sheet, deliberately:

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ComponentProps } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -11,7 +11,20 @@ import { loadDraft, saveDraft } from "@/lib/drafts";
 import { listLocalSends, localSendScope } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
-import { Composer } from "./composer";
+import { Composer, type ComposerControl } from "./composer";
+import { ActionGroups } from "./conversation-actions";
+
+// The composer's secondary controls are reached from the pane header's ⋯ menu. These tests render
+// the same menu rows beside the composer, without the popover, so every control is one tap away.
+function ComposerWithMenu(props: ComponentProps<typeof Composer>) {
+  const [controls, setControls] = useState<ComposerControl[]>([]);
+  return <>
+    <div data-testid="controls"><ActionGroups groups={[{ label: "Controls", actions: controls }]} onRun={(run) => run()} /></div>
+    <Composer {...props} onControlsChange={setControls} />
+  </>;
+}
+/** A menu row by name — the Keys tray has its own "Keys" tab, so scope to the menu. */
+const control = (name: string | RegExp) => within(screen.getByTestId("controls")).getByRole("button", { name });
 
 // A guarded send is TWO reply calls: type (submit:false), then — once the text is verified on the
 // input line — submit-only (empty text). Overriding the reply handler therefore has to keep the fake
@@ -54,7 +67,7 @@ function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}
     onSent: vi.fn(),
     ...overrides,
   };
-  const router = createMemoryRouter([{ path: "/", element: <Composer {...props} /> }]);
+  const router = createMemoryRouter([{ path: "/", element: <ComposerWithMenu {...props} /> }]);
   render(<RouterProvider router={router} />);
   return props;
 }
@@ -107,7 +120,7 @@ function renderComposerWithStatus(overrides: Partial<ComponentProps<typeof Compo
       element: (
         <>
           <StatusSentinel />
-          <Composer {...props} />
+          <ComposerWithMenu {...props} />
         </>
       ),
     },
@@ -675,7 +688,7 @@ describe("Composer — send", () => {
         element: (
           <>
             <StatusSentinel />
-            <Composer {...props} />
+            <ComposerWithMenu {...props} />
           </>
         ),
       },
@@ -693,9 +706,9 @@ describe("Composer — send", () => {
 });
 
 describe("Composer — typing into the terminal", () => {
-  /** The entry point: the named "Type" toggle in the Controls row, beside Keys. */
+  /** The entry point: the named "Type into terminal" row in the ⋯ menu, beside Keys. */
   function startDirectTyping() {
-    fireEvent.click(screen.getByRole("button", { name: /^type into terminal$/i }));
+    fireEvent.click(control(/^type into terminal$/i));
     return screen.getByPlaceholderText(/type into the terminal/i);
   }
 
@@ -707,19 +720,19 @@ describe("Composer — typing into the terminal", () => {
 
   // The entry point must be a deliberate press and nothing else: it sits in a row of dock toggles,
   // so it must not send, and it must not leave a half-open dock covering the keyboard it needs.
-  it("arms from the Controls row without sending, and closes an open dock", async () => {
+  it("arms from the menu without sending, and closes an open dock", async () => {
     let replyCalls = 0;
     server.use(replyHandler(() => replyCalls++));
     renderComposer();
-    fireEvent.click(screen.getByRole("button", { name: /^keys$/i }));
+    fireEvent.click(control(/^keys$/i));
     expect(screen.getByRole("button", { name: /close keys/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^type into terminal$/i }));
+    fireEvent.click(control(/^type into terminal$/i));
 
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /close keys/i })).toBeNull();
     expect(replyCalls).toBe(0);
-    expect(screen.getByRole("button", { name: /^type into terminal$/i })).toHaveAttribute(
+    expect(control(/^type into terminal$/i)).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -748,7 +761,7 @@ describe("Composer — typing into the terminal", () => {
           <button type="button" onClick={() => setGone(true)}>
             lock it
           </button>
-          <Composer
+          <ComposerWithMenu
             paneId="w1:p1"
             agent="claude"
             isShell={false}
@@ -771,7 +784,7 @@ describe("Composer — typing into the terminal", () => {
     const router = createMemoryRouter([{ path: "/", element: <Harness /> }]);
     render(<RouterProvider router={router} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^type into terminal$/i }));
+    fireEvent.click(control(/^type into terminal$/i));
     expect(screen.getByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "lock it" }));
@@ -858,7 +871,7 @@ describe("Composer — typing into the terminal", () => {
       fireEvent(document, new Event("visibilitychange")); // schedules the blur
       Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
       fireEvent(document, new Event("visibilitychange"));
-      fireEvent.click(screen.getByRole("button", { name: /^type into terminal$/i })); // re-arm
+      fireEvent.click(control(/^type into terminal$/i)); // re-arm
       act(() => vi.runOnlyPendingTimers());
     } finally {
       vi.useRealTimers();
@@ -880,7 +893,7 @@ describe("Composer — typing into the terminal", () => {
           <button type="button" onClick={() => setPaneId("w1:p2")}>
             Switch pane
           </button>
-          <Composer
+          <ComposerWithMenu
             paneId={paneId}
             agent="claude"
             isShell={false}
@@ -927,7 +940,7 @@ describe("Composer — typing into the terminal", () => {
     renderComposerWithStatus({ dialogPresent: true });
 
     const box = startDirectTyping();
-    expect(screen.getByRole("button", { name: /^type into terminal$/i })).toHaveAttribute(
+    expect(control(/^type into terminal$/i)).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -1056,7 +1069,7 @@ describe("Composer — typing into the terminal", () => {
     await user.type(box, "keep this draft");
 
     // The refusal belongs on the named choice, where there is somewhere to explain it.
-    fireEvent.click(screen.getByRole("button", { name: /^type into terminal$/i }));
+    fireEvent.click(control(/^type into terminal$/i));
 
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("keep this draft");
     expect(screen.queryByPlaceholderText(/type into the terminal/i)).not.toBeInTheDocument();
@@ -1071,7 +1084,7 @@ describe("Composer — typing into the terminal", () => {
           <button type="button" onClick={() => setPaneId("w1:p2")}>
             Switch pane
           </button>
-          <Composer
+          <ComposerWithMenu
             paneId={paneId}
             agent="claude"
             isShell={false}
@@ -1817,13 +1830,13 @@ describe("Composer — keys dock (in-flow, not an overlay)", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    const keys = screen.getByRole("button", { name: "Keys" });
-    expect(keys).toHaveAttribute("aria-expanded", "false");
+    const keys = control("Keys");
+    expect(keys).toHaveAttribute("aria-pressed", "false");
     // Closed by default — the tray isn't mounted.
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
 
     await user.click(keys);
-    expect(keys).toHaveAttribute("aria-expanded", "true");
+    expect(keys).toHaveAttribute("aria-pressed", "true");
 
     // The NavTray is now mounted (its Esc key is a good witness)…
     const esc = screen.getByRole("button", { name: "Esc" });
@@ -1835,7 +1848,7 @@ describe("Composer — keys dock (in-flow, not an overlay)", () => {
 
     // Tapping Keys again closes the dock (single-valued drawer toggle).
     await user.click(keys);
-    expect(keys).toHaveAttribute("aria-expanded", "false");
+    expect(keys).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
   });
 
@@ -1843,7 +1856,7 @@ describe("Composer — keys dock (in-flow, not an overlay)", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close Keys" }));
@@ -1862,7 +1875,7 @@ describe("Composer — keys dock (in-flow, not an overlay)", () => {
     );
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     await user.click(screen.getByRole("button", { name: "Esc" }));
 
     await waitFor(() => expect(sentKeys).toEqual(["Escape"]));
@@ -1874,13 +1887,13 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    const quick = screen.getByRole("button", { name: "Quick" });
-    expect(quick).toHaveAttribute("aria-expanded", "false");
+    const quick = control("Quick replies");
+    expect(quick).toHaveAttribute("aria-pressed", "false");
     // Closed by default — none of the quick replies are mounted.
     expect(screen.queryByRole("button", { name: "yes" })).not.toBeInTheDocument();
 
     await user.click(quick);
-    expect(quick).toHaveAttribute("aria-expanded", "true");
+    expect(quick).toHaveAttribute("aria-pressed", "true");
 
     // The reply grid is now mounted ("yes" is a good witness)…
     const yes = screen.getByRole("button", { name: "yes" });
@@ -1892,7 +1905,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
 
     // Tapping Quick again closes the dock (single-valued drawer toggle).
     await user.click(quick);
-    expect(quick).toHaveAttribute("aria-expanded", "false");
+    expect(quick).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "yes" })).not.toBeInTheDocument();
   });
 
@@ -1900,10 +1913,10 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
     // Keys unmounts, Quick mounts — only one dock at the single placement site.
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "yes" })).toBeInTheDocument();
@@ -1913,7 +1926,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
     expect(screen.getByRole("button", { name: "yes" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close Quick" }));
@@ -1926,7 +1939,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     server.use(replyHandler((typed) => (replyText = typed)));
     const props = renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
     await user.click(screen.getByRole("button", { name: "continue" }));
 
     await waitFor(() => expect(replyText).toBe("continue"));
@@ -1957,7 +1970,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     );
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
     await user.click(screen.getByRole("button", { name: "continue" }));
 
     // The tapped reply is busy; an untapped sibling is locked out so a second send can't race it.
@@ -1981,7 +1994,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     );
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
     await user.click(screen.getByRole("button", { name: "continue" }));
 
     // No ✓, no close — the reply never landed, so the dock stays put for a retry.
@@ -1998,7 +2011,7 @@ describe("Composer — display prefs behind the gear", () => {
     // Nothing display-related is on the permanent rows any more.
     expect(screen.queryByRole("button", { name: "Decrease font size" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.click(control("Display"));
 
     // Named controls, not bare glyphs — the whole point of the move.
     expect(screen.getByRole("switch", { name: "Wrap lines" })).toBeInTheDocument();
@@ -2011,10 +2024,10 @@ describe("Composer — display prefs behind the gear", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    await user.click(control("Display"));
     expect(screen.getByRole("switch", { name: "Wrap lines" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     expect(screen.queryByRole("switch", { name: "Wrap lines" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
   });
@@ -2024,8 +2037,8 @@ describe("Composer — display prefs behind the gear", () => {
     renderComposer({ readOnly: true });
 
     // Keys/Quick are write affordances and lock; the gear is local view state and must not.
-    expect(screen.getByRole("button", { name: "Keys" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Display settings" }));
+    expect(control("Keys")).toBeDisabled();
+    await user.click(control("Display"));
     expect(screen.getByRole("switch", { name: "Wrap lines" })).toBeInTheDocument();
   });
 });
@@ -2033,7 +2046,7 @@ describe("Composer — display prefs behind the gear", () => {
 describe("Composer — a composed key queue is guarded on the way out", () => {
   /** Open Keys and stage one chord, so the queue is genuinely dirty. */
   async function stageAKey(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     await user.click(screen.getByRole("button", { name: "Ctrl" }));
     await user.click(screen.getByRole("button", { name: "Tab" }));
     expect(screen.getByRole("button", { name: "Remove Ctrl Tab" })).toBeInTheDocument();
@@ -2055,17 +2068,13 @@ describe("Composer — a composed key queue is guarded on the way out", () => {
 
   // The ✕ is not the only exit — the Keys toggle and the other drawer buttons unmount the tray just
   // as effectively, which is why the guard lives on the drawer transition rather than the button.
-  // The Controls row's "Keys" toggle and the tray's own "Keys" segmented tab share an accessible
-  // name; only the toggle carries aria-expanded, which is what ties it to the dock.
-  const controlsToggle = (name: string) =>
-    screen
-      .getAllByRole("button", { name })
-      .find((b) => b.hasAttribute("aria-expanded")) as HTMLElement;
+  // The menu's "Keys" row and the tray's own "Keys" segmented tab share an accessible name.
+  const controlsToggle = (name: string) => control(name);
 
   it.each([
     ["the Keys toggle", () => controlsToggle("Keys")],
-    ["the Quick toggle", () => controlsToggle("Quick")],
-    ["the Display gear", () => screen.getByRole("button", { name: "Display settings" })],
+    ["the Quick toggle", () => controlsToggle("Quick replies")],
+    ["the Display gear", () => control("Display")],
   ])("%s also needs a second tap while keys are staged", async (_label, getButton) => {
     const user = userEvent.setup();
     renderComposerWithStatus();
@@ -2084,7 +2093,7 @@ describe("Composer — a composed key queue is guarded on the way out", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     await user.click(screen.getByRole("button", { name: "Ctrl" })); // armed, but nothing staged
     await user.click(screen.getByRole("button", { name: "Close Keys" }));
 
@@ -2095,7 +2104,7 @@ describe("Composer — a composed key queue is guarded on the way out", () => {
     const user = userEvent.setup();
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await user.click(control("Keys"));
     await user.click(screen.getByRole("button", { name: "Close Keys" }));
 
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
@@ -2111,7 +2120,7 @@ describe("Composer — a composed key queue is guarded on the way out", () => {
     await user.click(screen.getByRole("button", { name: "Close Keys" })); // arm
     await user.click(screen.getByRole("button", { name: "Close Keys" })); // discard
 
-    await user.click(screen.getByRole("button", { name: "Keys" })); // reopen, empty
+    await user.click(control("Keys")); // reopen, empty
     await user.click(screen.getByRole("button", { name: "Close Keys" }));
     expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
   });
@@ -2121,7 +2130,7 @@ describe("Composer — quick replies follow the pane kind", () => {
   it("an agent pane gets the agent set", async () => {
     const user = userEvent.setup();
     renderComposer({ agent: "claude", isShell: false });
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
 
     expect(screen.getByRole("button", { name: "continue" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "commit and push" })).toBeInTheDocument();
@@ -2130,7 +2139,7 @@ describe("Composer — quick replies follow the pane kind", () => {
   it("a shell pane gets y/n, not the agent phrases", async () => {
     const user = userEvent.setup();
     renderComposer({ agent: "shell", isShell: true });
-    await user.click(screen.getByRole("button", { name: "Quick" }));
+    await user.click(control("Quick replies"));
 
     expect(screen.getByRole("button", { name: "y" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "n" })).toBeInTheDocument();
@@ -2240,7 +2249,7 @@ describe("Composer — draft persistence", () => {
 
 
 describe("conversation composer", () => {
-  it("only exposes attach and send, and saves Send while a dialog owns the keyboard", async () => {
+  it("keeps one row of attach, model and send, and saves Send while a dialog owns the keyboard", async () => {
     const adds: string[] = [];
     server.use(
       http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({available:true,scope:"scope",messages:[]})),
@@ -2250,7 +2259,10 @@ describe("conversation composer", () => {
       }),
     );
     renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
-    expect(screen.queryByRole("button",{name:"Choose model"})).not.toBeInTheDocument();
+    // The model chip shares the input row; usage stays behind the ⋯ menu.
+    const row = screen.getByRole("button",{name:"Send"}).parentElement!;
+    expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();
+    expect(within(row).getByRole("button",{name:"Attach image"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"More message actions"})).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Add to queue"})).not.toBeInTheDocument();

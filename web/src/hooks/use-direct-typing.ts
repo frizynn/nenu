@@ -56,8 +56,8 @@ interface DirectTypingOptions {
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
 // Herdr writes.
 //
-// It does NOT own the entry point. Arming is an explicit NAMED choice — the "Type" toggle in the
-// composer's Controls row, beside Keys.
+// It does NOT own the entry point. Arming is an explicit NAMED choice — the "Type into terminal" row
+// of the pane header's ⋯ menu, beside Keys (published by the composer as a ComposerControl).
 //
 // WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
 // bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per

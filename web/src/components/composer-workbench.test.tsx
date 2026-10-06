@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendGuardedReply } from "@/lib/reply-action";
 import { loadDraft } from "@/lib/drafts";
 import { clearStatus } from "@/lib/status";
-import { Composer, type ComposerHandle } from "./composer";
+import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
 
 // This seam isolates workbench commands from the separately tested type/verify/submit protocol.
 // Assertions below require commands to use that guard, preserve drafts and remain explicit.
@@ -20,17 +20,21 @@ beforeEach(() => {
 function setup(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
   const ref = createRef<ComposerHandle>();
   const onSent = vi.fn();
+  let controls: ComposerControl[] = [];
+  const onControlsChange = (next: ComposerControl[]) => { controls = next; };
   const props: ComponentProps<typeof Composer> = {
     paneId: "w1:p1", session: "work", agent: "codex", isShell: false,
     gone: false, readOnly: false, disconnected: false, nativeWorkbench: true, dialogPresent: false,
     text: "pane output", terminalDraft: null, rawTerminalDraft: null,
     prefs: { wrap: true, fontSize: 11, rawTerminal: false, tapToFocus: true },
     setWrap: vi.fn(), stepFontSize: vi.fn(), setRawTerminal: vi.fn(), setTapToFocus: vi.fn(),
-    onSent, ...overrides,
+    onSent, onControlsChange, ...overrides,
   };
   const router = createMemoryRouter([{ path: "/", element: <Composer {...props} ref={ref} /> }]);
   render(<RouterProvider router={router} />);
-  return { ref, onSent, user: userEvent.setup() };
+  /** The ⋯ menu's view of the composer: its published controls, run as a menu tap would. */
+  const run = (id: ComposerControl["id"]) => act(() => controls.find((control) => control.id === id)!.run());
+  return { ref, onSent, user: userEvent.setup(), controls: () => controls, run };
 }
 
 it("opens the native model picker through the guard without consuming a draft or jumping history", async () => {
@@ -83,16 +87,15 @@ it("keeps composing available while disconnected or a dialog is open", async () 
   expect(sendGuardedReply).not.toHaveBeenCalled();
 });
 
-it("opens secondary tools from the header handle while keeping the composer simple", async () => {
-  const { ref, user } = setup({ nativeWorkbench: true, modelControl: <button>Choose model</button> });
+it("publishes its secondary controls to the header menu, grouped, instead of rendering them", async () => {
+  const { controls, user } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
   const input = screen.getByRole("textbox");
   await user.type(input, "draft survives navigation");
-  expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Send" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Display settings" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Quick replies" })).not.toBeInTheDocument();
-  await act(async () => ref.current!.openTools());
-  expect(screen.getByRole("button", { name: "Quick replies" })).toBeVisible();
+  expect(controls().map(({ group, label }) => `${group}: ${label}`)).toEqual([
+    "Terminal: Keys", "Terminal: Type into terminal", "Shortcuts: Quick replies", "Shortcuts: Commands",
+    "View: Display", "View: Context and usage",
+  ]);
+  for (const name of ["Keys", "Quick replies", "Display", "Session metrics"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   expect(input).toHaveValue("draft survives navigation");
 });
 
@@ -146,25 +149,22 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ force: false }));
 });
 
-it("keeps native composing free of the old labelled controls row", () => {
-  setup();
+it("keeps the input to one row: attach, draft, model chip, send", () => {
+  setup({ modelControl: <button>Choose model</button> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
-  expect(screen.queryByText("Quick")).not.toBeInTheDocument();
-  expect(screen.queryByText("Agent")).not.toBeInTheDocument();
-  const actions = screen.getByRole("toolbar", { name: "Message actions" });
   expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
-  expect(actions).toContainElement(screen.getByRole("button", { name: "Attach image" }));
-  // Attach sits at the start of the input surface, Send at the end.
-  expect(screen.getByRole("textbox").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-  expect(screen.getByRole("textbox").compareDocumentPosition(screen.getByRole("button", { name: "Send" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const input = screen.getByRole("textbox");
+  const order = ["Attach image", "Choose model", "Send"].map((name) => screen.getByRole("button", { name }));
+  expect(input.compareDocumentPosition(order[0]!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(input.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-it("opens compact quick actions without changing or sending the draft", async () => {
-  const { ref, user } = setup();
+it("opens quick replies from the menu without changing or sending the draft", async () => {
+  const { run, user } = setup();
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
-  await act(async () => ref.current!.openTools());
-  await user.click(screen.getByRole("button", { name: "Quick replies" }));
+  run("quick");
   expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
   expect(sendGuardedReply).not.toHaveBeenCalled();
@@ -185,14 +185,21 @@ it("keeps the configured confirmation when a disruptive slash command is typed i
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "/new", force: false }));
 });
 
-it("keeps session usage available in tools without cluttering the composer", async () => {
-  const { ref } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
+it("keeps session usage one menu tap away without cluttering the composer", async () => {
+  const { run } = setup({ nativeWorkbench: true, usageControls: <button>Session metrics</button> });
   expect(screen.queryByRole("button", { name: "Session metrics" })).not.toBeInTheDocument();
-  await act(async () => ref.current!.openTools());
+  run("usage");
   expect(screen.getAllByRole("button", { name: "Session metrics" })).toHaveLength(1);
 });
 
  it("shows Stop in the ordinary workbench while Codex works", () => {
   setup({ working: true });
   expect(screen.getByRole("button", { name: "Stop generation" })).toBeVisible();
+});
+
+it("moves Stop to the menu while a draft holds the send slot", async () => {
+  const { controls, user } = setup({ working: true });
+  expect(controls().some((control) => control.id === "stop")).toBe(false);
+  await user.type(screen.getByRole("textbox"), "next step");
+  expect(controls().find((control) => control.id === "stop")).toMatchObject({ group: "Terminal", label: "Stop generation" });
 });

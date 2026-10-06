@@ -58,8 +58,12 @@ export function TabStrip({
   return (
     <>
       {/* shrink-0 for the same reason as SpaceStrip — see the note there. */}
-      <div data-workbench-navigation-band="tabs" className="flex min-h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border/40 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-2 [&::-webkit-scrollbar]:hidden">
-        <span className="hidden sm:inline"><SectionLabel>Tabs</SectionLabel></span>
+      <div data-workbench-navigation-band="tabs" className={allowAll
+        ? "flex min-h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border/40 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-2 [&::-webkit-scrollbar]:hidden"
+        // 36px to the eye: the extra 8px of bottom padding overlaps the conversation (negative margin,
+        // transparent, raised) only to give each tab a 44px touch target.
+        : "relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"}>
+        {allowAll && <span className="hidden sm:inline"><SectionLabel>Tabs</SectionLabel></span>}
         {allowAll && <Chip label="All" active={selected === null} onClick={() => onSelect(null)} />}
         {wsTabs.map((t) => (
           <Chip
@@ -82,9 +86,11 @@ export function TabStrip({
           type="button"
           onClick={() => onNewTab(workspaceId)}
           aria-label="New tab"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent active:scale-95"
+          className={allowAll
+            ? "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent active:scale-95"
+            : "relative flex h-9 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors after:absolute after:inset-x-0 after:top-0 after:-bottom-2 after:content-[''] hover:text-foreground"}
         >
-          <Plus className="size-4" />
+          <Plus className="size-3.5" />
         </button>
       </div>
 
