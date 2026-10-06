@@ -23,6 +23,7 @@ import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/cha
 import { BottomSheet } from "@/components/ui/sheet";
 import { ConversationActions, type ConversationAction, type ConversationActionGroup } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useKeyboardOpen } from "@/hooks/use-keyboard";
 import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
@@ -90,8 +91,8 @@ interface AgentChatProps {
   project?: { slug: string; name: string };
   /** Header title override; a project frame names the thread this pane runs. */
   title?: string;
-  /** A band under the header (a project's Chat | Tasks switch). */
-  subheader?: ReactNode;
+  /** A control at the head of the header's right cluster (a project's Tasks toggle). */
+  headerAction?: ReactNode;
   /** Replaces the conversation body while set; the chat stays mounted underneath. */
   overlay?: ReactNode;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
@@ -136,7 +137,7 @@ export function AgentChat({
   tabLabel,
   project,
   title: titleOverride,
-  subheader,
+  headerAction,
   overlay,
   text,
   nativeTelemetry,
@@ -179,6 +180,8 @@ export function AgentChat({
   const composerRef = useRef<ComposerHandle>(null);
   // The header keeps one ⋯ on a phone; a desktop also shows Subagents and the terminal switch.
   const desktop = useMediaQuery("(min-width: 1024px)");
+  // While a phone keyboard is up, the tab and pane strips step aside so the chat keeps the height.
+  const keyboardOpen = useKeyboardOpen();
   const moreRef = useRef<HTMLButtonElement>(null);
   const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -769,6 +772,7 @@ export function AgentChat({
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
+      data-keyboard-open={keyboardOpen || undefined}
     >
       {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
           identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
@@ -794,6 +798,7 @@ export function AgentChat({
         rightLead={
           agent ? (
             <>
+              {headerAction}
               {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />}
               {harnessWithSubagents && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone}
                 {...(desktop ? {} : { open: subagentsOpen, onOpenChange: setSubagentsOpen, anchorRef: moreRef })} />}
@@ -815,7 +820,7 @@ export function AgentChat({
                 recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               />}
             </>
-          ) : undefined
+          ) : headerAction
         }
       >
         {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
@@ -846,7 +851,6 @@ export function AgentChat({
           </div>
         )}
       </AppHeader>
-      {subheader}
       {overlay}
 
       {/* Content region below the header — the mirror inside is the scroller. */}
