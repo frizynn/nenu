@@ -7,7 +7,8 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { clearStatus, useStatus } from "@/lib/status";
 import { isReloadHeld, __resetReloadGuard } from "@/lib/reload-guard";
-import { loadDraft } from "@/lib/drafts";
+import { loadDraft, saveDraft } from "@/lib/drafts";
+import { listLocalSends, localSendScope } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import { Composer } from "./composer";
@@ -1735,8 +1736,8 @@ describe("Composer — reload-guard hold (no-SW self-update safety gate)", () =>
   });
 
   it("holds while an image upload is in flight, releases once it settles", async () => {
-    // Failing upload keeps the input empty (a successful one appends the returned path, which then
-    // legitimately holds as real unsent text) — so the release is observable in isolation.
+    // A failing upload leaves only an error chip (a successful one is a real unsent attachment and
+    // legitimately holds) — so the release is observable in isolation.
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     server.use(
@@ -1783,7 +1784,7 @@ describe("Composer — quick keys / image attach", () => {
 });
 
 describe("Composer — clipboard image paste", () => {
-  it("uploads a pasted image the same way the picker does and appends its path", async () => {
+  it("attaches a pasted image as a chip, never as a path in the text", async () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: "/tmp/shot.png" })),
     );
@@ -1794,7 +1795,9 @@ describe("Composer — clipboard image paste", () => {
 
     fireEvent.paste(box, { clipboardData: { items: [item] } });
 
-    await waitFor(() => expect(box).toHaveValue("/tmp/shot.png"));
+    expect(await screen.findByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    expect(box).toHaveValue("");
   });
 
   it("leaves a plain-text paste alone — no upload, nothing written by the paste handler", () => {
@@ -2279,4 +2282,90 @@ it.each([true, false])("resumes live following only when the queued message is s
     expect(input).toHaveValue("Continue this investigation");
     expect(props.onSent).not.toHaveBeenCalled();
   }
+});
+
+describe("Composer — images and the pending bubble", () => {
+  const UPLOAD = "/home/you/.local/state/collie/uploads/w1-p1-mabc123-1234abcd.png";
+  // An earlier case can leave the queue's unsaved-message retry in sessionStorage for this pane.
+  beforeEach(() => sessionStorage.clear());
+
+  function serveQueue(add: (text: string) => Response | Promise<Response>) {
+    const adds: string[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: UPLOAD })),
+      http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ available: true, scope: "scope", messages: [] })),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        const body = (await request.json()) as { text: string };
+        adds.push(body.text);
+        return add(body.text);
+      }),
+    );
+    return adds;
+  }
+
+  async function attachAndType(text: string) {
+    const box = screen.getByRole("textbox");
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
+    });
+    await screen.findByRole("button", { name: "Remove Image 1" });
+    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    await userEvent.type(box, text);
+    return box;
+  }
+
+  it("sends the path with the text, clears the composer at once and shows a pending bubble", async () => {
+    let accept!: () => void;
+    const adds = serveQueue((text) => new Promise((resolve) => {
+      accept = () => resolve(HttpResponse.json({ available: true, scope: "scope", messages: [{ id: "q1", text, state: "queued", createdAt: 0, revision: 1 }] }));
+    }));
+    renderComposer({ nativeWorkbench: true });
+    const box = await attachAndType("see the edge");
+    // The path never appears in the textarea; it is only on the wire.
+    expect(box).toHaveValue("see the edge");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(adds).toEqual([`see the edge ${UPLOAD}`]));
+    expect(box).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Remove Image 1" })).not.toBeInTheDocument();
+    const scope = localSendScope("w1:p1", undefined);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ text: `see the edge ${UPLOAD}`, state: "sending" })]);
+
+    await act(async () => accept());
+    await waitFor(() => expect(listLocalSends(scope)).toEqual([expect.objectContaining({ state: "queued", queueState: "queued" })]));
+    // The queued message lives on its bubble, so the queue strip does not list it a second time.
+    expect(screen.queryByRole("region", { name: "Queued messages" })).not.toBeInTheDocument();
+    expect(loadDraft(undefined, "w1:p1")).toBeNull();
+  });
+
+  it("puts the text and the image back when the queue refuses the message", async () => {
+    serveQueue(() => HttpResponse.json({ error: "down" }, { status: 503 }));
+    renderComposer({ nativeWorkbench: true });
+    const box = await attachAndType("keep me");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(box).toHaveValue("keep me"));
+    expect(screen.getByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+    // Back in the box, so no "Not sent" bubble doubles it.
+    expect(listLocalSends(localSendScope("w1:p1", undefined))).toEqual([]);
+    expect(loadDraft(undefined, "w1:p1")).toBe(`keep me ${UPLOAD}`);
+  });
+
+  it("restores a saved draft's upload as a chip, not as text", () => {
+    saveDraft(undefined, "w1:p1", `half a thought ${UPLOAD}`);
+    renderComposer({ nativeWorkbench: true });
+    expect(screen.getByRole("textbox")).toHaveValue("half a thought");
+    expect(screen.getByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+  });
+
+  it("will not send while an image is still uploading", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => new Promise<Response>(() => {})));
+    renderComposer({ nativeWorkbench: true });
+    await userEvent.type(screen.getByRole("textbox"), "wait for it");
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
+    });
+    expect(await screen.findByText("Uploading…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
 });

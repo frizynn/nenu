@@ -117,7 +117,7 @@ it("does not arm a normal draft override when a toolbar command is rejected", as
   expect(sendGuardedReply).toHaveBeenLastCalledWith(expect.objectContaining({ text: "A normal draft", force: false }));
 });
 
-it("waits for verified model dismissal before sending, preserving edits made during the wait", async () => {
+it("waits for verified model dismissal before sending, keeping what was typed during the wait", async () => {
   let finish!: (ready: boolean) => void;
   const prepareSend = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
   const { user } = setup({ dialogPresent: true, prepareSend });
@@ -129,7 +129,8 @@ it("waits for verified model dismissal before sending, preserving edits made dur
   await user.type(input, " and keep these new words");
   await act(async () => finish(true));
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "Send this message", force: false }));
-  expect(input).toHaveValue("Send this message and keep these new words");
+  // The sent message left the box when Send was tapped; only the newer words remain.
+  expect(input).toHaveValue(" and keep these new words");
 });
 
 it("does not send or arm force when the model cannot be dismissed", async () => {
@@ -153,7 +154,9 @@ it("keeps native composing free of the old labelled controls row", () => {
   const actions = screen.getByRole("toolbar", { name: "Message actions" });
   expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   expect(actions).toContainElement(screen.getByRole("button", { name: "Attach image" }));
-  expect(screen.getByRole("textbox").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Attach sits at the start of the input surface, Send at the end.
+  expect(screen.getByRole("textbox").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(screen.getByRole("textbox").compareDocumentPosition(screen.getByRole("button", { name: "Send" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it("opens compact quick actions without changing or sending the draft", async () => {
