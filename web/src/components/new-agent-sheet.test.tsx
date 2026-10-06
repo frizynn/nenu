@@ -56,7 +56,7 @@ describe("NewAgentSheet", () => {
     await user.click(screen.getByRole("radio", { name: "Codex" }));
     await user.click(screen.getByRole("radio", { name: "Full access" }));
     await user.click(directory());
-    expect(screen.getByRole("button", { name: "/srv/web" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "/srv/web" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "/old/project" }));
     await user.type(screen.getByLabelText("Name (optional)"), "web");
     await user.type(screen.getByLabelText("First message (optional)"), "hello");
@@ -95,7 +95,7 @@ describe("NewAgentSheet", () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(directory());
-    const path = screen.getByLabelText("Folder path");
+    const path = await screen.findByLabelText("Folder path");
     await user.clear(path);
     await user.type(path, "~/code/w");
     await waitFor(() => expect(screen.queryByRole("button", { name: "api" })).toBeNull());
@@ -110,7 +110,7 @@ describe("NewAgentSheet", () => {
     const user = userEvent.setup();
     renderSheet();
     await user.click(directory());
-    const path = screen.getByLabelText("Folder path");
+    const path = await screen.findByLabelText("Folder path");
     await user.clear(path);
     await user.type(path, "/srv/data/");
     await screen.findByText(/Can't list this folder/);

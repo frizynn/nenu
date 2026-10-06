@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { ChevronRight, Folder, TriangleAlert } from "lucide-react";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
-import { DirPicker } from "@/components/dir-picker";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -26,6 +25,9 @@ import {
   type SpawnTarget,
 } from "@/lib/spawn";
 import { isReadOnly, type AgentView } from "@/lib/types";
+
+// Only someone choosing a folder needs the picker; it stays out of the bundle every page loads.
+const DirPicker = lazy(() => import("@/components/dir-picker").then((m) => ({ default: m.DirPicker })));
 
 export interface NewAgentValues {
   agent: SpawnAgent;
@@ -140,16 +142,18 @@ export function NewAgentSheet({ open, onClose, title, defaultCwd, liveDirs, read
       className={cn("sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-2xl sm:border sm:pb-4", browsing && "flex h-dvh flex-col sm:h-[min(40rem,85dvh)] [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col")}
     >
       {browsing ? (
-        <DirPicker
-          home={home}
-          shortcuts={suggestDirs([cwd], liveDirs, recent)}
-          onHome={setHome}
-          onBack={() => setBrowsing(false)}
-          onPick={(path) => {
-            setCwd(path);
-            setBrowsing(false);
-          }}
-        />
+        <Suspense fallback={<p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>}>
+          <DirPicker
+            home={home}
+            shortcuts={suggestDirs([cwd], liveDirs, recent)}
+            onHome={setHome}
+            onBack={() => setBrowsing(false)}
+            onPick={(path) => {
+              setCwd(path);
+              setBrowsing(false);
+            }}
+          />
+        </Suspense>
       ) : (
         <form
           className="flex flex-col gap-3"
