@@ -1,6 +1,5 @@
 import {
-  POLL_ATTEMPTS,
-  POLL_DELAY_MS,
+  VERIFY_DELAYS_MS,
   defaultSleep,
   type Sleep,
 } from "../web/src/lib/harness/poll.ts";
@@ -82,8 +81,8 @@ export async function deliverQueuedMessage(
     },
   });
   if (result.status === "sent") {
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      if (attempt > 0) await sleep(POLL_DELAY_MS);
+    for (const delay of VERIFY_DELAYS_MS) {
+      if (delay > 0) await sleep(delay);
       try {
         if (!(await sameConversation())) break;
         const lines = splitLines(parseAnsi((await read()).text));
