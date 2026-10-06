@@ -78,7 +78,10 @@
   --accent: light-dark(#f4f4f5, rgb(255 255 255 / 6%));
   --accent-foreground: var(--foreground);
   --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
-  --destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.985 0 0));
+  /* Text ON a destructive fill. Dark mode keeps the bright red that text-destructive needs on the
+     near-black page (6.7:1), so the label on that fill goes dark: white on it measured 2.96:1, dark
+     text 6.7:1. Light: white on the deeper red clears 4.5:1. */
+  --destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.145 0 0));
   --border: light-dark(#e4e4e7, rgb(255 255 255 / 8%));
   --input: light-dark(#d4d4d8, rgb(255 255 255 / 12%));
   /* Focus follows the saturated primary so the ring is findable on an app whose buttons type into
