@@ -41,7 +41,7 @@ The browser never touches the socket directly; the bridge is the only thing that
         │  127.0.0.1:PORT   (bridge binds loopback ONLY)
         ▼
    Nenu (this project)
-     • static web app + small JSON API (browser polls /api/snapshot)
+     • static web app + small JSON API (browser re-reads on /api/events, polls as fallback)
      • herdr-client adapter (the ONLY code that knows socket method names)
      • snapshot poll, event-poked (see §5)
         │  newline-delimited JSON over Unix socket
@@ -163,19 +163,23 @@ app. Closing this needs the server-side blocking-message capture described above
   and renders a window that grows upward, which is what lets find-in-history and jump-to-user-turn
   work across turns you haven't scrolled to. Rationale and the measured numbers are commented at the
   top of `web/src/routes/history.tsx`.
-- **The browser polls too.** `useRevalidator` → `/api/snapshot` on an adaptive interval. There is no
-  WebSocket fan-out to the browser and no push of state; pulling is what makes the two recovery loops
-  below trivial.
+- **The browser pulls state; it is only told what changed.** `useRevalidator` → `/api/snapshot`, plus
+  the pane, queue and transcript reads. A same-origin SSE stream (`/api/events`,
+  `bridge/live-events.ts`) names a changed herd, pane, queue or transcript, and the page re-reads it
+  through the same routes; polling relaxes to a fallback while the stream is open and keeps its old
+  cadence while it is not. No state travels on the stream, which is what keeps the two recovery loops
+  below trivial ([ADR 0054](./.adr/0054-the-browser-hears-what-changed-not-the-state.md)).
 - **Two independent recovery loops, designed in from the start** (not retrofitted):
   - *bridge ↔ Herdr*: the snapshot poll doubles as resync — a failed tick marks the herd
     disconnected (the UI's connection bar shows "Herdr offline") and keeps retrying; the
     `events.subscribe` stream reconnects with backoff and re-subscribes, and since it only pokes the
     poll, a dropped stream costs latency, never correctness.
   - *browser ↔ bridge*: polling makes reconnect trivial — failed polls surface in the connection bar
-    / offline banner, and the next successful poll heals the UI. No socket lifecycle to manage.
-- **Polling moots per-client backpressure.** A push design would need `bufferedAmount` watching so a
-  slow phone couldn't OOM the bridge. Each client instead fetches a bounded snapshot at its own pace,
-  so there is nothing to buffer or coalesce.
+    / offline banner, and the next successful poll heals the UI. The live-events stream reconnects
+    with backoff and asks every reader to refresh once; while it is down the polls carry everything.
+- **Pulling moots per-client backpressure.** Each client fetches a bounded snapshot at its own pace.
+  The live-events stream carries only tiny coalesced invalidations, and a client that stops reading is
+  closed after a bounded backlog rather than buffered.
 - **Render `pane.read` safely** (see §6): strip ANSI **server-side** to plain text and render it as
   React text nodes; never `innerHTML` raw terminal output.
 - **PWA cache-busting.** Service workers serve stale clients after an update, so the build stamp
