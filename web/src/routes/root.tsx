@@ -9,6 +9,7 @@ import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useSelfUpdate } from "@/lib/self-update";
 import { ConnectionBanner } from "@/components/connection-banner";
 import { DogGallop } from "@/components/dog-gallop";
+import { NewAgentHost } from "@/components/new-agent-sheet";
 import { StatusArea } from "@/components/status-area";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import { FilePreviewProvider } from "@/components/file-preview-provider";
@@ -75,6 +76,7 @@ export function RootLayout() {
         lastSeenAt={shownLastSeenAt(data, pane)}
       />
       <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session}><Outlet /></FilePreviewProvider></WorkbenchShell>
+      <NewAgentHost />
       <StatusArea />
     </div>
   );
