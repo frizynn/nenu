@@ -28,7 +28,11 @@ export class MessageQueue {
   private serial = Promise.resolve();
   private ready: Promise<void>;
   private running = false;
-  constructor(private path: string) {
+  /** `changed` hears every committed change to a row, after it is on disk. */
+  constructor(
+    private path: string,
+    private changed: (row: Pick<QueuedMessage, "session" | "paneId" | "state">) => void = () => {},
+  ) {
     this.ready = this.restore();
     void this.ready.catch(() => {});
   }
@@ -91,7 +95,7 @@ export class MessageQueue {
       .map((row) => ({ ...row }));
   }
   async add(row: Omit<QueuedMessage, "createdAt" | "state" | "revision">) {
-    return this.mutate(() => {
+    await this.mutate(() => {
       const old = this.rows.find((item) => item.id === row.id);
       if (old) {
         if (old.scope !== row.scope || old.text !== row.text)
@@ -123,6 +127,7 @@ export class MessageQueue {
         revision: 0,
       });
     });
+    this.changed({ ...row, state: "queued" });
   }
   async change(
     scope: string,
@@ -131,7 +136,7 @@ export class MessageQueue {
     action: "remove" | "edit" | "send",
     text?: string,
   ) {
-    return this.mutate(() => {
+    const row = await this.mutate(() => {
       const row = this.rows.find(
         (item) => item.scope === scope && item.id === id,
       );
@@ -155,7 +160,9 @@ export class MessageQueue {
         row.sendNow = action === "send";
         row.revision++;
       }
+      return { ...row };
     });
+    this.changed(row);
   }
   async tick(
     resolve: (
@@ -201,6 +208,7 @@ export class MessageQueue {
           return { ...row };
         });
         if (!claimed) continue;
+        this.changed(claimed);
         let outcome: QueueOutcome;
         try {
           outcome = await deliver(claimed);
@@ -211,7 +219,7 @@ export class MessageQueue {
               "Delivery could not be confirmed. Check Terminal before retrying.",
           };
         }
-        await this.mutate(() => {
+        const settled = await this.mutate(() => {
           const row = this.rows.find((item) => item.id === claimed.id)!;
           row.state =
             outcome.status === "sent"
@@ -222,7 +230,9 @@ export class MessageQueue {
           if (outcome.status === "sent") row.sentAt = Date.now();
           row.error = outcome.error;
           row.revision++;
+          return { ...row };
         });
+        this.changed(settled);
       }
     } finally {
       this.running = false;

@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -203,6 +204,22 @@ test("recent delivery receipts survive more than one hundred newer messages", as
     await queue.add({ ...row, id: "new" });
     await queue.add({ ...row, id: "sent-0" });
     expect((await queue.list("scope")).map((item) => item.id)).toEqual(["new"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+test("announces each committed state, after it is on disk", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-"));
+  try {
+    const path = join(dir, "queue.json");
+    const seen: string[] = [];
+    const queue = new MessageQueue(path, (changed) => {
+      const stored = JSON.parse(readFileSync(path, "utf8")) as { state: string }[];
+      seen.push(`${changed.session}/${changed.paneId}:${changed.state}=${stored[0]?.state}`);
+    });
+    await queue.add(row);
+    await queue.tick(async () => "ready", async () => ({ status: "sent" as const }));
+    expect(seen).toEqual(["main/w1:p1:queued=queued", "main/w1:p1:sending=sending", "main/w1:p1:sent=sent"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
