@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+
+import { groupChats, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
+import type { AgentView, ProjectView } from "./types";
+
+const DAY = 86_400_000;
+// Noon local time, so "today" has room on both sides regardless of the runner's timezone.
+const now = new Date(2026, 9, 6, 12, 0, 0).getTime();
+
+function pane(paneId: string, extra: Partial<AgentView> = {}): AgentView {
+  return { paneId, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false, ...extra };
+}
+
+const project: ProjectView = {
+  slug: "hub", name: "Hub", status: "active",
+  coordinator: { paneId: "c", agent: "claude", liveStatus: "working" },
+  threads: [
+    { id: "T1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "a", liveStatus: "working" },
+    { id: "T2", title: "Review", parentId: "root", role: "worker", status: "open", paneId: "b", liveStatus: "blocked" },
+    { id: "T3", title: "Queued", parentId: "root", role: "worker", status: "starting" },
+    { id: "T0", title: "Old", parentId: "root", role: "worker", status: "resolved", paneId: "z", liveStatus: "working" },
+  ],
+};
+
+describe("recency", () => {
+  it("splits at local midnight and at seven days, and treats unknown times as older", () => {
+    const midnight = new Date(2026, 9, 6).getTime();
+    expect(recencyOf(midnight, now)).toBe("today");
+    expect(recencyOf(midnight - 1, now)).toBe("week");
+    expect(recencyOf(now - 7 * DAY + 1, now)).toBe("week");
+    expect(recencyOf(now - 7 * DAY, now)).toBe("older");
+    expect(recencyOf(0, now)).toBe("older");
+  });
+
+  it("groups newest first, by the later of activity and last visit, skipping empty groups", () => {
+    const groups = groupChats([
+      pane("old", { lastActiveAt: now - 30 * DAY }),
+      pane("seen", { lastActiveAt: now - 20 * DAY, lastSeenAt: now - 60_000 }),
+      pane("active", { lastActiveAt: now - 1000 }),
+      pane("unknown"),
+    ], now);
+    expect(groups.map((group) => [group.label, group.chats.map((chat) => chat.paneId)])).toEqual([
+      ["Today", ["active", "seen"]],
+      ["Older", ["old", "unknown"]],
+    ]);
+  });
+});
+
+describe("project summary", () => {
+  it("counts the live coordinator and open threads, never resolved ones", () => {
+    expect(projectSummary(project)).toBe("2 working · 1 blocked");
+  });
+
+  it("falls back to paused, then to the open task count", () => {
+    const quiet = { ...project, coordinator: undefined, threads: project.threads.filter((thread) => !thread.liveStatus) };
+    expect(projectSummary(quiet)).toBe("1 open task");
+    expect(projectSummary({ ...quiet, status: "paused" })).toBe("Paused");
+    expect(projectSummary({ ...quiet, threads: [] })).toBe("No open tasks");
+  });
+});
+
+describe("pane ownership", () => {
+  it("finds the coordinator and thread panes, and leaves only the rest as chats", () => {
+    expect(projectForPane([project], "c")).toEqual({ project });
+    expect(projectForPane([project], "b")?.thread?.id).toBe("T2");
+    expect(projectForPane([project], "nope")).toBeUndefined();
+    expect(looseChats([pane("c"), pane("b"), pane("x")], [project]).map((chat) => chat.paneId)).toEqual(["x"]);
+  });
+});

@@ -233,7 +233,7 @@ export function SpaceOverview({
                               aria-label={`Open tab ${tab.label}, pane ${paneLabel(onlyPane)}`}
                               className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg px-3 text-left transition-colors hover:bg-muted active:scale-[0.99]"
                             >
-                              {onlyPane.kind === "shell" ? <Terminal className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : <span className="workbench-status-dot" data-status={onlyPane.status} aria-hidden />}
+                              {onlyPane.kind === "shell" ? <Terminal className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : <StatusDot status={onlyPane.status} surface="bg-transparent" className="mx-[3px] size-1.5" />}
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-sm font-medium">{tab.label}</span>
                                 <span className="block truncate text-xs text-muted-foreground">{paneLabel(onlyPane)}</span>
@@ -256,7 +256,7 @@ export function SpaceOverview({
                                 title={`${paneLabel(pane)} · ${pane.agent} · ${STATUS_LABEL[pane.status]}`}
                                 className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-[0.99]"
                               >
-                                {pane.kind === "shell" ? <Terminal className="size-3.5 shrink-0" aria-hidden /> : <span className="workbench-status-dot" data-status={pane.status} aria-hidden />}
+                                {pane.kind === "shell" ? <Terminal className="size-3.5 shrink-0" aria-hidden /> : <StatusDot status={pane.status} surface="bg-transparent" className="mx-[3px] size-1.5" />}
                                 <span className="min-w-0 flex-1 truncate">{paneLabel(pane)}</span>
                                 <span className="sr-only">{STATUS_LABEL[pane.status]}</span>
                               </button>

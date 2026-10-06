@@ -2,8 +2,10 @@ import { useEffect, useRef } from "react";
 import { useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData } from "react-router";
 
 import { AgentChat } from "@/components/agent-chat";
+import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
-import { homePath, panePath, projectPath } from "@/lib/nav";
+import { homePath, panePath } from "@/lib/nav";
+import { projectForPane } from "@/lib/projects";
 import { setStatus } from "@/lib/status";
 import type { AgentView } from "@/lib/types";
 
@@ -44,9 +46,8 @@ export function DetailRoute() {
     root.shellPanes.find((p) => p.paneId === paneId) ??
     (fresh && fresh.paneId === paneId && !seen ? fresh : undefined);
   const tabLabel = root.tabs.find((t) => t.tabId === agent?.tabId)?.label;
-  const project = root.projects?.find((candidate) =>
-    candidate.coordinator?.paneId === paneId || candidate.threads.some((thread) => thread.paneId === paneId)
-  );
+  const owner = projectForPane(root.projects, paneId);
+  const project = owner?.project;
   const gone = !agent;
 
   // Recover from a closed pane: once a healthy snapshot no longer has it, bounce Home instead of
@@ -59,9 +60,10 @@ export function DetailRoute() {
     }
   }, [gone, root.bridge, root.error, navigate, session]);
 
-  return (
+  const chat = (slots: Partial<ProjectChatSlots> = {}) => (
     <AgentChat
       key={paneId}
+      {...slots}
       paneId={paneId}
       session={session}
       agent={agent}
@@ -78,8 +80,11 @@ export function DetailRoute() {
       bridge={root.bridge}
       error={root.error}
       authError={root.authError || pane.authError}
-      onBack={() => navigate(project ? projectPath(project.slug, session) : homePath(session))}
+      // A project's page opens its coordinator, so leaving a project pane goes Home, not back into it.
+      onBack={() => navigate(homePath(session))}
       onSelect={(id) => navigate(panePath(id, session))}
     />
   );
+
+  return owner ? <ProjectFrame owner={owner} paneId={paneId} data={root}>{chat}</ProjectFrame> : chat();
 }

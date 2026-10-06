@@ -45,20 +45,19 @@
 :root {
   color-scheme: light dark;
 
-  --radius: 0.65rem;
-  /* Light deviates from stock shadcn in two places, both measured rather than taste:
-     --background is a step off white (stock has background == card == popover == pure white, so the
-     entire dashboard hierarchy rests on one 1.26:1 hairline), and --muted-foreground is darkened
-     for headroom (see below). oklch(0.97) rasterizes to rgb(245,245,245), which is exactly the
-     terminal mirror's inverted background — so the mirror stops showing a seam against the page. */
-  --background: light-dark(oklch(0.97 0 0), oklch(0.145 0 0));
-  --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-  --card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
-  --card-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-  --popover: light-dark(oklch(1 0 0), oklch(0.205 0 0));
-  --popover-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-  --primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
-  --primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --radius: 0.625rem;
+  --font-sans: "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* Neutral workbench palette (adapted from T3 Code at 191a4ef, see THIRD_PARTY_NOTICES.md): a
+     near-white page with white cards in light, near-black with faint white overlays in dark. The
+     terminal mirror does not follow it; it stays in dark space and inverts in light (ADR 0002). */
+  --background: light-dark(oklch(99.2% 0 0), #0a0a0a);
+  --foreground: light-dark(#27272a, #f5f5f5);
+  --card: light-dark(#fff, #111111);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(#fff, #191919);
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(oklch(0.488 0.217 264), oklch(0.588 0.217 264));
+  --primary-foreground: #fff;
   /* The "this control is ON" tint — a very light sky. Its own token pair rather than reusing
      --secondary because the two say different things: secondary is a quieter surface, this is a
      STATE, and the row needs the difference legible at a glance (an open dock, an armed mode). Kept
@@ -71,35 +70,25 @@
      7.3:1 light, 9.2:1 dark. */
   --control-on: light-dark(oklch(0.90 0.06 235), oklch(0.32 0.05 240));
   --control-on-foreground: light-dark(oklch(0.38 0.12 245), oklch(0.89 0.06 235));
-  --secondary: light-dark(oklch(0.94 0 0), oklch(0.269 0 0));
-  --secondary-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
-  /* Light --muted is a step BELOW --background so the header/composer chrome band still reads as a
-     distinct surface now that the page is no longer white. */
-  --muted: light-dark(oklch(0.94 0 0), oklch(0.269 0 0));
-  /* Light was oklch(0.556) — 4.74:1 on white, i.e. zero headroom, so every /70, /80 and opacity-60
-     derivative in the app fell under 3:1 while its dark counterpart passed. Darkened to buy that
-     headroom back; the alpha modifiers on small text were dropped as well, since no token value
-     rescues a /70. */
-  --muted-foreground: light-dark(oklch(0.48 0 0), oklch(0.708 0 0));
-  /* Light --accent must be a real step off --background, not stock shadcn's 0.97. Stock is right
-     only while background is pure white; 0.18.0 deliberately moved background to 0.97 (see above),
-     which silently made accent === background — so every "this is the current one" highlight
-     (`bg-accent` in the pane switcher and session switcher) and every `hover:bg-accent` rendered
-     as nothing at all in light mode. It sits a step BELOW --muted (0.94), not between it and
-     --background: the switcher needs three separable values — resting 0.97, hover (bg-muted/60)
-     ~0.94, active 0.92 — and 0.94 would have collided the last two. */
-  --accent: light-dark(oklch(0.92 0 0), oklch(0.269 0 0));
-  --accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --secondary: light-dark(#fafafa, rgb(255 255 255 / 4%));
+  --secondary-foreground: var(--foreground);
+  --muted: light-dark(#f4f4f5, rgb(255 255 255 / 4%));
+  /* Small text uses this at full strength: #62626c clears 5.9:1 on the light page. */
+  --muted-foreground: light-dark(#62626c, #a3a3a3);
+  --accent: light-dark(#f4f4f5, rgb(255 255 255 / 6%));
+  --accent-foreground: var(--foreground);
   --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
   --destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.985 0 0));
-  --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 12%));
-  --input: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 15%));
-  /* Light is darkened off stock shadcn (0.708 → 0.62): at 0.708 the focus ring measures 2.58:1 on
-     white, under the 3:1 WCAG 1.4.11 floor for a non-text indicator — and components draw it at
-     `ring-ring/50`, which halves that again. On an app whose buttons type into a live shell, a focus
-     ring you can't locate is a real problem. Still worth an on-device look: even at 0.62 the /50
-     variant is marginal. */
-  --ring: light-dark(oklch(0.62 0 0), oklch(0.556 0 0));
+  --border: light-dark(#e4e4e7, rgb(255 255 255 / 8%));
+  --input: light-dark(#d4d4d8, rgb(255 255 255 / 12%));
+  /* Focus follows the saturated primary so the ring is findable on an app whose buttons type into
+     a live shell. */
+  --ring: var(--primary);
+
+  /* Workbench navigation surfaces. */
+  --workbench-sidebar: light-dark(#fafafa, #000);
+  --workbench-row-hover: light-dark(#f0f0f2, #191a1d);
+  --workbench-row-selected: light-dark(#ebebee, #212226);
 
   /* Agent lifecycle status palette — the app's primary at-a-glance signal, so both halves are
      tuned against their own ground rather than one set being reused. The dark values glow on
@@ -253,6 +242,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
     overscroll-behavior-y: none;
     height: 100%;
     overflow: hidden;

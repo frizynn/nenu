@@ -1,37 +1,35 @@
-import { ArrowRight, FolderKanban } from "lucide-react";
+import { ChevronRight, FolderKanban } from "lucide-react";
 
-import type { ProjectView } from "@/lib/types";
+import { StatusDot } from "@/components/status-badge";
+import { projectSummary } from "@/lib/projects";
+import { STATUS_LABEL, type ProjectView } from "@/lib/types";
 
+/** Home's project list: coordinator status, name and a one-line activity summary per project. */
 export function ProjectOverview({ projects, onOpen }: { projects: ProjectView[]; onOpen: (slug: string) => void }) {
   if (projects.length === 0) return null;
   return (
-    <section aria-labelledby="registered-projects" className="mb-12">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h2 id="registered-projects" className="text-sm font-semibold">Herdr Projects</h2>
-        <span className="text-xs tabular-nums text-muted-foreground">{projects.length} registered</span>
-      </div>
-      <div className="divide-y rounded-xl border bg-card">
+    <section aria-labelledby="registered-projects" className="mb-10">
+      <h2 id="registered-projects" className="nav-label px-0">Projects</h2>
+      <ul className="divide-y divide-border/70 border-y border-border/70">
         {projects.map((project) => {
-          const open = project.threads.filter((thread) => thread.status !== "resolved");
-          const live = open.filter((thread) => thread.paneId).length + (project.coordinator ? 1 : 0);
+          const status = project.coordinator?.liveStatus;
           return (
-            <button key={project.slug} type="button" onClick={() => onOpen(project.slug)}
-              className="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left first:rounded-t-xl last:rounded-b-xl hover:bg-muted/50 active:bg-muted">
-              <FolderKanban className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="truncate font-medium">{project.name}</span>
-                  {project.status === "paused" && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Paused</span>}
+            <li key={project.slug}>
+              <button type="button" onClick={() => onOpen(project.slug)}
+                className="group flex min-h-14 w-full items-center gap-3 py-2.5 text-left">
+                <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{project.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{projectSummary(project)}</span>
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {live ? `${live} live · ` : ""}{open.length} open {open.length === 1 ? "thread" : "threads"}
-                </span>
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
-            </button>
+                {status && <StatusDot status={status} surface="bg-transparent" className="size-2" />}
+                {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground/70 transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </section>
   );
 }
