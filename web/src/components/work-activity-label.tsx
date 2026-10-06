@@ -22,8 +22,7 @@ export function WorkActivityLabel({ startedAt, thinking = false }: { startedAt?:
     document.addEventListener("visibilitychange", sync);
     return () => { if (timer) clearInterval(timer); document.removeEventListener("visibilitychange", sync); };
   }, [startedAt, thinking, locked]);
-  return <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-    <span aria-hidden="true" className="flex items-center gap-0.5 motion-safe:animate-pulse"><span className="size-1 rounded-full bg-current" /><span className="size-1 rounded-full bg-current" /><span className="size-1 rounded-full bg-current" /></span>
-    <span ref={text} className="tabular-nums">{label()}</span>
+  return <span className="inline-flex items-center text-xs text-muted-foreground">
+    <span ref={text} className="tabular-nums motion-safe:animate-pulse">{label()}</span>
   </span>;
 }

@@ -13,13 +13,11 @@ export function SubagentConversation({
   paneId,
   session,
   selection,
-  agent,
   onMain,
 }: {
   paneId: string;
   session?: string;
   selection: SubagentSelection;
-  agent?: string;
   onMain: () => void;
 }) {
   const locked = useLocked();
@@ -146,7 +144,7 @@ export function SubagentConversation({
           </div>
         )}
         {page ? (
-          <TranscriptView entries={page.entries} agent={agent} />
+          <TranscriptView entries={page.entries} />
         ) : (
           !failed && (
             <p role="status" className="text-sm text-muted-foreground">
