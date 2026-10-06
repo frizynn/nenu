@@ -31,6 +31,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 - Starting an agent on a brand-new pane no longer fails on a stale snapshot. (612a4074)
 - Destructive buttons are readable in dark mode. (d029b599)
+- Bypass and Full access are never preselected in New chat. (c1830c8f)
 
 ## [0.48.5] - 2026-10-05
 
