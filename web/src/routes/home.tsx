@@ -58,7 +58,6 @@ export function HomeRoute() {
           shellPanes={data.shellPanes}
           onOpen={(workspaceId) => navigate(spacePath(workspaceId, data.session))}
           onOpenPane={(paneId) => navigate(panePath(paneId, data.session))}
-          onNewSpace={() => navigation?.onNewChat?.()}
           open={spacesOpen}
           onOpenChange={setSpacesOpen}
         />

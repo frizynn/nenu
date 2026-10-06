@@ -38,7 +38,6 @@ function view(props: Partial<Parameters<typeof SpaceOverview>[0]> = {}) {
       agents={[]}
       onOpen={vi.fn()}
       onOpenPane={vi.fn()}
-      onNewSpace={vi.fn()}
       open
       onOpenChange={vi.fn()}
       {...props}
@@ -49,7 +48,7 @@ function view(props: Partial<Parameters<typeof SpaceOverview>[0]> = {}) {
 describe("SpaceOverview", () => {
   it("shows an empty state when there are no spaces", () => {
     render(view());
-    expect(screen.getByText(/no spaces yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no workspaces yet/i)).toBeInTheDocument();
   });
 
   it("renders each space with its pane count (pluralized)", () => {
@@ -66,14 +65,6 @@ describe("SpaceOverview", () => {
     await user.click(screen.getByRole("button", { name: "Open workspace anchorgenius" }));
     expect(onOpen).toHaveBeenCalledExactlyOnceWith("w1");
   });
-
-  it("creates a new space from the header button", async () => {
-    const user = userEvent.setup();
-    const onNewSpace = vi.fn();
-    render(view({ onNewSpace }));
-    await user.click(screen.getByRole("button", { name: /new space/i }));
-    expect(onNewSpace).toHaveBeenCalledOnce();
-  });
 });
 
 describe("SpaceOverview — folding", () => {
@@ -86,16 +77,9 @@ describe("SpaceOverview — folding", () => {
       "aria-expanded",
       "false",
     );
-    expect(screen.getByText("(2)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workspaces 2" })).toBeInTheDocument();
   });
 
-  it("keeps the new-space button reachable while folded", async () => {
-    const user = userEvent.setup();
-    const onNewSpace = vi.fn();
-    render(view({ workspaces: spaces, open: false, onNewSpace }));
-    await user.click(screen.getByRole("button", { name: /new space/i }));
-    expect(onNewSpace).toHaveBeenCalledOnce();
-  });
 
   it("reports the fold to its owner rather than keeping the state itself", async () => {
     const user = userEvent.setup();
@@ -188,7 +172,7 @@ describe("SpaceOverview — filtering", () => {
     const user = userEvent.setup();
     render(view({ workspaces: spaces }));
     await user.type(screen.getByLabelText(/filter spaces/i), "zzz");
-    expect(screen.getByText(/no space matches/i)).toBeInTheDocument();
+    expect(screen.getByText(/no workspace matches/i)).toBeInTheDocument();
   });
 
   it("offers no filter box for a single space — there is nothing to filter", () => {
