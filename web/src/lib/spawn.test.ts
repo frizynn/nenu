@@ -10,6 +10,9 @@ import {
   spawn,
   spawnState,
   suggestDirs,
+  PERMISSIONS,
+  loadPermission,
+  savePermission,
   withDir,
   type SpawnDeps,
   type SpawnInput,
@@ -17,7 +20,7 @@ import {
 
 const pane = { paneId: "w9:p1", workspaceId: "w9", workspaceLabel: "api", tabId: "w9:t1", cwd: "/srv/api" };
 const input = (over: Partial<SpawnInput> = {}): SpawnInput => ({
-  target: { kind: "workspace" }, agent: "claude", cwd: " /srv/api ", name: " api ", message: " fix the tests ", ...over,
+  target: { kind: "workspace" }, agent: "claude", cwd: " /srv/api ", name: " api ", message: " fix the tests ", permission: "plan", ...over,
 });
 
 function deps(over: Partial<SpawnDeps> = {}): SpawnDeps {
@@ -59,8 +62,26 @@ describe("remembered choices", () => {
     set.mockRestore();
   });
 
-  it("suggests live dirs first without repeating the typed one", () => {
-    expect(suggestDirs(["/a", "/b"], ["/b", "/c"], "/a")).toEqual(["/b", "/c"]);
+  it("suggests the current dir, then live dirs, then recents, once each and bounded", () => {
+    expect(suggestDirs(["/a"], ["/a", "/b"], ["/b", "/c", " "])).toEqual(["/a", "/b", "/c"]);
+    expect(suggestDirs([""], ["/1", "/2", "/3", "/4", "/5", "/6"])).toHaveLength(5);
+  });
+
+  it("remembers the permission per agent and drops one that is no longer offered", () => {
+    expect(loadPermission("claude")).toBe("ask");
+    savePermission("claude", "plan");
+    savePermission("codex", "full");
+    expect([loadPermission("claude"), loadPermission("codex")]).toEqual(["plan", "full"]);
+    savePermission("claude", "full"); // Codex's id, not Claude's
+    expect(loadPermission("claude")).toBe("ask");
+    localStorage.setItem("collie.spawn.permission", "[1]");
+    expect(loadPermission("codex")).toBe("ask");
+  });
+
+  it("offers only choices the bridge allowlists, flagging the dangerous ones", () => {
+    expect(PERMISSIONS.claude.map((p) => p.id)).toEqual(["ask", "acceptEdits", "plan", "bypass"]);
+    expect(PERMISSIONS.codex.map((p) => p.id)).toEqual(["ask", "auto", "full"]);
+    expect([...PERMISSIONS.claude, ...PERMISSIONS.codex].filter((p) => p.danger).map((p) => p.id)).toEqual(["bypass", "full"]);
   });
 });
 
@@ -73,9 +94,10 @@ describe("spawn", () => {
     expect(result).toEqual({ ok: true, pane });
     expect(body).toEqual({ label: "api", cwd: "/srv/api" });
     await vi.waitFor(() => expect(spawnState(pane.paneId)?.phase).toBe("done"));
-    expect(d.startAgent).toHaveBeenCalledWith("w9:p1", "claude", undefined);
+    expect(d.startAgent).toHaveBeenCalledWith("w9:p1", "claude", undefined, "plan");
     expect(d.changeMessageQueue).toHaveBeenCalledWith("w9:p1", expect.objectContaining({ action: "add", scope: "s1", text: "fix the tests" }), undefined);
     expect(loadAgent()).toBe("claude");
+    expect(loadPermission("claude")).toBe("plan");
     expect(loadDirs()).toEqual(["/srv/api"]);
   });
 

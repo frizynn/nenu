@@ -17,15 +17,15 @@ describe("native launch", () => {
     let calls = 0;
     const client = { startAgent: async () => { calls++; } };
     expect(launchAgent({ agent: "codex; touch /tmp/x" })).toBeNull();
-    await expect(startPaneAgent(pane, "codex", client)).rejects.toThrow("empty terminal");
-    await expect(startPaneAgent(undefined, "claude", client)).rejects.toThrow("empty terminal");
+    await expect(startPaneAgent(pane, { kind: "codex", permission: "ask" }, client)).rejects.toThrow("empty terminal");
+    await expect(startPaneAgent(undefined, { kind: "claude", permission: "ask" }, client)).rejects.toThrow("empty terminal");
     expect(calls).toBe(0);
   });
   test("keeps Codex hooks in the native process and gives Claude a recoverable id", async () => {
     const calls: string[][] = [];
     const client = { startAgent: async (_pane: string, _kind: string, args: string[] = []) => { calls.push(args); } };
-    await startPaneAgent({ ...pane, kind: "shell" }, "codex", client);
-    await startPaneAgent({ ...pane, kind: "shell" }, "claude", client);
+    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "codex", permission: "ask" }, client);
+    await startPaneAgent({ ...pane, kind: "shell" }, { kind: "claude", permission: "ask" }, client);
     expect(calls[0]).toEqual(["--no-daemon"]);
     expect(calls[1]?.[0]).toBe("--session-id");
     expect(calls[1]?.[1]).toMatch(/^[0-9a-f-]{36}$/);
