@@ -1,5 +1,5 @@
 import { createRef, type ComponentProps } from "react";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendGuardedReply } from "@/lib/reply-action";
@@ -149,14 +149,18 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ force: false }));
 });
 
-it("keeps the input to one row: attach, draft, model chip, send", () => {
+it("gives the draft the full width above a toolbar of attach, model chip and send", () => {
   setup({ modelControl: <button>Choose model</button> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
-  const order = ["Attach image", "Choose model", "Send"].map((name) => screen.getByRole("button", { name }));
-  expect(input.compareDocumentPosition(order[0]!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-  expect(input.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const toolbar = screen.getByRole("group", { name: "Message tools" });
+  // Regression: the draft used to share a row with these buttons and wrapped every few words.
+  expect(toolbar).not.toContainElement(input);
+  expect(within(input.parentElement!).queryAllByRole("button")).toHaveLength(0);
+  expect(input.parentElement!.nextElementSibling).toBe(toolbar);
+  const order = ["Attach image", "Choose model", "Send"].map((name) => within(toolbar).getByRole("button", { name }));
+  expect(order[0]!.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 

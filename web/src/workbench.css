@@ -124,23 +124,15 @@
 .workbench-composer textarea { background: transparent; border-color: transparent; box-shadow: none; }
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
-/* The soft keyboard can shrink the visual viewport without changing `dvh` on older iOS Safari.
-   useAppViewport mirrors that live height into --app-viewport-height, so the input stops growing
-   before it can push the toolbar/send controls below the keyboard. The textarea remains the only
-   scroller; its action row is a sibling outside this cap. */
+/* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
+   keyboard can shrink the visual viewport without changing `dvh` on older iOS Safari, so
+   useAppViewport mirrors that live height into --app-viewport-height and the cap leaves room for the
+   header, the toolbar below the draft and the safe-area padding. */
 .workbench-composer [data-slot="chat-input"] {
-  max-height: min(10rem, 26dvh, max(5.5rem, calc(var(--app-viewport-height, 100dvh) - 10rem)));
+  max-height: min(12rem, 40dvh, max(5.5rem, calc(var(--app-viewport-height, 100dvh) - 16rem)));
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-@media (max-width: 1023px), (pointer: coarse) {
-  .workbench-composer [data-slot="chat-input"] {
-    /* Keep at least four comfortable lines even in a short landscape visual viewport, while the
-       outer cap leaves room for the 44px action row and safe-area padding. */
-    max-height: min(8rem, 26dvh, max(5.5rem, calc(var(--app-viewport-height, 100dvh) - 10rem)));
-  }
+  scrollbar-width: thin;
 }
 
 @media (prefers-reduced-motion: reduce) {
