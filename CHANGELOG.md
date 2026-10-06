@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-07
+
+### Added
+- Live updates reach the browser over a same-origin event stream; polling becomes a fallback. (1a0c56dc, 380fdf43)
+- Images attach as "Image N" chips with thumbnails, multi-select, paste, retry and remove. (513c2d34, ec2b7fda)
+- Sent messages show at once as pending bubbles that reconcile with the transcript. (513c2d34)
+- One New chat sheet creates a tab or workspace, starts Claude Code, Codex or a shell and queues a first message. (ac88ada9, 4bb8ca75)
+- Project hub: sidebar with projects and chats by recency, coordinator chat with a task panel, Chat | Tasks on mobile. (575840bc)
+- In-app confirm dialog replaces browser confirm and alert on projects. (575840bc)
+
+### Changed
+- Send verification re-reads the input box within tens of milliseconds instead of a fixed 350 ms. (f735539c)
+- One theme token set; quieter Home workspaces list; plain queue and delivery copy. (0064b6b5, 61f96119, 1a46e7e2)
+
+### Fixed
+- Starting an agent on a brand-new pane no longer fails on a stale snapshot. (612a4074)
+- Destructive buttons are readable in dark mode. (d029b599)
+
 ## [0.48.5] - 2026-10-05
 
 ### Fixed
