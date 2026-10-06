@@ -62,6 +62,7 @@ import type { PreviewBlockAction } from "@/components/preview-select-block";
 import { type MenuBlockAction } from "@/components/menu-block";
 import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
+import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
@@ -327,6 +328,12 @@ export function AgentChat({
       agent?.status === "working"
     );
   const showConversation = conversationCapable && !prefs.rawTerminal;
+  // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
+  // (lib/live-events.ts). Leaving the pane restores the default.
+  useEffect(() => {
+    setMirrorShown(!showConversation || dialogPresent);
+    return () => setMirrorShown(true);
+  }, [showConversation, dialogPresent]);
 
   // Both are threaded to the composer: the RAW value (live) plus a stabilised one. extractInputDraft
   // is stateless, so it can't distinguish a stranded draft from the ~350ms flash where our OWN

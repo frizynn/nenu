@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchHistory, isApiErrorStatus } from "@/lib/api";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { isLocked, useLocked } from "@/lib/idle";
+import { concerns, onLiveEvent } from "@/lib/live-events";
 import type { PaneHistoryResponse } from "@/lib/types";
 
 interface LiveConversationOptions {
@@ -135,6 +136,11 @@ export function useLiveConversation({
       refreshRef.current(true);
     }
   }, [scope, enabled, locked, busy]);
+
+  // The bridge names a transcript change (a status flip, a delivered queue message) as it happens.
+  useEffect(() => onLiveEvent((event) => {
+    if (concerns(event, "journal", paneId)) refreshRef.current(true);
+  }), [paneId]);
 
   const refresh = useCallback(() => refreshRef.current(true), []);
   const current = state.scope === scope && enabled;

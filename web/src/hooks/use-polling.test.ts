@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 
 import { SUPERSEDE_MS, intervalFor, usePolling } from "./use-polling";
 import { isCatchingUp, resetIdleLock, setLocked } from "@/lib/idle";
+import { resetLiveEvents, setMirrorShown } from "@/lib/live-events";
+import { fakeLiveStream } from "@/test/live-stream";
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView } from "@/lib/types";
 
@@ -232,4 +234,63 @@ it("replaces a request stranded by backgrounding immediately on return", () => {
   act(() => document.dispatchEvent(new Event("visibilitychange")));
   expect(rr.revalidate).toHaveBeenCalledTimes(1);
   view.unmount(); vi.useRealTimers();
+});
+
+describe("with the live-events stream", () => {
+  const live = (mirrorShown: boolean) => ({ healthy: true, mirrorShown });
+
+  it("drops to the safety cadence when nothing on screen needs polling", () => {
+    const busy = makeData([makeAgent("w1:p1", "working")]);
+    expect(intervalFor(busy, null, live(true))).toBe(10_000);
+    expect(intervalFor(busy, "w1:p1", live(false))).toBe(COLD);
+    expect(intervalFor(busy, "w1:p1", live(true))).toBe(HOT);
+    expect(intervalFor(busy, "w1:p1", { healthy: false, mirrorShown: false })).toBe(HOT);
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    rr.state = "idle";
+    rr.revalidate.mockReset();
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetLiveEvents();
+    resetIdleLock();
+  });
+
+  it("revalidates on a herd or open-pane event, and replays one that lands mid-load", () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    const { rerender } = renderHook(() => usePolling(makeData([makeAgent("w1:p1", "idle")]), "w1:p1"));
+    stream.send({ topic: "queue", paneId: "w1:p1" });
+    stream.send({ topic: "pane", paneId: "w1:p2" });
+    expect(rr.revalidate).not.toHaveBeenCalled();
+    stream.send({ topic: "pane", paneId: "w1:p1" });
+    expect(rr.revalidate).toHaveBeenCalledTimes(1);
+
+    rr.state = "loading";
+    rerender();
+    stream.send({ topic: "snapshot" });
+    expect(rr.revalidate).toHaveBeenCalledTimes(1);
+    rr.state = "idle";
+    rerender();
+    expect(rr.revalidate).toHaveBeenCalledTimes(2);
+    stream.stop();
+  });
+
+  it("relaxes the open pane's poll only while its mirror is off screen", () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    setMirrorShown(false);
+    renderHook(() => usePolling(makeData([makeAgent("w1:p1", "working")]), "w1:p1"));
+    vi.advanceTimersByTime(HOT);
+    expect(rr.revalidate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(COLD - HOT);
+    expect(rr.revalidate).toHaveBeenCalledTimes(1);
+    act(() => setMirrorShown(true));
+    vi.advanceTimersByTime(HOT);
+    expect(rr.revalidate).toHaveBeenCalledTimes(2);
+    stream.stop();
+  });
 });
