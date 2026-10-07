@@ -68,7 +68,7 @@ describe("NewAgentSheet", () => {
     const user = userEvent.setup();
     renderSheet();
     const group = () => within(screen.getByRole("radiogroup", { name: "Permissions" }));
-    expect(group().getAllByRole("radio").map((r) => r.textContent)).toEqual(["Ask", "Accept edits", "Plan", "Bypass"]);
+    expect(group().getAllByRole("radio").map((r) => r.textContent)).toEqual(["Ask", "Auto", "Accept edits", "Plan", "Bypass"]);
     expect(screen.queryByText(/Never asks/)).toBeNull();
     await user.click(group().getByRole("radio", { name: "Bypass" }));
     expect(screen.getByText(/Never asks/)).toBeInTheDocument();

@@ -21,6 +21,7 @@ describe("permission allowlist", () => {
   });
 
   test("each listed choice maps to the flags its CLI documents", async () => {
+    expect((await argsFor({ agent: "claude", permission: "auto" })).slice(2)).toEqual(["--permission-mode", "auto"]);
     expect((await argsFor({ agent: "claude", permission: "acceptEdits" })).slice(2)).toEqual(["--permission-mode", "acceptEdits"]);
     expect((await argsFor({ agent: "claude", permission: "plan" })).slice(2)).toEqual(["--permission-mode", "plan"]);
     expect((await argsFor({ agent: "claude", permission: "bypass" })).slice(2)).toEqual(["--dangerously-skip-permissions"]);
@@ -30,7 +31,7 @@ describe("permission allowlist", () => {
 
   test("anything off the table is refused, never passed through", () => {
     for (const body of [
-      { agent: "claude", permission: "auto" }, // Codex's choice, not Claude's
+      { agent: "claude", permission: "full" }, // Codex's choice, not Claude's
       { agent: "codex", permission: "bypass" },
       { agent: "claude", permission: "--dangerously-skip-permissions" },
       { agent: "claude", permission: "toString" },
