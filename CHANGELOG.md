@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-07
+
+### Added
+- Sidebar switch between a per-project tree (coordinator, tasks, history) and the recent list. (23a26b6e)
+
+### Fixed
+- The composer gives the draft the full width above a slim toolbar; long drafts no longer clip. (b3968d7a)
+- Home's activity test no longer depends on the hour it runs. (5874892b)
+
 ## [0.50.0] - 2026-10-07
 
 ### Added
