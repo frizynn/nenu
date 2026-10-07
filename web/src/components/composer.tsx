@@ -1172,14 +1172,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {nativeWorkbench && <MessageQueueStrip messages={strayQueue} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
 
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
-        {/* One row, like a messenger: attach, the draft (it grows upward), the model chip and Send.
-            Everything else is in the header's ⋯ menu. */}
-        <div className="flex items-end gap-1">
-          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
-            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-            <Plus className="size-5 md:size-4" />
-          </Button>
-          <div className="relative min-w-0 flex-1">
+        {/* The draft takes the full width and grows upward; a slim toolbar under it holds attach,
+            the model chip and Send. Everything else is in the header's ⋯ menu. */}
+        <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
               {skills.loading ? "Loading skills…" : <span>Couldn't load skills. <button type="button" className="min-h-11 px-2 underline" onMouseDown={(e) => e.preventDefault()} onClick={skills.retry}>Retry</button></span>}
@@ -1229,15 +1224,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             autoCorrect={direct.active ? "off" : undefined}
             spellCheck={direct.active ? false : undefined}
             className={cn(
-              "workbench-chat-input block min-h-11 px-1 py-2 md:min-h-8 md:py-1.5",
+              "workbench-chat-input block min-h-10 px-2.5 pb-1 pt-2 md:min-h-9",
               direct.active &&
                 "border-primary focus-visible:border-primary focus-visible:ring-primary/30",
             )}
             disabled={gone || readOnly}
             rows={1}
           />
-          </div>
-          {modelControl && <div className="flex h-11 shrink-0 items-center md:h-8">{modelControl}</div>}
+        </div>
+        <div role="group" aria-label="Message tools" className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
+            disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
+            <Plus className="size-5 md:size-4" />
+          </Button>
+          <div className="flex-1" />
+          {modelControl && <div className="flex h-11 min-w-0 items-center md:h-8">{modelControl}</div>}
           {working && agent === "codex" && !hasDraft ? (
             <Button
               type="button"
