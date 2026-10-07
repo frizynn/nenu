@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
+import { groupChats, looseChats, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -65,5 +65,27 @@ describe("pane ownership", () => {
     expect(projectForPane([project], "b")?.thread?.id).toBe("T2");
     expect(projectForPane([project], "nope")).toBeUndefined();
     expect(looseChats([pane("c"), pane("b"), pane("x")], [project]).map((chat) => chat.paneId)).toEqual(["x"]);
+  });
+});
+
+describe("project groups", () => {
+  const titles = (query: string) => projectGroups([project], query).map((group) =>
+    [group.coordinator, group.open.map((thread) => thread.id), group.resolved.map((thread) => thread.id)]);
+
+  it("splits open tasks from history and keeps every row when the project itself matches", () => {
+    expect(titles("")).toEqual([[true, ["T1", "T2", "T3"], ["T0"]]]);
+    expect(titles("hub")).toEqual([[true, ["T1", "T2", "T3"], ["T0"]]]);
+  });
+
+  it("narrows to matching tasks, including resolved ones, and drops projects with nothing left", () => {
+    expect(titles("review")).toEqual([[false, ["T2"], []]]);
+    expect(titles("old")).toEqual([[false, [], ["T0"]]]);
+    expect(titles("nothing")).toEqual([]);
+  });
+
+  it("names a project pane after its task, or the coordinator", () => {
+    expect(paneTitle(pane("b", { paneLabel: "raw" }), projectForPane([project], "b"))).toBe("Review");
+    expect(paneTitle(pane("c"), projectForPane([project], "c"))).toBe("Coordinator");
+    expect(paneTitle(pane("x", { paneLabel: "Loose" }), undefined)).toBe("Loose");
   });
 });

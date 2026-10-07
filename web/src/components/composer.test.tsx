@@ -2249,7 +2249,7 @@ describe("Composer — draft persistence", () => {
 
 
 describe("conversation composer", () => {
-  it("keeps one row of attach, model and send, and saves Send while a dialog owns the keyboard", async () => {
+  it("keeps attach, model and send in the toolbar, and saves Send while a dialog owns the keyboard", async () => {
     const adds: string[] = [];
     server.use(
       http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({available:true,scope:"scope",messages:[]})),
@@ -2259,8 +2259,8 @@ describe("conversation composer", () => {
       }),
     );
     renderComposer({nativeWorkbench:true,dialogPresent:true,modelControl:<button>Choose model</button>,usageControls:<button>Usage</button>});
-    // The model chip shares the input row; usage stays behind the ⋯ menu.
-    const row = screen.getByRole("button",{name:"Send"}).parentElement!;
+    // The model chip sits in the toolbar under the draft; usage stays behind the ⋯ menu.
+    const row = screen.getByRole("group",{name:"Message tools"});
     expect(within(row).getByRole("button",{name:"Choose model"})).toBeInTheDocument();
     expect(within(row).getByRole("button",{name:"Attach image"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Usage"})).not.toBeInTheDocument();

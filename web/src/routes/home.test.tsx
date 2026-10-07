@@ -58,6 +58,9 @@ it("opens the shared new-agent flow from the prompt, carrying what was typed", a
 });
 
 it("leads with what needs you and keeps every live agent one tap away", async () => {
+  // Mid-hour, so both agents land in the same hourly Activity bucket whatever the wall clock says.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 7, 14, 30) });
+  onTestFinished(() => { vi.useRealTimers(); });
   const now = Date.now();
   const { user, router, main } = await setup({
     ...data,

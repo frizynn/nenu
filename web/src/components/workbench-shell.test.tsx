@@ -50,15 +50,15 @@ const projectData: HomeData = {
   }],
 };
 
-it("lists projects with their coordinator status and keeps project panes out of chats", () => {
+it("lists projects with their coordinator status and keeps project panes out of other chats", () => {
   const { sidebar } = setup(projectData, "/pane/w%3A1%3Ap9?s=work");
-  const link = sidebar.getByRole("link", { name: /Nenu Project/ });
+  const link = sidebar.getByRole("link", { name: /^Nenu Project/ });
   expect(link).toHaveAttribute("href", "/project/nenu?s=work");
-  expect(link).toHaveAccessibleName("Nenu Project, coordinator needs you");
-  // The open pane belongs to the project, so the project row is the current one.
-  expect(link).toHaveAttribute("aria-current", "page");
+  expect(link).toHaveAccessibleName("Nenu Project, coordinator needs you, 1 open task");
+  // The open pane is the project's coordinator, so its row inside the project is the current one.
+  expect(sidebar.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("aria-current", "page");
   expect(sidebar.queryByRole("link", { name: /Coordinator pane/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
+  expect(within(sidebar.getByRole("region", { name: "Other chats" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
 });
 
 it("groups chats by recency with a status for each", () => {
