@@ -54,6 +54,26 @@
 .nav-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
 .nav-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: inherit; }
 .nav-empty { padding: 12px 10px; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
+/* Group by: a 28px segmented switch at the head of the list. */
+.nav-views { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 4px 2px 2px; padding: 2px; border-radius: 9px; background: var(--workbench-row-hover); }
+.nav-views > button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 24px; border-radius: 7px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.nav-views > button > svg { flex-shrink: 0; }
+.nav-views > button[aria-checked="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 6%); }
+.nav-views > button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* A project: the chevron sits in the row's left padding, so the whole row stays one hover target. */
+.nav-project { position: relative; margin-top: 10px; }
+.nav-project > .nav-row { padding-left: 32px; }
+.nav-disclosure { position: absolute; z-index: 1; inset-block: 0; left: 4px; display: inline-flex; align-items: center; justify-content: center; width: 26px; color: var(--muted-foreground); cursor: pointer; }
+.nav-disclosure:disabled { cursor: default; }
+.nav-disclosure > svg, .nav-history > summary > svg { transition: transform 150ms ease-out; }
+.nav-disclosure[aria-expanded="true"] > svg, .nav-history[open] > summary > svg { transform: rotate(90deg); }
+.nav-row-nested { padding-left: 32px; }
+.nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 12px; }
+.nav-count { margin-left: auto; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+.nav-history > summary { gap: 6px; padding-left: 29px; color: var(--muted-foreground); font-size: 12px; list-style: none; }
+.nav-history > summary::-webkit-details-marker { display: none; }
+.nav-history > summary > .nav-count { margin-left: 0; }
+.nav-history > .nav-row-nested { padding-left: 50px; }
 /* Home: neutral cards with hairline borders; state is carried by dots and text, never by fills. */
 .home-grid { display: grid; gap: 12px; }
 @media (min-width: 1024px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
@@ -144,7 +164,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-history > summary > svg { transition: none; }
+  .task-history > summary > svg, .nav-disclosure > svg, .nav-history > summary > svg { transition: none; }
 }
 
 @media (min-width: 1024px) {
@@ -168,6 +188,12 @@
   .task-close { opacity: 1; width: 44px; height: 44px; margin: 0; }
   .workbench-icon-button { width: 44px; height: 44px; }
   .nav-row { font-size: 15px; }
+  .nav-views > button { font-size: 13px; }
+  .nav-views > button::after { content: ""; position: absolute; inset: -10px 0; }
+  .nav-disclosure { width: 36px; left: 0; }
+  .nav-project > .nav-row, .nav-row-nested { padding-left: 36px; }
+  .nav-history > summary { padding-left: 33px; font-size: 13px; }
+  .nav-history > .nav-row-nested { padding-left: 54px; }
 }
 
 @media (max-width: 1023px) {

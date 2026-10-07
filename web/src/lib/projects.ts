@@ -62,9 +62,13 @@ export interface ChatGroup {
   chats: AgentView[];
 }
 
+export function byRecency(panes: readonly AgentView[]): AgentView[] {
+  return [...panes].sort((a, b) => chatRecency(b) - chatRecency(a));
+}
+
 /** Newest first, bucketed into the non-empty recency groups in display order. */
 export function groupChats(panes: readonly AgentView[], now: number): ChatGroup[] {
-  const sorted = [...panes].sort((a, b) => chatRecency(b) - chatRecency(a));
+  const sorted = byRecency(panes);
   return (Object.keys(RECENCY_LABEL) as RecencyKey[])
     .map((key) => ({ key, label: RECENCY_LABEL[key], chats: sorted.filter((pane) => recencyOf(chatRecency(pane), now) === key) }))
     .filter((group) => group.chats.length > 0);
@@ -82,4 +86,32 @@ export function projectMatches(project: ProjectView, query: string): boolean {
 
 export function chatMatches(pane: AgentView, query: string): boolean {
   return matches(query, paneDisplayName(pane), pane.agent, pane.cwd, pane.workspaceLabel, pane.terminalTitle);
+}
+
+/** A project pane goes by its task (or "Coordinator"); any other pane by its own name. */
+export function paneTitle(pane: AgentView, owner: PaneProject | undefined): string {
+  if (!owner) return paneDisplayName(pane);
+  return owner.thread?.title ?? "Coordinator";
+}
+
+/** A project's rows in the sidebar's Projects view, narrowed to a search. */
+export interface ProjectGroup {
+  project: ProjectView;
+  coordinator: boolean;
+  open: ProjectThreadView[];
+  resolved: ProjectThreadView[];
+}
+
+/**
+ * Each project with the rows a search keeps: a match on the project itself keeps all of them,
+ * otherwise only the matching tasks. Projects with nothing left drop out.
+ */
+export function projectGroups(projects: readonly ProjectView[] | undefined, query: string): ProjectGroup[] {
+  return (projects ?? []).flatMap((project) => {
+    const whole = matches(query, project.name, project.slug, project.goal);
+    const threads = project.threads.filter((thread) => whole || matches(query, thread.id, thread.title));
+    const coordinator = project.coordinator !== undefined && (whole || matches(query, "Coordinator"));
+    if (!whole && !coordinator && threads.length === 0) return [];
+    return [{ project, coordinator, open: threads.filter(isOpenThread), resolved: threads.filter((thread) => !isOpenThread(thread)) }];
+  });
 }
