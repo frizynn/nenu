@@ -30,6 +30,7 @@ export interface PermissionChoice {
 export const PERMISSIONS: Record<Exclude<SpawnAgent, "shell">, readonly PermissionChoice[]> = {
   claude: [
     { id: "ask", label: "Ask", hint: "Your default mode. Asks before edits and commands." },
+    { id: "auto", label: "Auto", hint: "Decides what is safe on its own and asks only for risky actions." },
     { id: "acceptEdits", label: "Accept edits", hint: "Edits files without asking. Still asks before commands." },
     { id: "plan", label: "Plan", hint: "Reads and plans. Changes nothing until you approve." },
     { id: "bypass", label: "Bypass", hint: "Never asks. Can run any command and change any file.", danger: true },

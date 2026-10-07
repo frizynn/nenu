@@ -10,6 +10,7 @@ export type LaunchAgent = "codex" | "claude";
 const PERMISSION_ARGS = {
   claude: {
     ask: [],
+    auto: ["--permission-mode", "auto"],
     acceptEdits: ["--permission-mode", "acceptEdits"],
     plan: ["--permission-mode", "plan"],
     bypass: ["--dangerously-skip-permissions"],

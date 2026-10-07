@@ -81,7 +81,7 @@ describe("remembered choices", () => {
   });
 
   it("offers only choices the bridge allowlists, flagging the dangerous ones", () => {
-    expect(PERMISSIONS.claude.map((p) => p.id)).toEqual(["ask", "acceptEdits", "plan", "bypass"]);
+    expect(PERMISSIONS.claude.map((p) => p.id)).toEqual(["ask", "auto", "acceptEdits", "plan", "bypass"]);
     expect(PERMISSIONS.codex.map((p) => p.id)).toEqual(["ask", "auto", "full"]);
     expect([...PERMISSIONS.claude, ...PERMISSIONS.codex].filter((p) => p.danger).map((p) => p.id)).toEqual(["bypass", "full"]);
   });

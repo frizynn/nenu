@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-07
+
+### Added
+- New chat offers Claude Code's Auto permission mode. (e51fb084)
+
 ## [0.51.0] - 2026-10-07
 
 ### Added
