@@ -13,6 +13,9 @@ const data: HomeData = {
   agents: [{ paneId: "w:1:p2", workspaceId: "w:1", workspaceLabel: "Nenu", workspaceNumber: 1, tabId: "t1", agent: "codex", status: "working", cwd: "/dev/collie", focused: true, paneLabel: "Improve interface" }],
 };
 
+beforeEach(() => localStorage.clear());
+const chooseView = (nav: string) => localStorage.setItem("collie:sidebar:v1", JSON.stringify({ nav }));
+
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
   const router = createMemoryRouter([{ path: "/pane/:paneId", element }, { path: "*", element }], { initialEntries: [initialEntry] });
@@ -51,6 +54,7 @@ const projectData: HomeData = {
 };
 
 it("lists projects with their coordinator status and keeps project panes out of other chats", () => {
+  chooseView("projects");
   const { sidebar } = setup(projectData, "/pane/w%3A1%3Ap9?s=work");
   const link = sidebar.getByRole("link", { name: /^Nenu Project/ });
   expect(link).toHaveAttribute("href", "/project/nenu?s=work");
@@ -62,6 +66,7 @@ it("lists projects with their coordinator status and keeps project panes out of 
 });
 
 it("groups chats by recency with a status for each", () => {
+  chooseView("recent");
   const now = Date.now();
   const { sidebar } = setup({
     ...data,
@@ -77,6 +82,7 @@ it("groups chats by recency with a status for each", () => {
 });
 
 it("searches projects by thread metadata and chats by name, then closes on Escape", async () => {
+  chooseView("projects");
   const { sidebar, user } = setup(projectData);
   await user.click(sidebar.getByRole("button", { name: "Search" }));
   const search = sidebar.getByRole("searchbox", { name: "Search projects and chats" });

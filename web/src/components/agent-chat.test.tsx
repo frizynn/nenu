@@ -943,3 +943,49 @@ it("blocks sending immediately after access is refused, without waiting for the 
   renderChat({ error: true, authError: true });
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 });
+
+// Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
+// unsendable (ADR 0048 step 4), which is right, but it is not a question for the operator: Claude
+// resumes on its own. Only a screen that really waits on a key earns the interaction notice.
+describe("AgentChat — terminal waiting notice", () => {
+  const USAGE_LIMIT_TEXT = [
+    "● Listo, te aviso cuando termine.",
+    "  ⎿  You've hit your session limit · resets 1:20am (Europe/Amsterdam)",
+    "",
+    "  Usage limit reached · continuing automatically at 1:20am · esc to cancel",
+    "",
+    "✻ Sautéed for 1h 55m 17s · done 10:22 PM",
+    "",
+    "✔ Update installed · Restart to update",
+    RULE,
+    "❯ ",
+    RULE,
+    "  ⚠ Usage limit reached · limit resets 1:20am",
+    "    Continuing automatically at 1:20am · esc to cancel",
+    "  Opus 5.5 (1M context) | Context 18% used (82% left) | 5h 100% used (0% left)",
+    "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
+  ].join("\n");
+  const UNKNOWN_WAIT_TEXT = ["● Working on it", "", "  Something new needs your attention", "", "  Enter to continue"].join("\n");
+
+  it("shows a usage-limit pause as one quiet line, not a terminal waiting notice", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: USAGE_LIMIT_TEXT });
+    expect(await screen.findByText(/Usage limit reached · limit resets 1:20am/, { selector: "[data-terminal-notice] *" })).toBeVisible();
+    expect(screen.queryByText(/terminal is waiting/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /terminal keys/i })).not.toBeInTheDocument();
+  });
+
+  it("shows an unrecognised wait as one compact row that expands and dismisses", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: UNKNOWN_WAIT_TEXT });
+    const notice = await screen.findByRole("status", { name: "Terminal waiting" });
+    expect(within(notice).getByText("Enter to continue")).toBeVisible();
+    expect(within(notice).queryByText("Something new needs your attention")).not.toBeInTheDocument();
+    await user.click(within(notice).getByRole("button", { name: "Show terminal" }));
+    expect(within(notice).getByText(/Something new needs your attention/)).toBeVisible();
+    expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
+    await user.click(within(notice).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
+  });
+});

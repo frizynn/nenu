@@ -37,9 +37,14 @@ it("organizes work by project instead of duplicating a flat thread list", async 
   expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
   expect(within(document.querySelector("header")!).getByText("Home")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Open workspace Nenu" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Collapse tab Other panes" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Open workspace Nenu" }));
+  // Chats are browsed workspace → tab → pane, like the navigation; a blocked agent opens its workspace.
+  const chats = within(screen.getByRole("region", { name: "Chats" }));
+  expect(chats.getByRole("radio", { name: "Workspaces" })).toHaveAttribute("aria-checked", "true");
+  expect(within(chats.getByRole("group", { name: "Other panes" })).getAllByRole("link").map((link) => link.textContent))
+    .toEqual(["Earlier threadcodex, idle", "Review changesclaudeneeds you"]);
+  await user.type(chats.getByRole("searchbox", { name: "Filter chats" }), "review");
+  expect(chats.queryByText("Earlier thread")).not.toBeInTheDocument();
+  await user.click(chats.getByRole("link", { name: "Open workspace Nenu" }));
   expect(router.state.location.pathname).toBe("/space/w1");
   expect(router.state.location.search).toBe("?s=work");
 });
@@ -101,14 +106,16 @@ it("keeps existing threads navigable while workspace creation is read-only", asy
   const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
   expect(main.getByRole("button", { name: "New chat" })).toBeDisabled();
   expect(screen.getByRole("status")).toHaveTextContent("Read-only");
-  expect(screen.getByRole("button", { name: "Open pane Earlier thread" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Open pane Review changes" })).toBeInTheDocument();
+  const chats = within(screen.getByRole("region", { name: "Chats" }));
+  expect(chats.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
+  expect(chats.getByRole("link", { name: /^Review changes/ })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
 });
 
 it("keeps every pane available inside its project tab", async () => {
   const agents = Array.from({ length: 11 }, (_, index) => ({ ...data.agents[0]!, paneId: `pane${index}`, paneLabel: `Thread ${index}` }));
   await setup({ ...data, agents });
-  expect(screen.getAllByRole("button", { name: /^Open pane Thread / })).toHaveLength(11);
+  // Nothing needs you here, yet the only workspace still opens: there is nothing else to choose.
+  expect(within(screen.getByRole("region", { name: "Chats" })).getAllByRole("link", { name: /^Thread / })).toHaveLength(11);
 });
 
 it("lists projects with progress and jumps to chats outside projects", async () => {

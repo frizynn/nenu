@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router";
-import { ChevronRight, Clock, FolderKanban, House, Search, Settings, SquarePen } from "lucide-react";
+import { ChevronRight, Clock, FolderKanban, House, LayoutGrid, Search, Settings, SquarePen } from "lucide-react";
 
 import { ChatGroups, NavRow } from "@/components/chat-groups";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { StatusDot } from "@/components/status-badge";
+import { WorkspaceTree } from "@/components/workspace-tree";
 import { useSidebarPrefs, type SidebarView } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
@@ -13,7 +14,7 @@ import {
 } from "@/lib/projects";
 import { paneDisplayName, STATUS_LABEL, type ProjectThreadView } from "@/lib/types";
 
-/** The workbench navigation: new chat, search, then the herd either by project or by recency. */
+/** The workbench navigation: new chat, search, then the herd by workspace, project or recency. */
 export function WorkbenchSidebar({ data, onNavigate, onNewChat }: {
   data: HomeData;
   onNavigate?: () => void;
@@ -21,19 +22,6 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat }: {
 }) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
-  const { paneId, projectSlug } = useParams();
-  const { prefs, setView, setExpanded } = useSidebarPrefs();
-  const hasProjects = (data.projects ?? []).length > 0;
-  const view: SidebarView = hasProjects ? prefs.view ?? "projects" : "recent";
-  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-
-  // Arriving in a project reveals it once; collapsing it again afterwards is the operator's call.
-  const revealed = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!currentProject || revealed.current === currentProject) return;
-    revealed.current = currentProject;
-    setExpanded(currentProject, true);
-  }, [currentProject, setExpanded]);
 
   function closeSearch() {
     setQuery("");
@@ -59,10 +47,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat }: {
       </div>
 
       <div className="nav-scroll">
-        {hasProjects && <ViewToggle value={view} onChange={setView} />}
-        {view === "projects"
-          ? <ProjectsView data={data} query={query} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} />
-          : <RecentView data={data} query={query} currentProject={currentProject} onNavigate={onNavigate} />}
+        <ChatBrowser data={data} query={query} onNavigate={onNavigate} />
       </div>
 
       <div className="nav-footer">
@@ -73,24 +58,53 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat }: {
   );
 }
 
+/** The view switch and the chosen view; the sidebar, the drawer and Home share it and its stored choice. */
+export function ChatBrowser({ data, query, onNavigate }: { data: HomeData; query: string; onNavigate?: () => void }) {
+  const { paneId, projectSlug } = useParams();
+  const { prefs, setView, setExpanded, setWorkspaceOpen } = useSidebarPrefs();
+  const hasProjects = (data.projects ?? []).length > 0;
+  const chosen = prefs.view ?? "workspaces";
+  const view: SidebarView = chosen === "projects" && !hasProjects ? "workspaces" : chosen;
+  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
+
+  // Arriving in a project reveals it once; collapsing it again afterwards is the operator's call.
+  const revealed = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!currentProject || revealed.current === currentProject) return;
+    revealed.current = currentProject;
+    setExpanded(currentProject, true);
+  }, [currentProject, setExpanded]);
+
+  return <>
+    <ViewToggle value={view} options={hasProjects ? VIEWS : VIEWS.filter((option) => option.value !== "projects")} onChange={setView} />
+    {view === "workspaces" ? (
+      <WorkspaceTree source={data} query={query} session={data.session} currentPaneId={paneId}
+        expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} empty={<Empty query={query} />} />
+    ) : view === "projects"
+      ? <ProjectsView data={data} query={query} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} />
+      : <RecentView data={data} query={query} currentProject={currentProject} onNavigate={onNavigate} />}
+  </>;
+}
+
 const VIEWS: Array<{ value: SidebarView; label: string; Icon: typeof Clock }> = [
+  { value: "workspaces", label: "Workspaces", Icon: LayoutGrid },
   { value: "projects", label: "Projects", Icon: FolderKanban },
   { value: "recent", label: "Recent", Icon: Clock },
 ];
 
-/** A two-way segmented switch; arrows move the choice, as in any radio group. */
-function ViewToggle({ value, onChange }: { value: SidebarView; onChange: (view: SidebarView) => void }) {
+/** A segmented switch; arrows move the choice, as in any radio group. */
+function ViewToggle({ value, options, onChange }: { value: SidebarView; options: typeof VIEWS; onChange: (view: SidebarView) => void }) {
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
     if (!step) return;
     event.preventDefault();
-    const next = VIEWS[(VIEWS.findIndex((view) => view.value === value) + step + VIEWS.length) % VIEWS.length];
+    const next = options[(options.findIndex((view) => view.value === value) + step + options.length) % options.length];
     onChange(next.value);
     event.currentTarget.querySelector<HTMLButtonElement>(`[data-view="${next.value}"]`)?.focus();
   }
   return (
     <div className="nav-views" role="radiogroup" aria-label="Group by" onKeyDown={onKeyDown}>
-      {VIEWS.map(({ value: option, label, Icon }) => (
+      {options.map(({ value: option, label, Icon }) => (
         <button key={option} type="button" role="radio" data-view={option} aria-checked={value === option} tabIndex={value === option ? 0 : -1}
           onClick={() => onChange(option)}>
           <Icon aria-hidden size={14} />{label}

@@ -55,7 +55,7 @@
 .nav-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: inherit; }
 .nav-empty { padding: 12px 10px; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
 /* Group by: a 28px segmented switch at the head of the list. */
-.nav-views { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 4px 2px 2px; padding: 2px; border-radius: 9px; background: var(--workbench-row-hover); }
+.nav-views { position: relative; display: grid; grid-auto-columns: 1fr; grid-auto-flow: column; gap: 2px; margin: 4px 2px 2px; padding: 2px; border-radius: 9px; background: var(--workbench-row-hover); }
 .nav-views > button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 24px; border-radius: 7px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .nav-views > button > svg { flex-shrink: 0; }
 .nav-views > button[aria-checked="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 6%); }
@@ -74,6 +74,34 @@
 .nav-history > summary::-webkit-details-marker { display: none; }
 .nav-history > summary > .nav-count { margin-left: 0; }
 .nav-history > .nav-row-nested { padding-left: 50px; }
+
+/* Workspace → tab → pane. A workspace is a heading with its tally; rows carry title, session and state. */
+.nav-ws { margin-top: 6px; }
+.nav-ws + .nav-ws { border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent); padding-top: 6px; }
+.nav-ws-head { display: flex; align-items: center; gap: 2px; }
+.nav-ws-toggle { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px 6px 4px; border-radius: 8px; text-align: left; cursor: pointer; }
+.nav-ws-toggle:hover { background: var(--workbench-row-hover); }
+.nav-ws-toggle:disabled { cursor: default; background: none; }
+.nav-ws-toggle:focus-visible, .nav-ws-open:focus-visible, .nav-pane:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.nav-ws-chevron { flex-shrink: 0; color: var(--muted-foreground); transition: transform 150ms ease-out; }
+.nav-ws-toggle[aria-expanded="true"] > .nav-ws-chevron { transform: rotate(90deg); }
+.nav-ws-title { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nav-ws-name { overflow: hidden; color: var(--foreground); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.nav-ws-meta { overflow: hidden; color: var(--muted-foreground); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.nav-ws-open { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; color: var(--muted-foreground); }
+.nav-ws-open:hover { background: var(--workbench-row-hover); color: var(--foreground); }
+.nav-ws-body { padding: 0 0 4px 12px; }
+.nav-tab-label { display: flex; align-items: center; gap: 8px; padding: 8px 10px 2px 12px; color: var(--muted-foreground); font-size: 12px; }
+.nav-pane { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 40px; padding: 5px 10px; border-radius: 8px; color: var(--foreground); text-decoration: none; }
+.nav-pane:hover { background: var(--workbench-row-hover); }
+.nav-pane[aria-current="page"] { background: var(--workbench-row-selected); }
+.nav-pane-nested { padding-left: 22px; }
+.nav-pane-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; color: var(--muted-foreground); }
+.nav-pane-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.nav-pane-title, .nav-pane-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-pane-title { font-size: 13px; }
+.nav-pane-detail { color: var(--muted-foreground); font-size: 11.5px; }
+.nav-pane-status { flex-shrink: 0; font-size: 11.5px; font-weight: 500; }
 /* Home: neutral cards with hairline borders; state is carried by dots and text, never by fills. */
 .home-grid { display: grid; gap: 12px; }
 @media (min-width: 1024px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
@@ -88,6 +116,10 @@
 .home-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-radius: 8px; background: var(--muted); cursor: text; }
 .home-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
 .home-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: 13.5px; }
+.home-browser { margin-bottom: 32px; }
+.home-browser-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.home-browser-head > h2 { flex-shrink: 0; font-size: 15px; font-weight: 600; }
+.home-browser-head > .home-search { flex: 1; max-width: 320px; margin-left: auto; }
 .home-search input::-webkit-search-cancel-button { display: none; }
 .home-prompt { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 6px 6px 6px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / 4%); }
 .home-prompt:focus-within { border-color: color-mix(in srgb, var(--ring) 70%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent); }
@@ -156,7 +188,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-history > summary > svg, .nav-disclosure > svg, .nav-history > summary > svg { transition: none; }
+  .task-history > summary > svg, .nav-disclosure > svg, .nav-history > summary > svg, .nav-ws-chevron { transition: none; }
 }
 
 @media (min-width: 1024px) {
@@ -186,6 +218,14 @@
   .nav-project > .nav-row, .nav-row-nested { padding-left: 36px; }
   .nav-history > summary { padding-left: 33px; font-size: 13px; }
   .nav-history > .nav-row-nested { padding-left: 54px; }
+  .nav-ws-toggle { min-height: 52px; }
+  .nav-ws-name { font-size: 16px; }
+  .nav-ws-meta { font-size: 13px; }
+  .nav-ws-open { width: 44px; height: 44px; }
+  .nav-pane { min-height: 52px; padding-block: 6px; }
+  .nav-pane-title { font-size: 15px; }
+  .nav-pane-detail, .nav-pane-status { font-size: 13px; }
+  .nav-tab-label { font-size: 13px; }
 }
 
 @media (max-width: 1023px) {

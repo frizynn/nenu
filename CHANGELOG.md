@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-10-09
+
+### Added
+- Navigation and Home browse chats by Herdr workspace, then tab, then a split tab's panes, each with its session title and state. Projects and Recent stay in the same switch. (0dd3d9ad)
+
+### Changed
+- Home's folded workspace list at the bottom is replaced by that browser near the top. (0dd3d9ad)
+
+### Fixed
+- Claude's usage-limit pause shows as one quiet line instead of a "terminal is waiting" panel; a real unrecognised wait is a compact row you can expand or dismiss. (38b56c3e)
+
 ## [0.52.1] - 2026-10-09
 
 ### Fixed
