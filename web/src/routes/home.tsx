@@ -1,17 +1,16 @@
 import { useContext, useState } from "react";
 import { useNavigate, useRouteLoaderData } from "react-router";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Search } from "lucide-react";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
 import { ActivityCard, HerdCard } from "@/components/home-charts";
 import { LiveCard, QuickJump } from "@/components/home-panels";
 import { ProjectOverview } from "@/components/project-overview";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
-import { SpaceOverview } from "@/components/space-overview";
-import { openForCount, useDashPrefs } from "@/hooks/use-dash-prefs";
+import { ChatBrowser } from "@/components/workbench-sidebar";
 import { activityByHour, greeting, herdCounts, herdHeadline } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { panePath, projectPath, spacePath } from "@/lib/nav";
+import { projectPath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
@@ -22,8 +21,7 @@ export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigate = useNavigate();
   const navigation = useContext(WorkbenchNavigationContext);
-  const { prefs, setSpacesOpen } = useDashPrefs();
-  const spacesOpen = openForCount(prefs.spacesOpen, data.workspaces.length);
+  const [query, setQuery] = useState("");
   const now = Date.now();
   const counts = herdCounts(data.agents);
   const live = !data.error && data.bridge === "connected";
@@ -45,6 +43,19 @@ export function HomeRoute() {
           <PromptBox disabled={!navigation?.onNewChat} />
         </div>
 
+        {/* The herd as Herdr holds it, switchable to projects or recency like the navigation. */}
+        {data.workspaces.length > 0 && <section aria-labelledby="home-chats" className="home-browser">
+          <div className="home-browser-head">
+            <h2 id="home-chats">Chats</h2>
+            <label className="home-search">
+              <Search aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+              <input type="search" value={query} placeholder="Filter" aria-label="Filter chats"
+                onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }} />
+            </label>
+          </div>
+          <ChatBrowser data={data} query={query} />
+        </section>}
+
         {/* An empty herd gets the prompt, not a dashboard of zeros. */}
         {(counts.total > 0 || Boolean(data.projects?.length)) && <div className="home-grid">
           <HerdCard counts={counts} workspaces={data.workspaces.length} />
@@ -55,19 +66,6 @@ export function HomeRoute() {
             <QuickJump agents={data.agents} projects={data.projects} session={data.session} now={now} />
           </div>
         </div>}
-
-        <div className="mt-10">
-          <SpaceOverview
-            workspaces={data.workspaces}
-            tabs={data.tabs}
-            agents={data.agents}
-            shellPanes={data.shellPanes}
-            onOpen={(workspaceId) => navigate(spacePath(workspaceId, data.session))}
-            onOpenPane={(paneId) => navigate(panePath(paneId, data.session))}
-            open={spacesOpen}
-            onOpenChange={setSpacesOpen}
-          />
-        </div>
       </div>
     </main>
   </div>;

@@ -28,7 +28,6 @@ describe("openForCount", () => {
 describe("coerceDashPrefs", () => {
   it("defaults an empty object", () => {
     expect(coerceDashPrefs({})).toEqual({
-      spacesOpen: null,
       shellsOpen: null,
       recentOpen: true,
       recentDir: "newest",
@@ -38,12 +37,11 @@ describe("coerceDashPrefs", () => {
   it("keeps valid values", () => {
     expect(
       coerceDashPrefs({
-        spacesOpen: false,
         shellsOpen: true,
         recentOpen: false,
         recentDir: "oldest",
       }),
-    ).toEqual({ spacesOpen: false, shellsOpen: true, recentOpen: false, recentDir: "oldest" });
+    ).toEqual({ shellsOpen: true, recentOpen: false, recentDir: "oldest" });
   });
 
   it("rejects a bogus direction rather than trusting it", () => {
@@ -53,7 +51,7 @@ describe("coerceDashPrefs", () => {
   it("survives garbage", () => {
     expect(coerceDashPrefs(null).recentDir).toBe("newest");
     expect(coerceDashPrefs("nope").recentOpen).toBe(true);
-    expect(coerceDashPrefs({ spacesOpen: "yes" }).spacesOpen).toBeNull();
+    expect(coerceDashPrefs({ shellsOpen: "yes" }).shellsOpen).toBeNull();
   });
 });
 
@@ -63,7 +61,6 @@ describe("useDashPrefs", () => {
   it("starts at the defaults", () => {
     const { result } = renderHook(() => useDashPrefs());
     expect(result.current.prefs).toEqual({
-      spacesOpen: null,
       shellsOpen: null,
       recentOpen: true,
       recentDir: "newest",
@@ -72,14 +69,12 @@ describe("useDashPrefs", () => {
 
   it("persists each setting across a remount", () => {
     const first = renderHook(() => useDashPrefs());
-    act(() => first.result.current.setSpacesOpen(true));
     act(() => first.result.current.setShellsOpen(true));
     act(() => first.result.current.setRecentOpen(false));
     act(() => first.result.current.setRecentDir("oldest"));
 
     const second = renderHook(() => useDashPrefs());
     expect(second.result.current.prefs).toEqual({
-      spacesOpen: true,
       shellsOpen: true,
       recentOpen: false,
       recentDir: "oldest",
