@@ -398,14 +398,31 @@ describe("StateEngine — snapshot shaping", () => {
     expect(engine.current().agents.map((a) => a.paneId)).toEqual(["w1:p1", "w2:p2", "w2:p1"]);
   });
 
-  test("marks the bridge disconnected when a poll throws", async () => {
+  test("marks the bridge disconnected when polls keep throwing", async () => {
     const { herdr, engine, poll } = makeEngine();
     herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
     await poll();
     expect(engine.current().bridge).toBe("connected");
     herdr.sessionSnapshot = () => Promise.reject(new Error("socket down"));
     await poll();
+    await poll();
     expect(engine.current().bridge).toBe("disconnected");
+  });
+
+  test("one slow or failed poll keeps the last herd connected", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
+    await poll();
+    const original = herdr.sessionSnapshot.bind(herdr);
+    herdr.sessionSnapshot = () => Promise.reject(new Error("herdr session.snapshot: timed out after 5000ms"));
+    await poll();
+    expect(engine.current().bridge).toBe("connected");
+    expect(engine.current().agents.map((a) => a.paneId)).toEqual(["w1:p1"]);
+    herdr.sessionSnapshot = original;
+    await poll();
+    herdr.sessionSnapshot = () => Promise.reject(new Error("socket write failed"));
+    await poll();
+    expect(engine.current().bridge).toBe("connected"); // a success resets the count
   });
 });
 

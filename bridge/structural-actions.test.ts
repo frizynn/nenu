@@ -27,6 +27,8 @@ test("acknowledges a completed mutation even if refreshing metadata fails", asyn
   try {
     app.failReads();
     await app.action("/api/pane/w:p/rename", { label: "After" });
-    expect(app.engine.current().bridge).toBe("disconnected");
+    // The refresh failed (the label never updated), yet one failed read is not yet an outage.
+    expect(app.engine.current().agents[0]?.paneLabel).toBe("Before");
+    expect(app.engine.current().bridge).toBe("connected");
   } finally { await app.dispose(); }
 });

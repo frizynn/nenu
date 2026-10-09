@@ -69,9 +69,9 @@ export function isApiErrorStatus(error: unknown, status: number): boolean {
 // Every request gets a deadline so a black-holed connection (phone sleep/wake, a Tailscale route
 // that goes dark) can't leave a fetch pending forever — which would zombify the app: the poller
 // gates on `revalidator.state === "idle"` and never fires again, and route navigations wait on a
-// loader that never settles. On timeout the fetch aborts with a DOMException named "TimeoutError";
-// the loaders rethrow ONLY "AbortError" (a superseded revalidation), so a timeout falls into their
-// catch → stale-data-with-error, and the poller/nav can retry. Budgets by request class:
+// loader that never settles. On timeout the fetch rejects ("TimeoutError", or "AbortError" in WebKit);
+// the loaders rethrow only when their own request was aborted (a superseded revalidation), so a
+// timeout falls into their catch → stale-data-with-error, and the poller/nav can retry. Budgets by request class:
 //   - GET reads (snapshot/pane polls) are small and frequent — a short leash surfaces a dead link
 //     fast so the UI can show "reconnecting…" and retry on the next tick.
 const GET_TIMEOUT_MS = 10_000;
