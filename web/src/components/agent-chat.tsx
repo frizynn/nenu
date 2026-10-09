@@ -4,10 +4,10 @@ import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
 import { SessionSubagents } from "@/components/session-subagents";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users } from "lucide-react";
+import { ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
@@ -34,6 +34,7 @@ import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { adapterFor } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
+import { terminalWait } from "@/lib/terminal-wait";
 import { FindBar } from "@/components/find-bar";
 import { Composer, type ComposerControl, type ComposerHandle } from "@/components/composer";
 import { ConnectConversation } from "@/components/connect-conversation";
@@ -286,8 +287,14 @@ export function AgentChat({
   );
   // "Owns the keyboard" is asked of the dialog contract, not spelled as `kind !== "raw"`: the
   // slash-command `autocomplete` popup is a non-raw block painted while the input box is live.
-  const unknownInteraction = grammarsOn && /(?:enter|esc(?:ape)?)\s+(?:to\s+)?(?:confirm|cancel|continue|skip|select|go back)/i.test(modelSource.text.split("\n").slice(-25).join("\n")) &&
-    adapterFor(agent?.agent)?.composerReady?.(inputLines) === false && !liveBlocks.some(blockOwnsKeyboard);
+  // A key hint on a screen no grammar claims. Only an unexplained one blocks the composer as a dialog;
+  // a pause the agent leaves by itself (Claude's usage limit) is a quiet line, and the send guard
+  // still refuses the box underneath it either way.
+  const wait = grammarsOn && adapterFor(agent?.agent)?.composerReady?.(inputLines) === false && !liveBlocks.some(blockOwnsKeyboard)
+    ? terminalWait(modelSource.text)
+    : null;
+  const unknownInteraction = wait?.kind === "interaction";
+  const waitNotice = wait?.kind === "notice" ? wait.text : null;
   const dialogPresent = liveBlocks.some(blockOwnsKeyboard) || unknownInteraction;
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
@@ -738,7 +745,7 @@ export function AgentChat({
     telemetry,
     stale: conversation.error || connecting,
     modelAvailable,
-    disabled: readOnly || gone || connecting || dialogPresent,
+    disabled: readOnly || gone || connecting || dialogPresent || waitNotice !== null,
     panel: panels.panel,
     onPanelChange: (next: Parameters<typeof panels.changePanel>[0]) => { void panels.changePanel(next); },
     modelOpen: panels.panel === "model",
@@ -995,18 +1002,23 @@ export function AgentChat({
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
-          {!subagent && showConversation && dialogPresent && !modelPresent && (
+          {!subagent && showConversation && dialogPresent && !modelPresent && !unknownInteraction && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
               <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}
                 onPreviewAction={handlePreviewAction} onMultiSelectAction={handleMultiSelectAction}
                 onMenuAction={handleMenuAction} promptDisabled={readOnly || gone || connecting} />
-              {unknownInteraction && <div>
-                <p className="px-2 py-2 text-sm">The terminal is waiting. Your message will wait until it is ready.</p>
-                <div className="max-h-60 overflow-auto"><AnsiOutput text={text} agent={agent?.agent} /></div>
-                <button type="button" className="min-h-11 px-3 text-sm underline" onClick={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}>Open terminal keys</button>
-              </div>}
             </section>
+          )}
+          {!subagent && showConversation && wait?.kind === "interaction" && (
+            <TerminalWaitRow key={wait.hint} hint={wait.hint} text={text} agent={agent?.agent}
+              onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }} />
+          )}
+          {!subagent && showConversation && waitNotice !== null && (
+            <p data-terminal-notice className="flex min-w-0 items-center gap-2 px-4 pb-1 text-xs text-muted-foreground">
+              <Hourglass aria-hidden className="size-3.5 shrink-0" />
+              <span className="truncate">{waitNotice}</span>
+            </p>
           )}
 
           {/* Swipe-up / tap handle for the quick pane switcher — the sheet that switches AND closes
@@ -1118,6 +1130,40 @@ export function AgentChat({
           className="px-0 py-1"
         />
       </BottomSheet>
+    </div>
+  );
+}
+
+/**
+ * A screen that waits on a key no grammar could name: one row above the composer, in flow so it
+ * never covers the chat. The terminal tail and the Keys tray sit behind "Show terminal". Dismissing
+ * hides it only for this hint; the composer stays blocked, because the dialog is still there.
+ */
+function TerminalWaitRow({ hint, text, agent, onKeys }: { hint: string; text: string; agent?: string; onKeys: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const tailId = useId();
+  if (dismissed) return null;
+  return (
+    <div role="status" aria-label="Terminal waiting" className="mx-3 mb-1.5 rounded-lg border border-border/60 bg-muted/40 text-sm">
+      <div className="flex min-h-11 items-center gap-1 pl-3">
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber-500" />
+        <span className="min-w-0 flex-1 truncate px-1.5 text-muted-foreground">{hint}</span>
+        <button type="button" aria-label="Show terminal" aria-expanded={expanded} aria-controls={tailId}
+          className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground" onClick={() => setExpanded(!expanded)}>
+          <ChevronDown aria-hidden className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+        </button>
+        <button type="button" aria-label="Dismiss" className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground"
+          onClick={() => setDismissed(true)}>
+          <X aria-hidden className="size-4" />
+        </button>
+      </div>
+      {expanded && <div id={tailId} className="border-t border-border/60 pb-1">
+        <div className="max-h-40 overflow-auto"><AnsiOutput text={text} agent={agent} /></div>
+        <button type="button" className="inline-flex min-h-11 items-center gap-2 px-3 text-sm" onClick={onKeys}>
+          <Keyboard aria-hidden className="size-4" />Keys
+        </button>
+      </div>}
     </div>
   );
 }
