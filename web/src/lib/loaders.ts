@@ -41,14 +41,13 @@ import type {
   WorkspaceView,
 } from "@/lib/types";
 
-// A superseded revalidation is aborted via the loader's request.signal; that surfaces as an
-// AbortError we must RETHROW so React Router discards the stale run — swallowing it into the
-// stale-data/error-banner path would flash a spurious "reconnecting…" on every fast poll.
-function isAbortError<TThrown>(e: TThrown): boolean {
-  // `fetch` rejects an aborted request with a DOMException, which is an Error subclass in every
-  // engine Nenu runs in (and in jsdom) — so an `instanceof Error` test reaches it without having
-  // to inspect the shape of an arbitrary thrown value.
-  return e instanceof Error && e.name === "AbortError";
+// A superseded revalidation is aborted via the loader's request.signal; that rejection must be
+// RETHROWN so React Router discards the stale run — swallowing it into the stale-data/error-banner
+// path would flash a spurious "reconnecting…" on every fast poll. Supersession is read off the
+// request's own signal, never the error's name: WebKit rejects a fetch whose timeout fired with an
+// "AbortError" too, and rethrowing that replaced the open chat with the error screen on iPhones.
+function isSuperseded(request: Request | undefined): boolean {
+  return request?.signal.aborted === true;
 }
 
 // The root route's id, paired with rootLoader. Children read its data via
@@ -249,7 +248,7 @@ export async function rootLoader({ request }: { request?: Request } = {}): Promi
     rememberAuthError(session, false);
     return toHomeData(snap, session, false);
   } catch (e) {
-    if (isAbortError(e)) throw e; // superseded revalidation — let React Router drop it
+    if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));
     // Keep the last good herd on screen, flagged so the ConnectionBanner can say "reconnecting…".
     return staleHome(session);
@@ -414,7 +413,7 @@ export async function paneLoader({
       authError: false,
     };
   } catch (e) {
-    if (isAbortError(e)) throw e; // superseded revalidation — let React Router drop it
+    if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));
     // Genuine network / server failure: show stale text flagged as degraded.
     return stalePane(paneId, session, lines);
@@ -484,7 +483,7 @@ export async function historyLoader({
       fileTruncated: res.fileTruncated,
     };
   } catch (e) {
-    if (isAbortError(e)) throw e; // superseded — let React Router drop it
+    if (isSuperseded(request)) throw e; // superseded — let React Router drop it
     return { ...base, unavailable: "error" };
   }
 }

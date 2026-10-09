@@ -450,6 +450,44 @@ describe("loaders — aborted request", () => {
   });
 });
 
+// WebKit (every iPhone browser) rejects a fetch whose AbortSignal.timeout fired with an "AbortError"
+// ("Fetch is aborted"), not the "TimeoutError" other engines use. Only the request's own signal
+// tells a superseded run from a slow host, so a timeout on a live request must stay stale data
+// instead of replacing the open chat with the error screen.
+describe("loaders — WebKit-shaped request timeout", () => {
+  const liveRequest = (path: string) => new Request(`http://localhost${path}`);
+  // WebKit's DOMException is an Error subclass; jsdom's is not, so build the Error it really is.
+  const webkitTimeout = () =>
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      Object.assign(new Error("Fetch is aborted"), { name: "AbortError" }),
+    );
+
+  it("rootLoader keeps the last good herd", async () => {
+    const { rootLoader } = await import("./loaders");
+    await rootLoader({ request: liveRequest("/") });
+    webkitTimeout();
+    const data = await rootLoader({ request: liveRequest("/") });
+    expect(data.error).toBe(true);
+    expect(data.agents.length).toBeGreaterThan(0);
+  });
+
+  it("paneLoader keeps the last good text", async () => {
+    const { paneLoader } = await import("./loaders");
+    await paneLoader({ params: { paneId: "w1:p1" }, request: liveRequest("/pane/w1:p1") });
+    webkitTimeout();
+    const data = await paneLoader({ params: { paneId: "w1:p1" }, request: liveRequest("/pane/w1:p1") });
+    expect(data.error).toBe(true);
+    expect(data.text).toBe(paneTextWithDraft());
+  });
+
+  it("historyLoader reports an unavailable history", async () => {
+    const { historyLoader } = await import("./loaders");
+    webkitTimeout();
+    const data = await historyLoader({ params: { paneId: "w1:p1" }, request: liveRequest("/pane/w1:p1") });
+    expect(data.unavailable).toBe("error");
+  });
+});
+
 // historyLoader reads the agent's OWN transcript — the only conversation history a Claude pane can
 // have, since its terminal runs on the alternate screen and keeps no scrollback ring. Every
 // "unavailable" answer is an ordinary state the view explains, never an error banner.
