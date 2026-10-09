@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-10-09
+
+### Fixed
+- A slow read on iPhone no longer replaces the open chat with "Something went wrong". (e2b93097)
+- One missed Herdr reply no longer reports the herd disconnected. (a28b2b7d)
+
 ## [0.52.0] - 2026-10-07
 
 ### Added
