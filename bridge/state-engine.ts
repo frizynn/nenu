@@ -28,6 +28,9 @@ import {
 // more here than a smaller read. See HERDR_API.md → `pane.read`.
 const SESSION_NAME_READ_LINES = 40;
 
+// Consecutive failed polls before the herd is reported disconnected (see the poll's catch).
+const DISCONNECT_AFTER_FAILURES = 2;
+
 // Claude renders its input box as a horizontal rule, the ❯ prompt line, then a closing rule. After
 // `/rename <name>` the TOP rule carries the session name inside it: "────────── my-name ──". This
 // matches that named rule. `\S` also matches box-drawing chars, but a *plain* rule has no embedded
@@ -399,13 +402,21 @@ export class StateEngine {
       this.settleRefresh(poll, { ok: true });
       if (this.nameEpoch === nameEpoch) this.enrichSessionNames();
     } catch (err) {
+      const failures = ++this.failures;
+      // A loaded host misses one reply now and then; only a second failure in a row is an outage.
+      // Until then the last herd stays connected, so phones don't block the composer on a blip.
       if (this.bridge === "connected") {
-        console.warn(`[state] poll failed, marking disconnected: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        if (failures < DISCONNECT_AFTER_FAILURES) {
+          console.warn(`[state] poll failed, retrying before marking disconnected: ${message}`);
+        } else {
+          console.warn(`[state] poll failed ${failures} times, marking disconnected: ${message}`);
+          this.bridge = "disconnected";
+        }
       }
-      this.bridge = "disconnected";
       this.settleRefresh(poll, { ok: false, error: err });
       if (this.started && !this.retryTimer) {
-        const delay = Math.min(1000 * 2 ** Math.min(this.failures++, 3), 5000);
+        const delay = Math.min(1000 * 2 ** Math.min(failures - 1, 3), 5000);
         this.retryTimer = setTimeout(() => { this.retryTimer = null; if (this.started) void this.poll(); }, delay);
       }
     } finally {
