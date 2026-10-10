@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { ProjectTasks } from "./project-tasks";
+import { ProjectTasks, coordinatedThreads, prSummary, threadBucket } from "./project-tasks";
 
 const project: ProjectView = {
   slug: "hub", name: "Hub", goal: "Ship it", status: "active",
@@ -22,18 +22,44 @@ function setup(overrides: Partial<Parameters<typeof ProjectTasks>[0]> = {}) {
   return { ...props, user: userEvent.setup() };
 }
 
-it("lists the coordinator and open tasks, marks the current one and folds resolved ones into History", async () => {
+it("lists the coordinator, then threads grouped by what they need, resolved ones folded", async () => {
   const { user, onOpenPane } = setup();
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
   expect(screen.getByText("Ship it")).toBeInTheDocument();
   const build = screen.getByRole("button", { name: /^Build/ });
-  expect(build).toHaveTextContent("codex · needs you");
+  expect(build).toHaveTextContent("Asked you a question");
   expect(build.closest("li")).toHaveAttribute("aria-current", "true");
-  const history = screen.getByText("History").closest("details")!;
-  expect(history).not.toHaveAttribute("open");
-  expect(within(history).getByText("Audit")).toBeInTheDocument();
+  expect(build.closest("details")).toHaveTextContent(/^Needs you/);
+  const resolved = screen.getByText("Audit").closest("details")!;
+  expect(resolved).toHaveTextContent(/^Resolved/);
+  expect(resolved).not.toHaveAttribute("open");
+  expect(within(resolved).getByText("Audit")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /Coordinator/ }));
   expect(onOpenPane).toHaveBeenCalledWith("c");
+});
+
+it("buckets threads by their state and pull request", () => {
+  const base = { parentId: "root", role: "worker", status: "open" } as const;
+  expect(threadBucket({ ...base, id: "a", title: "a", paneId: "p", liveStatus: "blocked" })).toBe("needs");
+  expect(threadBucket({ ...base, id: "b", title: "b", status: "failed" })).toBe("needs");
+  expect(threadBucket({ ...base, id: "c", title: "c", group: "ready-for-review" })).toBe("ready");
+  expect(threadBucket({ ...base, id: "d", title: "d", pr: { state: "open", review: "approved" } })).toBe("ready");
+  expect(threadBucket({ ...base, id: "e", title: "e", paneId: "p", liveStatus: "working" })).toBe("working");
+  expect(threadBucket({ ...base, id: "f", title: "f", status: "resolved" })).toBe("resolved");
+  expect(prSummary({ number: 7, state: "open", review: "approved", checks: { passed: 6, failed: 0, pending: 0 } })).toBe("PR #7 · approved · checks passed");
+  expect(prSummary({ number: 7, state: "open", checks: { passed: 4, failed: 0, pending: 2 } })).toBe("PR #7 · checks 4/6");
+  expect(prSummary({ number: 7, state: "merged" })).toBe("PR #7 merged");
+});
+
+it("scopes a coordinator to the threads it runs", () => {
+  const tree: ProjectView = { ...project, threads: [
+    { id: "C", title: "Coord", parentId: "root", role: "coordinator", status: "open" },
+    { id: "W1", title: "W1", parentId: "C", role: "worker", status: "open" },
+    { id: "W2", title: "W2", parentId: "root", role: "worker", status: "open" },
+    { id: "O", title: "Orphan", parentId: "gone", role: "worker", status: "open" },
+  ] };
+  expect(coordinatedThreads(tree, "C").map((t) => t.id)).toEqual(["W1"]);
+  expect(coordinatedThreads(tree).map((t) => t.id)).toEqual(["C", "W2", "O"]);
 });
 
 it("closes a thread only after the in-app confirmation", async () => {

@@ -411,6 +411,11 @@ export async function paneLoader({
   return pane;
 }
 
+/** A pane's mirror outside the route, for a view docked beside the open pane (split-view.tsx). */
+export function readPane(paneId: string, session: string | undefined): Promise<PaneData> {
+  return loadPane(paneId, session, getRequestedLines(paneId, session), undefined);
+}
+
 // What paneLoader last returned per pane, bounded like the text cache.
 const lastPaneData = new Map<string, PaneData>();
 
