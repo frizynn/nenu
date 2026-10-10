@@ -96,30 +96,36 @@ describe("FakeHerdr", () => {
     expect(fake.writes().map((c) => c.method)).toEqual(["pane.send_text"]);
   });
 
-  test("closing a tab removes every pane in it and tells tab.closed subscribers", async () => {
+  test("closing a pane or a tab removes them and tells their subscribers", async () => {
     fake.addPane({ paneId: "w1:p2", workspaceId: "w1", tabId: "w1:t2", agent: null });
+    fake.addPane({ paneId: "w1:p3", workspaceId: "w1", tabId: "w1:t2", agent: null });
     const events: unknown[] = [];
     let up!: () => void;
     const ready = new Promise<void>((resolve) => (up = resolve));
     const stream = client.subscribeEvents({
-      subscriptions: [{ type: "tab.closed" }],
+      subscriptions: [{ type: "pane.closed" }, { type: "tab.closed" }],
       onUp: () => up(),
       onEvent: (_event, data) => events.push(data),
       onDown: () => {},
     });
     await ready;
+    await client.closePane("w1:p3");
+    expect((await client.sessionSnapshot()).panes.map((p) => p.pane_id)).toEqual(["w1:p1", "w1:p2"]);
     await client.closeTab("w1:t2");
     const snap = await client.sessionSnapshot();
     expect(snap.tabs.map((t) => t.tab_id)).toEqual(["w1:t1"]);
     expect(snap.panes.map((p) => p.pane_id)).toEqual(["w1:p1"]);
     await expect(client.closeTab("w1:t2")).rejects.toThrow("tab_not_found");
     await sleep(20);
-    expect(events).toMatchObject([{ type: "tab_closed", tab_id: "w1:t2", workspace_id: "w1" }]);
+    expect(events).toMatchObject([
+      { type: "pane_closed", pane_id: "w1:p3", workspace_id: "w1" },
+      { type: "tab_closed", tab_id: "w1:t2", workspace_id: "w1" },
+    ]);
     stream.close();
   });
 
   test("rejects a method it does not implement the way Herdr rejects an unknown variant", async () => {
-    await expect(client.closePane("w1:p1")).rejects.toThrow("unknown variant");
-    expect(fake.writes().map((c) => c.method)).toEqual(["pane.close"]);
+    await expect(client.createTab("w1")).rejects.toThrow("unknown variant");
+    expect(fake.writes().map((c) => c.method)).toEqual(["tab.create"]);
   });
 });

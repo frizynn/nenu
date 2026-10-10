@@ -180,8 +180,14 @@ export class FakeHerdr {
     const panes = [...this.panes.values()].filter((p) => p.tabId === tabId);
     if (panes.length === 0) throw new FakeError("tab_not_found", `tab ${tabId} not found`);
     for (const pane of panes) this.panes.delete(pane.paneId);
-    const line = JSON.stringify({ event: "tab_closed", data: { type: "tab_closed", tab_id: tabId, workspace_id: panes[0]!.workspaceId } }) + "\n";
-    for (const sub of this.subscribers) if (sub.types.has("tab.closed")) sub.socket.write(line);
+    this.broadcast("tab.closed", { tab_id: tabId, workspace_id: panes[0]!.workspaceId });
+  }
+
+  /** Close one pane, as `pane.close` does. A tab left without panes goes with it, as in Herdr. */
+  closePane(paneId: string): void {
+    const pane = this.pane(paneId);
+    this.panes.delete(paneId);
+    this.broadcast("pane.closed", { pane_id: paneId, workspace_id: pane.workspaceId });
   }
 
   appendLines(paneId: string, ...lines: string[]): void {
@@ -249,6 +255,9 @@ export class FakeHerdr {
         return { type: "ok" };
       case "pane.send_keys":
         for (const key of (params.keys as unknown[]) ?? []) this.pressKey(paneId, String(key));
+        return { type: "ok" };
+      case "pane.close":
+        this.closePane(paneId);
         return { type: "ok" };
       case "tab.close":
         this.closeTab(String(params.tab_id ?? ""));
@@ -358,6 +367,13 @@ export class FakeHerdr {
         sub.socket.write(line);
       }
     }
+  }
+
+  /** A global event (`tab.closed` → `tab_closed`) to everyone subscribed to its type. */
+  private broadcast(type: string, data: Record<string, unknown>): void {
+    const event = type.replace(".", "_");
+    const line = JSON.stringify({ event, data: { type: event, ...data } }) + "\n";
+    for (const sub of this.subscribers) if (sub.types.has(type)) sub.socket.write(line);
   }
 
   private wirePane(pane: FakePane) {

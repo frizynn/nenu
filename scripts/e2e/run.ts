@@ -194,42 +194,41 @@ async function project(): Promise<void> {
 }
 
 /**
- * Closing the tab an open pane lives in, from Nenu (the tab's actions sheet) and from Herdr (the
- * fake closes it while the page shows it), on a phone and a desk. The demo's `nenu` space holds
- * `redesign` (working) then `review` (idle); each case adds a throwaway tab after them, so the
- * expected landing is the pane in `review`. Then the first tab closes (lands on the next one) and
- * the only tab of `api` closes (lands Home).
+ * Closing what is on screen, on a phone and a desk: the open pane's tab from Nenu (its actions
+ * sheet) and from Herdr (the fake closes it while the page shows it), the open pane beside a
+ * sibling, and the tab a space view is filtered to. The demo's `nenu` space holds `redesign`
+ * (working) then `review` (idle); throwaway tabs go after them, so `review` is where a close lands.
+ * Then the first tab closes (lands on the next one) and the only tab of `api` closes (lands Home).
  */
 async function tabs(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench(async (bridge, browser) => {
     const fake = bridge.fake!;
     const herd = bridge.herd!;
-    const cases: Array<{ name: string; closed: string; expected: string; landed: string }> = [];
+    const cases: Array<{ name: string; expected: string; landed: string }> = [];
     const pathname = (page: Page) => page.evaluate(() => decodeURIComponent(location.pathname), null);
+    // A chip's last child is its label; a status dot's screen-reader text comes before it.
+    const activeTab = (page: Page) => page.evaluate(() => document.querySelector('[data-workbench-navigation-band="tabs"] button[aria-current="true"]')?.lastChild?.textContent ?? "", null);
+    const sheetClose = (band: "tabs" | "panes", row: "Close tab" | "Close pane") => async (page: Page) => {
+      await page.locator(`[data-workbench-navigation-band="${band}"] button[aria-current="true"]`).click();
+      await page.getByRole("button", { name: row, exact: true }).click({ timeout: 5000 });
+      await page.getByRole("button", { name: /^Tap again to close/ }).click({ timeout: 5000 });
+    };
+    const inHerdr = (tabId: string) => async () => fake.closeTab(tabId);
 
-    const closeAndLand = async (name: string, device: typeof PHONE | typeof DESKTOP, paneId: string, tabId: string, expected: string, by: "nenu" | "herdr") => {
+    const run = async (name: string, device: typeof PHONE | typeof DESKTOP, path: string, close: (page: Page) => Promise<void>, expected: string, read = pathname) => {
       const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
-      await page.goto(`${bridge.url}/pane/${encodeURIComponent(paneId)}`);
-      const activeTab = page.locator('[data-workbench-navigation-band="tabs"] button[aria-current="true"]');
-      await activeTab.waitFor({ timeout: 15_000 });
+      await page.goto(bridge.url + path);
+      await page.locator('[data-workbench-navigation-band="tabs"] button[aria-current="true"]').waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1000);
-      if (by === "nenu") {
-        await activeTab.click();
-        await page.getByRole("button", { name: "Close tab", exact: true }).click({ timeout: 5000 });
-        await page.getByRole("button", { name: /^Tap again to close/ }).click({ timeout: 5000 });
-      } else {
-        fake.closeTab(tabId);
-      }
-      const from = `/pane/${paneId}`;
-      for (let i = 0; i < 100 && (await pathname(page)) === from; i++) await sleep(100);
+      await close(page);
+      for (let i = 0; i < 100 && (await read(page)) !== expected; i++) await sleep(100);
       // Settle: a second hop (a stale snapshot bouncing Home) would land within a poll.
       await page.waitForTimeout(2500);
-      const landed = await pathname(page);
+      cases.push({ name, expected, landed: await read(page) });
       await page.screenshot({ path: join(outDir, `${name}.png`), animations: "disabled" });
-      cases.push({ name, closed: tabId, expected, landed });
       await context.close();
     };
     // Adding a pane emits no event, so wait for the bridge's next poll to list it before opening it.
@@ -239,7 +238,7 @@ async function tabs(): Promise<void> {
       fake.addTab(tabId, `scratch ${n}`).addPane({ paneId, workspaceId: "w1", tabId, agent: null, label: `Scratch ${n}`, cwd: bridge.dir });
       for (let i = 0; i < 150; i++) {
         const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ shellPanes: Array<{ paneId: string }> }>);
-        if (snap.shellPanes.some((p) => p.paneId === paneId)) return { tabId, paneId };
+        if (snap.shellPanes.some((p) => p.paneId === paneId)) return { tabId, path: `/pane/${encodeURIComponent(paneId)}` };
         await sleep(100);
       }
       throw new Error(`the bridge never listed ${paneId}`);
@@ -248,15 +247,22 @@ async function tabs(): Promise<void> {
     const review = `/pane/${herd.idle}`;
     let n = 3;
     for (const [device, deviceName] of [[PHONE, "phone"], [DESKTOP, "desktop"]] as const) {
-      for (const by of ["nenu", "herdr"] as const) {
-        const { tabId, paneId } = await scratchTab(n++);
-        await closeAndLand(`last-tab-${by}-${deviceName}`, device, paneId, tabId, review, by);
-      }
+      const nenu = await scratchTab(n++);
+      await run(`last-tab-nenu-${deviceName}`, device, nenu.path, sheetClose("tabs", "Close tab"), review);
+      const herdr = await scratchTab(n++);
+      await run(`last-tab-herdr-${deviceName}`, device, herdr.path, inHerdr(herdr.tabId), review);
     }
-    await closeAndLand("first-tab-herdr-phone", PHONE, herd.working, "w1:t1", review, "herdr");
-    await closeAndLand("only-tab-nenu-desktop", DESKTOP, herd.blocked, "w2:t1", "/", "nenu");
-    const tabCloses = fake.writes().filter((c) => c.method === "tab.close").map((c) => String(c.params.tab_id));
-    return { cases, failed: cases.filter((c) => c.landed !== c.expected).map((c) => c.name), tabCloses };
+    // `server` holds Blocked Claude, Codex and a shell: closing the shell keeps you in the tab.
+    await run("sibling-pane-nenu-phone", PHONE, `/pane/${encodeURIComponent(herd.shell)}`, sheetClose("panes", "Close pane"), `/pane/${herd.blocked}`);
+    await scratchTab(n);
+    await run("space-tab-nenu-phone", PHONE, "/space/w1", async (page) => {
+      await page.getByRole("button", { name: `scratch ${n}`, exact: true }).click({ timeout: 5000 });
+      await sheetClose("tabs", "Close tab")(page);
+    }, "review", activeTab);
+    await run("first-tab-herdr-phone", PHONE, `/pane/${encodeURIComponent(herd.working)}`, inHerdr("w1:t1"), review);
+    await run("only-tab-nenu-desktop", DESKTOP, `/pane/${encodeURIComponent(herd.blocked)}`, sheetClose("tabs", "Close tab"), "/");
+    const closes = fake.writes().filter((c) => c.method.endsWith(".close")).map((c) => `${c.method} ${String(c.params.tab_id ?? c.params.pane_id)}`);
+    return { cases, failed: cases.filter((c) => c.landed !== c.expected).map((c) => c.name), closes };
   }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "tabs.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
