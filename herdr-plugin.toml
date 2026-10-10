@@ -108,3 +108,17 @@ id = "subagent-hooks"
 title = "Enable Claude subagent activity"
 contexts = ["workspace"]
 command = ["bash", "scripts/collie-ctl.sh", "subagent-hooks"]
+
+# Opt-in observer hooks (ADR 0057): Claude POSTs status changes and dialog text to the bridge on
+# loopback, with a per-install token. They never decide anything. `claude-hooks-remove` undoes it.
+[[actions]]
+id = "claude-hooks"
+title = "Enable Claude live status (observer hooks)"
+contexts = ["workspace"]
+command = ["bash", "scripts/collie-ctl.sh", "claude-hooks"]
+
+[[actions]]
+id = "claude-hooks-remove"
+title = "Remove Claude live status hooks"
+contexts = ["workspace"]
+command = ["bash", "scripts/collie-ctl.sh", "claude-hooks", "--remove"]
