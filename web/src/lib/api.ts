@@ -14,6 +14,7 @@ import type {
   DeliveryMode,
   Interaction,
   NativeQueueState,
+  NodeRole,
   NotifyPrefs,
   PaneHistoryResponse,
   PaneSkillsResponse,
@@ -98,6 +99,8 @@ const ORG_MUTATION_TIMEOUT_MS = 35_000;
 //   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
 //     its 120 s idle timeout, so the client outlasts the CLI.
 const ORG_MERGE_TIMEOUT_MS = 100_000;
+//   - Starting a coordinator waits for its shell and agent; the bridge gives `open` 60 s.
+const ORG_OPEN_TIMEOUT_MS = 70_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -610,21 +613,31 @@ export function createTab(
   });
 }
 
-export function fetchOrgTemplates(
+/** What the start form offers for a project: its templates and the profiles a node can run. */
+export function fetchOrgStartOptions(
   project: string,
   session?: string,
-): Promise<{ ok: true; templates: TemplateView[] }> {
-  return req(withSession(`/api/org/templates?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
+): Promise<{ ok: true; templates: TemplateView[]; profiles: string[] }> {
+  return req(withSession(`/api/org/start-options?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
+/** Start a worker or coordinator; a template carries its own role and profile. */
 export function startOrgNode(
-  input: { project: string; template: string; title: string; parent: string; task: string },
+  input: { project: string; title: string; parent: string; task: string; role: NodeRole; profile?: string; template?: string },
   session?: string,
-): Promise<{ ok: true; node: { id: string; parentId: string; role: string; template: string } }> {
+): Promise<{ ok: true; node: { id: string } }> {
   return req(withSession("/api/org/node/start", session), {
     method: "POST",
     body: JSON.stringify(input),
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
+/** Start the project's coordinator (Organizations' `open`); it focuses one that already runs. */
+export function openOrgProject(input: { project: string }, session?: string): Promise<{ ok: true }> {
+  return req(withSession("/api/org/project/open", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_OPEN_TIMEOUT_MS);
 }
 
 export function resolveOrgNode(

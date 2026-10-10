@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 
-import { NewThreadMenu, errorMessage } from "@/components/new-thread-menu";
+import { NewNodeActions, errorMessage } from "@/components/node-start";
 import { StatusDot } from "@/components/status-badge";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
@@ -192,7 +192,7 @@ export function ProjectTasks({ project, threads = project.threads, title = proje
         </details>
       ))}
       {groups.length === 0 && <p className="py-3 text-sm text-muted-foreground">No threads yet.</p>}
-      {!readOnly && <div className="mt-3"><NewThreadMenu project={project} session={session} onStarted={onChanged} /></div>}
+      {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={onChanged} /></div>}
 
       <ConfirmDialog open={closing !== null} title="Close this thread?" confirmLabel="Close thread" busy={busy} error={error}
         description={<><span className="font-medium text-foreground">{closing?.title}</span> stops. Its branch, worktree and report are kept.</>}

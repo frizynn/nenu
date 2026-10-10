@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Check, ExternalLink, GitPullRequest, X } from "lucide-react";
 
-import { errorMessage } from "@/components/new-thread-menu";
+import { errorMessage } from "@/components/node-start";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { setOrgThreadFlags } from "@/lib/api";
 import { setStatus } from "@/lib/status";

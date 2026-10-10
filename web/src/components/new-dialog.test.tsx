@@ -5,7 +5,7 @@ import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
 
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { ProjectView, TemplateView } from "@/lib/types";
+import type { ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
 import NewDialog, { newContext, projectCommand } from "./new-dialog";
 
@@ -16,10 +16,6 @@ const project: ProjectView = {
   status: "active",
   workspaceIds: ["w:2"],
   threads: [{ id: "t-1", title: "Coordinator", parentId: "root", role: "coordinator", status: "open" }],
-};
-const template: TemplateView = {
-  name: "worker", scope: "project", description: "", role: "worker", canSpawn: false,
-  harness: "codex", model: "", reasoningEffort: "", rulesChars: 0, memoryChars: 0, updated: "",
 };
 const base: HomeData = {
   bridge: "connected", device: undefined, session: "work", sessions: [],
@@ -45,12 +41,12 @@ beforeEach(() => {
   const pane = { paneId: "w:9:p1", workspaceId: "w:9", workspaceLabel: "new", tabId: "t9", cwd: HOME };
   server.use(
     http.get("/api/dirs", () => HttpResponse.json({ path: HOME, home: HOME, entries: ["code"], truncated: false })),
-    http.get("/api/org/templates", () => HttpResponse.json({ ok: true, templates: [template] })),
+    http.get("/api/org/start-options", () => HttpResponse.json({ ok: true, templates: [], profiles: ["claude"] })),
     record("/api/tab", { ok: true, pane }),
     record("/api/workspace", { ok: true, pane }),
     record("/api/pane/:paneId/start", { ok: true }),
     record("/api/org/project/create", { ok: true, project: { slug: "panel-mayorista", name: "Panel mayorista" } }),
-    record("/api/org/node/start", { ok: true, node: { id: "t-2", parentId: "root", role: "worker", template: "worker" } }),
+    record("/api/org/node/start", { ok: true, node: { id: "t-2" } }),
   );
 });
 
@@ -109,18 +105,17 @@ it("creates a project with the exact command it previews and opens it", async ()
   expect(router.state.location.pathname).toBe("/project/panel-mayorista");
 });
 
-it("starts a thread in the project on screen, straight away on a desk", async () => {
+it("starts a coordinator in the project on screen, straight away on a desk", async () => {
   desktop();
   const { user, router } = setup();
   expect(await screen.findByRole("heading", { name: "New thread" })).toBeInTheDocument();
-  expect(await screen.findByLabelText("Title")).toHaveValue("worker");
-  await user.clear(screen.getByLabelText("Title"));
+  await user.click(screen.getByRole("radio", { name: "Coordinator" }));
   await user.type(screen.getByLabelText("Title"), "Filters");
   await user.selectOptions(screen.getByLabelText("Parent"), "t-1");
   await user.type(screen.getByLabelText("Task"), "Add a depot filter.");
-  await user.click(screen.getByRole("button", { name: "Start thread" }));
+  await user.click(screen.getByRole("button", { name: "Create coordinator" }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/awam"));
-  expect(posts["/api/org/node/start"]).toEqual([{ project: "awam", template: "worker", title: "Filters", parent: "t-1", task: "Add a depot filter." }]);
+  expect(posts["/api/org/node/start"]).toEqual([{ project: "awam", role: "coordinator", title: "Filters", parent: "t-1", task: "Add a depot filter." }]);
 });
 
 it("makes the scratch workspace on the bridge's home for the first quick chat, then reuses it", async () => {

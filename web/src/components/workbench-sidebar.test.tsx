@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectView } from "@/lib/types";
-import { threadTree, WorkbenchSidebar } from "./workbench-sidebar";
+import { WorkbenchSidebar } from "./workbench-sidebar";
 
 function pane(paneId: string, paneLabel: string, lastActiveAt = 0): AgentView {
   return { paneId, paneLabel, lastActiveAt, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false };
@@ -178,10 +178,4 @@ describe("the sidebar", () => {
     expect(screen.getByText("2 workspaces · 6 agents")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
-});
-
-it("nests threads by parent and lists an orphan or a parent loop at the root", () => {
-  const t = (id: string, parentId: string) => ({ id, title: id, parentId, role: "worker" as const, status: "open" as const });
-  const tree = threadTree([t("a", "root"), t("b", "a"), t("c", "gone"), t("x", "y"), t("y", "x")]);
-  expect(tree.map((node) => [node.thread.id, node.children.map((child) => child.thread.id)])).toEqual([["a", ["b"]], ["c", []], ["x", []], ["y", []]]);
 });

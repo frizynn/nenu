@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Eye, GitPullRequest } from "lucide-react";
 
-import { errorMessage } from "@/components/new-thread-menu";
+import { errorMessage } from "@/components/node-start";
 import { ThreadStateDot, canMerge, coordinatedThreads, threadBucket, threadDetail, threadDot } from "@/components/project-tasks";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { mergeOrgThread } from "@/lib/api";

@@ -12,7 +12,7 @@ import {
   liveDirsOf,
   useSpawnInto,
 } from "@/components/new-agent-sheet";
-import { NoTemplates, ThreadStartForm, errorMessage, useTemplates } from "@/components/new-thread-menu";
+import { NodeStartForm, errorMessage, startableRoles } from "@/components/node-start";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
 import { createOrgProject, fetchHomeDirs } from "@/lib/api";
@@ -22,7 +22,7 @@ import { projectPath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SPAWN_AGENTS, loadAgent, loadPermission, suggestDirs, type SpawnAgent, type SpawnTarget } from "@/lib/spawn";
-import { isReadOnly, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { isReadOnly, type NodeRole, type ProjectView, type WorkspaceView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const DirPicker = lazy(() => import("@/components/dir-picker").then((m) => ({ default: m.DirPicker })));
@@ -217,7 +217,7 @@ function ThreadPane({ projects, project, onProject, readOnly, session, onDone, o
   onNewProject: () => void;
 }) {
   const current = projects.find((p) => p.slug === project);
-  const load = useTemplates(current?.slug ?? "", session, current !== undefined);
+  const [role, setRole] = useState<NodeRole>("worker");
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   if (!current) {
@@ -235,17 +235,13 @@ function ThreadPane({ projects, project, onProject, readOnly, session, onDone, o
           {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
         </select>
       </Field>
-      {load.kind === "loading" && <p className="py-3 text-sm text-muted-foreground">Loading templates…</p>}
-      {load.kind === "error" && <p role="alert" className="py-3 text-sm text-destructive">{load.message}</p>}
-      {load.kind === "ready" && load.templates.length === 0 && <NoTemplates />}
-      {load.kind === "ready" && load.templates.length > 0 && (
-        <ThreadStartForm key={current.slug} project={current} session={session} templates={load.templates} readOnly={readOnly}
-          onStarted={() => {
-            void revalidator.revalidate();
-            navigate(projectPath(current.slug, session));
-            onDone();
-          }} />
-      )}
+      <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
+        role={startableRoles(current).includes(role) ? role : "worker"} onRole={setRole}
+        onStarted={() => {
+          void revalidator.revalidate();
+          navigate(projectPath(current.slug, session));
+          onDone();
+        }} />
     </div>
   );
 }

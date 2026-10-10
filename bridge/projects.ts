@@ -2,7 +2,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdir
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
-import { defaultOrgRun, readOverview, type OrgOverviewProject, type OrgOverviewThread, type OrgRun } from "./org-cli.ts";
+import { defaultOrgRun, readOverview, upstreamOnly, type OrgOverviewProject, type OrgOverviewThread, type OrgRun } from "./org-cli.ts";
 import type { AgentView, LivePublisher, ProjectThreadView, ProjectView, ThreadPullRequest, WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
@@ -49,6 +49,8 @@ export interface OrgProjectView extends ProjectView {
   source: "json" | "files";
   /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
   prActions: boolean;
+  /** Organizations can start coordinators and nest nodes (`node start`); upstream herdr-projects cannot. */
+  nodeActions: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds: string[];
   threads: OrgThreadView[];
@@ -63,6 +65,8 @@ export interface ProjectRegistryOptions {
   live?: LivePublisher;
   /** Watch the registry with fs.watch. Tests turn it off and call {@link ProjectRegistry.refresh}. */
   watch?: boolean;
+  /** Whether only upstream herdr-projects is installed; read on every refresh. */
+  upstream?: () => boolean;
 }
 
 function contained(path: string, root: string): boolean {
@@ -306,7 +310,9 @@ export class ProjectRegistry {
   private readonly run: OrgRun | null;
   private readonly live?: LivePublisher;
   private readonly watchEnabled: boolean;
+  private readonly upstream: () => boolean;
   private records: ProjectRecord[] = [];
+  private nodeActions = true;
   private loaded = false;
   private stamp = "";
   private nextStat = 0;
@@ -331,6 +337,7 @@ export class ProjectRegistry {
     this.run = options.run === undefined ? defaultOrgRun() : options.run;
     this.live = options.live;
     this.watchEnabled = options.watch ?? true;
+    this.upstream = options.upstream ?? upstreamOnly;
   }
 
   list(sessionName: string, isPrimary: boolean, panes: readonly AgentView[]): OrgProjectView[] {
@@ -341,6 +348,7 @@ export class ProjectRegistry {
       this.stamp = this.fingerprint();
       this.nextStat = this.now() + STAT_MS;
       this.records = this.readFiles().map((project) => ({ ...project, source: "files", prActions: false }));
+      this.nodeActions = !this.upstream();
       this.rewatch();
       this.schedule(false);
     } else if (this.now() >= this.nextStat) {
@@ -370,6 +378,7 @@ export class ProjectRegistry {
           threads,
           source: record.source,
           prActions: record.prActions,
+          nodeActions: this.nodeActions,
           workspaceIds: [...workspaceIds],
         };
       });
@@ -387,8 +396,10 @@ export class ProjectRegistry {
     const files = this.readFiles();
     const overview = this.run ? await readOverview(this.run, this.root).catch(() => undefined) : undefined;
     const next = overview ? this.fromJson(overview, files) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
-    const changed = JSON.stringify(next) !== JSON.stringify(this.records);
+    const nodeActions = !this.upstream();
+    const changed = nodeActions !== this.nodeActions || JSON.stringify(next) !== JSON.stringify(this.records);
     this.records = next;
+    this.nodeActions = nodeActions;
     this.loaded = true;
     this.rewatch();
     if (changed) for (const session of this.sessions) this.live?.publish({ session, topic: "org" });

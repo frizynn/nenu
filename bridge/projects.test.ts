@@ -16,7 +16,7 @@ afterEach(() => {
 
 /** Files only, no watcher: the default for tests that are not about the CLI or invalidation. */
 function registryFor(root: string, options: ProjectRegistryOptions = {}): ProjectRegistry {
-  const registry = new ProjectRegistry({ root, now: () => 1, run: null, watch: false, ...options });
+  const registry = new ProjectRegistry({ root, now: () => 1, run: null, watch: false, upstream: () => false, ...options });
   registries.push(registry);
   return registry;
 }
@@ -171,6 +171,17 @@ describe("ProjectRegistry: Organizations fields", () => {
     const registry = registryFor(fixture(), { run });
     await registry.refresh();
     expect(registry.list("default", true, [])[0]).toMatchObject({ name: "Demo Project", source: "files", prActions: false });
+  });
+
+  test("hides node actions while only upstream herdr-projects is installed, and announces the change", async () => {
+    let upstream = true;
+    const live: LiveEvent[] = [];
+    const registry = registryFor(fixture(), { upstream: () => upstream, live: { publish: (event) => live.push(event) } });
+    expect(registry.list("default", true, [])[0]!.nodeActions).toBe(false);
+    upstream = false;
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.nodeActions).toBe(true);
+    expect(live).toEqual([{ session: "default", topic: "org" }]);
   });
 
   test("a changed record is noticed by stat on the next read after the interval", async () => {

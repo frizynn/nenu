@@ -1,4 +1,4 @@
-import { createProject, listTemplates, mergeThread, OrgValidationError, resolveNode, setThreadFlags, startFromTemplate } from "../org-cli.ts";
+import { createProject, mergeThread, openProject, OrgValidationError, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
@@ -6,95 +6,36 @@ import { json } from "./http.ts";
 export const orgRoutes: Route[] = [
   {
     method: "GET",
-    path: "/api/org/templates",
+    path: "/api/org/start-options",
     access: "read",
     session: false,
     async handle({ orgRun }, { req, url }) {
       try {
-        const templates = await listTemplates(orgRun, url.searchParams.get("project") ?? "");
-        return json({ ok: true, templates }, req.headers.get("accept-encoding"));
+        const options = await startOptions(orgRun, url.searchParams.get("project") ?? "");
+        return json({ ok: true, ...options }, req.headers.get("accept-encoding"));
       } catch (error) {
         return json({
           ok: false,
-          error: error instanceof Error ? error.message : "Could not list templates.",
+          error: error instanceof Error ? error.message : "Could not read the start options.",
         }, req.headers.get("accept-encoding"), error instanceof OrgValidationError ? 400 : 502);
       }
     },
   },
-  {
-    method: "POST",
-    path: "/api/org/node/start",
-    access: "write",
-    session: true,
-    async handle({ cfg, audit, orgRun, projects }, { req, rt }) {
-      const acceptEncoding = req.headers.get("accept-encoding");
-      const body: unknown = await req.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
-      }
-      const project = "project" in body ? body.project : undefined;
-      const template = "template" in body ? body.template : undefined;
-      const title = "title" in body ? body.title : undefined;
-      const parent = "parent" in body ? body.parent : undefined;
-      const task = "task" in body ? body.task : undefined;
-      if (
-        typeof project !== "string" || typeof template !== "string" || typeof title !== "string" ||
-        typeof parent !== "string" || typeof task !== "string"
-      ) {
-        return json({ ok: false, error: "Project, template, title, parent, and task must be text." }, acceptEncoding, 400);
-      }
-      try {
-        const node = await startFromTemplate(orgRun, rt.socketPath, { project, template, title, parent, task });
-        audit.record({
-          action: "org.node.start",
-          session: rt.name,
-          device: deviceAuth(req, cfg).device,
-          detail: { project, template, title, parent },
-        });
-        void projects.invalidate();
-        return json({ ok: true, node }, acceptEncoding);
-      } catch (error) {
-        return json({
-          ok: false,
-          error: error instanceof Error ? error.message : "Could not start node.",
-        }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
-      }
-    },
-  },
-  {
-    method: "POST",
-    path: "/api/org/node/resolve",
-    access: "write",
-    session: true,
-    async handle({ cfg, audit, orgRun, projects }, { req, rt }) {
-      const acceptEncoding = req.headers.get("accept-encoding");
-      const body: unknown = await req.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
-      }
-      const project = "project" in body ? body.project : undefined;
-      const id = "id" in body ? body.id : undefined;
-      if (typeof project !== "string" || typeof id !== "string") {
-        return json({ ok: false, error: "Project and node ID must be text." }, acceptEncoding, 400);
-      }
-      try {
-        await resolveNode(orgRun, rt.socketPath, { project, id });
-        audit.record({
-          action: "org.node.resolve",
-          session: rt.name,
-          device: deviceAuth(req, cfg).device,
-          detail: { project, id },
-        });
-        void projects.invalidate();
-        return json({ ok: true }, acceptEncoding);
-      } catch (error) {
-        return json({
-          ok: false,
-          error: error instanceof Error ? error.message : "Could not close node.",
-        }, acceptEncoding, error instanceof OrgValidationError ? 400 : 502);
-      }
-    },
-  },
+  orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
+    const node = await startNode(orgRun, rt.socketPath, {
+      project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
+    });
+    return { response: { node }, detail: { project: body.project, id: node.id, role: body.role, parent: body.parent, profile: body.profile, template: body.template, title: body.title } };
+  }),
+  orgWrite("/api/org/node/resolve", "org.node.resolve", "Could not close node.", async ({ orgRun }, body, rt) => {
+    await resolveNode(orgRun, rt.socketPath, { project: body.project, id: body.id });
+    return { response: {}, detail: { project: body.project, id: body.id } };
+  }),
+  // The person waits on the redirect to the coordinator's chat, so the projects are re-read first.
+  orgWrite("/api/org/project/open", "org.project.open", "Could not start the coordinator.", async ({ orgRun }, body, rt) => {
+    await openProject(orgRun, rt.socketPath, { project: body.project });
+    return { response: {}, detail: { project: body.project } };
+  }, { settle: true }),
   orgWrite("/api/org/project/create", "org.project.create", "Could not create the project.", async ({ orgRun }, body) => {
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });
     return { response: { project }, detail: { project: project.slug } };
@@ -111,13 +52,15 @@ export const orgRoutes: Route[] = [
 
 /**
  * A POST that runs one Organizations write for the person's tap, audits it, and re-reads the
- * projects at once so the `org` event follows the change instead of the next stat.
+ * projects at once so the `org` event follows the change instead of the next stat. With `settle`
+ * the reply waits for that re-read, so the client's next snapshot already shows the change.
  */
 function orgWrite(
   path: string,
   action: string,
   failure: string,
-  write: (ctx: Services, body: Record<string, unknown>) => Promise<{ response: Record<string, unknown>; detail: Record<string, unknown> }>,
+  write: (ctx: Services, body: Record<string, unknown>, rt: SessionRouteRequest["rt"]) => Promise<{ response: Record<string, unknown>; detail: Record<string, unknown> }>,
+  { settle = false } = {},
 ): Route {
   return {
     method: "POST",
@@ -131,9 +74,10 @@ function orgWrite(
         return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
       }
       try {
-        const { response, detail } = await write(ctx, body as Record<string, unknown>);
+        const { response, detail } = await write(ctx, body as Record<string, unknown>, rt);
         ctx.audit.record({ action, session: rt.name, device: deviceAuth(req, ctx.cfg).device, detail });
-        void ctx.projects.invalidate();
+        if (settle) await ctx.projects.invalidate();
+        else void ctx.projects.invalidate();
         return json({ ok: true, ...response }, acceptEncoding);
       } catch (error) {
         return json({

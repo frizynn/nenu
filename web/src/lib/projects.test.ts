@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, looseChats, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
+import { groupChats, looseChats, nestThreads, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -88,4 +88,10 @@ describe("project groups", () => {
     expect(paneTitle(pane("c"), projectForPane([project], "c"))).toBe("Coordinator");
     expect(paneTitle(pane("x", { paneLabel: "Loose" }), undefined)).toBe("Loose");
   });
+});
+
+it("nests threads by parent and lists an orphan or a parent loop at the root", () => {
+  const t = (id: string, parentId: string) => ({ id, title: id, parentId, role: "worker" as const, status: "open" as const });
+  const tree = nestThreads([t("a", "root"), t("b", "a"), t("c", "gone"), t("x", "y"), t("y", "x")]);
+  expect(tree.map((node) => [node.thread.id, node.children.map((child) => child.thread.id)])).toEqual([["a", ["b"]], ["c", []], ["x", []], ["y", []]]);
 });
