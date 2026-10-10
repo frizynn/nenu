@@ -31,6 +31,36 @@ const SESSION_NAME_READ_LINES = 40;
 // Consecutive failed polls before the herd is reported disconnected (see the poll's catch).
 const DISCONNECT_AFTER_FAILURES = 2;
 
+// How long a claude pane's session name may go unread while its identity and status hold still. A
+// `/rename` typed in the desktop TUI changes neither, so this bounds how stale the name can get;
+// everything else re-reads on the change itself. Without it every poll read every claude pane:
+// 14 of the 15 socket calls per poll on a 14-claude herd (measured 2026-10-10).
+const SESSION_NAME_REFRESH_MS = 60_000;
+
+// Pane tokens copied into the view. Herdr Organizations writes these with a TTL and refreshes them
+// (`project`, `thread`, … at 300 s; `org_project`/`org_workspace` sidebar identity at 60 s);
+// `hp_group` is the sidebar's group order (live-observed). `org_heartbeat` stays out: it changes on
+// every 10 s refresh and would turn each one into a snapshot change.
+const ALLOWED_TOKENS = new Set([
+  "project", "thread", "review", "role", "rank", "depth", "parent", "tree-order", "hp_group",
+  "org_project", "org_workspace",
+]);
+const MAX_TOKEN_VALUE = 200;
+
+/** The allowlisted subset of a pane's tokens, or undefined when none is set. */
+export function allowedTokens(tokens: Record<string, unknown> | null | undefined): Record<string, string> | undefined {
+  if (!tokens) return undefined;
+  const out: Record<string, string> = {};
+  let any = false;
+  for (const [key, value] of Object.entries(tokens)) {
+    if (typeof value !== "string" || value.length > MAX_TOKEN_VALUE) continue;
+    if (!ALLOWED_TOKENS.has(key)) continue;
+    out[key] = value;
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
 // Claude renders its input box as a horizontal rule, the ❯ prompt line, then a closing rule. After
 // `/rename <name>` the TOP rule carries the session name inside it: "────────── my-name ──". This
 // matches that named rule. `\S` also matches box-drawing chars, but a *plain* rule has no embedded
@@ -77,7 +107,9 @@ export interface EngineSnapshot {
 type TransitionListener = (agent: AgentView, from: AgentStatus, to: AgentStatus) => void;
 type RemoveListener = (paneId: string) => void;
 type UpdateListener = (snap: EngineSnapshot) => void;
-type SessionName = { identity: string; name?: string };
+// `readFor` is the status the last successful read saw and `readAt` when; a status change or an
+// expired `readAt` asks for a fresh read, a new identity starts a fresh entry.
+type SessionName = { identity: string; name?: string; readFor?: string; readAt?: number };
 type RefreshWaiter = {
   poll: number;
   resolve: (snapshot: EngineSnapshot) => void;
@@ -120,6 +152,7 @@ export class StateEngine {
   constructor(
     private readonly herdr: HerdrClient,
     private readonly pollMs: number,
+    private readonly now: () => number = Date.now,
   ) {
     this.cadenceMs = pollMs;
   }
@@ -219,7 +252,7 @@ export class StateEngine {
     if (this.supportsSnapshot) {
       try {
         const snap = await this.herdr.sessionSnapshot();
-        return { workspaces: snap.workspaces, panes: snap.panes, tabs: snap.tabs };
+        return { workspaces: snap.workspaces, panes: snap.panes, tabs: snap.tabs, agents: snap.agents ?? [] };
       } catch (err) {
         if (!(err instanceof Error && err.message.includes("unknown variant"))) throw err;
         this.supportsSnapshot = false;
@@ -231,7 +264,8 @@ export class StateEngine {
       this.herdr.listPanes(),
       this.herdr.listTabs(),
     ]);
-    return { workspaces, panes, tabs };
+    // The list calls carry no agent counters; the views simply omit them.
+    return { workspaces, panes, tabs, agents: [] };
   }
 
   private async poll(): Promise<void> {
@@ -242,7 +276,8 @@ export class StateEngine {
     const poll = ++this.pollNumber;
     const nameEpoch = this.nameEpoch;
     try {
-      const { workspaces, panes, tabs } = await this.fetchWire();
+      const { workspaces, panes, tabs, agents: wireAgents } = await this.fetchWire();
+      const agentById = new Map(wireAgents.map((a) => [a.pane_id, a]));
       const wsById = new Map(workspaces.map((w) => [w.workspace_id, w]));
       const tabById = new Map(tabs.map((t) => [t.tab_id, t]));
       const terminalByPaneId = new Map(panes.map((p) => [p.pane_id, p.terminal_id]));
@@ -265,6 +300,8 @@ export class StateEngine {
           agent,
           workspaceLabel,
         );
+        const tokens = allowedTokens(p.tokens);
+        const counters = agentById.get(p.pane_id);
         return {
           paneId: p.pane_id,
           workspaceId: p.workspace_id,
@@ -307,6 +344,12 @@ export class StateEngine {
           ...(p.scroll
             ? { readableLines: p.scroll.max_offset_from_bottom + p.scroll.viewport_rows }
             : {}),
+          // Tokens expire unless their plugin refreshes them: absent means unknown, not removed.
+          ...(tokens ? { tokens } : {}),
+          // Herdr's own transition counters, when the server reports them (0.9.1 has no
+          // completion_seq; the list-call fallback has neither).
+          ...(typeof counters?.state_change_seq === "number" ? { stateChangeSeq: counters.state_change_seq } : {}),
+          ...(typeof counters?.completion_seq === "number" ? { completionSeq: counters.completion_seq } : {}),
         };
       };
 
@@ -430,11 +473,13 @@ export class StateEngine {
   }
 
   /**
-   * Read each claude pane's visible text and attach its `/rename` session name (see
+   * Read claude panes' visible text and attach the `/rename` session name (see
    * {@link extractClaudeSessionName}) to the view, exactly parallel to `paneLabel`. The name lives
    * only in the pane's rendered text — Herdr's pane metadata doesn't carry it — so this is the one
-   * place all panes can pick it up (the web app only holds text for the open pane). Reads run in
-   * parallel within one coalesced batch. A read that fails or times out keeps the last-known name
+   * place all panes can pick it up (the web app only holds text for the open pane). A pane is read
+   * only when it is new to the cache (new identity), its status moved since the last read, or that
+   * read is older than {@link SESSION_NAME_REFRESH_MS}; a quiet herd costs no reads at all. Reads
+   * run in parallel within one coalesced batch. A read that fails or times out keeps the last-known name
    * (sticky cache) and never fails the poll. Claude-only; other harnesses never set it. A
    * herdr client without `readPane` (the unit-test fake) short-circuits, so it's a no-op there.
    */
@@ -444,7 +489,13 @@ export class StateEngine {
       this.queuedNames = true;
       return;
     }
-    const claude = this.agents.filter((a) => a.agent === "claude");
+    const now = this.now();
+    const claude = this.agents.filter((a) => {
+      if (a.agent !== "claude") return false;
+      const cached = this.sessionNames.get(a.paneId);
+      return !cached || cached.readFor !== a.status || cached.readAt === undefined ||
+        now - cached.readAt >= SESSION_NAME_REFRESH_MS;
+    });
     if (claude.length === 0) return;
     this.enrichingNames = true;
     const epoch = this.nameEpoch;
@@ -457,12 +508,14 @@ export class StateEngine {
           // hands back transcript scrollback, where Claude echoes past user messages as `❯ …` lines
           // that the prompt anchor below would have to discriminate against.
           const read = await this.herdr.readPane(a.paneId, "visible", SESSION_NAME_READ_LINES, "text");
+          if (!cached || this.nameEpoch !== epoch || this.sessionNames.get(a.paneId) !== cached) return;
+          cached.readFor = a.status;
+          cached.readAt = now;
           const name = extractClaudeSessionName(read.text);
-          if (!name || !cached || this.nameEpoch !== epoch ||
-            this.sessionNames.get(a.paneId) !== cached || cached.name === name) return;
-          cached.name = name;
+          if (name) cached.name = name;
         } catch {
-          // Keep whatever's cached (if anything) — a transient read failure must not blank the name.
+          // Keep whatever's cached (if anything) — a transient read failure must not blank the name,
+          // and leaves the pane due so the next poll retries it.
         }
       }),
     ).then(() => {

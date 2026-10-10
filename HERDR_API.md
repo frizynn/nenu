@@ -1,6 +1,8 @@
-# Herdr socket API — empirically verified (v0.7.2, protocol 16)
+# Herdr socket API — empirically verified (v0.9.1, protocol 22)
 
-Probed live against a running Herdr server, most recently re-probed 2026-07-07 and cross-checked
+Probed live against a running Herdr server, most recently re-probed 2026-10-10 on 0.9.1 (protocol 22,
+read-only calls only) and cross-checked against the 0.9.3 CLI's schema. Older sections keep the version
+they were probed on. Earlier probes were cross-checked
 against the bundled machine-readable schema — `herdr api schema [--json | --output PATH]`
 (`schema_version 1`, covering requests, responses, errors, and events) is now the fastest way to
 re-derive this contract without probing. These are the facts the bridge is built on; they confirm
@@ -30,7 +32,10 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
 
 | Method | Params | Returns (`result.type`) |
 |---|---|---|
-| `session.snapshot` | `{}` | `session_snapshot` → `snapshot{workspaces[], tabs[], panes[], agents[], layouts[], focused_*}` |
+| `ping` | `{}` | `pong` → `{version, protocol, capabilities{…}}` |
+| `session.snapshot` | `{}` | `session_snapshot` → `snapshot{version, protocol, workspaces[], tabs[], panes[], agents[], layouts[], focused_*}` |
+| `pane.get` | `{pane_id}` | `pane_info` → `pane{…}` (one pane record) |
+| `pane.wait_for_output` | `{pane_id, source, match:{type, value}, timeout_ms, lines?, strip_ansi?}` | `output_matched` → `{pane_id, matched_line, read{…}, revision}` |
 | `workspace.list` | `{}` | `workspace_list` → `workspaces[]` |
 | `pane.list` | `{}` | `pane_list` → `panes[]` |
 | `pane.read` | `{pane_id, source, lines, format}` | `pane_read` → `read{text, truncated, revision}` |
@@ -153,6 +158,42 @@ detection: the error reply is
 ``{"id":"","error":{"code":"invalid_request","message":"invalid request: unknown variant `session.snapshot`, expected one of ..."}}``
 — the bridge treats an `unknown variant` error on `session.snapshot` specifically as "fall back,"
 not a hard failure.
+
+## Protocol 22 additions (live-checked on 0.9.1, 2026-10-10)
+
+All read-only, on the operator's 0.9.1 server (`ping` → `{"version":"0.9.1","protocol":22}`). An
+unknown method's error lists the server's 105 methods; `pane.get`, `pane.wait_for_output`,
+`agent.list` and `ping` are among them.
+
+- **Protocol probe.** `ping` is the cheapest call (0.13 ms) and reports `version` and `protocol`;
+  `session.snapshot` carries the same two fields. Nenu's event stream pings before each subscribe and
+  gates the newer subscription types on `protocol >= 22` (see "Event stream").
+- **`pane.get {pane_id}`** returns one pane record, the same shape as a `pane.list` entry (0.19 ms vs
+  1.25 ms for the list). Unknown id → `pane_not_found`.
+- **`pane.wait_for_output`** waits server-side until a `visible`/`recent`/`recent_unwrapped`/`detection`
+  read matches `match: {type: "substring" | "regex", value}`, and returns the matching read inline:
+  `{type:"output_matched", pane_id, matched_line, revision:0, read:{pane_id, workspace_id, tab_id,
+  source, format, text, revision:0, truncated}}`. Measured on 0.9.1: a hit returned in 1.4 ms; a miss
+  ends at `timeout_ms` with the error code **`timeout`** (`timed out waiting for output match`, 300 ms
+  asked → 308 ms); a bad pattern is `invalid_regex`; an unknown pane `pane_not_found`. `strip_ansi`
+  defaults to true. A match is a trigger to look, never the verification: whoever acts on it
+  re-derives the screen from `read.text` (ADR 0010, ADR 0048). `HerdrClient.waitForOutput` maps
+  `timeout` to `{matched:false}`.
+- **`agents[]` in `session.snapshot`** (and `agent.list`) carry agent-only fields on top of the pane
+  record: `state_change_seq` (bumps on every status transition, so two equal values mean nothing moved
+  between two reads), `completion_seq` (bumps when an idle transition completed work), `name`,
+  `interactive_ready`, `launch_pending`. **0.9.1 reports `state_change_seq` and omits
+  `completion_seq`** (live-observed on 12 agents); read both as optional. Nenu joins them onto the
+  agent view by `pane_id` (`stateChangeSeq`, `completionSeq`); the list-call fallback has neither.
+- **New pane-record fields:** `tokens` (key/value strings a plugin reports with a TTL, at most 32, keys
+  `^[A-Za-z0-9_-]{1,32}$`), `state_labels`, `title`, `display_agent`, `restore_error`, alongside
+  `terminal_title(_stripped)`. Herdr Organizations writes `project`, `thread`, `review`, `rank`,
+  `depth`, `parent`, `role`, `tree-order` (300 s TTL) and `org_sidebar`/`org_project`/`org_workspace`/
+  `org_heartbeat` (60 s TTL); live panes also carry `hp_group`. **A missing token means unknown, never
+  "removed"**: it can simply have expired while its plugin was down. Nenu copies an allowlisted subset
+  (`bridge/state-engine.ts` `allowedTokens`).
+- **No image API on the socket.** Neither the 0.9.1 method list nor the 0.9.3 schema has an image
+  method; pictures in chat come from the journal, uploads or files.
 
 ## `pane.send_keys` key grammar (verified)
 
@@ -305,11 +346,12 @@ Two sibling structural ops reorder objects. Both live-verified 2026-07-20 on the
 > `scroll: {offset_from_bottom, max_offset_from_bottom, viewport_rows} | null` (all `uint64`;
 > `offset_from_bottom == 0` means the pane is scrolled to the bottom). Nenu doesn't consume it yet.
 
-> **`revision` is a stub on Herdr 0.7.x** (live-verified 2026-07-05 on 0.7.0; reconfirmed unchanged
-> on 0.7.2, live-verified 2026-07-07): `pane.read`, `pane.list`, and `session.snapshot` all return
-> `revision: 0` for every pane, including actively-changing ones. Treat it as advisory /
-> future-proofing only — never as a load-bearing change detector (Nenu's prompt-select race
-> guard re-derives the menu from content for exactly this reason).
+> **`revision` is a metadata counter, not a content counter** (re-checked 2026-10-10 on 0.9.1).
+> The pane record's `revision` (in `pane.list`, `pane.get`, `session.snapshot`) moves on stripped-title,
+> metadata and resume changes; a working pane's output does not move it (a `pane.get` stayed at the same
+> revision while the pane worked). `pane.read`'s and `pane.wait_for_output`'s own `revision` is
+> **always 0**. On 0.7.x every revision was 0. Never use either as an output-change detector; Nenu's
+> prompt-select race guard re-derives the menu from content for exactly this reason.
 
 ## Event stream (now wired: event-poked polling)
 
@@ -322,14 +364,20 @@ are shaped differently — worth calling out explicitly:
   are dot-form (`pane.agent_status_changed`), but the `event` field on each streamed line is
   snake_case (`pane_agent_status_changed`). Real example line:
   `{"data":{"pane_id":"w6:p3","type":"pane_agent_detected","workspace_id":"w6"},"event":"pane_agent_detected"}`.
+  **Except pane-scoped events on 0.9.3:** the P0 probe log (2026-10-10) shows
+  `"event":"pane.agent_status_changed"` in dot form next to snake_case globals (`pane_updated`), and the
+  0.9.3 schema types a subscription event's `event` as `pane.output_matched | pane.agent_status_changed
+  | pane.scroll_changed`. Match both spellings.
 
-The full event catalog (subscription `type` values), 0.7.2 additions marked `*`:
+The full event catalog (subscription `type` values), 0.7.2 additions marked `*`, protocol 22
+additions marked `**` (the list is quoted from 0.9.1's own `unknown variant` error, 2026-10-10):
 
 ```
-workspace.created  workspace.updated  workspace.renamed  workspace.closed  workspace.focused  workspace.moved *
+workspace.created  workspace.updated  workspace.metadata_updated **  workspace.renamed  workspace.moved *
+workspace.reordered **  workspace.closed  workspace.focused
 worktree.created   worktree.opened    worktree.removed
 tab.created        tab.closed         tab.focused        tab.renamed       tab.moved *
-pane.created       pane.closed        pane.focused       pane.moved        pane.exited
+pane.created       pane.closed        pane.updated **    pane.focused      pane.moved        pane.exited
 pane.agent_detected  pane.output_matched  pane.agent_status_changed
 layout.updated *   pane.scroll_changed *
 ```
@@ -347,6 +395,24 @@ out here too since they're easy to miss in the block above.
   splits:[{id,direction,ratio,rect}]}` — the same shape as `session.snapshot`'s `layouts[]`.
 - **`pane.scroll_changed`** (pane-scoped) payload: `{pane_id, workspace_id, scroll}` (`scroll`
   shape as in "Object shapes" above).
+- **`pane.output_matched`** (pane-scoped) also takes `source`, `match: {type: "substring" | "regex",
+  value}`, `lines?` and `strip_ansi?`, like `pane.wait_for_output`. Payload: `{pane_id, matched_line,
+  read}`. A standing regex fired once per new dialog in the P0 probes (9 dialogs, 9 events), and the
+  `blocked` status arrived a median ~100 ms after it, in either order (0.9.3,
+  `web/src/lib/grammar/PROBES_2026_10_NOTES.md`). Server cost: Herdr re-reads the pane every 100 ms
+  for each such entry, so subscribe only the panes that need it.
+- **`pane.updated`** (global, protocol 22) carries the full pane record and fires on metadata changes
+  (title, session id, tokens), each with a new `revision`. **It does not track status**: in the P0
+  probe Claude produced 4 (agent detected, session id, `/clear`, title) and Codex ~1/s while blocked,
+  following its animated terminal title. Treat it as a metadata poke only.
+- **`pane.agent_status_changed`** (protocol 22) accepts an optional `agent_status` filter, and its
+  payload also carries `title`, `display_agent` and `state_labels`.
+- **One bad entry rejects the whole subscribe.** An unknown `type` (an older server) and a `pane_id`
+  that no longer exists (`pane_not_found`) both fail the request before the ack. Rebuild the per-pane
+  entries from a fresh snapshot before retrying.
+- **`events_lost`.** Herdr streams from a bounded shared event history; a reader that falls behind it gets
+  an `events_lost` error line and the stream closes. The prescribed recovery is resubscribe plus a fresh
+  `session.snapshot`, since whatever happened meanwhile is unknown.
 - **Rich payloads:** `pane_created` / `workspace_created` carry the **full** pane/workspace
   record, not just ids. `pane_exited` carries `{pane_id, workspace_id}`. `pane_agent_detected`
   carries `{pane_id, workspace_id, agent?}` and can fire in herd-wide bursts on re-detection —
@@ -356,10 +422,26 @@ Nenu now polls `session.snapshot` (above) as the source of truth, and additional
 long-lived `events.subscribe` stream — global lifecycle events plus a per-agent-pane
 `pane.agent_status_changed` subscription, resubscribed whenever the agent-pane set changes —
 purely to **poke** the poller: an event triggers an immediate debounced re-poll, it never updates
-state by itself. While the stream is healthy, interval polling relaxes to `COLLIE_POLL_IDLE_MS`
+state by itself. `bridge/event-poker.ts` adds:
+
+- the `**` types above, only when `ping` reports protocol 22 or newer, and the base list for good if
+  a server rejects them anyway;
+- `pane.output_matched` entries only for watches a caller sets (`setOutputWatches`), delivered to
+  `onOutputMatched` listeners at once and never as a poke. Herdr compiles each regex while handling
+  the subscribe and rejects the whole subscribe with `invalid_regex` over one it cannot compile (Rust
+  regex syntax: no look-around), so the poker drops every watch, tells `onOutputWatchesRejected`
+  listeners and resubscribes the base list at once;
+- `pane.updated` pokes only when the pane's agent, label, session ref or allowlisted tokens changed,
+  so Codex's animated title does not turn into a poll a second;
+- on `events_lost`, an immediate re-poll and resubscribe; on `pane_not_found`, an immediate re-poll
+  whose fresh pane set resubscribes (backoff stays the fallback).
+
+While the stream is healthy, interval polling relaxes to `COLLIE_POLL_IDLE_MS`
 (default 12000 ms, min 1000 ms); when the stream is down or reconnecting, it drops back to the
 fast `COLLIE_POLL_MS` cadence. Events accelerate; the snapshot stays authoritative — a missed
 event costs one interval, never correctness.
 
-Also visible in the 0.7.2 schema but unused by Nenu: `events.wait`, `pane.send_input`,
-`agent.list`, `pane.wait_for_output` — run `herdr api schema` for the full ~80-method catalog.
+Also in the schema but unused by Nenu: `events.wait` (on 0.9.1 it only matches agent status;
+`pane_output_changed` is rejected: "events.wait currently supports pane agent status matches"), `pane.send_input`,
+`agent.list` (the snapshot's `agents[]` already carries its counters) — run `herdr api schema` for
+the full catalog (105 methods on 0.9.1).

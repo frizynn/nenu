@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { extractClaudeSessionName } from "./state-engine.ts";
+import { HerdrClient } from "./herdr-client.ts";
+import { extractClaudeSessionName, StateEngine } from "./state-engine.ts";
+import { FakeHerdr } from "./test-support/fake-herdr.ts";
 
 // `extractClaudeSessionName` pulls Claude's own `/rename` session name out of a pane's rendered text.
 // It must match the name embedded in the horizontal rule above the ❯ prompt, and — critically — never
@@ -100,5 +104,42 @@ describe("extractClaudeSessionName — bottommost prompt wins", () => {
       "❯ ",
     ].join("\n");
     expect(extractClaudeSessionName(text)).toBe("real-name");
+  });
+});
+
+// The cost this name costs the herd, counted on the fake Herdr's socket. Before 2026-10-10 every
+// poll re-read every claude pane for it: on the operator's 14-claude herd that was 15 calls per poll
+// (1 snapshot + 14 reads, measured), every poll, forever.
+describe("session-name reads per poll (fake Herdr socket counters)", () => {
+  test("a poll with nothing changed costs one call, a status change one more", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nenu-session-name-"));
+    const fake = new FakeHerdr({ socketPath: join(dir, "herdr.sock") }).addWorkspace("w1", "demo");
+    for (let i = 1; i <= 14; i++) {
+      fake.addPane({ paneId: `w1:p${i}`, workspaceId: "w1", tabId: "w1:t1", agent: "claude", sessionId: `s-${i}` });
+    }
+    fake.addPane({ paneId: "w1:p99", workspaceId: "w1", tabId: "w1:t1", agent: null });
+    await fake.start();
+    const engine = new StateEngine(new HerdrClient(fake.socketPath, 1000, "bun"), 60_000);
+    const settled = () => new Promise((r) => setTimeout(r, 50)); // background name reads
+    try {
+      await engine.refresh();
+      await settled();
+      expect(fake.counts()).toEqual({ "session.snapshot": 1, "pane.read": 14 });
+
+      fake.resetCounts();
+      await engine.refresh();
+      await settled();
+      expect(fake.counts()).toEqual({ "session.snapshot": 1 });
+
+      fake.resetCounts();
+      fake.setStatus("w1:p3", "working");
+      await engine.refresh();
+      await settled();
+      expect(fake.counts()).toEqual({ "session.snapshot": 1, "pane.read": 1 });
+    } finally {
+      engine.stop();
+      fake.stop();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

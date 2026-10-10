@@ -63,7 +63,17 @@ interface WirePane {
    */
   terminal_title?: string | null;
   terminal_title_stripped?: string | null;
+  /**
+   * A metadata counter (protocol 22): it moves on title, metadata and resume changes, never on
+   * output. `pane.read`'s own `revision` is always 0. Neither is a content-change signal.
+   */
   revision: number;
+  /**
+   * Key/value tags a plugin reported on the pane with a TTL (protocol 22, at most 32). Herdr
+   * Organizations writes `project`, `thread`, `role`… here and refreshes them every few seconds,
+   * so a missing token means "unknown", never "removed".
+   */
+  tokens?: Record<string, string> | null;
   /**
    * The agent's OWN session identity, as the agent reported it to Herdr (herdr ≥ 0.7.2). For Claude
    * this is `{kind:"id", value:"<uuid>"}` — the uuid naming its on-disk session log, which is how
@@ -108,7 +118,35 @@ export interface WireSnapshot {
   workspaces: WireWorkspace[];
   tabs: WireTab[];
   panes: WirePane[];
+  /** Agent panes again, plus the agent-only counters below. Absent on servers before 0.7.2. */
+  agents?: WireAgent[];
 }
+
+/**
+ * The agent-only fields of a `session.snapshot` `agents[]` entry (same as `agent.list`). Only the
+ * counters are read; the rest duplicates the pane record. `completion_seq` is null or missing on
+ * 0.9.1 (live-observed 2026-10-10), so both stay optional.
+ */
+export interface WireAgent {
+  pane_id: string;
+  /** Bumps on every status transition, including one that started and ended between two polls. */
+  state_change_seq?: number | null;
+  /** Bumps when an idle transition completed work. */
+  completion_seq?: number | null;
+}
+
+/** What `ping` reports about the server. `protocol` gates newer subscription types. */
+export interface ServerInfo {
+  version: string;
+  protocol: number;
+}
+
+export type OutputMatch = { type: "substring" | "regex"; value: string };
+
+/** `pane.wait_for_output`'s outcome: the read that matched, or a timeout. */
+export type OutputWait =
+  | { matched: true; matchedLine: string; read: PaneRead }
+  | { matched: false };
 
 /** The freshly-created shell pane returned by tab.create / workspace.create (`root_pane`). */
 export interface CreatedShell {
@@ -130,10 +168,19 @@ export interface PaneRead {
 // live-probed 2026-08-03, herdr 0.7.5). Nothing called it before that probe, so the kebab spelling
 // this type carried since day one was never caught. `detection` also exists (listed by the server's
 // own error message); semantics unverified, so it stays out of the union until something needs it.
-type ReadSource = "visible" | "recent" | "recent_unwrapped";
+export type ReadSource = "visible" | "recent" | "recent_unwrapped";
 type ReadFormat = "text" | "ansi";
 
 let idCounter = 0;
+
+/**
+ * The Herdr error code inside a rejected request (`herdr <method>: <code>: <message>`, see
+ * wire.ts), or undefined for a transport failure (timeout, closed socket) that never got a reply.
+ */
+export function herdrErrorCode(err: unknown): string | undefined {
+  if (!(err instanceof Error)) return undefined;
+  return /^herdr \S+: ([a-z_]+): /.exec(err.message)?.[1];
+}
 
 /** Per-request wall-clock budget. Exported so callers can pass it explicitly alongside a dial mode. */
 export const DEFAULT_TIMEOUT_MS = 5000;
@@ -268,18 +315,60 @@ export class HerdrClient {
     return r.snapshot;
   }
 
+  /** Version and protocol of the running server, from `ping` (one-shot like every RPC). */
+  async serverInfo(): Promise<ServerInfo> {
+    const r = await this.request<{ version?: unknown; protocol?: unknown }>("ping");
+    return {
+      version: typeof r.version === "string" ? r.version : "",
+      protocol: typeof r.protocol === "number" ? r.protocol : 0,
+    };
+  }
+
+  /** One pane's record, cheaper than a whole snapshot. Unknown id → `pane_not_found`. */
+  async getPane(paneId: string): Promise<WirePane> {
+    const r = await this.request<{ pane: WirePane }>("pane.get", { pane_id: paneId });
+    return r.pane;
+  }
+
+  /**
+   * Wait server-side until the pane's text matches, and get the matching read inline. A miss within
+   * `timeoutMs` resolves `{matched:false}` instead of rejecting; any other error (`pane_not_found`,
+   * `invalid_regex`, an old server's `unknown variant`) rejects. The match only says "look now":
+   * whoever acts on it still re-derives what is on screen from `read.text`.
+   */
+  async waitForOutput(
+    paneId: string,
+    opts: { source: ReadSource; match: OutputMatch; timeoutMs: number; lines?: number },
+  ): Promise<OutputWait> {
+    const params: Record<string, unknown> = {
+      pane_id: paneId, source: opts.source, match: opts.match, timeout_ms: opts.timeoutMs,
+    };
+    if (opts.lines !== undefined) params.lines = opts.lines;
+    try {
+      // The socket budget must outlast the server's own wait, or a slow miss reads as a transport failure.
+      const r = await this.request<{ matched_line: string; read: PaneRead }>(
+        "pane.wait_for_output", params, opts.timeoutMs + this.timeoutMs,
+      );
+      return { matched: true, matchedLine: r.matched_line, read: r.read };
+    } catch (err) {
+      if (herdrErrorCode(err) === "timeout") return { matched: false };
+      throw err;
+    }
+  }
+
   /**
    * Open a LONG-LIVED `events.subscribe` stream. Unlike every other method here (one-shot), this
    * connection stays open: after the ack, each line is an event. It exists ONLY to poke re-polls —
    * callers must not treat events as state. `onDown` fires exactly once when the stream ends for any
-   * reason (error line, socket error, close, or a 5s ack timeout); `close()` is idempotent and also
-   * ends it with reason "closed". Reconnect/backoff live in the caller (see EventPoker).
+   * reason (error line, socket error, close, or a 5s ack timeout), with Herdr's error `code` when an
+   * error line ended it (`events_lost`, `pane_not_found`, `invalid_request`…); `close()` is idempotent
+   * and also ends it with reason "closed". Reconnect/backoff live in the caller (see EventPoker).
    */
   subscribeEvents(opts: {
-    subscriptions: Array<{ type: string; pane_id?: string }>;
+    subscriptions: Array<{ type: string; pane_id?: string } & Record<string, unknown>>;
     onUp: () => void;
     onEvent: (event: string, data: unknown) => void;
-    onDown: (reason: string) => void;
+    onDown: (reason: string, code?: string) => void;
   }): { close(): void } {
     const id = `es${++idCounter}`;
     const decoder = new TextDecoder("utf-8");
@@ -290,7 +379,7 @@ export class HerdrClient {
     let acked = false;
 
     // The single terminal path. Guarded so onDown never fires twice, and closes the FD once.
-    const fireDown = (reason: string) => {
+    const fireDown = (reason: string, code?: string) => {
       if (down) return;
       down = true;
       clearTimeout(ackTimer);
@@ -311,7 +400,7 @@ export class HerdrClient {
         }
       }
       cancelDial = null;
-      opts.onDown(reason);
+      opts.onDown(reason, code);
     };
 
     // A server that accepts the connection but never acks (hung) counts as down, not healthy.
@@ -327,7 +416,7 @@ export class HerdrClient {
         return;
       }
       if (decoded.kind === "error") {
-        fireDown(`${decoded.code}: ${decoded.message}`);
+        fireDown(`${decoded.code}: ${decoded.message}`, decoded.code);
         return;
       }
       if (decoded.kind === "ack") {
