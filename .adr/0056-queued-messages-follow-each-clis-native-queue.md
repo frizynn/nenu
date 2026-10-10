@@ -1,13 +1,13 @@
 # 0056. Queued messages follow each CLI's native queue
 
-- **Status:** Proposed. The direction was decided by Fran on 2026-10-10. The measured semantics
-  below are pending the P0 probes, and the decision becomes Accepted once they are filled in.
+- **Status:** Accepted 2026-10-10. Fran decided the direction; the P0 probes
+  (`web/src/lib/grammar/PROBES_2026_10_NOTES.md`) filled in the measured semantics below.
 - **Supersedes:** the message-queue half of [ADR 0025](./0025-artifacts-and-server-message-queue.md),
   specifically "Automatic sends wait for an idle/done agent". The artifacts half of 0025 stays in
   force, and so does the rest of its queue design (durable bridge file, enqueue ids, persisted
   `sending`, guarded writes, no replay of uncertain outcomes).
 - **Trail:** `bridge/queue-readiness.ts` · `bridge/queue-service.ts` · `bridge/queue-delivery.ts` ·
-  `bridge/message-queue.ts` · `bridge/journal/claude.ts` · `web/src/components/message-queue-strip.tsx`
+  `bridge/message-queue.ts` · `bridge/queue-native.ts` · `bridge/journal/claude.ts` · `web/src/components/message-queue-strip.tsx`
   · `web/src/components/composer.tsx`
 
 ## Context
@@ -76,22 +76,41 @@ CLI does not have.**
    `stranded` when their pane or conversation is gone. A stranded row is never delivered elsewhere
    on its own.
 
-### Measured semantics (pending P0)
+### Measured semantics
 
-This table is the contract the delivery code implements. Until the probes fill it in, Nenu keeps
-today's behaviour for the cell and the UI labels it unverified.
+This table is the contract the delivery code implements (`bridge/queue-native.ts`). Every row was
+measured on 2026-10-10 in a disposable Herdr 0.9.3 session; the notes file holds the evidence.
 
-| CLI | Key while working | What the CLI does | Journal record | Status |
-| --- | --- | --- | --- | --- |
-| Claude Code 2.1.296 | Enter | Documented: queued, absorbed after the current tool calls | `queue-operation` rows | Pending P0 inside Herdr |
-| Claude Code 2.1.296 | Ctrl+X Ctrl+S | Documented: send now | Unknown | Pending P0 (does Herdr pass the chord?) |
-| Claude Code 2.1.296 | Up / Esc | Documented: recall queued / interrupt and send queued | `popAll` on recall | Pending P0 |
-| Codex 0.160.1 | Enter | Third-party sources: steer the current turn | Unknown | Pending P0 |
-| Codex 0.160.1 | Tab | Fixture footer "tab to queue message": queue for the next turn | Unknown | Pending P0 |
-| pi | n/a | No adapter, no captures | n/a | Pending P0 and C1b; stays outside the queue |
+| CLI | Key while working | What the CLI does (measured) | Journal record |
+| --- | --- | --- | --- |
+| Claude Code 2.1.296 | Enter | Queued (`Press up to edit queued messages`), read after the running tool call in the same turn; with no tool left, at the start of the next turn | `enqueue`, then `remove` (absorbed_mid_turn) + `queued_command`, or `dequeue` |
+| Claude Code 2.1.296 | Ctrl+Enter, or Ctrl+X Ctrl+S | Send now: the running tool moves to the background, the queue is read at once | `dequeue` and a new user row |
+| Claude Code 2.1.296 | Up | Recalls the queue into the input box | `popAll` |
+| Codex 0.160.1 | Enter | Steer: read after the running tool call, same turn | None while pending |
+| Codex 0.160.1 | Tab | Queued for the next turn (`Queued follow-up inputs`) | None while pending |
+| Codex 0.160.1 | Esc with a steer pending | Interrupts the model and submits the steer | `turn_aborted` |
+| pi 1.0.0 | n/a | Composer and bracketed paste only, no turns probed | n/a, stays outside the queue until C1b |
 
-If P0 contradicts a row, the table changes and so does the mapping from `deliveryMode` to keys. The
-rule above it does not change.
+So Claude's Enter and Codex's Enter are the same behaviour, and only Codex has a next-turn queue a
+key reaches. The mapping:
+
+| `deliveryMode` | Claude | Codex |
+| --- | --- | --- |
+| `asap` / `steer` (one behaviour) | Typed as soon as the input box is free, Enter | Typed as soon as the input box is free, Enter |
+| `afterTurn` | Nenu holds the row until Herdr reports the turn over, then Enter | Tab while a turn runs, Enter when idle |
+| none sent (older clients) | `afterTurn`, as before | `steer`, as before |
+
+"Read it now" exists for Claude only: Ctrl+Enter on a row the journal shows still `enqueued`, into an
+empty input box, after the operator confirms, because it backgrounds the running command. Codex's
+equivalent (Esc) interrupts the model, so it is not offered.
+
+Claude 2.1.296 also moved `esc to interrupt` into the statusline under the input box while a turn
+runs. The composer guard used to read that as a modal's key hint and refused every send to a working
+Claude, a second queued message included. It now ignores that one hint and nothing else
+(`harness/claude/chrome.ts`, `working-composer.test.ts`).
+
+If a later probe contradicts a row, the table changes and so does the mapping. The rule above it does
+not change.
 
 ## Consequences
 
