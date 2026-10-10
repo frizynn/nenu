@@ -1,4 +1,4 @@
-import { chatFileReferences, filePathsInText, artifactKind } from "./chat-files";
+import { chatFileReferences, filePathsInText, artifactKind, markdownImagePaths } from "./chat-files";
 import type { TranscriptEntry } from "./types";
 
 describe("chat file references", () => {
@@ -57,4 +57,18 @@ it("tracks latest mentions and separates delivered documents from edited sources
   expect(refs.filter(file => artifactKind(file, false)).map(r => r.path)).toEqual(["report.pdf"]);
   expect(refs.find(r => r.path === "report.pdf")?.lastSeen).toMatchObject({ entryId: "latest", order: 2 });
   expect(refs.find(r => r.path === "src/main.ts")?.edited).toBe(true);
+});
+
+describe("journal media in file references", () => {
+  it("skips image markers and counts SendUserFile deliveries as delivered", () => {
+    const entries = [
+      { uuid: "a", ts: "2026-10-10T10:00:00Z", role: "user", parts: [{ kind: "image", index: 0 }] },
+      { uuid: "b", ts: "2026-10-10T10:01:00Z", role: "assistant", parts: [
+        { kind: "tool", name: "SendUserFile", summary: "", result: { text: "sent", attachments: [{ kind: "file", path: "/tmp/out/report.html" }] } },
+      ] },
+    ] as unknown as TranscriptEntry[];
+    const [report] = chatFileReferences(entries);
+    expect(report).toMatchObject({ path: "/tmp/out/report.html", delivered: true });
+    expect(markdownImagePaths("![a](x.png) and [b](y.png)")).toEqual(["x.png"]);
+  });
 });

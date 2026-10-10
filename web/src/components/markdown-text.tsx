@@ -1,8 +1,8 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 import { parseMarkdown, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
-import { FilePreviewContext } from "@/lib/file-preview-context";
+import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 
 // Renders the Markdown AST as React elements. Every string from the log reaches the DOM as a TEXT
@@ -43,6 +43,8 @@ function Hit({ text }: { text: string }) {
 function Span({ span }: { span: MdSpan }) {
   const openFile = useContext(FilePreviewContext);
   switch (span.kind) {
+    case "image":
+      return <InlineImage path={span.path} alt={span.alt} />;
     case "file":
       return openFile ? <button type="button" className="text-primary underline underline-offset-2 break-all text-left" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
     case "bold":
@@ -82,6 +84,21 @@ function Span({ span }: { span: MdSpan }) {
     default:
       return <Hit text={span.text} />;
   }
+}
+
+/**
+ * A Markdown image, in place, from the pane's own file route (the bridge contains and sniffs it).
+ * Without that route, or when the file is unavailable, it degrades to the file's name.
+ */
+function InlineImage({ path, alt }: { path: string; alt: string }) {
+  const url = useContext(FileMediaContext);
+  const openFile = useContext(FilePreviewContext);
+  const [failed, setFailed] = useState(false);
+  const name = alt || (path.split("/").at(-1) ?? path);
+  if (!url || failed) return <Span span={{ kind: "file", path, spans: [{ kind: "text", text: name }] }} />;
+  const image = <img src={url(path)} alt={name} loading="lazy" decoding="async" onError={() => setFailed(true)}
+    className="my-1 inline-block max-h-80 max-w-full rounded-lg border border-border/50 object-contain align-top" />;
+  return openFile ? <button type="button" aria-label={`Open ${name}`} className="inline-block max-w-full text-left" onClick={() => openFile(path)}>{image}</button> : image;
 }
 
 // A code-formatted filename inside a link is its label, never another nested interactive control.

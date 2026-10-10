@@ -3,37 +3,49 @@ import {
   FileMediaContext,
   FilePreviewContext,
 } from "@/lib/file-preview-context";
-import { filePathsInText } from "@/lib/chat-files";
-import { splitMessageImages } from "@/lib/message-images";
+import { filePathsInText, markdownImagePaths } from "@/lib/chat-files";
+import { IMAGE_EXTENSION, splitMessageImages } from "@/lib/message-images";
+import { ArtifactCards } from "./artifact-card";
+import { MediaViewerContext } from "./file-preview-provider";
 import { MessageImages } from "./message-images";
 
-export function ChatMedia({ text, compact = false }: { text: string; compact?: boolean }) {
+const VIDEO = /\.(mp4|m4v|mov|webm)$/i;
+
+export function ChatMedia({ text, compact = false, uploads = true }: { text: string; compact?: boolean; uploads?: boolean }) {
   const url = useContext(FileMediaContext);
-  const open = useContext(FilePreviewContext);
-  const paths = useMemo(
-    () =>
-      [...new Set(filePathsInText(text))]
-        .filter((path) =>
-          /\.(png|jpe?g|gif|webp|mp4|m4v|mov|webm)$/i.test(path),
-        )
-        .slice(0, 12),
-    [text],
-  );
+  const viewer = useContext(MediaViewerContext);
+  const openFile = useContext(FilePreviewContext);
+  const { media, pages } = useMemo(() => {
+    const inline = new Set(markdownImagePaths(text));
+    const paths = [...new Set(filePathsInText(text))].filter((path) => !inline.has(path));
+    return {
+      media: paths.filter((path) => IMAGE_EXTENSION.test(path) || VIDEO.test(path)).slice(0, 12),
+      pages: compact ? [] : paths.filter((path) => /\.html?$/i.test(path)).slice(0, 6),
+    };
+  }, [text, compact]);
   if (!url) return null;
   // The operator's own message: its images read as "Image 1…N" thumbnails, not as files.
-  const images = compact ? splitMessageImages(text).images : [];
+  const carried = compact ? splitMessageImages(text).images : [];
+  const images = uploads ? carried : [];
+  const shown = media.filter((path) => !carried.includes(path));
+  const gallery = shown.filter((path) => !VIDEO.test(path));
+  const open = (path: string) => {
+    if (viewer && gallery.includes(path)) viewer.open(gallery.map((p) => ({ kind: "file", path: p })), gallery.indexOf(path));
+    else openFile?.(path);
+  };
   return (
     <div className="space-y-2">
       <MessageImages paths={images} className="pt-1" />
-      {paths.filter((path) => !images.includes(path)).map((path) => (
+      {shown.map((path) => (
         <Media
           key={path}
           path={path}
           compact={compact}
           url={url(path)}
-          open={() => open?.(path)}
+          open={() => open(path)}
         />
       ))}
+      <ArtifactCards paths={pages} />
     </div>
   );
 }
@@ -62,7 +74,7 @@ function Media({
     );
   return (
     <figure className={`my-2 overflow-hidden rounded-lg border border-border/50 ${compact ? "max-w-40" : "max-w-lg"}`}>
-      {/\.(mp4|m4v|mov|webm)$/i.test(path) ? (
+      {VIDEO.test(path) ? (
         <video
           src={url}
           controls
@@ -83,6 +95,7 @@ function Media({
             src={url}
             alt={name}
             loading="lazy"
+            decoding="async"
             className={`${compact ? "max-h-32" : "max-h-80"} w-full object-contain`}
             onError={() => setFailed(true)}
           />

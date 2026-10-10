@@ -1,6 +1,7 @@
 import { localFilePath } from "./file-links";
 import { parseMarkdown, type MdBlock, type MdSpan } from "./markdown";
-import type { TranscriptEntry, TranscriptPart } from "./types";
+import type { ShownPart } from "./message-images";
+import type { TranscriptEntry } from "./types";
 
 export type ChatFileKind = "file" | "photo" | "video";
 
@@ -36,16 +37,13 @@ function normalisePath(path: string): string {
   return absolute ? `/${joined}` : joined || ".";
 }
 
-function markdownPaths(text: string, includeCode = true): string[] {
-  const paths: string[] = [];
+/** Every inline span of a Markdown text, nested spans included, in reading order. */
+function markdownSpans(text: string): MdSpan[] {
+  const out: MdSpan[] = [];
   const spans = (items: MdSpan[]) => {
     for (const span of items) {
-      if (span.kind === "file") paths.push(span.path);
-      else if (span.kind === "bold" || span.kind === "italic" || span.kind === "link") spans(span.spans);
-      else if (span.kind === "code" && includeCode) {
-        const path = localFilePath(span.text);
-        if (path) paths.push(path);
-      }
+      out.push(span);
+      if (span.kind === "bold" || span.kind === "italic" || span.kind === "link") spans(span.spans);
     }
   };
   const block = (item: MdBlock) => {
@@ -57,7 +55,20 @@ function markdownPaths(text: string, includeCode = true): string[] {
     }
   };
   parseMarkdown(text).forEach(block);
-  return paths;
+  return out;
+}
+
+function markdownPaths(text: string, includeCode = true): string[] {
+  return markdownSpans(text).flatMap((span) => {
+    if (span.kind === "file" || span.kind === "image") return [span.path];
+    const path = span.kind === "code" && includeCode ? localFilePath(span.text) : null;
+    return path ? [path] : [];
+  });
+}
+
+/** The local images a text already shows in place, as `![alt](path)`. */
+export function markdownImagePaths(text: string): string[] {
+  return markdownSpans(text).flatMap((span) => span.kind === "image" ? [span.path] : []);
 }
 
 /** Extract previewable local-file mentions from prose and compact tool summaries/results. */
@@ -78,9 +89,15 @@ export function filePathsInText(text: string): string[] {
   return paths;
 }
 
-function textInPart(part: TranscriptPart): string[] {
+function textInPart(part: ShownPart): string[] {
+  if (part.kind === "image") return [];
   if (part.kind === "text" || part.kind === "thinking") return [part.text];
   return [part.summary, part.result?.text ?? ""];
+}
+
+/** Files the harness itself reports delivering (Claude's SendUserFile), as the tool result names them. */
+export function sentFiles(part: ShownPart): string[] {
+  return part.kind === "tool" ? (part.result?.attachments ?? []).flatMap((a) => a.kind === "file" ? [a.path] : []) : [];
 }
 
 /** Oldest-first input produces stable first-seen ordering; repeat mentions collapse by path. */
@@ -88,10 +105,11 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
   const references = new Map<string, ChatFileReference>();
   for (const [order, entry] of entries.entries()) {
     const perEntry = new Set<string>();
-    for (const part of entry.parts) {
-      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? markdownPaths(part.text, false).map(normalisePath) : []);
+    for (const part of entry.parts as readonly ShownPart[]) {
+      const sent = sentFiles(part);
+      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? markdownPaths(part.text, false).map(normalisePath) : sent.map(normalisePath));
       for (const text of textInPart(part)) {
-        for (const candidate of filePathsInText(text)) {
+        for (const candidate of [...filePathsInText(text), ...sent]) {
           const path = localFilePath(candidate);
           if (!path) continue;
           const normal = normalisePath(path);
