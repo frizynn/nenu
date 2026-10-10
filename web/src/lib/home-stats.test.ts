@@ -86,7 +86,7 @@ describe("background work", () => {
   it("announces work that ended since the thread was last opened, newest first", () => {
     const activity = new Map<string, ActivityResponse>([
       ["a", res([wf("old", "completed", NOW - 30 * MIN), wf("new", "failed", NOW - 5 * MIN), wf("live", "running")],
-        [{ id: "k", kind: "bash", title: "Typecheck", status: "failed", exitCode: 144, at: NOW - 10 * MIN, hasOutput: true },
+        [{ id: "k", kind: "bash", title: "Typecheck", status: "failed", exitCode: 2, at: NOW - 10 * MIN, hasOutput: true },
          { id: "ok", kind: "bash", title: "Build", status: "completed", at: NOW - 2 * MIN, hasOutput: true }])],
       ["b", res([wf("seen", "completed", NOW - 30 * MIN)])],
       ["gone", res([wf("orphan", "completed", NOW - MIN)])],
@@ -94,6 +94,12 @@ describe("background work", () => {
     const notices = finishedNotices(activity, [agent("a", "idle", { lastSeenAt: NOW - 60 * MIN }), agent("b", "idle", { lastSeenAt: NOW - 20 * MIN })], NOW);
     expect(notices.map((n) => `${n.kind}:${n.id}:${n.failed}`)).toEqual(["workflow:new:true", "task:k:true", "workflow:old:false"]);
     expect(runningWorkflows(activity).map((r) => `${r.paneId}:${r.workflow.runId}`)).toEqual(["a:live"]);
+  });
+
+  it("keeps one failed command per pane and skips commands stopped by a signal", () => {
+    const failed = (id: string, exitCode: number, ago: number) => ({ id, kind: "bash" as const, title: id, status: "failed" as const, exitCode, at: NOW - ago * MIN, hasOutput: true });
+    const activity = new Map([["a", res([], [failed("older", 1, 20), failed("killed", 144, 2), failed("latest", 2, 5)])]]);
+    expect(finishedNotices(activity, [agent("a", "idle", { lastSeenAt: NOW - 60 * MIN })], NOW).map((n) => n.id)).toEqual(["latest"]);
   });
 
   it("lets a day-old result go", () => {

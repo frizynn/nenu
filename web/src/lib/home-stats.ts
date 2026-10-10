@@ -170,9 +170,12 @@ export function finishedNotices(activity: ReadonlyMap<string, ActivityResponse>,
       const at = workflow.updatedAt ?? (workflow.startedAt !== undefined && workflow.durationMs !== undefined ? workflow.startedAt + workflow.durationMs : undefined);
       if (fresh(at)) notices.push({ paneId, kind: "workflow", id: workflow.runId, title: workflow.name, failed: workflow.status === "failed", at, workflow });
     }
-    for (const task of res.tasks) {
-      if (task.status === "failed" && fresh(task.at)) notices.push({ paneId, kind: "task", id: task.id, title: task.title, failed: true, at: task.at, task });
-    }
+    // One notice per pane for failed commands, the latest. An exit above 128 is a signal: the agent or
+    // the user stopped it (a gate wait cut short, a Ctrl+C), which is not a result to review.
+    const failed = res.tasks
+      .filter((task): task is ActivityTask & { at: number } => task.status === "failed" && (task.exitCode ?? 1) <= 128 && fresh(task.at))
+      .sort((a, b) => b.at - a.at)[0];
+    if (failed) notices.push({ paneId, kind: "task", id: failed.id, title: failed.title, failed: true, at: failed.at, task: failed });
   }
   return notices.sort((a, b) => b.at - a.at);
 }
