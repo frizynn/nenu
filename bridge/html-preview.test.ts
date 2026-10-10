@@ -62,7 +62,9 @@ describe("sibling asset inlining", () => {
     root = join(dir, "project");
     await mkdir(join(root, "site", "assets"), { recursive: true });
     await writeFile(join(root, "site", "style.css"), "body{color:red}/*</style><script>x()</script>*/");
-    await writeFile(join(root, "site", "assets", "app.js"), 'document.title="</script>"');
+    await writeFile(join(root, "site", "app.js"), 'document.title="</script>"');
+    await writeFile(join(root, "site", "assets", "nested.js"), "nested()");
+    await writeFile(join(root, "site", "print.css"), "body{color:gray}");
     await writeFile(join(root, "site", "logo.png"), png);
     await writeFile(join(root, "site", "icon.svg"), "<svg xmlns='http://www.w3.org/2000/svg'/>");
     await writeFile(join(root, "top.css"), "body{color:blue}");
@@ -74,7 +76,11 @@ describe("sibling asset inlining", () => {
 
   const page = [
     '<link rel="stylesheet" href="./style.css?v=1">',
-    '<script type="module" src="assets/app.js"></script>',
+    '<script type="module" src="app.js"></script>',
+    '<script defer src="app.js"></script><script async src="app.js"></script>',
+    '<script src="assets/nested.js"></script>',
+    '<link rel="stylesheet" media="print" href="print.css">',
+    '<link rel="alternate stylesheet" href="print.css"><link rel="stylesheet" disabled href="print.css">',
     '<img src="logo.png"><img src="icon.svg">',
     '<link rel="stylesheet" href="../top.css">',
     '<link rel="stylesheet" href="/top.css">',
@@ -92,10 +98,14 @@ describe("sibling asset inlining", () => {
     const html = await response.text();
     expect(html).toContain("<style>body{color:red}/*<\\/style><script>x()</script>*/</style>");
     expect(html).toContain('<script type="module">document.title="<\\/script>"</script>');
+    expect(html).toContain('<style media="print">body{color:gray}</style>');
     expect(html).toContain(`<img src="data:image/png;base64,${png.toString("base64")}">`);
     expect(html).toContain('<img src="data:image/svg+xml;base64,');
     for (const kept of ['href="../top.css"', 'href="/top.css"', 'href="https://example.com/x.css"',
-      'href=".env.css"', 'href="escape.css"', '<link rel="icon" href="logo.png">'])
+      'href=".env.css"', 'href="escape.css"', '<link rel="icon" href="logo.png">',
+      '<script defer src="app.js"></script>', '<script async src="app.js"></script>',
+      '<script src="assets/nested.js"></script>', '<link rel="alternate stylesheet" href="print.css">',
+      '<link rel="stylesheet" disabled href="print.css">'])
       expect(html).toContain(kept);
     expect(html).not.toContain("secret");
     expect(html).not.toContain("color:green");

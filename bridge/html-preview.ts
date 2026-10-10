@@ -1,4 +1,4 @@
-import { dirname, extname, resolve, sep } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { designboardPreview } from "./designboard.ts";
 import { openPaneFile, readPaneBytes, readPaneText, type PaneFile } from "./pane-files.ts";
 import { imageExtFromBytes } from "./uploads.ts";
@@ -13,7 +13,7 @@ function siblingPath(dir: string, ref: string | null): string | null {
   if (!name || /^[a-z][a-z0-9+.-]*:/i.test(name) || /^[\\/]/.test(name)) return null;
   try {
     const path = resolve(dir, decodeURIComponent(name));
-    return path.startsWith(dir + sep) ? path : null;
+    return dirname(path) === dir ? path : null;
   } catch {
     return null;
   }
@@ -52,13 +52,20 @@ export async function inlineSiblingAssets(
   return new HTMLRewriter()
     .on("link[href]", {
       async element(link) {
-        if (!/(?:^|\s)stylesheet(?:\s|$)/i.test(link.getAttribute("rel") ?? "")) return;
+        const rel = link.getAttribute("rel") ?? "";
+        if (!/(?:^|\s)stylesheet(?:\s|$)/i.test(rel) || /(?:^|\s)alternate(?:\s|$)/i.test(rel) || link.hasAttribute("disabled")) return;
         const css = await readText(link.getAttribute("href"), [".css"]);
-        if (css !== null) link.replace(`<style>${css.replace(/<\/style/gi, "<\\/style")}</style>`, { html: true });
+        if (css === null) return;
+        const media = link.getAttribute("media");
+        const open = media === null ? "<style>" : `<style media="${Bun.escapeHTML(media)}">`;
+        link.replace(`${open}${css.replace(/<\/style/gi, "<\\/style")}</style>`, { html: true });
       },
     })
     .on("script[src]", {
       async element(script) {
+        // An inline classic script ignores defer and async and would run before the body exists.
+        const module = script.getAttribute("type")?.trim().toLowerCase() === "module";
+        if (!module && (script.hasAttribute("defer") || script.hasAttribute("async"))) return;
         const js = await readText(script.getAttribute("src"), [".js", ".mjs", ".cjs"]);
         if (js === null) return;
         script.removeAttribute("src");
