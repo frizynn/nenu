@@ -3,6 +3,7 @@ import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines, type Block } from "../web/src/lib/blocks.ts";
 import { DIALOG_CONTRACT, type DialogKind, type DialogModels } from "../web/src/lib/harness/dialog-contract.ts";
 import { sanitizeTypedText } from "../web/src/lib/harness/guard.ts";
+import { detectAskNotes } from "../web/src/lib/harness/codex/ask.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harness/multi-select-model.ts";
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/src/lib/harness/poll.ts";
@@ -38,7 +39,9 @@ export interface PaneIO {
 
 /** Interaction as served. The extra fields are wire additions this module owns until types.ts has them. */
 export interface DetectedInteraction extends Interaction {
-  options: Array<InteractionOption & { checked?: boolean }>;
+  /** `acceptsText`: the answer may carry `text` (a verified sequence types it); a `freeText` option
+   *  without it has no measured recipe and is answered in the terminal. */
+  options: Array<InteractionOption & { checked?: boolean; acceptsText?: true }>;
   /** The full command, file or plan is on the card (a hint carried it and the screen shows it). */
   detailComplete: boolean;
   /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
@@ -57,6 +60,10 @@ type Recipe =
   | { type: "preview"; n: number }
   /** Plan feedback: focus the input, type, verify, Enter (PLAN_FEEDBACK_NOTES.md). */
   | { type: "feedback"; key: string }
+  /** Row `n`'s keys alone, or with text: walk onto it, Tab, type, verify, Enter (PROBES_2026_10_NOTES.md). */
+  | { type: "amend"; n: number; keys: string[] }
+  /** Claude multi-select "Type something": walk onto the row, type, verify, step off. Never submits. */
+  | { type: "typeSomething"; n: number }
   | { type: "unsupported" };
 
 type Dialog = { [K in DialogKind]: { kind: K; model: DialogModels[K] } }[DialogKind];
@@ -96,6 +103,8 @@ const NAV_SETTLE_MS = 250;
 const OUTPUT_MATCH_WINDOW_MS = 30_000;
 /** Rows of a prompt's subject kept above its question. */
 const CONTEXT_MAX_ROWS = 12;
+/** Rows above a prompt's question that must hold still while its amend field opens and fills. */
+const HEAD_ROWS = 12;
 /** Rows of a plan's on-screen tail a plan hint must contain. */
 const PLAN_TAIL_ROWS = 3;
 
@@ -145,10 +154,12 @@ function role(label: string, answers: boolean, persistent = false): InteractionO
 }
 
 const keys = (k: string[]): Recipe => ({ type: "keys", keys: k });
+/** The recipes that type the answer's `text`; an option carrying one is served with `acceptsText`. */
+const TEXT_RECIPES = new Set<Recipe["type"]>(["feedback", "amend", "typeSomething"]);
 /** A "Type something" row is typed into in the terminal; a digit would only focus or tick it. */
 const pick = (label: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
   const option = { label, role: role(label, answers), ...extra };
-  return { option, recipe: option.role === "freeText" && recipe.type !== "feedback" ? { type: "unsupported" } : recipe };
+  return { option, recipe: option.role === "freeText" && !TEXT_RECIPES.has(recipe.type) ? { type: "unsupported" } : recipe };
 };
 
 /** Kind, question and the answerable options of a dialog, before hints. */
@@ -166,10 +177,12 @@ function describe(dialog: Dialog, agent: string): Described {
     case "multi-select": {
       const m = dialog.model;
       if (m.phase === "review") return review(agent, "multi-select");
+      const textRow = agent === "claude" ? emptyTypeSomethingRow(m) : null;
       return {
         kind: "multi-select", family: agent, question: m.question,
         choices: [
           ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
+          ...(textRow !== null ? [pick("Type something", { type: "typeSomething", n: textRow }, {}, true)] : []),
           pick(m.advanceLabel, { type: "advance" }, { role: "primary" }),
           ...(m.escape ? [pick(m.escape.label, keys([String(m.escape.n)]), { role: "deny" })] : []),
         ],
@@ -195,7 +208,8 @@ function review(agent: string, kind: "wizard" | "multi-select", context?: string
 function describePrompt(p: PromptModel, agent: string): Described {
   const kind: InteractionKind = p.family === "plan" ? "plan" : p.family === "select" ? "question" : "permission";
   const choices = p.options.map((o) => {
-    const choice = pick(o.label, keys(o.keys), { role: role(o.label, kind === "question", p.family === "trust") });
+    const recipe: Recipe = o.amend && AMEND_FIELD[agent] ? { type: "amend", n: Number(o.keys[0]), keys: o.keys } : keys(o.keys);
+    const choice = pick(o.label, recipe, { role: role(o.label, kind === "question", p.family === "trust") });
     if (o.description) choice.option.description = o.description;
     // Claude 2.1.296: a bare "No" rejects AND ends the turn; only Tab-amend keeps it going (PROBES_2026_10).
     else if (agent === "claude" && p.family === "permission" && o.label === "No") choice.option.description = "Stops Claude's turn";
@@ -209,6 +223,8 @@ function describePrompt(p: PromptModel, agent: string): Described {
   if (p.feedback && (p.feedback.purpose ?? "plan-change") === "plan-change") {
     choices.push(pick("Tell Claude what to change", { type: "feedback", key: p.feedback.key }, { role: "freeText" }));
   }
+  // AskUserQuestion's single-choice "Type something." has no measured recipe: shown, answered in the terminal.
+  if (p.textRow) choices.push(pick(p.textRow.label, { type: "unsupported" }, { role: "freeText" }));
   const context = promptContext(p);
   return { kind, family: p.family, question: p.question, ...(context ? { context } : {}), choices };
 }
@@ -279,13 +295,18 @@ function agrees(hint: InteractionHint, base: Described, dialog: Dialog, labels: 
 function typing(dialog: Dialog): boolean {
   if (dialog.kind === "prompt-select") return dialog.model.feedback?.focused ?? false;
   if (dialog.kind === "preview-select") return dialog.model.note.state === "editing";
+  // Claude's grammar reports the empty "Type something" row as `other`; with the pointer there, keys type into it.
+  if (dialog.kind === "multi-select") return dialog.model.phase === "checkbox" && dialog.model.pointer === "other";
   return false;
 }
 
 /** Build the served interaction for `dialog`: screen first, hints only where they agree. */
 export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog: Dialog, revision: number, hints: InteractionHint[], now: number): Detection {
   const base = describe(dialog, pane.agent);
-  const choices: Choice[] = base.choices.map((c, index) => ({ option: { index, ...c.option }, recipe: c.recipe }));
+  const choices: Choice[] = base.choices.map((c, index) => ({
+    option: { index, ...c.option, ...(TEXT_RECIPES.has(c.recipe.type) ? { acceptsText: true as const } : {}) },
+    recipe: c.recipe,
+  }));
   const labels = choices.map((c) => c.option.label);
   const kept = hints.filter((h) => agrees(h, base, dialog, labels));
   const asked = kept.find((h) => h.question && base.kind !== "permission");
@@ -343,6 +364,17 @@ interface Options {
   lines?: number;
   now?: () => number;
   sleep?: Sleep;
+}
+
+/**
+ * The exact string to type, or the 400 to answer. Over-long text is refused rather than cut: a cut can
+ * end in a space that no trimmed read-back ever matches, and a silent cut submits words nobody chose.
+ */
+function typedText(raw: string): string | AnswerResult {
+  const text = sanitizeTypedText(raw, Infinity);
+  if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+  if (text.length > FEEDBACK_MAX_LENGTH) return { status: 400, outcome: { ok: false, error: `Keep it under ${FEEDBACK_MAX_LENGTH + 1} characters.` } };
+  return text;
 }
 
 export class Interactions {
@@ -494,6 +526,9 @@ export class Interactions {
     if (choice.option.role === "persistent" && body.confirm !== true) {
       return { status: 409, outcome: { ok: false, error: "This option changes a setting beyond this answer. Confirm it.", code: "confirm_required" } };
     }
+    if (body.text !== undefined && !choice.option.acceptsText) {
+      return { status: 400, outcome: { ok: false, error: "This option takes no text." } };
+    }
     const { dialog } = detection;
     if (detection.interaction.typing) return changed("Someone is typing in this dialog.");
     let result: AnswerResult;
@@ -517,6 +552,14 @@ export class Interactions {
         return dialog.kind === "preview-select" ? this.preview(io, pane, dialog.model, recipe.n) : unsupported();
       case "feedback":
         return dialog.kind === "prompt-select" ? this.feedback(io, pane, dialog.model, recipe.key, text ?? "") : unsupported();
+      case "amend":
+        if (text === undefined) {
+          await io.sendPaneKeys(pane.paneId, recipe.keys);
+          return sent(recipe.keys);
+        }
+        return dialog.kind === "prompt-select" && AMEND_FIELD[pane.agent] ? this.amend(io, pane, dialog.model, recipe.n, text, AMEND_FIELD[pane.agent]!) : unsupported();
+      case "typeSomething":
+        return dialog.kind === "multi-select" ? this.typeSomething(io, pane, dialog.model, recipe.n, text ?? "") : unsupported();
       case "unsupported":
         return unsupported();
     }
@@ -580,8 +623,8 @@ export class Interactions {
   private async feedback(io: PaneIO, pane: AgentView, tapped: PromptModel, key: string, raw: string): Promise<AnswerResult> {
     const row = tapped.feedback;
     if (!row || row.focused || row.text !== "") return changed("Someone is typing in this dialog.");
-    const text = sanitizeTypedText(raw, FEEDBACK_MAX_LENGTH);
-    if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
     const focused = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === "";
     if ((await this.poll(io, pane, "prompt-select", tapped, focused)) !== "ok") return failed("The feedback box didn't open. Check the pane.");
@@ -594,6 +637,158 @@ export class Interactions {
     await io.sendPaneKeys(pane.paneId, ["Enter"]);
     return sent([key, "Enter"]);
   }
+
+  /** Read once until `accept`, giving up after the shared poll budget or when another dialog shows. */
+  private async waitFor<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, same: (m: DialogModels[K]) => boolean, accept: (m: DialogModels[K]) => boolean): Promise<DialogModels[K] | null> {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+      await this.sleep(POLL_DELAY_MS);
+      const m = await this.model(io, pane, kind).catch(() => null);
+      if (!m) continue;
+      if (accept(m)) return m;
+      if (!same(m)) return null;
+    }
+    return null;
+  }
+
+  /**
+   * Answer row `n` with text through its Tab field (Claude's "Tab to amend", Codex's notes;
+   * PROBES_2026_10_NOTES.md): walk the pointer onto the row one verified Up/Down at a time, Tab, wait
+   * for the empty field, type, read our exact words back, and Enter on a fresh read. No Enter goes out
+   * unless the field shows our text.
+   */
+  private async amend(io: PaneIO, pane: AgentView, tapped: PromptModel, n: number, raw: string, field: AmendField): Promise<AnswerResult> {
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
+    if (tapped.feedback || tapped.pointer === undefined) return changed();
+    const sentKeys: string[] = [];
+    let at = tapped.pointer;
+    for (let step = 0; at !== n; step++) {
+      if (step > tapped.options.length) return changed();
+      const key = at < n ? "Down" : "Up";
+      const want = at < n ? at + 1 : at - 1;
+      await io.sendPaneKeys(pane.paneId, [key]);
+      sentKeys.push(key);
+      // Not promptsSameIdentity: Claude's footer drops `Tab to amend` on the rows that cannot amend.
+      const same = (m: PromptModel) => sameAmendDialog(m, tapped) && !m.feedback && sameOptionRows(m, tapped);
+      const moved = await this.waitFor(io, pane, "prompt-select", same, (m) => same(m) && m.pointer === want);
+      if (!moved) return changed();
+      at = want;
+    }
+    await io.sendPaneKeys(pane.paneId, ["Tab"]);
+    sentKeys.push("Tab");
+    if ((await this.waitForField(io, pane, field, tapped, n, "")) !== "ok") return failed("The text field didn't open. Check the pane.");
+    await io.sendPaneText(pane.paneId, text);
+    if ((await this.waitForField(io, pane, field, tapped, n, text)) !== "ok") return failed("Your text didn't arrive. Nothing was submitted.");
+    // The Enter is the irreversible write: one more read right before it.
+    const fresh = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
+    if (field(fresh.text, tapped, n) !== text) return changed();
+    await io.sendPaneKeys(pane.paneId, ["Enter"]);
+    return sent([...sentKeys, "Enter"]);
+  }
+
+  /** Poll until the open field on row `n` holds `want`; "gone" once the screen shows no such field. */
+  private async waitForField(io: PaneIO, pane: AgentView, field: AmendField, tapped: PromptModel, n: number, want: string): Promise<"ok" | "gone"> {
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+      await this.sleep(POLL_DELAY_MS);
+      const read = await io.readPane(pane.paneId, "recent", this.lines, "ansi").catch(() => null);
+      if (read && field(read.text, tapped, n) === want) return "ok";
+    }
+    return "gone";
+  }
+
+  /**
+   * Fill AskUserQuestion's empty "Type something" row (PROBES_2026_10_NOTES.md, 2.1.296): walk `❯`
+   * onto it one verified step at a time, type (Claude ticks the row and shows the text as its label),
+   * verify, then `Up` off it. Off, because the field keeps the keyboard while `❯` is on it; Up, because
+   * a digit is ignored with `❯` on Submit (measured 2026-10-10) and works on an option row. It submits
+   * nothing: Submit stays the operator's tap.
+   */
+  private async typeSomething(io: PaneIO, pane: AgentView, tapped: MultiSelectModel, n: number, raw: string): Promise<AnswerResult> {
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
+    if (tapped.phase !== "checkbox" || emptyTypeSomethingRow(tapped) !== n) return changed();
+    const same = (m: MultiSelectModel) => sameQuestionRows(m, tapped, n - 1);
+    const sentKeys: string[] = [];
+    const step = async (key: string, accept: (m: MultiSelectModel) => boolean) => {
+      await io.sendPaneKeys(pane.paneId, [key]);
+      sentKeys.push(key);
+      return this.waitFor(io, pane, "multi-select", same, accept);
+    };
+    let at = pointedRow(tapped);
+    for (let moves = 0; at !== n; moves++) {
+      if (moves > n + 2) return changed();
+      const next = at === undefined ? "Up" : at < n ? "Down" : "Up";
+      const from = at;
+      const moved = await step(next, (m) => emptyTypeSomethingRow(m) === n && pointedRow(m) !== from);
+      if (!moved) return changed();
+      at = pointedRow(moved);
+    }
+    await io.sendPaneText(pane.paneId, text);
+    const filled = (m: MultiSelectModel) => m.phase === "checkbox" && m.options.length === n &&
+      m.options[n - 1]!.label === text && m.options[n - 1]!.checked;
+    if (!(await this.waitFor(io, pane, "multi-select", same, filled))) return failed("Your text didn't arrive. Nothing was submitted.");
+    if (!(await step("Up", (m) => filled(m) && pointedRow(m) === n - 1))) {
+      return failed("Your text is in, but the cursor is still in it. Check the pane before tapping a row.");
+    }
+    return sent(sentKeys);
+  }
+}
+
+/**
+ * The number of AskUserQuestion's "Type something" row while it is EMPTY. Claude's multi-select grammar
+ * drops that row, so it shows as the one number missing between the last option and "Chat about this";
+ * once typed into, the row reads as an ordinary option and nothing is missing. Single questions only:
+ * the wizard's version was not measured.
+ */
+function emptyTypeSomethingRow(m: MultiSelectModel): number | null {
+  if (m.phase !== "checkbox" || m.steps !== null || !m.escape) return null;
+  if (!m.options.every((o, i) => o.n === i + 1)) return null;
+  return m.escape.n === m.options.length + 2 ? m.options.length + 1 : null;
+}
+
+/** What the open Tab field on row `n` of `tapped` holds on this screen, or null when there is none. */
+type AmendField = (screen: string, tapped: PromptModel, n: number) => string | null;
+
+const AMEND_FIELD: Record<string, AmendField | undefined> = {
+  claude: (screen, tapped, n) => {
+    const d = dialogOnScreen("claude", screen);
+    const m = d?.kind === "prompt-select" ? d.model : null;
+    return m && sameAmendDialog(m, tapped) && m.feedback?.row === n && m.feedback.focused ? m.feedback.text : null;
+  },
+  codex: (screen, tapped, n) => {
+    const notes = detectAskNotes(splitLines(parseAnsi(screen)));
+    return notes && notes.question === tapped.question && notes.row === n ? notes.text : null;
+  },
+};
+
+/** The rows straight above a prompt's question, which move with it when a growing field re-flows the screen. */
+function promptHead(p: PromptModel): string {
+  const lines = p.signature.split("\n");
+  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  return q < 0 ? "" : lines.slice(Math.max(0, q - HEAD_ROWS), q + 1).join("\n");
+}
+
+/** Same permission prompt across its amend field opening: the field changes rows, footer and options. */
+function sameAmendDialog(a: PromptModel, b: PromptModel): boolean {
+  return a.family === b.family && a.question === b.question && promptHead(a) !== "" && promptHead(a) === promptHead(b);
+}
+
+const sameOptionRows = (a: PromptModel, b: PromptModel) =>
+  a.options.length === b.options.length && a.options.every((o, i) => o.label === b.options[i]!.label && o.keys.join() === b.options[i]!.keys.join());
+
+/** The numbered row under `❯` in a checkbox question's literal region; undefined on Submit/Next. */
+function pointedRow(m: MultiSelectModel): number | undefined {
+  const row = m.phase === "checkbox" ? /^\s*❯\s*(\d+)\./m.exec(m.regionSignature) : null;
+  return row ? Number(row[1]) : undefined;
+}
+
+/** Same checkbox question while its "Type something" row fills: earlier rows, escape and steps hold. */
+function sameQuestionRows(a: MultiSelectModel, b: MultiSelectModel, rows: number): boolean {
+  if (a.phase !== "checkbox" || b.phase !== "checkbox") return false;
+  return a.question === b.question && a.advanceLabel === b.advanceLabel && a.escape?.label === b.escape?.label &&
+    JSON.stringify(a.steps) === JSON.stringify(b.steps) &&
+    a.options.length >= rows && b.options.length >= rows &&
+    a.options.slice(0, rows).every((o, i) => o.label === b.options[i]!.label);
 }
 
 const sent = (keys: string[]): AnswerResult => ({ status: 200, outcome: { ok: true }, keys });

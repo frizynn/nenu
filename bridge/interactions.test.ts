@@ -41,17 +41,17 @@ const EXPECTED: Record<string, string> = {
   "claude--plan-approval--three-row-typed-focused.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval--three-row.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   "claude--plan-approval.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | No, refine with Ultraplan on Claude Code on the web=deny | Tell Claude what to change=freeText",
-  "claude--select-menu.txt": "question: Red=neutral | Green=neutral | Blue=neutral | Chat about this=deny",
+  "claude--select-menu.txt": "question: Red=neutral | Green=neutral | Blue=neutral | Chat about this=deny | Type something.=freeText",
   "claude--select-multi.txt": "wizard: Plan first=neutral | Just build it=neutral | Build + verify=neutral | Chat about this=deny",
-  "claude--select-multiselect-checked.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Submit=primary | Chat about this=deny",
+  "claude--select-multiselect-checked.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--select-multiselect-review.txt": "multi-select: Submit answers=primary | Cancel=deny",
-  "claude--select-multiselect-single.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Submit=primary | Chat about this=deny",
+  "claude--select-multiselect-single.txt": "multi-select: Cheese=neutral | Mushrooms=neutral | Olives=neutral | Peppers=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "claude--select-preview-note-attached.txt": "question: Boxy=neutral | Rounded=neutral | Minimal=neutral",
   "claude--select-preview-note-input.txt": "question: Boxy=neutral | Rounded=neutral | Minimal=neutral",
   "claude--select-preview.txt": "question: Boxy=neutral | Rounded=neutral | Minimal=neutral",
   "claude--trust-prompt.txt": "permission: Yes, I trust this folder=persistent | No, exit=deny",
-  "claude--v2285-ask-multi.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Submit=primary | Chat about this=deny",
-  "claude--v2285-ask-question.txt": "question: Apple=neutral | Banana=neutral | Chat about this=deny",
+  "claude--v2285-ask-multi.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
+  "claude--v2285-ask-question.txt": "question: Apple=neutral | Banana=neutral | Chat about this=deny | Type something.=freeText",
   "claude--v2285-ask-wizard.txt": "wizard: Apple=neutral | Banana=neutral | Chat about this=deny",
   "claude--wizard-multiselect-checked.txt": "multi-select: Pepperoni=neutral | Mushrooms=neutral | Bell peppers=neutral | Extra cheese=neutral | Next=primary | Chat about this=deny",
   "claude--wizard-multiselect-final.txt": "multi-select: Garlic knots=neutral | Caesar salad=neutral | Dipping sauces=neutral | Submit=primary | Chat about this=deny",
@@ -102,14 +102,20 @@ const EXPECTED: Record<string, string> = {
   "grok--plan-request-changes.txt": "menu: Approve=neutral | Plan=neutral | Back=deny",
   "grok--plan-tab-prompt.txt": "menu: Approve=neutral | Plan=neutral | Back=deny",
   // web/src/lib/harness/claude/fixtures
-  "ask-multiselect-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Submit=primary | Chat about this=deny",
+  "ask-multiselect-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "ask-review-v2296.txt": "multi-select: Submit answers=primary | Cancel=deny",
-  "ask-type-something-focused-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Submit=primary | Chat about this=deny",
+  "ask-type-something-filled-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Mango=neutral | Submit=primary | Chat about this=deny",
+  "ask-type-something-focused-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Type something=freeText | Submit=primary | Chat about this=deny",
   "ask-type-something-typed-v2296.txt": "multi-select: Apple=neutral | Banana=neutral | Cherry=neutral | Mango=neutral | Submit=primary | Chat about this=deny",
   "permission-bash-v2296.txt": "permission: Yes=primary | Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
+  "permission-bash-amend-typed-v2296.txt": "permission: Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
+  "permission-bash-amend-v2296.txt": "permission: Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
+  "permission-deny-amend-typed-v2296.txt": "permission: Yes=primary | Yes, and always allow access to /private/tmp/claude-501/nenu-probe from this project=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent",
+  "permission-pointer-mid-v2296.txt": "permission: Yes=primary | Yes, and always allow access to=persistent | Yes, and switch to auto mode · auto mode handles these prompts for you=persistent | No=deny",
   "plan-approval-v2296.txt": "plan: Yes, and use auto mode=persistent | Yes, manually approve edits=primary | Tell Claude what to change=freeText",
   // web/src/lib/harness/codex/fixtures
   "approval-exec-v0160.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
+  "ask-notes-row-pointed-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "ask-plan-mode-v0160.txt": "question: Apple=neutral | Banana=neutral | None of the above=neutral",
   "model-picker.txt": "menu: Confirm=neutral | Go back=deny",
   "model-reasoning.txt": "menu: Confirm=neutral | Go back=deny",
@@ -582,5 +588,160 @@ describe("free-text rows", () => {
     const { interaction, choices } = toInteraction({ paneId: "p", agent: "x" }, dialog, 0, [], 0);
     expect(interaction.options.map((o) => o.role)).toEqual(["freeText", "neutral"]);
     expect(choices.map((c) => c.recipe.type)).toEqual(["unsupported", "keys"]);
+  });
+});
+
+describe("free-text answers (Tab-amend, Type something, Codex notes)", () => {
+  const P0_CLAUDE = join(ROOT, "web/src/lib/harness/claude/fixtures");
+  const P0_CODEX = join(ROOT, "web/src/lib/harness/codex/fixtures");
+  const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+
+  /** `screen` with `❯` (or Codex's `›`) moved onto the numbered menu row `n`. */
+  function pointAt(screen: string, n: number, glyph = "❯"): string {
+    return screen.split("\n").map((l) => {
+      const bare = l.replace(new RegExp(`^(\\s*)${glyph} (?=\\d+\\. )`), "$1  ");
+      return new RegExp(`^\\s*${n}\\. `).test(bare) ? bare.replace(/^(\s*)  (?=\d)/, `$1${glyph} `) : bare;
+    }).join("\n");
+  }
+
+  /** A pane that walks through `steps` in order: each key or `text:` write shows the next screen. */
+  function sequencePane(initial: string, steps: Array<[string, string]>) {
+    let screen = initial;
+    const queue = [...steps];
+    const log = { keys: [] as string[][], text: [] as string[] };
+    const advance = (trigger: string) => {
+      if (queue[0]?.[0] === trigger) screen = queue.shift()![1];
+    };
+    const io: PaneIO = {
+      async readPane(): Promise<PaneRead> { return { pane_id: "p", text: screen, truncated: false, revision: 0 }; },
+      async sendPaneKeys(_pane, keys) { log.keys.push(keys); for (const k of keys) advance(k); },
+      async sendPaneText(_pane, text) { log.text.push(text); advance(`text:${text}`); },
+    };
+    return { io, log };
+  }
+
+  async function card(io: PaneIO, agent = "claude") {
+    const interactions = new Interactions({ publish() {} }, { sleep: noSleep });
+    const [found] = await interactions.refresh("s", io, [blocked("p", agent)]);
+    return { card: found!, answer: (body: Parameters<Interactions["answer"]>[3]) => interactions.answer("s", io, blocked("p", agent), body) };
+  }
+
+  const claude = (name: string) => fixture(name, P0_CLAUDE);
+  const bash = claude("permission-bash-v2296.txt");
+
+  test("only measured rows accept text, and a text answer to another option is a 400", async () => {
+    const pane = sequencePane(bash, []);
+    const { card: c, answer } = await card(pane.io);
+    expect(c.options.map((o) => o.acceptsText ?? false)).toEqual([true, false, false, true]);
+    const result = await answer({ signature: c.signature, optionIndex: 1, text: "x", confirm: true });
+    expect(result.status).toBe(400);
+    expect(pane.log.keys).toEqual([]);
+  });
+
+  test("text over the limit is refused before any key, never cut to a string the field cannot echo", async () => {
+    const pane = sequencePane(bash, []);
+    const { card: c, answer } = await card(pane.io);
+    const result = await answer({ signature: c.signature, optionIndex: 0, text: `${"a".repeat(239)} bc` });
+    expect(result.status).toBe(400);
+    expect(pane.log.keys).toEqual([]);
+    expect(pane.log.text).toEqual([]);
+  });
+
+  test("Yes without text is still the digit alone", async () => {
+    const pane = sequencePane(bash, []);
+    const { card: c, answer } = await card(pane.io);
+    expect((await answer({ signature: c.signature, optionIndex: 0 })).keys).toEqual(["1"]);
+  });
+
+  test("Yes with text: Tab, type, read back, Enter (captured 2.1.296 screens)", async () => {
+    const typed = "use printf instead of echo";
+    const pane = sequencePane(bash, [["Tab", claude("permission-bash-amend-v2296.txt")], [`text:${typed}`, claude("permission-bash-amend-typed-v2296.txt")]]);
+    const { card: c, answer } = await card(pane.io);
+    const result = await answer({ signature: c.signature, optionIndex: 0, text: ` ${typed}\n` });
+    expect(result).toEqual({ status: 200, outcome: { ok: true }, keys: ["Tab", "Enter"] });
+    expect(pane.log.text).toEqual([typed]);
+  });
+
+  test("No with text walks the pointer down one verified row at a time, through the rows that drop the Tab hint", async () => {
+    const base = plain(bash);
+    const at = (n: number, footer = "Esc to cancel") => pointAt(base, n).replace("Esc to cancel · Tab to amend", footer);
+    const open = (label: string) => at(4).replace(/❯ 4\. No$/m, `❯ 4. ${label}`);
+    const typed = "keep the file";
+    const pane = sequencePane(base, [
+      ["Down", at(2)],
+      ["Down", at(3)],
+      ["Down", at(4, "Esc to cancel · Tab to amend")],
+      ["Tab", open("No, and tell Claude what to do differently")],
+      [`text:${typed}`, open(`No, ${typed}`)],
+    ]);
+    const { card: c, answer } = await card(pane.io);
+    const result = await answer({ signature: c.signature, optionIndex: 3, text: typed });
+    expect(result.outcome).toEqual({ ok: true });
+    expect(pane.log.keys).toEqual([["Down"], ["Down"], ["Down"], ["Tab"], ["Enter"]]);
+  });
+
+  test("text that never shows up in the field sends no Enter", async () => {
+    const pane = sequencePane(bash, [["Tab", claude("permission-bash-amend-v2296.txt")]]);
+    const { card: c, answer } = await card(pane.io);
+    const result = await answer({ signature: c.signature, optionIndex: 0, text: "something else" });
+    expect(result.outcome.ok).toBe(false);
+    expect(pane.log.keys).toEqual([["Tab"]]);
+  });
+
+  test("an amend field already open is someone typing: nothing is sent", async () => {
+    const pane = sequencePane(claude("permission-bash-amend-typed-v2296.txt"), []);
+    const { card: c, answer } = await card(pane.io);
+    expect(c.typing).toBe(true);
+    expect((await answer({ signature: c.signature, optionIndex: 0, confirm: true })).status).toBe(409);
+    expect(pane.log).toEqual({ keys: [], text: [] });
+  });
+
+  test("Type something: walk onto the empty row, type, verify, step Up off it; nothing is submitted", async () => {
+    const base = plain(claude("ask-multiselect-v2296.txt"));
+    const filled = (n: number) => pointAt(base, n).replace("4. [ ] Type something", "4. [✔] Mango");
+    const pane = sequencePane(base, [
+      ["Down", pointAt(base, 2)],
+      ["Down", pointAt(base, 3)],
+      ["Down", pointAt(base, 4)],
+      ["text:Mango", filled(4)],
+      ["Up", filled(3)],
+    ]);
+    const { card: c, answer } = await card(pane.io);
+    const row = c.options.find((o) => o.label === "Type something")!;
+    expect(row).toMatchObject({ role: "freeText", acceptsText: true });
+    const result = await answer({ signature: c.signature, optionIndex: row.index, text: "Mango" });
+    expect(result).toEqual({ status: 200, outcome: { ok: true }, keys: ["Down", "Down", "Down", "Up"] });
+    expect(pane.log.text).toEqual(["Mango"]);
+  });
+
+  test("a filled Type something row is an ordinary option; the pointer on the empty row locks the card", () => {
+    const filled = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", claude("ask-type-something-filled-v2296.txt"))!, 0, [], 0).interaction;
+    expect(filled.options.some((o) => o.acceptsText)).toBe(false);
+    const focused = toInteraction({ paneId: "p", agent: "claude" }, dialogOnScreen("claude", claude("ask-type-something-focused-v2296.txt"))!, 0, [], 0).interaction;
+    expect(focused.typing).toBe(true);
+  });
+
+  test("a single-choice 'Type something.' is shown but answered in the terminal", async () => {
+    const pane = sequencePane(fixture("claude--select-menu.txt"), []);
+    const { card: c, answer } = await card(pane.io);
+    const row = c.options.find((o) => o.role === "freeText")!;
+    expect(row.acceptsText).toBeUndefined();
+    expect((await answer({ signature: c.signature, optionIndex: row.index })).outcome).toMatchObject({ code: "unsupported" });
+    expect(pane.log.keys).toEqual([]);
+  });
+
+  test("Codex notes: walk to None of the above, Tab, type, read back, Enter (captured 0.160.1 screens)", async () => {
+    const codex = (name: string) => fixture(name, P0_CODEX);
+    const start = pointAt(plain(codex("ask-notes-row-pointed-v0160.txt")), 1, "›");
+    const pane = sequencePane(start, [
+      ["Down", pointAt(start, 2, "›")],
+      ["Down", codex("ask-notes-row-pointed-v0160.txt")],
+      ["Tab", codex("ask-notes-open-v0160.txt")],
+      ["text:Mango please", codex("ask-notes-typed-v0160.txt")],
+    ]);
+    const { card: c, answer } = await card(pane.io, "codex");
+    expect(c.options.map((o) => o.acceptsText ?? false)).toEqual([false, false, true]);
+    const result = await answer({ signature: c.signature, optionIndex: 2, text: "Mango please" });
+    expect(result).toEqual({ status: 200, outcome: { ok: true }, keys: ["Down", "Down", "Tab", "Enter"] });
   });
 });
