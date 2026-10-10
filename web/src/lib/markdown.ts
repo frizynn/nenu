@@ -8,7 +8,8 @@
 // no dependency to a phone bundle that currently has seven.
 //
 // SCOPE. The subset agents actually emit: headings, fenced code, lists, blockquotes, rules,
-// paragraphs, GFM tables; inline bold/italic/code/links. Not images, not HTML passthrough.
+// paragraphs, GFM tables; inline bold/italic/code/links, and images that name a LOCAL file (shown
+// through the pane's file route, never fetched from the network). Not HTML passthrough.
 //
 // FLAT BY DESIGN. Blocks don't nest: a table or a list inside a blockquote or a list item is read as
 // the outer block's text, so a quoted table still collapses into a run-on line. Closing that means a
@@ -34,6 +35,8 @@ export type MdSpan =
   | { kind: "text"; text: string }
   | { kind: "code"; text: string }
   | { kind: "file"; path: string; spans: MdSpan[] }
+  /** `![alt](local-image)`. Only a local raster path; a remote image stays a link. */
+  | { kind: "image"; path: string; alt: string }
   | { kind: "bold"; spans: MdSpan[] }
   | { kind: "italic"; spans: MdSpan[] }
   /** `href` is already scheme-checked; anything unsafe never becomes a link (see `safeHref`). */
@@ -77,7 +80,7 @@ const INLINE_RE = new RegExp(
     "(`+)([^`]+?)\\1", // 1,2  inline code
     "\\*\\*(\\S(?:[^\\n]*?\\S)?)\\*\\*", // 3    bold
     "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
-    "\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6 link
+    "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
   ].join("|"),
   "g",
 );
@@ -110,12 +113,13 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
     if (m[2] !== undefined) push({ kind: "code", text: m[2] }); // leaf: content is verbatim
     else if (m[3] !== undefined) push({ kind: "bold", spans: parseInline(m[3], depth + 1) });
     else if (m[4] !== undefined) push({ kind: "italic", spans: parseInline(m[4], depth + 1) });
-    else if (m[5] !== undefined && m[6] !== undefined) {
-      const path = localFilePath(m[6]);
-      const href = safeHref(m[6]);
+    else if (m[6] !== undefined && m[7] !== undefined) {
+      const path = localFilePath(m[7]);
+      const href = safeHref(m[7]);
       // An unsafe target keeps its literal Markdown, so nothing silently disappears from the text.
-      if (path) push({ kind: "file", path, spans: parseInline(m[5] || path, depth + 1) });
-      else if (href) push({ kind: "link", href, spans: parseInline(m[5] || href, depth + 1) });
+      if (m[5] && path && /\.(?:png|jpe?g|gif|webp)$/i.test(path)) push({ kind: "image", path, alt: m[6] });
+      else if (path) push({ kind: "file", path, spans: parseInline(m[6] || path, depth + 1) });
+      else if (href) push({ kind: "link", href, spans: parseInline(m[6] || href, depth + 1) });
       else push({ kind: "text", text: m[0] });
     }
     last = m.index + m[0].length;

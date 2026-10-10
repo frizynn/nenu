@@ -308,3 +308,25 @@ describe("parseMarkdown", () => {
     expect(parseMarkdown("\n\n  \n")).toEqual([]);
   });
 });
+
+describe("images", () => {
+  it("a local raster image becomes an image span; the bang no longer leaks as text", () => {
+    expect(parseInline("see ![home](shots/home.png) here")).toEqual([
+      { kind: "text", text: "see " },
+      { kind: "image", path: "shots/home.png", alt: "home" },
+      { kind: "text", text: " here" },
+    ]);
+  });
+
+  it("a remote image is never loaded: it stays a link", () => {
+    expect(parseInline("![logo](https://example.com/logo.png)")).toEqual([
+      { kind: "link", href: "https://example.com/logo.png", spans: [{ kind: "text", text: "logo" }] },
+    ]);
+  });
+
+  it("an image syntax pointing at a non-image local file stays a file link", () => {
+    expect(parseInline("![spec](docs/spec.pdf)")).toEqual([
+      { kind: "file", path: "docs/spec.pdf", spans: [{ kind: "text", text: "spec" }] },
+    ]);
+  });
+});

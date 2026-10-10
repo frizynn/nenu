@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TranscriptView } from "./transcript-view";
+import { FilePreviewProvider } from "./file-preview-provider";
 import type { TranscriptEntry } from "@/lib/types";
 
 // TranscriptView renders the agent's own conversation log — the only history a Claude pane can have
@@ -404,4 +405,62 @@ it("prepares a selected question answer without submitting a terminal action", a
   render(<QuestionReplyContext.Provider value={prepare}><TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "request_user_input_async", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }] }] })]} /></QuestionReplyContext.Provider>);
   await userEvent.click(screen.getByRole("button", { name: "Instagram" }));
   expect(prepare).toHaveBeenCalledWith("Which source?\nInstagram");
+});
+
+describe("journal media", () => {
+  const withViewer = (ui: React.ReactNode) => <FilePreviewProvider paneId="w1:p1">{ui}</FilePreviewProvider>;
+  // /history sends image markers with no text; the web union does not list them yet.
+  const image = (index: number) => ({ kind: "image", index, mediaType: "image/png" }) as unknown as TranscriptEntry["parts"][number];
+
+  it("shows a pasted image from the journal by entry and index, without a path or a crash", () => {
+    render(withViewer(<TranscriptView query="look" entries={[turn({ uuid: "u-paste", parts: [{ kind: "text", text: "[Image #1] look" }, image(0)] })]} />));
+    expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=u-paste&n=0");
+  });
+
+  it("shows what a tool returned as thumbnails, addressed through the entry that made the call", async () => {
+    render(withViewer(<TranscriptView activityStatus="working" entries={[
+      turn({ uuid: "ask", parts: [{ kind: "text", text: "check the screenshot" }] }),
+      turn({ uuid: "call", role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/tmp/shot.png", result: { text: "", attachments: [{ kind: "image", index: 0, mediaType: "image/png" }] } }] }),
+    ]} />));
+    expect(await screen.findByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=call&n=0");
+  });
+
+  it("keeps the images of folded work visible as one gallery for the turn", () => {
+    render(withViewer(<TranscriptView activityStatus="done" entries={[
+      turn({ uuid: "ask", parts: [{ kind: "text", text: "shots" }] }),
+      turn({ uuid: "call", role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "Read", summary: "a.png", result: { text: "", attachments: [0, 1, 2, 3, 4].map((index) => ({ kind: "image" as const, index })) } }] }),
+      turn({ uuid: "done", role: "assistant", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "Done." }] }),
+    ]} />));
+    expect(screen.getByRole("button", { name: /^Worked/, expanded: false })).toBeInTheDocument();
+    const strip = screen.getByRole("list", { name: "Images from this turn" });
+    expect(strip.querySelectorAll("img")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Open 2 more images" })).toBeInTheDocument();
+  });
+
+  it("shows a delivered HTML file as a card that mounts no frame until opened", async () => {
+    render(withViewer(<TranscriptView activityStatus="done" entries={[
+      turn({ uuid: "ask", parts: [{ kind: "text", text: "make a page" }] }),
+      turn({ uuid: "send", role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "SendUserFile", summary: "/tmp/out/report.html", result: { text: "sent", attachments: [{ kind: "file", path: "/tmp/out/report.html" }] } }] }),
+      turn({ uuid: "done", role: "assistant", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "Here it is." }] }),
+    ]} />));
+    const card = screen.getByRole("button", { name: "Open report.html" });
+    expect(card).toHaveTextContent("HTML page · out/");
+    expect(document.querySelector("iframe")).toBeNull();
+    await userEvent.click(card);
+    const frame = await screen.findByTitle("Rendered preview of report.html");
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+  });
+
+  it("renders a local Markdown image in place and keeps it out of the media list below", () => {
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Before ![the home screen](shots/home.png) after" }] })]} />));
+    const images = screen.getAllByRole("img");
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute("alt", "the home screen");
+    expect(images[0]).toHaveAttribute("src", "/api/pane/w1%3Ap1/file?path=shots%2Fhome.png");
+  });
+});
+
+it("treats an AskUserQuestion that already has its answer as closed", () => {
+  render(<QuestionReplyContext.Provider value={vi.fn()}><TranscriptView entries={[turn({ role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "AskUserQuestion", summary: "Question", questions: [{ title: "Which source?", options: ["Web", "Instagram"] }], result: { text: "User answered: Web" } }] })]} /></QuestionReplyContext.Provider>);
+  expect(screen.getByRole("button", { name: "Instagram" })).toBeDisabled();
 });

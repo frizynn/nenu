@@ -12,3 +12,11 @@
 .pdf-preview-toolbar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--background); font-size: 13px; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) { .file-preview-panel { height: 100%; border-radius: 12px; } }
 @media (prefers-reduced-motion: no-preference) { @starting-style { .file-preview-panel { opacity: 0; transform: translateY(8px); } } .file-preview-panel { transition: opacity 160ms ease-out, transform 160ms ease-out; } }
+.file-preview-panel--full { width: min(100%, 1440px); height: 100%; }
+.file-preview-gallery { display: flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 4px; padding: 4px 12px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.html-viewer-bar { align-items: center; justify-content: space-between; }
+.html-viewer-widths { display: flex; gap: 4px; }
+.html-viewer-widths .file-preview-tab[aria-pressed="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
+.html-viewer-note { display: flex; flex-shrink: 0; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
+.html-viewer-stage--phone { display: flex; justify-content: center; padding: 16px; background: color-mix(in oklab, var(--muted) 60%, transparent); }
+.html-viewer-stage--phone .file-preview-html { width: 390px; max-width: 100%; height: auto; border-radius: 20px; box-shadow: 0 0 0 1px var(--border), 0 12px 40px #0004; }

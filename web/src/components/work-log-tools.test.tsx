@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { WorkLogTools } from "./work-log-tools";
+import { FileMediaContext } from "@/lib/file-preview-context";
 import type { TranscriptPart } from "@/lib/types";
 
 const calls: Array<{ id: string; part: Extract<TranscriptPart, { kind: "tool" }> }> = [
@@ -74,4 +75,13 @@ it("reveals a focused entry without a query and marks only its assigned first to
   expect(container.querySelectorAll('[data-turn="entry-b"]')).toHaveLength(1);
   expect(container.querySelector('[data-tool="third"]')).not.toHaveAttribute("data-turn");
   for (const button of screen.getAllByRole("button")) expect(button).toHaveAttribute("data-work-toggle");
+});
+
+it("shows the image a read tool opened as a thumbnail, folded or open", async () => {
+  render(<FileMediaContext.Provider value={(path) => `/api/file?path=${path}`}>
+    <WorkLogTools calls={[{ id: "read", owner: "e1", part: { kind: "tool", name: "Read", summary: "shots/home.png", result: { text: "" } } }]} />
+  </FileMediaContext.Provider>);
+  expect(screen.getByRole("img", { name: "home.png" })).toHaveAttribute("src", "/api/file?path=shots/home.png");
+  await userEvent.click(screen.getByRole("button", { name: /^1 tool call/ }));
+  expect(screen.getByRole("img", { name: "home.png" })).toBeInTheDocument();
 });

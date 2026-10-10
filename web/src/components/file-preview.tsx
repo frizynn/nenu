@@ -1,33 +1,52 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Code2, Download, Eye, RefreshCw, FileText, Loader2, X } from "lucide-react";
-import { fetchPaneFile, paneFileUrl } from "@/lib/api";
+import { ChevronLeft, ChevronRight, Download, Globe, ImageIcon, RefreshCw, FileText, Loader2, X } from "lucide-react";
+import { fetchPaneFile, journalImageUrl, paneFileUrl } from "@/lib/api";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { useHoldReload } from "@/lib/reload-guard";
 import { MarkdownText } from "./markdown-text";
+import { HtmlViewer } from "./html-viewer";
+import type { PreviewItem } from "./file-preview-provider";
 import "./file-preview.css";
 
 const PdfPreview = lazy(() => import("./pdf-preview"));
 type DocumentData = { kind: "video"; url: string } | { kind: "pdf"; bytes: ArrayBuffer; url: string } | { kind: "image"; url: string } | { kind: "text"; text: string; markdown: boolean; url: string };
-type HtmlView = "render" | "code";
 
-export default function FilePreview({ paneId, session, path, onClose }: { paneId: string; session?: string; path: string; onClose: () => void }) {
+const isHtml = (item: PreviewItem | undefined) => item?.kind === "file" && /\.html?$/i.test(item.path);
+
+export default function FilePreview({ paneId, session, items, start = 0, path, onClose }: {
+  paneId: string;
+  session?: string;
+  /** A gallery to step through; `path` is the one-file shorthand. */
+  items?: readonly PreviewItem[];
+  start?: number;
+  path?: string;
+  onClose: () => void;
+}) {
   useHoldReload("document-preview", true);
+  const list: readonly PreviewItem[] = items ?? (path ? [{ kind: "file", path }] : []);
+  const [index, setIndex] = useState(start);
+  const item = list[Math.min(index, list.length - 1)];
   const [data, setData] = useState<DocumentData | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [htmlView, setHtmlView] = useState<HtmlView>("render");
   const panel = useRef<HTMLDivElement>(null);
   const openFile = useContext(FilePreviewContext);
-  const openRelated = openFile ? (target: string) => openFile(target.startsWith("/") ? target : path.slice(0, path.lastIndexOf("/") + 1) + target) : null;
-  const name = path.split("/").pop() || "Document";
+  const filePath = item?.kind === "file" ? item.path : "";
+  const openRelated = openFile ? (target: string) => openFile(target.startsWith("/") ? target : filePath.slice(0, filePath.lastIndexOf("/") + 1) + target) : null;
+  const name = item?.kind === "journal" ? item.label : filePath.split("/").pop() || "Document";
+  const html = isHtml(item);
+  const itemKey = item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${filePath}`;
+
   useEffect(() => {
     const controller = new AbortController();
     let url: string | undefined;
-    setError(""); setData(null); setHtmlView("render");
-    if (/\.(mp4|m4v|mov|webm)$/i.test(path)) { setData({ kind: "video", url: paneFileUrl(paneId, path, session) }); return () => controller.abort(); }
+    setError(""); setData(null);
+    if (!item || html) return;
+    if (item.kind === "journal") { setData({ kind: "image", url: journalImageUrl(paneId, item.entry, item.index, session) }); return; }
+    if (/\.(mp4|m4v|mov|webm)$/i.test(item.path)) { setData({ kind: "video", url: paneFileUrl(paneId, item.path, session) }); return; }
     void (async () => {
-      const response = await fetchPaneFile(paneId, path, session, controller.signal);
+      const response = await fetchPaneFile(paneId, item.path, session, controller.signal);
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(blob);
@@ -38,11 +57,12 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
       } else if (/^image\/(png|jpeg|gif|webp)$/.test(type)) setData({ kind: "image", url });
       else if (type.startsWith("text/")) {
         const text = await blob.text();
-        if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(path), url });
+        if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(item.path), url });
       } else throw new Error("This file type cannot be previewed.");
     })().catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not open this file."); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [paneId, session, path, attempt]);
+    // itemKey names the item; the object itself is rebuilt on every render of a one-file preview.
+  }, [paneId, session, itemKey, html, attempt]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -50,9 +70,14 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
     return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, []);
 
+  const step = (by: number) => setIndex((current) => (current + by + list.length) % list.length);
+  const downloadUrl = data?.url ?? (html ? paneFileUrl(paneId, filePath, session) : undefined);
+  const Icon = html ? Globe : item?.kind === "journal" ? ImageIcon : FileText;
+
   return createPortal(<div className="file-preview-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={panel} role="dialog" aria-modal="true" aria-label={name} tabIndex={-1} className="file-preview-panel" onKeyDown={(event) => {
+    <div ref={panel} role="dialog" aria-modal="true" aria-label={name} tabIndex={-1} className={`file-preview-panel${html ? " file-preview-panel--full" : ""}`} onKeyDown={(event) => {
       if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+      if (list.length > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); step(event.key === "ArrowLeft" ? -1 : 1); }
       if (event.key === "Tab") {
         const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], [tabindex="0"]') ?? []);
         const first = controls[0], last = controls.at(-1);
@@ -61,32 +86,30 @@ export default function FilePreview({ paneId, session, path, onClose }: { paneId
       }
     }}>
       <header className="file-preview-header">
-        <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-medium">{name}</h2><p className="truncate text-xs text-muted-foreground" title={path}>{path}</p></div>
+        <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-medium">{name}</h2>
+          <p className="truncate text-xs text-muted-foreground" title={filePath || undefined}>{item?.kind === "journal" ? "From the conversation" : filePath}</p></div>
         <button type="button" aria-label="Refresh preview" onClick={() => setAttempt(n=>n+1)} className="file-preview-action"><RefreshCw className="size-4" /></button>
-        {data && <a href={data.url} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-4" /></a>}
+        {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-4" /></a>}
         <button type="button" aria-label="Close document" onClick={onClose} className="file-preview-action"><X className="size-5" /></button>
       </header>
-      {data?.kind === "text" && /\.html?$/i.test(path) && <div className="file-preview-tabs" role="tablist" aria-label="HTML preview mode">
-        {(["render", "code"] as const).map((view) => <button key={view} type="button" role="tab" aria-selected={htmlView === view} tabIndex={htmlView === view ? 0 : -1} className="file-preview-tab" onClick={() => setHtmlView(view)} onKeyDown={(event) => {
-          if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-          event.preventDefault();
-          const next = view === "render" ? "code" : "render";
-          setHtmlView(next);
-          panel.current?.querySelector<HTMLElement>(`[role="tab"][aria-selected="${next === view}"]`)?.focus();
-        }}>{view === "render" ? <><Eye className="size-4" aria-hidden="true" />Render</> : <><Code2 className="size-4" aria-hidden="true" />Código</>}</button>)}
-      </div>}
-      <div className="file-preview-content">
-        {error ? <div role="alert" className="p-6 text-sm">
-          <p>{error}</p>
-          <button type="button" className="mt-3 min-h-11 rounded-md border px-4" onClick={() => setAttempt((value) => value + 1)}>Retry</button>
-        </div> : <DocumentContent data={data} name={name} openRelated={openRelated} html={/\.html?$/i.test(path) ? htmlView : null} renderUrl={paneFileUrl(paneId, path, session).replace("/file?", "/html-preview?")} onError={setError} />}
-      </div>
+      {html ? <HtmlViewer paneId={paneId} session={session} path={filePath} name={name} reload={attempt} />
+        : <div className="file-preview-content">
+          {error ? <div role="alert" className="p-6 text-sm">
+            <p>{error}</p>
+            <button type="button" className="mt-3 min-h-11 rounded-md border px-4" onClick={() => setAttempt((value) => value + 1)}>Retry</button>
+          </div> : <DocumentContent data={data} name={name} openRelated={openRelated} onError={setError} />}
+        </div>}
+      {list.length > 1 && <nav aria-label="Gallery" className="file-preview-gallery">
+        <button type="button" aria-label="Previous" onClick={() => step(-1)} className="file-preview-action"><ChevronLeft className="size-5" /></button>
+        <span aria-live="polite" className="min-w-28 text-center text-sm">{name} <span className="text-muted-foreground">· {index + 1} of {list.length}</span></span>
+        <button type="button" aria-label="Next" onClick={() => step(1)} className="file-preview-action"><ChevronRight className="size-5" /></button>
+      </nav>}
     </div>
   </div>, document.body);
 }
 
-function DocumentContent({ data, name, openRelated, html, renderUrl, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; html: HtmlView | null; renderUrl: string; onError: (message: string) => void }) {
+function DocumentContent({ data, name, openRelated, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; onError: (message: string) => void }) {
   if (!data) return <Loading />;
   switch (data.kind) {
     case "pdf":
@@ -94,16 +117,8 @@ function DocumentContent({ data, name, openRelated, html, renderUrl, onError }: 
     case "video":
       return <video src={data.url} controls playsInline preload="metadata" aria-label={name} className="max-h-full w-full" onError={() => onError("Could not play this video. Download it to open in another player.")} />;
     case "image":
-      return <img src={data.url} alt={name} className="mx-auto h-auto max-w-full" />;
+      return <img src={data.url} alt={name} decoding="async" className="mx-auto h-auto max-w-full" onError={() => onError("Could not load this image.")} />;
     case "text":
-      if (html === "render") return <iframe
-        title={`Rendered preview of ${name}`}
-        sandbox="allow-scripts"
-        referrerPolicy="no-referrer"
-        src={renderUrl}
-        className="file-preview-html"
-        onError={() => onError("Could not render this HTML file.")}
-      />;
       if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{data.text}</pre>;
       return <FilePreviewContext.Provider value={openRelated}>
         <MarkdownText text={data.text} className="mx-auto max-w-3xl p-5 sm:p-8" />
