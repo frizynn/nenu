@@ -80,8 +80,13 @@ export function queueRowStatus(
     return { tone: "done", label: "Sent", actions: [] };
   }
   // "Send now" lifts the wait for the turn; a row already going as soon as it can has nothing to lift.
-  const holds = row.deliveryMode === undefined || row.deliveryMode === "afterTurn";
+  // A dialog, a draft in the box or a lost pane still holds it after the tap, so the button would do nothing.
+  const holds = (row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor);
   return { tone: "waiting", label: waitingLabel(name, row), actions: holds ? ["sendNow", "edit", "remove"] : ["edit", "remove"] };
+}
+
+function blockedBeyondTurn(reason: QueueWaitReason | undefined): boolean {
+  return reason === "dialog" || reason === "draft" || reason === "disconnected";
 }
 
 function waitingLabel(name: string, row: QueueRowView): string {

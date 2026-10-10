@@ -339,6 +339,10 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     expect(queueRowStatus("codex", { state: "queued", deliveryMode: "steer" }).actions).toEqual(["edit", "remove"]);
   });
 
+  it.each(["dialog", "draft", "disconnected"] as const)("does not offer Send now while the row waits for a %s", (waitingFor) => {
+    expect(queueRowStatus("claude", { state: "queued", deliveryMode: "afterTurn", waitingFor }).actions).toEqual(["edit", "remove"]);
+  });
+
   it("a stranded row says why and offers only Send here or Remove", () => {
     const status = queueRowStatus("claude", { state: "queued", stranded: { reason: "The conversation in this pane changed. Send it here or remove it.", since: 1 } });
     expect(status).toEqual({ tone: "problem", label: "The conversation in this pane changed. Send it here or remove it.", actions: ["sendNow", "remove"] });
