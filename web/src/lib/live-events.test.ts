@@ -1,7 +1,11 @@
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { fakeLiveStream } from "@/test/live-stream";
-import { concerns, connectLiveEvents, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, type LiveEvent, type LiveSource } from "./live-events";
+import { concerns, connectLiveEvents, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, setMirrorShown, type LiveEvent, type LiveSource } from "./live-events";
+
+vi.mock("react-router", () => ({ useParams: () => ({ paneId: "w1:p1" }) }));
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -73,5 +77,35 @@ describe("connectLiveEvents with resync", () => {
     source!.onopen?.(new Event("open"));
     expect(events).toEqual([{ topic: "resync" }]);
     stop();
+  });
+});
+
+describe("useLiveEvents", () => {
+  it("swaps the stream when the watched pane changes without going unhealthy, and resyncs", () => {
+    const sources: { url: string; source: LiveSource }[] = [];
+    vi.stubGlobal("EventSource", class {
+      onopen: ((ev: Event) => void) | null = null;
+      onmessage = null;
+      onerror = null;
+      close = vi.fn();
+      constructor(url: string) { sources.push({ url, source: this }); }
+    });
+    const events: LiveEvent[] = [];
+    onLiveEvent((event) => events.push(event));
+    const { unmount } = renderHook(() => useLiveEvents(undefined));
+    expect(sources.map(({ url }) => url)).toEqual(["/api/events?watch=w1%3Ap1"]);
+    act(() => sources[0]!.source.onopen?.(new Event("open")));
+    expect([isLiveHealthy(), events]).toEqual([true, []]);
+
+    act(() => setMirrorShown(false));
+    expect(sources.map(({ url }) => url)).toEqual(["/api/events?watch=w1%3Ap1", "/api/events"]);
+    expect(sources[0]!.source.close).toHaveBeenCalled();
+    expect(isLiveHealthy()).toBe(true);
+    act(() => sources[1]!.source.onopen?.(new Event("open")));
+    expect(events).toEqual([{ topic: "resync" }]);
+
+    unmount();
+    expect(isLiveHealthy()).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

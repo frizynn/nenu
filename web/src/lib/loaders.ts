@@ -242,7 +242,7 @@ export async function rootLoader({ request }: { request?: Request } = {}): Promi
   if (isNavigation && isLostLatched()) return staleHome(session);
   // A live event that named only the open pane: hand back the very same herd object (lib/revalidation.ts).
   const previous = lastHomeData.get(session ?? "");
-  if (!isNavigation && previous && !needsFetch("root")) return previous;
+  if (!isNavigation && previous && !needsFetch("root", request)) return previous;
 
   const home = await loadHome(session, request);
   lastHomeData.set(session ?? "", home);
@@ -404,7 +404,7 @@ export async function paneLoader({
   if (isNavigation && isLostLatched()) return stalePane(paneId, session, lines);
   // A live event that named only the herd: the mirror stays as it was (lib/revalidation.ts).
   const previous = lastPaneData.get(key);
-  if (!isNavigation && previous?.requestedLines === lines && !needsFetch("pane")) return previous;
+  if (!isNavigation && previous?.requestedLines === lines && !needsFetch("pane", request)) return previous;
 
   const pane = await loadPane(paneId, session, lines, request);
   rememberPaneData(key, pane);

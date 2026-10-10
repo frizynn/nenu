@@ -113,23 +113,19 @@ describe("notModifiedResponse", () => {
 });
 
 describe("SharedLoads", () => {
-  test("callers inside the window share one load; a later caller loads again", async () => {
-    let now = 0;
+  test("callers share a load while it runs; a caller after it settled loads again", async () => {
     let loads = 0;
-    const shared = new SharedLoads<number>(250, () => now);
+    const shared = new SharedLoads<number>();
     const load = async () => ++loads;
     const [a, b] = await Promise.all([shared.get("k", load), shared.get("k", load)]);
     expect([a, b, loads]).toEqual([1, 1, 1]);
-    now = 249;
-    expect(await shared.get("k", load)).toBe(1);
-    expect(await shared.get("other", load)).toBe(2);
-    now = 250;
-    expect(await shared.get("k", load)).toBe(3);
+    expect(await shared.get("k", load)).toBe(2);
+    expect(await shared.get("other", load)).toBe(3);
   });
 
   test("a failed load is not kept", async () => {
     let fail = true;
-    const shared = new SharedLoads<string>(250, () => 0);
+    const shared = new SharedLoads<string>();
     const load = async () => { if (fail) throw new Error("down"); return "ok"; };
     await expect(shared.get("k", load)).rejects.toThrow("down");
     fail = false;

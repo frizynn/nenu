@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { LiveEvents, liveEventStream, LiveThrottle, snapshotWatcher, type LiveEvent } from "./live-events.ts";
+import { PaneWatcher } from "./pane-watcher.ts";
+import type { Services, SessionRouteRequest } from "./routes/context.ts";
+import { eventRoutes } from "./routes/events.ts";
 import type { EngineSnapshot } from "./state-engine.ts";
 import { structuralFixture } from "./structural-fixture.test-support.ts";
 import type { AgentView } from "./types.ts";
@@ -159,5 +162,49 @@ describe("a client that stops reading", () => {
     let frames = 0;
     while (!(await reader.read()).done) frames++;
     expect(frames).toBeLessThan(300);
+  });
+});
+
+describe("GET /api/events ?watch=", () => {
+  function route(herd: () => EngineSnapshot, refreshed: () => EngineSnapshot = herd) {
+    const live = new LiveEvents();
+    const paneWatcher = new PaneWatcher(live, { readEveryMs: 1_000 });
+    const herdr = { async readPane(paneId: string) { return { pane_id: paneId, text: "", truncated: false, revision: 0 }; } };
+    const abort = new AbortController();
+    let refreshes = 0;
+    const engine = { current: herd, async refresh() { refreshes++; return refreshed(); } };
+    const open = async (watch: string) => {
+      const services = { cfg: { transcript: false }, live, paneWatcher, journalWatch: { resolveWith() {} } } as unknown as Services;
+      const request = {
+        req: new Request("http://bridge/api/events", { signal: abort.signal }),
+        url: new URL(`http://bridge/api/events?watch=${encodeURIComponent(watch)}`),
+        rt: { name: "s", engine, herdr },
+        server: { timeout() {} },
+      } as unknown as SessionRouteRequest;
+      return eventRoutes[0]!.handle(services, request);
+    };
+    return { live, paneWatcher, abort, open, refreshes: () => refreshes };
+  }
+
+  it("stops watching when the stream closes itself on a client that stopped reading", async () => {
+    const { live, paneWatcher, abort, open } = route(() => snap(pane("p", "idle")));
+    const response = await open("p");
+    expect(paneWatcher.watching).toEqual(["p"]);
+    for (let n = 0; n < 1000; n++) live.publish({ session: "s", topic: "pane", paneId: `x${n}` });
+    await Bun.sleep(60);
+    const reader = response.body!.getReader();
+    while (!(await reader.read()).done);
+    expect(abort.signal.aborted).toBe(false);
+    expect(paneWatcher.watching).toEqual([]);
+  });
+
+  it("refreshes the herd once for a pane created after the last snapshot", async () => {
+    const { paneWatcher, abort, open, refreshes } = route(() => snap(), () => snap(pane("new", "idle")));
+    await open("new");
+    expect([refreshes(), paneWatcher.watching]).toEqual([1, ["new"]]);
+    await open("bogus");
+    expect([refreshes(), paneWatcher.watching]).toEqual([2, ["new"]]);
+    abort.abort();
+    expect(paneWatcher.watching).toEqual([]);
   });
 });

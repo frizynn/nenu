@@ -33,25 +33,23 @@ export function notModifiedResponse(etag: string): Response {
 }
 
 /**
- * Share one in-flight or just-finished load between callers asking for the same key within `ttlMs`.
- * N phones on one pane then cost one Herdr read per window instead of N. A failed load is not kept.
+ * Share one in-flight load between callers asking for the same key. N phones on one pane then cost
+ * one Herdr read instead of N. Only loads still running are shared: a caller that arrives after a
+ * load settled reads again, so a fetch prompted by a change announced since then sees that change.
  */
 export class SharedLoads<T> {
-  private readonly loads = new Map<string, { at: number; value: Promise<T> }>();
-
-  constructor(private readonly ttlMs: number, private readonly now: () => number = Date.now) {}
+  private readonly loads = new Map<string, Promise<T>>();
 
   get(key: string, load: () => Promise<T>): Promise<T> {
-    const now = this.now();
-    for (const [k, entry] of this.loads) if (now - entry.at >= this.ttlMs) this.loads.delete(k);
     const hit = this.loads.get(key);
-    if (hit) return hit.value;
-    const entry = { at: now, value: load() };
-    this.loads.set(key, entry);
-    entry.value.catch(() => {
-      if (this.loads.get(key) === entry) this.loads.delete(key);
-    });
-    return entry.value;
+    if (hit) return hit;
+    const value = load();
+    this.loads.set(key, value);
+    const settle = () => {
+      if (this.loads.get(key) === value) this.loads.delete(key);
+    };
+    value.then(settle, settle);
+    return value;
   }
 }
 

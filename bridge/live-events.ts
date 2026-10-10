@@ -105,6 +105,9 @@ interface StreamOptions {
   /** The reconnect delay suggested to EventSource, in ms. */
   retryMs?: number;
   signal?: AbortSignal;
+  /** Runs once when the stream ends, whoever ended it. Bun does not abort the request's signal when
+   *  the server closes the body (a client that stopped reading), so request-scoped work hangs here. */
+  onClose?: () => void;
 }
 
 /**
@@ -113,7 +116,7 @@ interface StreamOptions {
  * subscription and both timers.
  */
 export function liveEventStream(hub: LiveEvents, session: string, options: StreamOptions = {}): ReadableStream<Uint8Array> {
-  const { heartbeatMs = 15_000, flushMs = 25, retryMs = 2_000, signal } = options;
+  const { heartbeatMs = 15_000, flushMs = 25, retryMs = 2_000, signal, onClose } = options;
   let stop = () => {};
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -153,6 +156,7 @@ export function liveEventStream(hub: LiveEvents, session: string, options: Strea
         } catch {
           // Already closed by the consumer.
         }
+        onClose?.();
       };
       signal?.addEventListener("abort", stop);
       if (signal?.aborted) return stop();

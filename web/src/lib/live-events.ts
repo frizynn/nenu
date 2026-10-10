@@ -118,9 +118,10 @@ export const LIVE_BACKOFF_MS: readonly number[] = [1_000, 2_000, 5_000, 15_000, 
 /**
  * Hold one stream open until the returned stop function runs. Opening marks the store healthy, an
  * error marks it unhealthy and reconnects after the backoff, and a reconnect emits `resync`. With
- * `resync`, the first open emits it too: the stream replaces one that closed moments ago.
+ * `resync`, the first open emits it too: the stream replaces one that closed moments ago. Stopping
+ * with `handover` leaves the store healthy, because a replacement stream is already opening.
  */
-export function connectLiveEvents(url: string, deps: LiveDeps = browserDeps, { resync = false } = {}): () => void {
+export function connectLiveEvents(url: string, deps: LiveDeps = browserDeps, { resync = false } = {}): (handover?: boolean) => void {
   let source: LiveSource | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
@@ -156,12 +157,12 @@ export function connectLiveEvents(url: string, deps: LiveDeps = browserDeps, { r
   };
 
   connect();
-  return () => {
+  return (handover = false) => {
     stopped = true;
     if (timer !== undefined) deps.clearTimeout(timer);
     source?.close();
     source = null;
-    setHealthy(false);
+    if (!handover) setHealthy(false);
   };
 }
 

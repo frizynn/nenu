@@ -9,37 +9,43 @@ import type { ShouldRevalidateFunctionArgs } from "react-router";
 /** The two polled loaders: the herd snapshot and the open pane's mirror. */
 export type RevalidationScope = "root" | "pane";
 
-const ALL: Record<RevalidationScope, boolean> = { root: true, pane: true };
-let wanted = { ...ALL };
-let settled = true;
+type Wanted = Record<RevalidationScope, boolean>;
+
+// A narrowed scope belongs to the one run it was asked for. It waits in `pending` until that run's
+// first loader picks it up and binds it to the run's request (React Router hands every loader of a
+// run the same Request). A loader on any other request, such as a mutation's own `revalidate()`
+// interrupting the narrowed run, re-reads.
+let pending: Wanted | null = null;
+let narrowed: { request: Request | undefined; wanted: Wanted } | null = null;
 
 /**
- * Ask the next revalidation to re-read only `scope`. While one is already running the scope joins
- * it, so a run superseded by a narrower one never loses what the first one was asked for.
+ * Ask the next revalidation to re-read only `scope`. While a narrowed run has not settled the scope
+ * joins it, so a run superseded by a narrower one never loses what the first one was asked for.
  */
 export function narrowRevalidation(scope: RevalidationScope): void {
-  wanted = settled ? { root: false, pane: false, [scope]: true } : { ...wanted, [scope]: true };
-  settled = false;
+  const joined = pending ?? narrowed?.wanted ?? { root: false, pane: false };
+  pending = { ...joined, [scope]: true };
 }
 
 /** A timer tick, a resume or a reconnect: every loader re-reads. */
 export function widenRevalidation(): void {
-  wanted = { ...ALL };
-  settled = false;
+  pending = null;
+  narrowed = null;
 }
 
-/**
- * The revalidator came to rest. Anything that revalidates without asking first (a mutation's own
- * `revalidate()`) then re-reads everything, as before.
- */
+/** The revalidator came to rest: whatever revalidates next without asking first re-reads everything. */
 export function revalidationSettled(): void {
-  wanted = { ...ALL };
-  settled = true;
+  widenRevalidation();
 }
 
-/** Whether `scope`'s loader must fetch on this revalidation run. Navigations always fetch. */
-export function needsFetch(scope: RevalidationScope): boolean {
-  return wanted[scope];
+/** Whether `scope`'s loader must fetch on the run `request` belongs to. Navigations always fetch. */
+export function needsFetch(scope: RevalidationScope, request?: Request): boolean {
+  if (pending) {
+    narrowed = { request, wanted: pending };
+    pending = null;
+  }
+  if (narrowed?.request !== request) narrowed = null;
+  return narrowed?.wanted[scope] ?? true;
 }
 
 /** Test-only. */

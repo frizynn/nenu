@@ -11,11 +11,10 @@ import { buildId, json, jsonError, secure, text, withBuildHeader } from "./http.
 // Upper bound on the pane-read `lines` param — don't trust the client (or Herdr) to cap it.
 export const MAX_READ_LINES = 10_000;
 
-// Mirror reads of one pane within this window share a single Herdr read (several phones, or a poll
-// racing a live event). Only this route: the guarded reply and prompt-select reads go to Herdr
-// directly because they need a truly fresh screen.
-const MIRROR_SHARE_MS = 250;
-const mirrorReads = new SharedLoads<JsonBody>(MIRROR_SHARE_MS);
+// Concurrent mirror reads of one pane share a single Herdr read (several phones, or a poll racing a
+// live event). Only this route: the guarded reply and prompt-select reads go to Herdr directly
+// because they need a truly fresh screen.
+const mirrorReads = new SharedLoads<JsonBody>();
 
 // The pane's own reads and lifecycle. The `""` action is the bare `/api/pane/:id` mirror read.
 export const panePaneActions: Record<string, PaneAction> = {

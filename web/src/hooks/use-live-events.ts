@@ -22,28 +22,45 @@ export function useLiveEvents(session: string | undefined): void {
   const { paneId } = useParams();
   const mirrorShown = useMirrorShown();
   const watch = paneId && mirrorShown ? paneId : undefined;
-  // A stream reopened only to start watching a pane resyncs, so a mirror that just came on screen
-  // is read now rather than at its next change.
+  const watchRef = useRef(watch);
+  watchRef.current = watch;
+  // The pane the open stream names, and how to swap that stream for one naming `watchRef.current`.
   const watched = useRef(watch);
+  const swap = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    let resync = watch !== undefined && watched.current !== watch;
-    watched.current = watch;
     if (locked || typeof EventSource === "undefined") return;
-    let stop: (() => void) | null = null;
+    let stop: ((handover?: boolean) => void) | null = null;
+    const open = (resync: boolean) => {
+      watched.current = watchRef.current;
+      return connectLiveEvents(liveStreamUrl(session, watchRef.current), undefined, { resync });
+    };
     const sync = () => {
       if (document.hidden) {
         stop?.();
         stop = null;
       } else if (!stop) {
-        stop = connectLiveEvents(liveStreamUrl(session, watch), undefined, { resync });
-        resync = false;
+        stop = open(false);
       }
+    };
+    // Changing what is watched opens the new stream before closing the old one, so the store stays
+    // healthy, and the new stream resyncs: an event published between the two would otherwise be lost.
+    swap.current = () => {
+      if (!stop) return;
+      const previous = stop;
+      stop = open(true);
+      previous(true);
     };
     sync();
     document.addEventListener("visibilitychange", sync);
     return () => {
+      swap.current = null;
       document.removeEventListener("visibilitychange", sync);
       stop?.();
     };
-  }, [session, locked, watch]);
+  }, [session, locked]);
+
+  useEffect(() => {
+    if (watched.current !== watch) swap.current?.();
+  }, [watch]);
 }
