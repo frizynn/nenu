@@ -57,17 +57,10 @@ export function imageLabel(index: number): string {
   return `Image ${index + 1}`;
 }
 
-/**
- * A part as /history sends it. The web TranscriptPart union does not list the image marker yet, so
- * the renderers read parts through this one widening instead of trusting the narrower type.
- */
-export type ShownPart = TranscriptPart | TranscriptImagePart;
-
-export function shownParts(entry: TranscriptEntry): readonly ShownPart[] {
-  return entry.parts as readonly ShownPart[];
-}
+/** @deprecated TranscriptPart now includes the image marker; kept until chat-files.ts drops it. */
+export type ShownPart = TranscriptPart;
 
 /** The images an entry holds inline, in journal order (what journal-image numbers by `index`). */
 export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
-  return shownParts(entry).filter((part): part is TranscriptImagePart => part.kind === "image");
+  return entry.parts.filter((part): part is TranscriptImagePart => part.kind === "image");
 }

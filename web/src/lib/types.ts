@@ -294,7 +294,8 @@ export type TranscriptPart =
       summary: string;
       questions?: Array<{ title: string; options: string[] }>;
       result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };
-    };
+    }
+  | TranscriptImagePart;
 
 /** A file a tool call produced or showed, as a reference. Mirrors bridge/types.ts. */
 export type ToolAttachment =
@@ -303,8 +304,7 @@ export type ToolAttachment =
 
 /**
  * An image the journal holds inline, as a marker only: the bytes come from the journal-image endpoint
- * by entry and index (`journalImageUrl`). Joins TranscriptPart once the renderers draw it, so the
- * existing switches over `part.kind` stay exhaustive until then.
+ * by entry and index (`journalImageUrl`), never inlined into /history.
  */
 export interface TranscriptImagePart {
   kind: "image";
