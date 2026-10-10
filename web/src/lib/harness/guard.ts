@@ -1,4 +1,7 @@
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "./poll";
+import { sanitizeTypedText } from "../typed-text";
+
+export { sanitizeTypedText };
 // Model-GENERIC race-guard machinery: the skeleton every dialog tap runs (fresh read → parse →
 // re-derive → unconditional revision check → structural-equality check), parameterised on the model
 // type M, its detector, and its equality function.
@@ -148,17 +151,3 @@ export async function pollUntil<M>(
   return sawDialog ? "timeout" : "drifted";
 }
 
-/**
- * Sanitize free text before it is typed into a focused TUI input via the reply path. Collapse
- * whitespace to single spaces FIRST (so \t \n \r become word boundaries, not glue), then strip any
- * remaining C0/C1 control chars. Pasted clipboard text can smuggle in ESC (\x1b — blurs/cancels the
- * dialog), BEL (\x07 — "edit in nano"), ETX (\x03), etc., which the reply path would deliver
- * straight into the focused input BEFORE the readback check — so they must never reach it.
- */
-export function sanitizeTypedText(text: string, maxLen: number): string {
-  return text
-    .replace(/\s+/g, " ")
-    .replace(/\p{Cc}/gu, "")
-    .trim()
-    .slice(0, maxLen);
-}

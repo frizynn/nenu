@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines, type Block } from "../web/src/lib/blocks.ts";
 import { DIALOG_CONTRACT, type DialogKind, type DialogModels } from "../web/src/lib/harness/dialog-contract.ts";
-import { sanitizeTypedText } from "../web/src/lib/harness/guard.ts";
 import { detectAskNotes } from "../web/src/lib/harness/codex/ask.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harness/multi-select-model.ts";
@@ -10,7 +9,7 @@ import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/s
 import { previewStructureEqual, type PreviewSelectModel } from "../web/src/lib/harness/preview-model.ts";
 import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/prompt-model.ts";
 import { WIZARD_CANCEL_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
-import { FEEDBACK_MAX_LENGTH } from "../web/src/lib/prompt-action.ts";
+import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "../web/src/lib/typed-text.ts";
 import type { PaneRead } from "./herdr-client.ts";
 import type {
   AgentView,
