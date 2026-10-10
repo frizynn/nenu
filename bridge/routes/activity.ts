@@ -15,8 +15,7 @@ function readerFor(ctx: Services): ClaudeActivity {
   return reader;
 }
 
-// The stream carries any topic name; LiveTopic gains "activity" with the live-events package.
-const ACTIVITY_TOPIC = "activity" as string as LiveTopic;
+const ACTIVITY_TOPIC: LiveTopic = "activity";
 
 async function activityRead(ctx: Services, { req, url, rt, paneId }: PaneRouteRequest): Promise<Response> {
   const encoding = req.headers.get("accept-encoding");

@@ -492,7 +492,7 @@ export interface PaneSkillsResponse {
  * What an invalidation names. `interaction` is a pane's detected dialog; `org` is the Organizations
  * projects/threads view. The stream carries only these names, never state (ADR 0054).
  */
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org";
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
 
 export interface LiveEvent {
   session: string;

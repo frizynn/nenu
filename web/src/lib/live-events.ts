@@ -75,7 +75,7 @@ function emit(event: LiveEvent): void {
   for (const listener of listeners) listener(event);
 }
 
-const TOPICS: Record<LiveTopic, true> = { snapshot: true, pane: true, queue: true, journal: true, interaction: true, org: true };
+const TOPICS: Record<LiveTopic, true> = { snapshot: true, pane: true, queue: true, journal: true, interaction: true, org: true, activity: true };
 
 /** Validate one `data:` payload; anything else is ignored rather than trusted. */
 export function parseLiveEvent(data: string): LiveEvent | null {
