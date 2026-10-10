@@ -3,6 +3,7 @@
 Status: **Accepted** (2026-09-11)
 
 Amended by: [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) (Accepted, shipped in 0.54.0). SVG renders as an `<img>`, a preview may inline its contained sibling assets, and the residual self-navigation egress is documented. Sandbox, opaque origin and CSP are unchanged.
+Amended by: [ADR 0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md). A refused file may open outside the preview through an operator-confirmed, single-use link, with the same CSP and sandbox for HTML.
 
 ## Context
 

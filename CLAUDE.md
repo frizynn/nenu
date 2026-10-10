@@ -255,6 +255,11 @@ sibling assets into the preview through the same containment checks as `/file`
 and index, never by path. Never execute HTML in Nenu's origin or turn
 the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md),
 [ADR 0059](./.adr/0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md)).
+The one way past a refusal is the operator's confirmed **Open** (`bridge/file-open.ts`): a
+write-level grant for one non-private path, answered with a single-use, two-minute link bound to
+that device and the resolved file, served `no-store` with HTML and SVG under the preview CSP plus
+`sandbox allow-scripts`. Never skip the confirmation, reuse a link or widen `/file` with it
+([ADR 0063](./.adr/0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

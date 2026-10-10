@@ -75,7 +75,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0017](./0017-recognising-a-password-prompt-changes-what-collie-says.md) | Recognising a password prompt changes what Nenu says, never what it sends | Accepted |
 | [0018](./0018-operator-command-rows-replace-the-catalog.md) | The operator's command rows replace the catalog, never merge into it | Accepted |
 | [0020](./0020-a-major-upgrade-is-consented-by-flag.md) | A major upgrade is consented by flag; routine update follows tags within the major | Accepted |
-| [0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) | HTML previews run in an opaque, no-network sandbox | Accepted; transport superseded by 0025, amended by 0059 |
+| [0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) | HTML previews run in an opaque, no-network sandbox | Accepted; transport superseded by 0025, amended by 0059 and 0063 |
 | [0022](./0022-native-agent-sessions-and-explicit-history-recovery.md) | Native agent sessions and explicit history recovery | Accepted; manual-only recovery superseded by 0028 |
 | [0023](./0023-codex-replies-use-bracketed-paste.md) | Codex replies are sent as bracketed paste | Accepted |
 | [0024](./0024-session-subagent-inspector.md) | Subagents are read within their parent session | Accepted |
@@ -90,9 +90,10 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted |
 | [0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md) | The bridge reads and answers dialogs; the screen is the actuator and hooks only observe | Accepted |
 | [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted |
-| [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted |
+| [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted; amended by 0063 |
 | [0060](./0060-codex-panes-stay-off-the-daemon.md) | Codex panes stay off the daemon (launching Codex daemon-backed was rejected) | Rejected |
 | [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Accepted |
+| [0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md) | A refused file opens only through a confirmed, single-use link (amends 0021, 0059) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

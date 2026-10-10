@@ -21,6 +21,10 @@ const TEXT_EXTENSIONS = new Set([
   ".sql", ".graphql", ".prisma", ".diff", ".patch", ".ini", ".conf", ".rst",
 ]);
 const TEXT_NAMES = new Set(["readme", "license", "licence", "dockerfile", "makefile", ".gitignore", ".gitattributes", ".editorconfig"]);
+/** A source or plain-text file by its name: shown as text, never executed. */
+export function isTextPath(path: string): boolean {
+  return TEXT_EXTENSIONS.has(extname(path).toLowerCase()) || TEXT_NAMES.has(basename(path).toLowerCase());
+}
 const PRIVATE_PART = /^(?:\.env(?:\..*)?|\.git|\.ssh|\.aws|\.azure|\.gnupg|\.kube|\.config|\.codex|\.claude|\.npmrc|\.pypirc|\.netrc|credentials(?:\..*)?|auth\.json|id_(?:rsa|ed25519|ecdsa|dsa)(?:\..*)?)$/i;
 const PRIVATE_EXTENSION = /\.(?:pem|key|p12|pfx|keystore)$/i;
 
@@ -45,7 +49,7 @@ function fileKind(path: string): FileKind | null {
   if ([".mp4", ".m4v", ".mov", ".webm"].includes(ext)) return "video";
   if (ext === ".pdf") return "pdf";
   if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) return "image";
-  if (TEXT_EXTENSIONS.has(ext) || TEXT_NAMES.has(basename(path).toLowerCase())) return "text";
+  if (isTextPath(path)) return "text";
   return null;
 }
 
@@ -139,7 +143,7 @@ export async function readPaneText(file: PaneFile): Promise<string | null> {
 }
 
 /** The served MIME of a sniffed image or PDF head, or null when the bytes are not what the name says. */
-function binaryMime(kind: "pdf" | "image", head: Buffer): string | null {
+export function binaryMime(kind: "pdf" | "image", head: Buffer): string | null {
   if (kind === "pdf") return head.subarray(0, 5).toString("ascii") === "%PDF-" ? "application/pdf" : null;
   const image = imageExtFromBytes(head);
   return image ? (image === "jpg" ? "image/jpeg" : `image/${image}`) : null;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
@@ -57,6 +57,8 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/update/check", level: "read", session: false },
   { method: "GET", path: "/api/interactions", level: "read", session: true },
   { method: "POST", path: "/api/interactions/w%3Ap/answer", level: "write", session: true },
+  { method: "POST", path: "/api/files/grant", level: "write", session: true },
+  { method: "GET", path: "/api/files/open", level: "read", session: false },
 ];
 
 // Paths no route claims for that method: they fall through to static and are never gated.
@@ -70,9 +72,12 @@ const UNROUTED = [
 let url = "";
 let dispose = async () => {};
 const seen: string[] = [];
+const audited: Array<{ action: string; device?: string | null; detail?: Record<string, unknown> }> = [];
+let outside = "";
 
 beforeAll(async () => {
   const dir = await mkdtemp(join(tmpdir(), "nenu-route-contract-"));
+  outside = await mkdtemp(join(tmpdir(), "nenu-route-outside-"));
   // A shell pane: no agent, so no handler reaches for a conversation, journal or daemon.
   const paneInfo = { pane_id: "w:p", terminal_id: "t", workspace_id: "w", tab_id: "tab", focused: false, cwd: dir, agent_status: "idle" as const, revision: 0 };
   const herdr = {
@@ -94,7 +99,7 @@ beforeAll(async () => {
     registry: { get: (name?: string) => (!name || name === "default" ? runtime : undefined), list: () => [], all: () => [runtime] },
     push: { enabled: false, publicKey: "", useInteractions: () => {} }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
     updateMonitor: { status: () => ({}), checkRelease: async () => {} },
-    audit: { record: () => {} },
+    audit: { record: (entry: (typeof audited)[number]) => audited.push(entry) },
     activity: { get: () => undefined, noteSeen: (_session: string, paneId: string) => seen.push(paneId) },
     live: new LiveEvents(),
   } as unknown as Parameters<typeof startServer>[0]);
@@ -103,6 +108,7 @@ beforeAll(async () => {
     engine.stop();
     await server.stop(true);
     await rm(dir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   };
 });
 
@@ -193,3 +199,46 @@ describe("unrouted requests fall through to static, ungated", () => {
     expect(result.body).toContain("Nothing is configured at this address");
   });
 });
+
+describe("opening a refused file through a confirmed link", () => {
+  const grant = async (path: string, headers: Record<string, string> = { ...SAME_ORIGIN(), "x-device": "phone" }) => {
+    const response = await fetch(`${url}/api/files/grant`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ paneId: "w:p", path }) });
+    return { status: response.status, body: await response.json() as { url?: string; name?: string; size?: number; type?: string; error?: string } };
+  };
+
+  test("grants a file outside the pane's folder and opens it once, sandboxed, for the same device", async () => {
+    const file = join(outside, "resultado-shopify.html");
+    await writeFile(file, "<script>document.title='ran'</script>");
+    audited.length = 0;
+    const { status, body } = await grant(file);
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ name: "resultado-shopify.html", type: "text/html", size: 37 });
+    expect(body.url).toMatch(/^\/api\/files\/open\?t=[A-Za-z0-9_-]{22}$/);
+    // Another device cannot use it, and trying spends it.
+    expect((await fetch(url + body.url, { headers: { "x-device": "tablet" } })).status).toBe(410);
+    const again = await grant(file);
+    // A top-level navigation carries no Origin.
+    const opened = await fetch(url + again.body.url, { headers: { "x-device": "phone" } });
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get("content-security-policy")).toEndWith("frame-ancestors 'none'; sandbox allow-scripts");
+    expect(opened.headers.get("content-security-policy")).toContain("connect-src 'none'");
+    expect(await opened.text()).toContain("document.title");
+    expect((await fetch(url + again.body.url, { headers: { "x-device": "phone" } })).status).toBe(410);
+    expect(audited.map((entry) => [entry.action, entry.device, entry.detail?.path])).toEqual([
+      ["file.grant", "phone", await realpathOf(file)],
+      ["file.grant", "phone", await realpathOf(file)],
+      ["file.open", "phone", await realpathOf(file)],
+    ]);
+  });
+
+  test("resolves a relative path against the named pane's folder and refuses private files", async () => {
+    expect(await grant("../nope.txt").then((r) => r.status)).toBe(404);
+    await writeFile(join(outside, ".env"), "TOKEN=1");
+    expect(await grant(join(outside, ".env"))).toEqual({ status: 403, body: { error: "This file is private and cannot be opened from Nenu." } });
+  });
+});
+
+async function realpathOf(path: string): Promise<string> {
+  const { realpath } = await import("node:fs/promises");
+  return realpath(path);
+}

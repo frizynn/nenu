@@ -7,6 +7,8 @@
   [ADR 0025](./0025-artifacts-and-server-message-queue.md) (a byte-serving route for journal images,
   and validators on media responses). The opaque origin, the response CSP and the sandbox tokens do
   not change.
+- **Amended by:** [ADR 0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md)
+  (a third, operator-confirmed way to open a file outside the pane's folder).
 - **Trail:** `bridge/pane-files.ts` · `bridge/html-preview.ts` · `bridge/media-preview.ts` ·
   `bridge/routes/*` (journal-image) · `web/src/components/chat-media.tsx` ·
   `web/src/lib/html-preview.ts`

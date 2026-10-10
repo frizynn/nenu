@@ -3,6 +3,7 @@ import type { AuditLog } from "../audit.ts";
 import type { ClaudeHooks } from "../claude-hooks.ts";
 import type { ClaudeTelemetry } from "../claude-telemetry.ts";
 import type { Config } from "../config.ts";
+import type { FileGrants } from "../file-open.ts";
 import type { ConversationService } from "../conversation-service.ts";
 import type { Interactions } from "../interactions.ts";
 import type { JournalWatch } from "../journal-watch.ts";
@@ -59,6 +60,8 @@ export interface Services extends ServerDeps {
   paneWatcher: PaneWatcher;
   journalWatch: JournalWatch;
   claudeHooks: ClaudeHooks;
+  /** Single-use links to files the operator confirmed opening outside the preview (ADR 0063). */
+  fileGrants: FileGrants;
 }
 
 export type AccessLevel = "read" | "write";

@@ -1,9 +1,10 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { artifactMetadata } from "../artifact-metadata.ts";
 import type { AuditLog } from "../audit.ts";
 import { chatUploadPreviewResponse, isChatUploadPath } from "../chat-upload-preview.ts";
 import type { Config } from "../config.ts";
+import { checkOpenable, grantedFileResponse } from "../file-open.ts";
 import { renderedHtmlResponse } from "../html-preview.ts";
 import { adapterFor } from "../journal/registry.ts";
 import { deliveredFilePaths } from "../journal/delivered.ts";
@@ -12,7 +13,8 @@ import { projectFiles } from "../project-files.ts";
 import type { UploadResponse } from "../types.ts";
 import { imageExtFromBytes, SNIFF_BYTES } from "../uploads.ts";
 import type { TranscriptEntry } from "../journal/types.ts";
-import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
+import { deviceAuth } from "./access.ts";
+import type { PaneAction, PaneRouteRequest, Route, Services } from "./context.ts";
 import { json, jsonError, secure, text } from "./http.ts";
 
 // Image upload limits. Herdr's socket only carries text/keys, so we can't paste an image into the
@@ -158,3 +160,45 @@ async function uploadPane(
     return json({ ok: false, error: (err as Error).message } satisfies UploadResponse, ae);
   }
 }
+
+// ── Open a refused file outside the preview (ADR 0063) ──────────────
+export const fileOpenRoutes: Route[] = [
+  {
+    // Write-level: only a device that can drive a terminal may mint a link, and only from Nenu's
+    // own page (a write needs Origin). A relative path resolves against the named pane's folder.
+    method: "POST",
+    path: "/api/files/grant",
+    access: "write",
+    session: true,
+    async handle({ cfg, audit, fileGrants }, { req, rt }) {
+      const body = await req.json().catch(() => null) as { paneId?: unknown; path?: unknown } | null;
+      let path = body?.path;
+      if (typeof path === "string" && !isAbsolute(path) && typeof body?.paneId === "string") {
+        const current = rt.engine.current();
+        const cwd = [...current.agents, ...current.shellPanes].find((pane) => pane.paneId === body.paneId)?.cwd;
+        if (cwd && isAbsolute(cwd)) path = resolve(cwd, path);
+      }
+      const file = await checkOpenable(path, cfg.stateDir);
+      if ("status" in file) return jsonError(file.message, file.status, null);
+      const device = deviceAuth(req, cfg).device;
+      const token = fileGrants.issue(file.path, device);
+      audit.record({ action: "file.grant", session: rt.name, device, detail: { path: file.path, size: file.size } });
+      return json({ url: `/api/files/open?t=${token}`, name: file.name, size: file.size, type: file.type }, null);
+    },
+  },
+  {
+    // Read-level: a link opened in a new tab is a top-level navigation and carries no Origin. The
+    // token is the authority: single-use, two minutes, bound to the granting device and the file.
+    method: "GET",
+    path: "/api/files/open",
+    access: "read",
+    session: false,
+    async handle({ cfg, audit, fileGrants }, { req, url }) {
+      const device = deviceAuth(req, cfg).device;
+      const path = fileGrants.consume(url.searchParams.get("t"), device);
+      const response = await grantedFileResponse(path, cfg.stateDir);
+      if (path) audit.record({ action: "file.open", device, detail: { path, status: response.status, size: Number(response.headers.get("content-length") ?? 0) } });
+      return secure(response);
+    },
+  },
+];
