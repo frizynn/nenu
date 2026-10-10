@@ -35,7 +35,7 @@ export class Subagents {
   private async claudeList(id: string) {
     const owner = (await this.runtimes.list().catch(() => [])).find((runtime) => runtime.sessionId === id);
     let startedAt: number | undefined;
-    if (owner?.startedAt) {
+    if (owner?.startedAt && owner.pid !== undefined) {
       try { process.kill(owner.pid, 0); startedAt = owner.startedAt; } catch { /* The native owner has exited. */ }
     }
     return this.claude.list(id, startedAt);
