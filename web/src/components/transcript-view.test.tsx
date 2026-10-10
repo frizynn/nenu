@@ -2,6 +2,8 @@ import { QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { server } from "@/test/setup";
 
 import { TranscriptView } from "./transcript-view";
 import { FilePreviewProvider } from "./file-preview-provider";
@@ -449,6 +451,32 @@ describe("journal media", () => {
     await userEvent.click(card);
     const frame = await screen.findByTitle("Rendered preview of report.html");
     expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+  });
+
+  // The designboard pane's compaction summary named files relative to other folders; each became an
+  // Open card that answered 404. A recap or a system note names files, it does not hand them over.
+  it("shows no cards for the files a compaction summary or a system note names", () => {
+    render(withViewer(<TranscriptView entries={[
+      turn({ uuid: "s", role: "summary", parts: [{ kind: "text", text: "Key files: `assets/canvas.template.html`, the real one `real/scroll.html`, shots in frames/frame1.png." }] }),
+      turn({ uuid: "n", role: "note", parts: [{ kind: "text", text: "Base directory for this skill: /skills/designboard\n\nOpen assets/canvas.template.html or report.html" }] }),
+    ]} />));
+    expect(screen.queryByRole("button", { name: /^Open / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    // The names stay in the text, and a code-formatted one still opens by name.
+    expect(screen.getByRole("button", { name: "assets/canvas.template.html" })).toBeEnabled();
+  });
+
+  it("opens a card at the file the bridge finds and says so when nothing is there", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
+      new URL(request.url).searchParams.getAll("inspect").map((path) => path === "gone.html"
+        ? { path, state: "missing" }
+        : { path, state: "preview", resolved: `/repo/${path}` }))));
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; the old `gone.html` was removed." }] })]} />));
+    const gone = await screen.findByRole("button", { name: "gone.html: file not found" });
+    expect(gone).toBeDisabled();
+    expect(gone).toHaveTextContent("Not found");
+    await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
+    expect(await screen.findByText("/repo/assets/canvas.template.html")).toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {
