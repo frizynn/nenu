@@ -11,6 +11,9 @@ import {
   journalImageUrl,
   sendMessage,
   createTab,
+  createOrgProject,
+  mergeOrgThread,
+  setOrgThreadFlags,
   fetchPane,
   fetchSnapshot,
   interruptPane,
@@ -32,6 +35,35 @@ describe("api client", () => {
   it("createTab posts and returns the created pane", async () => {
     const res = await createTab("w2");
     expect(res.ok).toBe(true);
+  });
+
+  it("sends the Organizations writes to their routes with the Herdr session", async () => {
+    const seen: { path: string; session: string | null; body: unknown }[] = [];
+    server.use(
+      http.post(/\/api\/org\/(project\/create|thread\/merge|thread\/set)$/, async ({ request }) => {
+        const url = new URL(request.url);
+        seen.push({ path: url.pathname, session: url.searchParams.get("session"), body: await request.json() });
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    await createOrgProject({ name: "App", goal: "Ship it" }, "phone");
+    await mergeOrgThread({ project: "app", id: "t-0001", method: "squash" }, "phone");
+    await setOrgThreadFlags({ project: "app", id: "t-0001", autoMerge: true }, "phone");
+
+    expect(seen).toEqual([
+      { path: "/api/org/project/create", session: "phone", body: { name: "App", goal: "Ship it" } },
+      { path: "/api/org/thread/merge", session: "phone", body: { project: "app", id: "t-0001", method: "squash" } },
+      { path: "/api/org/thread/set", session: "phone", body: { project: "app", id: "t-0001", autoMerge: true } },
+    ]);
+  });
+
+  it("throws the bridge's refusal when Organizations will not merge", async () => {
+    server.use(
+      http.post("/api/org/thread/merge", () =>
+        HttpResponse.json({ ok: false, error: "checks are failing" }, { status: 502 })),
+    );
+    await expect(mergeOrgThread({ project: "app", id: "t-0001" })).rejects.toThrow(/checks are failing/);
   });
 
   it("interruptPane targets the pane and Herdr session without sending arbitrary keys", async () => {

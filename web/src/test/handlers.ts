@@ -173,6 +173,18 @@ export const handlers = [
   }),
   http.get("/api/interactions", () => HttpResponse.json({ interactions: [] })),
   http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: true })),
+  http.post("/api/org/project/create", async ({ request }) => {
+    const body = await request.json() as { name: string };
+    return HttpResponse.json({ ok: true, project: { slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: body.name } });
+  }),
+  http.post("/api/org/thread/merge", async ({ request }) => {
+    const body = await request.json() as { id: string };
+    return HttpResponse.json({ ok: true, merged: { id: body.id, pr: "https://github.com/acme/app/pull/7" } });
+  }),
+  http.post("/api/org/thread/set", async ({ request }) => {
+    const body = await request.json() as { id: string; autoFixCi?: boolean; autoMerge?: boolean };
+    return HttpResponse.json({ ok: true, flags: { id: body.id, autoFixCi: body.autoFixCi ?? false, autoMerge: body.autoMerge ?? false } });
+  }),
   http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/close$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/rename$/, () => HttpResponse.json({ ok: true })),

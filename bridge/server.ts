@@ -92,7 +92,7 @@ export function startServer(opts: ServerDeps) {
     conversations,
     input,
     queue,
-    projects: new ProjectRegistry(),
+    projects: new ProjectRegistry({ live }),
     orgRun: defaultOrgRun(),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,
     interactions: new Interactions(live),
@@ -110,10 +110,11 @@ export function startServer(opts: ServerDeps) {
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
 
     fetch(req): Response | Promise<Response> {
-      if (!cfg.allowNonLoopbackBind && !isLoopbackPeer(server.requestIP(req)?.address)) {
+      const peer = server.requestIP(req)?.address;
+      if (!cfg.allowNonLoopbackBind && !isLoopbackPeer(peer)) {
         return text("non-loopback peer rejected", 403);
       }
-      return dispatch(services, req, server);
+      return dispatch(services, req, server, peer);
     },
   });
 

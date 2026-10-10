@@ -47,9 +47,6 @@ async function paneFileScope(
   return { cwd: pane?.cwd, journalEntries, delivered: async () => deliveredFilePaths(await journalEntries()) };
 }
 
-// Inlining sibling assets into HTML previews (ADR 0059) is on unless the operator opts out.
-const inlineHtmlAssets = () => process.env.COLLIE_HTML_INLINE_ASSETS !== "0";
-
 export const filePaneActions: Record<string, PaneAction> = {
   file: {
     level: "read",
@@ -70,7 +67,7 @@ export const filePaneActions: Record<string, PaneAction> = {
     async handle(services, request) {
       const { cwd, delivered } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, inlineAssets: inlineHtmlAssets() }));
+        { delivered, inlineAssets: services.cfg.htmlInlineAssets }));
     },
   },
   files: {

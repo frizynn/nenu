@@ -25,6 +25,9 @@ const CASES: Case[] = [
   { method: "GET", path: "/api/org/templates", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
+  { method: "POST", path: "/api/org/project/create", level: "write", session: true },
+  { method: "POST", path: "/api/org/thread/merge", level: "write", session: true },
+  { method: "POST", path: "/api/org/thread/set", level: "write", session: true },
   { method: "GET", path: "/api/snapshot", level: "read", session: true },
   { method: "POST", path: "/api/snapshot", level: "read", session: true },
   { method: "GET", path: "/api/events", level: "read", session: true },
@@ -34,7 +37,7 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/tab/t1/rename", level: "write", session: true },
   { method: "POST", path: "/api/tab/t1/close", level: "write", session: true },
   pane("", "GET", "read"),
-  ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "queue"]
+  ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "journal-image", "queue"]
     .map((action) => pane(action, "GET", "read")),
   ...["start", "reply", "keys", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
     .map((action) => pane(action, "POST", "write")),

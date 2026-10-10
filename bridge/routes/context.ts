@@ -76,6 +76,8 @@ export interface RouteRequest {
   url: URL;
   match: RegExpMatchArray | null;
   server: RequestTimeouts;
+  /** The TCP peer address Bun.serve reported; undefined when the transport has none (in-process tests). */
+  peer?: string;
 }
 
 export interface SessionRouteRequest extends RouteRequest {

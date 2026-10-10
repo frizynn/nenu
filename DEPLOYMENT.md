@@ -424,3 +424,20 @@ Two things to get right:
 `COLLIE_SERVE_PORT` applies to the https front door only. Under `COLLIE_SERVE_MODE=http` the tailnet
 listener already *is* `COLLIE_PORT`, so setting both is a contradiction and `serve` refuses it rather
 than pick a winner.
+
+## Settings that apply to every variant
+
+These do not change the front door, but a service manager has to carry them in the bridge's
+environment like the rest:
+
+```bash
+# COLLIE_HTML_INLINE_ASSETS=off        # HTML previews render the bare file, no same-folder assets
+# COLLIE_HERDR_ORGANIZATIONS_BIN=/opt/herdr/bin/herdr-organizations   # when it is not on PATH
+# HERDR_PROJECTS_ROOT=/srv/herdr-projects   # project registry folder (default ~/.herdr-projects)
+```
+
+Claude Code hooks (`collie-ctl.sh claude-hooks`) post to `http://127.0.0.1:$COLLIE_PORT/api/hooks/claude`.
+That route accepts only a loopback peer with a loopback `Host`, no `Origin` and no forwarding or
+Tailscale identity header, plus the token the installer wrote. A proxy that forwards it is refused by
+design, so never publish it; with several instances on one host, run the installer per user so each
+Claude posts to its own port.

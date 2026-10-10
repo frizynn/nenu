@@ -30,6 +30,10 @@ Nenu runs on your machine and is normally exposed only inside your
 
 - Conversation-first timelines with compact thinking and tool-call groups.
 - Automatic Herdr Projects discovery, with project overviews, coordinators, and thread status.
+  With a `herdr-organizations` that speaks `--json`, threads show PR checks and diff size, and a
+  PR can be merged or set to auto-fix CI and auto-merge from the phone. Nothing merges unless you
+  tap it or turn auto-merge on. `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
+  not on the service `PATH`; `HERDR_PROJECTS_ROOT` overrides the project registry folder.
 - A per-chat files and photos browser for references in the available conversation history.
 - A Stop control for interrupting an active Codex turn without closing its terminal.
 - Local, cached model and reasoning selectors for Codex CLI and Claude Code.
@@ -230,7 +234,9 @@ recent conversation mention (default), extension or name. Designboard titles com
 `canvas-doc` data; inspection reads at most 20 contained HTML files per request, with 60 per UI batch.
 Older candidates can be inspected on demand. Images and MP4/WebM videos also appear
 inside messages. Videos support seeking, and file previews can be refreshed or downloaded.
-HTML has Render and Code views in an isolated offline document; external assets remain blocked.
+HTML has Render and Code views in an isolated offline document. Styles, scripts and images in the
+same folder are inlined into that document (set `COLLIE_HTML_INLINE_ASSETS=off` to render the bare
+file); anything else stays blocked. SVG renders as an image, with its source in the Code view.
 Designboards open in view mode; downloading preserves the original editable document.
 
 Use **Add to queue** beside Attach to stage a message. While an agent works, Send queues the
