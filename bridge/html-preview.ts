@@ -92,10 +92,20 @@ export async function inlineSiblingAssets(
  * A network document has its own CSP; srcdoc inherits the app's stricter script policy. The file is
  * found exactly as `/file` finds it, delivered-outside-cwd exception included.
  */
+/**
+ * Who may frame the preview. 'self' alone is not enough: the sandbox header makes the document's
+ * origin opaque, and WebKit matches 'self' against that opaque origin, so Safari refuses to draw the
+ * frame inside Nenu and shows a blank page. The host the request reached (already checked against
+ * the Host allowlist by the access gate) names Nenu's real origin.
+ */
+export function frameAncestors(host: string | undefined): string {
+  return host && /^[A-Za-z0-9.-]+(:\d+)?$/.test(host) ? `'self' https://${host} http://${host}` : "'self'";
+}
+
 export async function renderedHtmlResponse(
   cwd: string | undefined,
   path: string | null,
-  options: { delivered?: () => Promise<readonly string[]>; inlineAssets?: boolean } = {},
+  options: { delivered?: () => Promise<readonly string[]>; inlineAssets?: boolean; host?: string } = {},
 ): Promise<Response> {
   if (!path || !/\.html?$/i.test(path))
     return new Response("An HTML file is required.", { status: 400 });
@@ -116,7 +126,7 @@ export async function renderedHtmlResponse(
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
-      "content-security-policy": `${HTML_PREVIEW_CSP}; sandbox allow-scripts; frame-ancestors 'self'`,
+      "content-security-policy": `${HTML_PREVIEW_CSP}; sandbox allow-scripts; frame-ancestors ${frameAncestors(options.host)}`,
       "referrer-policy": "no-referrer",
     },
   });

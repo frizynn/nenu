@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Code2, Eye, Loader2, Monitor, ShieldCheck, Smartphone } from "lucide-react";
+import { Code2, Expand, Eye, Loader2, Monitor, ShieldCheck, Smartphone } from "lucide-react";
 import { fetchPaneFile, paneFileUrl } from "@/lib/api";
 
 // The in-app HTML viewer. The document only ever runs in the opaque-origin `allow-scripts` iframe
@@ -89,6 +89,11 @@ export function HtmlViewer({ paneId, session, path, name, reload }: { paneId: st
           <button key={value} type="button" aria-pressed={width === value} className="file-preview-tab" onClick={() => setWidth(value)}>
             <Icon className="size-4" aria-hidden="true" /><span className="max-sm:sr-only">{label}</span>
           </button>)}
+        {/* The page on its own tab: a pinch zooms the document instead of Nenu, and a canvas gets
+            the whole screen. The response's own CSP sandbox keeps it opaque and offline there too. */}
+        <a className="file-preview-tab" href={htmlRenderUrl(paneId, path, session)} target="_blank" rel="noopener noreferrer">
+          <Expand className="size-4" aria-hidden="true" /><span className="max-sm:sr-only">Full screen</span>
+        </a>
       </div>}
     </div>
     <p className="html-viewer-note"><ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />Sandboxed · scripts on, no network, no cookies</p>

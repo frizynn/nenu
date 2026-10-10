@@ -68,7 +68,7 @@ export const filePaneActions: Record<string, PaneAction> = {
     async handle(services, request) {
       const { cwd, delivered } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, inlineAssets: services.cfg.htmlInlineAssets }));
+        { delivered, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined }));
     },
   },
   files: {

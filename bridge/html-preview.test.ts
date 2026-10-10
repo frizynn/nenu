@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, test, expect } from "bun:test";
 import { mkdir, mkdtemp, realpath, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { inlineSiblingAssets, renderedHtmlResponse } from "./html-preview.ts";
+import { frameAncestors, inlineSiblingAssets, renderedHtmlResponse } from "./html-preview.ts";
 import { openPaneFile } from "./pane-files.ts";
 test("HTML executes only with a response-enforced opaque sandbox and no network", async () => {
   const root = await mkdtemp(join(tmpdir(), "nenu-html-"));
@@ -122,4 +122,11 @@ describe("sibling asset inlining", () => {
     expect(tight).toContain('href="style.css"');
     expect(tight).toContain("data:image/png;base64,");
   });
+});
+
+test("the preview may be framed by Nenu's own host, not just the sandbox's opaque 'self'", () => {
+  expect(frameAncestors("macbook.tail.ts.net")).toBe("'self' https://macbook.tail.ts.net http://macbook.tail.ts.net");
+  expect(frameAncestors("127.0.0.1:8787")).toBe("'self' https://127.0.0.1:8787 http://127.0.0.1:8787");
+  expect(frameAncestors(undefined)).toBe("'self'");
+  expect(frameAncestors("evil.com; script-src *")).toBe("'self'");
 });
