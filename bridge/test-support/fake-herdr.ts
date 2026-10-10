@@ -57,7 +57,7 @@ export interface FakeHerdrOptions {
   viewportRows?: number;
 }
 
-const READ_METHODS = new Set(["session.snapshot", "workspace.list", "tab.list", "pane.list", "pane.read", "pane.get", "pane.process_info", "events.subscribe"]);
+const READ_METHODS = new Set(["session.snapshot", "workspace.list", "tab.list", "pane.list", "pane.read", "pane.get", "pane.process_info", "events.subscribe", "ping"]);
 const RULE = "─".repeat(72);
 const SPINNER = ["✻", "✶", "✳", "✢", "·"];
 
@@ -218,6 +218,8 @@ export class FakeHerdr {
   private dispatch(method: string, params: Record<string, unknown>): Record<string, unknown> {
     const paneId = String(params.pane_id ?? "");
     switch (method) {
+      case "ping":
+        return { type: "pong", version: this.version, protocol: this.protocol };
       case "session.snapshot":
         return { type: "session_snapshot", snapshot: { version: this.version, protocol: this.protocol, ...this.lists() } };
       case "workspace.list":
