@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Check, CircleDashed, GitPullRequest, X } from "lucide-react";
 
+import { FoldedList, HomeHeading } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import type { ReviewEntry } from "@/lib/home-stats";
@@ -135,27 +136,18 @@ function ReviewRow({ entry, session }: { entry: ReviewEntry; session?: string })
   );
 }
 
-/** How many rows show before "Show all": enough to act on, short enough to keep Projects in reach. */
-export const REVIEW_ROWS = 6;
+/** How many rows show before "Show all": enough to act on, short enough to keep Recent in reach. */
+export const REVIEW_ROWS = 5;
 
 /** Home's "Ready to review": the pull requests waiting on you, nothing else. */
 export function ReadyToReviewList({ entries, session }: { entries: readonly ReviewEntry[]; session?: string }) {
-  const [all, setAll] = useState(false);
   if (!entries.length) return null;
-  const shown = all ? entries : entries.slice(0, REVIEW_ROWS);
   return (
     <section aria-labelledby="home-review" className="flex flex-col gap-1.5">
-      <h2 id="home-review" className="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
-        <span className="text-foreground/85">Ready to review</span><span className="tabular-nums">{entries.length}</span>
-      </h2>
-      <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
-        {shown.map((entry) => <ReviewRow key={entry.key} entry={entry} session={session} />)}
-      </ul>
-      {entries.length > shown.length && (
-        <button type="button" onClick={() => setAll(true)} className="self-start px-1 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground sm:px-3.5">
-          Show all {entries.length}
-        </button>
-      )}
+      <HomeHeading id="home-review" label="Ready to review" count={entries.length} />
+      <FoldedList items={entries} rows={REVIEW_ROWS}>
+        {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} />}
+      </FoldedList>
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, jumpTargets, needsYouItems, projectStateCounts, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -49,7 +49,7 @@ it("lists dialogs oldest first, then blocked panes the bridge read no dialog on"
   expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : "blocked"}`)).toEqual(["a:asks", "b:asks", "c:blocked"]);
 });
 
-describe("review and project state", () => {
+describe("review state", () => {
   const hub: ProjectView = {
     slug: "hub", name: "Hub", status: "active", source: "json",
     coordinator: { paneId: "coord", agent: "codex", liveStatus: "working" },
@@ -69,11 +69,6 @@ describe("review and project state", () => {
   it("falls back to an open pull request on a stopped agent for a files-only project", () => {
     const files: ProjectView = { ...hub, source: "files", threads: hub.threads.map(({ group: _group, ...thread }) => thread) };
     expect(reviewItems([files]).map((item) => item.thread.id)).toEqual(["t2"]);
-  });
-
-  it("counts open threads by their dot, the coordinator once", () => {
-    expect(projectStateCounts(hub)).toEqual({ blocked: 1, working: 1, review: 1, idle: 1 });
-    expect(projectStateCounts({ ...hub, threads: [] })).toEqual({ blocked: 0, working: 1, review: 0, idle: 0 });
   });
 });
 
@@ -129,23 +124,24 @@ describe("background work", () => {
   });
 });
 
-describe("jumpTargets", () => {
+describe("recent chats", () => {
   const panes = [
     agent("coord", "working", { lastActiveAt: NOW - 30 * MIN }),
-    agent("worker", "working", { lastActiveAt: NOW - 2 * MIN }),
-    agent("chat-old", "idle", { paneLabel: "Changelog", lastActiveAt: NOW - 60 * MIN }),
-    agent("chat-new", "blocked", { paneLabel: "Auth review", workspaceLabel: "api", lastActiveAt: NOW - 10 * MIN }),
+    agent("worker", "done", { lastActiveAt: NOW - 2 * MIN, lastSeenAt: NOW - 5 * MIN }),
+    agent("chat-old", "idle", { paneLabel: "Changelog", tabLabel: "docs", lastActiveAt: NOW - 60 * MIN, lastSeenAt: NOW - 20 * MIN }),
+    agent("chat-asks", "blocked", { paneLabel: "Auth review", lastActiveAt: NOW - MIN }),
+    agent("chat-quiet", "idle", { paneLabel: "Untouched" }),
   ];
 
-  it("lists projects and loose chats by last movement, a project moving with its panes", () => {
-    expect(jumpTargets(panes, [project]).map((target) => `${target.kind}:${target.id}`))
-      .toEqual(["project:hub", "chat:chat-new", "chat:chat-old"]);
-    expect(jumpTargets(panes, [project])[1]).toMatchObject({ label: "Auth review", detail: "api", status: "blocked" });
+  it("lists chats by their last movement or visit, leaving out what Needs you shows", () => {
+    expect(recentChats(panes, [project], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
+      .toEqual(["worker", "chat-old", "coord", "chat-quiet"]);
   });
 
-  it("filters with the sidebar's matcher, including a project's task titles", () => {
-    expect(jumpTargets(panes, [project], "auth").map((target) => target.id)).toEqual(["chat-new"]);
-    expect(jumpTargets(panes, [project], "ship").map((target) => target.id)).toEqual(["hub"]);
-    expect(jumpTargets(panes, [project], "nothing like this")).toEqual([]);
+  it("names a project's pane by its thread and project, a loose chat by its workspace and tab", () => {
+    const [worker, old, coord] = recentChats(panes, [project], new Set(["chat-asks"]));
+    expect(worker).toMatchObject({ title: "Build", place: "Hub", tab: null, at: NOW - 2 * MIN, unseen: true });
+    expect(old).toMatchObject({ title: "Changelog", place: "nenu", tab: "docs", at: NOW - 20 * MIN, unseen: false });
+    expect(coord).toMatchObject({ title: "Coordinator", place: "Hub" });
   });
 });

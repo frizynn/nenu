@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-10-10
+
+### Added
+- Recent on Home: the latest chats with state, place, "New" when one finished unseen, and how many agents are working. (d22d027e)
+- Enter in the sidebar search opens the best match, as Home's Jump box did. (fea1260b)
+
+### Changed
+- Home is one column on a phone and a desk: composer, Needs you, Recent, Ready to review (five, then Show all), running workflows. Projects and workspaces stay in the sidebar. (d22d027e)
+- Needs you says "Nothing needs you right now" once dialogs were read. (fea1260b)
+
 ## [0.57.0] - 2026-10-10
 
 ### Added

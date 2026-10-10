@@ -1,83 +1,90 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { ChevronRight, FolderKanban, LayoutGrid, Search, Workflow } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
+import { ChevronRight, Workflow } from "lucide-react";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
-import { timeAgoShort } from "@/lib/format";
-import { jumpTargets, type JumpTarget } from "@/lib/home-stats";
-import { panePath, projectPath, spacePath } from "@/lib/nav";
-import { paneDisplayName, STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { timeAgo, timeAgoShort } from "@/lib/format";
+import type { RecentChat } from "@/lib/home-stats";
+import { panePath } from "@/lib/nav";
+import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-/** Projects and chats by recency, found by typing; ⌘K (the shell's) focuses it and Enter opens the first match. */
-export function QuickJump({ agents, projects, session, now }: { agents: AgentView[]; projects?: ProjectView[]; session?: string; now: number }) {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const targets = query.trim() ? jumpTargets(agents, projects, query) : [];
-  const pathOf = (target: JumpTarget) => target.kind === "project" ? projectPath(target.id, session) : panePath(target.id, session);
-
-  if (!agents.length && !projects?.length) return null;
+/** A Home section's heading: its name, how many, and an optional note at the far end. */
+export function HomeHeading({ id, label, count, note }: { id: string; label: string; count?: number; note?: ReactNode }) {
   return (
-    <section aria-labelledby="home-jump">
-      <h2 id="home-jump" className="sr-only">Jump to</h2>
-      <label className="home-search">
-        <Search aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        <input type="search" aria-keyshortcuts="Meta+K" value={query} placeholder="Jump to a project or chat" aria-label="Jump to a project or chat"
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && targets[0]) navigate(pathOf(targets[0]));
-            if (event.key === "Escape") setQuery("");
-          }} />
-        <kbd className="hidden shrink-0 rounded border border-border px-1.5 font-sans text-[11px] text-muted-foreground lg:inline">⌘K</kbd>
-      </label>
-      {targets.length > 0 && <ul className="mt-2">
-        {targets.map((target) => (
-          <li key={`${target.kind}:${target.id}`}>
-            <Link to={pathOf(target)} className="home-row">
-              {target.kind === "project"
-                ? <FolderKanban aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-                : <span className="flex size-4 shrink-0 items-center justify-center">{target.status && <StatusDot status={target.status} surface="bg-card" className="size-2" />}</span>}
-              <span className="min-w-0 flex-1 truncate">
-                {target.label}{" "}
-                <span className="text-muted-foreground">· {target.detail}</span>
-              </span>
-              {target.status && <span className="sr-only">, {STATUS_LABEL[target.status]}</span>}{" "}
-              {target.ts > 0 && <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{timeAgoShort(target.ts, now)}</span>}
-            </Link>
-          </li>
-        ))}
-      </ul>}
-      {query.trim() && targets.length === 0 && <p className="px-2 py-3 text-sm text-muted-foreground">No matching projects or chats</p>}
-    </section>
+    <h2 id={id} className="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
+      <span className="text-foreground/85">{label}</span>
+      {count !== undefined && count > 0 && <span className="tabular-nums">{count}</span>}
+      {note && <span className="ml-auto flex items-center gap-1.5 font-normal">{note}</span>}
+    </h2>
   );
 }
 
-/** A workspace outside every project: its agents as chips, each one tap from its chat. */
-export function WorkspaceSummary({ workspace, agents, session }: { workspace: WorkspaceView; agents: readonly AgentView[]; session?: string }) {
-  const tabs = workspace.tabCount;
+/** A Home list: its first `rows` items, and the rest behind "Show all". */
+export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; rows: number; children: (item: T) => ReactNode }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? items : items.slice(0, rows);
+  return <>
+    <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
+    {items.length > shown.length && (
+      <button type="button" onClick={() => setAll(true)} className="self-start px-1 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground sm:px-3.5">
+        Show all {items.length}
+      </button>
+    )}
+  </>;
+}
+
+/** How many chats Recent lists before "Show all". */
+export const RECENT_ROWS = 6;
+
+const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "text-status-working", done: "text-status-done" };
+
+const sr = (text: string) => <span className="sr-only">{text}</span>;
+
+/** Title, then state and place; the place gives up width before the tab, which tells rows apart. */
+function RecentRow({ chat, session, now }: { chat: RecentChat; session?: string; now: number }) {
+  const { agent, title, place, tab, at, unseen } = chat;
+  const status = STATUS_LABEL[agent.status];
   return (
-    <li className="flex min-w-0 flex-col gap-2 px-1 sm:rounded-[10px] py-2.5 sm:px-3">
-      <Link to={spacePath(workspace.workspaceId, session)} className="flex min-w-0 items-center gap-2 text-[13px]">
-        <LayoutGrid aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-medium">{workspace.label}</span>
-        <span className="shrink-0 text-[11.5px] text-muted-foreground tabular-nums">{tabs} {tabs === 1 ? "tab" : "tabs"}</span>
+    <li>
+      <Link to={panePath(agent.paneId, session)}
+        className="grid min-h-13 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-1.5 hover:bg-[var(--workbench-row-hover)] sm:rounded-[10px] sm:px-3.5">
+        <StatusDot status={agent.status} className="row-span-2 size-2" />
+        <span className="col-start-2 flex min-w-0 items-center gap-1.5">
+          <span className={cn("truncate text-[13.5px] leading-tight", unseen && "font-semibold")}>{title}</span>
+          {unseen && <>{sr(", ")}<span className="shrink-0 rounded border border-status-done/50 px-1 text-[11px] leading-4 text-status-done">New</span></>}
+        </span>
+        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-xs leading-tight text-muted-foreground">
+          {sr(", ")}
+          <span className={cn("shrink-0", STATUS_TEXT[agent.status])}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+          <span aria-hidden className="shrink-0">·</span>{sr(", ")}
+          <span className={cn("truncate", tab ? "max-w-[45%] shrink" : "min-w-0 flex-1")}>{place}</span>
+          {tab && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className="min-w-0 flex-1 truncate">{tab}</span></>}
+        </span>
+        {at > 0 && <span className="col-start-3 row-span-2 row-start-1 text-xs text-muted-foreground tabular-nums">
+          {sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}
+        </span>}
       </Link>
-      {agents.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {agents.map((agent) => (
-            <li key={agent.paneId} className="min-w-0">
-              <Link to={panePath(agent.paneId, session)}
-                className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-[7px] bg-muted px-2.5 text-xs text-foreground/85 hover:bg-muted/70 max-lg:h-9">
-                <StatusDot status={agent.status} surface="bg-muted" className="size-1.5" />
-                <span className="truncate">{paneDisplayName(agent)}</span>
-                <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
     </li>
+  );
+}
+
+/**
+ * Home's "Recent": the chats that moved or were opened last, each one tap from its thread, with how
+ * many agents are working right now. "New" marks one that finished since you last opened it.
+ */
+export function RecentChats({ chats, working, session, now }: { chats: readonly RecentChat[]; working: number; session?: string; now: number }) {
+  if (!chats.length) return null;
+  return (
+    <section aria-labelledby="home-recent" className="flex flex-col gap-1.5">
+      <HomeHeading id="home-recent" label="Recent"
+        note={working > 0 && <><StatusDot status="working" className="size-1.5" />{working} working now</>} />
+      <FoldedList items={chats} rows={RECENT_ROWS}>
+        {(chat) => <RecentRow key={chat.agent.paneId} chat={chat} session={session} now={now} />}
+      </FoldedList>
+    </section>
   );
 }
 

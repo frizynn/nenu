@@ -1,11 +1,10 @@
-import { useContext, useEffect, useState, type ReactNode } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { useContext, useEffect, useState } from "react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
 import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
-import { QuickJump } from "./home-panels";
 import { setLocked } from "@/lib/idle";
 import { openNewDialog, useNewDialogOpen } from "./new-agent-sheet";
 import type { HomeData } from "@/lib/loaders";
@@ -214,22 +213,6 @@ function desktop() {
   window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
   onTestFinished(() => { window.matchMedia = matchMedia; });
 }
-
-it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async () => {
-  desktop();
-  const shell = (page: ReactNode) => <WorkbenchShell data={data}>{page}</WorkbenchShell>;
-  const router = createMemoryRouter([
-    { path: "/pane/:paneId", element: shell(<p>Pane</p>) },
-    { path: "/", element: shell(<QuickJump agents={data.agents} session="work" now={Date.now()} />) },
-  ], { initialEntries: ["/pane/w%3A1%3Ap2?s=work"] });
-  render(<RouterProvider router={router} />);
-  await router.navigate("/?s=work");
-  // Press only once Home's box is on the page; pressing earlier races the route's render.
-  const box = await screen.findByRole("searchbox", { name: "Jump to a project or chat" });
-  await userEvent.setup().keyboard("{Meta>}k{/Meta}");
-  await waitFor(() => expect(box).toHaveFocus());
-  expect(screen.queryByRole("searchbox", { name: "Search projects and chats" })).not.toBeInTheDocument();
-});
 
 function NewDialogProbe() {
   return useNewDialogOpen() ? <p>New dialog</p> : null;

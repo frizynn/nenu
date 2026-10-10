@@ -18,9 +18,6 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 type Sheet = "browse" | "needs-you" | "search" | null;
 const SHEET_TITLE = { browse: "Navigation", "needs-you": "Needs you", search: "Search" } as const;
 
-/** A page's own search box, which ⌘K focuses instead of opening the sidebar search. */
-const PAGE_SEARCH = '.workbench-main [aria-keyshortcuts~="Meta+K"], .workbench-main input[aria-label="Jump to a project or chat"]';
-
 /** ⌘ on Apple keyboards. Elsewhere Ctrl, except in a text field, where Ctrl+K and Ctrl+N edit text. */
 function isShortcut(event: KeyboardEvent): boolean {
   if (event.metaKey) return !event.ctrlKey;
@@ -102,8 +99,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   }
   const search = () => reveal("search");
 
-  // ⌘K searches and ⌘N starts something new. A screen with its own search box (Home's jump box)
-  // gets ⌘K: the shell focuses that box, so the outcome does not depend on listener order.
+  // ⌘K searches and ⌘N starts something new.
   const latest = useRef({ search, newChat });
   latest.current = { search, newChat };
   useEffect(() => {
@@ -112,11 +108,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       const key = event.key.toLowerCase();
       if (key === "k") {
         event.preventDefault();
-        const own = document.querySelector<HTMLInputElement>(PAGE_SEARCH);
-        if (own) {
-          own.focus();
-          own.select();
-        } else latest.current.search();
+        latest.current.search();
       } else if (key === "n" && latest.current.newChat) {
         event.preventDefault();
         latest.current.newChat();

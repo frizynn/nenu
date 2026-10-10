@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, looseChats, nestThreads, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
+import { groupChats, jumpTargets, looseChats, nestThreads, paneIdentity, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -94,4 +94,34 @@ it("nests threads by parent and lists an orphan or a parent loop at the root", (
   const t = (id: string, parentId: string) => ({ id, title: id, parentId, role: "worker" as const, status: "open" as const });
   const tree = nestThreads([t("a", "root"), t("b", "a"), t("c", "gone"), t("x", "y"), t("y", "x")]);
   expect(tree.map((node) => [node.thread.id, node.children.map((child) => child.thread.id)])).toEqual([["a", ["b"]], ["c", []], ["x", []], ["y", []]]);
+});
+
+describe("pane identity", () => {
+  it("names a project pane by its thread and project, any other by its own name, workspace and tab", () => {
+    expect(paneIdentity(pane("b", { tabLabel: "server" }), [project])).toEqual({ title: "Review", place: "Hub", tab: null });
+    expect(paneIdentity(pane("c"), [project])).toEqual({ title: "Coordinator", place: "Hub", tab: null });
+    expect(paneIdentity(pane("x", { paneLabel: "Changelog", workspaceLabel: "nenu", tabLabel: "docs" }), [project]))
+      .toEqual({ title: "Changelog", place: "nenu", tab: "docs" });
+    expect(paneIdentity(pane("y", { workspaceLabel: "" }), undefined)).toEqual({ title: "claude", place: "w", tab: null });
+  });
+});
+
+describe("jump targets", () => {
+  const MIN = 60_000;
+  const panes = [
+    pane("c", { lastActiveAt: now - 30 * MIN }),
+    pane("a", { lastActiveAt: now - 2 * MIN }),
+    pane("old", { paneLabel: "Changelog", lastActiveAt: now - 60 * MIN }),
+    pane("new", { paneLabel: "Auth review", workspaceLabel: "api", lastActiveAt: now - 10 * MIN }),
+  ];
+
+  it("lists projects and loose chats by last movement, a project moving with its panes", () => {
+    expect(jumpTargets(panes, [project]).map((target) => `${target.kind}:${target.id}`)).toEqual(["project:hub", "chat:new", "chat:old"]);
+  });
+
+  it("filters with the sidebar's matchers, including a project's thread titles", () => {
+    expect(jumpTargets(panes, [project], "auth").map((target) => target.id)).toEqual(["new"]);
+    expect(jumpTargets(panes, [project], "queued").map((target) => target.id)).toEqual(["hub"]);
+    expect(jumpTargets(panes, [project], "nothing like this")).toEqual([]);
+  });
 });

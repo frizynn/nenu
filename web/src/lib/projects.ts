@@ -1,6 +1,7 @@
 // Pure view-model helpers for the project hub: what a project's status reads as, which project a
 // pane belongs to, and how chats are grouped by recency. Kept free of React so the sidebar, the
 // home list and the project panel share one definition and the rules stay unit-testable.
+import { paneParts } from "./pane-name";
 import type { AgentView, ProjectThreadView, ProjectView } from "./types";
 import { paneDisplayName } from "./types";
 
@@ -116,6 +117,52 @@ export function chatMatches(pane: AgentView, query: string): boolean {
 export function paneTitle(pane: AgentView, owner: PaneProject | undefined): string {
   if (!owner) return paneDisplayName(pane);
   return owner.thread?.title ?? "Coordinator";
+}
+
+/** What a pane is called and where it lives: its project, else its workspace and tab. */
+export interface PaneIdentity {
+  title: string;
+  place: string;
+  /** The tab, outside a project and only when its label says something. */
+  tab: string | null;
+}
+
+export function paneIdentity(pane: AgentView, projects: readonly ProjectView[] | undefined): PaneIdentity {
+  const owner = projectForPane(projects, pane.paneId);
+  const parts = paneParts(pane);
+  return { title: paneTitle(pane, owner), place: owner?.project.name ?? parts.project, tab: owner ? null : parts.tab };
+}
+
+export interface JumpTarget {
+  kind: "project" | "chat";
+  /** Project slug or pane id. */
+  id: string;
+  /** Last movement, epoch ms; 0 when unknown. */
+  ts: number;
+}
+
+/** A project moves when its coordinator or any of its task panes does, or a task file is updated. */
+function projectRecency(project: ProjectView, byPane: ReadonlyMap<string, AgentView>): number {
+  const panes = [project.coordinator?.paneId, ...project.threads.map((thread) => thread.paneId)];
+  const paneTimes = panes.map((id) => (id && byPane.get(id) ? chatRecency(byPane.get(id)!) : 0));
+  const updates = project.threads.map((thread) => Date.parse(thread.updated ?? "") || 0);
+  return Math.max(0, ...paneTimes, ...updates);
+}
+
+/**
+ * Where a search jumps, most recently moved first: projects and the chats outside them (a project's
+ * own panes are reached through the project), filtered with the sidebar's matchers.
+ */
+export function jumpTargets(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, query = ""): JumpTarget[] {
+  const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
+  const projectTargets = (projects ?? [])
+    .filter((project) => projectMatches(project, query))
+    .map((project): JumpTarget => ({ kind: "project", id: project.slug, ts: projectRecency(project, byPane) }));
+  const chatTargets = looseChats(agents, projects)
+    .filter((pane) => chatMatches(pane, query))
+    .map((pane): JumpTarget => ({ kind: "chat", id: pane.paneId, ts: chatRecency(pane) }));
+  // Stable sort: equal (or unknown) times keep projects first, then the bridge's own pane order.
+  return [...projectTargets, ...chatTargets].sort((a, b) => b.ts - a.ts);
 }
 
 /** A project's rows in the sidebar's Projects view, narrowed to a search. */

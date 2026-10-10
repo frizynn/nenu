@@ -1,19 +1,20 @@
 import { Link, useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 
+import { HomeHeading } from "@/components/home-panels";
 import { QuestionCard } from "@/components/question-card";
 import { StatusDot } from "@/components/status-badge";
-import type { InteractionsState } from "@/hooks/use-interactions";
-import { needsYouItems } from "@/lib/home-stats";
+import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
+import type { NeedsYouItem } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
-import { projectForPane } from "@/lib/projects";
-import { paneDisplayName, type AgentView, type ProjectView } from "@/lib/types";
+import { paneIdentity } from "@/lib/projects";
+import type { AgentView, Interaction, ProjectView } from "@/lib/types";
 
-/** Who is asking and where it lives: the project, else the workspace. */
+/** Who is asking and where it lives, as Recent names the same pane. */
 function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | undefined, paneId: string): { name: string; where?: string } {
   if (!agent) return { name: paneId };
-  const owner = projectForPane(projects, paneId);
-  return { name: owner?.thread?.title ?? paneDisplayName(agent), where: owner?.project.name ?? agent.workspaceLabel };
+  const { title, place } = paneIdentity(agent, projects);
+  return { name: title, where: place };
 }
 
 /**
@@ -21,26 +22,22 @@ function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | 
  * blocked pane with no dialog the bridge could read is a row into its thread. Answers just sent stay
  * as receipts until the pane's next dialog.
  */
-export function NeedsYouList({ agents, projects, session, interactions, readOnly }: {
+export function NeedsYouList({ agents, projects, session, items, receipts, interactions, readOnly }: {
   agents: readonly AgentView[];
   projects?: readonly ProjectView[];
   session?: string;
+  items: readonly NeedsYouItem<Interaction>[];
+  receipts: readonly Receipt[];
   interactions: InteractionsState;
   readOnly: boolean;
 }) {
   const navigate = useNavigate();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
-  const items = needsYouItems(agents, interactions.interactions);
-  const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
   if (!items.length && !receipts.length) return null;
 
   return (
     <section aria-labelledby="home-needs" className="flex flex-col gap-2.5">
-      <h2 id="home-needs" className="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
-        <span className="text-foreground/85">Needs you</span>
-        {items.length > 0 && <span className="tabular-nums">{items.length}</span>}
-        {items.length > 1 && <span className="ml-auto font-normal">oldest first</span>}
-      </h2>
+      <HomeHeading id="home-needs" label="Needs you" count={items.length} note={items.length > 1 && "oldest first"} />
       {items.map(({ paneId, interaction }) => {
         const who = asker(byPane.get(paneId), projects, paneId);
         const title = who.where ? `${who.name} · ${who.where}` : who.name;
