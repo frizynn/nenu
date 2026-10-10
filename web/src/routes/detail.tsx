@@ -67,7 +67,7 @@ export function DetailRoute() {
       paneId={paneId}
       session={session}
       agent={agent}
-      project={project ? { slug: project.slug, name: project.name } : undefined}
+      project={project ? { slug: project.slug, name: project.name, role: owner?.thread?.role ?? "coordinator" } : undefined}
       agents={root.agents}
       shellPanes={root.shellPanes}
       tabs={root.tabs}

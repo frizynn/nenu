@@ -72,7 +72,7 @@ import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
-import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
+import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
   MenuModel,
   MultiSelectModel,
@@ -80,6 +80,12 @@ import type {
   PromptModel,
   WizardModel,
 } from "@/lib/blocks";
+
+/** A worker thread takes steering; a coordinator takes questions and new work. */
+const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
+  worker: "Steer this thread…",
+  coordinator: "Ask the coordinator…",
+};
 
 interface AgentChatProps {
   paneId: string;
@@ -91,8 +97,8 @@ interface AgentChatProps {
   tabs: TabView[];
   /** Label of the pane's tab, shown in the header as "space › tab". */
   tabLabel?: string;
-  /** Owning project, when this pane is one of its coordinator/agent threads. */
-  project?: { slug: string; name: string };
+  /** Owning project, when this pane is one of its coordinator/agent threads; `role` picks the composer copy. */
+  project?: { slug: string; name: string; role: ProjectThreadView["role"] };
   /** Header title override; a project frame names the thread this pane runs. */
   title?: string;
   /** A control at the head of the header's right cluster (a project's Tasks toggle). */
@@ -1149,6 +1155,7 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
+            placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
             working={agent?.status === "working" || (agent?.agent === "codex" && hasCodexInterruptCue(modelSource.text))}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
