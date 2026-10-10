@@ -72,7 +72,7 @@ import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
-import { paneInTab } from "@/lib/spaces";
+import { paneInTab, soloPane } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -84,6 +84,9 @@ import type {
 } from "@/lib/blocks";
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
+/** The chat title's box, whether it opens the workspace overview or has none to open. */
+const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left lg:-mx-1 lg:min-h-9";
+
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
   worker: "Steer this thread…",
   coordinator: "Ask the coordinator…",
@@ -842,6 +845,23 @@ export function AgentChat({
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
   /> : undefined;
 
+  // A workspace of only this pane opens straight back onto it, so the title has no overview to open.
+  const titleOpensOverview = !!agent && (!!project || !soloPane(agent.workspaceId, agents, shellPanes));
+  const titleLabel = agent && <>
+    {isShell
+      ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+    <div className="min-w-0 flex-1">
+      <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
+        {title}
+        {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
+      </div>
+      <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
+        {shortCwd(agent.cwd)}
+      </div>
+    </div>
+  </>;
+
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
@@ -881,27 +901,16 @@ export function AgentChat({
       >
         {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
             it opens the workspace overview (all its tabs + panes). */}
-        {agent ? (
+        {agent ? (titleOpensOverview ? (
           <button
             type="button"
             onClick={() => openSpace(agent.workspaceId)}
             aria-label={`Open ${project?.name ?? agent.workspaceLabel} overview`}
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left transition-colors active:bg-muted/60 lg:-mx-1 lg:min-h-9"
+            className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
           >
-            {isShell
-              ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
-                {title}
-                {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
-              </div>
-              <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
-                {shortCwd(agent.cwd)}
-              </div>
-            </div>
+            {titleLabel}
           </button>
-        ) : (
+        ) : <div className={TITLE_SHAPE}>{titleLabel}</div>) : (
           <div className="min-w-0 flex-1 px-1">
             <span className="truncate font-semibold">(agent gone)</span>
           </div>
@@ -916,16 +925,15 @@ export function AgentChat({
 
         {strip !== undefined ? strip : <>
         {/* In-pane tab bar: the current space's tabs above the mirror — switch tab without leaving the
-            pane, or create one with +. No "All" here (you're always in a specific tab). */}
+            pane, or create one with +. */}
         {agent && (
           <TabStrip
             workspaceId={agent.workspaceId}
             tabs={tabs}
             agents={agents}
             selected={agent.tabId}
-            onSelect={(id) => id && goToTab(id)}
+            onSelect={goToTab}
             onNewTab={newTab}
-            allowAll={false}
             session={session}
             readOnly={readOnly}
             onRenamed={() => revalidator.revalidate()}

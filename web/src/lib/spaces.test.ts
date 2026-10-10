@@ -3,9 +3,13 @@ import {
   groupPanesByTab,
   neighborTab,
   paneAfterClose,
+  shownTab,
+  soloPane,
   sortSpacesByRecency,
   spaceLastSeenMap,
   spaceTriageMap,
+  tabName,
+  workspaceFolder,
 } from "./spaces";
 import { worstTriage } from "./triage";
 import type { AgentStatus, AgentView, TabView, WorkspaceView } from "./types";
@@ -52,12 +56,12 @@ describe("groupPanesByTab", () => {
     expect(group!.panes).toEqual([a1, shell]);
   });
 
-  it("collects panes whose tab isn't listed yet into a trailing '…' group", () => {
+  it("collects panes whose tab isn't listed yet into a trailing 'Other panes' group", () => {
     const orphan = agent({ paneId: "w1:p9", workspaceId: "w1", tabId: "w1:tX" });
     const groups = groupPanesByTab("w1", tabs, [orphan], []);
     const last = groups.at(-1)!;
     expect(last.tabId).toBe("w1:other");
-    expect(last.label).toBe("…");
+    expect(last.label).toBe("Other panes");
     expect(last.panes).toEqual([orphan]);
   });
 
@@ -233,5 +237,58 @@ describe("paneAfterClose", () => {
     const now = { tabs: [before[1]!, before[2]!], agents: [agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1" })], shellPanes: [shell("w1:p2", "w1:t2")] };
     expect(paneAfterClose({ tabId: "w1:t1" }, before, now)).toBe("w1:p2");
     expect(paneAfterClose({ tabId: "w1:t1" }, before, { ...now, tabs: [before[2]!], shellPanes: [] })).toBeUndefined();
+  });
+});
+
+describe("tabName", () => {
+  it("names a tab Herdr numbered by position, and keeps a label someone wrote", () => {
+    expect(tabName("1", 1)).toBe("Tab 1");
+    expect(tabName(" 12 ", 2)).toBe("Tab 12");
+    expect(tabName("redesign", 1)).toBe("redesign");
+    expect(tabName("v2 review", 1)).toBe("v2 review");
+    expect(tabName("  ", 3)).toBe("Tab 3");
+  });
+});
+
+describe("shownTab", () => {
+  const groups = [{ tabId: "w1:t1", label: "a", panes: [] }, { tabId: "w1:t2", label: "b", panes: [] }];
+
+  it("shows the tab asked for, else Herdr's active tab, else the first", () => {
+    expect(shownTab(groups, "w1:t1", "w1:t2")?.tabId).toBe("w1:t1");
+    expect(shownTab(groups, null, "w1:t2")?.tabId).toBe("w1:t2");
+    // A tab closed since the link was made falls back like no ask at all.
+    expect(shownTab(groups, "w1:gone", "w1:t2")?.tabId).toBe("w1:t2");
+    expect(shownTab(groups, null, "w1:gone")?.tabId).toBe("w1:t1");
+    expect(shownTab([], null, "w1:t1")).toBeUndefined();
+  });
+});
+
+describe("workspaceFolder", () => {
+  const at = (paneId: string, cwd: string) => agent({ paneId, workspaceId: "w1", tabId: "w1:t1", cwd });
+
+  it("is the directory most panes sit in, the first one on a tie", () => {
+    expect(workspaceFolder([at("w1:a", "/r/wt"), at("w1:b", "/r"), at("w1:c", "/r")])).toBe("/r");
+    expect(workspaceFolder([at("w1:a", "/r/wt"), at("w1:b", "/r")])).toBe("/r/wt");
+  });
+
+  it("is unknown without a pane that reports one", () => {
+    expect(workspaceFolder([])).toBeUndefined();
+    expect(workspaceFolder([at("w1:a", "")])).toBeUndefined();
+  });
+});
+
+describe("soloPane", () => {
+  const a = agent({ paneId: "w1:a", workspaceId: "w1", tabId: "w1:t1" });
+  const shell = agent({ paneId: "w1:s", workspaceId: "w1", tabId: "w1:t2", kind: "shell" });
+  const elsewhere = agent({ paneId: "w2:a", workspaceId: "w2", tabId: "w2:t1" });
+
+  it("is the workspace's only pane, agent or shell", () => {
+    expect(soloPane("w1", [a, elsewhere], [])).toBe(a);
+    expect(soloPane("w1", [elsewhere], [shell])).toBe(shell);
+  });
+
+  it("is nothing when the workspace holds several panes or none", () => {
+    expect(soloPane("w1", [a], [shell])).toBeUndefined();
+    expect(soloPane("w3", [a, elsewhere], [shell])).toBeUndefined();
   });
 });

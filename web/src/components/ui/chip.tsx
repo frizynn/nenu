@@ -6,13 +6,11 @@ import { STATUS_LABEL } from "@/lib/types";
 
 interface ChipProps {
   label: string;
-  /** Flat tabs inside a conversation; overview chips retain their filled treatment. */
-  quiet?: boolean;
   active: boolean;
   /** Subtle ring marking the item focused in the desktop TUI. */
   ring?: boolean;
   /**
-   * The most urgent thing happening inside this space/tab ({@link worstTriage}) — drawn as a leading
+   * The most urgent thing happening inside this tab ({@link worstTriage}) — drawn as a leading
    * dot in the same palette the herd list uses, so a chip and a row can't mean different things by
    * the same colour. Omit (or pass null) when the container holds no agent at all: that's not the
    * same as idle, and a resting dot would claim otherwise.
@@ -20,9 +18,8 @@ interface ChipProps {
   status?: TriageKey | null;
   onClick: () => void;
   /**
-   * Long-press (or right-click / Android contextmenu) opens actions for this chip — e.g. the tab
-   * rename sheet. Inert when unset (the space strip's chips don't wire it), so the handlers are safe
-   * to spread unconditionally.
+   * Long-press (or right-click / Android contextmenu) opens actions for this chip — the tab's
+   * rename/close sheet. Inert when unset, so the handlers are safe to spread unconditionally.
    */
   onLongPress?: () => void;
   /**
@@ -32,14 +29,10 @@ interface ChipProps {
   onTapActive?: () => void;
 }
 
-// Pill button shared by the space and tab strips: active fill, an optional desktop-focus ring, and
-// a leading status dot saying what's going on inside. Tab chips additionally wire a long-press to
-// open their rename sheet (space chips leave it unset — the handlers stay inert).
-//
-// The dot leads the label rather than riding the corner as a badge: a corner badge needs a ring in
-// the chip's own fill, and the chip has two fills (active/inactive). Inline, it just works, and it
-// matches how the space rows and section headings already read.
-export function Chip({ quiet = false, label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
+// A tab in a quiet underline row, shared by a pane's tab bar and the workspace page: the active tab
+// underlined, a dashed underline for the tab focused in the desktop TUI, and a leading status dot
+// saying what's going on inside. A long-press opens the tab's actions when the parent wires them.
+export function Chip({ label, active, ring, status, onClick, onLongPress, onTapActive }: ChipProps) {
   const longPress = useLongPress(onLongPress);
 
   // A long-press already suppresses the ensuing click (via longPress.onClickCapture), so this only
@@ -62,27 +55,16 @@ export function Chip({ quiet = false, label, active, ring, status, onClick, onLo
       className={cn(
         // select-none + -webkit-touch-callout:none stop iOS Safari's selection loupe / touch callout,
         // whose native long-press gesture otherwise fires pointercancel and kills the hold timer.
-        "relative flex shrink-0 select-none items-center gap-1 [-webkit-touch-callout:none] whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium transition-colors active:scale-95 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm",
-        // Quiet tabs are a slim 36px underline row. The ::after reaches 8px (past the 2px underline) into the strip's
-        // overlapping bottom padding (tab-strip.tsx), so a thumb still gets a 44px target.
-        quiet
-          ? "h-9 min-w-11 justify-center rounded-none border-b-2 border-transparent bg-transparent px-2.5 text-[13px] text-muted-foreground after:absolute after:inset-x-0 after:top-0 after:-bottom-2.5 after:content-[''] hover:text-foreground active:scale-100 sm:px-2.5 sm:py-1 sm:text-[13px]"
-          : active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground hover:bg-muted/70",
-        quiet && active && "border-primary text-foreground",
-        quiet && ring && !active && "border-dashed border-muted-foreground/40",
-        !quiet && ring && !active && "ring-1 ring-inset ring-primary/40",
+        // A slim 36px underline row: the ::after reaches 8px (past the 2px underline) into the row's
+        // bottom padding, so a thumb still gets a 44px target.
+        "relative flex h-9 min-w-11 shrink-0 select-none items-center justify-center gap-1 whitespace-nowrap rounded-none border-b-2 border-transparent bg-transparent px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors [-webkit-touch-callout:none] after:absolute after:inset-x-0 after:top-0 after:-bottom-2.5 after:content-[''] hover:text-foreground sm:gap-1.5",
+        active && "border-primary text-foreground",
+        ring && !active && "border-dashed border-muted-foreground/40",
       )}
     >
       {status && (
         <>
-          {/* A hollow resting dot is filled with the chip's own fill, which differs when active. */}
-          <StatusDot
-            status={TRIAGE_STATUS[status]}
-            surface={quiet ? "bg-background" : active ? "bg-primary" : "bg-muted"}
-            className="size-2"
-          />
+          <StatusDot status={TRIAGE_STATUS[status]} className="size-2" />
           {/* The dot is colour-only; say it in words for screen readers. */}
           <span className="sr-only">{STATUS_LABEL[TRIAGE_STATUS[status]]}</span>
         </>

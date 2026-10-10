@@ -11,7 +11,8 @@ export interface TabGroup {
 
 /**
  * Group a workspace's panes (agents + shells) by tab, in tab order. Panes whose tab isn't in the
- * tab list yet (a brief poll race after a create) fall into a trailing group so they're never lost.
+ * tab list yet (a brief poll race after a create) fall into a trailing "Other panes" group so
+ * they're never lost.
  */
 export function groupPanesByTab(
   workspaceId: string,
@@ -30,9 +31,51 @@ export function groupPanesByTab(
 
   const known = new Set(wsTabs.map((t) => t.tabId));
   const orphans = panes.filter((p) => !known.has(p.tabId));
-  if (orphans.length) groups.push({ tabId: `${workspaceId}:other`, label: "…", panes: orphans });
+  if (orphans.length) groups.push({ tabId: `${workspaceId}:other`, label: "Other panes", panes: orphans });
 
   return groups;
+}
+
+/** A workspace's name, or its number when Herdr has none for it. */
+export function workspaceName(workspace: Pick<WorkspaceView, "label" | "number">): string {
+  return workspace.label || `Workspace ${workspace.number}`;
+}
+
+/** The pane a workspace is when it holds exactly one, which its page opens straight onto. */
+export function soloPane(
+  workspaceId: string,
+  agents: readonly AgentView[],
+  shellPanes: readonly AgentView[],
+): AgentView | undefined {
+  const panes = [...agents, ...shellPanes].filter((p) => p.workspaceId === workspaceId);
+  return panes.length === 1 ? panes[0] : undefined;
+}
+
+/**
+ * A tab's name as Nenu shows it, `position` counting from 1. Herdr names an unlabelled tab by its
+ * position, and a bare "1" reads as a count.
+ */
+export function tabName(label: string, position: number): string {
+  const trimmed = label.trim();
+  if (!trimmed) return `Tab ${position}`;
+  return /^\d+$/.test(trimmed) ? `Tab ${trimmed}` : trimmed;
+}
+
+/** The tab a workspace page shows: the one asked for, else the one Herdr has active, else the first. */
+export function shownTab(groups: readonly TabGroup[], asked: string | null, active: string): TabGroup | undefined {
+  return groups.find((g) => g.tabId === asked) ?? groups.find((g) => g.tabId === active) ?? groups[0];
+}
+
+/** The folder a workspace works in: the directory most of its panes sit in, the first such on a tie. */
+export function workspaceFolder(panes: readonly AgentView[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const p of panes) if (p.cwd) counts.set(p.cwd, (counts.get(p.cwd) ?? 0) + 1);
+  let folder: string | undefined;
+  let most = 0;
+  for (const [cwd, n] of counts) {
+    if (n > most) [folder, most] = [cwd, n];
+  }
+  return folder;
 }
 
 /** The pane Nenu opens for a tab: its first agent, else its first shell. */

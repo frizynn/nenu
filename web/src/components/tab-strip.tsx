@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 
 import { Chip } from "@/components/ui/chip";
-import { SectionLabel } from "@/components/ui/section-label";
 import { TabActionsSheet } from "@/components/tab-actions-sheet";
+import { tabName } from "@/lib/spaces";
 import { worstTriage } from "@/lib/triage";
 import type { AgentView, TabView } from "@/lib/types";
 
@@ -11,12 +11,10 @@ interface TabStripProps {
   workspaceId: string;
   tabs: TabView[];
   agents: AgentView[];
-  /** Selected tab id, or null for "All" (every tab's panes). */
-  selected: string | null;
-  onSelect: (tabId: string | null) => void;
+  /** The tab the open pane sits in. */
+  selected: string;
+  onSelect: (tabId: string) => void;
   onNewTab: (workspaceId: string) => void;
-  /** Show the leading "All" chip (home space view); off for the in-pane tab bar. */
-  allowAll?: boolean;
   /** Session scope for the long-press tab actions (rename/close); undefined = primary. */
   session?: string;
   /** Drop the long-press write actions when the device isn't authorised (the sheet shows a note). */
@@ -27,13 +25,11 @@ interface TabStripProps {
   onClosed?: (tabId: string) => void;
 }
 
-// The selected space's tabs as a horizontal strip — the second header row under SpaceStrip, mirroring
-// it one level down. "All" shows every tab's panes; tapping a tab filters the space to it; the
-// trailing + creates a new tab (and opens its fresh shell). The desktop-focused tab gets a ring;
-// each tab carries a status dot for the most urgent thing inside it. A long-press on a chip opens
-// its actions sheet
-// (rename / close) when the parent wires both onRenamed and onClosed (the "All" chip and the + never
-// take long-press).
+// The open pane's space as a row of tabs above the conversation: tapping a tab opens one of its
+// panes; the trailing + creates a new tab (and opens its fresh shell). The desktop-focused tab gets
+// a ring; each tab carries a status dot for the most urgent thing inside it. A long-press on a chip
+// opens its actions sheet (rename / close) when the parent wires both onRenamed and onClosed (the +
+// never takes long-press).
 export function TabStrip({
   workspaceId,
   tabs,
@@ -41,7 +37,6 @@ export function TabStrip({
   selected,
   onSelect,
   onNewTab,
-  allowAll = true,
   session,
   readOnly,
   onRenamed,
@@ -57,19 +52,13 @@ export function TabStrip({
 
   return (
     <>
-      {/* shrink-0 for the same reason as SpaceStrip — see the note there. */}
-      <div data-workbench-navigation-band="tabs" className={allowAll
-        ? "flex min-h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-border/40 px-2 py-0.5 [scrollbar-width:none] sm:gap-2 sm:px-3 sm:py-2 [&::-webkit-scrollbar]:hidden"
-        // 36px to the eye: the extra 8px of bottom padding overlaps the conversation (negative margin,
-        // transparent, raised) only to give each tab a 44px touch target.
-        : "relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"}>
-        {allowAll && <span className="hidden sm:inline"><SectionLabel>Tabs</SectionLabel></span>}
-        {allowAll && <Chip label="All" active={selected === null} onClick={() => onSelect(null)} />}
-        {wsTabs.map((t) => (
+      {/* 36px to the eye: the extra 8px of bottom padding overlaps the conversation (negative margin,
+          transparent, raised) only to give each tab a 44px touch target. */}
+      <div data-workbench-navigation-band="tabs" className="relative z-[1] -mb-2 box-content flex h-9 shrink-0 items-start gap-0.5 overflow-x-auto overflow-y-hidden border-t border-border/40 px-2 pb-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden">
+        {wsTabs.map((t, index) => (
           <Chip
             key={t.tabId}
-            quiet={!allowAll}
-            label={t.label}
+            label={tabName(t.label, index + 1)}
             active={selected === t.tabId}
             ring={t.focused}
             // What's actually going on in there — blocked / ready / working / idle — instead of a
@@ -86,9 +75,7 @@ export function TabStrip({
           type="button"
           onClick={() => onNewTab(workspaceId)}
           aria-label="New tab"
-          className={allowAll
-            ? "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent active:scale-95"
-            : "relative flex h-9 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors after:absolute after:inset-x-0 after:top-0 after:-bottom-2 after:content-[''] hover:text-foreground"}
+          className="relative flex h-9 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors after:absolute after:inset-x-0 after:top-0 after:-bottom-2 after:content-[''] hover:text-foreground"
         >
           <Plus className="size-3.5" />
         </button>
