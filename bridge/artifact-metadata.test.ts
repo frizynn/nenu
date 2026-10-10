@@ -67,7 +67,7 @@ it("identifies a large canvas from its first bytes and caches the answer per fil
       { path: "board.html", state: "preview", designboard: 'Big "board"' },
     ]);
     await writeFile(join(root, "board.html"), big("Renamed"));
-    expect((await artifactMetadata(root, ["board.html"]))[0]?.designboard).toBe("Renamed");
+    expect(await artifactMetadata(root, ["board.html"])).toEqual([{ path: "board.html", state: "preview", designboard: "Renamed" }]);
     // An unclosed prefix without an HTML artboard is not a canvas.
     await writeFile(join(root, "data.html"),
       `<script id="canvas-doc" type="application/json">{"title":"Data","files":{"data.json":"${"x".repeat(128 * 1024)}"}}</script>`);
@@ -106,8 +106,9 @@ describe("where a name in the conversation leads", () => {
       // A device that could not open a file outside the folder learns nothing about one.
       expect(await artifactMetadata(root, ["real/scroll.html"], { folders })).toEqual([{ path: "real/scroll.html", state: "missing" }]);
       // A declared folder is a place to look, not a way to climb out of it.
-      expect(await artifactMetadata(root, ["../real/scroll.html"], { folders: async () => [join(scratch, "real")], openable }))
-        .toEqual([{ path: "../real/scroll.html", state: "missing" }]);
+      await writeFile(join(scratch, "secret.html"), "<h1>Secret</h1>");
+      expect(await artifactMetadata(root, ["../secret.html"], { folders: async () => [join(scratch, "real")], openable }))
+        .toEqual([{ path: "../secret.html", state: "missing" }]);
     } finally {
       await rm(root, { recursive: true });
       await rm(scratch, { recursive: true });
@@ -117,39 +118,30 @@ describe("where a name in the conversation leads", () => {
   it("reads ~/ as the bridge user's home and an absolute path outside the folder as outside", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "nenu-cwd-")));
     const home = await realpath(await mkdtemp(join(tmpdir(), "nenu-home-")));
-    const previous = process.env.HOME;
-    process.env.HOME = home;
     try {
       await mkdir(join(home, "Downloads", "boceto"), { recursive: true });
       await writeFile(join(home, "Downloads", "boceto", "v2.html"), "<h1>v2</h1>");
       const openable = async (path: string) => realpath(path).catch(() => null);
-      expect(await artifactMetadata(root, ["~/Downloads/boceto/v2.html", "~/Downloads/boceto/v9.html"], { openable })).toEqual([
+      expect(await artifactMetadata(root, ["~/Downloads/boceto/v2.html", "~/Downloads/boceto/v9.html"], { openable, home })).toEqual([
         { path: "~/Downloads/boceto/v2.html", state: "outside", resolved: join(home, "Downloads", "boceto", "v2.html") },
         { path: "~/Downloads/boceto/v9.html", state: "missing" },
       ]);
       // Without a way to open it, an absolute path outside the folder is outside by its name alone.
-      expect(await artifactMetadata(root, [join(home, "Downloads", "boceto", "v9.html")])).toEqual([
+      expect(await artifactMetadata(root, [join(home, "Downloads", "boceto", "v9.html")], { home })).toEqual([
         { path: join(home, "Downloads", "boceto", "v9.html"), state: "outside" },
       ]);
     } finally {
-      process.env.HOME = previous;
       await rm(root, { recursive: true });
       await rm(home, { recursive: true });
     }
   });
 
   it("collects the folders the conversation names, newest first, without URLs or elided paths", () => {
-    const previous = process.env.HOME;
-    process.env.HOME = "/home/op";
-    try {
-      const text = (body: string) => ({ uuid: body, ts: "", role: "summary" as const, parts: [{ kind: "text" as const, text: body }] });
-      expect(mentionedFolders([
-        text("Base directory for this skill: /home/op/.agents/skills/designboard\n\nSee https://example.com/docs/a.html"),
-        text("The skill lives in `~/Developer/labs/designboard`. Key files: `assets/canvas.template.html`."),
-        text("Scratch at /private/tmp/s/scratchpad (e.g. file:///private/tmp/s/scratchpad/awam-scroll.html, /Users/.../x.html)."),
-      ])).toEqual(["/private/tmp/s/scratchpad", "/home/op/Developer/labs/designboard", "/home/op/.agents/skills/designboard"]);
-    } finally {
-      process.env.HOME = previous;
-    }
+    const text = (body: string) => ({ uuid: body, ts: "", role: "summary" as const, parts: [{ kind: "text" as const, text: body }] });
+    expect(mentionedFolders([
+      text("Base directory for this skill: /home/op/.agents/skills/designboard\n\nSee https://example.com/docs/a.html"),
+      text("The skill lives in `~/Developer/labs/designboard`. Key files: `assets/canvas.template.html`."),
+      text("Scratch at /private/tmp/s/scratchpad (e.g. file:///private/tmp/s/scratchpad/awam-scroll.html, /Users/.../x.html)."),
+    ], "/home/op")).toEqual(["/private/tmp/s/scratchpad", "/home/op/Developer/labs/designboard", "/home/op/.agents/skills/designboard"]);
   });
 });

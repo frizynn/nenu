@@ -72,7 +72,7 @@ it("follows a name the pane's folder lacks to the file the bridge finds, and say
   unmount();
   render(<FilePreview paneId="w1:p1" path="gone.md" onClose={() => {}} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
-  expect(inspect).toHaveBeenCalledWith("w1:p1", ["gone.md"], undefined, expect.any(AbortSignal));
+  expect(inspect).toHaveBeenCalledWith("w1:p1", ["gone.md"], undefined);
 });
 
 it("surfaces unavailable files and retries without leaving the chat", async () => {

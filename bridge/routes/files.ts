@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
-import { artifactMetadata } from "../artifact-metadata.ts";
+import { artifactMetadata, mentionedFolders } from "../artifact-metadata.ts";
 import type { AuditLog } from "../audit.ts";
 import { chatUploadPreviewResponse, isChatUploadPath } from "../chat-upload-preview.ts";
 import type { Config } from "../config.ts";
@@ -47,7 +47,15 @@ async function paneFileScope(
       : null;
     return page?.entries ?? [];
   })();
-  return { cwd: pane?.cwd, journalEntries, delivered: async () => deliveredFilePaths(await journalEntries()) };
+  // Each is read once per request, however many names it is asked about.
+  let delivered: Promise<readonly string[]> | undefined;
+  let folders: Promise<readonly string[]> | undefined;
+  return {
+    cwd: pane?.cwd,
+    journalEntries,
+    delivered: () => delivered ??= journalEntries().then((entries) => deliveredFilePaths(entries)),
+    folders: () => folders ??= journalEntries().then((entries) => mentionedFolders(entries)),
+  };
 }
 
 export const filePaneActions: Record<string, PaneAction> = {
@@ -76,13 +84,21 @@ export const filePaneActions: Record<string, PaneAction> = {
   files: {
     level: "read",
     marksSeen: false,
-    async handle(_ctx, { url, rt, paneId }) {
-      const current = rt.engine.current();
-      const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+    async handle(services, request) {
+      const { cfg } = services;
+      const { req, url, rt, paneId } = request;
       if (url.searchParams.has("inspect")) {
-        try { return json(await artifactMetadata(pane?.cwd, url.searchParams.getAll("inspect")), null); }
+        const { cwd, delivered, folders } = await paneFileScope(services, request);
+        // Outside the pane's folder, only a device that could mint an Open link learns whether a file
+        // is there: the same answer the grant would give it (ADR 0063).
+        const openable = deviceAuth(req, cfg).authorized
+          ? async (path: string) => { const file = await checkOpenable(path, cfg.stateDir); return "status" in file ? null : file.path; }
+          : undefined;
+        try { return json(await artifactMetadata(cwd, url.searchParams.getAll("inspect"), { delivered, folders, openable }), null); }
         catch { return jsonError("At most 20 artifact paths per request.", 400, null); }
       }
+      const current = rt.engine.current();
+      const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
       try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? "."), null); }
       catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
     },

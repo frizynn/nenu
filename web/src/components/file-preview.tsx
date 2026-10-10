@@ -1,7 +1,7 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Download, Globe, ImageIcon, RefreshCw, FileText, Loader2, X } from "lucide-react";
-import { fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
+import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { useHoldReload } from "@/lib/reload-guard";
@@ -36,20 +36,36 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const [attempt, setAttempt] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const openFile = useContext(FilePreviewContext);
-  const filePath = item?.kind === "file" ? item.path : "";
+  const itemKey = item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${item?.path ?? ""}`;
+  // A name the pane's folder lacks can live in a folder the conversation names (a summary recapping
+  // another repo, a scratchpad): where the bridge found it, for this item only.
+  const [moved, setMoved] = useState<{ itemKey: string; path: string } | null>(null);
+  const shown = useRef(itemKey);
+  shown.current = itemKey;
+  const filePath = item?.kind !== "file" ? "" : moved?.itemKey === itemKey ? moved.path : item.path;
   const openRelated = openFile ? (target: string) => openFile(target.startsWith("/") ? target : filePath.slice(0, filePath.lastIndexOf("/") + 1) + target) : null;
   const name = item?.kind === "journal" ? item.label : filePath.split("/").pop() || "Document";
   const html = isHtml(item);
-  const itemKey = item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${filePath}`;
   // The pane this item is read through: the open one, unless the operator chose the pane whose
   // folder holds it. The choice belongs to one item, so stepping the gallery drops it.
   const [from, setFrom] = useState<{ itemKey: string; paneId: string } | null>(null);
   const source = from?.itemKey === itemKey ? from.paneId : paneId;
   const owner = error?.outside ? paneOwningPath(panes, filePath, source) : undefined;
   const sourceLabel = source === paneId ? "" : panes.find((pane) => pane.paneId === source)?.label ?? source;
-  const fail = (cause: unknown) => setError(cause instanceof PaneFileError
-    ? { message: cause.message, outside: cause.outside, status: cause.status }
-    : { message: cause instanceof Error ? cause.message : "Could not open this file.", outside: false });
+  const fail = (cause: unknown) => {
+    const failure: FileFailure = cause instanceof PaneFileError
+      ? { message: cause.message, outside: cause.outside, status: cause.status }
+      : { message: cause instanceof Error ? cause.message : "Could not open this file.", outside: false };
+    // Inside the folder by name and not there: ask the bridge where the name leads before saying so.
+    if (failure.status !== 404 || failure.outside || !filePath) return setError(failure);
+    const key = itemKey;
+    fetchArtifactMetadata(source, [filePath], session).then(([found]) => {
+      if (shown.current !== key) return;
+      if (found?.state === "missing") setError({ message: "File not found.", outside: false, status: 404 });
+      else if (found?.resolved && found.resolved !== filePath) setMoved({ itemKey: key, path: found.resolved });
+      else setError(failure);
+    }, () => { if (shown.current === key) setError(failure); });
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -57,9 +73,9 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     setError(null); setData(null);
     if (!item || html) return;
     if (item.kind === "journal") { setData({ kind: "image", url: journalImageUrl(paneId, item.entry, item.index, session) }); return; }
-    if (/\.(mp4|m4v|mov|webm)$/i.test(item.path)) { setData({ kind: "video", url: paneFileUrl(source, item.path, session) }); return; }
+    if (/\.(mp4|m4v|mov|webm)$/i.test(filePath)) { setData({ kind: "video", url: paneFileUrl(source, filePath, session) }); return; }
     void (async () => {
-      const response = await fetchPaneFile(source, item.path, session, controller.signal);
+      const response = await fetchPaneFile(source, filePath, session, controller.signal);
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(blob);
@@ -70,12 +86,12 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
       } else if (/^image\/(png|jpeg|gif|webp)$/.test(type)) setData({ kind: "image", url });
       else if (type.startsWith("text/")) {
         const text = await blob.text();
-        if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(item.path), url });
+        if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(filePath), url });
       } else throw new Error("This file type cannot be previewed.");
     })().catch((cause: unknown) => { if (!controller.signal.aborted) fail(cause); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-    // itemKey names the item; the object itself is rebuilt on every render of a one-file preview.
-  }, [paneId, source, session, itemKey, html, attempt]);
+    // itemKey and filePath name the item; the object itself is rebuilt on every render of a one-file preview.
+  }, [paneId, source, session, itemKey, filePath, html, attempt]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;

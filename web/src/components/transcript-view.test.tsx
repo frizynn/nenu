@@ -467,16 +467,23 @@ describe("journal media", () => {
   });
 
   it("opens a card at the file the bridge finds and says so when nothing is there", async () => {
+    let written = false;
     server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
-      new URL(request.url).searchParams.getAll("inspect").map((path) => path === "gone.html"
+      new URL(request.url).searchParams.getAll("inspect").map((path) => path === "later.html" && !written
         ? { path, state: "missing" }
         : { path, state: "preview", resolved: `/repo/${path}` }))));
-    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; the old `gone.html` was removed." }] })]} />));
-    const gone = await screen.findByRole("button", { name: "gone.html: file not found" });
-    expect(gone).toBeDisabled();
-    expect(gone).toHaveTextContent("Not found");
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; writing `later.html` next." }] })]} />));
+    const later = await screen.findByRole("button", { name: "later.html: file not found" });
+    expect(later).toHaveTextContent("Not found");
     await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
     expect(await screen.findByText("/repo/assets/canvas.template.html")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close document" }));
+    // A tap on a missing card asks again, and opens once the agent has written the file.
+    await userEvent.click(later);
+    expect(screen.queryByText("/repo/later.html")).not.toBeInTheDocument();
+    written = true;
+    await userEvent.click(later);
+    expect(await screen.findByText("/repo/later.html")).toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {

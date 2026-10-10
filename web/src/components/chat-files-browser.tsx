@@ -186,7 +186,7 @@ export function ChatFilesBrowser({
   const candidates = references.filter(reference => /\.html?$/i.test(reference.path))
     .sort((a, b) => b.lastSeen.order - a.lastSeen.order).map(reference => reference.path);
   const metadata = useArtifactMetadata(paneId, session, candidates, open && filter === "artifacts" && !scan.loading);
-  const boards = new Map(metadata.found.map(item => [item.path, item]));
+  const boards = new Map(metadata.found.flatMap(item => item.state === "preview" && item.designboard ? [[item.path, item.designboard]] : []));
   const category = filter === "photo" ? references.filter(r => r.kind !== "file")
     : filter === "artifacts" ? references.filter(r => {
       const kind = artifactKind(r, boards.has(r.path));
@@ -194,7 +194,7 @@ export function ChatFilesBrowser({
     }) : files;
   const extensions = [...new Set(category.map(fileExtension))].sort();
   const shown = category.filter(r => (extension === "all" || fileExtension(r) === extension)
-    && `${r.path} ${boards.get(r.path)?.title ?? ""}`.toLowerCase().includes(query.toLowerCase()))
+    && `${r.path} ${boards.get(r.path) ?? ""}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => (sort === "extension" ? fileExtension(a).localeCompare(fileExtension(b))
       : sort === "name" ? a.name.localeCompare(b.name) : 0) || b.lastSeen.order - a.lastSeen.order);
   /** Every open starts from the history on screen now, on the project tab, with no filters. */
@@ -295,7 +295,7 @@ export function ChatFilesBrowser({
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileText aria-hidden="true" className="size-4" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{boards.get(reference.path)?.title ?? reference.name}</span>
+                    <span className="block truncate text-sm font-medium">{boards.get(reference.path) ?? reference.name}</span>
                     <span className="block truncate font-mono text-[11px] text-muted-foreground">{reference.path}</span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
