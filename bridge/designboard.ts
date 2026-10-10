@@ -32,6 +32,28 @@ export function designboardTitle(source: string): string | null {
   return readDesignboard(source)?.title ?? null;
 }
 
+const CANVAS_DOC_OPEN = /<script\b(?=[^>]*\bid=["']canvas-doc["'])(?=[^>]*\btype=["']application\/json["'])[^>]*>/i;
+
+/**
+ * Identify a designboard from the first bytes of its file. Canvases embed their artboards after the
+ * title, so a large board is recognised without reading it whole: when the block does not close
+ * inside `head`, the title and the first artboard name are read from the JSON prefix instead.
+ */
+export function designboardTitleFromHead(head: string, complete: boolean): string | null {
+  const open = CANVAS_DOC_OPEN.exec(head);
+  if (!open) return null;
+  const prefix = head.slice(open.index + open[0].length);
+  if (complete || /<\/script\s*>/i.test(prefix)) return designboardTitle(head);
+  const title = /^\s*\{[^]*?"title"\s*:\s*("(?:[^"\\\n]|\\.)*")/.exec(prefix)?.[1];
+  if (!title || !/"files"\s*:\s*\{\s*"(?:[^"\\]|\\.)*\.html?"\s*:\s*"/i.test(prefix)) return null;
+  try {
+    const text = (JSON.parse(title) as string).trim().slice(0, 200);
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 /** The preview is for viewing; downloads retain the original editable canvas. */
 export function designboardPreview(source: string): string {
   const canvas = readDesignboard(source);

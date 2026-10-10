@@ -26,9 +26,34 @@ describe("chat upload previews", () => {
     const response = await chatUploadPreviewResponse(state, path, [entry(`Review this photo: [image](<${path}>)`)]);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
     expect(response.headers.get("content-security-policy")).toContain("sandbox");
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
+  });
+
+  test("revalidates with an ETag only while the reference and containment still hold", async () => {
+    const entries = [entry(`see ${path}, thanks`)];
+    const first = await chatUploadPreviewResponse(state, path, entries);
+    const etag = first.headers.get("etag")!;
+    await first.arrayBuffer();
+    expect((await chatUploadPreviewResponse(state, path, entries, etag)).status).toBe(304);
+    expect((await chatUploadPreviewResponse(state, path, [entry(path, "assistant")], etag)).status).toBe(404);
+    await writeFile(join(temp, "outside.png"), png);
+    await rm(path);
+    await symlink(join(temp, "outside.png"), path);
+    expect((await chatUploadPreviewResponse(state, path, entries, "*")).status).toBe(404);
+  });
+
+  test("finds every photo of a message from one scan of the same journal window", async () => {
+    const second = join(state, "uploads", "w1_p1-mabcd124-1234abce.jpg");
+    await writeFile(second, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]));
+    const entries = [entry(`[image](<${path}>) and ${second}.`)];
+    expect((await chatUploadPreviewResponse(state, path, entries)).status).toBe(200);
+    expect((await chatUploadPreviewResponse(state, second, entries)).status).toBe(200);
+    // Same entries object, different state dir: the memo never answers for another uploads root.
+    const otherState = join(temp, "other");
+    await mkdir(join(otherState, "uploads"), { recursive: true });
+    expect((await chatUploadPreviewResponse(otherState, path, entries)).status).toBe(404);
   });
 
   test("rejects missing, assistant-only, and partial-path references", async () => {

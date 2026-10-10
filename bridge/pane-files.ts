@@ -1,6 +1,9 @@
-import { videoResponse, MAX_VIDEO_BYTES } from "./media-preview.ts";
+import {
+  etagMatches, fileEtag, fileStream, FILE_SECURITY_HEADERS, inlineDisposition, MAX_VIDEO_BYTES,
+  notModifiedResponse, REVALIDATE, videoResponse,
+} from "./media-preview.ts";
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { open, realpath, type FileHandle } from "node:fs/promises";
 import { basename, extname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
 import type { TranscriptEntry } from "./journal/types.ts";
@@ -8,6 +11,8 @@ import { imageExtFromBytes } from "./uploads.ts";
 
 export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_PREVIEW_FILE_BYTES = 20 * 1024 * 1024;
+/** Enough leading bytes to sniff every image and PDF signature we accept. */
+const SNIFF_HEAD_BYTES = 64;
 
 const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".markdown", ".mdx", ".json", ".jsonc", ".jsonl", ".csv", ".tsv", ".log",
@@ -25,11 +30,17 @@ export function isPrivateProjectPath(path: string): boolean {
   return path.split(/[\\/]/).some((part) => PRIVATE_PART.test(part)) || PRIVATE_EXTENSION.test(path);
 }
 
-function fileError(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+/** Header that tells the client why a 404 happened when the reason is visible from the name alone. */
+export const FILE_STATE_HEADER = "x-file-state";
+export const OUTSIDE_PROJECT_MESSAGE = "This file is outside the project.";
+
+function fileError(message: string, status: number, headers: Record<string, string> = {}): Response {
+  return new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", ...headers } });
 }
 
-function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | "video" | null {
+type FileKind = "text" | "markdown" | "pdf" | "image" | "video";
+
+function fileKind(path: string): FileKind | null {
   const ext = extname(path).toLowerCase();
   if ([".md", ".markdown"].includes(ext)) return "markdown";
   if ([".mp4", ".m4v", ".mov", ".webm"].includes(ext)) return "video";
@@ -39,33 +50,52 @@ function fileKind(path: string): "text" | "markdown" | "pdf" | "image" | "video"
   return null;
 }
 
+function kindLimit(kind: FileKind): number {
+  return kind === "video" ? MAX_VIDEO_BYTES : kind === "text" || kind === "markdown" ? MAX_TEXT_FILE_BYTES : MAX_PREVIEW_FILE_BYTES;
+}
+
+const deliveredCache = new WeakMap<readonly TranscriptEntry[], string[]>();
+
 /**
  * Absolute paths Claude Code confirmed it delivered through SendUserFile, read from the harness's
  * own tool result ("N files delivered to user." then one "  <path> → file_uuid: …" line per file),
- * never from the model's prose or the call's input.
+ * never from the model's prose or the call's input. Memoized per parsed journal window.
  */
 export function deliveredFilePaths(entries: readonly TranscriptEntry[]): string[] {
-  return entries.flatMap((entry) => entry.parts.flatMap((part) =>
-    part.kind === "tool" && part.name === "SendUserFile" && part.result && !part.result.isError
-      ? [...part.result.text.matchAll(/^ {2}(\/.+) → file_uuid: /gm)].map((match) => resolve(match[1]!))
-      : []));
+  let paths = deliveredCache.get(entries);
+  if (!paths) {
+    paths = entries.flatMap((entry) => entry.parts.flatMap((part) =>
+      part.kind === "tool" && part.name === "SendUserFile" && part.result && !part.result.isError
+        ? [...part.result.text.matchAll(/^ {2}(\/.+) → file_uuid: /gm)].map((match) => resolve(match[1]!))
+        : []));
+    deliveredCache.set(entries, paths);
+  }
+  return paths;
+}
+
+/** A contained, opened, bounded regular file. The caller owns `handle` and must close it. */
+export interface PaneFile {
+  handle: FileHandle;
+  /** Real path after containment. */
+  path: string;
+  kind: FileKind;
+  size: number;
+  etag: string;
 }
 
 /**
  * Project previews are an explicit exception to journal-only reads: the client may name a file,
  * but the live pane supplies its root. Resolve both names, refuse escapes and sensitive paths,
- * then read a bounded regular file through one descriptor (never reopen its name while serving).
- * HTML/SVG/source code remain text/plain; none of the project's markup is executed by the browser.
+ * then open a bounded regular file through one descriptor (never reopen its name while serving).
  * A file outside the root is served only when the pane's journal shows the agent delivered it
  * (`delivered`, loaded lazily), named by its exact path or by a trailing part of it; the
  * private-path policy and bounded read still apply.
  */
-export async function paneFileResponse(
+export async function openPaneFile(
   cwd: string | undefined,
   requestedPath: string | null,
-  range: string | null = null,
   delivered: () => Promise<readonly string[]> = async () => [],
-): Promise<Response> {
+): Promise<PaneFile | Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
   }
@@ -86,56 +116,106 @@ export async function paneFileResponse(
     return sent ? await realpath(sent).catch(() => null) : null;
   };
   const path = await locate();
-  if (!path || isPrivateProjectPath(path)) return unavailable();
+  if (!path) {
+    // Decided from the name alone, so it says nothing about whether the file exists.
+    const within = (base: string) => candidate === base || candidate.startsWith(base + sep);
+    return within(resolve(cwd)) || within(root)
+      ? unavailable()
+      : fileError(OUTSIDE_PROJECT_MESSAGE, 404, { [FILE_STATE_HEADER]: "outside-project" });
+  }
+  if (isPrivateProjectPath(path)) return unavailable();
   const kind = fileKind(path);
   if (!kind) return fileError("This file type cannot be previewed.", 415);
-  const limit = kind === "video" ? MAX_VIDEO_BYTES : kind === "text" || kind === "markdown" ? MAX_TEXT_FILE_BYTES : MAX_PREVIEW_FILE_BYTES;
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
   if (!handle) return unavailable();
-  let streaming = false;
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || await locate() !== path) return unavailable();
-    if (stat.size > limit) return fileError(`File is too large to preview (maximum ${limit / 1024 / 1024} MB).`, 413);
-    if (kind === "video") {
-      const response = await videoResponse(handle, stat.size, range, basename(path));
+    if (!stat.isFile() || await locate() !== path) throw unavailable();
+    const limit = kindLimit(kind);
+    if (stat.size > limit) throw fileError(`File is too large to preview (maximum ${limit / 1024 / 1024} MB).`, 413);
+    return { handle, path, kind, size: stat.size, etag: fileEtag(stat) };
+  } catch (error) {
+    await handle.close();
+    return error instanceof Response ? error : unavailable();
+  }
+}
+
+/** Read up to `size` bytes; a file that grows after the stat stays capped at that size. */
+export async function readPaneBytes(file: PaneFile, size = file.size): Promise<Buffer<ArrayBuffer>> {
+  const bytes = Buffer.alloc(Math.min(size, file.size));
+  let length = 0;
+  while (length < bytes.length) {
+    const read = await file.handle.read(bytes, length, bytes.length - length, length);
+    if (read.bytesRead === 0) break;
+    length += read.bytesRead;
+  }
+  return bytes.subarray(0, length);
+}
+
+/** The bytes as text, or null when they are binary. */
+export async function readPaneText(file: PaneFile): Promise<string | null> {
+  const bytes = await readPaneBytes(file);
+  return bytes.includes(0) ? null : bytes.toString("utf8");
+}
+
+/** The served MIME of a sniffed image or PDF head, or null when the bytes are not what the name says. */
+function binaryMime(kind: "pdf" | "image", head: Buffer): string | null {
+  if (kind === "pdf") return head.subarray(0, 5).toString("ascii") === "%PDF-" ? "application/pdf" : null;
+  const image = imageExtFromBytes(head);
+  return image ? (image === "jpg" ? "image/jpeg" : `image/${image}`) : null;
+}
+
+/**
+ * Serve a contained project file (see {@link openPaneFile}). HTML/SVG/source code remain text/plain;
+ * none of the project's markup is executed by the browser. Images, PDFs and videos stream in
+ * bounded chunks; text is read whole (it is capped at 2 MB and must be checked for binary bytes).
+ * A matching If-None-Match gets a 304 only after every containment check has passed again.
+ */
+export async function paneFileResponse(
+  cwd: string | undefined,
+  requestedPath: string | null,
+  options: {
+    range?: string | null;
+    ifNoneMatch?: string | null;
+    delivered?: () => Promise<readonly string[]>;
+  } = {},
+): Promise<Response> {
+  const file = await openPaneFile(cwd, requestedPath, options.delivered);
+  if (file instanceof Response) return file;
+  let streaming = false;
+  try {
+    if (etagMatches(options.ifNoneMatch ?? null, file.etag)) return notModifiedResponse(file.etag);
+    const filename = basename(file.path);
+    if (file.kind === "video") {
       streaming = true;
-      return response;
+      return await videoResponse(file.handle, file.size, options.range ?? null, filename, file.etag);
     }
-    // A growing file stays capped, even when it changes after the initial stat.
-    const bytes = Buffer.alloc(stat.size);
-    let length = 0;
-    while (length < bytes.length) {
-      const read = await handle.read(bytes, length, bytes.length - length, length);
-      if (read.bytesRead === 0) break;
-      length += read.bytesRead;
+    const headers = {
+      "content-disposition": inlineDisposition(filename),
+      etag: file.etag,
+      "cache-control": REVALIDATE,
+      ...FILE_SECURITY_HEADERS,
+    };
+    if (file.kind === "pdf" || file.kind === "image") {
+      const mime = binaryMime(file.kind, await readPaneBytes(file, SNIFF_HEAD_BYTES));
+      if (!mime) return fileError(file.kind === "pdf" ? "This file is not a valid PDF." : "This file is not a supported image.", 415);
+      streaming = true;
+      return new Response(fileStream(file.handle, 0, file.size - 1), {
+        headers: { "content-type": mime, "content-length": String(file.size), ...headers },
+      });
     }
-    const content = bytes.subarray(0, length);
-    let mime = kind === "markdown" ? "text/markdown; charset=utf-8" : "text/plain; charset=utf-8";
-    if (kind === "pdf") {
-      if (content.subarray(0, 5).toString("ascii") !== "%PDF-") return fileError("This file is not a valid PDF.", 415);
-      mime = "application/pdf";
-    } else if (kind === "image") {
-      const image = imageExtFromBytes(content);
-      if (!image) return fileError("This file is not a supported image.", 415);
-      mime = image === "jpg" ? "image/jpeg" : `image/${image}`;
-    } else if (content.includes(0)) {
-      return fileError("Binary files cannot be displayed as text.", 415);
-    }
+    const content = await readPaneBytes(file);
+    if (content.includes(0)) return fileError("Binary files cannot be displayed as text.", 415);
     return new Response(content, {
       headers: {
-        "content-type": mime,
-        "content-length": String(length),
-        "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(basename(path)).replace(/'/g, "%27")}`,
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-        // Raw files are not documents in the app's security context, even when navigated directly.
-        "content-security-policy": "default-src 'none'; sandbox",
+        "content-type": file.kind === "markdown" ? "text/markdown; charset=utf-8" : "text/plain; charset=utf-8",
+        "content-length": String(content.length),
+        ...headers,
       },
     });
   } catch {
-    return unavailable();
+    return fileError("File unavailable in this workspace.", 404);
   } finally {
-    if (!streaming) await handle.close();
+    if (!streaming) await file.handle.close();
   }
 }
