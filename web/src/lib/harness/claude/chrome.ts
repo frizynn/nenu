@@ -491,8 +491,14 @@ function steppedMarksAreStatusline(
  *  walk (its footer split off by a blank, like the background-agents footer), and only these rows
  *  tell it apart. A popup tail is exempt, because its grammar named every row. */
 function tailNamesAMenu(text: string): boolean {
-  return NUMBERED_OPTION_ROW.test(text) || namesAMenuKey(text);
+  return NUMBERED_OPTION_ROW.test(text) || text.split(/\s+·\s+/).some((segment) => !RUNNING_TURN_HINT.test(segment.trim()) && namesAMenuKey(segment));
 }
+
+// Claude 2.1.296 moved "esc to interrupt" from the spinner into the statusline under the box for as
+// long as a turn runs (P0 captures working-queued-v2296, hook-holding-v2296). It names the running
+// turn's key, not a modal's, and refusing it refused every send to a working Claude: its native queue
+// takes typing then, and a second queued message could never reach it.
+const RUNNING_TURN_HINT = /^esc to interrupt$/i;
 
 /**
  * Whether a row of an `unknown` tail carries something else a modal paints: a pointer glyph anywhere,

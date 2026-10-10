@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-Queue half partially superseded by: [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md) (Proposed). Once it ships, automatic sends no longer wait for an idle/done agent, and each row carries a delivery mode. The artifacts half stays in force, amended by [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) (journal images, media validators).
+Queue half partially superseded by: [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md) (Accepted 2026-10-10). Automatic sends no longer wait for an idle/done agent, and each row carries a delivery mode. The artifacts half stays in force, amended by [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) (journal images, media validators).
 
 ## Context
 
