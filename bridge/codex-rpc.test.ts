@@ -89,7 +89,7 @@ describe("CodexLive", () => {
   const thread = "11111111-2222-3333-4444-555555555555";
   const pane: AgentView = { paneId: "p1", workspaceId: "w1", workspaceLabel: "QA", workspaceNumber: 1, tabId: "t1", focused: false, agent: "codex", status: "working", cwd: "/tmp", agentSession: { kind: "id", value: thread } };
 
-  function harness(opts: { status?: string; queued?: number; queueError?: CodexRpcError } = {}) {
+  function harness(opts: { status?: string; queued?: number; queueError?: CodexRpcError; resume?: boolean } = {}) {
     let clock = 1_000;
     const calls: Array<[string, Record<string, unknown> | undefined]> = [];
     const events: LiveEvent[] = [];
@@ -107,12 +107,21 @@ describe("CodexLive", () => {
         return {};
       },
     };
-    const live = new CodexLive({ publish: (e) => events.push(e) }, rpc, () => clock);
+    const changed: string[] = [];
+    const live = new CodexLive({ publish: (e) => events.push(e) }, rpc, () => clock, { resume: opts.resume ?? true, changed: (id) => changed.push(id) });
     const methods = () => calls.map(([m]) => m);
     const send = (m: CodexMessage) => listener!.message(m);
-    return { live, calls, methods, events, send, tick: (ms: number) => { clock += ms; }, close: () => listener?.closed?.() };
+    return { live, calls, methods, events, changed, send, tick: (ms: number) => { clock += ms; }, close: () => listener?.closed?.() };
   }
   const settle = () => Bun.sleep(0);
+
+  test("stays dormant unless resuming was enabled, since ADR 0022 forbids it", async () => {
+    const h = harness({ resume: false });
+    h.live.observe("default", pane);
+    await settle();
+    expect(h.calls).toEqual([]);
+    expect(h.live.view("default", "p1")).toBeNull();
+  });
 
   test("a --no-daemon pane is never resumed or queued against", async () => {
     const h = harness({ status: "notLoaded" });
@@ -157,6 +166,7 @@ describe("CodexLive", () => {
     h.send({ method: "item/completed", params: { threadId: thread, turnId: "turn", item: { id: "i", type: "agentMessage", text: "hi" } } });
     h.send({ method: "item/completed", params: { threadId: "99999999-2222-3333-4444-555555555555", turnId: "x", item: {} } });
     expect(h.events).toEqual([{ session: "default", topic: "journal", paneId: "p1" }]);
+    expect(h.changed).toEqual([thread]);
 
     h.send({ method: "thread/status/changed", params: { threadId: thread, status: { type: "active", activeFlags: ["waitingOnApproval"] } } });
     h.send({ id: 7, method: "item/commandExecution/requestApproval", params: { threadId: thread, turnId: "turn", itemId: "c", reason: "Needs network", command: "curl example.com" } });

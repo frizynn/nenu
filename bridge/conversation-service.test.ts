@@ -139,6 +139,12 @@ describe("identity recovery", () => {
     expect(methods).not.toContain("thread/resume");
     expect(methods.filter((m) => m === "thread/read")).toHaveLength(1);
     expect(methods.filter((m) => m === "thread/items/list")).toHaveLength(2);
+    // Within the cache window a repeat read is shared, until a live event says the thread changed.
+    await service.page(connected, { limit: 1 });
+    expect(methods.filter((m) => m === "thread/items/list")).toHaveLength(2);
+    service.forget(id);
+    await service.page(connected, { limit: 1 });
+    expect(methods.filter((m) => m === "thread/items/list")).toHaveLength(3);
   });
   test("caches the conversation picker list per directory", async () => {
     let lists = 0;
@@ -182,5 +188,39 @@ test("an older page survives a lost cursor by walking down to its anchor", async
   const older = await fresh.page("t", { limit: 2, before: "m3" });
   expect(older.entries.map((e) => e.uuid)).toEqual(["m1", "m2"]);
   expect(older.hasMore).toBe(true);
-  expect(await fresh.page("t", { limit: 2, before: "gone" })).toEqual({ entries: [], hasMore: false });
+});
+
+test("an unknown anchor walks a bounded way, then degrades to the newest page", async () => {
+  const items = Array.from({ length: 2000 }, (_, i) => ({ turnId: "turn", item: { id: `m${i}`, type: "agentMessage", text: `msg ${i}` } }));
+  let lists = 0;
+  const history = new CodexHistory({ request: async (method: string, params?: Record<string, unknown>) => {
+    if (method === "thread/turns/list") return { data: [{ id: "turn", status: "completed" }], nextCursor: null };
+    lists++;
+    const start = Number(params?.cursor ?? 0);
+    return { data: items.slice(-start - 8 || undefined, items.length - start).reverse(), nextCursor: String(start + 8) };
+  } });
+  const page = await history.page("t", { limit: 3, before: "nope" });
+  expect(page.entries.map((e) => e.uuid)).toEqual(["m1992", "m1993", "m1994", "m1995", "m1996", "m1997", "m1998", "m1999"]);
+  expect(page.hasMore).toBe(true);
+  expect(lists).toBe(9);
+});
+
+test("a large limit stops at the byte budget and leaves the rest to `before` paging", async () => {
+  const items = Array.from({ length: 200 }, (_, i) => ({ turnId: "turn", item: { id: `m${i}`, type: "agentMessage", text: "x".repeat(1000) } }));
+  let lists = 0;
+  const rpc = { request: async (method: string, params?: Record<string, unknown>) => {
+    if (method === "thread/turns/list") return { data: [{ id: "turn", status: "completed" }], nextCursor: null };
+    lists++;
+    const start = Number(params?.cursor ?? 0);
+    const reversed = [...items].reverse();
+    return { data: reversed.slice(start, start + 8), nextCursor: start + 8 < reversed.length ? String(start + 8) : null };
+  } };
+  const history = new CodexHistory(rpc, 20_000);
+  const first = await history.page("t", { limit: 5000 });
+  expect(lists).toBe(3);
+  expect(first.entries).toHaveLength(24);
+  expect(first.hasMore).toBe(true);
+  const older = await history.page("t", { limit: 5000, before: first.entries[0]!.uuid });
+  expect(older.entries.at(-1)?.uuid).toBe("m175");
+  expect(lists).toBe(6);
 });

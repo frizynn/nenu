@@ -104,13 +104,19 @@ export class ConversationService {
     if (pane.agent !== "codex" || pane.agentSession?.kind !== "id") return null;
     const id = pane.agentSession.value;
     const key = JSON.stringify([pane.cwd, id]);
-    return cached(this.pages, JSON.stringify([pane.cwd, id, opts.limit, opts.before ?? null]), 3_000, async () => {
+    return cached(this.pages, JSON.stringify([id, pane.cwd, opts.limit, opts.before ?? null]), 3_000, async () => {
       // Metadata only: the directory check. History comes in pages instead of every turn at once.
       await cached(this.threads, key, 30_000, () => this.thread(pane, id));
       const { entries, hasMore } = await this.history.page(id, opts);
       // The app-server has no cheap count; this is what is known so far.
       return { entries, total: entries.length, hasMore, fileTruncated: false };
     });
+  }
+
+  /** The thread changed (a live event): the next read must not be a page cached before it. */
+  forget(threadId: string): void {
+    const prefix = `${JSON.stringify([threadId]).slice(0, -1)},`;
+    for (const key of this.pages.keys()) if (key.startsWith(prefix)) this.pages.delete(key);
   }
 }
 

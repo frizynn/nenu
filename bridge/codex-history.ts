@@ -89,40 +89,57 @@ type Rpc = Pick<CodexRpc, "request">;
 // Items per thread/items/list call. One item is about 2.4 KB on a measured 948 KB thread, so a call
 // stays near 20 KB; a generated image still carries its base64 and can exceed it.
 export const ITEM_PAGE = 8;
+// Daemon bytes one page reads before it stops and reports hasMore. Every web caller pages back with
+// `before`, so a large `limit` (the history view asks for 5000) costs round trips, not a whole-thread read.
+export const PAGE_BYTES = 64 * 1024;
+// Calls spent looking for a `before` whose cursor was forgotten before degrading to the newest page.
+const WALK_CALLS = 8;
 const TURN_PAGE = 50;
-const MAX_CALLS = 400;
+const MAX_CALLS = 64;
 
 /**
  * Paged reads of an app-server thread, newest first, instead of hydrating every turn per read.
  * `before` is an entry uuid (an item id); the continuation cursor it maps to is remembered per thread.
- * A page ends on a call boundary, so it may hold up to ITEM_PAGE - 1 entries beyond `limit`.
+ * A page ends on a call boundary: it may hold up to ITEM_PAGE - 1 entries beyond `limit`, and one
+ * call beyond the byte budget.
  */
 export class CodexHistory {
   private readonly cursors = new Map<string, string>();
   private readonly turns = new Map<string, Map<string, TranscriptTurn>>();
-  constructor(private readonly rpc: Rpc) {}
+  constructor(private readonly rpc: Rpc, private readonly budget = PAGE_BYTES) {}
 
   async page(threadId: string, opts: { limit: number; before?: string }): Promise<{ entries: TranscriptEntry[]; hasMore: boolean }> {
-    let cursor = opts.before === undefined ? undefined : this.cursors.get(`${threadId}\0${opts.before}`);
-    // Without a remembered cursor (a restart, an evicted one), walk down to `before` first.
-    let skipping = opts.before !== undefined && cursor === undefined;
+    const anchor = opts.before;
+    let cursor = anchor === undefined ? undefined : this.cursors.get(`${threadId}\0${anchor}`);
+    // Without a remembered cursor (a restart, an evicted one), walk a bounded way down to `before`.
+    // An anchor it does not reach degrades to the newest page, like the journal pager, never to an
+    // empty page or a whole-thread walk driven by a client string.
+    let skipping = anchor !== undefined && cursor === undefined;
     const newestFirst: TranscriptEntry[] = [];
     let more = true;
-    for (let calls = 0; newestFirst.length < opts.limit && more && calls < MAX_CALLS; calls++) {
+    let bytes = 0;
+    let walked = 0;
+    for (let calls = 0; more && calls < MAX_CALLS && newestFirst.length < opts.limit && bytes < this.budget; calls++) {
       const page = record(await this.rpc.request("thread/items/list", {
         threadId, limit: ITEM_PAGE, sortDirection: "desc", ...(cursor ? { cursor } : {}),
       }));
-      for (const raw of list(page.data)) {
+      const rows = list(page.data);
+      if (!skipping) bytes += JSON.stringify(rows).length;
+      for (const raw of rows) {
         const row = record(raw);
         const item = record(row.item);
-        if (skipping) { skipping = item.id !== opts.before; continue; }
+        if (skipping) { skipping = item.id !== anchor; continue; }
         const entry = codexItemEntry(item, text(row.turnId));
         if (entry) newestFirst.push(entry);
       }
       cursor = typeof page.nextCursor === "string" && page.nextCursor ? page.nextCursor : undefined;
       more = cursor !== undefined;
+      if (skipping && (!more || ++walked >= WALK_CALLS)) {
+        skipping = false;
+        cursor = undefined;
+        more = true;
+      }
     }
-    if (skipping) return { entries: [], hasMore: false };
     const lifecycles = await this.lifecycles(threadId, new Set(newestFirst.map((entry) => entry.turnId ?? "")));
     const entries = newestFirst.reverse().map((entry) => {
       const turn = lifecycles.get(entry.turnId ?? "");

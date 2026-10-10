@@ -8,6 +8,11 @@ import type { AgentView, InteractionHint, LivePublisher, LiveTopic } from "./typ
 // names, and keeps the latest plan, diff, token usage and pending-request text. It never sends a
 // turn and never answers a request; panes started with --no-daemon are not loaded in the daemon
 // and are left exactly as before.
+//
+// Dormant unless built with `resume: true`. Subscribing needs thread/resume, and ADR 0022 still
+// says the daemon is read "without resuming": a resume replays pending approvals to this client and
+// fires the idle lifecycle (Completed) for every extension, not only the queue guarded below.
+// Enable it only after an ADR amendment accepts that.
 
 type Rpc = Pick<CodexRpc, "request" | "listen">;
 
@@ -93,10 +98,12 @@ export class CodexLive {
   private stopListening: (() => void) | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(readonly live: LivePublisher, private readonly rpc: Rpc = codexRpc(), private readonly now = Date.now, private readonly graceMs = 60_000) {}
+  constructor(readonly live: LivePublisher, private readonly rpc: Rpc = codexRpc(), private readonly now = Date.now,
+    private readonly options: { resume?: boolean; graceMs?: number; changed?(threadId: string): void } = {}) {}
 
   /** A page is looking at this pane: follow its Codex thread for the next `graceMs`. */
   observe(session: string, pane: AgentView): void {
+    if (!this.options.resume) return;
     if (pane.agent !== "codex" || pane.agentSession?.kind !== "id" || !isCodexSessionId(pane.agentSession.value)) return;
     const threadId = pane.agentSession.value;
     const key = `${session}\0${pane.paneId}`;
@@ -108,7 +115,7 @@ export class CodexLive {
       thread = { id: threadId, watches: new Map(), state: "idle", retryAt: 0, view: { threadId, subscribed: false, waitingOn: [] }, requests: new Map() };
       this.threads.set(threadId, thread);
     }
-    thread.watches.set(key, { session, paneId: pane.paneId, until: this.now() + this.graceMs });
+    thread.watches.set(key, { session, paneId: pane.paneId, until: this.now() + (this.options.graceMs ?? 60_000) });
     this.start();
     if (thread.state === "idle" && thread.retryAt <= this.now()) void this.subscribe(thread);
   }
@@ -246,7 +253,10 @@ export class CodexLive {
       thread.requests.clear();
       this.publish(thread, "interaction");
     }
-    if (JOURNAL_METHODS.has(method)) this.publish(thread, "journal");
+    if (JOURNAL_METHODS.has(method)) {
+      this.options.changed?.(thread.id);
+      this.publish(thread, "journal");
+    }
   }
 
   private status(thread: Thread, status: Record<string, unknown>): void {
