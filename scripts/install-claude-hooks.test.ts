@@ -92,9 +92,11 @@ test("removing the hooks deletes the token, so the bridge refuses later deliveri
     expect(await setObserverHooks(settings, dir, URL)).toBe(true);
     const token = await readHookToken(dir);
     expect(token).not.toBe("");
+    await Bun.sleep(2); // each rewrite backs up to a millisecond-stamped name
     expect(await setObserverHooks(settings, dir, null)).toBe(true);
     expect(await readHookToken(dir)).toBe("");
     expect(JSON.parse(await readFile(settings, "utf8"))).toEqual({});
+    await Bun.sleep(2);
     expect(await setObserverHooks(settings, dir, URL)).toBe(true);
     expect(await readHookToken(dir)).not.toBe(token);
   } finally {
