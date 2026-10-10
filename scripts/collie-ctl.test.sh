@@ -808,16 +808,21 @@ set -euo pipefail
 export HOME="$HOME_DIR"
 export HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
 export PATH="$BIN_DIR:$BASE_PATH"
+# Herdr gives actions their own state dir; the bridge must never pick it up from there.
+export HERDR_PLUGIN_STATE_DIR="${CASE_DIR}/action-state"
 source "$CTL"
 ensure_build() { return 0; }
 have_systemd() { return 1; }
 have_launchd() { return 0; }
-BUN=/bin/true
+BUN="${CASE_DIR}/fake-bun"
 sleep() { :; }   # the backoff is the point; waiting for it is not
 cmd_serve() { return 0; }
 print_status_banner() { echo "BANNER"; }
 cmd_start
 EOF
+
+  printf '#!/bin/sh\necho "state=${HERDR_PLUGIN_STATE_DIR-unset}" > "%s/bun.env"\n' "$CASE_DIR" > "${CASE_DIR}/fake-bun"
+  chmod +x "${CASE_DIR}/fake-bun"
 
   # Transient: the window closes on the second try, and `start` reports success like any other.
   install_flaky_launchctl 1
@@ -842,6 +847,8 @@ EOF
     *"bridge started (launchd:"*) fail "reported a launchd start after bootstrap failed" ;;
   esac
   [ -f "${CONFIG_DIR}/collie.pid" ] || fail "the unsupervised fallback left no pidfile to stop later"
+  local tries; for tries in 1 2 3 4 5 6 7 8 9 10; do [ -s "${CASE_DIR}/bun.env" ] && break; /bin/sleep 0.1; done
+  assert_eq "$(cat "${CASE_DIR}/bun.env")" "state=unset"
   assert_eq "$(grep -c '^bootstrap ' "$LAUNCHCTL_CALLS")" 3
 }
 

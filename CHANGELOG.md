@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.54.3] - 2026-10-10
+
+### Fixed
+- **Queued messages could be lost on restart.** When launchd refused a restart, the fallback bridge used the action's state dir, so the next supervised start no longer saw its queue. Both now use the same dir, and `start` waits for launchd to finish tearing down. (398769d2)
+- A queued message that leaves the queue with no delivery record now says so instead of showing "Sent". Delivered records stay listed for two hours so a sleeping phone can still tell. (a8241441)
+
 ## [0.54.2] - 2026-10-10
 
 ### Fixed

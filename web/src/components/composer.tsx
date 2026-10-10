@@ -364,8 +364,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       // Still in the CLI's own queue: the bubble keeps waiting, with "Read it now" where it exists.
       if (done?.native === "enqueued") {
         if (echo.native !== "enqueued") updateLocalSend(sendScope, echo.id, { native: "enqueued", queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
+      } else if (done) {
+        updateLocalSend(sendScope, echo.id, { state: "sent", native: done.native, queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
       } else {
-        updateLocalSend(sendScope, echo.id, { state: "sent", native: done?.native, queueState: undefined, waitingFor: undefined, deliveryMode: done?.deliveryMode ?? echo.deliveryMode });
+        // Gone from the queue with no delivery record: a restart on another state dir or a removal
+        // elsewhere. Never call that "Sent"; say so, and let the operator check before resending.
+        updateLocalSend(sendScope, echo.id, { state: "failed", textDelivered: true, error: "This message left the queue without being delivered. Check the chat or Terminal before sending it again.", queueState: undefined, waitingFor: undefined });
       }
     }
   }, [queue.page, sendScope]);

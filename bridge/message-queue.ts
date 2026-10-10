@@ -55,6 +55,11 @@ const STORAGE_LIMIT = 8 * 1024 * 1024;
 export const STRANDED_TTL_MS = 24 * 3600_000;
 /** How long a delivered row stays in `recent`, so its journal state can still be shown. */
 export const RECENT_MS = 10 * 60_000;
+/**
+ * How long a delivered row stays listed to clients. Longer than RECENT_MS: a phone that slept through
+ * the delivery must still find the record, or it cannot tell delivered from lost.
+ */
+export const DELIVERED_LIST_MS = 2 * 3600_000;
 // A waiting row is re-read on the fallback interval at most this often: 2 s, then 4 s, then 8 s.
 const BACKOFF_MS = [2_000, 4_000, 8_000];
 const STRANDED_RECHECK_MS = 30_000;
@@ -153,11 +158,11 @@ export class MessageQueue {
       .filter((row) => row.state !== "sent" && (row.scope === scope || (!!pane && strandedOn(row, pane))))
       .map((row) => this.view(row));
   }
-  /** Delivered rows of a scope from the last {@link RECENT_MS}, newest last. */
+  /** Delivered rows of a scope from the last {@link DELIVERED_LIST_MS}, newest last. */
   async recent(scope: string) {
     await this.ready;
     await this.serial;
-    const since = this.now() - RECENT_MS;
+    const since = this.now() - DELIVERED_LIST_MS;
     return this.rows
       .filter((row) => row.scope === scope && row.state === "sent" && (row.sentAt ?? 0) > since)
       .map((row) => ({ ...row }));
@@ -207,7 +212,7 @@ export class MessageQueue {
           !(item.stranded && item.stranded.since < now - STRANDED_TTL_MS) &&
           (item.state !== "sent" ||
             retainedSent.has(item.id) ||
-            (item.sentAt ?? item.createdAt) > now - RECENT_MS),
+            (item.sentAt ?? item.createdAt) > now - DELIVERED_LIST_MS),
       );
       const unsent = this.rows.filter((item) => item.state !== "sent");
       if (unsent.length >= MAX_ROWS) throw new Error("Queue is full.");
