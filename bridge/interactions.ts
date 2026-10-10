@@ -595,19 +595,10 @@ export class Interactions {
     return dialog?.kind === kind ? (dialog.model as DialogModels[K]) : null;
   }
 
-  /** Bounded polling until `accept`; "drifted" when another dialog (or none) replaced this one. */
-  private async poll<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, tapped: DialogModels[K], accept: (m: DialogModels[K]) => boolean): Promise<"ok" | "drifted" | "timeout"> {
+  /** Until `accept` on the dialog `tapped` showed; false once another dialog replaced it or time ran out. */
+  private async settles<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, tapped: DialogModels[K], accept: (m: DialogModels[K]) => boolean): Promise<boolean> {
     const identity = DIALOG_CONTRACT[kind].identity as (a: DialogModels[K], b: DialogModels[K]) => boolean;
-    let seen = false;
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      await this.sleep(POLL_DELAY_MS);
-      const m = await this.model(io, pane, kind).catch(() => null);
-      if (!m) continue;
-      seen = true;
-      if (accept(m)) return "ok";
-      if (!identity(m, tapped)) return "drifted";
-    }
-    return seen ? "timeout" : "drifted";
+    return (await this.waitFor(io, pane, kind, (m) => identity(m, tapped), accept)) !== null;
   }
 
   /** Multi-select Submit/Next: move the pointer onto the advance row one verified step at a time, then Enter. */
@@ -633,8 +624,7 @@ export class Interactions {
   /** Preview question: the digit moves the pointer; Enter only once the pointer is verified there. */
   private async preview(io: PaneIO, pane: AgentView, tapped: PreviewSelectModel, n: number): Promise<AnswerResult> {
     await io.sendPaneKeys(pane.paneId, [String(n)]);
-    const pointed = await this.poll(io, pane, "preview-select", tapped, (m) => previewStructureEqual(m, tapped) && (m.options.find((o) => o.n === n)?.pointed ?? false));
-    if (pointed !== "ok") return changed();
+    if (!(await this.settles(io, pane, "preview-select", tapped, (m) => previewStructureEqual(m, tapped) && (m.options.find((o) => o.n === n)?.pointed ?? false)))) return changed();
     await io.sendPaneKeys(pane.paneId, ["Enter"]);
     return sent([String(n), "Enter"]);
   }
@@ -650,10 +640,10 @@ export class Interactions {
     if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
     const focused = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === "";
-    if ((await this.poll(io, pane, "prompt-select", tapped, focused)) !== "ok") return failed("The feedback box didn't open. Check the pane.");
+    if (!(await this.settles(io, pane, "prompt-select", tapped, focused))) return failed("The feedback box didn't open. Check the pane.");
     await io.sendPaneText(pane.paneId, text);
     const landed = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === text;
-    if ((await this.poll(io, pane, "prompt-select", tapped, landed)) !== "ok") return failed("The feedback didn't arrive. Nothing was submitted.");
+    if (!(await this.settles(io, pane, "prompt-select", tapped, landed))) return failed("The feedback didn't arrive. Nothing was submitted.");
     // The Enter is the irreversible write: one more read right before it.
     const fresh = await this.model(io, pane, "prompt-select");
     if (!fresh || !landed(fresh)) return changed();
@@ -661,14 +651,19 @@ export class Interactions {
     return sent([key, "Enter"]);
   }
 
-  /** Read once until `accept`, giving up after the shared poll budget or when another dialog shows. */
-  private async waitFor<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, same: (m: DialogModels[K]) => boolean, accept: (m: DialogModels[K]) => boolean): Promise<DialogModels[K] | null> {
+  /** Read `kind` until `accept`, giving up after the shared poll budget or when another dialog shows. */
+  private waitFor<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, same: (m: DialogModels[K]) => boolean, accept: (m: DialogModels[K]) => boolean): Promise<DialogModels[K] | null> {
+    return this.until(() => this.model(io, pane, kind), accept, same);
+  }
+
+  /** The shared bounded poll: a null or failed read is retried, a read that is not `same` stops it. */
+  private async until<T>(read: () => Promise<T | null>, accept: (v: T) => boolean, same: (v: T) => boolean = () => true): Promise<T | null> {
     for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
       await this.sleep(POLL_DELAY_MS);
-      const m = await this.model(io, pane, kind).catch(() => null);
-      if (!m) continue;
-      if (accept(m)) return m;
-      if (!same(m)) return null;
+      const v = await read().catch(() => null);
+      if (v === null) continue;
+      if (accept(v)) return v;
+      if (!same(v)) return null;
     }
     return null;
   }
@@ -699,9 +694,9 @@ export class Interactions {
     }
     await io.sendPaneKeys(pane.paneId, ["Tab"]);
     sentKeys.push("Tab");
-    if ((await this.waitForField(io, pane, field, tapped, n, "")) !== "ok") return failed("The text field didn't open. Check the pane.");
+    if (!(await this.fieldHolds(io, pane, field, tapped, n, ""))) return failed("The text field didn't open. Check the pane.");
     await io.sendPaneText(pane.paneId, text);
-    if ((await this.waitForField(io, pane, field, tapped, n, text)) !== "ok") return failed("Your text didn't arrive. Nothing was submitted.");
+    if (!(await this.fieldHolds(io, pane, field, tapped, n, text))) return failed("Your text didn't arrive. Nothing was submitted.");
     // The Enter is the irreversible write: one more read right before it.
     const fresh = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
     if (field(fresh.text, tapped, n) !== text) return changed();
@@ -709,14 +704,10 @@ export class Interactions {
     return sent([...sentKeys, "Enter"]);
   }
 
-  /** Poll until the open field on row `n` holds `want`; "gone" once the screen shows no such field. */
-  private async waitForField(io: PaneIO, pane: AgentView, field: AmendField, tapped: PromptModel, n: number, want: string): Promise<"ok" | "gone"> {
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      await this.sleep(POLL_DELAY_MS);
-      const read = await io.readPane(pane.paneId, "recent", this.lines, "ansi").catch(() => null);
-      if (read && field(read.text, tapped, n) === want) return "ok";
-    }
-    return "gone";
+  /** Whether the open field on row `n` comes to hold `want` within the poll budget. */
+  private async fieldHolds(io: PaneIO, pane: AgentView, field: AmendField, tapped: PromptModel, n: number, want: string): Promise<boolean> {
+    const read = async () => field((await io.readPane(pane.paneId, "recent", this.lines, "ansi")).text, tapped, n);
+    return (await this.until(read, (v) => v === want)) !== null;
   }
 
   /**
