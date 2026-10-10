@@ -72,12 +72,26 @@ export function orgEnv(base: Record<string, string | undefined>, PATH: string, e
   return env;
 }
 
+/**
+ * The Organizations CLI, or the upstream herdr-projects it forked from. Most hosts still run upstream,
+ * which has `thread resolve` but no `node` commands, `--json` contract or PR actions.
+ */
+function orgBinary(PATH: string): string | null {
+  return Bun.which("herdr-organizations", { PATH }) ?? Bun.which("herdr-projects", { PATH });
+}
+
+/** True when only upstream herdr-projects is available, so node-level commands do not exist. */
+export function upstreamOnly(PATH = servicePath()): boolean {
+  if (process.env.COLLIE_HERDR_ORGANIZATIONS_BIN?.trim()) return false;
+  return !Bun.which("herdr-organizations", { PATH }) && !!Bun.which("herdr-projects", { PATH });
+}
+
 export function defaultOrgRun(): OrgRun {
   return async (argv, opts) => {
     const configured = process.env.COLLIE_HERDR_ORGANIZATIONS_BIN?.trim();
     const PATH = servicePath();
-    const binary = configured || Bun.which("herdr-organizations", { PATH });
-    if (!binary) throw new OrgCliError("herdr-organizations not found");
+    const binary = configured || orgBinary(PATH);
+    if (!binary) throw new OrgCliError("Neither herdr-organizations nor herdr-projects is installed.");
 
     const child = Bun.spawn([binary, ...argv], {
       stdin: "pipe",
@@ -146,10 +160,14 @@ export async function resolveNode(
   run: OrgRun,
   socketPath: string,
   input: { project: string; id: string },
+  upstream: () => boolean = upstreamOnly,
 ): Promise<void> {
   const project = validateProjectSlug(input.project);
   const id = validateNodeId(input.id);
-  const result = await run(["node", "resolve", project, id, "--close-view"], {
+  // Upstream closes a thread with `thread resolve`; --keep-worktree keeps the branch and worktree
+  // the close dialog promises to keep.
+  const argv = upstream() ? ["thread", "resolve", project, id, "--keep-worktree"] : ["node", "resolve", project, id, "--close-view"];
+  const result = await run(argv, {
     env: { HERDR_SOCKET_PATH: socketPath },
     timeoutMs: 30_000,
   });

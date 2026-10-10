@@ -128,12 +128,20 @@ describe("herdr-organizations CLI adapter", () => {
   it("resolves a node with the close-view flag", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
 
-    await resolveNode(run, "/tmp/herdr.sock", { project: "nenu", id: "t-1234" });
+    await resolveNode(run, "/tmp/herdr.sock", { project: "nenu", id: "t-1234" }, () => false);
 
     expect(calls).toEqual([{
       argv: ["node", "resolve", "nenu", "t-1234", "--close-view"],
       opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
     }]);
+  });
+
+  it("closes a thread through upstream herdr-projects, keeping its worktree", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
+
+    await resolveNode(run, "/tmp/herdr.sock", { project: "awam", id: "t-0042" }, () => true);
+
+    expect(calls.map((call) => call.argv)).toEqual([["thread", "resolve", "awam", "t-0042", "--keep-worktree"]]);
   });
 });
 
