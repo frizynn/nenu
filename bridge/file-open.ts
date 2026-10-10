@@ -53,6 +53,10 @@ type Refusal = { status: number; message: string };
 
 const refuse = (status: number, message: string): Refusal => ({ status, message });
 const PRIVATE = refuse(403, "This file is private and cannot be opened from Nenu.");
+
+// Places on a Mac where secrets live as ordinary-looking files the preview's list does not name:
+// the login keychain, cookie stores and browser profiles (saved passwords, session cookies).
+const MAC_SECRETS = /\/Library\/(?:Keychains|Cookies|Application Support\/(?:Google\/Chrome|BraveSoftware|Firefox|Arc|Microsoft Edge)|Safari|Containers\/com\.apple\.Safari)(?:\/|$)|\.keychain(?:-db)?$/i;
 const MISSING = refuse(404, "File not found.");
 
 /**
@@ -68,7 +72,7 @@ async function openChecked(requested: unknown, stateDir: string): Promise<{ hand
   const path = await realpath(requested).catch(() => null);
   if (!path) return MISSING;
   const state = await realpath(stateDir).catch(() => stateDir);
-  if (isPrivateProjectPath(path) || path === state || path.startsWith(state + sep)) return PRIVATE;
+  if (isPrivateProjectPath(path) || MAC_SECRETS.test(path) || path === state || path.startsWith(state + sep)) return PRIVATE;
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
   if (!handle) return MISSING;
   try {

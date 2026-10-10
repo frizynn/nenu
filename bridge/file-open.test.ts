@@ -33,7 +33,12 @@ describe("file open grants", () => {
     await writeFile(join(dir, "server.pem"), "key");
     await writeFile(join(state, "audit.log"), "{}");
     await symlink(join(dir, ".ssh", "config"), join(dir, "innocent.txt"));
-    for (const path of [join(dir, ".ssh", "config"), join(dir, ".env"), join(dir, "server.pem"), join(dir, "innocent.txt"), join(state, "audit.log")])
+    await mkdir(join(dir, "Library", "Keychains"), { recursive: true });
+    await writeFile(join(dir, "Library", "Keychains", "login.keychain-db"), "k");
+    await mkdir(join(dir, "Library", "Application Support", "Google", "Chrome", "Default"), { recursive: true });
+    await writeFile(join(dir, "Library", "Application Support", "Google", "Chrome", "Default", "Cookies.txt"), "c");
+    for (const path of [join(dir, ".ssh", "config"), join(dir, ".env"), join(dir, "server.pem"), join(dir, "innocent.txt"), join(state, "audit.log"),
+      join(dir, "Library", "Keychains", "login.keychain-db"), join(dir, "Library", "Application Support", "Google", "Chrome", "Default", "Cookies.txt")])
       expect(await checkOpenable(path, state)).toMatchObject({ status: 403 });
   });
 
