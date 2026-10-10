@@ -474,8 +474,8 @@ export function conversationRoot(text: string): string | null {
  */
 export class ClaudeTranscriptSource implements TranscriptSource {
   private readonly pathCache = new Map<string, { path: string; root: string }>();
-  /** followContinuation's answer per log, valid while its directory's listing is unchanged. */
-  private readonly followCache = new Map<string, { dirMtimeMs: number; best: string }>();
+  /** Conversation root per log file (see rootOf). */
+  private readonly rootCache = new Map<string, string>();
 
   private readonly roots: string[];
 
@@ -545,31 +545,10 @@ export class ClaudeTranscriptSource implements TranscriptSource {
    */
   private async followContinuation(path: string, root: string): Promise<string> {
     const dir = dirname(path);
-    // Memoised on the directory's mtime, which moves when a log is created, renamed or deleted —
-    // the only way a continuation can appear. Appends don't move it, and every history read and
-    // every watched journal asks this question, so the scan (a head read of each sibling) runs once
-    // per new file instead of once per request. One more case invalidates it: the reported log
-    // written after the continuation we picked, which the full scan would have switched back to.
-    const dirMtimeMs = (await stat(dir).catch(() => null))?.mtimeMs;
-    const memo = this.followCache.get(path);
-    if (memo && dirMtimeMs !== undefined && memo.dirMtimeMs === dirMtimeMs) {
-      if (memo.best === path) return path;
-      const [best, own] = await Promise.all([statFile(memo.best), statFile(path)]);
-      if (best && own && best.mtimeMs >= own.mtimeMs) return memo.best;
-    }
-    const best = await this.scanContinuation(path, root, dir);
-    if (dirMtimeMs !== undefined) {
-      this.followCache.set(path, { dirMtimeMs, best });
-      if (this.followCache.size > 256) this.followCache.delete(this.followCache.keys().next().value!);
-    }
-    return best;
-  }
-
-  private async scanContinuation(path: string, root: string, dir: string): Promise<string> {
     let self: { root: string | null; size: number; mtimeMs: number };
     try {
       const st = await stat(path);
-      self = { root: conversationRoot(await head(path)), size: st.size, mtimeMs: st.mtimeMs };
+      self = { root: await this.rootOf(path, st), size: st.size, mtimeMs: st.mtimeMs };
     } catch {
       return path;
     }
@@ -595,13 +574,32 @@ export class ClaudeTranscriptSource implements TranscriptSource {
         // read a file the journal never owned, which is exactly what files.ts promises it can't.
         const real = await containedRealpath(candidate, root);
         if (real === null) continue;
-        if (conversationRoot(await head(real)) !== self.root) continue;
+        if ((await this.rootOf(real, st)) !== self.root) continue;
         best = { path: real, size: st.size, mtimeMs: st.mtimeMs };
       } catch {
         continue; // unreadable sibling — ignore it rather than fail the whole read
       }
     }
     return best.path;
+  }
+
+  /**
+   * A log's conversation root, read from its first line once per file. Only the answer is cached,
+   * never which file wins: sizes, mtimes and containment are re-checked on every call because the
+   * continuation grows by appends and a sibling can be swapped for a symlink at any time. A null root
+   * (empty or half-written first line) is not cached, so a file still being created is read again.
+   * Keyed by inode too, so a path deleted and recreated with another conversation is read afresh.
+   */
+  private async rootOf(path: string, st: { ino: number }): Promise<string | null> {
+    const key = `${st.ino}:${path}`;
+    const cached = this.rootCache.get(key);
+    if (cached !== undefined) return cached;
+    const value = conversationRoot(await head(path));
+    if (value !== null) {
+      this.rootCache.set(key, value);
+      if (this.rootCache.size > 1024) this.rootCache.delete(this.rootCache.keys().next().value!);
+    }
+    return value;
   }
 
   stat = statFile;
