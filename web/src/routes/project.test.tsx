@@ -146,13 +146,29 @@ it("keeps a phone thread's way to the project's threads and coordinator when it 
   expect(router.state.location.pathname).toBe("/pane/worker");
 });
 
-it("shows the task list as the project page when no coordinator is running", async () => {
+it("shows the organization with a way to start the coordinator when none is running", async () => {
   const { router } = setup("/project/hub", home([pane("worker")]));
-  expect(await screen.findByText(/coordinator is not running/)).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Start coordinator" })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/project/hub");
-  const list = within(screen.getByRole("main"));
-  expect(list.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
-  expect(list.getByRole("button", { name: /^Build/ })).toBeInTheDocument();
+  const main = within(screen.getByRole("main"));
+  expect(main.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
+  expect(within(main.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Build/ })).toBeInTheDocument();
+});
+
+it("opens the coordinator's chat once Start has brought it up", async () => {
+  let running = false;
+  server.use(http.post("/api/org/project/open", () => { running = true; return HttpResponse.json({ ok: true, message: "started codex as hp-hub" }); }));
+  const router = createMemoryRouter([{
+    id: ROOT_ROUTE_ID, path: "/", element: <Outlet />,
+    loader: () => home(running ? [pane("coord"), pane("worker")] : [pane("worker")]),
+    children: [
+      { path: "project/:projectSlug", element: <ProjectRoute /> },
+      { path: "pane/:paneId", element: <p>PANE</p> },
+    ],
+  }], { initialEntries: ["/project/hub"] });
+  render(<RouterProvider router={router} />);
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Start coordinator" }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/pane/coord"));
 });
 
 it("leaves chats outside a project unframed", async () => {

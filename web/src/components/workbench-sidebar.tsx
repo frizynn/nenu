@@ -14,7 +14,7 @@ import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import {
-  chatMatches, isOpenThread, matches, paneTitle, projectForPane, projectGroups, type ProjectGroup,
+  chatMatches, isOpenThread, matches, nestThreads, paneTitle, projectForPane, projectGroups, type ProjectGroup, type ThreadNode,
 } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
@@ -225,30 +225,6 @@ interface TreeFolds {
   onExpand: (key: string, open: boolean) => void;
 }
 
-/** A thread with the threads it coordinates, as Organizations nests them. */
-export interface ThreadNode {
-  thread: ProjectThreadView;
-  children: ThreadNode[];
-}
-
-/** Nests threads under their parent; one whose parent is missing (resolved, filtered out) is a root. */
-export function threadTree(threads: readonly ProjectThreadView[]): ThreadNode[] {
-  const nodes = new Map(threads.map((thread) => [thread.id, { thread, children: [] as ThreadNode[] }]));
-  const parentOf = (node: ThreadNode) => {
-    // A corrupt record could loop its parents; such a thread is listed at the root instead.
-    for (let seen = 0, id = node.thread.parentId; seen <= nodes.size; seen++) {
-      const ancestor = nodes.get(id);
-      if (!ancestor) return nodes.get(node.thread.parentId);
-      if (ancestor === node) return undefined;
-      id = ancestor.thread.parentId;
-    }
-    return undefined;
-  };
-  const roots: ThreadNode[] = [];
-  for (const node of nodes.values()) (parentOf(node)?.children ?? roots).push(node);
-  return roots;
-}
-
 const STATE_WORD: Partial<Record<ThreadState, string>> = { blocked: "needs you", review: "review" };
 
 function StateDot({ state, className = "size-2" }: { state: ThreadState; className?: string }) {
@@ -316,7 +292,7 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
                 : <span className="nav-row-note">{project.coordinator.agent}</span>}
             </Link>
           )}
-          {threadTree(group.open).map((node) => branch(node, 1))}
+          {nestThreads(group.open).map((node) => branch(node, 1))}
           {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)} onClick={onNavigate}
               aria-current={pane.paneId === paneId ? "page" : undefined}>

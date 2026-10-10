@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-10-10
+
+### Added
+- The project page shows its organization when the coordinator is not running: a Start coordinator button (Organizations' `open`), open threads nested under the coordinators that run them (most urgent first), and resolved ones folded. (4c7f314d)
+- New coordinator beside New thread, with a parent (project root or an open coordinator) and a profile; upstream herdr-projects gets top-level threads only. (540f879f)
+
+### Fixed
+- New thread works without templates; it used to end in "No templates yet" on every Organizations release. (540f879f)
+
 ## [0.56.0] - 2026-10-10
 
 ### Added

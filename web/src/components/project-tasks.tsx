@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 
-import { NewThreadMenu, errorMessage } from "@/components/new-thread-menu";
+import { NewNodeActions, errorMessage } from "@/components/node-start";
 import { StatusDot } from "@/components/status-badge";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
@@ -136,37 +136,12 @@ interface ProjectTasksProps {
 export function ProjectTasks({ project, threads = project.threads, title = project.name, subtitle = project.goal, panes, session, currentPaneId, readOnly,
   showCoordinator = true, onOpenPane, onChanged, action, now = Date.now() }: ProjectTasksProps) {
   const [closing, setClosing] = useState<ProjectThreadView | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const groups = bucketed(threads);
   const coordinator = showCoordinator ? project.coordinator : undefined;
 
-  async function closeThread() {
-    if (!closing) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await resolveOrgNode({ project: project.slug, id: closing.id }, session);
-      setClosing(null);
-      onChanged();
-    } catch (failure) {
-      // The thread stays in the snapshot; the dialog stays open with the cause.
-      setError(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="project-tasks">
-      <header className="mb-4">
-        <div className="flex items-start gap-2">
-          <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
-          {project.status === "paused" && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
-          {action}
-        </div>
-        {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{subtitle}</p>}
-      </header>
+      <TasksHeader title={title} subtitle={subtitle} paused={project.status === "paused"} action={action} />
 
       {coordinator && (
         <ul className="task-list mb-2">
@@ -176,32 +151,88 @@ export function ProjectTasks({ project, threads = project.threads, title = proje
       )}
 
       {groups.map(([bucket, list]) => (
-        <details key={bucket} className="task-history mb-2" open={bucket !== "resolved" || list.some((thread) => thread.paneId !== undefined && thread.paneId === currentPaneId)}>
-          <summary className="flex min-h-9 items-center gap-2 rounded-md bg-muted/40 px-2.5 text-[13px] font-medium">
-            <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />{BUCKET_LABEL[bucket]} <span className="tabular-nums font-normal text-muted-foreground">{list.length}</span>
-          </summary>
+        <TaskGroup key={bucket} label={BUCKET_LABEL[bucket]} count={list.length}
+          open={bucket !== "resolved" || list.some((thread) => thread.paneId !== undefined && thread.paneId === currentPaneId)}>
           {bucket === "needs" && <p className="px-2.5 pt-1.5 text-xs text-muted-foreground">Decisions, reviews and permission requests.</p>}
           <ul className="task-list mt-1">
             {list.map((thread) => (
               <TaskRow key={thread.id} dot={threadDot(thread)} title={thread.title} detail={threadDetail(thread, panes)} age={threadAge(thread, now)}
                 current={currentPaneId !== undefined && thread.paneId === currentPaneId}
                 onOpen={thread.paneId ? () => onOpenPane(thread.paneId!) : undefined}
-                onClose={bucket !== "resolved" && !readOnly ? () => { setError(null); setClosing(thread); } : undefined} />
+                onClose={bucket !== "resolved" && !readOnly ? () => setClosing(thread) : undefined} />
             ))}
           </ul>
-        </details>
+        </TaskGroup>
       ))}
       {groups.length === 0 && <p className="py-3 text-sm text-muted-foreground">No threads yet.</p>}
-      {!readOnly && <div className="mt-3"><NewThreadMenu project={project} session={session} onStarted={onChanged} /></div>}
+      {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={onChanged} /></div>}
 
-      <ConfirmDialog open={closing !== null} title="Close this thread?" confirmLabel="Close thread" busy={busy} error={error}
-        description={<><span className="font-medium text-foreground">{closing?.title}</span> stops. Its branch, worktree and report are kept.</>}
-        onConfirm={() => void closeThread()} onCancel={() => { if (!busy) setClosing(null); }} />
+      <CloseThreadDialog project={project} thread={closing} session={session} onCancel={() => setClosing(null)}
+        onClosed={() => { setClosing(null); onChanged(); }} />
     </div>
   );
 }
 
-function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
+/** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
+export function TasksHeader({ title, subtitle, paused, action }: { title: string; subtitle?: ReactNode; paused: boolean; action?: ReactNode }) {
+  return (
+    <header className="mb-4">
+      <div className="flex items-start gap-2">
+        <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
+        {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
+        {action}
+      </div>
+      {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{subtitle}</p>}
+    </header>
+  );
+}
+
+/** A foldable group of task rows with its count. */
+export function TaskGroup({ label, count, open, children }: { label: string; count: number; open: boolean; children: ReactNode }) {
+  return (
+    <details className="task-history mb-2" open={open}>
+      <summary className="flex min-h-9 items-center gap-2 rounded-md bg-muted/40 px-2.5 text-[13px] font-medium">
+        <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />{label} <span className="tabular-nums font-normal text-muted-foreground">{count}</span>
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+/** Confirm closing a thread (Organizations' resolve); on failure it stays open with the cause. */
+export function CloseThreadDialog({ project, thread, session, onClosed, onCancel }: {
+  project: ProjectView;
+  thread: ProjectThreadView | null;
+  session?: string;
+  onClosed: () => void;
+  onCancel: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function close() {
+    if (!thread) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await resolveOrgNode({ project: project.slug, id: thread.id }, session);
+      onClosed();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ConfirmDialog open={thread !== null} title="Close this thread?" confirmLabel="Close thread" busy={busy} error={error}
+      description={<><span className="font-medium text-foreground">{thread?.title}</span> stops. Its branch, worktree and report are kept.</>}
+      onConfirm={() => void close()} onCancel={() => { if (!busy) { setError(null); onCancel(); } }} />
+  );
+}
+
+/** One thread's row; `children` hangs the threads a coordinator runs inside the same list item. */
+export function TaskRow({ dot, title, detail, age, current, onOpen, onClose, children }: {
   dot: ThreadDot;
   title: string;
   detail: string;
@@ -209,6 +240,7 @@ function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
   current: boolean;
   onOpen?: () => void;
   onClose?: () => void;
+  children?: ReactNode;
 }) {
   const body = <>
     <ThreadStateDot state={dot} className="mt-1.5 size-2" />
@@ -219,9 +251,12 @@ function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
     {age && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
   </>;
   return (
-    <li className="task-row" aria-current={current ? "true" : undefined}>
-      {onOpen ? <button type="button" className="task-main" onClick={onOpen}>{body}</button> : <div className="task-main opacity-75">{body}</div>}
-      {onClose && <button type="button" className="task-close" aria-label={`Close ${title}`} title="Close thread" onClick={onClose}><Check aria-hidden className="size-4" /></button>}
+    <li aria-current={current ? "true" : undefined}>
+      <div className="task-row">
+        {onOpen ? <button type="button" className="task-main" onClick={onOpen}>{body}</button> : <div className="task-main opacity-75">{body}</div>}
+        {onClose && <button type="button" className="task-close" aria-label={`Close ${title}`} title="Close thread" onClick={onClose}><Check aria-hidden className="size-4" /></button>}
+      </div>
+      {children}
     </li>
   );
 }

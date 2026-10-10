@@ -8,6 +8,10 @@ export type OrgRun = (
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const NODE_ID_RE = /^t-\d{4,}$/;
+/** Organizations' profile names: letters, digits, `.`, `_` and `-`, at most 40, not led by `-` or `.`. */
+export const PROFILE_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,39}$/;
+export const NODE_ROLES = ["worker", "coordinator"] as const;
+export type NodeRole = typeof NODE_ROLES[number];
 
 export class OrgValidationError extends Error {
   constructor(message: string) {
@@ -41,6 +45,20 @@ export function validateNodeId(value: unknown): string {
 export function validateParent(value: unknown): string {
   if (value === "root") return value;
   return validateNodeId(value);
+}
+
+export function validateRole(value: unknown): NodeRole {
+  if (value === undefined) return "worker";
+  const role = NODE_ROLES.find((candidate) => candidate === value);
+  if (!role) throw new OrgValidationError("Role must be worker or coordinator.");
+  return role;
+}
+
+/** A profile name, or "" for the project's default. */
+export function validateProfile(value: unknown): string {
+  if (value === undefined || value === "") return "";
+  if (typeof value !== "string" || !PROFILE_RE.test(value)) throw new OrgValidationError("Profile must be a profile name.");
+  return value;
 }
 
 export function validateTitle(value: unknown): string {
@@ -133,33 +151,75 @@ export async function listTemplates(run: OrgRun, project: string): Promise<Templ
   });
 }
 
-export async function startFromTemplate(
+/** The profiles this host can launch, by name (`profile list --names`); none when the CLI cannot say. */
+export async function listProfiles(run: OrgRun): Promise<string[]> {
+  const result = await run(["profile", "list", "--names"], { timeoutMs: 10_000 });
+  if (result.code !== 0) return [];
+  return result.stdout.split("\n").map((line) => line.trim()).filter((name) => PROFILE_RE.test(name));
+}
+
+/** What the start form offers for a project: its templates and the profiles a node can run. */
+export async function startOptions(run: OrgRun, project: string): Promise<{ templates: TemplateView[]; profiles: string[] }> {
+  const [templates, profiles] = await Promise.all([listTemplates(run, project), listProfiles(run)]);
+  return { templates, profiles };
+}
+
+/**
+ * Start a worker or a coordinator under the project root or an open coordinator, from a template
+ * (which carries its role and profile) or from a role and an optional profile. Upstream
+ * herdr-projects has no nodes: it starts a top-level thread with `thread start`, and refuses the rest.
+ */
+export async function startNode(
   run: OrgRun,
   socketPath: string,
-  input: { project: string; template: string; title: string; parent: string; task: string },
-): Promise<{ id: string; parentId: string; role: string; template: string }> {
+  input: { project: unknown; title: unknown; parent: unknown; task: unknown; role?: unknown; profile?: unknown; template?: unknown },
+  upstream: () => boolean = upstreamOnly,
+): Promise<{ id: string; project: string; title: string; parent: string; role: NodeRole; profile: string; template: string }> {
   const project = validateProjectSlug(input.project);
-  const template = validateTemplateName(input.template);
   const title = validateTitle(input.title);
   const parent = validateParent(input.parent);
   const task = validateTask(input.task);
-  const result = await run(
-    ["node", "start", project, "--template", template, "--title", title, "--parent", parent, "--task-file", "-"],
-    { stdin: task, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 },
-  );
+  const role = validateRole(input.role);
+  const profile = validateProfile(input.profile);
+  const template = input.template === undefined || input.template === "" ? "" : validateTemplateName(input.template);
+  if (template && profile) throw new OrgValidationError("A template carries its own profile.");
+  const nodes = !upstream();
+  if (!nodes && (template || role !== "worker" || parent !== "root")) {
+    throw new OrgValidationError("herdr-projects starts only top-level threads; coordinators, nesting and templates need Herdr Organizations.");
+  }
+  // `--flag=value` keeps a title that starts with a hyphen from reading as a flag.
+  const fields = [`--title=${title}`, ...(profile ? [`--profile=${profile}`] : [])];
+  const argv = nodes
+    ? ["node", "start", project, ...(template ? [`--template=${template}`] : [`--role=${role}`]), `--parent=${parent}`, ...fields, "--task-file", "-"]
+    : ["thread", "start", project, ...fields, "--task-file", "-"];
+  const result = await run(argv, { stdin: task, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
   if (result.code !== 0) throw commandError(result);
 
-  const value = parseJson(result.stdout, "node start");
-  if (!isRecord(value) || !isNodeStartResult(value)) {
-    throw new OrgCliError("herdr-organizations returned an invalid node start response.");
+  const value = parseJson(result.stdout, argv.slice(0, 2).join(" "));
+  if (!isRecord(value) || typeof value.id !== "string" || !NODE_ID_RE.test(value.id)) {
+    throw new OrgCliError("herdr-organizations returned an invalid start response.");
   }
-  return { id: value.id, parentId: value.parent_id, role: value.role, template: value.template };
+  return { id: value.id, project, title, parent, role, profile, template };
+}
+
+/**
+ * `open`: start the project's coordinator in the project's workspace of this Herdr session, or focus
+ * it when one already runs. The bridge has no terminal, so it never starts in the bridge's own pane.
+ * Returns the CLI's first line, which says what happened ("started …", or "… is not ready yet …"
+ * when the agent waits on a dialog); `open` exits 0 in both cases.
+ */
+export async function openProject(run: OrgRun, socketPath: string, input: { project: unknown }): Promise<{ message: string }> {
+  const project = validateProjectSlug(input.project);
+  const result = await run(["open", project], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
+  if (result.code !== 0) throw commandError(result);
+  const first = result.stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return { message: first.slice(0, 300) };
 }
 
 export async function resolveNode(
   run: OrgRun,
   socketPath: string,
-  input: { project: string; id: string },
+  input: { project: unknown; id: unknown },
   upstream: () => boolean = upstreamOnly,
 ): Promise<void> {
   const project = validateProjectSlug(input.project);
@@ -443,13 +503,6 @@ function parseTemplate(value: unknown): TemplateView | undefined {
     memoryChars: value.memory_chars,
     updated: value.updated,
   };
-}
-
-function isNodeStartResult(value: Record<string, unknown>): value is Record<"id" | "parent_id" | "role" | "template", string> {
-  return typeof value.id === "string" && NODE_ID_RE.test(value.id) &&
-    typeof value.parent_id === "string" &&
-    typeof value.role === "string" &&
-    typeof value.template === "string";
 }
 
 function isCharCount(value: unknown): value is number {

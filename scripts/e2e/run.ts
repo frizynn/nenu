@@ -2,14 +2,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser } from "./browser.ts";
+import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { tickJournal } from "./scenario.ts";
+import { demoOrg, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
 //
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
+//   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -62,8 +63,8 @@ const perMinute = (o: Record<string, number>, ms: number) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round((v * 60_000 / ms) * 10) / 10]));
 const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 
-async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number): Promise<T> {
-  const bridge = await startTestBridge({ port, fake: true, epoch });
+async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number, org?: (herd: DemoHerd, now: number) => OrgSeed): Promise<T> {
+  const bridge = await startTestBridge({ port, fake: true, epoch, org });
   let browser: Browser | null = null;
   try {
     browser = await launchWebkit();
@@ -112,6 +113,83 @@ async function smoke(): Promise<void> {
   await writeFile(join(outDir, "smoke.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (result.unexpectedWrites.length || result.projects) process.exit(1);
+}
+
+/**
+ * The project page of a project whose coordinator is not running, on a phone and a desk; then the
+ * person creates a coordinator under the project root, a thread under that coordinator, and starts
+ * the project coordinator. Organizations is fake-org.ts, so the run reports the exact argv Nenu ran.
+ */
+async function project(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const shots: string[] = [];
+    const shoot = async (page: Page, name: string) => {
+      const path = join(outDir, `${name}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      shots.push(path);
+    };
+    const openProject = async (device: typeof PHONE | typeof DESKTOP) => {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + "/project/awam");
+      await page.locator('main >> text="Panel depósito"').waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      return { page, close: () => context.close() };
+    };
+    const calledWith = async (verb: string) => {
+      for (let i = 0; i < 100; i++) {
+        if ((await bridge.orgCalls()).some((argv) => argv[0] === verb)) return;
+        await sleep(100);
+      }
+      throw new Error(`Organizations was never asked to ${verb}`);
+    };
+
+    // Both pages first, so neither capture shows what the flows below create.
+    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      const { page, close } = await openProject(device);
+      await shoot(page, `project-${name}`);
+      await close();
+    }
+    let flowError: string | null = null;
+    for (const [name, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+      const { page, close } = await openProject(device);
+      try {
+        if (name === "desktop") {
+          await page.getByRole("button", { name: "New coordinator" }).click({ timeout: 5000 });
+          await page.getByLabel("Title", { exact: true }).fill("Pagos y facturación");
+          await page.getByLabel("Task", { exact: true }).fill("Coordinate the billing work: invoices, receipts and the payment provider.");
+          await shoot(page, "new-coordinator-desktop");
+          await page.getByRole("button", { name: "Create coordinator" }).click();
+          await page.locator('main >> text="Pagos y facturación"').waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(500);
+          await shoot(page, "project-created-desktop");
+          await page.getByRole("button", { name: "Start coordinator" }).click();
+          await calledWith("open");
+        } else {
+          await page.getByRole("button", { name: "New thread" }).click({ timeout: 5000 });
+          await page.getByLabel("Title", { exact: true }).fill("Ajustar checkout");
+          // A select's accessible name carries its chosen option, so its label is matched loosely.
+          await page.getByLabel("Parent").selectOption("t-0010");
+          await page.getByLabel("Task", { exact: true }).fill("Make the checkout fit a 390 px screen.");
+          await shoot(page, "new-thread-phone");
+          await page.getByRole("button", { name: "Create thread" }).click();
+          await page.locator('main >> text="Ajustar checkout"').waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(500);
+          await shoot(page, "project-created-phone");
+        }
+      } catch (error) {
+        flowError ??= `${name}: ${(error as Error).message.split("\n")[0]}`;
+        await shoot(page, `failed-${name}`);
+      }
+      await close();
+    }
+    return { shots, flowError, orgCalls: await bridge.orgCalls(), unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, demoOrg);
+  await writeFile(join(outDir, "project.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.flowError || result.unexpectedWrites.length) process.exit(1);
 }
 
 async function baseline(): Promise<void> {
@@ -269,9 +347,10 @@ async function compare(a: string, b: string): Promise<void> {
 
 const command = positionals[0];
 if (command === "smoke") await smoke();
+else if (command === "project") await project();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

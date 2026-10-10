@@ -190,9 +190,11 @@
 .quiet-action:hover, .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 
 .task-list { display: flex; flex-direction: column; gap: 1px; }
+/* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */
+.task-branch { margin-left: 11px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
 .task-row { display: flex; align-items: flex-start; border-radius: 8px; }
-.task-row:hover, .task-row[aria-current="true"] { background: var(--workbench-row-hover); }
-.task-row[aria-current="true"] { background: var(--workbench-row-selected); }
+.task-row:hover { background: var(--workbench-row-hover); }
+[aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
 .task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: 8px; }
 .task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
 .task-row:hover .task-close, .task-close:focus-visible { opacity: 1; }

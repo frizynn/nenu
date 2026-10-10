@@ -23,9 +23,10 @@ const pane = (action: string, method: string, level: Level): Case =>
   ({ method, path: `/api/pane/w%3Ap${action ? `/${action}` : ""}`, level, session: true });
 
 const CASES: Case[] = [
-  { method: "GET", path: "/api/org/templates", level: "read", session: false },
+  { method: "GET", path: "/api/org/start-options", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
+  { method: "POST", path: "/api/org/project/open", level: "write", session: true },
   { method: "POST", path: "/api/org/project/create", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/merge", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/set", level: "write", session: true },

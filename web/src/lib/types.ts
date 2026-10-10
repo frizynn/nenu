@@ -229,15 +229,19 @@ export interface ProjectView {
   source?: "json" | "files";
   /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
   prActions?: boolean;
+  /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
+  nodeActions?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
 }
+
+export type NodeRole = "worker" | "coordinator";
 
 export interface TemplateView {
   name: string;
   scope: "global" | "project";
   description: string;
-  role: "worker" | "coordinator";
+  role: NodeRole;
   canSpawn: boolean;
   harness: string;
   model: string;

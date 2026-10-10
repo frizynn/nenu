@@ -2,13 +2,15 @@ import { describe, expect, it } from "bun:test";
 
 import {
   createProject,
+  listProfiles,
   listTemplates,
   mergeThread,
+  openProject,
   orgEnv,
   readOverview,
   resolveNode,
   setThreadFlags,
-  startFromTemplate,
+  startNode,
   type OrgRun,
 } from "./org-cli.ts";
 
@@ -85,42 +87,70 @@ describe("herdr-organizations CLI adapter", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("sends the task on stdin and passes the Herdr socket through the environment", async () => {
-    const { run, calls } = fakeRun({
-      code: 0,
-      stdout: JSON.stringify({ id: "t-1234", parent_id: "root", role: "worker", template: "review-worker" }),
-      stderr: "",
-    });
+  it("starts a template with the task on stdin and the Herdr socket in the environment", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-1234", parent_id: "root", role: "worker" }), stderr: "" });
     const task = "Review the accessibility changes.";
 
-    expect(await startFromTemplate(run, "/tmp/herdr.sock", {
-      project: "nenu",
-      template: "review-worker",
-      title: "Review accessibility",
-      parent: "root",
-      task,
-    })).toEqual({ id: "t-1234", parentId: "root", role: "worker", template: "review-worker" });
+    expect(await startNode(run, "/tmp/herdr.sock", {
+      project: "nenu", template: "review-worker", title: "Review accessibility", parent: "root", task,
+    }, () => false)).toEqual({ id: "t-1234", project: "nenu", title: "Review accessibility", parent: "root", role: "worker", profile: "", template: "review-worker" });
     expect(calls).toEqual([{
-      argv: ["node", "start", "nenu", "--template", "review-worker", "--title", "Review accessibility", "--parent", "root", "--task-file", "-"],
+      argv: ["node", "start", "nenu", "--template=review-worker", "--parent=root", "--title=Review accessibility", "--task-file", "-"],
       opts: { stdin: task, env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
     }]);
   });
 
+  it("starts a coordinator under another coordinator with the profile it names", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-0042", parent_id: "t-0010", role: "coordinator", profile: "codex" }), stderr: "" });
+
+    expect(await startNode(run, "/tmp/herdr.sock", {
+      project: "awam", title: "-Billing", parent: "t-0010", task: "Coordinate billing.", role: "coordinator", profile: "codex",
+    }, () => false)).toMatchObject({ id: "t-0042", role: "coordinator", parent: "t-0010", profile: "codex" });
+    expect(calls[0]!.argv).toEqual(["node", "start", "awam", "--role=coordinator", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
+  });
+
+  it("starts a top-level thread through upstream herdr-projects and refuses what it cannot do", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-0007", kind: "tab", profile: "", agent: "claude", branch: "", pane_id: "w1:p3" }), stderr: "" });
+    const thread = { project: "awam", title: "Hotfix", parent: "root", task: "Fix the login." };
+
+    expect(await startNode(run, "/tmp/herdr.sock", thread, () => true)).toMatchObject({ id: "t-0007", role: "worker", parent: "root" });
+    expect(calls[0]!.argv).toEqual(["thread", "start", "awam", "--title=Hotfix", "--task-file", "-"]);
+    for (const refused of [{ role: "coordinator" }, { parent: "t-0001" }, { template: "review-worker" }]) {
+      await expect(startNode(run, "/tmp/herdr.sock", { ...thread, ...refused }, () => true)).rejects.toThrow("need Herdr Organizations");
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  it("lists the profile names and none when the CLI cannot say", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "claude\ncodex\n-bad\nsonnet.fast\n", stderr: "" });
+    expect(await listProfiles(run)).toEqual(["claude", "codex", "sonnet.fast"]);
+    expect(calls[0]).toEqual({ argv: ["profile", "list", "--names"], opts: { timeoutMs: 10_000 } });
+    expect(await listProfiles(fakeRun({ code: 2, stdout: "", stderr: "unrecognized subcommand 'profile'" }).run)).toEqual([]);
+  });
+
+  it("opens a project's coordinator in the bridge's Herdr session", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "started codex as hp-awam", stderr: "" });
+
+    expect(await openProject(run, "/tmp/herdr.sock", { project: "awam" })).toEqual({ message: "started codex as hp-awam" });
+    expect(calls).toEqual([{ argv: ["open", "awam"], opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 } }]);
+    await expect(openProject(fakeRun({ code: 1, stdout: "", stderr: "error: `awam` is archived" }).run, "/s", { project: "awam" })).rejects.toThrow("is archived");
+  });
+
   it("rejects invalid input before running the CLI", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: "[]", stderr: "" });
-    const valid = {
-      project: "nenu",
-      template: "review-worker",
-      title: "Review accessibility",
-      parent: "root",
-      task: "Review the change.",
-    };
+    const valid = { project: "nenu", title: "Review accessibility", parent: "root", task: "Review the change." };
+    const start = (input: Record<string, unknown>) => startNode(run, "/tmp/herdr.sock", { ...valid, ...input }, () => false);
 
     await expect(listTemplates(run, "bad..slug")).rejects.toThrow("Project must use lowercase");
     await expect(listTemplates(run, "Uppercase")).rejects.toThrow("Project must use lowercase");
-    await expect(startFromTemplate(run, "/tmp/herdr.sock", { ...valid, template: "Review" })).rejects.toThrow("Template must use lowercase");
-    await expect(startFromTemplate(run, "/tmp/herdr.sock", { ...valid, title: "First line\nSecond line" })).rejects.toThrow("Title cannot contain line breaks");
-    await expect(startFromTemplate(run, "/tmp/herdr.sock", { ...valid, task: "  " })).rejects.toThrow("Task is required");
+    await expect(start({ template: "Review" })).rejects.toThrow("Template must use lowercase");
+    await expect(start({ title: "First line\nSecond line" })).rejects.toThrow("Title cannot contain line breaks");
+    await expect(start({ task: "  " })).rejects.toThrow("Task is required");
+    await expect(start({ role: "admin" })).rejects.toThrow("Role must be worker or coordinator");
+    await expect(start({ profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
+    await expect(start({ template: "review-worker", profile: "codex" })).rejects.toThrow("carries its own profile");
+    await expect(start({ parent: "../t-1" })).rejects.toThrow("Node ID must look like t-1234");
+    await expect(openProject(run, "/s", { project: "../awam" })).rejects.toThrow("Project must use lowercase");
     await expect(resolveNode(run, "/tmp/herdr.sock", { project: "nenu", id: "t-1" })).rejects.toThrow("Node ID must look like t-1234");
     expect(calls).toEqual([]);
   });
