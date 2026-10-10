@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { artifactMetadata } from "./artifact-metadata.ts";
-import { designboardTitle, designboardPreview } from "./designboard.ts";
+import { designboardTitle, designboardTitleFromHead, designboardPreview } from "./designboard.ts";
 const canvas =
   '<script id="canvas-doc" type="application/json">{"title":"Checkout study","files":{"Main.html":"<h1>Checkout</h1>"}}</script>';
 describe("artifact metadata", () => {
@@ -53,4 +53,31 @@ it("previews canvases in view mode without changing other HTML or allowing scrip
   );
   expect(designboardTitle(withComment)).toBe("Checkout study");
   expect(designboardPreview(withComment)).not.toContain("<h1>");
+});
+
+it("identifies a large canvas from its first bytes and caches the answer per file version", async () => {
+  const root = await mkdtemp(join(tmpdir(), "nenu-artifacts-head-"));
+  try {
+    const big = (title: string) =>
+      `<html><body><script id="canvas-doc" type="application/json">{"title":${JSON.stringify(title)},"mode":"edit","files":{"Main.html":"${"x".repeat(1024 * 1024)}"}}</script></body></html>`;
+    await writeFile(join(root, "board.html"), big('Big "board"'));
+    expect(await artifactMetadata(root, ["board.html"])).toEqual([
+      { path: "board.html", kind: "designboard", title: 'Big "board"' },
+    ]);
+    await writeFile(join(root, "board.html"), big("Renamed"));
+    expect((await artifactMetadata(root, ["board.html"]))[0]?.title).toBe("Renamed");
+    // An unclosed prefix without an HTML artboard is not a canvas.
+    await writeFile(join(root, "data.html"),
+      `<script id="canvas-doc" type="application/json">{"title":"Data","files":{"data.json":"${"x".repeat(128 * 1024)}"}}</script>`);
+    expect(await artifactMetadata(root, ["data.html"])).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+it("reads the title from a truncated head only when the canvas block is open", () => {
+  const head = '<script id="canvas-doc" type="application/json">{"title":"Partial","files":{"Main.html":"<h1>';
+  expect(designboardTitleFromHead(head, false)).toBe("Partial");
+  expect(designboardTitleFromHead(head, true)).toBeNull();
+  expect(designboardTitleFromHead("<h1>plain</h1>", false)).toBeNull();
 });

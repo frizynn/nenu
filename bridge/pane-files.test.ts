@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TranscriptEntry } from "./journal/types.ts";
-import { deliveredFilePaths, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, paneFileResponse } from "./pane-files.ts";
+import { deliveredFilePaths, FILE_STATE_HEADER, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse } from "./pane-files.ts";
 
 describe("pane project files", () => {
   let dir: string;
@@ -22,7 +22,8 @@ describe("pane project files", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
       expect(response.headers.get("content-disposition")).toContain("hello%20world.md");
-      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("cache-control")).toBe("private, no-cache");
+      expect(response.headers.get("etag")).toMatch(/^"[0-9a-z.-]+"$/);
       expect(await response.text()).toBe("# Hello\n");
     }
   });
@@ -40,10 +41,19 @@ describe("pane project files", () => {
     await mkdir(sibling);
     await writeFile(join(sibling, "secret.md"), "private");
     await symlink(sibling, join(root, "outside"));
-    for (const path of ["../project-extra/secret.md", join(sibling, "secret.md"), "outside/secret.md", "missing.md"]) {
+    for (const path of ["outside/secret.md", "missing.md"]) {
       const response = await paneFileResponse(root, path);
       expect(response.status).toBe(404);
+      expect(response.headers.get(FILE_STATE_HEADER)).toBeNull();
       expect(await response.text()).toBe("File unavailable in this workspace.");
+    }
+    // A name that points outside the project says so, decided from the name alone: an existing
+    // and a missing file answer identically.
+    for (const path of ["../project-extra/secret.md", join(sibling, "secret.md"), "../project-extra/missing.md"]) {
+      const response = await paneFileResponse(root, path);
+      expect(response.status).toBe(404);
+      expect(response.headers.get(FILE_STATE_HEADER)).toBe("outside-project");
+      expect(await response.text()).toBe(OUTSIDE_PROJECT_MESSAGE);
     }
   });
 
@@ -113,26 +123,77 @@ describe("pane project files", () => {
     ];
     const delivered = async () => deliveredFilePaths(entries);
 
-    const response = await paneFileResponse(root, join(outside, "sent.jpg"), null, delivered);
+    const response = await paneFileResponse(root, join(outside, "sent.jpg"), { delivered });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(jpeg));
 
     // The assistant's prose names a delivered file by its bare name or a trailing part of its path.
     for (const name of ["sent.jpg", "downloads/sent.jpg"]) {
-      const named = await paneFileResponse(root, name, null, delivered);
+      const named = await paneFileResponse(root, name, { delivered });
       expect(named.status).toBe(200);
       expect(new Uint8Array(await named.arrayBuffer())).toEqual(new Uint8Array(jpeg));
     }
     for (const name of ["mentioned.jpg", "failed.jpg", "ent.jpg"]) {
-      expect((await paneFileResponse(root, name, null, delivered)).status).toBe(404);
+      expect((await paneFileResponse(root, name, { delivered })).status).toBe(404);
     }
 
-    for (const name of ["mentioned.jpg", "failed.jpg", "innocent.jpg", ".ssh/key.jpg"]) {
-      const denied = await paneFileResponse(root, join(outside, name), null, delivered);
+    for (const name of ["mentioned.jpg", "failed.jpg"]) {
+      const denied = await paneFileResponse(root, join(outside, name), { delivered });
+      expect(denied.status).toBe(404);
+      expect(await denied.text()).toBe(OUTSIDE_PROJECT_MESSAGE);
+    }
+    for (const name of ["innocent.jpg", ".ssh/key.jpg"]) {
+      const denied = await paneFileResponse(root, join(outside, name), { delivered });
       expect(denied.status).toBe(404);
       expect(await denied.text()).toBe("File unavailable in this workspace.");
     }
+  });
+
+  test("revalidates with an ETag only after containment, and never caches errors", async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+    await writeFile(join(root, "shot.png"), png);
+    const first = await paneFileResponse(root, "shot.png");
+    const etag = first.headers.get("etag")!;
+    expect(first.headers.get("cache-control")).toBe("private, no-cache");
+    await first.arrayBuffer();
+
+    const cached = await paneFileResponse(root, "shot.png", { ifNoneMatch: `W/${etag}, "other"` });
+    expect(cached.status).toBe(304);
+    expect(cached.headers.get("etag")).toBe(etag);
+    expect(cached.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(await cached.text()).toBe("");
+
+    await writeFile(join(root, "shot.png"), Buffer.concat([png, Buffer.alloc(1)]));
+    const changed = await paneFileResponse(root, "shot.png", { ifNoneMatch: etag });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+    await changed.arrayBuffer();
+
+    // A wildcard or a stale tag never turns a refused path into a 304.
+    const outside = join(dir, "outside.png");
+    await writeFile(outside, png);
+    await rm(join(root, "shot.png"));
+    await symlink(outside, join(root, "shot.png"));
+    for (const path of ["shot.png", "../outside.png", ".env.png", "missing.png"]) {
+      const denied = await paneFileResponse(root, path, { ifNoneMatch: "*" });
+      expect(denied.status).toBe(404);
+      expect(denied.headers.get("cache-control")).toBe("no-store");
+      expect(denied.headers.get("etag")).toBeNull();
+    }
+  });
+
+  test("streams images and PDFs in bounded chunks instead of buffering the whole file", async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(3 * 1024 * 1024, 7)]);
+    await writeFile(join(root, "big.png"), png);
+    const response = await paneFileResponse(root, "big.png");
+    expect(response.headers.get("content-length")).toBe(String(png.length));
+    const reader = response.body!.getReader();
+    const chunks: Uint8Array[] = [];
+    for (let read = await reader.read(); !read.done; read = await reader.read()) chunks.push(read.value);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(Math.max(...chunks.map((chunk) => chunk.length))).toBeLessThanOrEqual(256 * 1024);
+    expect(Buffer.concat(chunks)).toEqual(png);
   });
 
   test("rejects missing panes, directories, filesystem root and malformed input", async () => {
@@ -151,10 +212,10 @@ test("video previews validate content and honor seek ranges", async () => {
   try {
     const bytes = Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from("ftypisom"),Buffer.alloc(100,7)]);
     await writeFile(join(root,"demo.mp4"),bytes);
-    const response = await paneFileResponse(root,"demo.mp4","bytes=12-19");
+    const response = await paneFileResponse(root,"demo.mp4",{ range: "bytes=12-19" });
     expect(response.status).toBe(206);expect(response.headers.get("content-range")).toBe(`bytes 12-19/${bytes.length}`);
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(bytes.subarray(12,20)));
-    expect((await paneFileResponse(root,"demo.mp4","bytes=9999-")).status).toBe(416);
+    expect((await paneFileResponse(root,"demo.mp4",{ range: "bytes=9999-" })).status).toBe(416);
     await writeFile(join(root,"bad.mp4"),"<script>bad</script>");
     expect((await paneFileResponse(root,"bad.mp4")).status).toBe(415);
   } finally { await rm(root,{recursive:true,force:true}); }

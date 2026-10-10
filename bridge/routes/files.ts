@@ -10,7 +10,8 @@ import { deliveredFilePaths, paneFileResponse } from "../pane-files.ts";
 import { projectFiles } from "../project-files.ts";
 import type { UploadResponse } from "../types.ts";
 import { imageExtFromBytes, SNIFF_BYTES } from "../uploads.ts";
-import type { PaneAction } from "./context.ts";
+import type { TranscriptEntry } from "../journal/types.ts";
+import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { json, jsonError, secure, text } from "./http.ts";
 
 // Image upload limits. Herdr's socket only carries text/keys, so we can't paste an image into the
@@ -22,37 +23,54 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_UPLOAD_OVERHEAD = 64 * 1024; // 64 KB
 // Image type is sniffed from magic bytes in uploadPane — never from the client-supplied MIME.
 
+/**
+ * The pane a file request reads from and its journal, resolved one way for both /file and
+ * /html-preview so a file the agent delivered from outside the cwd opens in either.
+ */
+async function paneFileScope(
+  { cfg, conversations, journals, transcripts }: Services,
+  { rt, paneId }: PaneRouteRequest,
+) {
+  const current = rt.engine.current();
+  const original = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
+  const pane = original ? await conversations.resolve(original, rt.herdr, rt.name) : undefined;
+  // The store already bounds and contains source reads. Request its whole available parsed
+  // window so an upload or delivery in an older turn can be verified without browser claims.
+  let loaded: Promise<readonly TranscriptEntry[]> | undefined;
+  const journalEntries = () => loaded ??= (async () => {
+    const adapter = pane && journals ? adapterFor(journals, pane.agent) : undefined;
+    const page = cfg.transcript && pane?.agentSession && adapter && transcripts
+      ? await transcripts.page(adapter, pane.agentSession, { limit: Number.MAX_SAFE_INTEGER }).catch(() => null)
+      : null;
+    return page?.entries ?? [];
+  })();
+  return { cwd: pane?.cwd, journalEntries, delivered: async () => deliveredFilePaths(await journalEntries()) };
+}
+
+// Inlining sibling assets into HTML previews (ADR 0059) is on unless the operator opts out.
+const inlineHtmlAssets = () => process.env.COLLIE_HTML_INLINE_ASSETS !== "0";
+
 export const filePaneActions: Record<string, PaneAction> = {
   file: {
     level: "read",
     marksSeen: false,
-    async handle({ cfg, conversations, journals, transcripts }, { req, url, rt, paneId }) {
-      const current = rt.engine.current();
-      const original = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
-      const pane = original ? await conversations.resolve(original, rt.herdr, rt.name) : undefined;
+    async handle(services, request) {
+      const { req, url } = request;
+      const { cwd, journalEntries, delivered } = await paneFileScope(services, request);
       const requestedPath = url.searchParams.get("path");
-      // The store already bounds and contains source reads. Request its whole available parsed
-      // window so an upload or delivery in an older turn can be verified without browser claims.
-      const journalEntries = async () => {
-        const adapter = pane && journals ? adapterFor(journals, pane.agent) : undefined;
-        const page = cfg.transcript && pane?.agentSession && adapter && transcripts
-          ? await transcripts.page(adapter, pane.agentSession, { limit: Number.MAX_SAFE_INTEGER }).catch(() => null)
-          : null;
-        return page?.entries ?? [];
-      };
-      if (isChatUploadPath(cfg.stateDir, requestedPath))
-        return secure(await chatUploadPreviewResponse(cfg.stateDir, requestedPath, await journalEntries()));
-      return secure(await paneFileResponse(pane?.cwd, requestedPath, req.headers.get("range"),
-        async () => deliveredFilePaths(await journalEntries())));
+      const ifNoneMatch = req.headers.get("if-none-match");
+      if (isChatUploadPath(services.cfg.stateDir, requestedPath))
+        return secure(await chatUploadPreviewResponse(services.cfg.stateDir, requestedPath, await journalEntries(), ifNoneMatch));
+      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered }));
     },
   },
   "html-preview": {
     level: "read",
     marksSeen: false,
-    async handle(_ctx, { url, rt, paneId }) {
-      const current = rt.engine.current();
-      const pane = [...current.agents, ...current.shellPanes].find(entry => entry.paneId === paneId);
-      return secure(await renderedHtmlResponse(pane?.cwd, url.searchParams.get("path")));
+    async handle(services, request) {
+      const { cwd, delivered } = await paneFileScope(services, request);
+      return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
+        { delivered, inlineAssets: inlineHtmlAssets() }));
     },
   },
   files: {
