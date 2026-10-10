@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { SUPERSEDE_MS, intervalFor, scopeOf, usePolling } from "./use-polling";
 import { isCatchingUp, resetIdleLock, setLocked } from "@/lib/idle";
 import { resetLiveEvents } from "@/lib/live-events";
-import { needsFetch, resetRevalidation } from "@/lib/revalidation";
+import { needsFetch, widenRevalidation } from "@/lib/revalidation";
 import { fakeLiveStream } from "@/test/live-stream";
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView } from "@/lib/types";
@@ -259,14 +259,14 @@ describe("with the live-events stream", () => {
     vi.useFakeTimers();
     rr.state = "idle";
     rr.revalidate.mockReset();
-    resetRevalidation();
+    widenRevalidation();
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
   });
   afterEach(() => {
     vi.useRealTimers();
     resetLiveEvents();
     resetIdleLock();
-    resetRevalidation();
+    widenRevalidation();
   });
 
   it("revalidates on a herd or open-pane event, and replays one that lands mid-load", () => {

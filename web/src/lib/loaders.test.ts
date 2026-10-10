@@ -724,7 +724,7 @@ describe("cold boot with no network", () => {
 describe("loaders — narrowed revalidation", () => {
   it("a pane-only revalidation hands back the same herd without fetching the snapshot", async () => {
     const { rootLoader, paneLoader } = await import("./loaders");
-    const { narrowRevalidation, revalidationSettled } = await import("./revalidation");
+    const { narrowRevalidation, widenRevalidation } = await import("./revalidation");
     // React Router hands every loader of one run the same Request.
     const run = () => new Request("http://localhost/pane/w1%3Ap1");
     const first = run();
@@ -740,7 +740,7 @@ describe("loaders — narrowed revalidation", () => {
     const pane = await paneLoader({ params: { paneId: "w1:p1" }, request: narrowed });
     expect(urls().some((url) => url.includes("/api/pane/"))).toBe(true);
 
-    revalidationSettled();
+    widenRevalidation();
     narrowRevalidation("root");
     fetchSpy.mockClear();
     const herdOnly = run();

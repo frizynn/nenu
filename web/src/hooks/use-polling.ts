@@ -4,7 +4,7 @@ import { useRevalidator } from "react-router";
 import { beginCatchUp, endCatchUp, isLocked, useLocked } from "@/lib/idle";
 import { concerns, onLiveEvent, useLiveHealthy, type LiveEvent } from "@/lib/live-events";
 import type { HomeData } from "@/lib/loaders";
-import { narrowRevalidation, revalidationSettled, widenRevalidation, type RevalidationScope } from "@/lib/revalidation";
+import { narrowRevalidation, widenRevalidation, type RevalidationScope } from "@/lib/revalidation";
 
 // Adaptive polling, the React Router way: a timer that calls `revalidator.revalidate()`, which
 // re-runs every active loader (snapshot + the open pane) — our equivalent of a refetch interval.
@@ -91,7 +91,7 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
   const missed = useRef(new Set<RevalidationScope>());
   useEffect(() => {
     if (revalidator.state !== "idle") return;
-    revalidationSettled();
+    widenRevalidation();
     if (missed.current.size === 0) return;
     const scopes = [...missed.current];
     missed.current.clear();
