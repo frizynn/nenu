@@ -133,8 +133,10 @@ the unit name; the Herdr action runs from anywhere.
   The fast poll of an open mirror moves to the bridge: `/api/events?watch=` takes the panes a
   client shows, `bridge/pane-watcher.ts` reads only those and names a pane when its screen
   changes, and `bridge/journal-watch.ts` names a journal when its file changes. The web client
-  does not send `?watch=` yet, and only the queue relaxes to 10 s on a healthy stream; the mirror
-  and transcript keep their own polls until it does
+  (`web/src/hooks/use-live-events.ts`) sends `?watch=<open pane>` only while that pane's mirror,
+  or a dialog drawn from it, is on screen; the conversation view watches no screen and relies on
+  the journal events. On a healthy stream the router poll (snapshot + pane), the busy transcript,
+  the queue and the dialogs all relax to a 10 s safety net
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
