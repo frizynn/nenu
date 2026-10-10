@@ -98,10 +98,17 @@ export function tickJournal(file: string, now: () => number, everyMs = 2000): ()
   return () => clearInterval(timer);
 }
 
-/** What fake-org.ts starts from: Organizations' `overview --json` projects, plus the profile names. */
+/**
+ * What fake-org.ts starts from: Organizations' `overview --json` projects, plus the profile names.
+ * A project's `coordinator` binds its coordinator to a demo pane, as `.state/coordinator.json` does.
+ */
 export interface OrgSeed {
   profiles: string[];
-  projects: Array<{ slug: string; name: string; goal: string; status: "active" | "paused"; threads: Array<Record<string, unknown> & { id: string }> }>;
+  projects: Array<{
+    slug: string; name: string; goal: string; status: "active" | "paused";
+    coordinator?: { pane_id: string; workspace_id: string; tab_id: string };
+    threads: Array<Record<string, unknown> & { id: string }>;
+  }>;
 }
 
 /**
@@ -139,6 +146,65 @@ export function demoOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
         }),
         thread("t-0014", "Hotfix login", "root", "worker", "open", "idle", 35),
       ],
+    }],
+  };
+}
+
+/**
+ * A project shaped like a long-running real one (measured 2026-10-10: 8 resolved coordinators, 20
+ * threads nested under five of them, 63 resolved top-level threads), with open work at three depths
+ * in every state: a coordinator waiting on you, an idle one running a working thread, a thread ready
+ * for review and a nested coordinator with a thread of its own; a thread waiting on you and an idle
+ * one at the top; and a resolved thread under the open coordinator. With `coordinator` the
+ * project's own coordinator runs in the demo Codex pane.
+ */
+export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" | "codex">, at: number, { coordinator = false } = {}): OrgSeed {
+  const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
+  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0], tab_id: tabId, pane_id: paneId });
+  const node = (id: number, title: string, parent: string, role: "worker" | "coordinator", group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
+    id: `t-${String(id).padStart(4, "0")}`, title, parent_id: parent, role, status: group === "resolved" ? "resolved" : "open", group,
+    group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes),
+    report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null, ...extra,
+  });
+  const threads: Array<Record<string, unknown> & { id: string }> = [];
+  let id = 0;
+  // Resolved coordinators, oldest first, each with the threads it ran.
+  const teams: Array<[string, number]> = [
+    ["Cierre Mi Cúcula", 2], ["Publicación Mi Cúcula", 2], ["Revisar PRs a develop", 4], ["Mergear PRs restantes", 10],
+    ["Preparar release", 2], ["Investigar WhatsApp", 0], ["Stock y vínculos", 0], ["Prueba de plantilla", 0],
+  ];
+  for (const [index, [title, size]] of teams.entries()) {
+    const coordinatorId = `t-${String(++id).padStart(4, "0")}`;
+    const minutes = 30_000 - index * 3000;
+    threads.push(node(id, title, "root", "coordinator", "resolved", minutes));
+    for (let n = 1; n <= size; n++) threads.push(node(++id, `${title}: paso ${n}`, coordinatorId, "worker", "resolved", minutes + n * 10));
+  }
+  for (let n = 1; n <= 63; n++) threads.push(node(++id, `Tarea cerrada ${n}`, "root", "worker", "resolved", 29_000 - n * 300));
+  threads.push(
+    node(101, "Migración de stock", "root", "coordinator", "waiting-on-you", 20),
+    node(102, "Rediseño mobile", "root", "coordinator", "idle", 2, bound(herd.idle, "w1:t2")),
+    node(103, "Landing a 390 px", "t-0102", "worker", "working", 0, bound(herd.working, "w1:t1")),
+    node(104, "Panel mercadería", "t-0102", "worker", "ready-for-review", 12, {
+      pr: {
+        url: "https://github.com/awam/comercio/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
+        additions: 182, deletions: 40, failing: [], comment_count: 1, draft: false, mergeable: "MERGEABLE", merge_blocker: null,
+      },
+    }),
+    node(105, "Checkout", "t-0102", "coordinator", "working", 6),
+    node(106, "Ajustar pagos", "t-0105", "worker", "idle", 9),
+    node(107, "Auditar estilos", "t-0102", "worker", "resolved", 40),
+    node(108, "Hotfix login", "root", "worker", "idle", 35),
+    node(109, "Panel depósito", "root", "worker", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
+  );
+  return {
+    profiles: ["claude", "codex"],
+    projects: [{
+      slug: "awam",
+      name: "AWAM Comercio SaaS",
+      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      status: "active",
+      ...(coordinator ? { coordinator: bound(herd.codex, "w2:t1") } : {}),
+      threads,
     }],
   };
 }

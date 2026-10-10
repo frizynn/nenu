@@ -125,6 +125,10 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
       await mkdir(join(paths.projects, project.slug), { recursive: true });
       await writeFile(join(paths.projects, project.slug, "PROJECT.md"),
         `+++\nname = ${JSON.stringify(project.name)}\ngoal = ${JSON.stringify(project.goal)}\nrepos = [{ path = ${JSON.stringify(dir)} }]\n+++\n`);
+      if (project.coordinator) {
+        await mkdir(join(paths.projects, project.slug, ".state"), { recursive: true });
+        await writeFile(join(paths.projects, project.slug, ".state", "coordinator.json"), JSON.stringify({ session: "", cwd: dir, ...project.coordinator }));
+      }
     }
   }
 

@@ -55,14 +55,30 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
   console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: "" }));
 }
 
+/** `node resolve --close-view`: the node is resolved; its agent and view would stop. */
+function resolve(slug: string, id: string): void {
+  const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
+  const node = project.threads.find((thread) => thread.id === id) ?? fail(`no node ${id}`);
+  if (node.status === "resolved") fail(`${id} is already resolved`);
+  Object.assign(node, { status: "resolved", group: "resolved", group_label: "Resolved", note: "manual", updated: new Date().toISOString() });
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+}
+
 const [command, sub] = argv;
-const { flags, positionals } = parse(argv.slice(command === "node" || command === "thread" || command === "profile" ? 2 : 1));
+const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator"].includes(command ?? "") ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
   console.log(state.profiles.join("\n"));
 } else if (command === "node" && sub === "start") {
   start(positionals[0]!, flags, flags.role === "coordinator" ? "coordinator" : "worker", flags.parent || "root");
+} else if (command === "node" && sub === "resolve") {
+  resolve(positionals[0]!, positionals[1]!);
+} else if (command === "coordinator" && sub === "replace") {
+  // The FakeHerdr has no pane to start, so the coordinator keeps its pane; the run checks the argv.
+  if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
+  if (!state.profiles.includes(flags.profile ?? "")) fail(`there is no profile \`${flags.profile}\`; \`profile list\` shows them`);
+  console.log(`stopped 1 coordinator agent(s) and started a new one on ${flags.profile}`);
 } else if (command === "open") {
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
   console.log(`started claude as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);
