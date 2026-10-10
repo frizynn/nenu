@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-10-10
+
+### Added
+- Open a file the preview refuses (outside the agent's folder, too large, unknown type) in a new tab after a confirmation, through a single-use two-minute link; HTML and SVG stay sandboxed with no network (ADR 0063). (caca6838)
+
+### Changed
+- Compact composer: one line with the send/stop button inside, and a quiet row below with attachments, a menu, model, effort and the context ring. (dcc92597)
+
+### Fixed
+- Open refuses macOS keychains, cookie stores and browser profiles. (3d0e871f)
+
 ## [0.54.4] - 2026-10-10
 
 ### Fixed
