@@ -1,0 +1,1 @@
+{"agentType": "workflow-subagent", "description": "design:activity", "workflowPhase": "Design", "spawnDepth": 1, "requestShape": "foreground", "requestNonInteractive": false}

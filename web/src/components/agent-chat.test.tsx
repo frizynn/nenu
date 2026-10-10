@@ -88,7 +88,7 @@ describe("AgentChat — reply flow", () => {
 
   it("keeps the draft and surfaces the error when the bridge rejects the send", async () => {
     server.use(
-      http.post(/\/api\/pane\/[^/]+\/reply$/, () =>
+      http.post(/\/api\/pane\/[^/]+\/send$/, () =>
         HttpResponse.json({ ok: false, error: "agent busy" }),
       ),
     );
@@ -926,7 +926,7 @@ it("keeps an open session on screen when a newer build is announced, even withou
 
 it("allows a send attempt during a brief signal loss and retains the draft if it fails", async () => {
   __resetConnectionHealth();
-  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
+  server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
   renderChat({ error: true });
   const box = screen.getByPlaceholderText(/type a reply/i);
   await userEvent.type(box, "keep this during weak signal");
@@ -987,5 +987,56 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(within(notice).getByRole("button", { name: "Keys" })).toBeVisible();
     await user.click(within(notice).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentChat — bridge-detected dialog", () => {
+  const PERMISSION = readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8");
+
+  it("shows the bridge's card inline instead of the popover, and a tap is one POST", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    const posts: unknown[] = [];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+        paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+        context: "Bash command\nmkfifo fixture-fifo", signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
+        options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+      }] })),
+      http.post(/\/api\/interactions\/[^/]+\/answer$/, async ({ request }) => {
+        posts.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Waiting on you")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
+    expect(await screen.findByText("Answered: Yes")).toBeVisible();
+  });
+
+  it("keeps the popover while the bridge has no card for the pane", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
+  });
+});
+
+describe("AgentChat — project composer copy", () => {
+  it("asks a worker thread to be steered", () => {
+    renderChat({ project: { slug: "hub", name: "Hub", role: "worker" } });
+    expect(screen.getByPlaceholderText("Steer this thread…")).toBeInTheDocument();
+  });
+
+  it("points a coordinator's composer at the coordinator", () => {
+    renderChat({ project: { slug: "hub", name: "Hub", role: "coordinator" } });
+    expect(screen.getByPlaceholderText("Ask the coordinator…")).toBeInTheDocument();
+  });
+
+  it("keeps the reply copy outside a project", () => {
+    renderChat();
+    expect(screen.getByPlaceholderText("Type a reply…")).toBeInTheDocument();
   });
 });

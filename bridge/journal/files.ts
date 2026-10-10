@@ -27,6 +27,29 @@ import { sep } from "node:path";
 /** Most bytes we will ever pull off one log. Beyond this we keep the TAIL (newest turns). */
 export const MAX_TRANSCRIPT_BYTES = 32 * 1024 * 1024; // 32 MB
 
+/**
+ * How far past the cap an incrementally parsed window may grow before it is re-read from a newer
+ * start. Without it every append to a >32 MB log would cross the cap and pay a full re-parse; with
+ * it a busy log re-parses once per 4 MB written, and the window never holds less than the cap.
+ */
+export const TAIL_HEADROOM_BYTES = 4 * 1024 * 1024; // 4 MB
+
+/**
+ * True when a log's first bytes are a compressed container (gzip, zstd, xz, bzip2) rather than JSONL.
+ * Codex can store rollouts compressed; parsing those bytes as text would show nothing and say nothing,
+ * so the journal refuses them like any other log it cannot read.
+ */
+export function isCompressed(head: Uint8Array): boolean {
+  const [a, b, c, d] = head;
+  return (a === 0x1f && b === 0x8b) // gzip
+    || (a === 0x28 && b === 0xb5 && c === 0x2f && d === 0xfd) // zstd
+    || (a === 0xfd && b === 0x37 && c === 0x7a && d === 0x58) // xz
+    || (a === 0x42 && b === 0x5a && c === 0x68); // bzip2
+}
+
+/** Thrown for a log that exists but is not JSONL. The store answers it like an absent log. */
+export class UnreadableJournal extends Error {}
+
 /** True when the path exists at all. Cheap pre-check before the more expensive realpath work. */
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -85,11 +108,11 @@ export async function containedRealpathIn(
   return null;
 }
 
-/** Size + mtime, or null when the file is gone. The store's cache-validity probe (see types.ts). */
-export async function statFile(path: string): Promise<{ size: number; mtimeMs: number } | null> {
+/** Size + mtime + inode, or null when the file is gone. The store's cache-validity probe (see types.ts). */
+export async function statFile(path: string): Promise<{ size: number; mtimeMs: number; ino: number } | null> {
   try {
     const st = await stat(path);
-    return { size: st.size, mtimeMs: st.mtimeMs };
+    return { size: st.size, mtimeMs: st.mtimeMs, ino: st.ino };
   } catch {
     return null;
   }
@@ -98,6 +121,11 @@ export async function statFile(path: string): Promise<{ size: number; mtimeMs: n
 /** First bytes of a file — enough to identify a log without reading a multi-megabyte one. */
 export async function head(path: string, bytes = 64 * 1024): Promise<string> {
   return Bun.file(path).slice(0, bytes).text();
+}
+
+/** Bytes `[start, end)` of a log — the store's incremental read. */
+export async function readRange(path: string, start: number, end: number): Promise<Uint8Array> {
+  return new Uint8Array(await Bun.file(path).slice(start, end).arrayBuffer());
 }
 
 /**
@@ -114,6 +142,7 @@ export async function loadTail(
   const size = st.size;
   const complete = size <= MAX_TRANSCRIPT_BYTES;
   const file = Bun.file(path);
+  if (isCompressed(new Uint8Array(await file.slice(0, 4).arrayBuffer()))) throw new UnreadableJournal(path);
   const text = complete ? await file.text() : await file.slice(size - MAX_TRANSCRIPT_BYTES).text();
   return { text, complete, size, mtimeMs: st.mtimeMs };
 }

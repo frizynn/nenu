@@ -2,31 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  BUILD_HEADER,
-  cacheControlFor,
-  checkAccess,
-  marksPaneSeen,
-  SEEN_HEADER,
-  deviceAuth,
-  guard,
-  historyParams,
-  hasCodexInterruptCue,
-  interruptCodexPane,
-  isHostAllowed,
-  isLoopbackPeer,
-  isReservedAuthPath,
-  keysPane,
-  normalizeTabLabel,
-  paneReadResponse,
-  replyPane,
-  resolveStaticPath,
-  sendReplySteps,
-  startupWarnings,
-  staticContentType,
-  withBuildHeader,
-  type ReplySender,
-} from "./server.ts";
+import { startupWarnings } from "./server.ts";
+import { checkAccess, deviceAuth, guard, isHostAllowed, isLoopbackPeer } from "./routes/access.ts";
+import { historyParams } from "./routes/history.ts";
+import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
+import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
+import { paneReadResponse } from "./routes/pane.ts";
+import { interruptCodexPane, keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
+import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
+import { normalizeTabLabel } from "./routes/structure.ts";
+import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
 import type { Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
@@ -62,6 +47,7 @@ function cfg(overrides: Partial<Config> = {}): Config {
     notifyDelayMs: 30_000,
     readLines: 200,
     transcript: true,
+    htmlInlineAssets: true,
     journalRoots: {
       claude: ["/tmp/claude-projects"],
       codex: ["/nope/codex"],
@@ -101,7 +87,7 @@ describe("Codex interrupt cue", () => {
   });
 
   test("accepts the current Codex working cue with styled Escape and background activity", async () => {
-    const capture = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+    const capture = await Bun.file(join(import.meta.dirname, "..", "web/src/fixtures/panes/codex--v0159-busy.txt")).text();
     expect(hasCodexInterruptCue(capture)).toBe(true);
   });
 

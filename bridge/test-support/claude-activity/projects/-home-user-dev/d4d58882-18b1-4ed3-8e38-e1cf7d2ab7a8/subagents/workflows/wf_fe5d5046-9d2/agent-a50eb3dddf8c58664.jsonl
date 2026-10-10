@@ -1,0 +1,1 @@
+{"parentUuid": null, "isSidechain": true, "agentId": "a50eb3dddf8c58664", "type": "assistant", "timestamp": "2026-10-10T07:00:00.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "redacted"}, {"type": "tool_use", "id": "toolu_x", "name": "Bash", "input": {"command": "redacted", "description": "Keep waiting for gate"}}]}}

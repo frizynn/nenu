@@ -40,6 +40,11 @@ describe("searchableText", () => {
     });
     expect(searchableText(e)).not.toContain("SECRET_TOKEN");
   });
+
+  it("skips inline image markers, which carry no visible text", () => {
+    const e = entry({ parts: [{ kind: "text", text: "see this" }, { kind: "image", index: 0, mediaType: "image/png" }] });
+    expect(searchableText(e)).toBe("see this");
+  });
 });
 
 describe("matchingEntries", () => {

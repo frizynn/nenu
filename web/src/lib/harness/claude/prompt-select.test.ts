@@ -348,3 +348,56 @@ describe("detectPromptSelectRegion — render boundary", () => {
     expect(region!.model).toEqual(detectPromptSelect(lines));
   });
 });
+
+// "Tab to amend" (Claude Code 2.1.296), captured in a disposable session: PROBES_2026_10_NOTES.md.
+describe("detectPromptSelect — the permission prompt's Tab-amend field", () => {
+  const P0_DIR = join(import.meta.dirname, "fixtures");
+  const p0 = (name: string) => detectPromptSelect(splitLines(parseAnsi(readFileSync(join(P0_DIR, name), "utf8"))));
+
+  it("marks only the measured rows, plain Yes and the last row's No, as amendable", () => {
+    const model = p0("permission-bash-v2296.txt")!;
+    expect(model.family).toBe("permission");
+    expect(model.options.map((o) => o.amend ?? false)).toEqual([true, false, false, true]);
+    expect(model.pointer).toBe(1);
+    expect(model.feedback).toBeUndefined();
+  });
+
+  it("reads the pointer on a middle row, where the footer drops the Tab hint, as the same closed prompt", () => {
+    const model = p0("permission-pointer-mid-v2296.txt")!;
+    expect(model.family).toBe("permission");
+    expect(model.pointer).toBe(2);
+    expect(model.feedback).toBeUndefined();
+    expect(model.options.map((o) => o.keys)).toEqual([["1"], ["2"], ["3"], ["4"]]);
+  });
+
+  it.each([
+    ["permission-bash-amend-v2296.txt", 1, ""],
+    ["permission-bash-amend-typed-v2296.txt", 1, "use printf instead of echo"],
+    ["permission-deny-amend-typed-v2296.txt", 4, "keep the file"],
+  ])("%s: an open field is a focused free-text row on its option, never a button", (name, row, text) => {
+    const model = p0(name)!;
+    expect(model.feedback).toEqual({ key: "Tab", focused: true, text, purpose: "free-text", row });
+    expect(model.options.map((o) => o.keys[0])).not.toContain(String(row));
+    expect(model.options.every((o) => !o.amend)).toBe(true);
+  });
+
+  it("an open field is a different identity from the closed prompt, and from a field on another row", () => {
+    const closed = p0("permission-bash-v2296.txt")!;
+    const yes = p0("permission-bash-amend-v2296.txt")!;
+    const no = { ...yes, feedback: { ...yes.feedback!, row: 4 } };
+    expect(promptsSameIdentity(closed, yes)).toBe(false);
+    expect(promptsSameIdentity(yes, no)).toBe(false);
+  });
+
+  it("a bare 'Esc to cancel' screen that is not this menu stays raw", () => {
+    expect(detectPromptSelect(fixtureLines("claude-lab--menu-status-screen--w82.txt"))).toBeNull();
+    const plain = "─".repeat(40) + "\n Pick one?\n ❯ 1. Red\n   2. Blue\n\n Esc to cancel";
+    expect(detectPromptSelect(splitLines(parseAnsi(plain)))).toBeNull();
+  });
+
+  it("an AskUserQuestion 'Type something.' row is carried, not offered", () => {
+    const model = detectPromptSelect(fixtureLines("claude--select-menu.txt"))!;
+    expect(model.textRow).toEqual({ n: 4, label: "Type something." });
+    expect(model.options.map((o) => o.label)).not.toContain("Type something.");
+  });
+});

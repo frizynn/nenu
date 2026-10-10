@@ -115,7 +115,7 @@ export const fixtureTranscript: TranscriptEntry[] = [
 ];
 
 // ── The fake pane's input box ────────────────────────────────────────────────────────────────────
-// A guarded reply (lib/reply-action.ts) types with submit:false and then polls pane reads until the
+// A guarded reply (bridge/guarded-send.ts) types with submit:false and then polls pane reads until the
 // adapter can see that text on the "❯" line — only then does it send the submit key. So the fake
 // pane has to behave like a real TUI (text typed → it appears on the prompt line; submit → the line
 // clears) or no guarded send would ever verify and every send test would stall.
@@ -164,6 +164,26 @@ export const handlers = [
   http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
     recordReply((await request.json()) as { text?: string; submit?: boolean });
     return HttpResponse.json({ ok: true });
+  }),
+  // The one-request guarded send: it lands like a submitted reply, so the fake input line clears.
+  http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+    const body = (await request.json()) as { text: string; requestId: string };
+    recordReply({ text: body.text, submit: true });
+    return HttpResponse.json({ ok: true, requestId: body.requestId, ack: "submitted" });
+  }),
+  http.get("/api/interactions", () => HttpResponse.json({ interactions: [] })),
+  http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: true })),
+  http.post("/api/org/project/create", async ({ request }) => {
+    const body = await request.json() as { name: string };
+    return HttpResponse.json({ ok: true, project: { slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: body.name } });
+  }),
+  http.post("/api/org/thread/merge", async ({ request }) => {
+    const body = await request.json() as { id: string };
+    return HttpResponse.json({ ok: true, merged: { id: body.id, pr: "https://github.com/acme/app/pull/7" } });
+  }),
+  http.post("/api/org/thread/set", async ({ request }) => {
+    const body = await request.json() as { id: string; autoFixCi?: boolean; autoMerge?: boolean };
+    return HttpResponse.json({ ok: true, flags: { id: body.id, autoFixCi: body.autoFixCi ?? false, autoMerge: body.autoMerge ?? false } });
   }),
   http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/close$/, () => HttpResponse.json({ ok: true })),

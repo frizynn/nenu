@@ -137,6 +137,11 @@ export interface Config {
    */
   transcript: boolean;
   /**
+   * Inline an HTML preview's sibling assets (CSS, scripts, images next to the file) into the
+   * sandboxed document, which has no network (ADR 0059). Off renders the bare file.
+   */
+  htmlInlineAssets: boolean;
+  /**
    * Where each harness keeps its session logs — one directory or several, searched in order. Every
    * read is confined to the root it was found under, after symlink resolution, so these double as the
    * security boundary for a feature that touches the filesystem — override only to relocate (or add)
@@ -309,6 +314,7 @@ export function loadConfig(): Config {
     notifyDelayMs: envInt("COLLIE_NOTIFY_DELAY_MS", 30_000, { min: 0 }),
     readLines: envInt("COLLIE_READ_LINES", 200, { min: 1 }),
     transcript: envBool("COLLIE_TRANSCRIPT", true),
+    htmlInlineAssets: envBool("COLLIE_HTML_INLINE_ASSETS", true),
     journalRoots: {
       // COLLIE_TRANSCRIPT_ROOT predates the per-harness split and meant Claude's root, so it keeps
       // meaning exactly that — an existing deployment's env keeps working untouched. It takes SEVERAL

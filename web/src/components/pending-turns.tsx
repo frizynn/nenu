@@ -3,6 +3,7 @@ import { AlertCircle, Check, Clock, Loader2 } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
 import { MessageImages } from "@/components/message-images";
+import { queueRowStatus } from "@/hooks/use-message-queue";
 import type { LocalSend, LocalSendActions } from "@/lib/local-sends";
 import { splitMessageImages } from "@/lib/message-images";
 import { cn } from "@/lib/utils";
@@ -13,14 +14,21 @@ export function pendingStatus(send: LocalSend): {
   label: string;
   actions: Array<keyof LocalSendActions>;
 } {
-  if (send.state === "failed") return { tone: "problem", label: send.error || "Not sent", actions: ["retry", "edit"] };
-  if (send.state === "sent") return { tone: "done", label: "Sent", actions: [] };
-  if (send.state === "queued") {
-    if (send.queueState === "sending") return { tone: "busy", label: "Sending…", actions: [] };
-    if (send.queueState === "paused") return { tone: "problem", label: send.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
-    return { tone: "waiting", label: "Waiting. It sends when the agent is free.", actions: ["sendNow", "edit", "remove"] };
+  if (send.state === "failed") {
+    // Text that may already be in the terminal is checked there, never resent blind.
+    if (send.textDelivered) return { tone: "problem", label: send.error || "Not confirmed. Check Terminal.", actions: ["openTerminal", "edit"] };
+    return { tone: "problem", label: send.error || "Not sent", actions: ["retry", "edit"] };
   }
-  return { tone: "busy", label: "Sending…", actions: [] };
+  if (send.state === "sent" && !send.queueId) return { tone: "done", label: send.unverified ? "Sent, not verified" : "Sent", actions: [] };
+  if (send.state === "sending") return { tone: "busy", label: "Sending…", actions: [] };
+  return queueRowStatus(send.agent, {
+    state: send.state === "sent" || send.native ? "sent" : (send.queueState ?? "queued"),
+    deliveryMode: send.deliveryMode,
+    waitingFor: send.waitingFor,
+    stranded: send.stranded,
+    native: send.native,
+    error: send.error,
+  });
 }
 
 const ACTION_LABEL: Record<keyof LocalSendActions, string> = {
@@ -28,6 +36,8 @@ const ACTION_LABEL: Record<keyof LocalSendActions, string> = {
   edit: "Edit",
   remove: "Remove",
   sendNow: "Send now",
+  readNow: "Read it now",
+  openTerminal: "Open Terminal",
 };
 
 const TONE_ICON: Record<ReturnType<typeof pendingStatus>["tone"], ReactNode> = {
@@ -66,7 +76,7 @@ export function PendingTurns({ sends, actions }: { sends: readonly LocalSend[]; 
                   className="min-h-11 rounded-md px-2 font-medium text-foreground hover:bg-muted md:min-h-7"
                   onClick={() => actions[action](send)}
                 >
-                  {ACTION_LABEL[action]}
+                  {action === "sendNow" && send.stranded ? "Send here" : ACTION_LABEL[action]}
                 </button>
               ))}
             </div>

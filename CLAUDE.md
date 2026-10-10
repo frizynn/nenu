@@ -130,6 +130,14 @@ the unit name; the Herdr action runs from anywhere.
 - `/api/events` (SSE) only names what changed; readers re-fetch through the usual routes and polling
   relaxes to a fallback while it is open. Never put state or pane text on it, and never drop the
   fallback poll ([ADR 0054](./.adr/0054-the-browser-hears-what-changed-not-the-state.md)).
+  The fast poll of an open mirror moves to the bridge: `/api/events?watch=` takes the panes a
+  client shows, `bridge/pane-watcher.ts` reads only those and names a pane when its screen
+  changes, and `bridge/journal-watch.ts` names a journal when its file changes. The web client
+  (`web/src/hooks/use-live-events.ts`) sends `?watch=<open pane>` only while that pane's mirror,
+  or a dialog drawn from it, is on screen; the conversation view watches no screen and relies on
+  the journal events. On a healthy stream the router poll (snapshot + pane), the busy transcript,
+  the queue and the dialogs all relax to a 10 s safety net
+  ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
@@ -238,10 +246,15 @@ grammar, the probe catches on-disk format drift.
 Project file previews (`bridge/pane-files.ts`) separately accept a client path under the live pane's
 cwd, or an exact path Claude Code's own SendUserFile result in the current pane's contained journal
 reports as delivered (never a path the model merely mentions). Every read is bounded and contained after realpath resolution; private paths are refused.
-SVG and source render as text. HTML may execute only in the opaque-origin `allow-scripts` iframe
+Source renders as text, and so does SVG for now. SVG may render only as an `<img>` from an
+`image/svg+xml` blob, never as a document. HTML may execute only in the opaque-origin `allow-scripts` iframe
 defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and the sandbox grants no
-same-origin, forms, popups, top navigation or downloads. Never execute it in Nenu's origin or turn
-the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md)).
+same-origin, forms, popups, top navigation or downloads. The bridge may inline same-directory
+sibling assets into the preview through the same containment checks as `/file`
+(`COLLIE_HTML_INLINE_ASSETS`, on by default). Images an agent looked at are served by journal entry
+and index, never by path. Never execute HTML in Nenu's origin or turn
+the endpoint into unrestricted host file access ([ADR 0021](./.adr/0021-html-previews-run-in-an-opaque-no-network-sandbox.md),
+[ADR 0059](./.adr/0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

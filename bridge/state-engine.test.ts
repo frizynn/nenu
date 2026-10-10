@@ -19,6 +19,7 @@ interface FakePane {
   label?: string | null;
   revision: number;
   agent_session?: { source?: string; agent?: string; kind?: string; value?: string } | null;
+  tokens?: Record<string, unknown> | null;
   scroll?: {
     offset_from_bottom: number;
     max_offset_from_bottom: number;
@@ -58,8 +59,11 @@ const ws = (id: string, number: number) => ({
   agent_status: "idle" as AgentStatus,
 });
 
+type FakeAgent = { pane_id: string; state_change_seq?: number | null; completion_seq?: number | null };
+
 class FakeHerdr {
   panes: FakePane[] = [];
+  agents: FakeAgent[] = [];
   workspaces = [ws("w1", 1), ws("w2", 2)];
   tabs = [
     {
@@ -73,13 +77,17 @@ class FakeHerdr {
     },
   ];
   // The default path (herdr ≥ 0.7.2): one snapshot call carries workspaces + panes + tabs.
-  sessionSnapshot() {
+  sessionSnapshot(): Promise<{
+    version: string; protocol: number; workspaces: FakeHerdr["workspaces"]; tabs: FakeHerdr["tabs"];
+    panes: FakePane[]; agents?: FakeAgent[];
+  }> {
     return Promise.resolve({
       version: "0.7.2",
       protocol: 16,
       workspaces: this.workspaces,
       tabs: this.tabs,
       panes: this.panes,
+      agents: this.agents,
     });
   }
   listWorkspaces() {
@@ -602,6 +610,80 @@ describe("StateEngine — session name enrichment", () => {
     expect(agent("w1:p1").sessionName).toBeUndefined();
   });
 
+  describe("when a pane is re-read", () => {
+    function clockEngine() {
+      const herdr = new NameHerdr();
+      let now = 1_000_000;
+      const engine = new StateEngine(herdr as unknown as HerdrClient, 1500, () => now);
+      const poll = async () => {
+        await (engine as unknown as { poll(): Promise<void> }).poll();
+        await new Promise((r) => setTimeout(r, 0)); // let the background name reads settle
+      };
+      return { herdr, engine, poll, advance: (ms: number) => { now += ms; } };
+    }
+
+    test("a quiet herd is read once, then not again until something moves", async () => {
+      const { herdr, poll } = clockEngine();
+      herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "claude")];
+      await poll();
+      expect(herdr.reads.length).toBe(2);
+      await poll();
+      await poll();
+      expect(herdr.reads.length).toBe(2);
+    });
+
+    test("a status change re-reads that pane only", async () => {
+      const { herdr, poll } = clockEngine();
+      herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "claude")];
+      await poll();
+      herdr.panes = [pane("w1:p1", "w1", "working", "claude"), pane("w1:p2", "w1", "idle", "claude")];
+      await poll();
+      expect(herdr.reads.map((r) => r[0])).toEqual(["w1:p1", "w1:p2", "w1:p1"]);
+    });
+
+    test("a new session identity re-reads, and drops the old name", async () => {
+      const { herdr, engine, poll } = clockEngine();
+      const p = pane("w1:p1", "w1", "idle", "claude");
+      p.agent_session = { kind: "id", value: "s-1" };
+      herdr.panes = [p];
+      herdr.texts.set("w1:p1", named("first"));
+      await poll();
+      herdr.panes = [{ ...p, agent_session: { kind: "id", value: "s-2" } }];
+      herdr.texts.set("w1:p1", plainBox);
+      await poll();
+      expect(herdr.reads.length).toBe(2);
+      expect(engine.current().agents[0]!.sessionName).toBeUndefined();
+    });
+
+    test("an unchanged pane is re-read after a minute, so a /rename still shows up", async () => {
+      const { herdr, engine, poll, advance } = clockEngine();
+      herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
+      herdr.texts.set("w1:p1", plainBox);
+      await poll();
+      herdr.texts.set("w1:p1", named("renamed"));
+      advance(59_000);
+      await poll();
+      expect(herdr.reads.length).toBe(1);
+      advance(1_000);
+      await poll();
+      expect(herdr.reads.length).toBe(2);
+      expect(engine.current().agents[0]!.sessionName).toBe("renamed");
+    });
+
+    test("a failed read is retried on the next poll", async () => {
+      const { herdr, engine, poll } = clockEngine();
+      herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
+      herdr.texts.set("w1:p1", named("late"));
+      const readPane = herdr.readPane.bind(herdr);
+      herdr.readPane = (...args) => { herdr.reads.push(args); return Promise.reject(new Error("read down")); };
+      await poll();
+      herdr.readPane = readPane;
+      await poll();
+      expect(herdr.reads.length).toBe(2);
+      expect(engine.current().agents[0]!.sessionName).toBe("late");
+    });
+  });
+
   test("a failing pane read never blanks the name or fails the poll", async () => {
     const { herdr, engine, poll, agent } = makeNameEngine();
     herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
@@ -781,6 +863,46 @@ describe("StateEngine — pane capability fields", () => {
     herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
     await poll();
     expect(engine.current().agents[0]!.readableLines).toBeUndefined();
+  });
+
+  test("copies only the allowlisted tokens, and omits the field when none is left", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    const p1 = pane("w1:p1", "w1", "idle", "claude");
+    p1.tokens = {
+      project: "nenu", thread: "rd-f2", role: "worker", "tree-order": "3", org_project: "nenu", hp_group: "~!0001",
+      secret_plugin_key: "nope", org_heartbeat: "1791590653", rank: 5, review: "x".repeat(201),
+    };
+    const p2 = pane("w1:p2", "w1", "idle", "codex");
+    p2.tokens = { other_plugin: "x" };
+    herdr.panes = [p1, p2, pane("w1:p3", "w1", "idle", null)];
+    await poll();
+    const byId = (id: string) => [...engine.current().agents, ...engine.current().shellPanes].find((a) => a.paneId === id)!;
+    expect(byId("w1:p1").tokens).toEqual({
+      project: "nenu", thread: "rd-f2", role: "worker", "tree-order": "3", org_project: "nenu", hp_group: "~!0001",
+    });
+    expect("tokens" in byId("w1:p2")).toBe(false);
+    expect("tokens" in byId("w1:p3")).toBe(false);
+  });
+
+  test("joins state_change_seq and completion_seq from the snapshot's agents, absent when unreported", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    herdr.panes = [pane("w1:p1", "w1", "idle", "claude"), pane("w1:p2", "w1", "idle", "claude")];
+    // 0.9.1 reports state_change_seq and no completion_seq (live-observed); a newer server both.
+    herdr.agents = [{ pane_id: "w1:p1", state_change_seq: 6257 }, { pane_id: "w1:p2", state_change_seq: 12, completion_seq: 4 }];
+    await poll();
+    const byId = (id: string) => engine.current().agents.find((a) => a.paneId === id)!;
+    expect(byId("w1:p1").stateChangeSeq).toBe(6257);
+    expect("completionSeq" in byId("w1:p1")).toBe(false);
+    expect(byId("w1:p2")).toMatchObject({ stateChangeSeq: 12, completionSeq: 4 });
+  });
+
+  test("the list-call fallback carries no counters", async () => {
+    const { herdr, engine, poll } = makeEngine();
+    herdr.panes = [pane("w1:p1", "w1", "idle", "claude")];
+    herdr.agents = [{ pane_id: "w1:p1", state_change_seq: 9 }];
+    herdr.sessionSnapshot = () => Promise.reject(new Error("herdr session.snapshot: invalid_request: unknown variant `session.snapshot`"));
+    await poll();
+    expect("stateChangeSeq" in engine.current().agents[0]!).toBe(false);
   });
 });
 

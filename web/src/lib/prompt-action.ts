@@ -9,7 +9,7 @@
 //     which the dialog routes every keystroke into the box as text. Enter then submits the box as
 //     DENY-WITH-FEEDBACK: the plan is rejected, the agent is handed the text and re-plans. That Enter
 //     is irreversible and it is the LAST thing sent, only after a fresh read shows our own words in
-//     the box — the same "never submit blind" rule as reply-action and submitPreviewNote.
+//     the box — the same "never submit blind" rule as the bridge send and submitPreviewNote.
 //
 // Both flows start with the same guard as their siblings: a FRESH pane read, the unconditional
 // revision check, and a re-derivation THROUGH THE PANE'S ADAPTER compared against what the user
@@ -27,7 +27,10 @@ import {
   type DialogTarget,
 } from "./dialog-guard";
 import { promptsSameIdentity } from "./harness/prompt-model";
-import { sanitizeTypedText, type ActionResult } from "./harness/guard";
+import { type ActionResult } from "./harness/guard";
+import { FEEDBACK_MAX_LENGTH, sanitizeTypedText } from "./typed-text";
+
+export { FEEDBACK_MAX_LENGTH };
 import { type Sleep } from "./harness/poll";
 
 /** The prompt-select identity comparators, part of the neutral contract (harness/prompt-model.ts).
@@ -38,17 +41,6 @@ export { promptsEqual, promptsSameIdentity, sameKeys } from "./harness/prompt-mo
  *  name so existing imports (wizard-action, AgentChat, tests) keep working. */
 export type PromptActionResult = ActionResult;
 
-/**
- * Longest feedback Nenu will type into a plan dialog.
- *
- * Not a comfort limit — a grammar one. The row does not window long text: Claude re-flows the whole
- * value across as many display lines as it needs, which pushes the dialog's footer away from its
- * options. `MAX_FEEDBACK_WRAP` (harness/claude/prompt-select.ts) is how far that may go before the
- * screen stops parsing at all, and this is sized to stay inside it even on a narrow pane (~4 lines of
- * ~60 usable columns). Longer text isn't dangerous — the read-back check simply refuses and nothing is
- * submitted — but the dialog would drop off the phone, so we don't let it happen.
- */
-export const FEEDBACK_MAX_LENGTH = 240;
 
 interface GuardArgs {
   paneId: string;
@@ -103,7 +95,7 @@ export async function submitPromptOption(
  * If focus never lands, nothing has been typed and nothing is submitted — the digit's pointer move is
  * the only side effect, and `Up` (from the keys pad, or the terminal) undoes it. If the text never
  * lands, NO Enter is sent: the words sit unsubmitted in the box for a human to finish or discard,
- * which is the same bargain reply-action's `stalled` strikes.
+ * which is the same bargain the bridge send's unseen-text failure strikes.
  */
 export async function submitPromptFeedback(
   args: GuardArgs & { text: string },

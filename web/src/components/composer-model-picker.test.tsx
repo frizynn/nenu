@@ -27,12 +27,12 @@ function mount(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
 }
 
 it("opens the real model picker through a scoped verified send and preserves the browser draft", async () => {
-  const writes: Array<{ url: string; text: string; submit?: boolean }> = [];
-  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
-    const body = await request.json() as { text: string; submit?: boolean };
-    writes.push({ url: request.url, ...body });
-    recordReply(body);
-    return HttpResponse.json({ ok: true });
+  const writes: Array<{ url: string; text: string }> = [];
+  server.use(http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+    const body = await request.json() as { text: string; requestId: string };
+    writes.push({ url: request.url, text: body.text });
+    recordReply({ text: body.text, submit: true });
+    return HttpResponse.json({ ok: true, requestId: body.requestId, ack: "submitted" });
   }));
   const ref = mount();
   const input = screen.getByRole("textbox");
@@ -40,14 +40,11 @@ it("opens the real model picker through a scoped verified send and preserves the
   let sent = false;
   await act(async () => { sent = await ref.current!.openModelPicker(); });
   expect(sent).toBe(true);
-  expect(writes.map(({ text, submit }) => ({ text, submit }))).toEqual([
-    { text: "/model", submit: false }, { text: "", submit: true },
-  ]);
-  for (const write of writes) {
-    const url = new URL(write.url);
-    expect(decodeURIComponent(url.pathname)).toBe("/api/pane/w1:p1/reply");
-    expect(url.searchParams.get("session")).toBe("work");
-  }
+  // One request: the bridge types, verifies and submits.
+  expect(writes.map(({ text }) => text)).toEqual(["/model"]);
+  const url = new URL(writes[0]!.url);
+  expect(decodeURIComponent(url.pathname)).toBe("/api/pane/w1:p1/send");
+  expect(url.searchParams.get("session")).toBe("work");
   expect(input).toHaveValue("Keep this unsent work");
   expect(loadDraft("work", "w1:p1")).toBe("Keep this unsent work");
 });
@@ -60,7 +57,7 @@ it.each([
   ["unsupported agent", { agent: "unknown-agent" }],
 ] as const)("refuses the model shortcut for %s without writing", async (_name, overrides) => {
   const writes = vi.fn();
-  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, async () => {
+  server.use(http.post(/\/api\/pane\/[^/]+\/(send|reply)$/, async () => {
     writes();
     return HttpResponse.json({ ok: true });
   }));
@@ -78,7 +75,7 @@ it("does not bypass an operator-required model confirmation", async () => {
       push: false, vapidPublicKey: "",
       operatorCommands: [{ agent: "claude", command: "/model", description: "Change models", takesArg: false, argHint: "", confirm: true }],
     })),
-    http.post(/\/api\/pane\/[^/]+\/reply$/, () => {
+    http.post(/\/api\/pane\/[^/]+\/(send|reply)$/, () => {
       writes();
       return HttpResponse.json({ ok: true });
     }),

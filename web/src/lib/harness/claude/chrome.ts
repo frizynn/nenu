@@ -86,7 +86,7 @@ const INPUT_PLACEHOLDERS = ["Press up to edit queued messages"];
  * as the whole-box test rather than a per-run one.
  *
  * Three consequences follow from misreading one as a draft, and all three are fixed by classifying it
- * here, at the single place a draft is derived (lib/reply-action.ts and composer.tsx both take their
+ * here, at the single place a draft is derived (bridge/guarded-send.ts and composer.tsx both take their
  * draft from `extractInputDraft`, so neither needs its own ghost test):
  *
  *  1. the app offered to "recover" a stranded draft the operator never wrote;
@@ -287,7 +287,7 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
  * Two callers, both of which need exactly this and must not re-derive it:
  *  - the generic menu grammar (menu.ts), whose last-resort footer match would otherwise claim an
  *    ordinary prompt screen that happens to end in a `·`-separated hint row;
- *  - the reply path's pre-flight (lib/reply-action.ts via the adapter's `composerReady`), which
+ *  - the reply path's pre-flight (bridge/guarded-send.ts via the adapter's `composerReady`), which
  *    refuses to type at all when the box isn't there.
  */
 export function hasInputBox(lines: StyledLine[]): boolean {
@@ -491,8 +491,14 @@ function steppedMarksAreStatusline(
  *  walk (its footer split off by a blank, like the background-agents footer), and only these rows
  *  tell it apart. A popup tail is exempt, because its grammar named every row. */
 function tailNamesAMenu(text: string): boolean {
-  return NUMBERED_OPTION_ROW.test(text) || namesAMenuKey(text);
+  return NUMBERED_OPTION_ROW.test(text) || text.split(/\s+·\s+/).some((segment) => !RUNNING_TURN_HINT.test(segment.trim()) && namesAMenuKey(segment));
 }
+
+// Claude 2.1.296 moved "esc to interrupt" from the spinner into the statusline under the box for as
+// long as a turn runs (P0 captures working-queued-v2296, hook-holding-v2296). It names the running
+// turn's key, not a modal's, and refusing it refused every send to a working Claude: its native queue
+// takes typing then, and a second queued message could never reach it.
+const RUNNING_TURN_HINT = /^esc to interrupt$/i;
 
 /**
  * Whether a row of an `unknown` tail carries something else a modal paints: a pointer glyph anywhere,

@@ -13,7 +13,7 @@ const STATUS_WORD: Partial<Record<AgentStatus, string>> = { blocked: "needs you"
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-status-blocked", working: "text-status-working", done: "text-status-done" };
 
 /** The herd as Herdr holds it: each workspace, its tabs, and a tab's panes when it has several. */
-export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null }: {
+export function WorkspaceTree({ source, query, session, currentPaneId, expanded, onExpand, onNavigate, empty = null, compact = false }: {
   source: TreeSource;
   query: string;
   session?: string;
@@ -24,6 +24,8 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   onNavigate?: () => void;
   /** Shown instead when nothing is left to list. */
   empty?: ReactNode;
+  /** The sidebar's one-line workspace rows: the name opens the space, the chevron folds its panes. */
+  compact?: boolean;
 }) {
   const searching = query.trim() !== "";
   const branches = workspaceTree(source, query, currentPaneId);
@@ -31,11 +33,11 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} session={session} currentPaneId={currentPaneId}
       open={searching || (expanded[branch.workspace.workspaceId] ?? defaultOpen(branch, branches.length))} searching={searching}
-      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} />
+      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
   ));
 }
 
-function WorkspaceSection({ branch, session, currentPaneId, open, searching, onToggle, onNavigate }: {
+function WorkspaceSection({ branch, session, currentPaneId, open, searching, onToggle, onNavigate, compact }: {
   branch: WorkspaceBranch;
   session?: string;
   currentPaneId?: string;
@@ -43,12 +45,28 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
   searching: boolean;
   onToggle: (open: boolean) => void;
   onNavigate?: () => void;
+  compact: boolean;
 }) {
   const bodyId = useId();
   const { name, counts, workspace } = branch;
+  const status = workspaceStatus(counts);
   return (
-    <section aria-label={name} className="nav-ws">
-      <div className="nav-ws-head">
+    <section aria-label={name} className={compact ? "nav-ws nav-ws-compact" : "nav-ws"}>
+      {compact ? (
+        <div className="nav-project">
+          <button type="button" className="nav-disclosure" aria-label={`${name} panes`} aria-expanded={open} aria-controls={open ? bodyId : undefined}
+            disabled={searching} onClick={() => onToggle(!open)}>
+            <ChevronRight aria-hidden size={14} />
+          </button>
+          <Link className="nav-row" to={spacePath(workspace.workspaceId, session)} onClick={onNavigate}>
+            <LayoutGrid aria-hidden size={14} />
+            <span className="nav-row-text">{name}</span>
+            {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
+            {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
+            <span className="nav-count">{branch.tabs.length} {branch.tabs.length === 1 ? "tab" : "tabs"}</span>
+          </Link>
+        </div>
+      ) : <div className="nav-ws-head">
         <button type="button" className="nav-ws-toggle" aria-expanded={open} aria-controls={open ? bodyId : undefined} disabled={searching}
           onClick={() => onToggle(!open)}>
           <ChevronRight aria-hidden size={15} className="nav-ws-chevron" />
@@ -60,7 +78,7 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
         <Link className="nav-ws-open" to={spacePath(workspace.workspaceId, session)} onClick={onNavigate} aria-label={`Open workspace ${name}`}>
           <LayoutGrid aria-hidden size={15} />
         </Link>
-      </div>
+      </div>}
       {open && (
         <div id={bodyId} className="nav-ws-body">
           {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} session={session} currentPaneId={currentPaneId} onNavigate={onNavigate} />)}
@@ -69,6 +87,14 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
       )}
     </section>
   );
+}
+
+/** The one dot a folded workspace shows: its most urgent agent, none for a workspace of shells. */
+function workspaceStatus(counts: WorkspaceBranch["counts"]): AgentStatus | undefined {
+  if (counts.blocked) return "blocked";
+  if (counts.working) return "working";
+  if (counts.done) return "done";
+  return counts.agents ? "idle" : undefined;
 }
 
 /** "3 chats · 2 working · 1 needs you": what is inside, and only the states worth a look. */

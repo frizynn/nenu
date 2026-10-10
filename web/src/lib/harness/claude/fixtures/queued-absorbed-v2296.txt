@@ -1,0 +1,35 @@
+[0m[38;2;215;119;87m ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▛█   [0m[1mClaude Code [0m[38;2;153;153;153mv2.1.296[0m
+[0m[38;2;215;119;87m▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m█▀  [0m[38;2;153;153;153mHaiku 5.5 with low effort · Claude Team[0m
+[0m[38;2;215;119;87m ▝▝   ▝▝   [0m[38;2;153;153;153m/private/tmp/claude-501/nenu-probe[0m
+
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mRun the bash command [0m[38;2;177;185;249m[48;2;55;55;55msleep 25[0m[38;2;255;255;255m[48;2;55;55;55m and then reply with exactly the word DONE.[0m[48;2;55;55;55m                                             [0m
+
+[0m[38;2;255;107;128m⏺[0m [0m[1mBash[0m(sleep 25)
+[0m[38;2;153;153;153m  ⎿  [0m[38;2;255;107;128mError: Blocked: standalone sleep 25. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>;[0m
+     [0m[38;2;255;107;128mdo sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps [0m
+     [0m[38;2;255;107;128mto work around this block.[0m
+
+[0m[38;2;255;255;255m⏺ [0mThe harness blocked a standalone foreground [0m[38;2;177;185;249msleep[0m. I'll run the same command in the background, which it allows.
+
+[0m[38;2;78;186;101m⏺[0m [0m[1mBash[0m(sleep 25)
+[0m[38;2;153;153;153m  ⎿  Running in the background (↓ to manage)[0m
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mAlso add the word BANANA to your final reply.[0m[48;2;55;55;55m                                                                        [0m
+
+[0m[38;2;255;255;255m⏺ [0mThe 25-second sleep is running in the background, and I'll reply when it finishes. Per your new message, my final
+  reply will be [0m[38;2;177;185;249mDONE [0mwith [0m[38;2;177;185;249mBANANA [0madded.
+
+[0m[38;2;153;153;153m✻ Crunched for 12s · done 2:04 AM[0m
+
+[0m[38;2;78;186;101m⏺[0m Background command "Sleep for 25 seconds in background" completed (exit code 0)
+
+[0m[38;2;255;255;255m⏺[0m DONE BANANA
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mCogitated for 2s · done 2:05 AM[0m
+
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+❯ 
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[38;2;255;193;7m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle) · ← for agents                                                             [0m[38;2;78;186;101m/rc[0m

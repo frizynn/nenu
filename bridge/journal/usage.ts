@@ -1,7 +1,7 @@
 import type { SessionTelemetry } from "./types.ts";
 
 type Usage = Omit<SessionTelemetry, "fileTruncated">;
-type RecordValue = Record<string, unknown>;
+export type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as RecordValue : {};
@@ -33,82 +33,90 @@ function limits(value: unknown): Usage["rateLimits"] {
   return result.length ? result : undefined;
 }
 
-/** Codex's counters are provider-reported cumulative totals, not a sum of repeated events. */
-export function parseCodexUsage(text: string): Usage | undefined {
-  const result: Usage = { source: "journal" };
-  let found = false;
-  for (const row of rows(text)) {
-    const p = record(row.payload);
-    let changed = false;
-    if (row.type === "turn_context") {
-      const model = label(p.model);
-      const effort = label(p.effort) ?? label(p.reasoning_effort);
-      if (model) {
-        // A changed model's old context window is not evidence of the new model's capacity.
-        if (result.model && result.model !== model) delete result.context;
-        result.model = model;
-        result.effort = effort;
-        changed = true;
-      } else if (effort) {
-        result.effort = effort;
-        changed = true;
-      }
-    } else if (row.type === "event_msg" && p.type === "token_count") {
-      const info = record(p.info);
-      const total = record(info.total_token_usage);
-      const tokens: NonNullable<Usage["tokens"]> = {
-        scope: "session", input: count(total.input_tokens), output: count(total.output_tokens),
-        cachedInput: count(total.cached_input_tokens), total: count(total.total_tokens),
-      };
-      if ([tokens.input, tokens.output, tokens.cachedInput, tokens.total].some((v) => v !== undefined)) {
-        result.tokens = tokens;
-        changed = true;
-      }
-      const last = record(info.last_token_usage);
-      const usedTokens = count(last.total_tokens);
-      const windowTokens = count(info.model_context_window);
-      if (usedTokens !== undefined || (windowTokens !== undefined && windowTokens > 0)) {
-        result.context = { usedTokens, windowTokens: windowTokens && windowTokens > 0 ? windowTokens : undefined };
-        changed = true;
-      }
-      if (Object.hasOwn(p, "rate_limits")) {
-        result.rateLimits = limits(p.rate_limits);
-        if (result.rateLimits) changed = true;
-      }
-    } else continue;
-    if (changed) {
-      found = true;
-      result.observedAt = timestamp(row.timestamp) ?? result.observedAt;
+/**
+ * Codex's counters are provider-reported cumulative totals, not a sum of repeated events. Folded one
+ * row at a time so a resumable parser can carry the result across appends; `undefined` until a row
+ * reported something.
+ */
+export function codexUsageRow(row: RecordValue, prev: Usage | undefined): Usage | undefined {
+  const p = record(row.payload);
+  const result: Usage = prev ?? { source: "journal" };
+  let changed = false;
+  if (row.type === "turn_context") {
+    const model = label(p.model);
+    const effort = label(p.effort) ?? label(p.reasoning_effort);
+    if (model) {
+      // A changed model's old context window is not evidence of the new model's capacity.
+      if (result.model && result.model !== model) delete result.context;
+      result.model = model;
+      result.effort = effort;
+      changed = true;
+    } else if (effort) {
+      result.effort = effort;
+      changed = true;
+    }
+  } else if (row.type === "event_msg" && p.type === "token_count") {
+    const info = record(p.info);
+    const total = record(info.total_token_usage);
+    const tokens: NonNullable<Usage["tokens"]> = {
+      scope: "session", input: count(total.input_tokens), output: count(total.output_tokens),
+      cachedInput: count(total.cached_input_tokens), total: count(total.total_tokens),
+    };
+    if ([tokens.input, tokens.output, tokens.cachedInput, tokens.total].some((v) => v !== undefined)) {
+      result.tokens = tokens;
+      changed = true;
+    }
+    const last = record(info.last_token_usage);
+    const usedTokens = count(last.total_tokens);
+    const windowTokens = count(info.model_context_window);
+    if (usedTokens !== undefined || (windowTokens !== undefined && windowTokens > 0)) {
+      result.context = { usedTokens, windowTokens: windowTokens && windowTokens > 0 ? windowTokens : undefined };
+      changed = true;
+    }
+    if (Object.hasOwn(p, "rate_limits")) {
+      result.rateLimits = limits(p.rate_limits);
+      if (result.rateLimits) changed = true;
     }
   }
-  return found ? result : undefined;
+  if (!changed) return prev;
+  result.observedAt = timestamp(row.timestamp) ?? result.observedAt;
+  return result;
+}
+
+export function parseCodexUsage(text: string): Usage | undefined {
+  let result: Usage | undefined;
+  for (const row of rows(text)) result = codexUsageRow(row, result);
+  return result;
 }
 
 /** Claude rows can repeat an API message across blocks. Report its latest usage without summing. */
+export function claudeUsageRow(row: RecordValue, prev: Usage | undefined): Usage | undefined {
+  if (row.type !== "assistant" || row.isSidechain === true) return prev;
+  const m = record(row.message);
+  const model = label(m.model);
+  if (model === "<synthetic>") return prev;
+  const usage = record(m.usage);
+  const uncached = count(usage.input_tokens);
+  const read = count(usage.cache_read_input_tokens);
+  const write = count(usage.cache_creation_input_tokens);
+  const output = count(usage.output_tokens);
+  // Claude input_tokens excludes both cache categories. Missing categories are unknown, not zero.
+  const input = uncached !== undefined && read !== undefined && write !== undefined
+    ? count(uncached + read + write) : undefined;
+  if (!model && input === undefined && output === undefined && read === undefined) return prev;
+  const result: Usage = { source: "journal", model, observedAt: timestamp(row.timestamp) };
+  if (input !== undefined || output !== undefined || read !== undefined) {
+    result.tokens = {
+      scope: "last-message", input, output, cachedInput: read,
+      total: input !== undefined && output !== undefined ? count(input + output) : undefined,
+    };
+  }
+  if (input !== undefined) result.context = { usedTokens: input };
+  return result;
+}
+
 export function parseClaudeUsage(text: string): Usage | undefined {
   let result: Usage | undefined;
-  for (const row of rows(text)) {
-    if (row.type !== "assistant" || row.isSidechain === true) continue;
-    const m = record(row.message);
-    const model = label(m.model);
-    if (model === "<synthetic>") continue;
-    const usage = record(m.usage);
-    const uncached = count(usage.input_tokens);
-    const read = count(usage.cache_read_input_tokens);
-    const write = count(usage.cache_creation_input_tokens);
-    const output = count(usage.output_tokens);
-    // Claude input_tokens excludes both cache categories. Missing categories are unknown, not zero.
-    const input = uncached !== undefined && read !== undefined && write !== undefined
-      ? count(uncached + read + write) : undefined;
-    if (!model && input === undefined && output === undefined && read === undefined) continue;
-    result = { source: "journal", model, observedAt: timestamp(row.timestamp) };
-    if (input !== undefined || output !== undefined || read !== undefined) {
-      result.tokens = {
-        scope: "last-message", input, output, cachedInput: read,
-        total: input !== undefined && output !== undefined ? count(input + output) : undefined,
-      };
-    }
-    if (input !== undefined) result.context = { usedTokens: input };
-  }
+  for (const row of rows(text)) result = claudeUsageRow(row, result);
   return result;
 }

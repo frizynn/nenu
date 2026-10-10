@@ -1,13 +1,17 @@
 import { TranscriptQuestion } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { splitMessageImages } from "@/lib/message-images";
+import { filePathsInText, sentFiles } from "@/lib/chat-files";
+import { IMAGE_EXTENSION, imageLabel, journalImages, splitMessageImages } from "@/lib/message-images";
+import { ArtifactCards } from "./artifact-card";
 import { ChatMedia } from "./chat-media";
+import { MediaViewerContext } from "./file-preview-provider";
+import { ImageStrip, JournalImages, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
 import { ChevronRight, Info } from "lucide-react";
 
 import { MarkdownText } from "@/components/markdown-text";
 import { searchableText } from "@/lib/transcript-search";
-import { WorkLogTools } from "@/components/work-log-tools";
+import { relabel, useToolImages, WorkLogTools } from "@/components/work-log-tools";
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, formatWorkDuration, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -52,10 +56,21 @@ function ThinkingPart({ part, query, focused = false }: { part: Extract<Transcri
   </div>;
 }
 
-function Part({ part, query, focused = false, active = false, compactMedia = false }: { part: TranscriptPart; query: string; focused?: boolean; active?: boolean; compactMedia?: boolean }) {
+function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true }: {
+  part: TranscriptPart;
+  entryId: string;
+  query: string;
+  focused?: boolean;
+  active?: boolean;
+  compactMedia?: boolean;
+  /** False when the entry's journal already holds its images, so upload paths don't show them twice. */
+  uploads?: boolean;
+}) {
   const media = useContext(FileMediaContext);
+  // Inline journal images render as one strip per entry (EntryImages), not part by part.
+  if (part.kind === "image") return null;
   // Tool output is COMMAND output, not prose — it stays verbatim in a monospace block (see ToolPart).
-  if (part.kind === "tool") return <WorkLogTools calls={[{ id: "single", part }]} query={query} active={active} />;
+  if (part.kind === "tool") return <WorkLogTools calls={[{ id: "single", part, owner: entryId }]} query={query} active={active} />;
   if (part.kind === "thinking") return <ThinkingPart part={part} query={query} focused={focused} />;
   // Prose is Markdown, so it renders formatted. MarkdownText emits React elements only — never
   // markup — so this keeps the same XSS boundary the raw text node had.
@@ -65,10 +80,16 @@ function Part({ part, query, focused = false, active = false, compactMedia = fal
         text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
       />
-      <ChatMedia text={part.text} compact={compactMedia} />
+      <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
     </div>
   );
+}
+
+/** The images an entry holds inline, as one gallery; the user's sit in the bubble like uploads. */
+function EntryImages({ entry }: { entry: TranscriptEntry }) {
+  const images = journalImages(entry);
+  return images.length ? <JournalImages entry={entry.uuid} images={images} className="pt-1" /> : null;
 }
 
 function Turn({
@@ -84,6 +105,7 @@ function Turn({
   focused?: boolean;
 }) {
   const time = clockTime(entry.ts);
+  const inline = journalImages(entry).length > 0;
 
   // Neither of these is speech, so both render dashed-and-muted — visibly set apart from the
   // conversation rather than attributed to the user or the agent.
@@ -96,8 +118,9 @@ function Turn({
           {time && ` · ${time}`}
         </div>
         {entry.parts.map((part, i) => (
-          <Part key={i} part={part} query={query} focused={focused} />
+          <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
         ))}
+        <EntryImages entry={entry} />
       </div>
     );
   }
@@ -110,8 +133,9 @@ function Turn({
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
         <div className="max-w-[85%] min-w-0 space-y-1.5 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 [overflow-wrap:anywhere]">
           {entry.parts.map((part, i) => (
-            <Part key={i} part={part} query={query} focused={focused} compactMedia />
+            <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
           ))}
+          <EntryImages entry={entry} />
         </div>
         {showHeader && time && <span className="mt-1 px-1 text-[11px] leading-none text-muted-foreground/70">{time}</span>}
       </div>
@@ -120,8 +144,9 @@ function Turn({
   return (
     <div data-speaker="assistant" className="space-y-1.5 px-0.5" title={time || undefined}>
       {entry.parts.map((part, i) => (
-        <Part key={i} part={part} query={query} focused={focused} />
+        <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
+      <EntryImages entry={entry} />
     </div>
   );
 }
@@ -137,9 +162,10 @@ function ActivityLog({ entries, query, focusedUuid, active }: { entries: Transcr
   }
   return <div className="space-y-1 pl-5 text-xs text-muted-foreground">
     {blocks.map((block) => block.kind === "tools"
-      ? <WorkLogTools key={block.entries[0]!.uuid} calls={block.entries.flatMap((entry) => entry.parts.flatMap((part, index) => part.kind === "tool" ? [{ id: `${entry.uuid}:${index}`, entryId: index === 0 ? entry.uuid : undefined, part }] : []))} query={query} focusedEntryId={focusedUuid} active={active} />
+      ? <WorkLogTools key={block.entries[0]!.uuid} calls={block.entries.flatMap((entry) => entry.parts.flatMap((part, index) => part.kind === "tool" ? [{ id: `${entry.uuid}:${index}`, entryId: index === 0 ? entry.uuid : undefined, owner: entry.uuid, part }] : []))} query={query} focusedEntryId={focusedUuid} active={active} />
       : <div key={block.entry.uuid} data-turn={block.entry.uuid} className={focusedUuid === block.entry.uuid ? "rounded ring-2 ring-primary/60" : undefined}>
-          {block.entry.parts.map((part, index) => <Part key={index} part={part} query={query} focused={focusedUuid === block.entry.uuid} active={active} />)}
+          {block.entry.parts.map((part, index) => <Part key={index} part={part} entryId={block.entry.uuid} query={query} focused={focusedUuid === block.entry.uuid} active={active} />)}
+          <EntryImages entry={block.entry} />
         </div>)}
   </div>;
 }
@@ -151,11 +177,21 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
   const open = searching || (expanded ?? !turn.settled);
   const tools = turn.activity.flatMap((entry) => entry.parts.filter((part) => part.kind === "tool"));
   const failures = tools.filter((part) => part.result?.isError).length;
-  const truncated = turn.activity.some((entry) => entry.parts.some((part) => part.kind === "tool" ? part.result?.truncated : part.truncated));
+  const truncated = turn.activity.some((entry) => entry.parts.some((part) => part.kind === "tool" ? part.result?.truncated : part.kind !== "image" && part.truncated));
   const hasDetails = turn.activity.length > 0;
   const label = turn.interrupted ? "Stopped" : turn.settled ? "Worked" : "Work log";
   const duration = turn.durationMs !== undefined ? ` for ${formatWorkDuration(turn.durationMs)}` : "";
   const lastPart = turn.activity.at(-1)?.parts.at(-1);
+  const viewer = useContext(MediaViewerContext);
+  const toolImages = useToolImages();
+  // Folded work still shows what the agent looked at, as one gallery for the turn.
+  const turnImages: StripImage[] = open ? [] : relabel(turn.activity.flatMap((entry) => [
+    ...entry.parts.flatMap((part) => part.kind === "tool" ? toolImages(part, entry.uuid) : []),
+    ...journalImages(entry).map(({ index }) => ({ src: viewer?.journalUrl(entry.uuid, index), label: imageLabel(0), item: { kind: "journal" as const, entry: entry.uuid, index, label: imageLabel(0) } })),
+  ]));
+  const answerPaths = turn.answer ? turn.answer.parts.flatMap((part) => part.kind === "text" ? filePathsInText(part.text) : []) : [];
+  const delivered = [...new Set(turn.activity.flatMap((entry) => entry.parts.flatMap(sentFiles)))]
+    .filter((path) => !IMAGE_EXTENSION.test(path) && !answerPaths.some((mention) => path === mention || path.endsWith(`/${mention.replace(/^\.\//, "")}`)));
   return <div className="space-y-2" data-work-turn={turn.id}>
     <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails}
       onClick={() => setExpanded(!open)} className="flex min-h-11 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0 text-left text-xs text-muted-foreground hover:text-foreground disabled:opacity-100 md:min-h-7">
@@ -172,6 +208,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive }: { turn: Work
       className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
       <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
     </div>}
+    <ArtifactCards paths={delivered} />
+    <ImageStrip images={turnImages} max={3} label="Images from this turn" />
   </div>;
 }
 
@@ -182,8 +220,11 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   activityStatus?: AgentStatus;
   onWorkToggle?: (anchor: HTMLElement) => void;
 }) {
+  // A question is pending until its call has a result: Claude records the answer as the
+  // AskUserQuestion tool_result, which can land without any user-typed turn after it.
   const questionIndex = entries.findLastIndex((entry) => entry.parts.some((part) => part.kind === "tool" && part.questions?.length));
-  const pendingQuestion = questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
+  const questionOpen = entries[questionIndex]?.parts.some((part) => part.kind === "tool" && !!part.questions?.length && !part.result);
+  const pendingQuestion = questionOpen && questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
   const rows = useMemo(() => buildWorkTimeline(entries, activityStatus), [entries, activityStatus]);
   let lastDay = "";
   let lastRole = "";

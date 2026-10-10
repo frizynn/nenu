@@ -1,7 +1,11 @@
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { fakeLiveStream } from "@/test/live-stream";
-import { concerns, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, type LiveEvent } from "./live-events";
+import { concerns, connectLiveEvents, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, setMirrorShown, type LiveEvent, type LiveSource } from "./live-events";
+
+vi.mock("react-router", () => ({ useParams: () => ({ paneId: "w1:p1" }) }));
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -13,6 +17,9 @@ describe("parseLiveEvent", () => {
   it("accepts the bridge's frames and nothing else", () => {
     expect(parseLiveEvent('{"topic":"snapshot"}')).toEqual({ topic: "snapshot" });
     expect(parseLiveEvent('{"topic":"queue","paneId":"w1:p1"}')).toEqual({ topic: "queue", paneId: "w1:p1" });
+    expect(parseLiveEvent('{"topic":"org"}')).toEqual({ topic: "org" });
+    expect(parseLiveEvent('{"topic":"interaction","paneId":"w1:p1"}')).toEqual({ topic: "interaction", paneId: "w1:p1" });
+    expect(parseLiveEvent('{"topic":"toString"}')).toBeNull();
     expect(parseLiveEvent('{"topic":"resync"}')).toBeNull();
     expect(parseLiveEvent('{"topic":"pane","paneId":3}')).toBeNull();
     expect(parseLiveEvent("not json")).toBeNull();
@@ -54,5 +61,51 @@ describe("connectLiveEvents", () => {
     expect(stream.sources[1]!.close).toHaveBeenCalled();
     vi.advanceTimersByTime(60_000);
     expect(stream.sources).toHaveLength(2);
+  });
+});
+
+describe("connectLiveEvents with resync", () => {
+  it("resyncs on its first open when it replaces a stream that just closed", () => {
+    const events: LiveEvent[] = [];
+    onLiveEvent((event) => events.push(event));
+    let source: LiveSource | undefined;
+    const stop = connectLiveEvents("/api/events?watch=w1%3Ap1", {
+      open: () => (source = { onopen: null, onmessage: null, onerror: null, close: vi.fn() }),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (handle) => clearTimeout(handle),
+    }, { resync: true });
+    source!.onopen?.(new Event("open"));
+    expect(events).toEqual([{ topic: "resync" }]);
+    stop();
+  });
+});
+
+describe("useLiveEvents", () => {
+  it("swaps the stream when the watched pane changes without going unhealthy, and resyncs", () => {
+    const sources: { url: string; source: LiveSource }[] = [];
+    vi.stubGlobal("EventSource", class {
+      onopen: ((ev: Event) => void) | null = null;
+      onmessage = null;
+      onerror = null;
+      close = vi.fn();
+      constructor(url: string) { sources.push({ url, source: this }); }
+    });
+    const events: LiveEvent[] = [];
+    onLiveEvent((event) => events.push(event));
+    const { unmount } = renderHook(() => useLiveEvents(undefined));
+    expect(sources.map(({ url }) => url)).toEqual(["/api/events?watch=w1%3Ap1"]);
+    act(() => sources[0]!.source.onopen?.(new Event("open")));
+    expect([isLiveHealthy(), events]).toEqual([true, []]);
+
+    act(() => setMirrorShown(false));
+    expect(sources.map(({ url }) => url)).toEqual(["/api/events?watch=w1%3Ap1", "/api/events"]);
+    expect(sources[0]!.source.close).toHaveBeenCalled();
+    expect(isLiveHealthy()).toBe(true);
+    act(() => sources[1]!.source.onopen?.(new Event("open")));
+    expect(events).toEqual([{ topic: "resync" }]);
+
+    unmount();
+    expect(isLiveHealthy()).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

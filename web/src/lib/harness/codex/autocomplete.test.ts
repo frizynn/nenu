@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseAnsi } from "../../ansi";
 import { splitLines } from "../../blocks";
-import { draftCarriesSend } from "../../reply-action";
+import { draftCarriesSend } from "../../guarded-reply";
 import { codexAdapter } from "./index";
 import { locateComposer } from "./chrome";
 

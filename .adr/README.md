@@ -75,9 +75,24 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0017](./0017-recognising-a-password-prompt-changes-what-collie-says.md) | Recognising a password prompt changes what Nenu says, never what it sends | Accepted |
 | [0018](./0018-operator-command-rows-replace-the-catalog.md) | The operator's command rows replace the catalog, never merge into it | Accepted |
 | [0020](./0020-a-major-upgrade-is-consented-by-flag.md) | A major upgrade is consented by flag; routine update follows tags within the major | Accepted |
-| [0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) | HTML previews run in an opaque, no-network sandbox | Accepted |
+| [0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) | HTML previews run in an opaque, no-network sandbox | Accepted; transport superseded by 0025, amended by 0059 |
+| [0022](./0022-native-agent-sessions-and-explicit-history-recovery.md) | Native agent sessions and explicit history recovery | Accepted; manual-only recovery superseded by 0028 |
+| [0023](./0023-codex-replies-use-bracketed-paste.md) | Codex replies are sent as bracketed paste | Accepted |
+| [0024](./0024-session-subagent-inspector.md) | Subagents are read within their parent session | Accepted |
+| [0025](./0025-artifacts-and-server-message-queue.md) | Artifacts and a server-owned message queue | Accepted; queue half partially superseded by 0056, artifacts half amended by 0059 |
+| [0026](./0026-open-clients-survive-frontend-updates.md) | Open clients stay usable across frontend updates | Accepted |
+| [0027](./0027-quiet-recovery-on-intermittent-networks.md) | Intermittent connectivity and updates stay out of the conversation | Accepted |
+| [0028](./0028-automatic-codex-history-recovery.md) | Automatic Codex history recovery from the live terminal title | Accepted |
 | [0048](./0048-the-input-box-is-found-by-its-own-frame.md) | The input box is found by its own frame; the statusline bound only bounds what is stripped (amends 0004) | Accepted |
 | [0053](./0053-an-unread-dialog-still-has-a-way-out.md) | An unread dialog still has a way out: a footer phrase never silences a grammar (only that half is in Nenu) | Proposed |
+| [0054](./0054-the-browser-hears-what-changed-not-the-state.md) | The browser hears what changed, never the state | Accepted; amended by 0058 |
+| [0055](./0055-the-folder-picker-lists-names-under-home-only.md) | The folder picker lists folder names under home, and nothing else | Accepted |
+| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted |
+| [0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md) | The bridge reads and answers dialogs; the screen is the actuator and hooks only observe | Accepted |
+| [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted |
+| [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted |
+| [0060](./0060-codex-panes-stay-off-the-daemon.md) | Codex panes stay off the daemon (launching Codex daemon-backed was rejected) | Rejected |
+| [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

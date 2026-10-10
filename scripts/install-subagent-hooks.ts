@@ -1,8 +1,7 @@
-import { readFile, writeFile, rename } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { object } from "../bridge/subagent-files.ts";
 import { loadConfig } from "../bridge/config.ts";
+import { defaultSettingsPath, pluginRoot, updateClaudeSettings } from "./install-claude-hooks.ts";
 
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 export function subagentHookSettings(settings: unknown, command: string): Record<string, unknown> {
@@ -25,17 +24,10 @@ export function subagentHookSettings(settings: unknown, command: string): Record
 }
 
 if (import.meta.main) {
-  const settingsPath = process.argv[2] ?? join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
+  const settingsPath = process.argv[2] ?? defaultSettingsPath();
   const stateDir = process.argv[3] ?? loadConfig().stateDir;
-  const command = [process.execPath, resolve(import.meta.dir, "subagent-hook.ts"), stateDir].map(quote).join(" ");
-  const before = await readFile(settingsPath, "utf8");
-  const next = JSON.stringify(subagentHookSettings(JSON.parse(before), command), null, 2) + "\n";
-  if (next !== before) {
-    await writeFile(`${settingsPath}.nenu-backup-${Date.now()}`, before, { mode: 0o600, flag: "wx" });
-    const temporary = `${settingsPath}.nenu-${crypto.randomUUID()}.tmp`;
-    await writeFile(temporary, next, { mode: 0o600, flag: "wx" });
-    if (await readFile(settingsPath, "utf8") !== before) throw new Error("Claude settings changed; retry installation.");
-    await rename(temporary, settingsPath);
-  }
-  console.log("Nenu subagent hooks installed; existing hooks preserved.");
+  const script = join(pluginRoot("subagent-hook.ts"), "scripts", "subagent-hook.ts");
+  const command = [process.execPath, script, stateDir].map(quote).join(" ");
+  await updateClaudeSettings(settingsPath, (settings) => subagentHookSettings(settings, command), "nenu-backup");
+  console.log(`Nenu subagent hooks installed from ${script}; existing hooks preserved.`);
 }

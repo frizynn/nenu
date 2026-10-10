@@ -25,6 +25,8 @@ interface LiveConversationProps {
   query?: string;
   currentMatch?: number;
   onMatchCount?: (count: number) => void;
+  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards). */
+  footer?: ReactNode;
 }
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
@@ -41,7 +43,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -272,12 +274,13 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
                 activityStatus={!error && !frozen ? activityStatus : undefined} onWorkToggle={onWorkToggle} />
               <PendingTurns sends={localSends} actions={localSendActions} />
-            </> : localSends.length > 0 ? <PendingTurns sends={localSends} actions={localSendActions} /> : <div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+              {footer}
+            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{footer}</> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               {loading ? <Loader2 className="size-5 animate-spin motion-reduce:animate-none" /> : <MessageSquare className="size-5" />}
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && recovery}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
-            </div>}
+            </div>{footer}</>}
           </div>
         </div>
         {paused && <button type="button" onClick={followLatest} aria-label="Scroll to latest" className="absolute bottom-3 left-1/2 z-10 flex min-h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs shadow-md hover:bg-muted">

@@ -499,7 +499,7 @@ export function describeAdapterConformance(
         });
 
         // A menu HAS the keyboard. If the adapter can tell whether its composer is on screen, it must
-        // say no here — otherwise the reply pre-flight (lib/reply-action.ts) would type the user's
+        // say no here — otherwise the reply pre-flight (bridge/guarded-send.ts) would type the user's
         // message into the modal, which is the exact `/model` bug the grammar exists to end.
         it(`${name}: composerReady is false while the modal is up`, () => {
           if (!adapter.composerReady) return; // "no idea" is allowed; a wrong "yes" is not

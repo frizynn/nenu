@@ -1,0 +1,39 @@
+[0m[2m╭─────────────────────────────────────────────────╮[0m
+[0m[2m│ [0m[1m[38;2;99;168;248m✨ Update available![0m [0m[1m0.160.1 -> 0.162.1[0m[2m         │[0m
+[0m[2m│ [0mRun [0m[38;2;99;168;248mnpm install -g @openai/codex[0m to update.[0m[2m     │[0m
+[0m[2m│                                                 │[0m
+[0m[2m│ [0mSee full release notes:[0m[2m                         │[0m
+[0m[2m│ [0m[4m[38;2;99;168;248mhttps://github.com/openai/codex/releases/latest[0m[2m │[0m
+[0m[2m╰─────────────────────────────────────────────────╯[0m
+
+
+  [0m[38;2;99;168;248m>_ [0m[1mOpenAI Codex[0m[2m (v0.160.1)[0m
+     [0m[2m/private/tmp/nenu-probe[0m
+
+  [0m[38;2;99;168;248mA long time ago, in a directory not so far away…[0m
+
+[0m[2m• [0mModel changed to gpt-6.1-sol medium for Plan mode.
+
+
+[0m[1m[2m› [0mUse the request_user_input tool to ask me one question: which fruit do I prefer, options Apple and Banana. Do
+  nothing else.
+
+
+
+
+
+
+
+
+
+
+
+
+  [0m[2mQuestion 1/1 (1 unanswered)[0m
+  [0m[38;2;99;168;248mWhich fruit do you prefer?[0m
+ 
+    1. Apple              [0m[2mChoose Apple.[0m
+    2. Banana             [0m[2mChoose Banana.[0m
+  [0m[1m[7m› 3. None of the above  [0m[7mOptionally, add details in notes (tab)[0m[1m[7m                                                     [0m
+
+  [0m[1mtab[0m to add notes[0m[2m | [0m[1menter[0m to submit answer[0m[2m | [0m[1mesc[0m to interrupt

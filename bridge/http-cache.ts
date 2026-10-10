@@ -27,6 +27,32 @@ export function notModified(ifNoneMatch: string | null, etag: string): boolean {
   return ifNoneMatch !== null && ifNoneMatch === etag;
 }
 
+/** RFC 7232 §4.1: a 304 echoes the ETag and carries no body. */
+export function notModifiedResponse(etag: string): Response {
+  return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
+}
+
+/**
+ * Share one in-flight load between callers asking for the same key. N phones on one pane then cost
+ * one Herdr read instead of N. Only loads still running are shared: a caller that arrives after a
+ * load settled reads again, so a fetch prompted by a change announced since then sees that change.
+ */
+export class SharedLoads<T> {
+  private readonly loads = new Map<string, Promise<T>>();
+
+  get(key: string, load: () => Promise<T>): Promise<T> {
+    const hit = this.loads.get(key);
+    if (hit) return hit;
+    const value = load();
+    this.loads.set(key, value);
+    const settle = () => {
+      if (this.loads.get(key) === value) this.loads.delete(key);
+    };
+    value.then(settle, settle);
+    return value;
+  }
+}
+
 /**
  * Build a JSON Response, gzip-compressing the body when the client signals gzip
  * support via Accept-Encoding and the serialised body is large enough to benefit.

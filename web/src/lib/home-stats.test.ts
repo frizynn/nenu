@@ -1,4 +1,5 @@
-import { activityByHour, greeting, herdCounts, herdHeadline, jumpTargets, projectProgress } from "./home-stats";
+import type { ActivityResponse, ActivityWorkflow } from "./activity";
+import { finishedNotices, greeting, homeHeadline, jumpTargets, needsYouItems, projectStateCounts, reviewItems, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -18,26 +19,20 @@ const project: ProjectView = {
   ],
 };
 
-describe("herd counts and headline", () => {
-  const herd = [
-    agent("a", "blocked"),
-    agent("b", "done", { lastActiveAt: NOW - MIN, lastSeenAt: NOW - 10 * MIN }),
-    agent("c", "done", { lastActiveAt: NOW - 10 * MIN, lastSeenAt: NOW - MIN }),
-    agent("d", "working"),
-    agent("e", "idle"),
-  ];
-
-  it("buckets with the triage classifier, so a seen done agent rests", () => {
-    expect(herdCounts(herd)).toEqual({ needs: 1, ready: 1, working: 1, recent: 2, total: 5 });
+describe("headline", () => {
+  it("names what needs you and what is ready, never a list", () => {
+    expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9)).toBe("2 threads need you, 2 are ready to review");
+    expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9)).toBe("1 thread needs you");
+    expect(homeHeadline({ needs: 0, review: 1, working: 0 }, 9)).toBe("1 result ready to review");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9)).toBe("2 agents at work");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9)).toBe("All quiet");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0)).toBe("What should we work on?");
   });
 
-  it("leads with the most urgent fact", () => {
-    expect(herdHeadline(herdCounts(herd))).toBe("1 agent needs you");
-    expect(herdHeadline(herdCounts([agent("a", "blocked"), agent("b", "blocked")]))).toBe("2 agents need you");
-    expect(herdHeadline(herdCounts([agent("b", "done", { lastActiveAt: 2, lastSeenAt: 1 })]))).toBe("1 result ready to review");
-    expect(herdHeadline(herdCounts([agent("d", "working"), agent("e", "working")]))).toBe("2 agents at work");
-    expect(herdHeadline(herdCounts([agent("e", "idle")]))).toBe("All quiet");
-    expect(herdHeadline(herdCounts([]))).toBe("What should we work on?");
+  it("keeps the phone's to two facts", () => {
+    expect(homeHeadline({ needs: 2, review: 0, working: 5 }, 9, true)).toBe("2 need you · 5 working");
+    expect(homeHeadline({ needs: 1, review: 3, working: 5 }, 9, true)).toBe("1 needs you · 3 to review");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 1, true)).toBe("All quiet");
   });
 
   it("greets by the local hour", () => {
@@ -48,29 +43,63 @@ describe("herd counts and headline", () => {
   });
 });
 
-describe("activityByHour", () => {
-  it("counts each agent once, in the hour of its latest change, ending with the current hour", () => {
-    const buckets = activityByHour([
-      agent("a", "working", { lastActiveAt: NOW - 5 * MIN }),
-      agent("b", "idle", { lastActiveAt: NOW - 20 * MIN }),
-      agent("c", "idle", { lastActiveAt: NOW - 3 * 60 * MIN }),
-      agent("d", "idle", { lastActiveAt: NOW - 13 * 60 * MIN }),
-      agent("e", "idle"),
-    ], NOW, 12);
-    expect(buckets).toHaveLength(12);
-    expect(buckets.at(-1)).toEqual({ start: new Date(2026, 9, 7, 15).getTime(), count: 2 });
-    expect(buckets.at(-4)!.count).toBe(1);
-    expect(buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(3);
+it("lists dialogs oldest first, then blocked panes the bridge read no dialog on", () => {
+  const agents = [agent("a", "blocked", { lastActiveAt: 5 }), agent("b", "blocked"), agent("c", "blocked", { lastActiveAt: 1 }), agent("d", "working")];
+  const items = needsYouItems(agents, [{ paneId: "b", detectedAt: 20 }, { paneId: "a", detectedAt: 10 }]);
+  expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : "blocked"}`)).toEqual(["a:asks", "b:asks", "c:blocked"]);
+});
+
+describe("review and project state", () => {
+  const hub: ProjectView = {
+    slug: "hub", name: "Hub", status: "active", source: "json",
+    coordinator: { paneId: "coord", agent: "codex", liveStatus: "working" },
+    threads: [
+      { id: "t1", title: "Coordinator", parentId: "root", role: "coordinator", status: "open", paneId: "coord", liveStatus: "working", group: "working" },
+      { id: "t2", title: "Panel", parentId: "t1", role: "worker", status: "open", paneId: "p2", liveStatus: "done", group: "ready-for-review", pr: { state: "open", number: 12 } },
+      { id: "t3", title: "Asks", parentId: "t1", role: "worker", status: "open", paneId: "p3", liveStatus: "blocked", group: "ready-for-review" },
+      { id: "t4", title: "Idle", parentId: "t1", role: "worker", status: "open", paneId: "p4", liveStatus: "idle", group: "idle" },
+      { id: "t5", title: "Shipped", parentId: "t1", role: "worker", status: "resolved", group: "resolved" },
+    ],
+  };
+
+  it("takes Organizations' ready-for-review group, unless the thread is asking", () => {
+    expect(reviewItems([hub]).map((item) => item.thread.id)).toEqual(["t2"]);
   });
 
-  it("is all zeros, never invented, when the bridge reports no timestamps", () => {
-    expect(activityByHour([agent("a", "working")], NOW).every((bucket) => bucket.count === 0)).toBe(true);
+  it("falls back to an open pull request on a stopped agent for a files-only project", () => {
+    const files: ProjectView = { ...hub, source: "files", threads: hub.threads.map(({ group: _group, ...thread }) => thread) };
+    expect(reviewItems([files]).map((item) => item.thread.id)).toEqual(["t2"]);
+  });
+
+  it("counts open threads by their dot, the coordinator once", () => {
+    expect(projectStateCounts(hub)).toEqual({ blocked: 1, working: 1, review: 1, idle: 1 });
+    expect(projectStateCounts({ ...hub, threads: [] })).toEqual({ blocked: 0, working: 1, review: 0, idle: 0 });
   });
 });
 
-it("measures project progress as resolved over all tasks", () => {
-  expect(projectProgress(project)).toEqual({ resolved: 2, total: 3, ratio: 2 / 3 });
-  expect(projectProgress({ ...project, threads: [] })).toEqual({ resolved: 0, total: 0, ratio: 0 });
+describe("background work", () => {
+  const wf = (runId: string, status: ActivityWorkflow["status"], updatedAt?: number): ActivityWorkflow =>
+    ({ runId, name: runId, status, updatedAt, phases: [], agentCount: 2, doneCount: 2 });
+  const res = (workflows: ActivityWorkflow[], tasks: Extract<ActivityResponse, { available: true }>["tasks"] = []): ActivityResponse =>
+    ({ available: true, sessionKey: "s", workflows, tasks, artifacts: [], truncated: false });
+
+  it("announces work that ended since the thread was last opened, newest first", () => {
+    const activity = new Map<string, ActivityResponse>([
+      ["a", res([wf("old", "completed", NOW - 30 * MIN), wf("new", "failed", NOW - 5 * MIN), wf("live", "running")],
+        [{ id: "k", kind: "bash", title: "Typecheck", status: "failed", exitCode: 144, at: NOW - 10 * MIN, hasOutput: true },
+         { id: "ok", kind: "bash", title: "Build", status: "completed", at: NOW - 2 * MIN, hasOutput: true }])],
+      ["b", res([wf("seen", "completed", NOW - 30 * MIN)])],
+      ["gone", res([wf("orphan", "completed", NOW - MIN)])],
+    ]);
+    const notices = finishedNotices(activity, [agent("a", "idle", { lastSeenAt: NOW - 60 * MIN }), agent("b", "idle", { lastSeenAt: NOW - 20 * MIN })], NOW);
+    expect(notices.map((n) => `${n.kind}:${n.id}:${n.failed}`)).toEqual(["workflow:new:true", "task:k:true", "workflow:old:false"]);
+    expect(runningWorkflows(activity).map((r) => `${r.paneId}:${r.workflow.runId}`)).toEqual(["a:live"]);
+  });
+
+  it("lets a day-old result go", () => {
+    const activity = new Map([["a", res([wf("ancient", "completed", NOW - 25 * 60 * MIN)])]]);
+    expect(finishedNotices(activity, [agent("a", "idle")], NOW)).toEqual([]);
+  });
 });
 
 describe("jumpTargets", () => {

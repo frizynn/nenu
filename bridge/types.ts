@@ -78,6 +78,20 @@ export interface AgentView {
    * `done` agent IS the "finished while you weren't looking" state — there is no stored seen flag.
    */
   lastSeenAt?: number;
+  /**
+   * Herdr's pane tokens (`pane.list` `tokens`, protocol 22+): short key/value tags a harness or
+   * plugin sets on the pane. Only an allowlisted subset is copied here (F2 owns the list); absent on
+   * older Herdr servers and when no allowed token is set.
+   */
+  tokens?: Record<string, string>;
+  /**
+   * Herdr's `agent.list` `state_change_seq`: bumps on every status transition, so two equal values
+   * mean no transition happened between two reads — even one that started and finished between
+   * polls. Absent on servers that don't report it.
+   */
+  stateChangeSeq?: number;
+  /** Herdr's `agent.list` `completion_seq`: bumps when an idle transition completed work. */
+  completionSeq?: number;
 }
 
 /**
@@ -178,6 +192,36 @@ export interface ProjectThreadView {
   paneId?: string;
   agent?: string;
   liveStatus?: AgentStatus;
+  /** Organizations' `last_group` for the thread (e.g. "ready", "needs-review"); absent when unset. */
+  group?: string;
+  branch?: string;
+  /** The thread's pull request. Numbers appear only when Organizations reported them (never guessed). */
+  pr?: ThreadPullRequest;
+  /** 1 for a direct child of the project, computed from `parentId`. */
+  depth?: number;
+  /** A report the person has not acknowledged yet. */
+  reportUnacked?: boolean;
+  groupLabel?: string;
+  /** Organizations' bracketed note: live agent state, `pane closed`, `failed: …`. `--json` only. */
+  note?: string;
+  /** The PR automation flags. Present only when Organizations has PR actions. */
+  autoFixCi?: boolean;
+  autoMerge?: boolean;
+}
+
+export interface ThreadPullRequest {
+  url?: string;
+  number?: number;
+  state: "open" | "draft" | "merged" | "closed";
+  review?: "approved" | "changes_requested" | "review_required" | "commented";
+  /** CI check counts, present only when the `--json` contract carries them. */
+  checks?: { passed: number; failed: number; pending: number; failing?: string[] };
+  /** Diff size, present only when the `--json` contract carries it. */
+  diff?: { additions: number; deletions: number };
+  /** Why `thread merge` would refuse, as of the ticker's last read; `null` when it would merge. `--json` only. */
+  mergeBlocker?: string | null;
+  commentCount?: number;
+  mergeable?: string;
 }
 
 export interface ProjectView {
@@ -187,10 +231,16 @@ export interface ProjectView {
   status: "active" | "paused";
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
+  /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */
+  source?: "json" | "files";
+  /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
+  prActions?: boolean;
+  /** Workspaces holding a live pane bound to this project, in this session. */
+  workspaceIds?: string[];
 }
 
 /**
- * Per-device authorisation state for the requesting client (see `deviceAuth()` in server.ts).
+ * Per-device authorisation state for the requesting client (see `deviceAuth()` in routes/access.ts).
  * Reported in the snapshot so the UI can show a read-only state. Optional on the wire so an older
  * bridge (or a response from before the feature existed) simply reads as "not enforced".
  */
@@ -203,7 +253,7 @@ export interface DeviceAuth {
   authorized: boolean;
 }
 
-// ── REST response shapes (the browser polls these; see server.ts) ──────────────
+// ── REST response shapes (the browser polls these; see routes/) ──────────────
 
 /** GET /api/snapshot — the current herd view. */
 export interface SnapshotResponse {
@@ -435,3 +485,158 @@ export interface PaneSkillsResponse {
   truncated: boolean;
   reason?: "unsupported-agent" | "no-pane";
 }
+
+// ── Live invalidations ─────────────────────────────────────────────────────────
+
+/**
+ * What an invalidation names. `interaction` is a pane's detected dialog; `org` is the Organizations
+ * projects/threads view. The stream carries only these names, never state (ADR 0054).
+ */
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
+
+export interface LiveEvent {
+  session: string;
+  topic: LiveTopic;
+  paneId?: string;
+}
+
+/** The one capability a producer of invalidations needs; injected so tests can pass a recorder. */
+export interface LivePublisher {
+  publish(event: LiveEvent): void;
+}
+
+// ── Interactions: a pane's dialog, detected by the bridge from the screen ──────────────────────────
+
+/**
+ * What an option does, which decides how it is drawn and whether a one-tap answer is allowed:
+ * `persistent` changes a setting beyond this turn ("don't ask again"), so it always asks to confirm;
+ * `freeText` opens a text reply instead of pressing a key.
+ */
+export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
+
+export interface InteractionOption {
+  /** Position in the dialog's own order; what {@link AnswerRequest.optionIndex} names. */
+  index: number;
+  label: string;
+  description?: string;
+  role: InteractionOptionRole;
+  /** A multi-select row's tick; absent on every other kind. */
+  checked?: boolean;
+  /** The answer may carry `text` (a verified sequence types it). A `freeText` option without it has
+   *  no measured recipe and is answered in the terminal. */
+  acceptsText?: true;
+}
+
+export type InteractionKind = "permission" | "question" | "plan" | "menu" | "wizard" | "multi-select" | "password";
+
+/**
+ * Text that enriches a screen-detected dialog (a hook payload, a journal row, a Codex RPC request).
+ * Hints never choose the key that answers: when they disagree with the screen, the screen wins.
+ */
+export interface InteractionHint {
+  source: "claude-hook" | "claude-journal" | "codex-rpc";
+  observedAt: number;
+  question?: string;
+  options?: string[];
+  /** The full command, file path or plan the dialog is about, when the source carries it. */
+  detail?: string;
+}
+
+export interface Interaction {
+  paneId: string;
+  agent: string;
+  kind: InteractionKind;
+  /** Which harness grammar recognised it ("claude", "codex", …). */
+  family: string;
+  question: string;
+  /** The text around the question the operator needs to decide (the command, the diff path…). */
+  context?: string;
+  options: InteractionOption[];
+  /** Identity of the exact dialog on screen; an answer carrying another signature is refused (409). */
+  signature: string;
+  /** Herdr pane revision the detection read. */
+  revision: number;
+  hints?: InteractionHint[];
+  detectedAt: number;
+  /** The full command, file or plan is on the card; only then may Home or a push approve it. */
+  detailComplete?: boolean;
+  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
+  typing?: true;
+}
+
+/** POST /api/interactions/:paneId/answer. `text` only for a `freeText` option. */
+export interface AnswerRequest {
+  signature: string;
+  optionIndex: number;
+  text?: string;
+  /** Acknowledges a `persistent` option. */
+  confirm?: boolean;
+}
+
+export type AnswerOutcome =
+  | { ok: true }
+  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" };
+
+// ── Guarded send: one POST that types, verifies and submits ────────────────────────────────────────
+
+/**
+ * How a message meets a busy agent: `asap` types it as soon as the composer is free (the CLI's own
+ * queue takes it mid-turn), `afterTurn` waits for the turn to end, `steer` joins the running turn
+ * where the CLI supports it.
+ */
+export type DeliveryMode = "asap" | "afterTurn" | "steer";
+
+export interface SendRequest {
+  text: string;
+  /** Idempotency key; a retry with the same id never types twice. */
+  requestId: string;
+  paste?: boolean;
+  /** The dialog text the operator saw, when sending into one (the reply prompt binding). */
+  expectedPrompt?: string;
+  /**
+   * The operator's "Type anyway" after a `not_ready` refusal: a screen the adapter misreads still
+   * gets the text. It skips only that refusal. The text is still verified in the box before Enter.
+   */
+  force?: boolean;
+}
+
+export type SendStage = "preflight" | "type" | "verify" | "submit" | "confirm";
+
+export type SendOutcome =
+  | { ok: true; requestId: string; ack: "submitted"; replayed?: boolean }
+  | {
+      ok: false;
+      requestId: string;
+      /** Where it stopped; with `textDelivered` it tells the client whether a resend would duplicate. */
+      stage: SendStage;
+      error: string;
+      textDelivered: boolean;
+      code?: "prompt_changed" | "not_ready" | "busy";
+    };
+
+// ── Queue rows: the fields the delivery rework adds ────────────────────────────────────────────────
+
+/** Why a queued row is still waiting; shown to the operator, never written as a revision bump. */
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected";
+
+/** What the CLI's own queue did with a delivered row, read from its journal. */
+export type NativeQueueState = "enqueued" | "absorbed" | "recalled";
+
+// ── Transcript media without bytes ─────────────────────────────────────────────────────────────────
+
+/**
+ * An image the journal holds inline (a pasted screenshot, a tool's image result), as a marker only.
+ * The bytes are fetched on demand from the journal-image endpoint by entry and index — never by path,
+ * and never inlined into /history. Joins TranscriptPart once the adapters emit it.
+ */
+export interface TranscriptImagePart {
+  kind: "image";
+  /** Zero-based image index within its entry; with the entry uuid it addresses journal-image. */
+  index: number;
+  mediaType?: string;
+}
+
+/** A file a tool call produced or showed, attached to the call's result as a reference. */
+export type ToolAttachment =
+  | { kind: "image"; index: number; mediaType?: string }
+  | { kind: "file"; path: string };

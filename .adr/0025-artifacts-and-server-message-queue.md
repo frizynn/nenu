@@ -2,6 +2,8 @@
 
 Status: Accepted
 
+Queue half partially superseded by: [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md) (Accepted 2026-10-10). Automatic sends no longer wait for an idle/done agent, and each row carries a delivery mode. The artifacts half stays in force, amended by [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) (journal images, media validators).
+
 ## Context
 
 Media and edited files were only discoverable through transcript links, and the phone could not stage follow-up messages. Sleeping mobile clients leave in-flight requests stranded. Herdr snapshot failures also remained visible until the relaxed poll interval.

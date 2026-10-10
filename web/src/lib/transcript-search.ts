@@ -15,6 +15,7 @@ import type { TranscriptEntry } from "@/lib/types";
 export function searchableText(entry: TranscriptEntry): string {
   const parts: string[] = [];
   for (const part of entry.parts) {
+    if (part.kind === "image") continue;
     if (part.kind === "tool") {
       parts.push(part.name, part.summary);
     } else {

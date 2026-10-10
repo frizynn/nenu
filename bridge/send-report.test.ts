@@ -47,6 +47,10 @@ describe("sendReportDetail", () => {
     });
   });
 
+  test("accepts the bridge guard's confirm phase: Enter went out and the box kept the text", () => {
+    expect(sendReportDetail({ ...stalled, status: "error", phase: "confirm" })).toMatchObject({ status: "error", phase: "confirm" });
+  });
+
   test("refuses a report whose status or phase is not one the guard produces", () => {
     expect(sendReportDetail({ ...stalled, status: "sent" })).toBeNull();
     expect(sendReportDetail({ ...stalled, phase: "somewhere" })).toBeNull();

@@ -2,20 +2,26 @@ import { createRef, type ComponentProps } from "react";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { sendGuardedReply } from "@/lib/reply-action";
+import { sendMessage } from "@/lib/api";
 import { loadDraft } from "@/lib/drafts";
 import { clearStatus } from "@/lib/status";
 import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
 
-// This seam isolates workbench commands from the separately tested type/verify/submit protocol.
-// Assertions below require commands to use that guard, preserve drafts and remain explicit.
-vi.mock("@/lib/reply-action", () => ({ sendGuardedReply: vi.fn() }));
+// These seams isolate workbench commands from the separately tested send protocol: the bridge's
+// one-request send, and the browser guard that only the "Type anyway" override still uses.
+// Assertions below require commands to use the guarded send, preserve drafts and remain explicit.
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), sendMessage: vi.fn() }));
+
+const refused = { ok: false as const, requestId: "r", stage: "preflight" as const, error: "Input changed", textDelivered: false, code: "not_ready" as const };
 
 beforeEach(() => {
-  vi.mocked(sendGuardedReply).mockReset();
-  vi.mocked(sendGuardedReply).mockResolvedValue({ status: "sent" });
+  vi.mocked(sendMessage).mockReset();
+  vi.mocked(sendMessage).mockImplementation(async (_pane, request) => ({ ok: true, requestId: request.requestId, ack: "submitted" }));
   clearStatus();
 });
+
+/** The texts sent through the bridge's one-request send, with the pane and session they went to. */
+const sent = () => vi.mocked(sendMessage).mock.calls.map(([pane, request, session]) => ({ pane, text: request.text, session }));
 
 function setup(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
   const ref = createRef<ComposerHandle>();
@@ -41,11 +47,11 @@ it("opens the native model picker through the guard without consuming a draft or
   const { ref, onSent, user } = setup();
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep this unfinished thought");
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   let result = false;
   await act(async () => { result = await ref.current!.openModelPicker(); });
   expect(result).toBe(true);
-  expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ paneId: "w1:p1", session: "work", agent: "codex", text: "/model", force: false }));
+  expect(sent()).toEqual([{ pane: "w1:p1", text: "/model", session: "work" }]);
   expect(input).toHaveValue("Keep this unfinished thought");
   expect(loadDraft("work", "w1:p1")).toBe("Keep this unfinished thought");
   expect(onSent).not.toHaveBeenCalled();
@@ -54,9 +60,9 @@ it("opens the native model picker through the guard without consuming a draft or
 it("compacts only after the explicit command and retains the local draft", async () => {
   const { ref, onSent, user } = setup();
   await user.type(screen.getByRole("textbox"), "Continue with this afterwards");
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   await act(async () => { expect(await ref.current!.compactContext()).toBe(true); });
-  expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "/compact", force: false, session: "work" }));
+  expect(sent()).toEqual([{ pane: "w1:p1", text: "/compact", session: "work" }]);
   expect(screen.getByRole("textbox")).toHaveValue("Continue with this afterwards");
   expect(onSent).toHaveBeenCalledOnce();
 });
@@ -73,7 +79,7 @@ it.each([
     expect(await ref.current!.openModelPicker()).toBe(false);
     expect(await ref.current!.compactContext()).toBe(false);
   });
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   expect(onSent).not.toHaveBeenCalled();
 });
 
@@ -84,7 +90,7 @@ it("keeps composing available while disconnected or a dialog is open", async () 
   await user.type(input, "Draft while waiting");
   expect(input).toHaveValue("Draft while waiting");
   expect(loadDraft("work", "w1:p1")).toBe("Draft while waiting");
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
 });
 
 it("publishes its secondary controls to the header menu, grouped, instead of rendering them", async () => {
@@ -100,24 +106,26 @@ it("publishes its secondary controls to the header menu, grouped, instead of ren
 });
 
 it("does not convert a rejected picker command into a forced send on retry", async () => {
-  vi.mocked(sendGuardedReply).mockResolvedValue({ status: "blocked", error: "Input changed" });
+  vi.mocked(sendMessage).mockResolvedValue(refused);
   const { ref, onSent, user } = setup();
   await user.type(screen.getByRole("textbox"), "Preserve this draft");
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
-  expect(sendGuardedReply).toHaveBeenCalledTimes(2);
-  for (const [args] of vi.mocked(sendGuardedReply).mock.calls) expect(args.force).toBe(false);
+  expect(sendMessage).toHaveBeenCalledTimes(2);
+  // Neither retry became a forced "Type anyway" send.
+  expect(vi.mocked(sendMessage).mock.calls.some(([, request]) => request.force)).toBe(false);
   expect(screen.getByRole("textbox")).toHaveValue("Preserve this draft");
   expect(onSent).not.toHaveBeenCalled();
 });
 
 it("does not arm a normal draft override when a toolbar command is rejected", async () => {
-  vi.mocked(sendGuardedReply).mockResolvedValueOnce({ status: "blocked", error: "Input changed" });
+  vi.mocked(sendMessage).mockResolvedValueOnce(refused);
   const { ref, user } = setup();
   await user.type(screen.getByRole("textbox"), "A normal draft");
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
   await user.keyboard("{Control>}{Enter}{/Control}");
-  expect(sendGuardedReply).toHaveBeenLastCalledWith(expect.objectContaining({ text: "A normal draft", force: false }));
+  expect(sent().at(-1)).toMatchObject({ text: "A normal draft" });
+  expect(vi.mocked(sendMessage).mock.calls.at(-1)?.[1].force).toBeUndefined();
 });
 
 it("waits for verified model dismissal before sending, keeping what was typed during the wait", async () => {
@@ -128,10 +136,10 @@ it("waits for verified model dismissal before sending, keeping what was typed du
   await user.type(input, "Send this message");
   await user.keyboard("{Control>}{Enter}{/Control}");
   expect(prepareSend).toHaveBeenCalledOnce();
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   await user.type(input, " and keep these new words");
   await act(async () => finish(true));
-  expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "Send this message", force: false }));
+  expect(sent()).toEqual([expect.objectContaining({ text: "Send this message" })]);
   // The sent message left the box when Send was tapped; only the newer words remain.
   expect(input).toHaveValue(" and keep these new words");
 });
@@ -142,11 +150,11 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep me");
   await user.keyboard("{Control>}{Enter}{/Control}");
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   expect(input).toHaveValue("Keep me");
   prepareSend.mockResolvedValue(true);
   await user.keyboard("{Control>}{Enter}{/Control}");
-  expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ force: false }));
+  expect(sent()).toEqual([expect.objectContaining({ text: "Keep me" })]);
 });
 
 it("gives the draft the full width above a toolbar of attach, model chip and send", () => {
@@ -171,7 +179,7 @@ it("opens quick replies from the menu without changing or sending the draft", as
   run("quick");
   expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Close Quick" }));
   expect(input).toBeEnabled();
 });
@@ -183,10 +191,10 @@ it("keeps the configured confirmation when a disruptive slash command is typed i
   await user.type(input, "/new");
   await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: "Send" }));
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(sendMessage).not.toHaveBeenCalled();
   expect(input).toHaveValue("/new");
   await user.click(screen.getByRole("button", { name: "Really send?" }));
-  expect(sendGuardedReply).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: "/new", force: false }));
+  expect(sent()).toEqual([expect.objectContaining({ text: "/new" })]);
 });
 
 it("keeps session usage one menu tap away without cluttering the composer", async () => {

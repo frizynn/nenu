@@ -68,6 +68,12 @@ export interface AgentView {
    * `lastActiveAt > lastSeenAt`, so opening the pane clears it by construction.
    */
   lastSeenAt?: number;
+  /** Herdr pane tokens the bridge allows through (short key/value tags). Absent on older Herdr. */
+  tokens?: Record<string, string>;
+  /** Bumps on every status transition; equal values mean nothing changed between two reads. */
+  stateChangeSeq?: number;
+  /** Bumps when an idle transition completed work. Absent when Herdr doesn't report it. */
+  completionSeq?: number;
 }
 
 /**
@@ -158,6 +164,35 @@ export interface ProjectThreadView {
   paneId?: string;
   agent?: string;
   liveStatus?: AgentStatus;
+  /** Organizations' `last_group` for the thread (e.g. "ready"); absent when unset. */
+  group?: string;
+  branch?: string;
+  /** The thread's pull request. Numbers appear only when Organizations reported them. */
+  pr?: ThreadPullRequest;
+  /** 1 for a direct child of the project, computed from `parentId`. */
+  depth?: number;
+  /** A report the person has not acknowledged yet. */
+  reportUnacked?: boolean;
+  groupLabel?: string;
+  /** Organizations' bracketed note: live agent state, `pane closed`, `failed: …`. `--json` only. */
+  note?: string;
+  /** The PR automation flags. Present only when Organizations has PR actions. */
+  autoFixCi?: boolean;
+  autoMerge?: boolean;
+}
+
+/** Mirrors ThreadPullRequest in bridge/types.ts. */
+export interface ThreadPullRequest {
+  url?: string;
+  number?: number;
+  state: "open" | "draft" | "merged" | "closed";
+  review?: "approved" | "changes_requested" | "review_required" | "commented";
+  checks?: { passed: number; failed: number; pending: number; failing?: string[] };
+  diff?: { additions: number; deletions: number };
+  /** Why `thread merge` would refuse, as of the ticker's last read; `null` when it would merge. `--json` only. */
+  mergeBlocker?: string | null;
+  commentCount?: number;
+  mergeable?: string;
 }
 
 export interface ProjectView {
@@ -167,6 +202,12 @@ export interface ProjectView {
   status: "active" | "paused";
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
+  /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */
+  source?: "json" | "files";
+  /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
+  prActions?: boolean;
+  /** Workspaces holding a live pane bound to this project, in this session. */
+  workspaceIds?: string[];
 }
 
 export interface TemplateView {
@@ -252,8 +293,24 @@ export type TranscriptPart =
       name: string;
       summary: string;
       questions?: Array<{ title: string; options: string[] }>;
-      result?: { text: string; truncated?: boolean; isError?: boolean };
-    };
+      result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };
+    }
+  | TranscriptImagePart;
+
+/** A file a tool call produced or showed, as a reference. Mirrors bridge/types.ts. */
+export type ToolAttachment =
+  | { kind: "image"; index: number; mediaType?: string }
+  | { kind: "file"; path: string };
+
+/**
+ * An image the journal holds inline, as a marker only: the bytes come from the journal-image endpoint
+ * by entry and index (`journalImageUrl`), never inlined into /history.
+ */
+export interface TranscriptImagePart {
+  kind: "image";
+  index: number;
+  mediaType?: string;
+}
 
 /**
  * One turn. `user`/`assistant` are speech; the other two are not, and render set apart so they can't
@@ -480,3 +537,108 @@ export interface SubagentHistoryResponse {
   entries: TranscriptEntry[];
   truncated: boolean;
 }
+
+// ── Live invalidations ─────────────────────────────────────────────────────────
+
+/** What an invalidation names (mirrors LiveTopic in bridge/types.ts). Never state (ADR 0054). */
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
+
+// ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
+
+/** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply. */
+export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
+
+export interface InteractionOption {
+  index: number;
+  label: string;
+  description?: string;
+  role: InteractionOptionRole;
+  /** A multi-select row's tick; absent on rows that are not checkboxes. */
+  checked?: boolean;
+  /**
+   * The answer may carry `text` (a verified sequence types it). A `freeText` row without it has no
+   * measured recipe and is answered in the terminal.
+   */
+  acceptsText?: true;
+}
+
+export type InteractionKind = "permission" | "question" | "plan" | "menu" | "wizard" | "multi-select" | "password";
+
+/** Text that enriches a dialog; it never picks the key. When it disagrees with the screen, the screen wins. */
+export interface InteractionHint {
+  source: "claude-hook" | "claude-journal" | "codex-rpc";
+  observedAt: number;
+  question?: string;
+  options?: string[];
+  detail?: string;
+}
+
+export interface Interaction {
+  paneId: string;
+  agent: string;
+  kind: InteractionKind;
+  family: string;
+  question: string;
+  context?: string;
+  options: InteractionOption[];
+  /** Identity of the dialog on screen; an answer with another signature comes back `interaction_changed`. */
+  signature: string;
+  revision: number;
+  hints?: InteractionHint[];
+  detectedAt: number;
+  /** The full command, file or plan is on the card; only then may Home or a push approve it. */
+  detailComplete?: boolean;
+  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
+  typing?: true;
+}
+
+export interface AnswerRequest {
+  signature: string;
+  optionIndex: number;
+  /** Only for an option served with `acceptsText`. */
+  text?: string;
+  /** Acknowledges a `persistent` option; without it the bridge answers `confirm_required`. */
+  confirm?: boolean;
+}
+
+export type AnswerOutcome =
+  | { ok: true }
+  | { ok: false; error: string; code?: "interaction_changed" | "confirm_required" | "unsupported" };
+
+// ── Guarded send (mirrors bridge/types.ts) ─────────────────────────────────────────────────────────
+
+/** `asap`: type as soon as the composer is free; `afterTurn`: wait for the turn to end; `steer`: join it. */
+export type DeliveryMode = "asap" | "afterTurn" | "steer";
+
+export interface SendRequest {
+  text: string;
+  /** Idempotency key; a retry with the same id never types twice. */
+  requestId: string;
+  paste?: boolean;
+  expectedPrompt?: string;
+  /**
+   * The operator's "Type anyway" after a `not_ready` refusal: a screen the adapter misreads still
+   * gets the text. It skips only that refusal. The text is still verified in the box before Enter.
+   */
+  force?: boolean;
+}
+
+export type SendStage = "preflight" | "type" | "verify" | "submit" | "confirm";
+
+export type SendOutcome =
+  | { ok: true; requestId: string; ack: "submitted"; replayed?: boolean }
+  | {
+      ok: false;
+      requestId: string;
+      stage: SendStage;
+      error: string;
+      /** True when text reached the input box: a resend would duplicate it. */
+      textDelivered: boolean;
+      code?: "prompt_changed" | "not_ready" | "busy";
+    };
+
+/** Why a queued row is still waiting (mirrors bridge/types.ts). */
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected";
+
+/** What the CLI's own queue did with a delivered row. */
+export type NativeQueueState = "enqueued" | "absorbed" | "recalled";

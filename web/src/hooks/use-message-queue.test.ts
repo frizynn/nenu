@@ -1,12 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchMessageQueue, changeMessageQueue } from "@/lib/api";
+import { ApiError, fetchMessageQueue, changeMessageQueue } from "@/lib/api";
 import { setLocked } from "@/lib/idle";
 import { resetLiveEvents } from "@/lib/live-events";
 import { fakeLiveStream } from "@/test/live-stream";
-import { useMessageQueue } from "./use-message-queue";
+import { queueRowStatus, useMessageQueue } from "./use-message-queue";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
   fetchMessageQueue: vi.fn(),
   changeMessageQueue: vi.fn(),
 }));
@@ -16,7 +17,7 @@ const page = {
   messages: [],
 };
 beforeEach(() => {
-  sessionStorage.clear();
+  localStorage.clear();
   vi.resetAllMocks();
   vi.mocked(fetchMessageQueue).mockResolvedValue(page);
 });
@@ -160,7 +161,7 @@ it("recovers an unacknowledged enqueue automatically with the same ID", async ()
 });
 
 it("does not automatically replay an old saved enqueue", async () => {
-  sessionStorage.setItem(
+  localStorage.setItem(
     `collie.queue.pending:${JSON.stringify(["pane", "session"])}`,
     JSON.stringify({
       id: "old",
@@ -189,5 +190,161 @@ describe("live queue updates", () => {
     hook.unmount();
     stream.stop();
     resetLiveEvents();
+  });
+});
+
+describe("the send-time choice reaches the bridge", () => {
+  const key = `collie.queue.pending:${JSON.stringify(["pane", "session"])}`;
+
+  it("keeps an unacknowledged add in localStorage, with its mode, until the bridge acks it", async () => {
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(new Error("lost response"));
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.add("Steer it", "steer")).toBeNull();
+    });
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    expect(saved).toMatchObject({ text: "Steer it", deliveryMode: "steer" });
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => {
+      expect(await hook.result.current.add("Steer it", "steer")).toBe(saved.id);
+    });
+    expect(vi.mocked(changeMessageQueue).mock.calls[1]![1]).toMatchObject({ action: "add", id: saved.id, deliveryMode: "steer" });
+    expect(localStorage.getItem(key)).toBeNull();
+    hook.unmount();
+  });
+
+  it.each([
+    ["past the resend window", { scope: "conversation-one", createdAt: Date.now() - 6 * 60_000 }],
+    ["for another conversation", { scope: "conversation-old", createdAt: Date.now() }],
+  ])("drops a saved add %s instead of blocking the next one", async (_, stale) => {
+    localStorage.setItem(key, JSON.stringify({ id: "old", text: "Lost", ...stale }));
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    await act(async () => {
+      expect(await hook.result.current.add("Next", "afterTurn")).not.toBeNull();
+    });
+    expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(changeMessageQueue).mock.calls[0]![1]).toMatchObject({ text: "Next" });
+    hook.unmount();
+  });
+
+  // A refused add would be refused again on every resend, and a pending add holds every later send.
+  it("forgets an add the bridge refused, so the next message is not held behind it", async () => {
+    const long = "x".repeat(20_001);
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(
+      new ApiError("Use a message between 1 and 20,000 characters without terminal controls.", 400),
+    );
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.add(long, "afterTurn")).toBeNull();
+    });
+    expect(hook.result.current.error).toMatch(/20,000 characters/);
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => {
+      expect(await hook.result.current.add("short follow up", "afterTurn")).not.toBeNull();
+    });
+    hook.unmount();
+  });
+
+  it("stops resending a saved add once the bridge refuses it", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(key, JSON.stringify({ id: "full", text: "Later", scope: "conversation-one", createdAt: Date.now() }));
+    vi.mocked(changeMessageQueue).mockRejectedValue(new ApiError("Queue is full.", 409));
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    try {
+      await act(async () => {});
+      expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(key)).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+    } finally {
+      hook.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends a new mode for the same text as a new row, so the latest pick is the one that goes", async () => {
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(new Error("lost response"));
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.add("Fix it", "afterTurn")).toBeNull();
+    });
+    expect(hook.result.current.pendingAdd()).toEqual({ text: "Fix it", deliveryMode: "afterTurn" });
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => {
+      await hook.result.current.add("Fix it", "steer");
+    });
+    const [first, second] = vi.mocked(changeMessageQueue).mock.calls.map((call) => call[1]);
+    expect(second).toMatchObject({ text: "Fix it", deliveryMode: "steer" });
+    expect(second!.id).not.toBe(first!.id);
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    hook.unmount();
+  });
+
+  it("asks for Read it now with an explicit confirm", async () => {
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.readNow("row-1")).toBe(true);
+    });
+    expect(vi.mocked(changeMessageQueue).mock.calls[0]![1]).toEqual({ scope: page.scope, action: "now", id: "row-1", confirm: true });
+    hook.unmount();
+  });
+
+  it("lists what the bridge delivered, as it reported it", async () => {
+    const delivered = [{ id: "d1", text: "read me", sentAt: 5, deliveryMode: "asap", native: "enqueued" }];
+    vi.mocked(fetchMessageQueue).mockResolvedValue({ ...page, delivered } as typeof page);
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.delivered).toEqual(delivered));
+    hook.unmount();
+  });
+});
+
+describe("queueRowStatus says what each CLI does with the row", () => {
+  it.each([
+    ["claude", { state: "queued", deliveryMode: "afterTurn", waitingFor: "working" }, "Waiting for Claude to finish this turn."],
+    ["codex", { state: "queued", deliveryMode: "afterTurn" }, "Queued. It goes when Codex finishes this turn."],
+    ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "dialog" }, "Waiting. Answer the dialog first."],
+    ["codex", { state: "queued", deliveryMode: "steer" }, "Goes as soon as Codex's input box is free."],
+    ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "turn-start" }, "Waiting for Claude to start on the previous message."],
+    ["claude", { state: "sent", native: "enqueued" }, "In Claude's queue. Claude reads it after the step it's on."],
+    ["claude", { state: "sent", native: "absorbed" }, "Read by Claude"],
+    ["claude", { state: "sent", native: "recalled" }, "Taken back into the terminal's input box"],
+    ["codex", { state: "sent", deliveryMode: "steer" }, "Sent into Codex's current turn"],
+    ["codex", { state: "sent", deliveryMode: "afterTurn" }, "Sent"],
+  ] as const)("%s %j", (agent, row, label) => {
+    expect(queueRowStatus(agent, row).label).toBe(label);
+  });
+
+  it("offers Read it now only for a row Claude's own queue holds", () => {
+    expect(queueRowStatus("claude", { state: "sent", native: "enqueued" }).actions).toEqual(["readNow"]);
+    expect(queueRowStatus("codex", { state: "sent", native: "enqueued" }).actions).toEqual([]);
+    expect(queueRowStatus("claude", { state: "sent", native: "absorbed" }).actions).toEqual([]);
+  });
+
+  it("offers Send now only on a row that waits for the turn", () => {
+    expect(queueRowStatus("codex", { state: "queued", deliveryMode: "afterTurn" }).actions).toEqual(["sendNow", "edit", "remove"]);
+    expect(queueRowStatus("codex", { state: "queued", deliveryMode: "steer" }).actions).toEqual(["edit", "remove"]);
+  });
+
+  it.each(["dialog", "draft", "disconnected"] as const)("does not offer Send now while the row waits for a %s", (waitingFor) => {
+    expect(queueRowStatus("claude", { state: "queued", deliveryMode: "afterTurn", waitingFor }).actions).toEqual(["edit", "remove"]);
+  });
+
+  it("a stranded row says why and offers only Send here or Remove", () => {
+    const status = queueRowStatus("claude", { state: "queued", stranded: { reason: "The conversation in this pane changed. Send it here or remove it.", since: 1 } });
+    expect(status).toEqual({ tone: "problem", label: "The conversation in this pane changed. Send it here or remove it.", actions: ["sendNow", "remove"] });
   });
 });

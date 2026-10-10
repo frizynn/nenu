@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { messageMatchKey } from "./message-images";
-import type { TranscriptEntry } from "./types";
+import type { DeliveryMode, NativeQueueState, QueueWaitReason, TranscriptEntry } from "./types";
 
 // What this client has sent but the agent's journal does not show yet.
 //
@@ -21,8 +21,21 @@ export interface LocalSend {
   /** The wire text (prose plus image paths). */
   text: string;
   state: LocalSendState;
-  /** The server queue row's own state while the message waits there. */
+  /** The server queue row this bubble follows. Rows are matched by id, never by text. */
+  queueId?: string;
+  /** The row's own state while the message waits in Nenu's queue. */
   queueState?: "queued" | "sending" | "paused";
+  deliveryMode?: DeliveryMode;
+  waitingFor?: QueueWaitReason;
+  stranded?: { reason: string; since: number };
+  /** What the CLI's own queue did with it, once delivered. */
+  native?: NativeQueueState;
+  /** The pane's agent when it was sent, for wording that names it. */
+  agent?: string;
+  /** Sent to an agent whose input box Nenu cannot read back, so nothing confirmed the text arrived. */
+  unverified?: boolean;
+  /** A failed send whose text may already be in the terminal: check it there rather than resend. */
+  textDelivered?: boolean;
   error?: string;
   /** Journal user turns that already matched when this bubble was first reconciled. */
   baseline?: string[];
@@ -33,6 +46,8 @@ export interface LocalSendActions {
   edit: (send: LocalSend) => void;
   remove: (send: LocalSend) => void;
   sendNow: (send: LocalSend) => void;
+  readNow: (send: LocalSend) => void;
+  openTerminal: (send: LocalSend) => void;
 }
 
 /** How long a delivered bubble may wait for its journal turn before it gives up quietly. */
@@ -67,7 +82,7 @@ export function addLocalSend(scope: string, text: string, state: LocalSendState 
   const list = listLocalSends(scope);
   const existing = list.find((send) => send.text === text && (send.state === "failed" || send.state === "sending"));
   if (existing) {
-    updateLocalSend(scope, existing.id, { state, error: undefined });
+    updateLocalSend(scope, existing.id, { state, error: undefined, textDelivered: undefined });
     return existing.id;
   }
   const id = crypto.randomUUID();

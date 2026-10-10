@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { downscaleImage } from "@/lib/image-downscale";
 import { isLocalImageUrl, localImageUrl, rememberLocalImage } from "@/lib/local-sends";
 import type { UploadResponse } from "@/lib/types";
 
@@ -71,7 +72,7 @@ export function useComposerAttachments({ upload, previewUrl, onPathsChange, init
   async function start(id: string, file: File) {
     let result: UploadResponse;
     try {
-      result = await options.current.upload(file);
+      result = await options.current.upload(await downscaleImage(file));
     } catch (error) {
       result = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }

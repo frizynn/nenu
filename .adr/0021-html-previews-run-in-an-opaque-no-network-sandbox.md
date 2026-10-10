@@ -2,6 +2,8 @@
 
 Status: **Accepted** (2026-09-11)
 
+Amended by: [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) (Accepted, shipped in 0.54.0). SVG renders as an `<img>`, a preview may inline its contained sibling assets, and the residual self-navigation egress is documented. Sandbox, opaque origin and CSP are unchanged.
+
 ## Context
 
 Project files already cross a deliberate read boundary: the live pane supplies the workspace root,

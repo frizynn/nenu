@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 
 import { beginCatchUp, endCatchUp, isLocked, useLocked } from "@/lib/idle";
-import { concerns, onLiveEvent, useLiveHealthy, useMirrorShown } from "@/lib/live-events";
+import { concerns, onLiveEvent, useLiveHealthy, type LiveEvent } from "@/lib/live-events";
 import type { HomeData } from "@/lib/loaders";
+import { narrowRevalidation, widenRevalidation, type RevalidationScope } from "@/lib/revalidation";
 
 // Adaptive polling, the React Router way: a timer that calls `revalidator.revalidate()`, which
 // re-runs every active loader (snapshot + the open pane) — our equivalent of a refetch interval.
@@ -14,16 +15,21 @@ import type { HomeData } from "@/lib/loaders";
 //    and it's kicked immediately on focus/online/visibility as an accelerator.
 const HOT_MS = 1500;
 const COLD_MS = 4000;
-// While the live-events stream is up the bridge announces every herd change, so polling is only the
-// safety net. A terminal mirror on screen is the exception: Herdr announces its output to nobody.
+// While the live-events stream is up the bridge announces every herd change, and it watches the
+// mirror on screen itself (ADR 0058), so polling is only the safety net.
 const SAFETY_MS = 10_000;
 
 /** What the live-events stream can stand in for (lib/live-events.ts). */
 export interface LiveCoverage {
-  /** The stream is open: herd, queue and transcript changes arrive as they happen. */
+  /** The stream is open: herd, mirror, queue and transcript changes arrive as they happen. */
   healthy: boolean;
-  /** The open pane shows its raw mirror (or a dialog drawn from it), so output must keep flowing. */
-  mirrorShown: boolean;
+}
+
+/** Which loader a live event asks to re-read, or null when it concerns neither. */
+export function scopeOf(event: LiveEvent, paneId: string | null | undefined): RevalidationScope | "all" | null {
+  if (event.topic === "resync") return "all";
+  if (concerns(event, "snapshot") || concerns(event, "org")) return "root";
+  return paneId && concerns(event, "pane", paneId) ? "pane" : null;
 }
 
 // Self-heal a wedged revalidation. Normally a tick no-ops while one is already in flight (see the
@@ -45,13 +51,12 @@ export const SUPERSEDE_MS = 12_000;
  *
  * Returns COLD_MS otherwise (home screen, idle herd, no pane open).
  *
- * While the live-events stream is healthy the herd needs no polling of its own: an open pane whose
- * mirror is on screen stays HOT, an open pane showing its conversation drops to COLD (dialogs arrive
- * with a pushed status change), and anything else falls back to SAFETY_MS.
+ * While the live-events stream is healthy every view falls back to SAFETY_MS: herd changes are pushed,
+ * and the bridge watches the mirror on screen and announces each change to it (ADR 0058).
  */
 export function intervalFor(data: HomeData | undefined, paneId?: string | null, live?: LiveCoverage): number {
+  if (live?.healthy) return SAFETY_MS;
   const paneOpen = !!paneId && [...(data?.agents ?? []), ...(data?.shellPanes ?? [])].some((p) => p.paneId === paneId);
-  if (live?.healthy) return paneOpen ? (live.mirrorShown ? HOT_MS : COLD_MS) : SAFETY_MS;
 
   const anyActive = data?.agents.some((a) => a.status === "blocked" || a.status === "working");
   if (anyActive) return HOT_MS;
@@ -77,18 +82,23 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
   }
 
   const healthy = useLiveHealthy();
-  const mirrorShown = useMirrorShown();
-  const ms = intervalFor(data, paneId, { healthy, mirrorShown });
+  const ms = intervalFor(data, paneId, { healthy });
   const paneRef = useRef(paneId);
   paneRef.current = paneId;
 
   // An invalidation that lands mid-load may describe state that load already read past, so it is
-  // held and replayed once the revalidator comes to rest.
-  const missed = useRef(false);
+  // held and replayed once the revalidator comes to rest, for the loaders it named.
+  const missed = useRef(new Set<RevalidationScope>());
   useEffect(() => {
-    if (revalidator.state !== "idle" || !missed.current) return;
-    missed.current = false;
-    if (!document.hidden && !isLocked()) ref.current.revalidate();
+    if (revalidator.state !== "idle") return;
+    widenRevalidation();
+    if (missed.current.size === 0) return;
+    const scopes = [...missed.current];
+    missed.current.clear();
+    if (document.hidden || isLocked()) return;
+    if (scopes.length > 1) widenRevalidation();
+    else narrowRevalidation(scopes[0]!);
+    ref.current.revalidate();
   }, [revalidator.state]);
 
   // Resuming from the idle lock must refetch AT ONCE. The route tree stays mounted through a pause
@@ -102,7 +112,10 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
     wasLocked.current = locked;
     if (!released) return;
     beginCatchUp(); // holds the cover through the refetch — see the settle effect below
-    if (ref.current.state === "idle") ref.current.revalidate();
+    if (ref.current.state === "idle") {
+      widenRevalidation();
+      ref.current.revalidate();
+    }
   }, [locked]);
 
   // End the catch-up beat when the revalidator comes to rest. Keyed on the state itself, so it can't
@@ -129,19 +142,28 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
       // because a possibly-lying flag says offline.
       const r = ref.current;
       if (r.state === "idle") {
+        widenRevalidation();
         r.revalidate();
         return;
       }
       // Already loading: normally we leave it be, but a revalidation stuck past SUPERSEDE_MS is
       // almost certainly a black-holed fetch — kick a fresh one to supersede it and self-heal.
       const since = loadingSince.current;
-      if (since !== null && Date.now() - since >= SUPERSEDE_MS) { loadingSince.current = Date.now(); r.revalidate(); }
+      if (since !== null && Date.now() - since >= SUPERSEDE_MS) { loadingSince.current = Date.now(); widenRevalidation(); r.revalidate(); }
     };
     const id = window.setInterval(tick, ms);
     const unsubscribe = onLiveEvent((event) => {
-      if (!concerns(event, "snapshot") && !concerns(event, "pane", paneRef.current)) return;
-      if (ref.current.state === "idle") tick();
-      else missed.current = true;
+      const scope = scopeOf(event, paneRef.current);
+      if (scope === null) return;
+      if (ref.current.state !== "idle") {
+        if (scope === "all") missed.current.add("root").add("pane");
+        else missed.current.add(scope);
+        return;
+      }
+      if (document.hidden || isLocked()) return;
+      if (scope === "all") widenRevalidation();
+      else narrowRevalidation(scope);
+      ref.current.revalidate();
     });
     const onWake = () => tick();
     let wasHidden = document.hidden;
@@ -150,6 +172,7 @@ export function usePolling(data: HomeData | undefined, paneId?: string | null): 
       wasHidden = document.hidden;
       if (resumed && !isLocked() && ref.current.state === "loading") {
         loadingSince.current = Date.now();
+        widenRevalidation();
         ref.current.revalidate();
       } else if (!document.hidden) tick();
     };

@@ -1,46 +1,22 @@
-// The free-text reply path's race guard.
+// The free-text reply's guard, in the composer's terms.
 //
-// Every OTHER path that types into a live TUI (prompt-, wizard-, preview-action) refuses to send a
-// key it hasn't first verified the pane is ready for — "Enter is never sent blind". The reply path
-// was the one exception: it typed the text, waited a fixed 350ms, and fired the submit key with
-// nothing checking what was on screen.
-//
-// That is issue #34, reproduced on a real pane: with a Claude permission dialog focused, the typed
-// text is swallowed and the submit key ANSWERS THE DIALOG — approving whatever option was
-// highlighted (Claude highlights "Yes" by default). The message is destroyed and the bridge still
-// reports {ok:true}, because both Herdr RPCs genuinely succeeded: an ack means "herdr took the
-// bytes" (HERDR_API.md), never "the TUI acted on them". So the bridge cannot detect this; only a
-// client that can read the input box can.
-//
-// The fix makes the submit key CONDITIONAL on evidence the text reached the input box: type
-// unsubmitted → poll fresh reads until the adapter sees our text on the "❯" line → only then
-// submit. If it never appears, NO key is sent and the caller keeps the draft. This is the same
-// choreography submitPreviewNote already uses for the note field, applied to the main input.
+// Issue #34: with a Claude permission dialog focused, typed text is swallowed and the submit key
+// ANSWERS THE DIALOG. The bridge's one-request send (bridge/guarded-send.ts, POST /send) guards
+// against it: it types unsubmitted, waits until the adapter sees the text in the input box, and only
+// then submits. This module holds what both sides share: the evidence check that a draft on screen
+// is the text just typed (`draftCarriesSend`, imported by the bridge), and the mapping of the
+// bridge's answer to what the composer does next.
 
-import type { ActionResponse } from "./types";
-export interface ReplyTransport {
-  fetchPane(paneId: string, lines?: number, session?: string): Promise<{ text: string }>;
-  sendReply(paneId: string, text: string, submit: boolean, session?: string, expectedPrompt?: string, requestId?: string, paste?: boolean): Promise<ActionResponse>;
-  /** Tell the bridge about a send that did not end in "sent", for its audit trail. Optional: a
-   *  transport without it simply leaves the outcome where it always was, on the caller's screen. */
-  reportUnsent?(paneId: string, report: UnsentReport, session?: string): Promise<unknown>;
-}
-import { parseAnsi } from "./ansi";
-import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "./blocks";
-import { adapterFor, type HarnessAdapter } from "./harness";
-import { VERIFY_DELAYS_MS, defaultSleep, type Sleep } from "./harness/poll";
-import { detectNoEchoPrompt } from "./no-echo";
+import type { SendOutcome } from "./types";
 
 export type ReplyOutcome =
   /** Text was verified in the input box and the submit key went through. */
   | { status: "sent" }
   /**
-   * The PRE-FLIGHT refused: a live read could not see an input box on screen, so NO REPLY TEXT was
+   * The bridge's PRE-FLIGHT refused: a live read could not see an input box on screen, so NO REPLY TEXT was
    * typed and no submit key was sent. Distinct from `stalled`, which is reported only after the text
    * has already gone into the pane. The caller keeps the draft and may offer a deliberate override
-   * (`force`). The caller's `onComposerSeen` work may have run before a re-confirming refusal — but
-   * only ever on the path where a live read had just seen the composer, which is the invariant that
-   * whole callback exists to enforce.
+   * (`force`).
    *
    * `noEcho` carries the password prompt the refusing read was looking at, when it was one — see
    * lib/no-echo.ts.
@@ -52,94 +28,6 @@ export type ReplyOutcome =
   | { status: "stalled"; error: string; noEcho?: string }
   /** Transport/RPC failure. `textDelivered` = text is in the pane but unsubmitted; don't resend. */
   | { status: "error"; error: string; textDelivered?: boolean };
-
-/** Where a send gave up. */
-export type SendPhase = "preflight" | "pre-type" | "type" | "verify" | "submit";
-
-/** What one verification read saw: the read itself failed, the screen could not be parsed, or it
- *  showed no composer / an empty input box / a draft that was not the message. */
-export type VerifyRead = "read-failed" | "unreadable" | "no-composer" | "empty-draft" | "other-draft";
-
-/**
- * The account of a send that did not end in "sent", as posted to the bridge (bridge/send-report.ts
- * validates and bounds it again). It exists so a stall can be diagnosed after the fact: a run of
- * `read-failed` is a connection problem, `no-composer` is a dialog or an unrecognised screen, and
- * `other-draft` with the draft and screen tail attached is a verifier false negative.
- *
- * `noEcho` = a read saw a password prompt. The report then carries no message, draft or screen.
- */
-export interface UnsentReport {
-  status: "blocked" | "stalled" | "error";
-  phase: SendPhase;
-  error: string;
-  preflight: "skipped" | "read-failed" | "no-composer" | "composer";
-  attempts: VerifyRead[];
-  elapsedMs: number;
-  noEcho: boolean;
-  text?: string;
-  draft?: string;
-  screen?: string[];
-}
-
-/** Everything the guard learns on the way, kept only to build an {@link UnsentReport}. */
-interface SendTrace {
-  phase: SendPhase;
-  preflight: UnsentReport["preflight"];
-  attempts: VerifyRead[];
-  /** The last screen any read returned, and the draft the adapter extracted from it. */
-  lastLines: StyledLine[] | null;
-  draft: string | null;
-  noEcho: boolean;
-}
-
-const REPORT_SCREEN_LINES = 15;
-const REPORT_LINE_CHARS = 120;
-const REPORT_TEXT_CHARS = 500;
-/** Waits before each re-post of a report. The stall most worth recording is the one where the
- *  connection was down, which is exactly when the first post fails too. */
-const REPORT_RETRY_DELAYS_MS = [3_000, 15_000];
-
-function observe(trace: SendTrace, lines: StyledLine[], draft: string | null): void {
-  trace.lastLines = lines;
-  trace.draft = draft;
-  if (detectNoEchoPrompt(lines) !== null) trace.noEcho = true;
-}
-
-function unsentReport(args: GuardedReplyArgs, trace: SendTrace, outcome: Exclude<ReplyOutcome, { status: "sent" }>, elapsedMs: number): UnsentReport {
-  const report: UnsentReport = {
-    status: outcome.status,
-    phase: trace.phase,
-    error: outcome.error,
-    preflight: trace.preflight,
-    attempts: trace.attempts,
-    elapsedMs,
-    noEcho: trace.noEcho || ("noEcho" in outcome && outcome.noEcho !== undefined),
-  };
-  if (report.noEcho) return report;
-  report.text = args.text.slice(0, REPORT_TEXT_CHARS);
-  if (trace.draft !== null) report.draft = trace.draft.slice(0, REPORT_TEXT_CHARS);
-  if (trace.lastLines !== null) {
-    report.screen = trimTrailingBlank(trace.lastLines)
-      .slice(-REPORT_SCREEN_LINES)
-      .map((line) => lineText(line).trimEnd().slice(0, REPORT_LINE_CHARS));
-  }
-  return report;
-}
-
-/** Fire-and-forget: a report that cannot be delivered must never change what the send returned. */
-async function postReport(args: GuardedReplyArgs, report: UnsentReport): Promise<void> {
-  const sleep = args.sleep ?? defaultSleep;
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await args.transport.reportUnsent?.(args.paneId, report, args.session);
-      return;
-    } catch {
-      const delay = REPORT_RETRY_DELAYS_MS[attempt];
-      if (delay === undefined) return;
-      await sleep(delay);
-    }
-  }
-}
 
 /** Minimum visible characters that must match before we believe the input box holds OUR text. */
 export const MIN_MATCH_CHARS = 8;
@@ -265,372 +153,33 @@ export function draftCarriesSend(sent: string, draft: string | null): boolean {
   return false;
 }
 
-export interface GuardedReplyArgs {
-  transport: ReplyTransport;
-  paneId: string;
-  text: string;
-  /** The pane's agent — picks the adapter whose `extractInputDraft` can read the input box. */
-  agent: string | undefined | null;
-  /** The session the pane lives in (undefined = primary) — scopes every call. */
-  session?: string;
-  /** Lines to request per verification read (undefined = the bridge's default tail, which is where
-   *  the input box always is). */
-  requestedLines?: number;
-  /** Test seam for the poll pacing. */
-  sleep?: Sleep;
-  /**
-   * Override the PRE-FLIGHT'S REFUSAL and type anyway — the user's deliberate second tap after a
-   * `blocked` outcome (a mis-detected screen, an adapter that can't see a box it really has). The
-   * live read still happens; `force` only stops a definite `false` from refusing the send. The
-   * type-then-verify guard below still runs, so the submit key is never fired blind either way, and
-   * `onComposerSeen` still does not run — a screen that just answered "no composer" is the last
-   * place destructive keys may go.
-   */
-  force?: boolean;
-  /**
-   * Work the caller needs done once a live read has POSITIVELY SEEN the composer, and before the
-   * first byte of the reply is typed. Exists for exactly one caller and one reason: composer.tsx's
-   * pre-clear sweep (`ctrl+k` + a run of Backspaces that wipes a stranded draft off the input line so
-   * `pane.send_text` doesn't append to it) is DESTRUCTIVE, and it used to run in the composer before
-   * `sendGuardedReply` was called at all — i.e. before anything had looked at the live pane.
-   *
-   * That ordering is the whole bug. The composer decides to sweep from `display`, which is a
-   * SNAPSHOT: a poll behind while the mirror follows the tail, and frozen outright while the user has
-   * scrolled back or opened find. So its own fail-fast (`dialogPresent`) can read false against a pane
-   * that has since put a dialog up, and the sweep then fires into that dialog — the exact
-   * keystrokes-into-a-modal failure #34 is about, just upstream of where #34 was fixed.
-   *
-   * For an adapter that lifts NO interactive kind that fail-fast is not merely stale, it is inert:
-   * `dialogPresent` is `buildBlocks(...).some(b => b.kind !== "raw")`, so an adapter whose
-   * `buildBlocks` returns one `raw` block by construction can never make it true. Verified live
-   * against an omp pane with a full-screen picker up: `dialogPresent === false`. There is no window
-   * to widen or narrow there — `composerReady` is the ONLY gate on such a pane, which is why this
-   * hook keys on it rather than on the caller having already checked something.
-   *
-   * The name is the contract: this runs ONLY on the branch where `composerReady` answered true about
-   * a pane read moments ago. `force`, a read that threw, an adapter with no `composerReady`, no
-   * adapter at all — none of them reaches it, and neither will whatever path is added next, because
-   * `preflight` hands the runner back only on that one branch (see `Preflight`). Every other path
-   * types without sweeping and leans on type-then-verify, which still withholds the submit key.
-   *
-   * Resolving `{ ok: false }` aborts the send with that error and nothing typed. `keysSent` says
-   * whether the draft-clearing keys were sent. If so, the guard waits for a live, empty composer
-   * before typing the replacement.
-   *
-   * The argument carries the evidence FORWARD, not just the permission. `promptRegion` is the prompt
-   * tail the adapter saw on the pane the pre-flight just read, and a caller that sends destructive
-   * keys must pass it to `api.sendKeys` as `expected_prompt`: an ordering guarantee alone cannot
-   * bound the gap between the read and the keys, because that gap is a network round-trip and the
-   * only limit on it is GET_TIMEOUT_MS. Binding hands the last word to the bridge, which re-reads
-   * immediately before `send_keys` and 409s the write if the row has gone — the same mitigation
-   * every dialog tap already gets through lib/dialog-guard.ts.
-   */
-  onComposerSeen?: (seen: ComposerSeen) => Promise<ComposerPrepResult>;
-  /** Stable across retries. The bridge deduplicates type and submit as separate phases. */
-  requestId?: string;
-  /** A type request is about to leave, including attempts whose response may be lost. */
-  onTypeAttempt?: () => void;
-  onAck?: (ack: "typed" | "submitted") => void;
-}
+// ── The bridge's one-request send ─────────────────────────────────────────────────────────────────
 
-/** What the pre-flight's live read saw, handed to the caller's pre-type work. */
-export interface ComposerSeen {
-  /** Draft extracted from the same live read, never the caller's older display snapshot. */
-  draft: string | null;
-  /**
-   * The composer's own prompt/draft tail, verbatim on screen, for binding a destructive write to it
-   * (`api.sendKeys(..., expectedPrompt)`). `null` when the adapter has no `composerPrompt` — then the
-   * write goes out unbound, which is the pre-existing behaviour and the reason the hook is optional.
-   */
-  promptRegion: string | null;
-}
-
-export type ComposerPrepResult =
-  /** Done. `keysSent` = did anything actually go out on the wire? A caller with nothing to do says
-   *  `false` and saves the guard a re-confirming read. */
-  | { ok: true; keysSent: boolean }
-  /** Abort the send with this error, nothing typed. */
-  | { ok: false; error: string };
-
-export async function sendGuardedReply(args: GuardedReplyArgs): Promise<ReplyOutcome> {
-  const trace: SendTrace = { phase: "preflight", preflight: "skipped", attempts: [], lastLines: null, draft: null, noEcho: false };
-  const started = Date.now();
-  const outcome = await guardedReply(args, trace);
-  if (outcome.status !== "sent" && args.transport.reportUnsent) {
-    void postReport(args, unsentReport(args, trace, outcome, Date.now() - started));
-  }
-  return outcome;
-}
-
-async function guardedReply(args: GuardedReplyArgs, trace: SendTrace): Promise<ReplyOutcome> {
-  const adapter = adapterFor(args.agent ?? undefined);
-  // No grammar for this harness → the input box is unreadable, so there is nothing to verify
-  // against and the guard cannot run. Keep the legacy one-shot send rather than guess: a heuristic
-  // over the raw mirror has a false-negative that is worse than the bug — a no-echo input (a shell's
-  // sudo prompt) would never show the text, so the submit key would be withheld forever. Non-Claude
-  // harnesses gain this safety exactly when they gain an adapter.
-  if (!adapter) {
-    trace.phase = "type";
-    return oneShot(args);
-  }
-
-  // PRE-FLIGHT. The verify-after guard below is enough to keep Enter from answering a dialog, but it
-  // is not enough to keep the MESSAGE out of one: it types first and checks second, so a modal that
-  // owns the keyboard (Claude's `/model` picker — no input box at the tail at all) receives the
-  // user's text before anything notices. One read up front is the difference between "nothing
-  // happened" and "your reply is now sitting in a picker".
-  const { refuse, runPreType } = await preflight(adapter, args, trace);
-  if (refuse !== null) return refuse;
-  trace.phase = "pre-type";
-
-  // The ONE call site of the caller's destructive pre-type work — and it is not guarded by a
-  // condition, it is guarded by whether the runner exists at all. `preflight` returns one only from
-  // the branch where a live read just saw the composer, so every other path (force, a read that
-  // threw, an adapter with no `composerReady`, and anything added later) skips this by construction
-  // rather than by remembering to check. `?.()` is the whole enforcement; there is no list to keep
-  // in sync.
-  const aborted = await runPreType?.();
-  if (aborted) return aborted;
-
-  trace.phase = "type";
-  let typed;
-  try {
-    args.onTypeAttempt?.();
-    typed = await args.transport.sendReply(args.paneId, args.text, false, args.session, undefined, args.requestId ? `${args.requestId}:type` : undefined, adapter.bracketedPaste);
-  } catch (e) {
-    return { status: "error", error: message(e) };
-  }
-  if (!typed.ok) return { status: "error", error: typed.error };
-  args.onAck?.("typed");
-  trace.phase = "verify";
-
-  const sleep = args.sleep ?? defaultSleep;
-  // The last screen a verification read actually saw, kept only so the stall below can be named. The
-  // pre-flight catches almost every password prompt before a byte is typed, but not all of them: a
-  // harness with no `composerReady`, and a `force` the operator armed against a mis-detected screen,
-  // both arrive here having typed the secret into a prompt that will never echo it.
-  let lastSeen: string | null = null;
-  for (const delay of VERIFY_DELAYS_MS) {
-    // Read BEFORE the first sleep: pane.read is an on-demand live read, not a cached poll, so the
-    // text is often already on screen by the time the type call returns. The later reads start
-    // short because a repaint usually lands within tens of milliseconds (harness/poll.ts).
-    if (delay > 0) await sleep(delay);
-    let draft: string | null = null;
-    let fresh: { text: string } | null = null;
-    try {
-      fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
-      const lines = splitLines(parseAnsi(fresh.text));
-      // Only a screen the adapter does NOT recognise as its composer can be a raw password prompt.
-      // Without that gate a match on the tail is dangerous rather than merely wrong: the notice this
-      // feeds tells the operator to press Enter in Type, so a stall that was really a dialog eating
-      // the text — with an agent that happened to PRINT "Enter passphrase:" as its last line — would
-      // have us advising the exact keystroke #34 exists to prevent. An adapter with no
-      // `composerReady` cannot rule anything out, so it doesn't (`?? false`): that path is the
-      // unguarded one either way, and it is where a bare shell's sudo prompt actually lives.
-      const composerVisible = adapter.composerReady?.(lines) ?? false;
-      lastSeen = composerVisible ? null : detectNoEchoPrompt(lines);
-      draft = adapter.extractInputDraft(lines);
-      observe(trace, lines, draft);
-      trace.attempts.push(draft !== null ? "other-draft" : adapter.composerReady && !composerVisible ? "no-composer" : "empty-draft");
-    } catch {
-      trace.attempts.push(fresh === null ? "read-failed" : "unreadable");
-      continue; // transient read failure — the bounded loop is the timeout
-    }
-    if (draftCarriesSend(args.text, draft)) return submitOnly(args, trace);
-    // The adapter gets a second look, and only a second look: a harness can SWALLOW what we typed and
-    // paint a token of its own instead (Claude collapses anything past its paste threshold into
-    // `[Pasted text #N +M lines]`), so the box never holds our words and the match above structurally
-    // cannot succeed — the send stalls forever while every retry re-collapses. The adapter is the only
-    // thing that knows its harness's token and whether this one is consistent with THIS send
-    // (.adr/0010). It can only widen the evidence, never narrow it, so a harness without the
-    // capability is untouched.
-    if (draft !== null && adapter.draftCarriesSend?.(args.text, draft)) return submitOnly(args, trace);
-  }
-
-  // The text never showed up on the input line. The likeliest cause is a dialog holding focus and
-  // eating the keystrokes — and the one thing we must NOT do is send the submit key anyway, because
-  // that is precisely what answers the dialog. Stop dead and let the caller keep the draft.
-  //
-  // If instead this is a false negative (the text IS in the box, the adapter just couldn't see it),
-  // nothing is lost: the next send's pre-clear sweep removes it, and the stranded-draft preview
-  // surfaces it in the meantime.
-  if (lastSeen !== null) {
-    // Typed into a prompt that will never show it. The text IS in the pane — unsubmitted, which for a
-    // password means the operator needs one Enter, not a retry, and a retry would type a second copy.
-    return {
-      status: "stalled",
-      error:
-        "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.",
-      noEcho: lastSeen,
-    };
-  }
-  // Two different failures end here and the operator's next move differs: when every read failed
-  // there is no evidence either way (the text may well be in the box), when reads worked the box was
-  // looked at and the message was not in it.
-  return {
-    status: "stalled",
-    error: trace.attempts.every((read) => read === "read-failed") ? UNREAD : UNSEEN,
-  };
-}
-
-const UNREAD =
-  "Couldn't read the terminal to confirm your message: the connection failed. Nothing was submitted. Your draft is saved; the text may already be typed, so check Terminal before retrying.";
-
-const UNSEEN =
-  "Your message wasn't seen in the agent's input box. Nothing was submitted. Your draft is saved; retry or open Terminal.";
-
-const NO_BOX =
-  "The agent's input box isn't on screen — a menu or dialog is probably up. Nothing was typed.";
-
-/** Said instead of {@link NO_BOX} when the screen is a password prompt. It names the mechanism rather
- *  than the symptom, because the operator's next move depends on knowing that waiting won't help. */
-const NO_ECHO =
-  "That's a password prompt — it shows nothing as you type, so Send can never confirm the text arrived. Nothing was typed.";
+/** How the bridge words a refusal at a password prompt (bridge/guarded-send.ts NO_ECHO, NO_ECHO_TYPED). */
+const PASSWORD_PROMPT = /^That's a password prompt/;
 
 /**
- * What the pre-flight decided. Two fields, and the second is the safety invariant of this module made
- * structural rather than conditional:
- *
- *   `refuse`     — non-null ⇒ return it; the send is refused with no reply text typed.
- *   `runPreType` — non-null ⇒ a live read POSITIVELY SAW the composer, so the caller's destructive
- *                  pre-type work may run. It is created on exactly one branch below and nowhere else.
- *
- * The point of shipping the permission as a CALLABLE rather than a boolean is that there is nothing
- * for a later edit to re-derive, forget, or get subtly wrong: a new path through `preflight` that does
- * not positively confirm a composer cannot produce a runner, so it cannot fire a keystroke, whatever
- * its author intended. That is what the three holes the previous shape left open all had in common —
- * `force`, a read that threw, and an adapter with no `composerReady` each SKIPPED the read and then
- * ran the sweep anyway, because the sweep was gated on its own separate condition — "did the caller
- * hand me a callback?" — instead of on the evidence.
+ * POST /send's answer in the composer's terms. The bridge's copy is kept as it is: when the text may
+ * already be in the input box (`textDelivered`) it says to check Terminal, and the composer must not
+ * resend on its own. `noEchoPrompt` names the prompt on screen when the bridge refused at one.
  */
-interface Preflight {
-  refuse: ReplyOutcome | null;
-  runPreType: (() => Promise<ReplyOutcome | null>) | null;
+export function replyOutcomeFrom(outcome: SendOutcome, noEchoPrompt: () => string | null): ReplyOutcome {
+  if (outcome.ok) return { status: "sent" };
+  const noEcho = PASSWORD_PROMPT.test(outcome.error) ? (noEchoPrompt() ?? "") : undefined;
+  if (!outcome.textDelivered && outcome.code === "not_ready") {
+    return { status: "blocked", error: outcome.error, ...(noEcho !== undefined ? { noEcho } : {}) };
+  }
+  if (noEcho !== undefined) return { status: "stalled", error: outcome.error, noEcho };
+  return { status: "error", error: outcome.error, textDelivered: outcome.textDelivered };
 }
 
 /**
- * One live read, and everything the rest of the send is allowed to do with it.
- *
- * Fail-OPEN for the MESSAGE in both weak directions — an adapter without `composerReady` and a read
- * that throws both fall through to the type-then-verify guard rather than blocking a send on a
- * transient network blip — and fail-CLOSED for KEYS in every direction but one. Failing open for the
- * message is defensible: the submit key is still withheld until the text is seen. Extending that to a
- * `ctrl+k` + 40×Backspace burst is not, because those keys are not withheld by anything downstream —
- * once sent they have already landed in whatever owns the keyboard.
+ * Whether the next try of the same message keeps this request id. Only while the bridge can still
+ * act on the earlier try: its text may be in the input box, and the same id submits it there instead
+ * of typing a second copy. A failure before anything was typed, or one where the bridge already saw
+ * the box without the text (stage `preflight`), gets a fresh id, so the retry sweeps whatever is
+ * stranded on the input line and types again.
  */
-async function preflight(adapter: HarnessAdapter, args: GuardedReplyArgs, trace: SendTrace): Promise<Preflight> {
-  const blind = (refuse: ReplyOutcome | null): Preflight => ({ refuse, runPreType: null });
-
-  // Nothing here can read this harness's input box, so there is no evidence to be had — and no
-  // refusal to make either. Same behaviour as before an adapter grows a `composerReady`, minus the
-  // sweep, which had no business going out unverified.
-  if (!adapter.composerReady) return blind(null);
-
-  const composerReady = adapter.composerReady.bind(adapter);
-  let probe;
-  try {
-    probe = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
-  } catch {
-    trace.preflight = "read-failed";
-    return blind(null); // transient read failure
-  }
-  const seen = splitLines(parseAnsi(probe.text));
-  observe(trace, seen, adapter.extractInputDraft(seen));
-  const ready = composerReady(seen);
-  trace.preflight = ready ? "composer" : "no-composer";
-  if (!ready) {
-    // `force` is the user's deliberate "type anyway", so it overrides the refusal — but this is the
-    // one screen we have POSITIVE evidence about, and what it says is "no composer". Keys stay home.
-    if (args.force) return blind(null);
-    // The refusal is already made; naming the screen only changes what the operator is told. A
-    // password prompt is the one case where the generic "a menu or dialog is probably up" is not just
-    // unhelpful but actively misleading — there is no dialog to answer and no amount of retrying will
-    // ever work, because the evidence this guard needs is exactly what the prompt is refusing to show
-    // (#103). Hand the prompt itself back so the caller can say so and offer "Type".
-    const noEcho = detectNoEchoPrompt(seen);
-    if (noEcho !== null) return blind({ status: "blocked", error: NO_ECHO, noEcho });
-    return blind({ status: "blocked", error: NO_BOX });
-  }
-
-  // The region the read's `true` was true OF. Computed here, from the same parse `composerReady` just
-  // answered about, so the caller cannot bind its keys to anything but the screen that authorised
-  // them — and cannot forget to, since it arrives as the argument.
-  const promptRegion = adapter.composerPrompt?.(seen) ?? null;
-  const draft = adapter.extractInputDraft(seen);
-
-  return {
-    refuse: null,
-    runPreType: async () => {
-      if (!args.onComposerSeen) return null;
-      let prep;
-      try {
-        prep = await args.onComposerSeen({ promptRegion, draft });
-      } catch (e) {
-        return { status: "error", error: message(e) };
-      }
-      if (!prep.ok) return { status: "error", error: prep.error };
-      if (!prep.keysSent) return null; // the read above is still the freshest thing there is
-
-      // A write ack can precede the TUI consuming a large Backspace sweep. Waiting for an empty
-      // editor prevents the previous draft (even identical text) from verifying the next send.
-      const sleep = args.sleep ?? defaultSleep;
-      for (const delay of VERIFY_DELAYS_MS) {
-        if (delay > 0) await sleep(delay);
-        try {
-          const fresh = await args.transport.fetchPane(args.paneId, args.requestedLines, args.session);
-          const lines = splitLines(parseAnsi(fresh.text));
-          observe(trace, lines, adapter.extractInputDraft(lines));
-          if (!composerReady(lines)) return {
-            status: "blocked",
-            error: "The agent's input box left the screen while its input line was being cleared. Your message wasn't typed.",
-          };
-          if (adapter.extractInputDraft(lines) === null) return null;
-        } catch {
-          // No new message may be typed until a live read confirms the destructive clear finished.
-        }
-      }
-      return { status: "error", error: "The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready." };
-    },
-  };
-}
-
-/** The pre-#34 behaviour: one call that types AND submits. Only for harnesses with no adapter. */
-async function oneShot(args: GuardedReplyArgs): Promise<ReplyOutcome> {
-  // No `onComposerSeen` here, and none is possible: with no adapter nothing can read the input box,
-  // so no live read can ever confirm a composer, and the invariant says the destructive sweep stays
-  // home. It costs this path nothing — agent-chat derives the stranded draft through
-  // `adapterFor(agent)?.extractInputDraft`, so a pane with no adapter has no draft to sweep and the
-  // composer's callback was already a no-op here.
-  try {
-    const res = await args.transport.sendReply(args.paneId, args.text, true, args.session, undefined, args.requestId ? `${args.requestId}:oneshot` : undefined);
-    return res.ok ? { status: "sent" } : { status: "error", error: res.error };
-  } catch (e) {
-    return { status: "error", error: message(e) };
-  }
-}
-
-/**
- * Empty text + submit: `sendReplySteps` skips the send_text step entirely and sends ONLY the
- * bridge's configured submit keys (COLLIE_SUBMIT_KEYS). So the submit-key contract stays
- * server-owned and this whole guard needs no bridge change.
- */
-async function submitOnly(args: GuardedReplyArgs, trace: SendTrace): Promise<ReplyOutcome> {
-  trace.phase = "submit";
-  try {
-    const res = await args.transport.sendReply(args.paneId, "", true, args.session, undefined, args.requestId ? `${args.requestId}:submit` : undefined);
-    if (res.ok) { args.onAck?.("submitted"); return { status: "sent" }; }
-    // The text is verifiably sitting in the input box and only the submit key failed — same shape as
-    // the bridge's own partial-failure case. Tell the caller not to resend.
-    return {
-      status: "error",
-      error: "typed into the pane but not submitted — check the pane before resending",
-      textDelivered: true,
-    };
-  } catch (e) {
-    return { status: "error", error: message(e), textDelivered: true };
-  }
-}
-
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+export function retryKeepsRequestId(outcome: SendOutcome): boolean {
+  return !outcome.ok && outcome.textDelivered && outcome.stage !== "preflight";
 }

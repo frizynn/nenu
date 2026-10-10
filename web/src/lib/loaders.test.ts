@@ -720,3 +720,66 @@ describe("cold boot with no network", () => {
     });
   });
 });
+
+describe("loaders — narrowed revalidation", () => {
+  it("a pane-only revalidation hands back the same herd without fetching the snapshot", async () => {
+    const { rootLoader, paneLoader } = await import("./loaders");
+    const { narrowRevalidation, widenRevalidation } = await import("./revalidation");
+    // React Router hands every loader of one run the same Request.
+    const run = () => new Request("http://localhost/pane/w1%3Ap1");
+    const first = run();
+    const home = await rootLoader({ request: first });
+    await paneLoader({ params: { paneId: "w1:p1" }, request: first });
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const urls = () => fetchSpy.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input));
+    narrowRevalidation("pane");
+    const narrowed = run();
+    expect(await rootLoader({ request: narrowed })).toBe(home);
+    expect(urls().some((url) => url.includes("/api/snapshot"))).toBe(false);
+    const pane = await paneLoader({ params: { paneId: "w1:p1" }, request: narrowed });
+    expect(urls().some((url) => url.includes("/api/pane/"))).toBe(true);
+
+    widenRevalidation();
+    narrowRevalidation("root");
+    fetchSpy.mockClear();
+    const herdOnly = run();
+    await rootLoader({ request: herdOnly });
+    expect(await paneLoader({ params: { paneId: "w1:p1" }, request: herdOnly })).toBe(pane);
+    expect(urls().some((url) => url.includes("/api/pane/"))).toBe(false);
+  });
+
+  it("a revalidation nobody narrowed re-reads both loaders, even one that interrupts a narrowed run", async () => {
+    const { createMemoryRouter } = await import("react-router");
+    const { narrowRevalidation, needsFetch } = await import("./revalidation");
+    const fetched: string[] = [];
+    const loader = (scope: "root" | "pane") => ({ request }: { request: Request }) => {
+      if (needsFetch(scope, request)) fetched.push(scope);
+      return new Promise((resolve) => setTimeout(() => resolve(scope), 5));
+    };
+    const router = createMemoryRouter(
+      [{ path: "/", loader: loader("root"), children: [{ path: "pane/:paneId", loader: loader("pane") }] }],
+      { initialEntries: ["/pane/w1%3Ap1"] },
+    );
+    router.initialize();
+    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
+    fetched.length = 0;
+
+    narrowRevalidation("pane");
+    void router.revalidate();
+    // A mutation's own revalidate() lands while the narrowed run is still loading.
+    await router.revalidate();
+    expect(fetched).toEqual(["pane", "root", "pane"]);
+    router.dispose();
+  });
+
+  it("a navigation always fetches, narrowed or not", async () => {
+    const { rootLoader } = await import("./loaders");
+    const { narrowRevalidation } = await import("./revalidation");
+    await rootLoader({ request: new Request("http://localhost/") });
+    narrowRevalidation("pane");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await rootLoader({ request: new Request("http://localhost/space/w1") });
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+});
