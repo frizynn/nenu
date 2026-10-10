@@ -8,16 +8,128 @@ import {
   type MessageQueuePage,
   type QueueMessage,
 } from "@/lib/api";
+import type { DeliveryMode, NativeQueueState, QueueWaitReason } from "@/lib/types";
+
+// ── What each CLI does with a message that meets it busy (ADR 0056) ────────────────────────────────
+//
+// The bridge implements the measured table (bridge/queue-native.ts); this is the same table in the
+// operator's words. Only a CLI whose probes measured both behaviours gets the send-time choice.
+
+export interface BusyChoice {
+  name: string;
+  /** The mode "Send now" stores: Claude's Enter (its own queue) or Codex's Enter (a steer). */
+  now: DeliveryMode;
+  nowHint: string;
+  laterHint: string;
+}
+
+const BUSY_CHOICES: Record<string, BusyChoice> = {
+  claude: {
+    name: "Claude",
+    now: "asap",
+    nowHint: "Goes into Claude's queue. Claude reads it after the step it's on.",
+    laterHint: "Nenu holds it until Claude finishes this turn.",
+  },
+  codex: {
+    name: "Codex",
+    now: "steer",
+    nowHint: "Steers this turn. Codex reads it after the step it's on.",
+    laterHint: "Goes into Codex's queue and runs as the next turn.",
+  },
+};
+
+/** The send-time choice for a busy agent, or null when this CLI has only one behaviour Nenu measured. */
+export function busyChoiceFor(agent: string | null | undefined): BusyChoice | null {
+  return (agent && BUSY_CHOICES[agent]) || null;
+}
+
+function agentName(agent: string | null | undefined): string {
+  return busyChoiceFor(agent)?.name ?? "The agent";
+}
+
+/** A queue row as the operator sees it, whether it still waits in Nenu or was handed to the CLI. */
+export interface QueueRowView {
+  state: "queued" | "sending" | "paused" | "sent";
+  deliveryMode?: DeliveryMode;
+  waitingFor?: QueueWaitReason;
+  stranded?: { reason: string; since: number };
+  native?: NativeQueueState;
+  error?: string;
+}
+
+export type QueueRowAction = "sendNow" | "edit" | "remove" | "readNow";
+
+/**
+ * One status line and the buttons that make sense for a row. The wording follows the agent and the
+ * mode, and never claims more than the bridge knows: "read" comes only from Claude's own journal.
+ */
+export function queueRowStatus(
+  agent: string | null | undefined,
+  row: QueueRowView,
+): { tone: "busy" | "waiting" | "done" | "problem"; label: string; actions: QueueRowAction[] } {
+  const name = agentName(agent);
+  if (row.stranded) return { tone: "problem", label: row.stranded.reason || "Its conversation is gone.", actions: ["sendNow", "remove"] };
+  if (row.state === "sending") return { tone: "busy", label: "Sending…", actions: [] };
+  if (row.state === "paused") return { tone: "problem", label: row.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
+  if (row.state === "sent") {
+    if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue. ${name} reads it after the step it's on.`, actions: agent === "claude" ? ["readNow"] : [] };
+    if (row.native === "absorbed") return { tone: "done", label: `Read by ${name}`, actions: [] };
+    if (row.native === "recalled") return { tone: "problem", label: "Taken back into the terminal's input box", actions: [] };
+    if (agent === "codex" && row.deliveryMode === "steer") return { tone: "done", label: "Sent into Codex's current turn", actions: [] };
+    return { tone: "done", label: "Sent", actions: [] };
+  }
+  return { tone: "waiting", label: waitingLabel(name, row), actions: ["sendNow", "edit", "remove"] };
+}
+
+function waitingLabel(name: string, row: QueueRowView): string {
+  switch (row.waitingFor) {
+    case "dialog":
+      return "Waiting. Answer the dialog first.";
+    case "draft":
+      return "Waiting. The terminal's input box holds a draft.";
+    case "disconnected":
+      return "Waiting for the pane to reconnect.";
+    case "turn-start":
+      return `Waiting for ${name} to start on the previous message.`;
+    case "working":
+      return row.deliveryMode === "afterTurn" ? `Waiting for ${name} to finish this turn.` : `Waiting for ${name}'s input box.`;
+    default:
+      return row.deliveryMode === "afterTurn" ? `Queued. It goes when ${name} finishes this turn.` : "Waiting";
+  }
+}
+
+/** A row the bridge delivered in the last minutes, with what the CLI's own queue did with it. */
+export interface DeliveredRow {
+  id: string;
+  text: string;
+  sentAt?: number;
+  deliveryMode?: DeliveryMode;
+  native?: NativeQueueState;
+}
+
+function deliveredRows(page: MessageQueuePage | null): DeliveredRow[] {
+  // The bridge's queue page carries `delivered` (bridge/queue-service.ts); lib/api.ts types the rest.
+  const value = page && "delivered" in page ? (page as { delivered?: unknown }).delivered : undefined;
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (row): row is DeliveredRow =>
+      !!row && typeof row === "object" && typeof (row as DeliveredRow).id === "string" && typeof (row as DeliveredRow).text === "string",
+  );
+}
+
+// ── The hook ─────────────────────────────────────────────────────────────────────────────────────
 
 type PendingMessage = {
   id: string;
   text: string;
   scope: string;
   createdAt?: number;
+  deliveryMode?: DeliveryMode;
 };
+// localStorage, so an add whose answer was lost survives the PWA being killed until the bridge acks it.
 function readPending(key: string): PendingMessage | null {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
     if (
       value &&
       typeof value === "object" &&
@@ -37,12 +149,16 @@ function readPending(key: string): PendingMessage | null {
 }
 function savePending(key: string, value: PendingMessage | null) {
   try {
-    if (value) sessionStorage.setItem(key, JSON.stringify(value));
-    else sessionStorage.removeItem(key);
+    if (value) localStorage.setItem(key, JSON.stringify(value));
+    else localStorage.removeItem(key);
   } catch {
     /* In-memory retries remain available without storage. */
   }
 }
+
+/** The `now` action is newer than lib/api.ts's body type; the bridge validates it (queue-service.ts). */
+type QueueChange = Parameters<typeof changeMessageQueue>[1];
+type ReadNowChange = Omit<QueueChange, "action"> & { action: "now"; confirm: true };
 
 export function useMessageQueue(
   paneId: string,
@@ -106,6 +222,7 @@ export function useMessageQueue(
               action: "add",
               id: waiting.id,
               text: waiting.text,
+              ...(waiting.deliveryMode ? { deliveryMode: waiting.deliveryMode } : {}),
             },
             session,
           );
@@ -157,68 +274,23 @@ export function useMessageQueue(
       document.removeEventListener("visibilitychange", wake);
     };
   }, [paneId, session, enabled, locked, storageKey]);
-  const mutate = useCallback(
-    async (
-      action: "add" | "edit" | "remove" | "send",
-      text?: string,
-      item?: QueueMessage,
-    ) => {
+
+  /** One queue write. True once the bridge saved it and the page still belongs to this pane. */
+  const write = useCallback(
+    async (body: (scope: string) => QueueChange | ReadNowChange, onSaved?: () => void): Promise<boolean> => {
       if (!page?.available || mutating.current) return false;
       mutating.current = true;
       const key = current.current;
       setBusy(true);
       setError("");
-      if (
-        action === "add" &&
-        pending.current &&
-        (pending.current.text !== text || pending.current.scope !== page.scope)
-      ) {
-        setError(
-          "The previous message is still being saved. Keep this draft until it reconnects.",
-        );
-        setBusy(false);
-        mutating.current = false;
-        return false;
-      }
-      if (action === "add" && !pending.current)
-        pending.current = readPending(storageKey);
-      if (
-        action === "add" &&
-        (!pending.current ||
-          pending.current.text !== text ||
-          pending.current.scope !== page.scope)
-      )
-        pending.current = {
-          id: crypto.randomUUID(),
-          text: text!,
-          scope: page.scope,
-          createdAt: Date.now(),
-        };
-      if (action === "add") savePending(storageKey, pending.current);
       try {
-        const next = await changeMessageQueue(
-          paneId,
-          {
-            scope: page.scope,
-            action,
-            id: item?.id ?? pending.current!.id,
-            text,
-            revision: item?.revision,
-          },
-          session,
-        );
+        const next = await changeMessageQueue(paneId, body(page.scope) as QueueChange, session);
         if (!next.available)
           throw new Error(
             "The connected conversation is unavailable. Your draft was kept.",
           );
-        if (action === "add") savePending(storageKey, null);
-        if (current.current === key) {
-          setPage(next);
-          if (action === "add") {
-            setAccepted({ id: pending.current?.id ?? "", text: text! });
-            pending.current = null;
-          }
-        }
+        onSaved?.();
+        if (current.current === key) setPage(next);
         return current.current === key;
       } catch (failure) {
         if (current.current === key)
@@ -235,7 +307,68 @@ export function useMessageQueue(
         }
       }
     },
-    [page, busy, paneId, session, storageKey],
+    [page, paneId, session],
   );
-  return { page, error, refreshError, busy, mutate, accepted };
+
+  /**
+   * Queue a message with the operator's choice of mode. The row id is minted here and kept in
+   * localStorage until the bridge acknowledges it, so a lost answer is retried with the same id.
+   * Resolves the row id, or null when it was not saved.
+   */
+  const add = useCallback(
+    async (text: string, deliveryMode: DeliveryMode): Promise<string | null> => {
+      if (!page?.available || mutating.current) return null;
+      if (pending.current && (pending.current.text !== text || pending.current.scope !== page.scope)) {
+        setError(
+          "The previous message is still being saved. Keep this draft until it reconnects.",
+        );
+        return null;
+      }
+      pending.current ??= readPending(storageKey);
+      if (!pending.current || pending.current.text !== text || pending.current.scope !== page.scope)
+        pending.current = {
+          id: crypto.randomUUID(),
+          text,
+          scope: page.scope,
+          createdAt: Date.now(),
+          deliveryMode,
+        };
+      const row = pending.current;
+      savePending(storageKey, row);
+      const key = current.current;
+      const saved = await write(
+        (scope) => ({ scope, action: "add", id: row.id, text, deliveryMode: row.deliveryMode ?? deliveryMode }),
+        () => savePending(storageKey, null),
+      );
+      if (!saved) return null;
+      if (current.current === key) {
+        setAccepted({ id: row.id, text });
+        pending.current = null;
+      }
+      return row.id;
+    },
+    [page, storageKey, write],
+  );
+
+  const mutate = useCallback(
+    async (
+      action: "add" | "edit" | "remove" | "send",
+      text?: string,
+      item?: QueueMessage,
+    ): Promise<boolean> => {
+      // Callers that predate the send-time choice queue for after the turn, as the queue always did.
+      if (action === "add") return (await add(text!, "afterTurn")) !== null;
+      if (!item) return false;
+      return write((scope) => ({ scope, action, id: item.id, text, revision: item.revision }));
+    },
+    [add, write],
+  );
+
+  /** "Read it now": Claude's send-now chord for a row its own queue still holds. Confirmed by the caller. */
+  const readNow = useCallback(
+    (id: string) => write((scope) => ({ scope, action: "now", id, confirm: true })),
+    [write],
+  );
+
+  return { page, delivered: deliveredRows(page), error, refreshError, busy, add, mutate, readNow, accepted };
 }

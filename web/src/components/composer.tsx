@@ -1,4 +1,4 @@
-import { useMessageQueue } from "@/hooks/use-message-queue";
+import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
@@ -29,6 +29,11 @@ import { useHoldReload } from "@/lib/reload-guard";
 import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
 import { sendGuardedReply } from "@/lib/reply-action";
+import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
+import { parseAnsi } from "@/lib/ansi";
+import { splitLines } from "@/lib/blocks";
+import { detectNoEchoPrompt } from "@/lib/no-echo";
+import type { DeliveryMode } from "@/lib/types";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
 import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
@@ -82,7 +87,8 @@ interface ComposerProps {
   agent: string | undefined | null;
   /** True for a bare shell pane (tweaks the placeholder copy). */
   isShell: boolean;
-  /** Codex is generating; the primary action becomes an explicit interrupt control. */
+  /** The agent is working. Send then offers "now" or "after this turn" where the CLI has both
+   *  (ADR 0056); for Codex with an empty draft the primary action becomes an interrupt control. */
   working?: boolean;
   /** Pane is gone (no agent) — locks the composer with a distinct placeholder. */
   gone: boolean;
@@ -134,9 +140,6 @@ interface ComposerProps {
 // draft, the model chip and Send.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
-// Pause after clearing a stranded terminal draft so the TUI settles before pane.send_text.
-const TUI_SETTLE_MS = 350;
-
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
 // our own in-flight reply (still on the "❯" line before the bridge's pending Enter lands), NOT a
 // stranded draft. Wide enough to cover a slow tailnet round-trip; the parent's cross-poll
@@ -180,6 +183,30 @@ function ComposerDock({
   );
 }
 
+/**
+ * The send-time choice for a busy agent. Both rows are 48 px targets; the wording is the CLI's own
+ * measured behaviour, so "now" never promises more than the CLI does.
+ */
+function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
+  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
+  return (
+    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-lg border border-border/60 bg-background p-1">
+      <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
+      <button type="button" className={row} onClick={() => onPick(choice.now)}>
+        <span className="text-sm font-medium">Send now</span>
+        <span className="text-xs text-muted-foreground">{choice.nowHint}</span>
+      </button>
+      <button type="button" className={row} onClick={() => onPick("afterTurn")}>
+        <span className="text-sm font-medium">Queue for later</span>
+        <span className="text-xs text-muted-foreground">{choice.laterHint}</span>
+      </button>
+      <button type="button" className="min-h-11 w-full rounded-md text-xs text-muted-foreground hover:bg-muted" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 /** One line for the mirror view's "You sent" strip: the prose, and how many images went with it. */
 function sentPreview(message: string): string {
   const { text, images } = splitMessageImages(message);
@@ -189,7 +216,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -292,31 +319,45 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Pending bubbles in the conversation (lib/local-sends.ts) for what this composer sent.
   const sendScope = localSendScope(paneId, session);
   const localSends = useLocalSends(sendScope);
-  const echoes = (text: string) => listLocalSends(sendScope).filter((echo) => echo.text === text);
   useEffect(() => {
     const accepted = queue.accepted;
     if (accepted) {
       // Also fires for a save the queue retried on its own after a failure put the draft back.
       if (draftMessage() === accepted.text.trim()) clearComposer();
-      const [echo] = echoes(accepted.text);
+      const echo =
+        listLocalSends(sendScope).find((item) => item.queueId === accepted.id) ??
+        listLocalSends(sendScope).find((item) => !item.queueId && item.text === accepted.text && item.state !== "sent");
       if (echo) {
-        if (echo.state !== "queued") updateLocalSend(sendScope, echo.id, { state: "queued", queueState: "queued", error: undefined });
+        if (echo.state !== "queued" || echo.queueId !== accepted.id)
+          updateLocalSend(sendScope, echo.id, { state: "queued", queueState: "queued", queueId: accepted.id, error: undefined });
       } else if (nativeWorkbench) {
-        addLocalSend(sendScope, accepted.text, "queued");
+        const id = addLocalSend(sendScope, accepted.text, "queued");
+        updateLocalSend(sendScope, id, { queueId: accepted.id, agent: agent ?? undefined });
       }
       onSent();
     }
   }, [queue.accepted]);
-  // Follow each queued bubble through the server queue: its row's state while it waits, and "sent"
-  // once the row is gone (delivered; a removal from here drops the bubble first).
+  // Follow each queued bubble through its own server row (by id: two identical messages are two
+  // rows): its state while it waits in Nenu, then what the CLI's queue did with it once delivered.
   useEffect(() => {
     const page = queue.page;
     if (!page?.available) return;
     for (const echo of listLocalSends(sendScope)) {
-      if (echo.state !== "queued") continue;
-      const row = page.messages.find((message) => message.text === echo.text);
-      if (!row) updateLocalSend(sendScope, echo.id, { state: "sent", queueState: undefined });
-      else if (row.state !== echo.queueState || row.error !== echo.error) updateLocalSend(sendScope, echo.id, { queueState: row.state, error: row.error });
+      if (echo.state !== "queued" || !echo.queueId) continue;
+      const row = page.messages.find((message) => message.id === echo.queueId);
+      if (row) {
+        const patch = { queueState: row.state, error: row.error, deliveryMode: row.deliveryMode, waitingFor: row.waitingFor, stranded: row.stranded };
+        if ((Object.keys(patch) as Array<keyof typeof patch>).some((key) => JSON.stringify(patch[key]) !== JSON.stringify(echo[key])))
+          updateLocalSend(sendScope, echo.id, patch);
+        continue;
+      }
+      const done = queue.delivered.find((item) => item.id === echo.queueId);
+      // Still in the CLI's own queue: the bubble keeps waiting, with "Read it now" where it exists.
+      if (done?.native === "enqueued") {
+        if (echo.native !== "enqueued") updateLocalSend(sendScope, echo.id, { native: "enqueued", queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
+      } else {
+        updateLocalSend(sendScope, echo.id, { state: "sent", native: done?.native, queueState: undefined, waitingFor: undefined, deliveryMode: done?.deliveryMode ?? echo.deliveryMode });
+      }
     }
   }, [queue.page, sendScope]);
   /** Begin an optimistic send. In the conversation view the message moves straight to its pending
@@ -326,38 +367,61 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const taken = isDraft && nativeWorkbench ? draftMessage() : null;
     if (taken !== null) clearComposer();
     const id = echo ? addLocalSend(sendScope, message) : null;
+    if (id) updateLocalSend(sendScope, id, { agent: agent ?? undefined });
     return { taken, id };
   }
   /** A send that did not go through: the message goes back into an empty composer; if the operator
-   *  has already started something new, it stays on its bubble as "Not sent" instead of clobbering it. */
-  function failSend(started: { taken: string | null; id: string | null }, error: string, secret = false) {
+   *  has already started something new, it stays on its bubble as "Not sent" instead of clobbering it.
+   *  Text that may already be in the terminal (`delivered`) stays on its bubble, pointing at Terminal:
+   *  putting it back under Send would invite the resend that duplicates it. */
+  function failSend(started: { taken: string | null; id: string | null }, error: string, secret = false, delivered = false) {
     const composerEmpty = draftMessage() === "" && attachments.current().length === 0;
-    const restored = started.taken !== null && composerEmpty;
+    const restored = started.taken !== null && composerEmpty && (!delivered || !started.id);
     if (restored) restoreIntoComposer(started.taken!);
     if (!started.id) return;
     // A password prompt's text must not linger on screen; a restored draft is already back in the box.
     if (secret || restored) removeLocalSend(sendScope, started.id);
-    else updateLocalSend(sendScope, started.id, { state: "failed", error: error || "Not sent" });
+    else updateLocalSend(sendScope, started.id, { state: "failed", error: error || "Not sent", textDelivered: delivered || undefined });
   }
-  async function enqueueDraft(value: string, isDraft = true): Promise<boolean> {
+  async function enqueueDraft(value: string, isDraft: boolean, mode: DeliveryMode): Promise<boolean> {
     const t = value.trim();
     if (!t || sending || queue.busy) return false;
     if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
     const started = beginSend(t, isDraft, !t.startsWith("/"));
-    const saved = await queue.mutate("add", t);
-    if (saved) {
-      if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued" });
+    const rowId = await queue.add(t, mode);
+    if (rowId) {
+      if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued", queueId: rowId, deliveryMode: mode });
       if (draftMessage() === t) clearComposer();
     } else failSend(started, "Couldn't queue this message");
-    return saved;
+    return rowId !== null;
+  }
+  // A busy agent's Send waits here for the operator's pick: now, or after this turn (ADR 0056).
+  const [busyPick, setBusyPick] = useState<{ text: string; isDraft: boolean } | null>(null);
+  const busyChoice = nativeWorkbench && queue.page?.available ? busyChoiceFor(agent) : null;
+  useEffect(() => setBusyPick(null), [paneId, session, locked]);
+  function pickBusy(mode: DeliveryMode) {
+    const pick = busyPick;
+    setBusyPick(null);
+    if (!pick) return;
+    // A draft keeps what was typed while the choice was open; a quick reply sends what was tapped.
+    void enqueueDraft(pick.isDraft ? draftMessage() : pick.text, pick.isDraft, mode);
+  }
+  // "Read it now" backgrounds Claude's running command, so it takes a second tap.
+  const readNowConfirm = usePendingConfirm(8_000);
+  function readNow(rowId: string) {
+    if (!readNowConfirm.confirm(rowId)) {
+      setStatus("Claude moves a running command to the background to read it now. Tap again to confirm.", "info");
+      return;
+    }
+    void queue.readNow(rowId);
   }
   const [sending, setSending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   useEffect(() => {
     if (!working) setInterrupting(false);
   }, [working]);
-  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; typeAttempted: boolean } | null>(null);
-  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | null>(null);
+  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; typeAttempted: boolean; keep: boolean } | null>(null);
+  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | "check" | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -480,7 +544,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // alike (during the echo both carry our text). Recomputed each render (each poll re-renders), so it
   // lapses on its own once the grace expires or the echo resolves; a genuinely stranded draft (never
   // matches a recent send) is untouched.
-  const suppressEcho = (draft: string | null, pending = pendingDeliveryRef.current): string | null => {
+  const suppressEcho = (draft: string | null): string | null => {
+    const pending = pendingDeliveryRef.current;
     if (draft !== null && pending?.typeAttempted && pending.paneId === paneId && isSelfEcho(draft, pending.text, adapter?.draftCarriesSend)) return null;
     if (
       draft !== null &&
@@ -626,13 +691,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact"): Promise<boolean> {
     const t = value.trim();
     if (!t || locked || sending) return false;
-    if (nativeWorkbench && queue.page?.available && !action && !force) return enqueueDraft(value, isDraft);
-    // A dialog on screen owns the TUI's keyboard: our text is swallowed and the submit key ANSWERS
-    // the dialog, approving whatever option was highlighted (#34). Refuse BEFORE the destructive
-    // pre-clear sweep below — those ctrl+k/Backspaces would land in the dialog too. The input is
-    // kept: the user answers the dialog with its own buttons, then taps Send again. We never
-    // queue-and-auto-send, because the text may be a reaction to state the dialog just changed —
-    // sending is consent, and the conditions moved.
+    const queueable = nativeWorkbench && queue.page?.available && !action && !force;
+    // A busy agent: the operator picks now or after this turn. An idle one gets the message directly.
+    if (queueable && working && busyChoice) {
+      setBusyPick({ text: t, isDraft });
+      return false;
+    }
+    // A dialog owns the TUI's keyboard: Nenu's queue holds the message until the dialog is answered.
+    if (queueable && dialogPresent) return enqueueDraft(t, isDraft, "afterTurn");
+    // Without the queue, a dialog on screen refuses the send: our text would be swallowed and the
+    // submit key would ANSWER the dialog, approving whatever option was highlighted (#34). The input
+    // is kept: the user answers the dialog with its own buttons, then taps Send again. We never
+    // queue-and-auto-send here, because the text may be a reaction to state the dialog just changed.
     if (dialogPresent && !(nativeWorkbench && prepareSend)) {
       setStatus("A dialog is waiting — answer it first, then send.", "error");
       return false;
@@ -641,9 +711,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // Slash commands are not conversation turns, so they get no bubble.
     const started = beginSend(t, isDraft, !action && nativeWorkbench && !t.startsWith("/"));
     const previous = pendingDeliveryRef.current;
-    const delivery = previous?.paneId === paneId && previous.text === t
+    // The same request id only while the bridge can still act on the earlier try (retryKeepsRequestId).
+    const delivery = previous?.paneId === paneId && previous.text === t && previous.keep
       ? previous
-      : { paneId, text: t, id: crypto.randomUUID(), typeAttempted: false };
+      : { paneId, text: t, id: crypto.randomUUID(), typeAttempted: true, keep: false };
     pendingDeliveryRef.current = delivery;
     if (!action) setDeliveryPhase("queued");
     try {
@@ -655,94 +726,35 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         failSend(started, "");
         return false;
       }
-      // Guarded: types the text, verifies it reached the input box, and only THEN sends the submit
-      // key. A "stalled" outcome means nothing was submitted and the draft must survive (#34).
-      const res = await sendGuardedReply({
-        paneId,
-        text: t,
-        agent,
-        session,
-        force,
-        requestId: delivery.id,
-        onTypeAttempt: () => { delivery.typeAttempted = true; },
-        onAck: (ack) => { if (!action) setDeliveryPhase(ack === "typed" ? "typed" : null); },
-        // Clear a stranded draft on the terminal's "❯" line before pane.send_text appends at cursor —
-        // ctrl+k kills cursor→end, Backspace sweep kills the head (preview-action.ts pattern). Skip
-        // when there's no live draft: a blind sweep races the TUI and Enter can fire before the PTY
-        // settles. Uses the pre-flight's current draft, echo-suppressed, so our own
-        // in-flight echo never triggers a (destructive) clear of a message that's already on its way,
-        // and a live host draft is swept exactly once whether or not the user took it over first.
-        //
-        // Handed to the guard rather than run out here, because these are the most destructive keys
-        // the composer sends and everything deciding to send them is a SNAPSHOT. `effectiveRaw` and
-        // `dialogPresent` are both derived from the mirror's `display`, which lags the live pane by a
-        // poll while following and is frozen outright while the user has scrolled back or opened
-        // find. A dialog that went up in that gap leaves `dialogPresent` false and a draft still
-        // visible, and the sweep lands in the dialog — the #34 failure one step upstream of where
-        // #34 was fixed. The guard runs this ONLY after a live read has positively seen the composer,
-        // which is why it is named for that and not for its position: `force` included, since a
-        // forced retry is armed by a `blocked` outcome, i.e. by the app having just PROVEN a dialog
-        // owns the keyboard. A forced send therefore types without sweeping and stalls if the line
-        // really did hold a draft — which is what it did anyway, since the same detector that could
-        // not see the box cannot read our text back out of it either.
-        onComposerSeen: async ({ promptRegion, draft }) => {
-          // Display polls can lag or be frozen. Clear only a draft from the guard's live read.
-          // Suppress a previous delivery's echo, never the new delivery just allocated above:
-          // a first Send after Take over must still replace its matching terminal draft.
-          const liveDraft = suppressEcho(draft, previous);
-          if (liveDraft === null) return { ok: true as const, keysSent: false };
-          // The props that lock this composer are a SNAPSHOT too, and `send()` read them before the
-          // pre-flight's round-trip. A pane that died or a device that lost write access inside that
-          // window leaves the composer rendered locked while this burst is still queued behind an
-          // await — and unlike every other key this component sends, the burst does not go through
-          // `pressKeys`, which refuses when locked. Re-read the live value instead of the closure's.
-          if (lockedRef.current) {
-            return { ok: false as const, error: "Pane is no longer writable — nothing was sent" };
-          }
-          // Size the sweep from the same live draft the prompt binding protects. Extra Backspace
-          // on an empty input is a no-op; retain the existing margin for renderer wrap differences.
-          const clearCount = [...liveDraft].length + 32;
-          // BOUND to the prompt row the pre-flight's read actually saw. Ordering is not a freshness
-          // bound: the read's answer describes the pane at the moment the BRIDGE snapshotted it, and
-          // these keys go out when the answer arrives — a whole network round-trip later, capped only
-          // by GET_TIMEOUT_MS. `expected_prompt` hands the last word to the bridge, which re-reads the
-          // pane immediately before send_keys and 409s (`prompt_changed`) when that row has gone, so
-          // the window shrinks to two local RPCs. Same mitigation every dialog tap gets from
-          // lib/dialog-guard.ts, which is the one place in this app that could already refuse a key on
-          // exactly the evidence this burst used to accept.
-          const clearRes = await api.sendKeys(
-            paneId,
-            ["ctrl+k", ...Array(clearCount).fill("Backspace")],
-            session,
-            promptRegion ?? undefined,
-          );
-          if (!clearRes.ok) {
-            // A refused binding is the guard doing its job, not a transport failure — say so, because
-            // the user's next move is to look at the pane rather than to retry into whatever is now
-            // on it. Nothing was typed either way: this aborts the send before the reply text.
-            if (clearRes.code === "prompt_changed") {
-              return {
-                ok: false as const,
-                error: "The input box changed while clearing it — nothing was typed. Check the pane.",
-              };
-            }
-            return { ok: false as const, error: clearRes.error ?? "Couldn't clear the terminal input" };
-          }
-          scheduleKeyRevalidate();
-          await new Promise((resolve) => setTimeout(resolve, TUI_SETTLE_MS));
-          // `keysSent` — the burst plus this settle is exactly the window the guard re-reads across
-          // before it types, so the message doesn't follow the keys into a dialog that opened inside
-          // it.
-          return { ok: true as const, keysSent: true };
-        },
-      });
+      let res: ReplyOutcome;
+      if (force) {
+        // "Type anyway" skips the pre-flight, which the bridge's one-request send never does, so the
+        // override keeps the browser guard: it still withholds Enter until it sees the text.
+        res = await sendGuardedReply({
+          paneId,
+          text: t,
+          agent,
+          session,
+          force,
+          requestId: delivery.id,
+          onAck: (ack) => { if (!action) setDeliveryPhase(ack === "typed" ? "typed" : null); },
+        });
+        delivery.keep = res.status !== "sent";
+      } else {
+        // One request: the bridge sweeps a stranded draft, types, verifies and submits.
+        const outcome = await api.sendMessage(paneId, { text: t, requestId: delivery.id }, session);
+        delivery.keep = retryKeepsRequestId(outcome);
+        res = replyOutcomeFrom(outcome, () => detectNoEchoPrompt(splitLines(parseAnsi(text))));
+      }
       if (res.status === "sent") {
         pendingDeliveryRef.current = null;
         setDeliveryPhase(null);
         // A draft send cleared the composer when it started; a retry from a bubble clears the same
         // message if it had been put back.
         if (draftMessage() === t) clearComposer();
-        if (started.id) updateLocalSend(sendScope, started.id, { state: "sent" });
+        // An agent without an adapter has no input box Nenu can read back: Enter went out unverified.
+        const unverified = !adapter;
+        if (started.id) updateLocalSend(sendScope, started.id, { state: "sent", unverified: unverified || undefined });
         // Remember what/when we sent, so the next few polls recognise this text echoing on the "❯"
         // line as our own in-flight reply rather than a stranded draft (suppressEcho above).
         lastSentRef.current = { text: t, at: Date.now() };
@@ -753,8 +765,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           setPreviewLatched(false);
         }
         // ✓ flash on the send button + status line acknowledge a VERIFIED send (the text was seen in
-        // the input box before the submit key went out), so this lands slightly later than the old
-        // fire-and-forget ✓ but is now actually true. The "You sent: …" pending preview keeps the
+        // the input box before the submit key went out). The "You sent: …" pending preview keeps the
         // typed text visible until the mirror catches up (cleared by the next text update or a 6s
         // safety timeout).
         setJustSent(true);
@@ -762,7 +773,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         sentTimer.current = setTimeout(() => setJustSent(false), 1500);
         // The native picker already shows its own loading state.
         if (action !== "model" || !nativeWorkbench) {
-          setStatus(action === "model" ? "Opening model picker…" : action === "compact" ? "Compaction requested" : "Message sent", action === "model" ? "info" : "success");
+          setStatus(
+            action === "model" ? "Opening model picker…" : action === "compact" ? "Compaction requested" : unverified ? "Sent, not verified: Nenu can't read this agent's input box." : "Message sent",
+            action === "model" || unverified ? "info" : "success",
+          );
         }
         // The conversation view shows the pending bubble instead of this strip.
         setLastSent(action || nativeWorkbench ? null : sentPreview(t));
@@ -792,22 +806,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setStatus(`${res.error} Tap Send again to type anyway.`, "error");
         return false;
       } else {
-        // "stalled" = the text never reached the input box, so NO submit key was sent (a dialog was
-        // probably holding focus). "error" with textDelivered = the text is in the pane but the
-        // submit failed. Either way the draft stays put: the user checks the pane rather than
-        // double-sending, and on a stall their message is still here to re-send once the dialog is
-        // answered.
+        // "stalled" = the text went into the pane but was never seen in the input box, so NO submit
+        // key was sent (a dialog was probably holding focus). "error" with textDelivered = the text
+        // may be in the pane, unsubmitted. Either way it may already be typed: the operator checks
+        // Terminal rather than resending, which would type a second copy.
         //
-        // Except at a password prompt, where the draft staying put is the wrong call and the notice
-        // says so: the text is already IN the pane (unsubmitted), so a re-send types a second copy of
-        // a secret rather than recovering a lost message. The notice's handoff is what clears it.
-        noticeNoEcho(
-          res.status === "stalled" && res.noEcho !== undefined
-            ? { prompt: res.noEcho, typed: true }
-            : null,
-        );
-        failSend(started, res.error, res.status === "stalled" && res.noEcho !== undefined);
-        setDeliveryPhase("retry");
+        // At a password prompt the notice takes over: a re-send types a second copy of a secret
+        // rather than recovering a lost message, and the notice's handoff is what clears it.
+        const prompt = res.status === "stalled" ? res.noEcho : undefined;
+        const secret = prompt !== undefined;
+        noticeNoEcho(secret ? { prompt, typed: true } : null);
+        const delivered = res.status === "stalled" || res.textDelivered === true;
+        failSend(started, res.error, secret, delivered);
+        setDeliveryPhase(delivered ? "check" : "retry");
         setStatus(res.error, "error");
         return false;
       }
@@ -854,7 +865,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The bubbles' buttons. A queued message is handled through its server queue row; a failed one
   // locally. Edit puts the message back into the composer for another go.
   const queueRow = (echo: LocalSend): QueueMessage | undefined =>
-    queue.page?.messages.find((message) => message.text === echo.text);
+    echo.queueId ? queue.page?.messages.find((message) => message.id === echo.queueId) : undefined;
   const bubbleActions = useRef<LocalSendActions | null>(null);
   bubbleActions.current = {
     retry: (echo) => { if (!sending) void send(echo.text, false); },
@@ -874,6 +885,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const row = queueRow(echo);
       if (row) void queue.mutate("send", undefined, row);
     },
+    readNow: (echo) => { if (echo.queueId) readNow(echo.queueId); },
+    openTerminal: () => setRawTerminal(true),
   };
   useEffect(() => {
     if (!nativeWorkbench || locked) return;
@@ -882,12 +895,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       edit: (echo) => bubbleActions.current?.edit(echo),
       remove: (echo) => bubbleActions.current?.remove(echo),
       sendNow: (echo) => bubbleActions.current?.sendNow(echo),
+      readNow: (echo) => bubbleActions.current?.readNow(echo),
+      openTerminal: (echo) => bubbleActions.current?.openTerminal(echo),
     });
     return () => setLocalSendActions(sendScope, null);
   }, [sendScope, nativeWorkbench, locked]);
   // The queue strip lists only what has no bubble in the conversation, so nothing shows twice.
-  const echoed = new Set(localSends.filter((echo) => echo.state === "queued").map((echo) => echo.text));
-  const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.text));
+  const echoed = new Set(localSends.map((echo) => echo.queueId).filter(Boolean));
+  const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.id));
+  const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id));
 
   async function interruptGeneration() {
     if (locked || interrupting || agent !== "codex") return;
@@ -1053,8 +1069,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {deliveryPhase && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
-            {deliveryPhase !== "retry" && <Loader2 className="size-3 shrink-0 animate-spin" />}
-            <span>{deliveryPhase === "queued" ? "Sending…" : deliveryPhase === "typed" ? "Making sure it arrived…" : "Not sent. Tap Send to try again."}</span>
+            {(deliveryPhase === "queued" || deliveryPhase === "typed") && <Loader2 className="size-3 shrink-0 animate-spin" />}
+            <span>
+              {deliveryPhase === "queued"
+                ? "Sending…"
+                : deliveryPhase === "typed"
+                  ? "Making sure it arrived…"
+                  : deliveryPhase === "check"
+                    ? "Not confirmed. Check the terminal before sending again."
+                    : "Not sent. Tap Send to try again."}
+            </span>
           </div>
         )}
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
@@ -1169,7 +1193,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        {nativeWorkbench && <MessageQueueStrip messages={strayQueue} busy={queue.busy || disconnected} error={queue.error || (disconnected ? "" : queue.refreshError)} change={queue.mutate} />}
+        {busyPick && busyChoice && <BusyChoicePanel choice={busyChoice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}
+        {nativeWorkbench && (
+          <MessageQueueStrip
+            agent={agent}
+            messages={strayQueue}
+            delivered={strayDelivered}
+            busy={queue.busy || disconnected}
+            error={queue.error || (disconnected ? "" : queue.refreshError)}
+            change={queue.mutate}
+            readNow={readNow}
+            readNowArmed={readNowConfirm.pending}
+          />
+        )}
 
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* The draft takes the full width and grows upward; a slim toolbar under it holds attach,

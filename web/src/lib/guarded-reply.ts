@@ -17,7 +17,7 @@
 // submit. If it never appears, NO key is sent and the caller keeps the draft. This is the same
 // choreography submitPreviewNote already uses for the note field, applied to the main input.
 
-import type { ActionResponse } from "./types";
+import type { ActionResponse, SendOutcome } from "./types";
 export interface ReplyTransport {
   fetchPane(paneId: string, lines?: number, session?: string): Promise<{ text: string }>;
   sendReply(paneId: string, text: string, submit: boolean, session?: string, expectedPrompt?: string, requestId?: string, paste?: boolean): Promise<ActionResponse>;
@@ -473,11 +473,12 @@ async function guardedReply(args: GuardedReplyArgs, trace: SendTrace): Promise<R
   };
 }
 
+// The same words the bridge's one-request send uses (bridge/guarded-send.ts), so a stall reads the
+// same whichever path typed the text: it may be in the box, so the next move is Terminal, not Send.
 const UNREAD =
-  "Couldn't read the terminal to confirm your message: the connection failed. Nothing was submitted. Your draft is saved; the text may already be typed, so check Terminal before retrying.";
+  "Couldn't read the terminal to confirm your message. Nothing was submitted; the text may already be typed, so check Terminal before retrying.";
 
-const UNSEEN =
-  "Your message wasn't seen in the agent's input box. Nothing was submitted. Your draft is saved; retry or open Terminal.";
+const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was submitted; it may still be typed, so check Terminal before retrying.";
 
 const NO_BOX =
   "The agent's input box isn't on screen — a menu or dialog is probably up. Nothing was typed.";
@@ -633,4 +634,35 @@ async function submitOnly(args: GuardedReplyArgs, trace: SendTrace): Promise<Rep
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+// ── The bridge's one-request send ─────────────────────────────────────────────────────────────────
+
+/** How the bridge words a refusal at a password prompt (bridge/guarded-send.ts NO_ECHO, NO_ECHO_TYPED). */
+const PASSWORD_PROMPT = /^That's a password prompt/;
+
+/**
+ * POST /send's answer in the composer's terms. The bridge's copy is kept as it is: when the text may
+ * already be in the input box (`textDelivered`) it says to check Terminal, and the composer must not
+ * resend on its own. `noEchoPrompt` names the prompt on screen when the bridge refused at one.
+ */
+export function replyOutcomeFrom(outcome: SendOutcome, noEchoPrompt: () => string | null): ReplyOutcome {
+  if (outcome.ok) return { status: "sent" };
+  const noEcho = PASSWORD_PROMPT.test(outcome.error) ? (noEchoPrompt() ?? "") : undefined;
+  if (!outcome.textDelivered && outcome.code === "not_ready") {
+    return { status: "blocked", error: outcome.error, ...(noEcho !== undefined ? { noEcho } : {}) };
+  }
+  if (noEcho !== undefined) return { status: "stalled", error: outcome.error, noEcho };
+  return { status: "error", error: outcome.error, textDelivered: outcome.textDelivered };
+}
+
+/**
+ * Whether the next try of the same message keeps this request id. Only while the bridge can still
+ * act on the earlier try: its text may be in the input box, and the same id submits it there instead
+ * of typing a second copy. A failure before anything was typed, or one where the bridge already saw
+ * the box without the text (stage `preflight`), gets a fresh id, so the retry sweeps whatever is
+ * stranded on the input line and types again.
+ */
+export function retryKeepsRequestId(outcome: SendOutcome): boolean {
+  return !outcome.ok && outcome.textDelivered && outcome.stage !== "preflight";
 }
