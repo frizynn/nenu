@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-10-11
+
+### Changed
+- The workspace page shows the workspace's name and folder, its tabs as tabs (rename and close behind ⋯) and the shown tab's panes with their state and last activity, one tap from the chat; the row of every workspace and the "All" filter are gone, and it uses the project pages' frame. (e54a4d4, 2f82aa1, 6b16a65)
+- A workspace holding a single pane opens straight onto it, from the sidebar, the rail or a link. (e54a4d4, 2f82aa1)
+- A tab Herdr numbers by position reads "Tab 1" in the tab bar, the sidebar and the chat title. (e54a4d4, 2f82aa1)
+
+### Added
+- `bun scripts/e2e/run.ts space` captures the workspace page in each of its shapes, phone and desk. (25c2567)
+
 ## [0.60.0] - 2026-10-11
 
 ### Changed
