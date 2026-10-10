@@ -224,6 +224,28 @@ export interface ThreadPullRequest {
   mergeable?: string;
 }
 
+/**
+ * An open pull request of the person's, read with `gh` in a repo an agent works in
+ * (bridge/pull-requests.ts). `paneIds` are the panes whose folder is on its branch.
+ */
+export interface PullRequestView {
+  /** `owner/name`, from the PR's own URL. */
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  /** The head branch. */
+  branch: string;
+  base?: string;
+  draft: boolean;
+  review?: "approved" | "changes_requested" | "review_required";
+  checks?: { passed: number; failed: number; pending: number };
+  diff?: { additions: number; deletions: number };
+  /** Epoch ms. */
+  updatedAt?: number;
+  paneIds: string[];
+}
+
 export interface ProjectView {
   slug: string;
   name: string;
@@ -269,6 +291,8 @@ export interface SnapshotResponse {
   tabs: TabView[];
   /** Registered Herdr Projects belonging to this session. Absent on older bridges. */
   projects?: ProjectView[];
+  /** Open pull requests from GitHub in the repos agents work in. Absent on older bridges. */
+  pullRequests?: PullRequestView[];
   /**
    * Every herdr session this bridge fronts (primary first, then alphabetical). Always present; a
    * single-session deployment lists just the primary, so the switcher UI can stay hidden.

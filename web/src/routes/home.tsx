@@ -11,7 +11,7 @@ import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue } from "@/lib/api";
-import { finishedNotices, greeting, homeHeadline, needsYouItems, reviewItems, runningWorkflows } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, reviewQueue, runningWorkflows } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -34,10 +34,9 @@ export function HomeRoute() {
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const needs = needsYouItems(data.agents, interactions.interactions);
-  const reviews = reviewItems(data.projects);
-  const notices = finishedNotices(activity, data.agents, now);
+  const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
-  const counts = { needs: needs.length, review: reviews.length + notices.length, working: data.agents.filter((a) => a.status === "working").length };
+  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const long = homeHeadline(counts, data.agents.length);
   const short = homeHeadline(counts, data.agents.length, true);
   const loose = looseWorkspaces(data);
@@ -75,7 +74,7 @@ export function HomeRoute() {
             <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} interactions={interactions} readOnly={readOnly || !live} />
           </div>
           <div className="order-3 empty:hidden">
-            <ReadyToReviewList reviews={reviews} notices={notices} agents={data.agents} session={data.session} now={now} />
+            <ReadyToReviewList entries={reviews} session={data.session} />
           </div>
         </div>
 

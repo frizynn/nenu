@@ -6,7 +6,7 @@ import { HomeRoute } from "./home";
 import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { Interaction, ProjectView } from "@/lib/types";
+import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
 
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
@@ -156,7 +156,8 @@ it("lists pull requests ready to review with their diff and checks, and the proj
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
   expect(review.getByText("Mobile panel")).toBeInTheDocument();
   expect(review.getByText("#1342")).toBeInTheDocument();
-  expect(review.getByText("+212")).toBeInTheDocument();
+  // The diff sits in its own column on a desk and under the title on a phone.
+  expect(review.getAllByText("+212")).toHaveLength(2);
   expect(review.getByText("checks")).toBeInTheDocument();
   const projects = within(main.getByRole("region", { name: /^Projects/ }));
   const card = projects.getByRole("link", { name: /Hub/ });
@@ -170,19 +171,54 @@ it("lists pull requests ready to review with their diff and checks, and the proj
   expect(router.state.location.pathname).toBe("/pane/w2%3Ap2");
 });
 
-it("announces a workflow that finished since its thread was opened", async () => {
+it("keeps failed commands and finished workflows out of Ready to review", async () => {
   const now = Date.now();
   const activity: ActivityResponse = {
-    available: true, sessionKey: "s", truncated: false, artifacts: [], tasks: [],
+    available: true, sessionKey: "s", truncated: false, artifacts: [],
+    tasks: [{ id: "k", kind: "bash", title: "bun run test", status: "failed", exitCode: 1, at: now - 60_000, hasOutput: true }],
     workflows: [{ runId: "r1", name: "org-tui-design", status: "completed", updatedAt: now - 60_000, durationMs: 1_418_000, phases: [], agentCount: 4, doneCount: 4 }],
   };
   server.use(http.get("/api/pane/:pane/activity", ({ params }) => HttpResponse.json(params.pane === "w1:p2" ? activity : { available: false, reason: "no-session" })));
   const agents = data.agents.map((a) => a.paneId === "w1:p2" ? { ...a, status: "idle" as const, hasSession: true, lastSeenAt: now - 3_600_000 } : a);
   const { main } = await setup({ ...data, agents });
-  const review = within(await main.findByRole("region", { name: /^Ready to review/ }));
-  expect(review.getByText("Workflow finished: org-tui-design")).toBeInTheDocument();
-  expect(review.getByText("Nenu · 4 agents · 23m 38s")).toBeInTheDocument();
-  expect(review.getByRole("link", { name: "View result of org-tui-design" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+  await screen.findByRole("heading", { level: 1 });
+  expect(main.queryByRole("region", { name: /^Ready to review/ })).not.toBeInTheDocument();
+  expect(main.queryByText(/Command failed/)).not.toBeInTheDocument();
+  expect(main.queryByText(/Workflow finished/)).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/review/);
+});
+
+it("lists the pull requests agents opened outside Organizations and reviews them in the agent or on GitHub", async () => {
+  const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
+    repo: "frizynn/comercio-saas", number, title: `PR ${number}`, url: `https://github.com/frizynn/comercio-saas/pull/${number}`,
+    branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
+  });
+  const { user, router, main } = await setup({ ...data, pullRequests: [
+    pr(1699, { title: "Email campaigns", draft: true }),
+    pr(1698, { title: "Abandoned carts", paneIds: ["w1:p1"], checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 3752, deletions: 154 } }),
+    pr(1696, { title: "Publish products", review: "approved", checks: { passed: 4, failed: 0, pending: 0 } }),
+  ] });
+  expect(headline()).toBe("1 thread needs you, 3 are ready to review");
+  const review = within(main.getByRole("region", { name: /^Ready to review/ }));
+  expect(review.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["Review Publish products", "Review Abandoned carts", "Review Email campaigns"]);
+  expect(review.getByText("#1698")).toBeInTheDocument();
+  expect(review.getByText("1 failing")).toBeInTheDocument();
+  expect(review.getByText("Draft")).toBeInTheDocument();
+  expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("href", "https://github.com/frizynn/comercio-saas/pull/1696");
+  expect(review.getByRole("link", { name: "Review Publish products" })).toHaveAttribute("target", "_blank");
+  await user.click(review.getByRole("link", { name: "Review Abandoned carts" }));
+  expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
+});
+
+it("shows the first rows and the rest on request", async () => {
+  const pullRequests = Array.from({ length: 9 }, (_, i): PullRequestView => ({
+    repo: "a/b", number: i + 1, title: `PR ${i + 1}`, url: `https://github.com/a/b/pull/${i + 1}`, branch: "x", draft: false, paneIds: [],
+  }));
+  const { user, main } = await setup({ ...data, pullRequests });
+  const review = within(main.getByRole("region", { name: /^Ready to review/ }));
+  expect(review.getAllByRole("listitem")).toHaveLength(6);
+  await user.click(review.getByRole("button", { name: "Show all 9" }));
+  expect(review.getAllByRole("listitem")).toHaveLength(9);
 });
 
 it("jumps with ⌘K and Enter to the first matching chat", async () => {

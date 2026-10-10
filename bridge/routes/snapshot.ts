@@ -12,7 +12,7 @@ export const snapshotRoutes: Route[] = [
     path: "/api/snapshot",
     access: "read",
     session: true,
-    async handle({ cfg, activity, hasJournal, projects, registry, snooze, updateMonitor }, { req, rt }) {
+    async handle({ cfg, activity, hasJournal, projects, pullRequests, registry, snooze, updateMonitor }, { req, rt }) {
       const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
       const device = deviceAuth(req, cfg);
       // Attach each pane's activity timestamps. Done here rather than in the state engine so the
@@ -39,6 +39,7 @@ export const snapshotRoutes: Route[] = [
         tabs,
         projects: projectViews,
         looseWorkspaceIds: looseWorkspaceIds(workspaces, projectViews),
+        pullRequests: pullRequests.list(rt.name, [...agents, ...shellPanes]),
         sessions: registry.list(),
         notifications: { snoozedUntil: snooze.until() },
         update: updateMonitor.status(),
