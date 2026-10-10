@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-10-11
+
+### Fixed
+- Claude's own bookkeeping rows (image sizes after a Read, loaded skill bodies) no longer show as your messages or split a turn's work log; other meta rows are System notes, and `/command` and `!` input read cleanly. (#49)
+- "Read it now" on a queued Claude message sends one Ctrl+Enter, then says it asked; a repeat or late tap no longer ends in a 409, and API errors read as a sentence, never a route with JSON. (#50)
+- Closing a tab keeps you in its workspace on the neighbouring tab (left, else right), from Nenu or from Herdr; only an emptied workspace goes Home. (#51)
+- File cards resolve names against the folders the chat itself names and `~/`, say "Not found" instead of opening a 404, and compaction summaries no longer produce cards. (#52)
+
 ## [0.58.0] - 2026-10-10
 
 ### Added
