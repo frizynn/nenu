@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-10-10
+
+### Fixed
+- HTML previews no longer come up blank in Safari: the frame allows Nenu's own host, not only the sandbox's opaque 'self'. (02d45118)
+- The HTML viewer opens a page full screen on its own tab, so a pinch zooms the page instead of Nenu. (02d45118)
+
 ## [0.54.1] - 2026-10-10
 
 ### Fixed
