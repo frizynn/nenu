@@ -89,7 +89,7 @@ beforeAll(async () => {
   const server = startServer({
     cfg,
     registry: { get: (name?: string) => (!name || name === "default" ? runtime : undefined), list: () => [], all: () => [runtime] },
-    push: { enabled: false, publicKey: "" }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
+    push: { enabled: false, publicKey: "", useInteractions: () => {} }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
     updateMonitor: { status: () => ({}), checkRelease: async () => {} },
     audit: { record: () => {} },
     activity: { get: () => undefined, noteSeen: (_session: string, paneId: string) => seen.push(paneId) },

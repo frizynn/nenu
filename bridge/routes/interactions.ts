@@ -55,7 +55,7 @@ export const interactionRoutes: Route[] = [
     access: "read",
     session: true,
     async handle(ctx, { req, rt }) {
-      const interactions = await ctx.interactions.refresh(rt.name, rt.herdr, rt.engine.current().agents, interactionHints(ctx, rt));
+      const interactions = await ctx.interactions.list(rt.name, rt.herdr, rt.engine.current().agents, interactionHints(ctx, rt));
       const body = { interactions };
       const etag = computeEtag(JSON.stringify(body));
       if (notModified(req.headers.get("if-none-match"), etag)) {

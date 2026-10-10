@@ -103,7 +103,7 @@ describe("POST /api/hooks/claude", () => {
     const server = startServer({
       cfg: { ...loadConfig(), host: "127.0.0.1", port: 0, stateDir: dir, transcript: false, trustedUser: "", skipServe: true, allowAnyHost: false, publicHosts: [], tailscaleHosts: [], allowedOrigins: [] },
       registry: { get: () => runtime, list: () => [], all: () => [runtime] },
-      push: { enabled: false, publicKey: "" }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
+      push: { enabled: false, publicKey: "", useInteractions: () => {} }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
       updateMonitor: { status: () => ({}), checkRelease: async () => {} },
       audit: { record: () => {} },
       activity: { get: () => undefined, noteSeen: () => {} },

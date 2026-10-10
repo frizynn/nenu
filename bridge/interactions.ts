@@ -101,6 +101,8 @@ export type AnswerResult = { status: 200 | 400 | 409 | 422 | 502; outcome: Answe
 const NAV_SETTLE_MS = 250;
 /** A matched dialog regex keeps a pane eligible for detection this long even before Herdr says blocked. */
 const OUTPUT_MATCH_WINDOW_MS = 30_000;
+/** How long a client's list reuses a pane read; follow() re-reads on every herd or screen change. */
+const LIST_FRESH_MS = 2_000;
 /** Rows of a prompt's subject kept above its question. */
 const CONTEXT_MAX_ROWS = 12;
 /** Rows above a prompt's question that must hold still while its amend field opens and fills. */
@@ -348,6 +350,7 @@ interface Entry {
   /** Screen text plus hints the detection was built from; the same input is never re-parsed. */
   input: string;
   detection: Detection | null;
+  readAt: number;
 }
 
 export type HintSource = (session: string, pane: AgentView) => Promise<InteractionHint[]>;
@@ -380,6 +383,7 @@ function typedText(raw: string): string | AnswerResult {
 export class Interactions {
   private readonly panes = new Map<string, Entry>();
   private readonly matched = new Map<string, number>();
+  private readonly listing = new Map<string, Promise<DetectedInteraction[]>>();
   private readonly lines: number;
   private readonly now: () => number;
   private readonly sleep: Sleep;
@@ -401,11 +405,23 @@ export class Interactions {
   }
 
   /**
+   * The cards a client asks for. A pane read in the last LIST_FRESH_MS is not read again, and callers
+   * that arrive while a list is running share it, so more open phones do not mean more pane reads.
+   */
+  list(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource): Promise<DetectedInteraction[]> {
+    const running = this.listing.get(session);
+    if (running) return running;
+    const run = this.refresh(session, io, agents, hints, undefined, LIST_FRESH_MS).finally(() => this.listing.delete(session));
+    this.listing.set(session, run);
+    return run;
+  }
+
+  /**
    * Re-detect the session's eligible panes (blocked, or a dialog regex matched lately) and forget the
    * rest. A pane is read every time (one local read, no revision to skip on: pane.read's is 0) but only
    * parsed when its text or hints changed. Publishes `interaction` for every pane whose card changed.
    */
-  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string): Promise<DetectedInteraction[]> {
+  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<DetectedInteraction[]> {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
@@ -418,7 +434,8 @@ export class Interactions {
         if (s === session && !live.has(paneId)) this.forget(session, paneId);
       }
     }
-    await Promise.all(eligible.filter((a) => only === undefined || a.paneId === only).map(async (pane) => {
+    const stale = (paneId: string) => now - (this.panes.get(paneKey(session, paneId))?.readAt ?? -Infinity) >= maxAgeMs;
+    await Promise.all(eligible.filter((a) => (only === undefined || a.paneId === only) && stale(a.paneId)).map(async (pane) => {
       try {
         const read = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
         this.store(session, pane, read, hints ? await hints(session, pane) : []);
@@ -491,10 +508,14 @@ export class Interactions {
     const key = paneKey(session, pane.paneId);
     const input = `${pane.agent}\0${read.text}\0${JSON.stringify(hints)}`;
     const previous = this.panes.get(key);
-    if (previous?.input === input) return previous.detection;
+    const readAt = this.now();
+    if (previous?.input === input) {
+      previous.readAt = readAt;
+      return previous.detection;
+    }
     const dialog = dialogOnScreen(pane.agent, read.text);
-    const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, this.now()) : null;
-    this.panes.set(key, { input, detection });
+    const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, readAt) : null;
+    this.panes.set(key, { input, detection, readAt });
     const before = previous?.detection?.interaction;
     const after = detection?.interaction;
     if (before?.signature !== after?.signature || JSON.stringify(before?.hints) !== JSON.stringify(after?.hints)) {
