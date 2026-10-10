@@ -1,0 +1,32 @@
+user@host work % claude --model haiku --effort low --setting-sources project,local
+[0m[38;2;215;119;87m ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▛█   [0m[1mClaude Code [0m[38;2;153;153;153mv2.1.296[0m
+[0m[38;2;215;119;87m▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m█▀  [0m[38;2;153;153;153mHaiku 5.5 with low effort · Claude Team[0m
+[0m[38;2;215;119;87m ▝▝   ▝▝   [0m[38;2;153;153;153m/private/tmp/nenu-probe
+
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mUse the Bash tool to run: echo hi > hello.txt[0m[48;2;55;55;55m                                                                         [0m
+
+[0m[38;2;78;186;101m⏺[0m [0m[1mBash[0m(echo hi > hello.txt)
+[0m[38;2;153;153;153m  ⎿  (No output)[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55muse printf instead of echo[0m[48;2;55;55;55m                                                                                            [0m
+ 
+[0m[38;2;153;153;153m⏺[0m [0m[1mBash[0m(printf 'hi\n' > hello.txt)
+[0m[38;2;153;153;153m  ⎿  Waiting…[0m
+
+[0m[38;2;177;185;249m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+ [0m[1m[38;2;177;185;249mBash command[0m
+ [0m[1mTip: auto mode handles these prompts for you — choose "switch to auto mode" below[0m
+ [0m[38;2;153;153;153mWrite "hi" into hello.txt using printf[0m
+[0m[38;2;80;80;80m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+ printf 'hi\n' > hello.txt
+[0m[38;2;80;80;80m╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌[0m
+ Do you want to proceed?
+   [0m[38;2;153;153;153m1. [0mYes
+ [0m[38;2;177;185;249m❯ [0m[38;2;153;153;153m2. [0m[38;2;177;185;249mYes, and always allow access to [0m
+      [0m[1m[38;2;177;185;249m/private/tmp/nenu-probe[0m[38;2;177;185;249m from [0m
+      [0m[38;2;177;185;249mthis project[0m
+   [0m[38;2;153;153;153m3. [0mYes, and switch to auto mode[0m[38;2;153;153;153m · auto mode handles these prompts for you[0m
+   [0m[38;2;153;153;153m4. [0mNo
+
+ [0m[38;2;153;153;153mEsc to cancel[0m

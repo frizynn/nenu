@@ -34,6 +34,13 @@ export interface PromptOption {
    * Absent when `keys[0]` already is the badge.
    */
   keyLabel?: string;
+  /**
+   * With `❯`/`›` on this row, `Tab` opens a text field whose words ride along with the answer. Claude's
+   * "Tab to amend": on `Yes` the tool runs and Claude gets the text, on `No` the tool is rejected and
+   * the turn continues with it. Codex's notes: the row is answered with `user_note: <text>`. Set only on
+   * rows whose recipe was measured (PROBES_2026_10_NOTES.md); the bridge types it as a verified sequence.
+   */
+  amend?: true;
 }
 
 /**
@@ -42,9 +49,11 @@ export interface PromptOption {
  *
  *   - `plan-change` — Claude's "Tell Claude what to change": the digit focuses the field, typing
  *     fills it, Enter denies the plan and hands the agent the text (PLAN_FEEDBACK_NOTES.md).
- *   - `free-text` — another harness's custom-answer row (Grok's `z`). Parsed so a focused row can
- *     lock the option buttons; Nenu does not type into it. The Claude plan-feedback send path
- *     is the wrong recipe (different key, different Enter, unmeasured caret/wrap).
+ *   - `free-text` — any other custom-answer field (Grok's `z`, Codex's notes box, Claude's open
+ *     "Tab to amend" field, which also sets `row`). Parsed so a focused field can lock the option
+ *     buttons; the web send path does not type into it. The Claude plan-feedback send path is the
+ *     wrong recipe (different key, different Enter, unmeasured caret/wrap); the bridge carries
+ *     the measured recipes for these (bridge/interactions.ts).
  */
 export type PromptFeedbackPurpose = "plan-change" | "free-text";
 
@@ -74,6 +83,9 @@ export interface PromptFeedback {
   text: string;
   /** Absent = `plan-change` (Claude). Set explicitly when the row is not that input. */
   purpose?: PromptFeedbackPurpose;
+  /** The option row an OPEN amend field belongs to (Claude's "Tab to amend"); the row's own label
+   *  became the field. Absent on a standalone input row. */
+  row?: number;
 }
 
 /** A recognised single-choice dialog: the question, its selectable options, and the family. */
@@ -83,6 +95,15 @@ export interface PromptModel {
   family: PromptFamily;
   /** The dialog's inline free-text input row, when it has one. Absent on dialogs without one. */
   feedback?: PromptFeedback;
+  /**
+   * A free-text row the grammar dropped from `options` and that Nenu has no measured recipe to type
+   * into (AskUserQuestion's single-choice "Type something."). Carried so a card can send the
+   * operator to the terminal instead of hiding that the answer exists.
+   */
+  textRow?: { n: number; label: string };
+  /** The row number `❯` sits on, when the grammar saw one. A recipe that walks the pointer with
+   *  Up/Down (Claude's Tab-amend) reads it; identity ignores it, `signature` already carries it. */
+  pointer?: number;
   /**
    * The dialog's identity, independent of everything OUR OWN choreography changes: the `❯` pointer,
    * the feedback row's contents, and the row's HEIGHT (a long value wraps, which re-flows the screen
@@ -146,6 +167,7 @@ export function promptsSameIdentity(a: PromptModel, b: PromptModel): boolean {
     // keystrokes would be aimed at the wrong row.
     a.feedback?.key === b.feedback?.key &&
     a.feedback?.purpose === b.feedback?.purpose &&
+    a.feedback?.row === b.feedback?.row &&
     a.options.length === b.options.length &&
     a.options.every((o, i) => o.label === b.options[i]!.label && sameKeys(o.keys, b.options[i]!.keys))
   );
