@@ -115,7 +115,7 @@ export const fixtureTranscript: TranscriptEntry[] = [
 ];
 
 // ── The fake pane's input box ────────────────────────────────────────────────────────────────────
-// A guarded reply (lib/reply-action.ts) types with submit:false and then polls pane reads until the
+// A guarded reply (bridge/guarded-send.ts) types with submit:false and then polls pane reads until the
 // adapter can see that text on the "❯" line — only then does it send the submit key. So the fake
 // pane has to behave like a real TUI (text typed → it appears on the prompt line; submit → the line
 // clears) or no guarded send would ever verify and every send test would stall.

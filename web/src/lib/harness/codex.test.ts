@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseAnsi } from "../ansi";
 import { splitLines, type StyledLine } from "../blocks";
-import { draftCarriesSend } from "../reply-action";
+import { draftCarriesSend } from "../guarded-reply";
 import { codexAdapter } from "./codex";
 import { animatedComposerRegion, locateComposer, stripChrome } from "./codex/chrome";
 import { isStatusRow, lineText, PLACEHOLDER } from "./codex/markers";

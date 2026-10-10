@@ -79,7 +79,7 @@ export function composerBottomText(text: string): string | null {
 //   ESC[38;2;250;81;53m╰─ ESC[38;2;242;244;248mlist the files in this repoESC[38;2;111;115;119mrtESC[0m … ─╯
 //
 // That one rendering detail cost omp panes their whole reply path: `extractInputDraft` read back
-// `leftover draft here's`, `draftCarriesSend` (lib/reply-action.ts) requires the visible draft to be
+// `leftover draft here's`, `draftCarriesSend` (lib/guarded-reply.ts) requires the visible draft to be
 // CONTAINED in what was typed, `'s` is not — so the submit key was withheld and every send stalled
 // with "Message didn't reach the input box" while the message really was in the box. Each retry
 // re-typed, omp re-suggested, and the stall repeated forever.

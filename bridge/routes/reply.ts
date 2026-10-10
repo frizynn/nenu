@@ -306,11 +306,13 @@ export function parseSendRequest(body: unknown): SendRequest | string {
   if (typeof b.requestId !== "string" || b.requestId.length > MAX_REPLY_REQUEST_ID_CHARS || !/^[A-Za-z0-9._:-]+$/.test(b.requestId)) return "bad requestId";
   if (b.paste !== undefined && typeof b.paste !== "boolean") return "bad paste";
   if (b.expectedPrompt !== undefined && (typeof b.expectedPrompt !== "string" || b.expectedPrompt.length > MAX_EXPECTED_PROMPT_CHARS)) return "bad expectedPrompt";
+  if (b.force !== undefined && typeof b.force !== "boolean") return "bad force";
   return {
     text: b.text,
     requestId: b.requestId,
     ...(b.paste !== undefined ? { paste: b.paste as boolean } : {}),
     ...(b.expectedPrompt !== undefined ? { expectedPrompt: b.expectedPrompt as string } : {}),
+    ...(b.force === true ? { force: true } : {}),
   };
 }
 

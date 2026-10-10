@@ -543,8 +543,7 @@ export interface SubagentHistoryResponse {
 /** What an invalidation names (mirrors LiveTopic in bridge/types.ts). Never state (ADR 0054). */
 export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
 
-// ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts, plus the wire
-// additions bridge/interactions.ts serves: DetectedInteraction and AnswerBody) ─────────────────────
+// ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
 
 /** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply. */
 export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
@@ -617,6 +616,11 @@ export interface SendRequest {
   requestId: string;
   paste?: boolean;
   expectedPrompt?: string;
+  /**
+   * The operator's "Type anyway" after a `not_ready` refusal: a screen the adapter misreads still
+   * gets the text. It skips only that refusal. The text is still verified in the box before Enter.
+   */
+  force?: boolean;
 }
 
 export type SendStage = "preflight" | "type" | "verify" | "submit" | "confirm";

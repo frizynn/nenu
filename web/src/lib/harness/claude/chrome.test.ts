@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseAnsi } from "../../ansi";
 import { splitLines, type StyledLine } from "../../blocks";
-import { draftCarriesSend } from "../../reply-action";
+import { draftCarriesSend } from "../../guarded-reply";
 import { extractAgentsFooter, extractInputDraft, extractStatusLines, hasInputBox, stripChrome } from "./chrome";
 import { lineText } from "./markers";
 
@@ -453,7 +453,7 @@ describe("extractInputDraft — recovers a stranded prompt-line draft", () => {
   // A very long draft (610 chars / 25 logical lines, per the issue) can wrap to ~40 rows at a narrow
   // pane's column count. Pin that the walk reaches all the way up to the prompt (well past the old
   // 12-line cap, comfortably under the new 100-line one), and that the resulting join is exactly what
-  // reply-action's draftCarriesSend needs to verify the send actually landed.
+  // guarded-reply's draftCarriesSend needs to verify the send actually landed.
   it("extracts a ~40-row wrapped draft in full, and it verifies a real send via draftCarriesSend", () => {
     const words = Array.from({ length: 200 }, (_, i) => `word${i}`);
     const wordsPerRow = 5;
@@ -473,7 +473,7 @@ describe("extractInputDraft — recovers a stranded prompt-line draft", () => {
 
   // The Latin case above wraps at WORD boundaries, so every fold seam extractInputDraft inserts
   // happens to coincide with a real space in `sent` — draftCarriesSend's "loosen only the fold's own
-  // seam" logic (reply-action.ts) is never actually exercised by it. CJK text wraps mid-run (no spaces
+  // seam" logic (guarded-reply.ts) is never actually exercised by it. CJK text wraps mid-run (no spaces
   // to break at), so EVERY seam in a real CJK draft is fabricated by the fold, never a genuine space —
   // this is the case that actually needs the loosening.
   it("extracts a ~40-row wrapped CJK draft (no natural spaces) verified through the fold-seam path", () => {

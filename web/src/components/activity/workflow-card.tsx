@@ -1,4 +1,4 @@
-import { ChevronRight, Maximize2, Workflow } from "lucide-react";
+import { Maximize2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -73,25 +73,5 @@ export function WorkflowCard({ workflow, now, onOpen, className }: { workflow: A
         )}
       </div>
     </section>
-  );
-}
-
-/** The one-line form, for a workflow mentioned again further down the chat. */
-export function WorkflowLine({ workflow, now, onOpen, className }: { workflow: ActivityWorkflow; now: number; onOpen?: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`Open workflow ${workflow.name}`}
-      className={cn("flex min-h-11 w-full max-w-[600px] items-center gap-2.5 rounded-lg bg-card px-3 text-left ring-1 ring-border hover:bg-muted/40", className)}
-    >
-      <Workflow aria-hidden="true" className={cn("size-4 shrink-0", workflow.status === "running" ? "text-status-working" : "text-status-done")} />
-      <span className="truncate text-[13.5px] font-medium">{workflow.name}</span>
-      <AgentBar states={allAgents(workflow).map((a) => a.state)} className="hidden w-[90px] shrink-0 sm:flex" />
-      <PhaseSteps phases={workflow.phases} className="hidden flex-nowrap md:flex" />
-      <span className="flex-1" />
-      <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">{formatDuration(workflowElapsed(workflow, now))}</span>
-      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-    </button>
   );
 }

@@ -328,7 +328,7 @@ export function extractStatusLines(lines: StyledLine[]): StyledLine[] {
  * empty composer (verified across every idle capture in the corpus), so an empty box yields `""` and
  * this returns null. `null` also covers "no box at the tail".
  *
- * Load-bearing beyond the preview: reply-action.ts runs omp panes through type-then-verify, and THIS
+ * Load-bearing beyond the preview: bridge/guarded-send.ts runs omp panes through type-then-verify, and THIS
  * is the verify half — a wrong answer stalls every free-text send with "Message didn't reach the
  * input box". The bottom border's tail therefore has omp's INLINE SUGGESTION taken off it
  * (`composerGhost`, markers.ts): that ghost is not in the input buffer, so leaving it in made the
@@ -383,7 +383,7 @@ const BRIDGE_PROMPT_TAIL_LINES = 6;
  * when there is no composer at the tail. This is the `expected_prompt` the reply path binds its
  * destructive pre-clear sweep to: the bridge re-reads the pane and 409s the write when this exact line
  * is no longer near the tail, so the burst cannot land on a screen that moved between the pre-flight's
- * read and the keys (lib/reply-action.ts; bridge/server.ts `checkPromptBinding`).
+ * read and the keys (bridge/guarded-send.ts; bridge/server.ts `checkPromptBinding`).
  *
  * The `╰─ … ─╯` row is the right region for that job twice over. It is the most distinctive line omp
  * draws — the census behind `composerBottomText` is that it appears once per composer capture and

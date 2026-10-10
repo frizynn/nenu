@@ -1,13 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, BookText, GitPullRequest, MessageSquare } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Activity, BookText, GitPullRequest, MessageSquare } from "lucide-react";
 
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { TaskOutput } from "@/components/activity/task-output";
-import { WorkflowDetail } from "@/components/activity/workflow-detail";
+import { WorkflowScreen, useActivityClock, type OpenWorkflow } from "@/components/activity/running-workflows";
 import { ProjectTasks, ThreadStateDot, prSummary, threadAge, threadDot } from "@/components/project-tasks";
 import { BottomSheet } from "@/components/ui/sheet";
-import { useActivity, useWorkflowDetail } from "@/hooks/use-activity";
-import { runningCount } from "@/lib/activity";
+import { useActivity } from "@/hooks/use-activity";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -56,36 +55,14 @@ export function PrList({ threads, onOpenPane, now = Date.now() }: {
  */
 export function PaneActivity({ paneId, session, className }: { paneId: string; session?: string; className?: string }) {
   const activity = useActivity(paneId, session);
-  const [now, setNow] = useState(() => Date.now());
-  const [workflow, setWorkflow] = useState<{ runId: string; agentId: string | null } | null>(null);
+  const now = useActivityClock(activity.data);
+  const [workflow, setWorkflow] = useState<OpenWorkflow | null>(null);
   const [task, setTask] = useState<string | null>(null);
-  const running = runningCount(activity.data) > 0;
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(id);
-  }, [running]);
-  const detail = useWorkflowDetail(paneId, workflow?.runId ?? null, session, activity.data);
-  const listed = activity.data?.available ? activity.data.workflows.find((w) => w.runId === workflow?.runId) : undefined;
-  const shown = detail.detail?.workflow ?? listed;
   return (
     <>
       <ActivityPanel className={className} data={activity.data} stale={activity.stale} now={now} onRetry={activity.refresh}
         onOpenWorkflow={(runId, agentId) => setWorkflow({ runId, agentId: agentId ?? null })} onOpenTask={setTask} />
-      {workflow && (
-        <div role="dialog" aria-label={shown?.name ?? "Workflow"} className="fixed inset-0 z-40 flex flex-col bg-background pt-[env(safe-area-inset-top)]">
-          <div className="flex min-h-12 items-center gap-2 border-b border-border px-2">
-            <button type="button" aria-label="Back" onClick={() => setWorkflow(null)} className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent">
-              <ArrowLeft aria-hidden className="size-4" />
-            </button>
-            <span className="truncate text-sm font-medium">{shown?.name ?? "Workflow"}</span>
-          </div>
-          {shown
-            ? <WorkflowDetail workflow={shown} results={detail.detail?.results} now={now} selectedAgentId={workflow.agentId}
-              onSelectAgent={(agentId) => setWorkflow({ runId: workflow.runId, agentId })} />
-            : <p role="status" className="p-4 text-sm text-muted-foreground">{detail.failed ? "This workflow is no longer available." : "Loading workflow…"}</p>}
-        </div>
-      )}
+      {workflow && <WorkflowScreen paneId={paneId} session={session} activity={activity} open={workflow} now={now} onChange={setWorkflow} />}
       <BottomSheet open={task !== null} onClose={() => setTask(null)} title="Task output">
         {task && <TaskOutput paneId={paneId} session={session} taskId={task} />}
       </BottomSheet>

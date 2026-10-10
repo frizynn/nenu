@@ -5,6 +5,7 @@ import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import {
   fetchMessageQueue,
   changeMessageQueue,
+  isDefiniteRefusal,
   type MessageQueuePage,
   type QueueMessage,
 } from "@/lib/api";
@@ -79,8 +80,13 @@ export function queueRowStatus(
     return { tone: "done", label: "Sent", actions: [] };
   }
   // "Send now" lifts the wait for the turn; a row already going as soon as it can has nothing to lift.
-  const holds = row.deliveryMode === undefined || row.deliveryMode === "afterTurn";
+  // A dialog, a draft in the box or a lost pane still holds it after the tap, so the button would do nothing.
+  const holds = (row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor);
   return { tone: "waiting", label: waitingLabel(name, row), actions: holds ? ["sendNow", "edit", "remove"] : ["edit", "remove"] };
+}
+
+function blockedBeyondTurn(reason: QueueWaitReason | undefined): boolean {
+  return reason === "dialog" || reason === "draft" || reason === "disconnected";
 }
 
 function waitingLabel(name: string, row: QueueRowView): string {
@@ -211,6 +217,7 @@ export function useMessageQueue(
         return;
       }
       controller = new AbortController();
+      let resent: PendingMessage | null = null;
       try {
         let next = await fetchMessageQueue(paneId, session, controller.signal);
         const waiting = pending.current;
@@ -227,6 +234,7 @@ export function useMessageQueue(
           // The read already succeeded: show it even if the resend fails, so the composer keeps
           // routing this text through the queue instead of falling back to a direct send.
           if (!stopped && current.current === scope) setPage(next);
+          resent = waiting;
           next = await changeMessageQueue(
             paneId,
             {
@@ -250,7 +258,12 @@ export function useMessageQueue(
           failedAt = null;
           setRefreshError("");
         }
-      } catch {
+      } catch (failure) {
+        // The bridge refused the resent add outright: resending it for minutes would never land.
+        if (resent && pending.current?.id === resent.id && isDefiniteRefusal(failure)) {
+          savePending(storageKey, null);
+          pending.current = null;
+        }
         if (!stopped && !controller.signal.aborted) {
           failedAt ??= Date.now();
           if (Date.now() - failedAt >= CONNECTION_LOST_MS)
@@ -287,9 +300,16 @@ export function useMessageQueue(
     };
   }, [paneId, session, enabled, locked, storageKey]);
 
-  /** One queue write. True once the bridge saved it and the page still belongs to this pane. */
+  /**
+   * One queue write. True once the bridge saved it and the page still belongs to this pane.
+   * `onRefused` runs when the bridge answered no, so the write is known not to have happened.
+   */
   const write = useCallback(
-    async (body: (scope: string) => QueueChange | ReadNowChange, onSaved?: () => void): Promise<boolean> => {
+    async (
+      body: (scope: string) => QueueChange | ReadNowChange,
+      onSaved?: () => void,
+      onRefused?: () => void,
+    ): Promise<boolean> => {
       if (!page?.available || mutating.current) return false;
       mutating.current = true;
       const key = current.current;
@@ -297,14 +317,17 @@ export function useMessageQueue(
       setError("");
       try {
         const next = await changeMessageQueue(paneId, body(page.scope) as QueueChange, session);
-        if (!next.available)
+        if (!next.available) {
+          onRefused?.();
           throw new Error(
             "The connected conversation is unavailable. Your draft was kept.",
           );
+        }
         onSaved?.();
         if (current.current === key) setPage(next);
         return current.current === key;
       } catch (failure) {
+        if (isDefiniteRefusal(failure)) onRefused?.();
         if (current.current === key)
           setError(
             failure instanceof Error
@@ -366,9 +389,16 @@ export function useMessageQueue(
       pending.current = row;
       savePending(storageKey, row);
       const key = current.current;
+      // Only a lost answer keeps the row for a resend. A refusal (too long, terminal controls, a full
+      // queue) would be refused again, and would hold every later send in this conversation.
+      const forget = () => {
+        savePending(storageKey, null);
+        if (pending.current?.id === row.id) pending.current = null;
+      };
       const saved = await write(
         (scope) => ({ scope, action: "add", id: row.id, text, deliveryMode }),
         () => savePending(storageKey, null),
+        forget,
       );
       if (!saved) return null;
       if (current.current === key) {

@@ -1,6 +1,6 @@
-import { pushActions, type DetectedInteraction } from "./interactions.ts";
+import { pushActions } from "./interactions.ts";
 import type { PushMessage } from "./push.ts";
-import type { AgentStatus, AgentView } from "./types.ts";
+import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 
 // A notification shouldn't be fire-and-forget. This coordinator gives every blocked/done alert a
 // lifecycle and collapses the herd into a single, always-accurate notification:
@@ -96,7 +96,7 @@ const ALERT_BODY_MAX = 300;
  * is about) becomes the body. Answer actions ride along only when the whole detail fits in the body,
  * so a permission is never approved from a notification that cut its command off.
  */
-export function interactionAlert(msg: PushMessage, interaction: DetectedInteraction): PushMessage {
+export function interactionAlert(msg: PushMessage, interaction: Interaction): PushMessage {
   const detail = interaction.kind === "permission" ? interaction.context : undefined;
   const body = detail ? `${interaction.question}\n${detail}` : interaction.question;
   const fits = body.length <= ALERT_BODY_MAX;

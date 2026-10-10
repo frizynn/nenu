@@ -37,20 +37,6 @@ export interface PaneIO {
   sendPaneText(paneId: string, text: string): Promise<void>;
 }
 
-/** Interaction as served. The extra fields are wire additions this module owns until types.ts has them. */
-export interface DetectedInteraction extends Interaction {
-  /** `acceptsText`: the answer may carry `text` (a verified sequence types it); a `freeText` option
-   *  without it has no measured recipe and is answered in the terminal. */
-  options: Array<InteractionOption & { checked?: boolean; acceptsText?: true }>;
-  /** The full command, file or plan is on the card (a hint carried it and the screen shows it). */
-  detailComplete: boolean;
-  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
-  typing?: true;
-}
-
-/** An answer as POSTed; `confirm` acknowledges a `persistent` option. */
-export type AnswerBody = AnswerRequest & { confirm?: boolean };
-
 /** How one option is answered, kept bridge-side: the wire only names the option by index. */
 type Recipe =
   | { type: "keys"; keys: string[] }
@@ -68,7 +54,7 @@ type Recipe =
 
 type Dialog = { [K in DialogKind]: { kind: K; model: DialogModels[K] } }[DialogKind];
 
-type Option = DetectedInteraction["options"][number];
+type Option = InteractionOption;
 
 interface Choice {
   option: Option;
@@ -90,7 +76,7 @@ interface Described {
 }
 
 interface Detection {
-  interaction: DetectedInteraction;
+  interaction: Interaction;
   dialog: Dialog;
   choices: Choice[];
 }
@@ -316,7 +302,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   // A permission hint only agrees when its command is whole rows of the screen's subject, so that
   // subject (tool header, command, description) already shows it in full. A plan hint is longer.
   const context = base.kind === "permission" ? base.context : (detail ?? base.context);
-  const interaction: DetectedInteraction = {
+  const interaction: Interaction = {
     paneId: pane.paneId,
     agent: pane.agent,
     kind: base.kind,
@@ -340,7 +326,7 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
  * answer fits in two actions, so the one left out is never an answer. A question's escape row
  * ("Chat about this") is not an answer; a permission's "No" is. Nothing while someone is typing.
  */
-export function pushActions(i: DetectedInteraction): Array<{ optionIndex: number; title: string }> {
+export function pushActions(i: Interaction): Array<{ optionIndex: number; title: string }> {
   if (i.typing || (i.kind !== "question" && !(i.kind === "permission" && i.detailComplete))) return [];
   const answers = i.options.filter((o) => o.role === "primary" || o.role === "neutral" || (i.kind === "permission" && o.role === "deny"));
   return answers.length > 0 && answers.length <= 2 ? answers.map((o) => ({ optionIndex: o.index, title: o.label })) : [];
@@ -385,7 +371,7 @@ function typedText(raw: string): string | AnswerResult {
 export class Interactions {
   private readonly panes = new Map<string, Entry>();
   private readonly matched = new Map<string, number>();
-  private readonly listing = new Map<string, Promise<DetectedInteraction[]>>();
+  private readonly listing = new Map<string, Promise<Interaction[]>>();
   private readonly lines: number;
   private readonly now: () => number;
   private readonly sleep: Sleep;
@@ -397,7 +383,7 @@ export class Interactions {
   }
 
   /** The pane's last detected interaction, without reading anything. */
-  current(session: string, paneId: string): DetectedInteraction | null {
+  current(session: string, paneId: string): Interaction | null {
     return this.panes.get(paneKey(session, paneId))?.detection?.interaction ?? null;
   }
 
@@ -410,7 +396,7 @@ export class Interactions {
    * The cards a client asks for. A pane read in the last LIST_FRESH_MS is not read again, and callers
    * that arrive while a list is running share it, so more open phones do not mean more pane reads.
    */
-  list(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource): Promise<DetectedInteraction[]> {
+  list(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource): Promise<Interaction[]> {
     const running = this.listing.get(session);
     if (running) return running;
     const run = this.refresh(session, io, agents, hints, undefined, LIST_FRESH_MS).finally(() => this.listing.delete(session));
@@ -423,7 +409,7 @@ export class Interactions {
    * rest. A pane is read every time (one local read, no revision to skip on: pane.read's is 0) but only
    * parsed when its text or hints changed. Publishes `interaction` for every pane whose card changed.
    */
-  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<DetectedInteraction[]> {
+  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<Interaction[]> {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
@@ -445,7 +431,7 @@ export class Interactions {
         // An unreadable pane keeps its last card; the next refresh tries again.
       }
     }));
-    return eligible.map((a) => this.current(session, a.paneId)).filter((i): i is DetectedInteraction => i !== null);
+    return eligible.map((a) => this.current(session, a.paneId)).filter((i): i is Interaction => i !== null);
   }
 
   /**
@@ -535,7 +521,7 @@ export class Interactions {
    * screen is refused (409) before any key goes out, and a persistent option needs `confirm`. The
    * caller holds the pane's write lock and has already passed the write gate.
    */
-  async answer(session: string, io: PaneIO, pane: AgentView, body: AnswerBody): Promise<AnswerResult> {
+  async answer(session: string, io: PaneIO, pane: AgentView, body: AnswerRequest): Promise<AnswerResult> {
     let read: PaneRead;
     try {
       read = await io.readPane(pane.paneId, "recent", this.lines, "ansi");

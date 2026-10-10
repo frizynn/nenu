@@ -163,7 +163,7 @@ describe("ompBuildBlocks emits nothing but raw", () => {
 
 // The reply pre-flight's half of Tier 1, asserted directly rather than only through the conformance
 // suite's menu leg (which this adapter never reaches, having no menu fixtures). `composerReady` is
-// what makes reply-action.ts refuse to type into a modal; a wrong `true` here puts the user's message
+// what makes the guarded send refuse to type into a modal; a wrong `true` here puts the user's message
 // into a picker, and a wrong `false` blocks every reply on a live composer.
 const COMPOSER_FIXTURES = [
   "omp--done--tool-result.txt",

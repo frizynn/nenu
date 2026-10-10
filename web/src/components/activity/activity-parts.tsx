@@ -75,11 +75,12 @@ export function StatusTag({ status }: { status: ActivityWorkflowStatus }) {
 export function Meta({ items, className }: { items: ReactNode[]; className?: string }) {
   const shown = items.filter((item) => item !== "" && item !== undefined && item !== null && item !== false);
   return (
-    <span className={cn("flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground", className)}>
+    <span className={cn("flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground", className)}>
       {shown.map((item, i) => (
         <Fragment key={i}>
-          {i > 0 && <span aria-hidden="true" className="text-muted-foreground/50">·</span>}
-          <span className="whitespace-nowrap tabular-nums">{item}</span>
+          {i > 0 && <span aria-hidden="true" className="shrink-0 text-muted-foreground/50">·</span>}
+          {/* text-overflow works on a text box, not on a flex row: only the last item takes the ellipsis. */}
+          <span className={cn("whitespace-nowrap tabular-nums", i === shown.length - 1 ? "min-w-0 truncate" : "shrink-0")}>{item}</span>
         </Fragment>
       ))}
     </span>

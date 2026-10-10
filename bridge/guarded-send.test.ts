@@ -155,6 +155,29 @@ describe("guardedSend", () => {
     expect(term.count("pane.send_keys")).toBe(0);
   });
 
+  test("Type anyway skips the no-input-box refusal and still withholds Enter until the box shows the text", async () => {
+    const term = new Term();
+    term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    const { outcome } = await run(term, { force: true });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(1);
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("Type anyway submits once the text shows up in the box", async () => {
+    const term = new Term();
+    term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    // The pre-flight read sees the dialog; it is gone by the time the text is typed.
+    const type = term.sendPaneText;
+    term.sendPaneText = async (paneId, text) => {
+      term.dialog = null;
+      return type(paneId, text);
+    };
+    const { outcome } = await run(term, { force: true });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    expect(term.keys()).toEqual([["Enter"]]);
+  });
+
   test("a password prompt is named, and nothing is typed", async () => {
     const term = new Term();
     term.agent = "claude";

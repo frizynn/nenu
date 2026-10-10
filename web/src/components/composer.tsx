@@ -28,7 +28,6 @@ import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
 import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
-import { sendGuardedReply } from "@/lib/reply-action";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
@@ -430,8 +429,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     if (!working) setInterrupting(false);
   }, [working]);
-  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; typeAttempted: boolean; keep: boolean } | null>(null);
-  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "typed" | "retry" | "check" | null>(null);
+  const pendingDeliveryRef = useRef<{ paneId: string; text: string; id: string; keep: boolean } | null>(null);
+  const [deliveryPhase, setDeliveryPhase] = useState<"queued" | "retry" | "check" | null>(null);
   // Pending-send preview: set on a successful send, cleared when the mirror catches up (next text
   // update) or after a 6s safety timeout. Shows "You sent: …" so the user knows the message landed.
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -556,7 +555,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // matches a recent send) is untouched.
   const suppressEcho = (draft: string | null): string | null => {
     const pending = pendingDeliveryRef.current;
-    if (draft !== null && pending?.typeAttempted && pending.paneId === paneId && isSelfEcho(draft, pending.text, adapter?.draftCarriesSend)) return null;
+    if (draft !== null && pending?.paneId === paneId && isSelfEcho(draft, pending.text, adapter?.draftCarriesSend)) return null;
     if (
       draft !== null &&
       lastSentRef.current !== null &&
@@ -728,9 +727,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // The same request id only while the bridge can still act on the earlier try (retryKeepsRequestId).
     const delivery = previous?.paneId === paneId && previous.text === t && previous.keep
       ? previous
-      : { paneId, text: t, id: crypto.randomUUID(), typeAttempted: true, keep: false };
+      : { paneId, text: t, id: crypto.randomUUID(), keep: false };
     pendingDeliveryRef.current = delivery;
     if (!action) setDeliveryPhase("queued");
+    // Set once the write is on the wire: from then on a lost answer may hide a message already typed.
+    let posted = false;
     try {
       if (action !== "model" && prepareSend && !(await prepareSend())) {
         failSend(started, "");
@@ -740,26 +741,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         failSend(started, "");
         return false;
       }
-      let res: ReplyOutcome;
-      if (force) {
-        // "Type anyway" skips the pre-flight, which the bridge's one-request send never does, so the
-        // override keeps the browser guard: it still withholds Enter until it sees the text.
-        res = await sendGuardedReply({
-          paneId,
-          text: t,
-          agent,
-          session,
-          force,
-          requestId: delivery.id,
-          onAck: (ack) => { if (!action) setDeliveryPhase(ack === "typed" ? "typed" : null); },
-        });
-        delivery.keep = res.status !== "sent";
-      } else {
-        // One request: the bridge sweeps a stranded draft, types, verifies and submits.
-        const outcome = await api.sendMessage(paneId, { text: t, requestId: delivery.id }, session);
-        delivery.keep = retryKeepsRequestId(outcome);
-        res = replyOutcomeFrom(outcome, () => detectNoEchoPrompt(splitLines(parseAnsi(text))));
-      }
+      posted = true;
+      // One request: the bridge sweeps a stranded draft, types, verifies and submits. "Type anyway"
+      // (force) skips only its no-input-box refusal; Enter still waits until the box shows the text.
+      const outcome = await api.sendMessage(paneId, { text: t, requestId: delivery.id, ...(force ? { force } : {}) }, session);
+      delivery.keep = retryKeepsRequestId(outcome);
+      const res: ReplyOutcome = replyOutcomeFrom(outcome, () => detectNoEchoPrompt(splitLines(parseAnsi(text))));
       if (res.status === "sent") {
         pendingDeliveryRef.current = null;
         setDeliveryPhase(null);
@@ -837,9 +824,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return false;
       }
     } catch (e) {
-      failSend(started, e instanceof Error ? e.message : String(e));
-      setDeliveryPhase("retry");
-      setStatus(e instanceof Error ? e.message : String(e), "error");
+      // The answer was lost after the request went out (network drop, timeout, 5xx): the bridge may
+      // already have typed and submitted it. Keep the request id so a retry replays that outcome
+      // instead of typing a second copy, and point the operator at Terminal rather than a resend.
+      const unknown = posted && !api.isDefiniteRefusal(e);
+      if (unknown) delivery.keep = true;
+      const error = unknown ? "No answer from Nenu, so the message may already be sent. Check Terminal before sending again." : e instanceof Error ? e.message : String(e);
+      failSend(started, error, false, unknown);
+      setDeliveryPhase(unknown ? "check" : "retry");
+      setStatus(error, "error");
       return false;
     } finally {
       setSending(false);
@@ -1083,15 +1076,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {deliveryPhase && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
-            {(deliveryPhase === "queued" || deliveryPhase === "typed") && <Loader2 className="size-3 shrink-0 animate-spin" />}
+            {deliveryPhase === "queued" && <Loader2 className="size-3 shrink-0 animate-spin" />}
             <span>
               {deliveryPhase === "queued"
                 ? "Sending…"
-                : deliveryPhase === "typed"
-                  ? "Making sure it arrived…"
-                  : deliveryPhase === "check"
-                    ? "Not confirmed. Check the terminal before sending again."
-                    : "Not sent. Tap Send to try again."}
+                : deliveryPhase === "check"
+                  ? "Not confirmed. Check the terminal before sending again."
+                  : "Not sent. Tap Send to try again."}
             </span>
           </div>
         )}

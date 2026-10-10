@@ -3,7 +3,6 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { sendMessage } from "@/lib/api";
-import { sendGuardedReply } from "@/lib/reply-action";
 import { loadDraft } from "@/lib/drafts";
 import { clearStatus } from "@/lib/status";
 import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
@@ -12,14 +11,12 @@ import { Composer, type ComposerControl, type ComposerHandle } from "./composer"
 // one-request send, and the browser guard that only the "Type anyway" override still uses.
 // Assertions below require commands to use the guarded send, preserve drafts and remain explicit.
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), sendMessage: vi.fn() }));
-vi.mock("@/lib/reply-action", () => ({ sendGuardedReply: vi.fn() }));
 
 const refused = { ok: false as const, requestId: "r", stage: "preflight" as const, error: "Input changed", textDelivered: false, code: "not_ready" as const };
 
 beforeEach(() => {
   vi.mocked(sendMessage).mockReset();
   vi.mocked(sendMessage).mockImplementation(async (_pane, request) => ({ ok: true, requestId: request.requestId, ack: "submitted" }));
-  vi.mocked(sendGuardedReply).mockReset();
   clearStatus();
 });
 
@@ -115,8 +112,8 @@ it("does not convert a rejected picker command into a forced send on retry", asy
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
   expect(sendMessage).toHaveBeenCalledTimes(2);
-  // Neither retry became the forced browser-guard send.
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  // Neither retry became a forced "Type anyway" send.
+  expect(vi.mocked(sendMessage).mock.calls.some(([, request]) => request.force)).toBe(false);
   expect(screen.getByRole("textbox")).toHaveValue("Preserve this draft");
   expect(onSent).not.toHaveBeenCalled();
 });
@@ -128,7 +125,7 @@ it("does not arm a normal draft override when a toolbar command is rejected", as
   await act(async () => { expect(await ref.current!.openModelPicker()).toBe(false); });
   await user.keyboard("{Control>}{Enter}{/Control}");
   expect(sent().at(-1)).toMatchObject({ text: "A normal draft" });
-  expect(sendGuardedReply).not.toHaveBeenCalled();
+  expect(vi.mocked(sendMessage).mock.calls.at(-1)?.[1].force).toBeUndefined();
 });
 
 it("waits for verified model dismissal before sending, keeping what was typed during the wait", async () => {

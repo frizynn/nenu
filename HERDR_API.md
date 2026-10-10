@@ -114,7 +114,7 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
   `send_keys` return before the target program has read, let alone rendered, anything. So a
   successful RPC pair is not evidence a reply was delivered — a focused TUI dialog can swallow the
   text and consume the Enter with both calls reporting success. Anything that needs delivery
-  *confirmed* must read the pane back and look (`web/src/lib/reply-action.ts`).
+  *confirmed* must read the pane back and look (`bridge/guarded-send.ts`).
 
 > **Herdr answers no `OSC 10` / `OSC 11` background query, and relays SGR verbatim** (live-probed
 > 2026-07-29 in a pane running a raw-mode `stty` probe: both queries returned nothing).

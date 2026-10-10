@@ -3,7 +3,6 @@ import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
 import { trackBusy } from "./busy";
-import type { UnsentReport } from "./guarded-reply";
 import { markLive } from "./connection-health";
 import { observeServerBuild, SERVER_BUILD_HEADER } from "./server-build";
 import type {
@@ -60,7 +59,7 @@ export type { NotifyPrefs, UpdateInfo };
 export const XHR_HEADER = "x-requested-with";
 export const XHR_HEADER_VALUE = "XMLHttpRequest";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
     super(message);
@@ -72,6 +71,15 @@ class ApiError extends Error {
 /** True when an API request failed with the given HTTP status. */
 export function isApiErrorStatus(error: unknown, status: number): boolean {
   return error instanceof ApiError && error.status === status;
+}
+
+/**
+ * True when the server answered a request with a definite no (a 4xx other than a timeout), so the
+ * write did not happen. A network error, a timeout or a 5xx leaves the outcome unknown: the request
+ * may have run before its answer was lost.
+ */
+export function isDefiniteRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408;
 }
 
 // Every request gets a deadline so a black-holed connection (phone sleep/wake, a Tailscale route
@@ -482,14 +490,6 @@ function refusedAnswer(detail: string): AnswerOutcome | null {
 /** An image the pane's journal holds inline, addressed by entry and index — never by path. */
 export function journalImageUrl(paneId: string, entry: string, index: number, session?: string): string {
   return withSession(`/api/pane/${encodeURIComponent(paneId)}/journal-image?entry=${encodeURIComponent(entry)}&n=${index}`, session);
-}
-
-/** Record a guarded send that did not end in "sent" in the bridge's audit trail. */
-export function reportUnsentReply(paneId: string, report: UnsentReport, session?: string): Promise<ActionResponse> {
-  return doReq<ActionResponse>(
-    withSession(`/api/pane/${encodeURIComponent(paneId)}/send-report`, session),
-    { method: "POST", body: JSON.stringify(report) },
-  );
 }
 
 export function sendKeys(

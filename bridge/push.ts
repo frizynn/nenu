@@ -1,7 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
-import type { DetectedInteraction } from "./interactions.ts";
+import type { Interaction } from "./types.ts";
 import { interactionAlert, type PushInteraction } from "./notifications.ts";
 
 // Optional Web Push (VAPID). Zero hard dependency: if `web-push` isn't installed or VAPID keys
@@ -180,7 +180,7 @@ export interface PushMessage {
  * The detected dialog of a pane, if any; `session` is undefined for the primary. May read the pane
  * first: an alert usually fires before any client asked for the card.
  */
-export type InteractionLookup = (session: string | undefined, paneId: string) => DetectedInteraction | null | Promise<DetectedInteraction | null>;
+export type InteractionLookup = (session: string | undefined, paneId: string) => Interaction | null | Promise<Interaction | null>;
 
 export class Push {
   private lib: WebPushModule | null = null;
@@ -310,7 +310,7 @@ export class Push {
   }
 
   /** A failed lookup is no dialog: the plain alert still goes out. */
-  private async lookup(session: string | undefined, paneId: string): Promise<DetectedInteraction | null> {
+  private async lookup(session: string | undefined, paneId: string): Promise<Interaction | null> {
     try {
       return (await this.interactionFor?.(session, paneId)) ?? null;
     } catch {
