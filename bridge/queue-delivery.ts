@@ -23,7 +23,8 @@ const TAB: string[] = ["Tab"];
  * Three things differ from a phone send. The queue never clears a draft: one in the box is the
  * operator's own typing at the terminal, so the row waits instead of sweeping it. Text and Enter go
  * through `write`, the reply route, so each lands in the audit trail as before. And the submit key
- * follows the row's mode: Enter, or Tab for Codex's next-turn queue (queue-native.ts).
+ * follows the row's mode: Enter, or Tab for Codex's next-turn queue (queue-native.ts), pressed on
+ * `herdr`, which the queue service hands in already audited.
  */
 export async function deliverQueuedMessage(
   row: QueuedMessage,

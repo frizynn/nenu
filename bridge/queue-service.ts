@@ -9,10 +9,20 @@ import { object } from "./subagent-files.ts";
 import type { ActionResponse, AgentView, DeliveryMode } from "./types.ts";
 import type { HerdrClient } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
+import type { AuditLog } from "./audit.ts";
+import type { SendHerdr } from "./guarded-send.ts";
 
 type Context = { pane: AgentView; herdr: HerdrClient; connected: boolean };
 /** The journal facts of a pane's conversation (journal/store.ts), when the bridge reads journals. */
 export type FactsReader = (pane: AgentView) => Promise<JournalFacts | null>;
+
+/**
+ * What the bridge lends the queue beyond typing through the reply route. Each is optional and its
+ * feature stays off without it: no `facts`, no journal state and no "Read it now"; no `audit`, no key
+ * the reply route cannot press for it (Codex's Tab, Claude's send-now chord), so nothing reaches a
+ * terminal unaudited.
+ */
+export type QueueExtras = { facts?: FactsReader | null; audit?: Pick<AuditLog, "record"> | null };
 
 const identity = (pane: AgentView) =>
   pane.agentSession?.kind === "id"
@@ -53,7 +63,7 @@ export class QueueService {
     ) => Promise<ActionResponse>,
     private input = new PaneWrites(),
     changed: (row: Pick<QueuedMessage, "session" | "paneId" | "state">) => void = () => {},
-    private facts: FactsReader | null = null,
+    private extras: QueueExtras = {},
   ) {
     this.queue = new MessageQueue(join(stateDir, "message-queue.json"), changed);
     this.timer = setInterval(() => this.kick(false), TICK_FALLBACK_MS);
@@ -98,7 +108,10 @@ export class QueueService {
     if (mode === "afterTurn" && !this.turnStarted(row.scope, current.pane)) return { wait: "turn-start" };
     const readiness = await queueReadiness(current.pane, current.herdr, mode);
     if (!readiness.ready) return { wait: readiness.reason };
-    return { ready: { context: current, submit: submitKind(row.agent, mode, readiness.busy) } };
+    const submit = submitKind(row.agent, mode, readiness.busy);
+    // Tab only goes out audited; without the trail the row waits for the turn and goes with Enter.
+    if (submit === "tab" && !this.extras.audit) return { wait: "working" };
+    return { ready: { context: current, submit } };
   }
   /** Whether the turn the scope's last delivery started has visibly begun (ADR 0056 rule 5). */
   private turnStarted(scope: string, pane: AgentView): boolean {
@@ -117,7 +130,7 @@ export class QueueService {
   private async deliver(row: QueuedMessage, ready: { context: Context; submit: "enter" | "tab" }) {
     const { context } = ready;
     const write: QueueWrite = (text, submit, id, paste) => this.write(row, text, submit, id, paste);
-    const outcome = await deliverQueuedMessage(row, context.herdr, write, async () => {
+    const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
     }, ready.submit);
@@ -128,12 +141,36 @@ export class QueueService {
     return outcome;
   }
   /**
+   * The pane's client with every key the queue presses on its own (not through the reply route,
+   * which audits itself) recorded in the audit trail, sent or not.
+   */
+  private audited(row: QueuedMessage, herdr: HerdrClient, action: string): SendHerdr {
+    const audit = this.extras.audit;
+    return {
+      getPane: (id) => herdr.getPane(id),
+      readPane: (...args) => herdr.readPane(...args),
+      waitForOutput: (...args) => herdr.waitForOutput(...args),
+      sendPaneText: (...args) => herdr.sendPaneText(...args),
+      async sendPaneKeys(id, keys) {
+        if (!audit) throw new Error("Keys need the audit trail.");
+        let sent = false;
+        try {
+          await herdr.sendPaneKeys(id, keys);
+          sent = true;
+        } finally {
+          audit.record({ action, paneId: id, session: row.session, device: row.device, detail: { keys, sent } });
+        }
+      },
+    };
+  }
+  /**
    * Read what Claude's own queue did with recently delivered rows (queue-operation rows in its
    * journal): in its queue, read, or recalled into the input box. A paused row whose enqueue shows up
    * was delivered after all.
    */
   private async confirmFromJournal() {
-    if (!this.facts) return;
+    const read = this.extras.facts;
+    if (!read) return;
     const rows = (await this.queue.unconfirmed()).filter((row) => row.agent === "claude");
     const byPane = new Map<string, QueuedMessage[]>();
     for (const row of rows) {
@@ -145,7 +182,7 @@ export class QueueService {
         const first = group[0]!;
         const current = await this.resolve(first.session, first.paneId).catch(() => null);
         if (!current || identity(current.pane) !== first.conversation) return;
-        const facts = await this.facts!(current.pane).catch(() => null);
+        const facts = await read(current.pane).catch(() => null);
         if (!facts) return;
         for (const row of group) {
           const native = nativeState(facts.queue, row.text, row.claimedAt ?? row.sentAt ?? row.createdAt);
@@ -227,7 +264,7 @@ export class QueueService {
           });
           added = id;
         } else if (body.action === "now") {
-          const refused = await this.sendNow(scope, id, body.confirm === true, current);
+          const refused = await this.sendNow(scope, id, body.confirm === true, current, device);
           if (refused) return Response.json(refused, { status: 409 });
         } else if (
           ["edit", "remove", "send"].includes(String(body.action)) &&
@@ -239,7 +276,7 @@ export class QueueService {
             body.revision,
             body.action as "edit" | "remove" | "send",
             text,
-            { session, paneId, conversation },
+            { session, paneId, conversation, agent },
           );
         else
           return Response.json(
@@ -285,17 +322,17 @@ export class QueueService {
    * "Read it now": Claude's send-now chord for a row its native queue still holds. It can background
    * the running tool, so the operator confirms it first. Null when it went out, else the refusal.
    */
-  private async sendNow(scope: string, id: string, confirmed: boolean, current: Context) {
+  private async sendNow(scope: string, id: string, confirmed: boolean, current: Context, device: string | null) {
     const keys = sendNowKeys(current.pane.agent);
     const row = (await this.queue.recent(scope)).find((item) => item.id === id);
-    if (!keys || !row || row.native !== "enqueued")
+    if (!keys || !row || row.native !== "enqueued" || !this.extras.audit)
       return { error: "Only a message waiting in Claude's own queue can be read now.", code: "unsupported" };
     if (!confirmed)
       return {
         error: "Claude reads it now and moves a running command to the background. Confirm to continue.",
         code: "confirm_required",
       };
-    const result = await this.input.run(row.session, row.paneId, () => sendQueuedNow(row.paneId, row.agent, keys, current.herdr));
+    const result = await this.input.run(row.session, row.paneId, () => sendQueuedNow(row.paneId, row.agent, keys, this.audited({ ...row, device }, current.herdr, "queue.now")));
     if (result.busy) return { error: "Another terminal action is finishing. Try again.", code: "busy" };
     return result.value.ok ? null : { error: result.value.error, code: "not_ready" };
   }

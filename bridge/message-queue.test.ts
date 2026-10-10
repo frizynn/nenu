@@ -323,10 +323,59 @@ test("a stranded row says why, is listed on its pane and moves to the new conver
     expect(stranded).toMatchObject({ id: "one", stranded: { reason: "The conversation in this pane changed." } });
     expect(await queue.list("new-scope")).toEqual([]);
     expect(sent).toEqual([]);
-    await queue.change("new-scope", "one", stranded!.revision, "send", undefined, { ...pane, conversation: "claude:new" });
+    await queue.change("new-scope", "one", stranded!.revision, "send", undefined, { ...pane, conversation: "claude:new", agent: "claude" });
     await queue.tick(readyNow, deliver, { force: true });
     expect(sent).toEqual(["one@claude:new"]);
   });
+});
+
+test("a conversation that goes away strands every row it held, and a move takes the pane's agent", async () => {
+  await withQueue(async (queue) => {
+    for (const id of ["one", "two", "three"]) await queue.add({ ...row, id, deliveryMode: "asap" });
+    await queue.tick(async (): Promise<Verdict<true>> => ({ stranded: "The conversation in this pane changed." }), async () => ({ status: "sent" as const }), { force: true });
+    const pane = { session: "main", paneId: "w1:p1" };
+    const shown = await queue.list("new-scope", pane);
+    expect(shown.map((r) => [r.id, !!r.stranded])).toEqual([["one", true], ["two", true], ["three", true]]);
+    await queue.change("new-scope", "two", shown[1]!.revision, "send", undefined, { ...pane, conversation: "codex:new", agent: "codex" });
+    expect((await queue.list("new-scope")).map((r) => [r.id, r.agent, r.conversation, r.deliveryMode])).toEqual([["two", "codex", "codex:new", "steer"]]);
+  });
+});
+
+test("the old conversation coming back un-strands all its rows", async () => {
+  await withQueue(async (queue) => {
+    for (const id of ["one", "two"]) await queue.add({ ...row, id });
+    await queue.tick(async (): Promise<Verdict<true>> => ({ stranded: "The agent's pane closed." }), async () => ({ status: "sent" as const }), { force: true });
+    await queue.tick(working, async () => ({ status: "sent" as const }), { force: true });
+    expect((await queue.list("scope")).map((r) => r.stranded)).toEqual([undefined, undefined]);
+  });
+});
+
+test("a forced kick that lands during a fallback pass still looks past that pass's backoff", async () => {
+  let clock = 1_000_000;
+  await withQueue(async (queue) => {
+    await queue.add(row);
+    let status = "working";
+    let looks = 0;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const assess = async (): Promise<Verdict<true>> => {
+      looks++;
+      const seen = status;
+      if (looks === 2) await gate; // the fallback pass, still reading when the turn ends
+      return seen === "working" ? { wait: "working" } : { ready: true };
+    };
+    const sent: string[] = [];
+    const deliver = async (r: { id: string }) => (sent.push(r.id), { status: "sent" as const });
+    await queue.tick(assess, deliver, { force: true });
+    clock += 2_500;
+    const fallback = queue.tick(assess, deliver);
+    await Bun.sleep(5);
+    status = "idle";
+    const forced = queue.tick(assess, deliver, { force: true });
+    release();
+    await Promise.all([fallback, forced]);
+    expect(sent).toEqual(["one"]);
+  }, () => clock);
 });
 
 test("a stranded row the operator never came back for expires; the per-conversation cap holds", async () => {

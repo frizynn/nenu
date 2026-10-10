@@ -159,7 +159,7 @@ type Status = "idle" | "working" | "blocked" | "done";
 const RULE = "─".repeat(60);
 
 /** One agent pane: a Claude- or Codex-shaped screen, Herdr's status and state counter, and a journal. */
-async function agentPane(agent: "claude" | "codex", status: Status) {
+async function agentPane(agent: "claude" | "codex", status: Status, { audited = true } = {}) {
   const { mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -169,6 +169,7 @@ async function agentPane(agent: "claude" | "codex", status: Status) {
   const pane = {
     status, seq: 1, session: "first", draft: "", events: 0,
     submitted: [] as string[], keys: [] as string[][], journal: [] as import("./journal/types.ts").NativeQueueEvent[],
+    audit: [] as import("./audit.ts").AuditEntry[],
   };
   const screen = () => {
     if (agent === "codex") return pane.draft ? codexDraft.replace("Also say BANANA at the end.", pane.draft) : codexBusy;
@@ -205,7 +206,7 @@ async function agentPane(agent: "claude" | "codex", status: Status) {
     },
     undefined,
     () => { pane.events++; },
-    async () => ({ queue: pane.journal }),
+    { facts: async () => ({ queue: pane.journal }), audit: audited ? { record: (entry) => { pane.audit.push(entry); } } : null },
   );
   const call = async (body?: Record<string, unknown>) => {
     const res = await service.handle(new Request("http://localhost/queue", body ? { method: "POST", body: JSON.stringify(body) } : {}), "session", "pane", null);
@@ -303,6 +304,7 @@ it("Claude's journal marks a delivered row queued then read, and 'read it now' a
     const confirmed = await t.call({ action: "now", id: "one", scope, confirm: true });
     expect(confirmed.status).toBe(200);
     expect(t.pane.keys).toEqual([["ctrl+enter"]]);
+    expect(t.pane.audit).toEqual([{ action: "queue.now", paneId: "pane", session: "session", device: null, detail: { keys: ["ctrl+enter"], sent: true } }]);
     t.pane.journal.push({ kind: "dequeue", ts: new Date().toISOString() });
     t.service.kick();
     await Bun.sleep(30);
@@ -317,6 +319,7 @@ it("Codex 'afterTurn' while a turn runs goes to Codex's own queue with Tab; 'ste
     await t.add("later", "After this turn, run the tests.", "afterTurn");
     await t.settle(() => t.pane.submitted.length === 1);
     expect(t.pane.submitted).toEqual(["tab:After this turn, run the tests."]);
+    expect(t.pane.audit).toMatchObject([{ action: "queue.submit", paneId: "pane", detail: { keys: ["Tab"], sent: true } }]);
     await t.add("now", "Also check the lint.", "steer");
     await t.settle(() => t.pane.submitted.length === 2);
     expect(t.pane.submitted[1]).toBe("Also check the lint.");
@@ -327,5 +330,23 @@ it("rejects an unknown delivery mode", async () => {
   const t = await agentPane("claude", "idle");
   try {
     expect((await t.add("bad", "Hi", "whenever")).status).toBe(400);
+  } finally { await t.close(); }
+});
+
+it("a Codex row sent without a mode lands after the turn, in Codex's own queue", async () => {
+  const t = await agentPane("codex", "working");
+  try {
+    await t.add("plain", "Then update the docs.");
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect(t.pane.submitted).toEqual(["tab:Then update the docs."]);
+  } finally { await t.close(); }
+});
+
+it("without an audit trail the queue presses no key of its own: Codex waits for the turn", async () => {
+  const t = await agentPane("codex", "working", { audited: false });
+  try {
+    const added = await t.add("later", "After this turn.", "afterTurn");
+    expect(added.body.messages[0]).toMatchObject({ id: "later", waitingFor: "working" });
+    expect(t.pane.keys).toEqual([]);
   } finally { await t.close(); }
 });

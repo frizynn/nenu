@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { normalizeMode } from "./queue-native.ts";
 import type { DeliveryMode, NativeQueueState, QueueWaitReason } from "./types.ts";
 
 export interface QueuedMessage {
@@ -68,7 +69,7 @@ export class MessageQueue {
   private rows: QueuedMessage[] = [];
   private serial = Promise.resolve();
   private ready: Promise<void>;
-  private workers = new Map<string, { again: boolean; done: Promise<void> }>();
+  private workers = new Map<string, { again: boolean; force: boolean; done: Promise<void> }>();
   private waiting = new Map<string, QueueWaitReason>();
   private backoff = new Map<string, { at: number; step: number }>();
   private listeners = new Set<() => void>();
@@ -224,8 +225,8 @@ export class MessageQueue {
   }
   /**
    * Edit, remove or send a row of `scope`, or a stranded row of the same pane. `send` on a stranded
-   * row moves it to `target`, the pane's current conversation: that is the operator choosing to
-   * deliver it there.
+   * row moves it to `target`, the pane's current conversation and agent: that is the operator
+   * choosing to deliver it there.
    */
   async change(
     scope: string,
@@ -233,7 +234,7 @@ export class MessageQueue {
     revision: number,
     action: "remove" | "edit" | "send",
     text?: string,
-    target?: Pick<QueuedMessage, "session" | "paneId" | "conversation">,
+    target?: Pick<QueuedMessage, "session" | "paneId" | "conversation" | "agent">,
   ) {
     const row = await this.mutate(() => {
       const row = this.rows.find(
@@ -257,6 +258,9 @@ export class MessageQueue {
         if (row.stranded && action === "send" && target) {
           row.scope = scope;
           row.conversation = target.conversation;
+          // The pane may run another CLI now; its keys and readiness follow the agent.
+          row.agent = target.agent;
+          row.deliveryMode = normalizeMode(target.agent, row.deliveryMode);
           row.stranded = undefined;
         }
         row.state = "queued";
@@ -312,15 +316,19 @@ export class MessageQueue {
       const running = this.workers.get(scope);
       if (running) {
         running.again = true;
+        // A forced kick that lands mid-pass must not inherit that pass's backoff.
+        running.force ||= !!options.force;
         passes.push(running.done);
         continue;
       }
-      const worker = { again: true, done: Promise.resolve() };
+      const worker = { again: true, force: !!options.force, done: Promise.resolve() };
       worker.done = (async () => {
         try {
           while (worker.again) {
             worker.again = false;
-            if (await this.pass(scope, assess, deliver, options)) worker.again = true;
+            const force = worker.force;
+            worker.force = false;
+            if (await this.pass(scope, assess, deliver, { ...options, force })) worker.again = true;
           }
         } finally {
           this.workers.delete(scope);
@@ -343,11 +351,14 @@ export class MessageQueue {
     if (!head || head.state !== "queued") return false;
     const now = this.now();
     if (head.stranded && head.stranded.since < now - STRANDED_TTL_MS) {
+      const expired = candidates.filter((row) => row.stranded && row.stranded.since < now - STRANDED_TTL_MS);
       await this.mutate(() => {
-        this.rows = this.rows.filter((item) => item.id !== head.id);
+        this.rows = this.rows.filter((item) => !expired.includes(item));
       });
-      this.forget(head.id);
-      this.notify(head);
+      for (const row of expired) {
+        this.forget(row.id);
+        this.notify(row);
+      }
       return false;
     }
     const due = this.backoff.get(head.id);
@@ -361,14 +372,16 @@ export class MessageQueue {
     if ("stranded" in verdict) {
       this.backoff.set(head.id, { at: this.now() + STRANDED_RECHECK_MS, step: 0 });
       if (head.stranded) return false;
-      await this.settle(head, (row) => {
-        row.stranded = { reason: verdict.stranded, since: this.now() };
+      // A pane or conversation that went away takes the whole scope with it, not just its head.
+      const stranded = { reason: verdict.stranded, since: this.now() };
+      await this.settleScope(scope, (row) => !row.stranded, (row) => {
+        row.stranded = { ...stranded };
       });
       return false;
     }
     if (head.stranded) {
-      // Its conversation is back: the row waits in it again.
-      await this.settle(head, (row) => {
+      // Its conversation is back: the rows wait in it again.
+      await this.settleScope(scope, (row) => !!row.stranded, (row) => {
         row.stranded = undefined;
       });
       return true;
@@ -423,6 +436,19 @@ export class MessageQueue {
       return { ...row };
     });
     if (row) this.notify(row);
+  }
+  /** Apply `apply` to every unsent row of `scope` that passes `test`, in one write. */
+  private async settleScope(scope: string, test: (row: QueuedMessage) => boolean, apply: (row: QueuedMessage) => void) {
+    const rows = await this.mutate(() =>
+      this.rows
+        .filter((row) => row.scope === scope && row.state !== "sent" && test(row))
+        .map((row) => {
+          apply(row);
+          row.revision++;
+          return { ...row };
+        }),
+    );
+    for (const row of rows) this.notify(row);
   }
   private forget(id: string) {
     this.waiting.delete(id);

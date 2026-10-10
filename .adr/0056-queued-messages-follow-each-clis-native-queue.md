@@ -1,7 +1,9 @@
 # 0056. Queued messages follow each CLI's native queue
 
-- **Status:** Accepted 2026-10-10. Fran decided the direction; the P0 probes
-  (`web/src/lib/grammar/PROBES_2026_10_NOTES.md`) filled in the measured semantics below.
+- **Status:** Accepted 2026-10-10, not yet shipped. Fran decided the direction; the P0 probes
+  (`web/src/lib/grammar/PROBES_2026_10_NOTES.md`) filled in the measured semantics below. The
+  bridge side is built; the journal reader and audit trail still have to be handed to the queue
+  in `bridge/server.ts`, and the send-time choice is the phone's (C1).
 - **Supersedes:** the message-queue half of [ADR 0025](./0025-artifacts-and-server-message-queue.md),
   specifically "Automatic sends wait for an idle/done agent". The artifacts half of 0025 stays in
   force, and so does the rest of its queue design (durable bridge file, enqueue ids, persisted
@@ -98,11 +100,17 @@ key reaches. The mapping:
 | --- | --- | --- |
 | `asap` / `steer` (one behaviour) | Typed as soon as the input box is free, Enter | Typed as soon as the input box is free, Enter |
 | `afterTurn` | Nenu holds the row until Herdr reports the turn over, then Enter | Tab while a turn runs, Enter when idle |
-| none sent (older clients) | `afterTurn`, as before | `steer`, as before |
+| none sent (older clients) | `afterTurn`: lands after the turn, as before | `afterTurn`: lands after the turn, as before |
 
 "Read it now" exists for Claude only: Ctrl+Enter on a row the journal shows still `enqueued`, into an
 empty input box, after the operator confirms, because it backgrounds the running command. Codex's
 equivalent (Esc) interrupts the model, so it is not offered.
+
+Codex's Tab and Claude's Ctrl+Enter are the only keys the queue presses itself rather than through
+the reply route, so each is written to the audit trail (`queue.submit`, `queue.now`). A bridge built
+without the trail never presses them: the Codex row waits for the turn and goes with Enter, and "Read
+it now" is refused. Likewise, without the journal reader there is no `enqueued` state and no "Read it
+now".
 
 Claude 2.1.296 also moved `esc to interrupt` into the statusline under the input box while a turn
 runs. The composer guard used to read that as a modal's key hint and refused every send to a working

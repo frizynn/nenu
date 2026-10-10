@@ -52,9 +52,9 @@ describe("what Claude's own queue did with a message (P0 journal, Claude Code 2.
 });
 
 describe("delivery modes, as P0 measured the keys", () => {
-  test("without a choice each CLI keeps the queue's old behaviour", () => {
+  test("without a choice a row lands after the running turn, as the queue always did", () => {
     expect(normalizeMode("claude", undefined)).toBe("afterTurn");
-    expect(normalizeMode("codex", undefined)).toBe("steer");
+    expect(normalizeMode("codex", undefined)).toBe("afterTurn");
   });
 
   test("Claude's Enter and Codex's Enter are one behaviour, named the CLI's way", () => {

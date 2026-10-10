@@ -16,10 +16,9 @@ export const DELIVERY_MODES: ReadonlySet<DeliveryMode> = new Set(["asap", "after
 
 /** The mode a row is stored with. `asap` and `steer` are one key per CLI, named the CLI's way. */
 export function normalizeMode(agent: string, mode: DeliveryMode | undefined): DeliveryMode {
-  // Without a choice, each CLI keeps what the queue did before ADR 0056: Claude waits for the turn
-  // to end, Codex is typed straight in.
-  if (mode === undefined) return agent === "codex" ? "steer" : "afterTurn";
-  if (mode === "afterTurn") return mode;
+  // Without a choice (every client before ADR 0056) a row lands after the running turn, as the queue
+  // always did: Claude's row waits for the turn to end, Codex's goes into Codex's own next-turn queue.
+  if (mode === undefined || mode === "afterTurn") return "afterTurn";
   return agent === "codex" ? "steer" : "asap";
 }
 

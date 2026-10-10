@@ -87,7 +87,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0053](./0053-an-unread-dialog-still-has-a-way-out.md) | An unread dialog still has a way out: a footer phrase never silences a grammar (only that half is in Nenu) | Proposed |
 | [0054](./0054-the-browser-hears-what-changed-not-the-state.md) | The browser hears what changed, never the state | Accepted; amended by 0058 |
 | [0055](./0055-the-folder-picker-lists-names-under-home-only.md) | The folder picker lists folder names under home, and nothing else | Accepted |
-| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted |
+| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted, not yet shipped |
 | [0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md) | The bridge reads and answers dialogs; the screen is the actuator and hooks only observe | Accepted, not yet shipped |
 | [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted, not yet shipped |
 | [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted, not yet shipped |
