@@ -150,31 +150,6 @@
 .nav-pane-title { font-size: 13px; }
 .nav-pane-detail { color: var(--muted-foreground); font-size: 11.5px; }
 .nav-pane-status { flex-shrink: 0; font-size: 11.5px; font-weight: 500; }
-/* Home: neutral cards with hairline borders; state is carried by dots and text, never by fills. */
-.home-grid { display: grid; gap: 12px; }
-@media (min-width: 1024px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
-.home-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
-.home-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; }
-.home-card-head > h2 { font-weight: 500; }
-.home-card-head > span { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
-.home-row { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 36px; margin-inline: -8px; padding: 6px 8px; width: calc(100% + 16px); border-radius: 8px; color: var(--foreground); font-size: 13.5px; text-decoration: none; }
-.home-row:hover { background: var(--workbench-row-hover); }
-.home-bar { fill: var(--foreground); opacity: 0.72; }
-.home-bar-empty { fill: var(--border); }
-.home-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-radius: 8px; background: var(--muted); cursor: text; }
-.home-search:focus-within { outline: 2px solid var(--ring); outline-offset: -2px; }
-.home-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: 13.5px; }
-.home-browser { margin-bottom: 32px; }
-.home-browser-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-.home-browser-head > h2 { flex-shrink: 0; font-size: 15px; font-weight: 600; }
-.home-browser-head > .home-search { flex: 1; max-width: 320px; margin-left: auto; }
-.home-search input::-webkit-search-cancel-button { display: none; }
-.home-prompt { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 6px 6px 6px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / 4%); }
-.home-prompt:focus-within { border-color: color-mix(in srgb, var(--ring) 70%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent); }
-.home-prompt input { flex: 1; min-width: 0; height: 40px; background: transparent; outline: none; font-size: 16px; }
-.home-prompt input::placeholder { color: var(--muted-foreground); }
-.home-prompt-send { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: var(--primary-foreground); cursor: pointer; }
-.home-prompt-send:disabled { opacity: 0.4; cursor: default; }
 .workbench-sidebar .nav-label:first-child { padding-top: 10px; }
 
 /* Project frame: chat, then the task panel on wide screens; a header toggle below that. */
@@ -276,10 +251,7 @@
 
 /* Touch: every target reaches 44px, and the hover-only close is always visible. */
 @media (max-width: 1023px), (pointer: coarse) {
-  .nav-row, .workbench-context-trigger, .quiet-action, .task-main, .home-row { min-height: 44px; }
-  .home-search { height: 44px; }
-  .home-search input { font-size: 16px; }
-  .home-row { font-size: 15px; }
+  .nav-row, .workbench-context-trigger, .quiet-action, .task-main { min-height: 44px; }
   .task-close { opacity: 1; width: 44px; height: 44px; margin: 0; }
   .workbench-icon-button { width: 44px; height: 44px; }
   .nav-row { font-size: 15px; }

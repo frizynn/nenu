@@ -3,15 +3,14 @@ import { Link, useRouteLoaderData } from "react-router";
 import { ArrowUp, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-react";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
-import { QuickJump, RunningWorkCard, WorkspaceSummary } from "@/components/home-panels";
+import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
 import { NeedsYouList } from "@/components/needs-you-list";
-import { ProjectSummaryCard } from "@/components/project-summary-card";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { ReadyToReviewList, useHomeActivity } from "@/components/ready-to-review-list";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { useInteractions } from "@/hooks/use-interactions";
 import { changeMessageQueue, fetchMessageQueue } from "@/lib/api";
-import { greeting, homeHeadline, needsYouItems, reviewQueue, runningWorkflows } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
 import { openNewAgent } from "@/lib/spawn";
@@ -19,10 +18,11 @@ import { isReadOnly, type AgentView, type DeliveryMode, type ProjectView } from 
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-// Home is the command center: one sentence of what matters, a composer that reaches a coordinator or
-// starts a thread, then what needs you (answered in place), what is ready to review, and the
-// projects and loose workspaces. Figures come from the snapshot, the bridge's detected dialogs and
-// the Claude sessions' background work; nothing here is stored history.
+// Home answers "what needs me now", top to bottom: one sentence, a composer that reaches a
+// coordinator or starts a thread, what needs you (answered in place), the chats that moved last, what
+// is ready to review and the workflows still running. Projects and workspaces live in the sidebar
+// (Browse on a phone), so Home never repeats them. Figures come from the snapshot, the bridge's
+// detected dialogs and the Claude sessions' background work; nothing here is stored history.
 export function HomeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const navigation = useContext(WorkbenchNavigationContext);
@@ -34,17 +34,15 @@ export function HomeRoute() {
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const needs = needsYouItems(data.agents, interactions.interactions);
+  const recent = recentChats(data.agents, data.projects, new Set(needs.map((item) => item.paneId)));
   const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const long = homeHeadline(counts, data.agents.length);
   const short = homeHeadline(counts, data.agents.length, true);
-  const loose = looseWorkspaces(data);
-  const projects = data.projects ?? [];
   const notice = data.error ? "Showing your last workspace snapshot. Reconnect to see current activity."
     : data.bridge !== "connected" ? "Waiting for your workspaces to connect."
     : data.agents.length ? null : "Describe a task to start your first agent. You pick the agent and folder next.";
-  const sideHead = "flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground";
 
   return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
     <AppHeader bridge={data.bridge} error={data.error} rightTrail={<SettingsGear session={data.session} />}>
@@ -52,61 +50,32 @@ export function HomeRoute() {
     </AppHeader>
     <ReadOnlyBanner device={data.device} />
     <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-9 xl:px-12">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-7 lg:flex-row lg:gap-10">
-        <div className="flex min-w-0 flex-1 flex-col gap-6 lg:max-w-[680px] lg:gap-7">
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm text-muted-foreground sm:text-[13px]">
-              {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
-              <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
-            </p>
-            <h1 className="text-[27px] leading-tight font-semibold tracking-tight sm:text-[30px]">
-              {!live ? "What should we work on?" : short === long ? long : <>
-                <span className="sm:hidden">{short}</span>
-                <span className="max-sm:hidden">{long}</span>
-              </>}
-            </h1>
-            {notice && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notice}</p>}
-          </div>
-          <div className="order-2 lg:order-1">
-            <HomeComposer data={data} projects={projects} disabled={!navigation?.onNewChat} />
-          </div>
-          <div className="order-1 empty:hidden lg:order-2">
-            <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} interactions={interactions} readOnly={readOnly || !live} />
-          </div>
-          <div className="order-3 empty:hidden">
-            <ReadyToReviewList entries={reviews} session={data.session} />
-          </div>
+      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6 lg:gap-7">
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm text-muted-foreground sm:text-[13px]">
+            {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
+            <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
+          </p>
+          <h1 className="text-[27px] leading-tight font-semibold tracking-tight sm:text-[30px]">
+            {!live ? "What should we work on?" : short === long ? long : <>
+              <span className="sm:hidden">{short}</span>
+              <span className="max-sm:hidden">{long}</span>
+            </>}
+          </h1>
+          {notice && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notice}</p>}
         </div>
-
-        <aside aria-label="Projects and workspaces" className="flex min-w-0 flex-col gap-6 lg:w-[340px] lg:flex-none lg:pt-1">
-          <QuickJump agents={data.agents} projects={data.projects} session={data.session} now={now} />
-          {running.length > 0 && (
-            <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
-              <h2 id="home-running" className={sideHead}><span className="text-foreground/85">Running in background</span><span className="tabular-nums">{running.length}</span></h2>
+        <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
+        <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} interactions={interactions} readOnly={readOnly || !live} calm={live && data.agents.length > 0} />
+        <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
+        <ReadyToReviewList entries={reviews} session={data.session} />
+        {running.length > 0 && (
+          <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
+            <HomeHeading id="home-running" label="Running in background" count={running.length} />
+            <div className="grid gap-3 sm:grid-cols-2">
               {running.map(({ paneId, workflow }) => <RunningWorkCard key={`${paneId}:${workflow.runId}`} paneId={paneId} workflow={workflow} agent={byPane.get(paneId)} session={data.session} now={now} />)}
-            </section>
-          )}
-          {projects.length > 0 && (
-            <section aria-labelledby="home-projects" className="flex flex-col gap-2.5">
-              <h2 id="home-projects" className={sideHead}><span className="text-foreground/85">Projects</span><span className="tabular-nums">{projects.length}</span></h2>
-              {projects.map((project) => <ProjectSummaryCard key={project.slug} project={project} session={data.session} />)}
-            </section>
-          )}
-          {loose.workspaces.length > 0 && (
-            <section aria-labelledby="home-workspaces" className="flex flex-col gap-1">
-              <h2 id="home-workspaces" className={sideHead}>
-                <span className="text-foreground/85">Workspaces</span><span className="tabular-nums">{loose.workspaces.length}</span>
-                {projects.length > 0 && <span className="ml-auto font-normal">not in a project</span>}
-              </h2>
-              <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
-                {loose.workspaces.map((workspace) => (
-                  <WorkspaceSummary key={workspace.workspaceId} workspace={workspace} session={data.session}
-                    agents={loose.agents.filter((agent) => agent.workspaceId === workspace.workspaceId)} />
-                ))}
-              </ul>
-            </section>
-          )}
-        </aside>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   </div>;

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 
+import { HomeHeading } from "@/components/home-panels";
 import { QuestionCard } from "@/components/question-card";
 import { StatusDot } from "@/components/status-badge";
 import type { InteractionsState } from "@/hooks/use-interactions";
@@ -19,28 +20,28 @@ function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | 
 /**
  * Home's "Needs you": each detected dialog as the compact card, answered in place, oldest first. A
  * blocked pane with no dialog the bridge could read is a row into its thread. Answers just sent stay
- * as receipts until the pane's next dialog.
+ * as receipts until the pane's next dialog. With nothing waiting it is one quiet line, and only
+ * while `calm` (a live herd); a stale or disconnected one cannot vouch for that.
  */
-export function NeedsYouList({ agents, projects, session, interactions, readOnly }: {
+export function NeedsYouList({ agents, projects, session, interactions, readOnly, calm }: {
   agents: readonly AgentView[];
   projects?: readonly ProjectView[];
   session?: string;
   interactions: InteractionsState;
   readOnly: boolean;
+  calm: boolean;
 }) {
   const navigate = useNavigate();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
   const items = needsYouItems(agents, interactions.interactions);
   const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
-  if (!items.length && !receipts.length) return null;
+  if (!items.length && !receipts.length) {
+    return calm ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p> : null;
+  }
 
   return (
     <section aria-labelledby="home-needs" className="flex flex-col gap-2.5">
-      <h2 id="home-needs" className="flex items-center gap-2 text-[12.5px] font-medium text-muted-foreground">
-        <span className="text-foreground/85">Needs you</span>
-        {items.length > 0 && <span className="tabular-nums">{items.length}</span>}
-        {items.length > 1 && <span className="ml-auto font-normal">oldest first</span>}
-      </h2>
+      <HomeHeading id="home-needs" label="Needs you" count={items.length} note={items.length > 1 && "oldest first"} />
       {items.map(({ paneId, interaction }) => {
         const who = asker(byPane.get(paneId), projects, paneId);
         const title = who.where ? `${who.name} · ${who.where}` : who.name;

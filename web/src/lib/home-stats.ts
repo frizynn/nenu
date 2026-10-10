@@ -1,8 +1,9 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { chatMatches, chatRecency, isOpenThread, looseChats, projectMatches } from "./projects";
-import { paneDisplayName, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type PullRequestView, type ThreadPullRequest } from "./types";
+import { chatRecency, isOpenThread, paneTitle, projectForPane } from "./projects";
+import { isUnseen } from "./triage";
+import type { AgentStatus, AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -152,66 +153,37 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
   return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
 }
 
-export type ProjectStateCounts = Record<"blocked" | "working" | "review" | "idle", number>;
-
-/** A project's open threads (and its coordinator) by what their dot says, for its status bar. */
-export function projectStateCounts(project: ProjectView): ProjectStateCounts {
-  const counts: ProjectStateCounts = { blocked: 0, working: 0, review: 0, idle: 0 };
-  const states: ThreadState[] = project.threads.filter(isOpenThread).map(threadState);
-  const coordinated = project.threads.some((thread) => thread.paneId && thread.paneId === project.coordinator?.paneId);
-  if (project.coordinator && !coordinated) states.push(project.coordinator.liveStatus);
-  for (const state of states) counts[state === "blocked" || state === "working" || state === "review" ? state : "idle"]++;
-  return counts;
-}
-
-export interface JumpTarget {
-  kind: "project" | "chat";
-  /** Project slug or pane id. */
-  id: string;
-  label: string;
-  detail: string;
-  status?: AgentStatus;
-  /** Last movement, epoch ms; 0 when unknown. */
-  ts: number;
-}
-
-/** A project moves when its coordinator or any of its task panes does, or a task file is updated. */
-function projectRecency(project: ProjectView, byPane: ReadonlyMap<string, AgentView>): number {
-  const panes = [project.coordinator?.paneId, ...project.threads.map((thread) => thread.paneId)];
-  const paneTimes = panes.map((id) => (id && byPane.get(id) ? chatRecency(byPane.get(id)!) : 0));
-  const updates = project.threads.map((thread) => Date.parse(thread.updated ?? "") || 0);
-  return Math.max(0, ...paneTimes, ...updates);
+/** A chat in Home's "Recent": what it is about, where it lives, and when it last moved. */
+export interface RecentChat {
+  agent: AgentView;
+  /** The thread's title inside a project, else the pane's own name. */
+  title: string;
+  /** The project, else the workspace and its tab. */
+  where: string;
+  /** Last movement or visit, epoch ms; 0 when unknown. */
+  at: number;
+  /** Finished since you last opened it. */
+  unseen: boolean;
 }
 
 /**
- * Everything Home can jump to, most recently moved first: projects and the chats outside them (a
- * project's own panes are reached through the project). A query filters with the same matcher the
- * sidebar search uses.
+ * Home's "Recent": every agent chat, most recently moved or opened first, except the ones "Needs you"
+ * already shows. Equal (or unknown) times keep the bridge's pane order.
  */
-export function jumpTargets(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, query = ""): JumpTarget[] {
-  const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
-  const projectTargets = (projects ?? [])
-    .filter((project) => projectMatches(project, query))
-    .map((project): JumpTarget => ({
-      kind: "project",
-      id: project.slug,
-      label: project.name,
-      detail: "Project",
-      ...(project.coordinator ? { status: project.coordinator.liveStatus } : {}),
-      ts: projectRecency(project, byPane),
-    }));
-  const chatTargets = looseChats(agents, projects)
-    .filter((pane) => chatMatches(pane, query))
-    .map((pane): JumpTarget => ({
-      kind: "chat",
-      id: pane.paneId,
-      label: paneDisplayName(pane),
-      detail: pane.workspaceLabel,
-      status: pane.status,
-      ts: chatRecency(pane),
-    }));
-  // Stable sort: equal (or unknown) times keep projects first, then the bridge's own pane order.
-  return [...projectTargets, ...chatTargets].sort((a, b) => b.ts - a.ts);
+export function recentChats(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>): RecentChat[] {
+  return agents
+    .filter((agent) => !shown.has(agent.paneId))
+    .map((agent): RecentChat => {
+      const owner = projectForPane(projects, agent.paneId);
+      return {
+        agent,
+        title: paneTitle(agent, owner),
+        where: owner?.project.name ?? [agent.workspaceLabel, agent.tabLabel].filter(Boolean).join(" · "),
+        at: chatRecency(agent),
+        unseen: isUnseen(agent),
+      };
+    })
+    .sort((a, b) => b.at - a.at);
 }
 
 /** Workflows still running, with the pane that launched them. */

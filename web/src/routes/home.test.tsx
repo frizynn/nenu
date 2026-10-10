@@ -150,7 +150,7 @@ describe("a project's coordinator", () => {
   });
 });
 
-it("lists pull requests ready to review with their diff and checks, and the project's state", async () => {
+it("lists pull requests ready to review with their diff and checks", async () => {
   const { user, router, main } = await setup(projectData);
   expect(headline()).toBe("1 thread needs you, 1 is ready to review");
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
@@ -159,16 +159,68 @@ it("lists pull requests ready to review with their diff and checks, and the proj
   // The diff sits in its own column on a desk and under the title on a phone.
   expect(review.getAllByText("+212")).toHaveLength(2);
   expect(review.getByText("checks")).toBeInTheDocument();
-  const projects = within(main.getByRole("region", { name: /^Projects/ }));
-  const card = projects.getByRole("link", { name: /Hub/ });
-  expect(card).toHaveTextContent("1 coordinator · 3 threads · 1 to review");
-  expect(within(card).getByRole("img")).toHaveAccessibleName("1 working, 1 to review, 1 idle");
-  // The project's own workspace is not repeated under Workspaces.
-  const workspaces = within(main.getByRole("region", { name: /^Workspaces/ }));
-  expect(workspaces.queryByText("hub")).not.toBeInTheDocument();
-  expect(workspaces.getByRole("link", { name: /^Earlier thread, idle/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
   await user.click(review.getByRole("link", { name: "Review Mobile panel" }));
   expect(router.state.location.pathname).toBe("/pane/w2%3Ap2");
+});
+
+describe("Recent", () => {
+  const now = Date.now();
+  const recentData: HomeData = {
+    ...projectData,
+    agents: projectData.agents.map((agent) => ({
+      "w1:p1": { ...agent, tabLabel: "docs", lastActiveAt: now - 3 * 3_600_000 },
+      "w1:p2": { ...agent, lastActiveAt: now - 60_000 },
+      c1: { ...agent, lastActiveAt: now - 2 * 3_600_000 },
+      "w2:p2": { ...agent, lastActiveAt: now - 5 * 60_000, lastSeenAt: now - 3_600_000 },
+      "w2:p3": { ...agent, lastActiveAt: now - 20 * 60_000 },
+    } as Record<string, typeof agent>)[agent.paneId] ?? agent),
+  };
+
+  it("lists the chats that moved last, each with its state and place, and opens one in a tap", async () => {
+    const { user, router, main } = await setup(recentData);
+    const recent = within(main.getByRole("region", { name: /^Recent/ }));
+    // "Review changes" is waiting on you, so Needs you shows it and Recent does not.
+    expect(recent.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Mobile panelNewDone · Hub5m",
+      "LandingWorking · Hub20m",
+      "CoordinatorIdle · Hub2h",
+      "Earlier threadIdle · Nenu · docs3h",
+    ]);
+    expect(recent.getByText("1 working now")).toBeInTheDocument();
+    await user.click(recent.getByRole("link", { name: /^Landing/ }));
+    expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
+  });
+
+  it("shows the first chats and the rest on request", async () => {
+    const agents = Array.from({ length: 8 }, (_, i) => ({ ...data.agents[0]!, paneId: `w1:x${i}`, paneLabel: `Chat ${i}`, lastActiveAt: now - i * 60_000 }));
+    const { user, main } = await setup({ ...data, agents });
+    const recent = within(main.getByRole("region", { name: /^Recent/ }));
+    expect(recent.getAllByRole("listitem")).toHaveLength(6);
+    await user.click(recent.getByRole("button", { name: "Show all 8" }));
+    expect(recent.getAllByRole("listitem")).toHaveLength(8);
+  });
+});
+
+it("leaves projects and workspaces to the sidebar instead of repeating them", async () => {
+  const { main } = await setup(projectData);
+  expect(main.queryByRole("region", { name: /^Projects/ })).not.toBeInTheDocument();
+  expect(main.queryByRole("region", { name: /^Workspaces/ })).not.toBeInTheDocument();
+  expect(main.queryByRole("searchbox")).not.toBeInTheDocument();
+  const sidebar = within(screen.getByRole("complementary", { name: "Workspace sidebar" }));
+  expect(sidebar.getByText("Hub")).toBeInTheDocument();
+});
+
+it("says in one line that nothing needs you, only while the herd is live", async () => {
+  const quiet = { ...data, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })) };
+  const { main } = await setup(quiet);
+  expect(main.getByText("Nothing needs you right now")).toBeInTheDocument();
+  expect(main.queryByRole("region", { name: /^Needs you/ })).not.toBeInTheDocument();
+});
+
+it("does not vouch for a quiet herd from a stale snapshot", async () => {
+  const quiet = { ...data, error: true, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })) };
+  const { main } = await setup(quiet);
+  expect(main.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
 });
 
 it("keeps failed commands and finished workflows out of Ready to review", async () => {
@@ -186,6 +238,21 @@ it("keeps failed commands and finished workflows out of Ready to review", async 
   expect(main.queryByText(/Command failed/)).not.toBeInTheDocument();
   expect(main.queryByText(/Workflow finished/)).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/review/);
+});
+
+it("keeps workflows still running in the one column, each opening its chat", async () => {
+  const now = Date.now();
+  const activity: ActivityResponse = {
+    available: true, sessionKey: "s", truncated: false, artifacts: [], tasks: [],
+    workflows: [{ runId: "r2", name: "nenu-wave", status: "running", updatedAt: now, phases: [], agentCount: 9, doneCount: 6 }],
+  };
+  server.use(http.get("/api/pane/:pane/activity", ({ params }) => HttpResponse.json(params.pane === "w1:p1" ? activity : { available: false, reason: "no-session" })));
+  const agents = data.agents.map((a) => a.paneId === "w1:p1" ? { ...a, agent: "claude", hasSession: true } : a);
+  const { user, router, main } = await setup({ ...data, agents });
+  const running = within(await main.findByRole("region", { name: /^Running in background/ }));
+  expect(running.getByText("6 of 9 agents done")).toBeInTheDocument();
+  await user.click(running.getByRole("link", { name: /nenu-wave/ }));
+  expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
 });
 
 it("lists the pull requests agents opened outside Organizations and reviews them in the agent or on GitHub", async () => {
@@ -216,19 +283,15 @@ it("shows the first rows and the rest on request", async () => {
   }));
   const { user, main } = await setup({ ...data, pullRequests });
   const review = within(main.getByRole("region", { name: /^Ready to review/ }));
-  expect(review.getAllByRole("listitem")).toHaveLength(6);
+  expect(review.getAllByRole("listitem")).toHaveLength(5);
   await user.click(review.getByRole("button", { name: "Show all 9" }));
   expect(review.getAllByRole("listitem")).toHaveLength(9);
 });
 
-it("jumps with ⌘K and Enter to the first matching chat", async () => {
-  const { user, router, main } = await setup();
-  const jump = main.getByRole("searchbox", { name: "Jump to a project or chat" });
-  expect(jump).toHaveAttribute("aria-keyshortcuts", "Meta+K");
+it("opens the sidebar's search with ⌘K, the one place to jump from", async () => {
+  const { user } = await setup();
   await user.keyboard("{Meta>}k{/Meta}");
-  expect(jump).toHaveFocus();
-  await user.type(jump, "review{Enter}");
-  expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
+  expect(screen.getByRole("searchbox", { name: "Search projects and chats" })).toHaveFocus();
 });
 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {
@@ -246,6 +309,6 @@ it("keeps existing threads navigable while answering and creating are read-only"
   const needs = within(main.getByRole("region", { name: /^Needs you/ }));
   expect(await needs.findByRole("button", { name: "Yes" })).toBeDisabled();
   expect(needs.getByRole("button", { name: "Open" })).toBeEnabled();
-  const workspaces = within(main.getByRole("region", { name: /^Workspaces/ }));
-  expect(workspaces.getByRole("link", { name: /^Review changes, needs you/ })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
+  const recent = within(main.getByRole("region", { name: /^Recent/ }));
+  expect(recent.getByRole("link", { name: /^Earlier thread/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
 });
