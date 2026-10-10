@@ -180,14 +180,14 @@ export class FakeHerdr {
     const panes = [...this.panes.values()].filter((p) => p.tabId === tabId);
     if (panes.length === 0) throw new FakeError("tab_not_found", `tab ${tabId} not found`);
     for (const pane of panes) this.panes.delete(pane.paneId);
-    this.broadcast("tab.closed", { tab_id: tabId, workspace_id: panes[0]!.workspaceId });
+    this.broadcast("tab.closed", "tab_closed", { tab_id: tabId, workspace_id: panes[0]!.workspaceId });
   }
 
-  /** Close one pane, as `pane.close` does. A tab left without panes goes with it, as in Herdr. */
+  /** Close one pane, as `pane.close` does. Tabs are derived from panes, so an emptied tab goes too. */
   closePane(paneId: string): void {
     const pane = this.pane(paneId);
     this.panes.delete(paneId);
-    this.broadcast("pane.closed", { pane_id: paneId, workspace_id: pane.workspaceId });
+    this.broadcast("pane.closed", "pane_closed", { pane_id: paneId, workspace_id: pane.workspaceId });
   }
 
   appendLines(paneId: string, ...lines: string[]): void {
@@ -369,9 +369,8 @@ export class FakeHerdr {
     }
   }
 
-  /** A global event (`tab.closed` → `tab_closed`) to everyone subscribed to its type. */
-  private broadcast(type: string, data: Record<string, unknown>): void {
-    const event = type.replace(".", "_");
+  /** A global event to everyone subscribed to its type, as `emit` does for pane-scoped ones. */
+  private broadcast(type: string, event: string, data: Record<string, unknown>): void {
     const line = JSON.stringify({ event, data: { type: event, ...data } }) + "\n";
     for (const sub of this.subscribers) if (sub.types.has(type)) sub.socket.write(line);
   }
