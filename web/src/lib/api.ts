@@ -140,12 +140,31 @@ export function paneFileUrl(paneId: string, path: string, session?: string): str
   return withSession(`/api/pane/${encodeURIComponent(paneId)}/file?path=${encodeURIComponent(path)}`, session);
 }
 
+/**
+ * A file read the bridge refused. `outside` is the bridge's `x-file-state: outside-project`: the
+ * path is beyond the pane's folder and was not delivered by the agent, so retrying cannot help.
+ */
+export class PaneFileError extends ApiError {
+  readonly outside: boolean;
+  constructor(message: string, status: number, outside: boolean) {
+    super(message, status);
+    this.name = "PaneFileError";
+    this.outside = outside;
+  }
+}
+
+/** The refusal a failed /file or /html-preview response describes. */
+export async function paneFileError(res: Response): Promise<PaneFileError> {
+  return new PaneFileError(`Could not open file (${res.status}): ${await errorDetail(res)}`, res.status,
+    res.headers.get("x-file-state") === "outside-project");
+}
+
 export async function fetchPaneFile(paneId: string, path: string, session: string | undefined, signal: AbortSignal): Promise<Response> {
   const res = await apiFetch(paneFileUrl(paneId, path, session), {
     signal: withTimeout(signal, UPLOAD_TIMEOUT_MS), cache: "no-store",
     headers: { [XHR_HEADER]: XHR_HEADER_VALUE },
   });
-  if (!res.ok) throw new ApiError(`Could not open file (${res.status}): ${await errorDetail(res)}`, res.status);
+  if (!res.ok) throw await paneFileError(res);
   return res;
 }
 
