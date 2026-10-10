@@ -55,6 +55,8 @@ export interface QueueRowView {
   waitingFor?: QueueWaitReason;
   stranded?: { reason: string; since: number };
   native?: NativeQueueState;
+  /** When the bridge pressed "Read it now" for it. */
+  readNowAt?: number;
   error?: string;
 }
 
@@ -73,6 +75,7 @@ export function queueRowStatus(
   if (row.state === "sending") return { tone: "busy", label: "Sending…", actions: [] };
   if (row.state === "paused") return { tone: "problem", label: row.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
   if (row.state === "sent") {
+    if (row.native === "enqueued" && row.readNowAt !== undefined) return { tone: "busy", label: `Asked ${name} to read it now.`, actions: [] };
     if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue. ${name} reads it after the step it's on.`, actions: agent === "claude" ? ["readNow"] : [] };
     if (row.native === "absorbed") return { tone: "done", label: `Read by ${name}`, actions: [] };
     if (row.native === "recalled") return { tone: "problem", label: "Taken back into the terminal's input box", actions: [] };
@@ -114,6 +117,7 @@ export interface DeliveredRow {
   sentAt?: number;
   deliveryMode?: DeliveryMode;
   native?: NativeQueueState;
+  readNowAt?: number;
 }
 
 function deliveredRows(page: MessageQueuePage | null): DeliveredRow[] {

@@ -27,6 +27,7 @@ export function pendingStatus(send: LocalSend): {
     waitingFor: send.waitingFor,
     stranded: send.stranded,
     native: send.native,
+    readNowAt: send.readNowAt,
     error: send.error,
   });
 }

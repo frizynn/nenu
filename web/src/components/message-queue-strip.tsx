@@ -139,7 +139,7 @@ export function MessageQueueStrip({
         })}
         {delivered.map((row) => {
           const { text: prose, images } = splitMessageImages(row.text);
-          const status = queueRowStatus(agent, { state: "sent", deliveryMode: row.deliveryMode, native: row.native });
+          const status = queueRowStatus(agent, { state: "sent", deliveryMode: row.deliveryMode, native: row.native, readNowAt: row.readNowAt });
           const armed = readNowArmed === row.id;
           return (
             <li key={row.id} className="py-1" data-queue-row={row.native ?? "sent"}>

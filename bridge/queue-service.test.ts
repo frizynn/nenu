@@ -325,6 +325,32 @@ it("Claude's journal marks a delivered row queued then read, and 'read it now' a
   } finally { await t.close(); }
 });
 
+// Measured 2026-10-10 on the live bridge: "Read it now" pressed Ctrl+Enter twice 0.9 s apart, before
+// Claude's journal showed the message read, and a later tap was answered 409 "unsupported".
+it("'read it now' presses Ctrl+Enter once per row: a repeat, before or after Claude reads it, answers the page", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "Look at this when you can", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    t.service.kick();
+    await Bun.sleep(30);
+    const scope = await t.scope();
+    const now = () => t.call({ action: "now", id: "one", scope, confirm: true });
+    expect((await now()).status).toBe(200);
+    const repeat = await now();
+    expect(repeat.status).toBe(200);
+    expect(t.pane.keys).toEqual([["ctrl+enter"]]);
+    expect(repeat.body.delivered[0]).toMatchObject({ id: "one", native: "enqueued", readNowAt: expect.any(Number) });
+    t.pane.journal.push({ kind: "dequeue", ts: new Date().toISOString() });
+    t.service.kick();
+    await Bun.sleep(30);
+    const afterRead = await now();
+    expect(afterRead.status).toBe(200);
+    expect(afterRead.body.delivered[0]).toMatchObject({ id: "one", native: "absorbed" });
+    expect(t.pane.keys).toEqual([["ctrl+enter"]]);
+  } finally { await t.close(); }
+});
+
 it("Codex 'afterTurn' while a turn runs goes to Codex's own queue with Tab; 'steer' with Enter", async () => {
   const t = await agentPane("codex", "working");
   try {
