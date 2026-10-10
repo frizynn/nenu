@@ -86,9 +86,14 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     bin: join(dir, "bin"),
   };
   for (const p of Object.values(paths)) await mkdir(p, { recursive: true });
-  // The bridge shells out to these two. Organizations answers "no templates"; `claude agents` fails,
-  // so session discovery never lists the operator's real Claude processes.
-  const stubs = { "herdr-organizations": "echo 'error: unrecognized subcommand' >&2\nexit 2", claude: "exit 1" };
+  // The bridge shells out to these. Organizations answers "no templates"; `claude agents` fails,
+  // so session discovery never lists the operator's real Claude processes; `gh` never reaches
+  // GitHub: it prints the pull requests in $NENU_E2E_GH_PRS (a JSON file), or fails.
+  const stubs = {
+    "herdr-organizations": "echo 'error: unrecognized subcommand' >&2\nexit 2",
+    claude: "exit 1",
+    gh: `[ -n "$NENU_E2E_GH_PRS" ] && exec cat "$NENU_E2E_GH_PRS"\necho 'gh stub: no pull requests' >&2\nexit 1`,
+  };
   for (const [name, body] of Object.entries(stubs)) {
     await writeFile(join(paths.bin, name), `#!/bin/sh\n${body}\n`);
     await chmod(join(paths.bin, name), 0o755);
@@ -100,6 +105,9 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
   if (opts.fake) {
     fake = new FakeHerdr({ socketPath });
     herd = await seedDemoHerd(fake, { claudeRoot: paths.claude, cwd: dir, shift });
+    // With fake pull requests the demo panes sit in a repo on branch `e2e-demo`, so a PR on that
+    // branch opens its agent and the rest open on GitHub.
+    if (process.env.NENU_E2E_GH_PRS) Bun.spawnSync(["git", "init", "-q", "-b", "e2e-demo", dir]);
     await fake.start();
   }
 

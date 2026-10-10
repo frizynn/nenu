@@ -1,6 +1,6 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { finishedNotices, greeting, homeHeadline, jumpTargets, needsYouItems, projectStateCounts, reviewItems, runningWorkflows } from "./home-stats";
-import type { AgentView, ProjectView } from "./types";
+import { greeting, homeHeadline, jumpTargets, needsYouItems, projectStateCounts, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
 const MIN = 60_000;
@@ -23,7 +23,7 @@ describe("headline", () => {
   it("names what needs you and what is ready, never a list", () => {
     expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9)).toBe("2 threads need you, 2 are ready to review");
     expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9)).toBe("1 thread needs you");
-    expect(homeHeadline({ needs: 0, review: 1, working: 0 }, 9)).toBe("1 result ready to review");
+    expect(homeHeadline({ needs: 0, review: 1, working: 0 }, 9)).toBe("1 pull request ready to review");
     expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9)).toBe("2 agents at work");
     expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9)).toBe("All quiet");
     expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0)).toBe("What should we work on?");
@@ -77,34 +77,55 @@ describe("review and project state", () => {
   });
 });
 
+describe("review queue", () => {
+  const gh = (number: number, extra: Partial<PullRequestView> = {}): PullRequestView => ({
+    repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`, branch: `feat/${number}`,
+    draft: false, updatedAt: number * 1000, paneIds: [], ...extra,
+  });
+
+  it("lists pull requests only, drafts last, green and approved first, then the most recent", () => {
+    const rows = reviewQueue([], [
+      gh(1),
+      gh(2, { draft: true, updatedAt: 99_000 }),
+      gh(3, { review: "approved", checks: { passed: 3, failed: 0, pending: 0 } }),
+      gh(4, { checks: { passed: 1, failed: 1, pending: 0 } }),
+      gh(5, { checks: { passed: 2, failed: 0, pending: 0 } }),
+    ]);
+    expect(rows.map((row) => row.number)).toEqual([3, 5, 4, 1, 2]);
+    expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+  });
+
+  it("opens the agent on the PR's branch, else the PR on GitHub", () => {
+    const [mapped, unmapped] = reviewQueue([], [gh(2, { paneIds: ["w1:p3", "w1:p4"] }), gh(1)]);
+    expect(mapped!.open).toEqual({ paneId: "w1:p3" });
+    expect(unmapped!.open).toBeUndefined();
+  });
+
+  it("joins the same PR from Organizations into one row that opens its thread", () => {
+    const hub: ProjectView = {
+      slug: "hub", name: "Hub", status: "active", source: "json",
+      threads: [
+        { id: "t2", title: "Thread title", parentId: "root", role: "worker", status: "open", paneId: "p2", liveStatus: "done", group: "ready-for-review",
+          pr: { state: "open", number: 7, url: "https://github.com/acme/shop/pull/7", mergeBlocker: "checks failing" } },
+        { id: "t3", title: "Org only", parentId: "root", role: "worker", status: "open", liveStatus: "done", group: "ready-for-review", pr: { state: "open", number: 12 } },
+      ],
+    };
+    const rows = reviewQueue([hub], [gh(7, { paneIds: ["other"], updatedAt: 5_000 })]);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.number === 7)).toMatchObject({ title: "PR 7", repo: "shop", open: { paneId: "p2" }, mergeBlocker: "checks failing" });
+    expect(rows.find((row) => row.number === 12)).toMatchObject({ title: "Org only", repo: "Hub", open: { project: "hub" } });
+  });
+});
+
 describe("background work", () => {
   const wf = (runId: string, status: ActivityWorkflow["status"], updatedAt?: number): ActivityWorkflow =>
     ({ runId, name: runId, status, updatedAt, phases: [], agentCount: 2, doneCount: 2 });
-  const res = (workflows: ActivityWorkflow[], tasks: Extract<ActivityResponse, { available: true }>["tasks"] = []): ActivityResponse =>
-    ({ available: true, sessionKey: "s", workflows, tasks, artifacts: [], truncated: false });
 
-  it("announces work that ended since the thread was last opened, newest first", () => {
+  it("lists the workflows still running, by pane", () => {
     const activity = new Map<string, ActivityResponse>([
-      ["a", res([wf("old", "completed", NOW - 30 * MIN), wf("new", "failed", NOW - 5 * MIN), wf("live", "running")],
-        [{ id: "k", kind: "bash", title: "Typecheck", status: "failed", exitCode: 2, at: NOW - 10 * MIN, hasOutput: true },
-         { id: "ok", kind: "bash", title: "Build", status: "completed", at: NOW - 2 * MIN, hasOutput: true }])],
-      ["b", res([wf("seen", "completed", NOW - 30 * MIN)])],
-      ["gone", res([wf("orphan", "completed", NOW - MIN)])],
+      ["a", { available: true, sessionKey: "s", workflows: [wf("done", "completed", NOW), wf("live", "running")], tasks: [], artifacts: [], truncated: false }],
     ]);
-    const notices = finishedNotices(activity, [agent("a", "idle", { lastSeenAt: NOW - 60 * MIN }), agent("b", "idle", { lastSeenAt: NOW - 20 * MIN })], NOW);
-    expect(notices.map((n) => `${n.kind}:${n.id}:${n.failed}`)).toEqual(["workflow:new:true", "task:k:true", "workflow:old:false"]);
     expect(runningWorkflows(activity).map((r) => `${r.paneId}:${r.workflow.runId}`)).toEqual(["a:live"]);
-  });
-
-  it("keeps one failed command per pane and skips commands stopped by a signal", () => {
-    const failed = (id: string, exitCode: number, ago: number) => ({ id, kind: "bash" as const, title: id, status: "failed" as const, exitCode, at: NOW - ago * MIN, hasOutput: true });
-    const activity = new Map([["a", res([], [failed("older", 1, 20), failed("killed", 144, 2), failed("latest", 2, 5)])]]);
-    expect(finishedNotices(activity, [agent("a", "idle", { lastSeenAt: NOW - 60 * MIN })], NOW).map((n) => n.id)).toEqual(["latest"]);
-  });
-
-  it("lets a day-old result go", () => {
-    const activity = new Map([["a", res([wf("ancient", "completed", NOW - 25 * 60 * MIN)])]]);
-    expect(finishedNotices(activity, [agent("a", "idle")], NOW)).toEqual([]);
   });
 });
 

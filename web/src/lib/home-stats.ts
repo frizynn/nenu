@@ -1,15 +1,15 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
-import type { ActivityResponse, ActivityTask, ActivityWorkflow } from "./activity";
+import type { ActivityResponse, ActivityWorkflow } from "./activity";
 import { chatMatches, chatRecency, isOpenThread, looseChats, projectMatches } from "./projects";
-import { paneDisplayName, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView } from "./types";
+import { paneDisplayName, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type PullRequestView, type ThreadPullRequest } from "./types";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export interface HomeCounts {
   /** Panes with a dialog waiting, or blocked without one the bridge could read. */
   needs: number;
-  /** Pull requests and finished background work waiting to be looked at. */
+  /** Pull requests waiting to be looked at. */
   review: number;
   working: number;
 }
@@ -23,7 +23,7 @@ export function homeHeadline(counts: HomeCounts, total: number, short = false): 
   }
   if (needs && review) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you, ${review} ${review === 1 ? "is" : "are"} ready to review`;
   if (needs) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you`;
-  if (review) return `${plural(review, "result")} ready to review`;
+  if (review) return `${plural(review, "pull request")} ready to review`;
   if (working) return `${plural(working, "agent")} at work`;
   return total ? "All quiet" : "What should we work on?";
 }
@@ -76,6 +76,80 @@ export function reviewItems(projects: readonly ProjectView[] | undefined): Revie
       ? threadState(thread) === "review"
       : thread.pr?.state === "open" && thread.liveStatus !== "working" && thread.liveStatus !== "blocked"))
     .map((thread) => ({ project, thread })));
+}
+
+/** One pull request in Home's "Ready to review", from GitHub, from Organizations, or both. */
+export interface ReviewEntry {
+  /** `owner/name#number` when the URL is known, else the thread's own key. */
+  key: string;
+  title: string;
+  /** The repo's short name, or the project's name for a PR Organizations reported without a URL. */
+  repo: string;
+  number?: number;
+  branch?: string;
+  url?: string;
+  draft: boolean;
+  review?: ThreadPullRequest["review"];
+  checks?: { passed: number; failed: number; pending: number };
+  diff?: { additions: number; deletions: number };
+  mergeBlocker?: string | null;
+  /** Epoch ms; 0 when unknown. */
+  updatedAt: number;
+  /** Where Review goes inside Nenu; absent means the PR's page on GitHub. */
+  open?: { paneId: string } | { project: string };
+}
+
+const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/;
+const prKey = (url: string | undefined) => {
+  const match = url ? PR_URL_RE.exec(url) : null;
+  return match ? { key: `${match[1]}/${match[2]}#${match[3]}`, repo: match[2]! } : undefined;
+};
+const checksPassed = (checks: ReviewEntry["checks"]) => !!checks && checks.passed > 0 && !checks.failed && !checks.pending;
+
+/**
+ * Home's review list: the person's open pull requests from GitHub, joined with the PRs Organizations
+ * threads are waiting on. The same PR from both is one row that opens Organizations' thread. Drafts
+ * go last; among the rest a PR with green checks and an approval comes first, then the most recent.
+ */
+export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRequests: readonly PullRequestView[] | undefined): ReviewEntry[] {
+  const rows = new Map<string, ReviewEntry>();
+  for (const pr of pullRequests ?? []) {
+    const id = prKey(pr.url);
+    const key = id?.key ?? `${pr.repo}#${pr.number}`;
+    rows.set(key, {
+      key, title: pr.title, repo: id?.repo ?? pr.repo, number: pr.number, branch: pr.branch, url: pr.url, draft: pr.draft,
+      ...(pr.review ? { review: pr.review } : {}),
+      ...(pr.checks ? { checks: pr.checks } : {}),
+      ...(pr.diff ? { diff: pr.diff } : {}),
+      updatedAt: pr.updatedAt ?? 0,
+      ...(pr.paneIds[0] ? { open: { paneId: pr.paneIds[0] } } : {}),
+    });
+  }
+  for (const { project, thread } of reviewItems(projects)) {
+    const pr = thread.pr;
+    const id = prKey(pr?.url);
+    const key = id?.key ?? `${project.slug}:${thread.id}`;
+    const { open: _ownPane, ...github } = rows.get(key) ?? {};
+    // Organizations' thread is the one to open; GitHub's read is the fresher one for everything else.
+    rows.set(key, {
+      key,
+      title: thread.title,
+      repo: id?.repo ?? project.name,
+      ...(pr?.number !== undefined ? { number: pr.number } : {}),
+      ...(thread.branch ? { branch: thread.branch } : {}),
+      ...(pr?.url ? { url: pr.url } : {}),
+      draft: pr?.state === "draft",
+      ...(pr?.review ? { review: pr.review } : {}),
+      ...(pr?.checks ? { checks: pr.checks } : {}),
+      ...(pr?.diff ? { diff: pr.diff } : {}),
+      ...(pr?.mergeBlocker !== undefined ? { mergeBlocker: pr.mergeBlocker } : {}),
+      updatedAt: Date.parse(thread.updated ?? "") || 0,
+      ...github,
+      open: thread.paneId ? { paneId: thread.paneId } : { project: project.slug },
+    });
+  }
+  const ready = (row: ReviewEntry) => Number(checksPassed(row.checks)) + Number(row.review === "approved");
+  return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
 }
 
 export type ProjectStateCounts = Record<"blocked" | "working" | "review" | "idle", number>;
@@ -138,46 +212,6 @@ export function jumpTargets(agents: readonly AgentView[], projects: readonly Pro
     }));
   // Stable sort: equal (or unknown) times keep projects first, then the bridge's own pane order.
   return [...projectTargets, ...chatTargets].sort((a, b) => b.ts - a.ts);
-}
-
-/** Background work that ended since you last opened its thread: a workflow, or a command that failed. */
-export interface FinishedNotice {
-  paneId: string;
-  kind: "workflow" | "task";
-  id: string;
-  title: string;
-  failed: boolean;
-  /** Epoch ms it ended. */
-  at: number;
-  workflow?: ActivityWorkflow;
-  task?: ActivityTask;
-}
-
-const NOTICE_WINDOW_MS = 24 * 3_600_000;
-
-/**
- * Finished workflows and failed background commands per pane, newest first. Opening the thread
- * retires them the way it retires an unseen result: the bridge's `lastSeenAt` passes their end.
- */
-export function finishedNotices(activity: ReadonlyMap<string, ActivityResponse>, agents: readonly AgentView[], now: number): FinishedNotice[] {
-  const seen = new Map(agents.map((agent) => [agent.paneId, agent.lastSeenAt ?? 0]));
-  const notices: FinishedNotice[] = [];
-  for (const [paneId, res] of activity) {
-    if (!res.available || !seen.has(paneId)) continue;
-    const fresh = (at: number | undefined): at is number => at !== undefined && at > seen.get(paneId)! && now - at < NOTICE_WINDOW_MS;
-    for (const workflow of res.workflows) {
-      if (workflow.status !== "completed" && workflow.status !== "failed") continue;
-      const at = workflow.updatedAt ?? (workflow.startedAt !== undefined && workflow.durationMs !== undefined ? workflow.startedAt + workflow.durationMs : undefined);
-      if (fresh(at)) notices.push({ paneId, kind: "workflow", id: workflow.runId, title: workflow.name, failed: workflow.status === "failed", at, workflow });
-    }
-    // One notice per pane for failed commands, the latest. An exit above 128 is a signal: the agent or
-    // the user stopped it (a gate wait cut short, a Ctrl+C), which is not a result to review.
-    const failed = res.tasks
-      .filter((task): task is ActivityTask & { at: number } => task.status === "failed" && (task.exitCode ?? 1) <= 128 && fresh(task.at))
-      .sort((a, b) => b.at - a.at)[0];
-    if (failed) notices.push({ paneId, kind: "task", id: failed.id, title: failed.title, failed: true, at: failed.at, task: failed });
-  }
-  return notices.sort((a, b) => b.at - a.at);
 }
 
 /** Workflows still running, with the pane that launched them. */

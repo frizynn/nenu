@@ -34,6 +34,7 @@ import type {
   PaneHistoryResponse,
   PaneReadResponse,
   ProjectView,
+  PullRequestView,
   SessionSummary,
   SnapshotResponse,
   TabView,
@@ -82,6 +83,8 @@ export interface HomeData {
   workspaces: WorkspaceView[];
   tabs: TabView[];
   projects?: ProjectView[];
+  /** Open pull requests from GitHub in the repos agents work in. */
+  pullRequests?: PullRequestView[];
   /** The bridge's session registry (primary-first); empty on a single-session / older bridge. */
   sessions: SessionSummary[];
   /** The session this snapshot was fetched for (undefined = primary) — so children don't re-derive. */
@@ -178,6 +181,7 @@ function toHomeData(
     workspaces: snap.workspaces ?? [],
     tabs: snap.tabs ?? [],
     projects: snap.projects ?? [],
+    pullRequests: snap.pullRequests ?? [],
     sessions: snap.sessions ?? [],
     session,
     snoozedUntil: snap.notifications?.snoozedUntil ?? null,

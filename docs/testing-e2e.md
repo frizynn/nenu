@@ -42,8 +42,11 @@ journals, `bridge.log`).
   `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `GROK_HOME` and the `XDG_*` dirs. The
   bridge therefore never lists the operator's projects or skills, and the Codex pane answers "Codex
   server is unavailable" instead of dialing the live Codex app-server. `bridge.test.ts` checks both.
-- The two CLIs the bridge runs are stubs placed first on `PATH`. `herdr-organizations` answers "no
+- The CLIs the bridge runs are stubs placed first on `PATH`. `herdr-organizations` answers "no
   templates" and `claude agents` fails, so Claude session discovery never sees real processes.
+  `gh` never reaches GitHub: it prints the JSON file named by `NENU_E2E_GH_PRS` (the output of
+  `gh pr list --json …`), or fails. With that variable set the demo panes' folder is a fresh git
+  repo on branch `e2e-demo`, so Home's "Ready to review" shows those pull requests.
   `PATH` itself is inherited, and so is everything outside the bridge process: the FakeHerdr and
   the browser run in the bench's own process.
 - The FakeHerdr counts calls by method and keeps a log of every call for the whole run (resetting
