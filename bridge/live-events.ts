@@ -1,4 +1,5 @@
 import type { EngineSnapshot } from "./state-engine.ts";
+import type { LiveEvent, LivePublisher } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Live invalidations for the browser. The bridge already learns about herd changes the moment they
@@ -9,15 +10,9 @@ import type { EngineSnapshot } from "./state-engine.ts";
 // goes through the usual routes, gates and caches.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal";
+export type { LiveEvent, LiveTopic } from "./types.ts";
 
-export interface LiveEvent {
-  session: string;
-  topic: LiveTopic;
-  paneId?: string;
-}
-
-export class LiveEvents {
+export class LiveEvents implements LivePublisher {
   private readonly listeners = new Set<(event: LiveEvent) => void>();
 
   publish(event: LiveEvent): void {
@@ -55,6 +50,45 @@ export function snapshotWatcher(session: string, publish: (event: LiveEvent) => 
       publish({ session, topic: "journal", paneId });
     }
   };
+}
+
+const eventKey = (event: LiveEvent) => `${event.session}\u0000${event.topic}\u0000${event.paneId ?? ""}`;
+
+/**
+ * Publish one event key at most once per `gapMs`. A change after a quiet spell goes out after
+ * `delayMs` (0 = at once); changes inside the gap collapse into one trailing publish, so a screen that
+ * repaints four times a second costs a watching phone one re-read a second.
+ */
+export class LiveThrottle {
+  private readonly last = new Map<string, number>();
+  private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+
+  constructor(
+    private readonly live: LivePublisher,
+    private readonly gapMs: number,
+    private readonly delayMs = 0,
+  ) {}
+
+  publish(event: LiveEvent): void {
+    const key = eventKey(event);
+    if (this.pending.has(key)) return;
+    const wait = Math.max(this.delayMs, (this.last.get(key) ?? -Infinity) + this.gapMs - Date.now());
+    const fire = () => {
+      this.pending.delete(key);
+      this.last.set(key, Date.now());
+      this.live.publish(event);
+    };
+    if (wait <= 0) fire();
+    else this.pending.set(key, setTimeout(fire, wait));
+  }
+
+  /** Drop what is held for this event: the producer stopped watching it. */
+  forget(event: LiveEvent): void {
+    const key = eventKey(event);
+    clearTimeout(this.pending.get(key));
+    this.pending.delete(key);
+    this.last.delete(key);
+  }
 }
 
 const encoder = new TextEncoder();

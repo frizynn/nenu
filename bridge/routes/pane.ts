@@ -1,7 +1,7 @@
 import { launchAgent, startPaneAgent } from "../agent-start.ts";
 import type { Config } from "../config.ts";
 import type { HerdrClient, PaneRead } from "../herdr-client.ts";
-import { JsonBody, notModified } from "../http-cache.ts";
+import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http-cache.ts";
 import { discoverPaneModels } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
 import type { PaneReadResponse } from "../types.ts";
@@ -11,15 +11,23 @@ import { buildId, json, jsonError, secure, text, withBuildHeader } from "./http.
 // Upper bound on the pane-read `lines` param — don't trust the client (or Herdr) to cap it.
 export const MAX_READ_LINES = 10_000;
 
+// Mirror reads of one pane within this window share a single Herdr read (several phones, or a poll
+// racing a live event). Only this route: the guarded reply and prompt-select reads go to Herdr
+// directly because they need a truly fresh screen.
+const MIRROR_SHARE_MS = 250;
+const mirrorReads = new SharedLoads<JsonBody>(MIRROR_SHARE_MS);
+
 // The pane's own reads and lifecycle. The `""` action is the bare `/api/pane/:id` mirror read.
 export const panePaneActions: Record<string, PaneAction> = {
   "": {
     level: "read",
     marksSeen: false,
     handle({ cfg, conversations, claudeTelemetry }, { req, url, rt, paneId }) {
-      const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
-      const native = original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : Promise.resolve(undefined);
-      return readPane(rt.herdr, cfg, paneId, url, req, native);
+      const native = async () => {
+        const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
+        return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : undefined;
+      };
+      return readPane(rt.herdr, cfg, paneId, url, req, native, rt.name);
     },
   },
   start: {
@@ -125,7 +133,8 @@ async function readPane(
   paneId: string,
   url: URL,
   req: Request,
-  native: Promise<PaneReadResponse["nativeTelemetry"]> = Promise.resolve(undefined),
+  native: () => Promise<PaneReadResponse["nativeTelemetry"]>,
+  session: string,
 ): Promise<Response> {
   const linesParam = Number.parseInt(url.searchParams.get("lines") ?? "", 10);
   // Clamp to a sane ceiling — don't trust the client (or Herdr) to bound an enormous read.
@@ -134,34 +143,24 @@ async function readPane(
       ? Math.min(linesParam, MAX_READ_LINES)
       : cfg.readLines;
   try {
-    // "ansi" so the client can render a faithful, colored terminal mirror. It is also, as far as we
-    // have probed, why this read leaves the operator's terminal alone: a `recent` read only harvests
-    // an alt-screen pane — scrolling it up and back — in `text` format. `lines` here is whatever the
-    // web app asked for (600 for the history view), well past any pane's height, so switching this
-    // to "text" would move someone's screen on every revalidate. See HERDR_API.md → `pane.read`.
-    const read = await herdr.readPane(paneId, "recent", lines, "ansi");
-    const data = paneReadResponse(paneId, read);
-    const nativeTelemetry = await native;
-    if (nativeTelemetry) data.nativeTelemetry = nativeTelemetry;
+    const body = await mirrorReads.get(`${session}\u0000${paneId}\u0000${lines}`, async () => {
+      // "ansi" so the client can render a faithful, colored terminal mirror. It is also, as far as we
+      // have probed, why this read leaves the operator's terminal alone: a `recent` read only harvests
+      // an alt-screen pane — scrolling it up and back — in `text` format. `lines` here is whatever the
+      // web app asked for (600 for the history view), well past any pane's height, so switching this
+      // to "text" would move someone's screen on every revalidate. See HERDR_API.md → `pane.read`.
+      const [read, nativeTelemetry] = await Promise.all([herdr.readPane(paneId, "recent", lines, "ansi"), native()]);
+      const data = paneReadResponse(paneId, read);
+      if (nativeTelemetry) data.nativeTelemetry = nativeTelemetry;
+      return new JsonBody(data);
+    });
     // ETag is derived from the serialised body — if content hasn't changed the client gets a 304
     // and skips the whole transfer (the big win on a cellular link).
-    const body = new JsonBody(data);
     const etag = body.etag;
     // Tag pane polls too (both the 304 and the full body), so a client that only has a pane open —
     // not the home snapshot — still observes a live rebuild between polls.
     const build = await buildId();
-    if (notModified(req.headers.get("if-none-match"), etag)) {
-      // RFC 7232 §4.1: 304 MUST echo the ETag; body MUST be empty.
-      return withBuildHeader(
-        secure(
-          new Response(null, {
-            status: 304,
-            headers: { etag, "cache-control": "no-store" },
-          }),
-        ),
-        build,
-      );
-    }
+    if (notModified(req.headers.get("if-none-match"), etag)) return withBuildHeader(secure(notModifiedResponse(etag)), build);
     return withBuildHeader(
       secure(body.response(req.headers.get("accept-encoding"), { etag })),
       build,

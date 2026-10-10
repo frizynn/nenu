@@ -25,6 +25,7 @@ import {
   saveLastSnapshot,
 } from "@/lib/last-seen";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
+import { needsFetch } from "@/lib/revalidation";
 import { SESSION_PARAM, normalizeSession } from "@/lib/session";
 import type {
   AgentView,
@@ -239,7 +240,19 @@ export async function rootLoader({ request }: { request?: Request } = {}): Promi
   // than hanging on a doomed fetch. Revalidations fall through and really fetch (so recovery lands and
   // markLive clears the latch → the next run fetches live and replaces the stale herd).
   if (isNavigation && isLostLatched()) return staleHome(session);
+  // A live event that named only the open pane: hand back the very same herd object (lib/revalidation.ts).
+  const previous = lastHomeData.get(session ?? "");
+  if (!isNavigation && previous && !needsFetch("root")) return previous;
 
+  const home = await loadHome(session, request);
+  lastHomeData.set(session ?? "", home);
+  return home;
+}
+
+// What rootLoader last returned per session, so a narrowed revalidation can return it unchanged.
+const lastHomeData = new Map<string, HomeData>();
+
+async function loadHome(session: string | undefined, request: Request | undefined): Promise<HomeData> {
   try {
     const snap = await fetchSnapshot(session, request?.signal);
     lastSnapshot.set(session ?? "", snap);
@@ -389,7 +402,29 @@ export async function paneLoader({
   // Fast path: navigating to a pane during a known, escalated outage shows its last-known mirror (or an
   // empty degraded pane if never visited) INSTANTLY — never a 10s hang on a fetch that can't land.
   if (isNavigation && isLostLatched()) return stalePane(paneId, session, lines);
+  // A live event that named only the herd: the mirror stays as it was (lib/revalidation.ts).
+  const previous = lastPaneData.get(key);
+  if (!isNavigation && previous?.requestedLines === lines && !needsFetch("pane")) return previous;
 
+  const pane = await loadPane(paneId, session, lines, request);
+  rememberPaneData(key, pane);
+  return pane;
+}
+
+// What paneLoader last returned per pane, bounded like the text cache.
+const lastPaneData = new Map<string, PaneData>();
+
+function rememberPaneData(key: string, pane: PaneData): void {
+  lastPaneData.delete(key);
+  lastPaneData.set(key, pane);
+  if (lastPaneData.size > PANE_TEXT_MAX) {
+    const oldest = lastPaneData.keys().next().value;
+    if (oldest !== undefined) lastPaneData.delete(oldest);
+  }
+}
+
+async function loadPane(paneId: string, session: string | undefined, lines: number, request: Request | undefined): Promise<PaneData> {
+  const key = paneKey(paneId, session);
   try {
     // On a 304 fetchPane returns the cached body, so `read.text` is populated either way; the
     // `?? lastPaneText` is just belt-and-suspenders. Both paths are a success (not the error

@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from "react";
 
+import type { LiveTopic } from "@/lib/types";
+
 // The bridge's live invalidations (bridge/live-events.ts), received over one same-origin
 // EventSource. An event only NAMES what changed (the herd, a pane's mirror, its queue or its
 // transcript), and whoever shows that thing re-reads it through the usual API. Polling stays as the
 // fallback: relaxed while the stream is up, at its old cadence while it is down, so a lost event
 // costs one fallback interval and never correctness.
 
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal";
+export type { LiveTopic };
 /** `resync` follows a reconnect: events may have been missed, so every reader refreshes once. */
 export type LiveEvent = { topic: LiveTopic; paneId?: string } | { topic: "resync"; paneId?: undefined };
 
@@ -36,7 +38,7 @@ export function onLiveEvent(listener: (event: LiveEvent) => void): () => void {
 
 /** Whether `event` asks the reader of `topic` for `paneId` to refresh. */
 export function concerns(event: LiveEvent, topic: LiveTopic, paneId?: string | null): boolean {
-  return event.topic === "resync" || (event.topic === topic && (topic === "snapshot" || event.paneId === paneId));
+  return event.topic === "resync" || (event.topic === topic && (topic === "snapshot" || topic === "org" || event.paneId === paneId));
 }
 
 /** Live read, safe from timers, like idle.ts's isLocked. */
@@ -73,14 +75,14 @@ function emit(event: LiveEvent): void {
   for (const listener of listeners) listener(event);
 }
 
-const TOPICS: readonly string[] = ["snapshot", "pane", "queue", "journal"];
+const TOPICS: Record<LiveTopic, true> = { snapshot: true, pane: true, queue: true, journal: true, interaction: true, org: true };
 
 /** Validate one `data:` payload; anything else is ignored rather than trusted. */
 export function parseLiveEvent(data: string): LiveEvent | null {
   try {
     const value: unknown = JSON.parse(data);
     if (!value || typeof value !== "object" || !("topic" in value) || typeof value.topic !== "string") return null;
-    if (!TOPICS.includes(value.topic)) return null;
+    if (!Object.hasOwn(TOPICS, value.topic)) return null;
     const topic = value.topic as LiveTopic;
     if (!("paneId" in value)) return { topic };
     return typeof value.paneId === "string" ? { topic, paneId: value.paneId } : null;
@@ -115,13 +117,14 @@ export const LIVE_BACKOFF_MS: readonly number[] = [1_000, 2_000, 5_000, 15_000, 
 
 /**
  * Hold one stream open until the returned stop function runs. Opening marks the store healthy, an
- * error marks it unhealthy and reconnects after the backoff, and a reconnect emits `resync`.
+ * error marks it unhealthy and reconnects after the backoff, and a reconnect emits `resync`. With
+ * `resync`, the first open emits it too: the stream replaces one that closed moments ago.
  */
-export function connectLiveEvents(url: string, deps: LiveDeps = browserDeps): () => void {
+export function connectLiveEvents(url: string, deps: LiveDeps = browserDeps, { resync = false } = {}): () => void {
   let source: LiveSource | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
-  let opened = false;
+  let opened = resync;
   let stopped = false;
 
   const connect = () => {

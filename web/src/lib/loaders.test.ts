@@ -720,3 +720,36 @@ describe("cold boot with no network", () => {
     });
   });
 });
+
+describe("loaders — narrowed revalidation", () => {
+  it("a pane-only revalidation hands back the same herd without fetching the snapshot", async () => {
+    const { rootLoader, paneLoader } = await import("./loaders");
+    const { narrowRevalidation, revalidationSettled } = await import("./revalidation");
+    const home = await rootLoader({ request: new Request("http://localhost/pane/w1%3Ap1") });
+    await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1%3Ap1") });
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    narrowRevalidation("pane");
+    expect(await rootLoader({ request: new Request("http://localhost/pane/w1%3Ap1") })).toBe(home);
+    const urls = () => fetchSpy.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input));
+    expect(urls().some((url) => url.includes("/api/snapshot"))).toBe(false);
+    const pane = await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1%3Ap1") });
+    expect(urls().some((url) => url.includes("/api/pane/"))).toBe(true);
+
+    revalidationSettled();
+    narrowRevalidation("root");
+    fetchSpy.mockClear();
+    expect(await paneLoader({ params: { paneId: "w1:p1" }, request: new Request("http://localhost/pane/w1%3Ap1") })).toBe(pane);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("a navigation always fetches, narrowed or not", async () => {
+    const { rootLoader } = await import("./loaders");
+    const { narrowRevalidation } = await import("./revalidation");
+    await rootLoader({ request: new Request("http://localhost/") });
+    narrowRevalidation("pane");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await rootLoader({ request: new Request("http://localhost/space/w1") });
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+});

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeLiveStream } from "@/test/live-stream";
-import { concerns, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, type LiveEvent } from "./live-events";
+import { concerns, connectLiveEvents, isLiveHealthy, onLiveEvent, parseLiveEvent, resetLiveEvents, type LiveEvent, type LiveSource } from "./live-events";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -13,6 +13,9 @@ describe("parseLiveEvent", () => {
   it("accepts the bridge's frames and nothing else", () => {
     expect(parseLiveEvent('{"topic":"snapshot"}')).toEqual({ topic: "snapshot" });
     expect(parseLiveEvent('{"topic":"queue","paneId":"w1:p1"}')).toEqual({ topic: "queue", paneId: "w1:p1" });
+    expect(parseLiveEvent('{"topic":"org"}')).toEqual({ topic: "org" });
+    expect(parseLiveEvent('{"topic":"interaction","paneId":"w1:p1"}')).toEqual({ topic: "interaction", paneId: "w1:p1" });
+    expect(parseLiveEvent('{"topic":"toString"}')).toBeNull();
     expect(parseLiveEvent('{"topic":"resync"}')).toBeNull();
     expect(parseLiveEvent('{"topic":"pane","paneId":3}')).toBeNull();
     expect(parseLiveEvent("not json")).toBeNull();
@@ -54,5 +57,21 @@ describe("connectLiveEvents", () => {
     expect(stream.sources[1]!.close).toHaveBeenCalled();
     vi.advanceTimersByTime(60_000);
     expect(stream.sources).toHaveLength(2);
+  });
+});
+
+describe("connectLiveEvents with resync", () => {
+  it("resyncs on its first open when it replaces a stream that just closed", () => {
+    const events: LiveEvent[] = [];
+    onLiveEvent((event) => events.push(event));
+    let source: LiveSource | undefined;
+    const stop = connectLiveEvents("/api/events?watch=w1%3Ap1", {
+      open: () => (source = { onopen: null, onmessage: null, onerror: null, close: vi.fn() }),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (handle) => clearTimeout(handle),
+    }, { resync: true });
+    source!.onopen?.(new Event("open"));
+    expect(events).toEqual([{ topic: "resync" }]);
+    stop();
   });
 });
