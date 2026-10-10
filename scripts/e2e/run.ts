@@ -146,15 +146,20 @@ async function project(): Promise<void> {
       throw new Error(`Organizations was never asked to ${verb}`);
     };
 
-    let flowError: string | null = null;
+    // Both pages first, so neither capture shows what the flows below create.
     for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
       const { page, close } = await openProject(device);
       await shoot(page, `project-${name}`);
+      await close();
+    }
+    let flowError: string | null = null;
+    for (const [name, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+      const { page, close } = await openProject(device);
       try {
         if (name === "desktop") {
           await page.getByRole("button", { name: "New coordinator" }).click({ timeout: 5000 });
-          await page.getByLabel("Title").fill("Pagos y facturación");
-          await page.getByLabel("Task").fill("Coordinate the billing work: invoices, receipts and the payment provider.");
+          await page.getByLabel("Title", { exact: true }).fill("Pagos y facturación");
+          await page.getByLabel("Task", { exact: true }).fill("Coordinate the billing work: invoices, receipts and the payment provider.");
           await shoot(page, "new-coordinator-desktop");
           await page.getByRole("button", { name: "Create coordinator" }).click();
           await page.locator('main >> text="Pagos y facturación"').waitFor({ timeout: 15_000 });
@@ -164,9 +169,10 @@ async function project(): Promise<void> {
           await calledWith("open");
         } else {
           await page.getByRole("button", { name: "New thread" }).click({ timeout: 5000 });
-          await page.getByLabel("Title").fill("Ajustar checkout");
+          await page.getByLabel("Title", { exact: true }).fill("Ajustar checkout");
+          // A select's accessible name carries its chosen option, so its label is matched loosely.
           await page.getByLabel("Parent").selectOption("t-0010");
-          await page.getByLabel("Task").fill("Make the checkout fit a 390 px screen.");
+          await page.getByLabel("Task", { exact: true }).fill("Make the checkout fit a 390 px screen.");
           await shoot(page, "new-thread-phone");
           await page.getByRole("button", { name: "Create thread" }).click();
           await page.locator('main >> text="Ajustar checkout"').waitFor({ timeout: 15_000 });

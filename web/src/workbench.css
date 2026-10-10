@@ -190,6 +190,8 @@
 .quiet-action:hover, .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 
 .task-list { display: flex; flex-direction: column; gap: 1px; }
+/* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */
+.task-branch { margin-left: 11px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
 .task-row { display: flex; align-items: flex-start; border-radius: 8px; }
 .task-row:hover, .task-row[aria-current="true"] { background: var(--workbench-row-hover); }
 .task-row[aria-current="true"] { background: var(--workbench-row-selected); }

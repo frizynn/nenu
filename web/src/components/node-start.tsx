@@ -116,12 +116,6 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
   return (
     <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)}>
       {onRole && nodes && <Segmented label="Role" options={ROLES} value={role} onChange={onRole} />}
-      {templates.length > 0 && <label className="block text-sm font-medium">Template
-        <select className={FIELD} value={template} onChange={set("template")}>
-          <option value="">None</option>
-          {templates.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} · {candidate.scope}</option>)}
-        </select>
-      </label>}
       <label className="block text-sm font-medium">Title
         <input className={FIELD} value={form.title} required onChange={set("title")} />
       </label>
@@ -131,10 +125,17 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
           {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.title}</option>)}
         </select>
       </label>}
-      {!template && profiles.length > 0 && <label className="block text-sm font-medium">Profile
-        <select className={FIELD} value={form.profile} onChange={set("profile")}>
+      {/* On screen while the names load, so the form does not jump under the person's typing. */}
+      {!template && <label className="block text-sm font-medium">Profile
+        <select className={FIELD} value={form.profile} disabled={options.kind === "loading"} onChange={set("profile")}>
           <option value="">Project default</option>
           {profiles.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
+        </select>
+      </label>}
+      {templates.length > 0 && <label className="block text-sm font-medium">Template
+        <select className={FIELD} value={template} onChange={set("template")}>
+          <option value="">None</option>
+          {templates.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} · {candidate.scope}</option>)}
         </select>
       </label>}
       <label className="block text-sm font-medium">Task

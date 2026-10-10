@@ -1,14 +1,15 @@
 import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
-import { ProjectTasks } from "@/components/project-tasks";
+import { ProjectOrganization } from "@/components/project-organization";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
 
 // A project opens on its coordinator's conversation; the pane route frames it with the task list.
-// Without a live coordinator there is no conversation to show, so the project is its task list.
+// Without a live coordinator there is no conversation to show, so the project is its organization:
+// a way to start the coordinator, the threads nested under their coordinators, and New.
 export function ProjectRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "" } = useParams();
@@ -28,11 +29,9 @@ export function ProjectRoute() {
     <ReadOnlyBanner device={data.device} />
     <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-12">
       <div className="mx-auto w-full max-w-2xl">
-        {!project ? <p className="py-16 text-center text-sm text-muted-foreground">Project not found in this Herdr session.</p> : <>
-          <ProjectTasks project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
-            onOpenPane={(id) => navigate(panePath(id, data.session))} onChanged={() => revalidator.revalidate()} />
-          <p className="mt-8 text-sm text-muted-foreground">The coordinator is not running in this Herdr session, so there is no project chat yet.</p>
-        </>}
+        {!project ? <p className="py-16 text-center text-sm text-muted-foreground">Project not found in this Herdr session.</p>
+          : <ProjectOrganization project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
+            onOpenPane={(id) => navigate(panePath(id, data.session))} onChanged={() => revalidator.revalidate()} />}
       </div>
     </main>
   </div>;

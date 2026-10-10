@@ -108,7 +108,8 @@ it("offers only a top-level thread when upstream herdr-projects runs the project
   await user.click(screen.getByRole("button", { name: "New thread" }));
   const dialog = within(screen.getByRole("dialog", { name: "New thread" }));
   expect(dialog.queryByLabelText("Parent")).not.toBeInTheDocument();
-  expect(dialog.queryByLabelText("Profile")).not.toBeInTheDocument();
+  await waitFor(() => expect(dialog.getByLabelText("Profile")).toBeEnabled());
+  expect(within(dialog.getByLabelText("Profile")).getAllByRole("option").map((option) => option.textContent)).toEqual(["Project default"]);
 });
 
 it("keeps the dialog open with Organizations' refusal", async () => {
