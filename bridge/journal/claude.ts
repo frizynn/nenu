@@ -94,7 +94,7 @@ export function classifyUserText(
   if (isEnvelope("system-reminder", text)) return null;
   if (isEnvelope("local-command-caveat", text)) return null;
 
-  // Newer versions lead a slash command with `<command-message>`; the command line is the same.
+  // Claude Code writes a slash command's tags in either order (both seen across 2.1.280–2.1.295).
   if (isEnvelope("command-name", text) || isEnvelope("command-message", text)) {
     const name = inner("command-name", text) ?? "";
     const args = inner("command-args", text) ?? "";
