@@ -295,4 +295,23 @@ describe("live transcript updates", () => {
     stream.stop();
     resetLiveEvents();
   });
+
+  it("relaxes a busy transcript to the safety poll while the stream is up, and catches up when it drops", async () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    const { unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true, busy: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(async () => { stream.fail(); await vi.advanceTimersByTimeAsync(0); });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    unmount();
+    stream.stop();
+    resetLiveEvents();
+  });
 });

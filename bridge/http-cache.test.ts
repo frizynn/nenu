@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { computeEtag, gzipJsonResponse, notModified } from "./http-cache.ts";
+import { computeEtag, gzipJsonResponse, notModified, notModifiedResponse, SharedLoads } from "./http-cache.ts";
 
 // All three helpers are pure (no I/O), so we drive them directly.
 
@@ -99,5 +99,36 @@ describe("gzipJsonResponse", () => {
     const res = gzipJsonResponse(data, "gzip", { etag });
     expect(res.headers.get("content-encoding")).toBe("gzip");
     expect(res.headers.get("etag")).toBe(etag);
+  });
+});
+
+describe("notModifiedResponse", () => {
+  test("is an empty 304 that echoes the ETag", async () => {
+    const res = notModifiedResponse('"abc"');
+    expect(res.status).toBe(304);
+    expect(res.headers.get("etag")).toBe('"abc"');
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.text()).toBe("");
+  });
+});
+
+describe("SharedLoads", () => {
+  test("callers share a load while it runs; a caller after it settled loads again", async () => {
+    let loads = 0;
+    const shared = new SharedLoads<number>();
+    const load = async () => ++loads;
+    const [a, b] = await Promise.all([shared.get("k", load), shared.get("k", load)]);
+    expect([a, b, loads]).toEqual([1, 1, 1]);
+    expect(await shared.get("k", load)).toBe(2);
+    expect(await shared.get("other", load)).toBe(3);
+  });
+
+  test("a failed load is not kept", async () => {
+    let fail = true;
+    const shared = new SharedLoads<string>();
+    const load = async () => { if (fail) throw new Error("down"); return "ok"; };
+    await expect(shared.get("k", load)).rejects.toThrow("down");
+    fail = false;
+    expect(await shared.get("k", load)).toBe("ok");
   });
 });

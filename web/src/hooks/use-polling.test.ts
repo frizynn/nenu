@@ -1,8 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 
-import { SUPERSEDE_MS, intervalFor, usePolling } from "./use-polling";
+import { SUPERSEDE_MS, intervalFor, scopeOf, usePolling } from "./use-polling";
 import { isCatchingUp, resetIdleLock, setLocked } from "@/lib/idle";
-import { resetLiveEvents, setMirrorShown } from "@/lib/live-events";
+import { resetLiveEvents } from "@/lib/live-events";
+import { needsFetch, resetRevalidation } from "@/lib/revalidation";
 import { fakeLiveStream } from "@/test/live-stream";
 import type { HomeData } from "@/lib/loaders";
 import type { AgentView } from "@/lib/types";
@@ -237,26 +238,35 @@ it("replaces a request stranded by backgrounding immediately on return", () => {
 });
 
 describe("with the live-events stream", () => {
-  const live = (mirrorShown: boolean) => ({ healthy: true, mirrorShown });
-
-  it("drops to the safety cadence when nothing on screen needs polling", () => {
+  it("drops every view to the safety cadence, and keeps the old cadence while the stream is down", () => {
     const busy = makeData([makeAgent("w1:p1", "working")]);
-    expect(intervalFor(busy, null, live(true))).toBe(10_000);
-    expect(intervalFor(busy, "w1:p1", live(false))).toBe(COLD);
-    expect(intervalFor(busy, "w1:p1", live(true))).toBe(HOT);
-    expect(intervalFor(busy, "w1:p1", { healthy: false, mirrorShown: false })).toBe(HOT);
+    expect(intervalFor(busy, null, { healthy: true })).toBe(10_000);
+    expect(intervalFor(busy, "w1:p1", { healthy: true })).toBe(10_000);
+    expect(intervalFor(busy, "w1:p1", { healthy: false })).toBe(HOT);
+  });
+
+  it("maps each event to the loader it needs", () => {
+    expect(scopeOf({ topic: "snapshot" }, "w1:p1")).toBe("root");
+    expect(scopeOf({ topic: "org" }, null)).toBe("root");
+    expect(scopeOf({ topic: "pane", paneId: "w1:p1" }, "w1:p1")).toBe("pane");
+    expect(scopeOf({ topic: "pane", paneId: "w1:p2" }, "w1:p1")).toBeNull();
+    expect(scopeOf({ topic: "pane", paneId: "w1:p1" }, null)).toBeNull();
+    expect(scopeOf({ topic: "journal", paneId: "w1:p1" }, "w1:p1")).toBeNull();
+    expect(scopeOf({ topic: "resync" }, null)).toBe("all");
   });
 
   beforeEach(() => {
     vi.useFakeTimers();
     rr.state = "idle";
     rr.revalidate.mockReset();
+    resetRevalidation();
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
   });
   afterEach(() => {
     vi.useRealTimers();
     resetLiveEvents();
     resetIdleLock();
+    resetRevalidation();
   });
 
   it("revalidates on a herd or open-pane event, and replays one that lands mid-load", () => {
@@ -279,18 +289,44 @@ describe("with the live-events stream", () => {
     stream.stop();
   });
 
-  it("relaxes the open pane's poll only while its mirror is off screen", () => {
+  it("re-reads only the loader an event names, and everything on a tick", () => {
     const stream = fakeLiveStream();
     stream.open();
-    setMirrorShown(false);
-    renderHook(() => usePolling(makeData([makeAgent("w1:p1", "working")]), "w1:p1"));
-    vi.advanceTimersByTime(HOT);
-    expect(rr.revalidate).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(COLD - HOT);
+    const { rerender } = renderHook(() => usePolling(makeData([makeAgent("w1:p1", "working")]), "w1:p1"));
+    stream.send({ topic: "pane", paneId: "w1:p1" });
+    expect([needsFetch("root"), needsFetch("pane")]).toEqual([false, true]);
+
+    // A herd event racing the first run joins it instead of replacing it.
+    stream.send({ topic: "snapshot" });
+    expect([needsFetch("root"), needsFetch("pane")]).toEqual([true, true]);
+    rr.state = "loading";
+    rerender();
+    rr.state = "idle";
+    rerender();
+    // At rest, a revalidation nobody narrowed (a mutation's) re-reads everything.
+    expect([needsFetch("root"), needsFetch("pane")]).toEqual([true, true]);
+
+    stream.send({ topic: "snapshot" });
+    expect([needsFetch("root"), needsFetch("pane")]).toEqual([true, false]);
+    rr.state = "loading";
+    rerender();
+    rr.state = "idle";
+    rerender();
+    rr.revalidate.mockClear();
+    vi.advanceTimersByTime(10_000);
     expect(rr.revalidate).toHaveBeenCalledTimes(1);
-    act(() => setMirrorShown(true));
-    vi.advanceTimersByTime(HOT);
-    expect(rr.revalidate).toHaveBeenCalledTimes(2);
+    expect([needsFetch("root"), needsFetch("pane")]).toEqual([true, true]);
+    stream.stop();
+  });
+
+  it("polls the open pane at the safety cadence whatever is on screen", () => {
+    const stream = fakeLiveStream();
+    stream.open();
+    renderHook(() => usePolling(makeData([makeAgent("w1:p1", "working")]), "w1:p1"));
+    vi.advanceTimersByTime(COLD);
+    expect(rr.revalidate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(10_000 - COLD);
+    expect(rr.revalidate).toHaveBeenCalledTimes(1);
     stream.stop();
   });
 });

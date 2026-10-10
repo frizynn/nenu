@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchHistory, isApiErrorStatus } from "@/lib/api";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { isLocked, useLocked } from "@/lib/idle";
-import { concerns, onLiveEvent } from "@/lib/live-events";
+import { concerns, isLiveHealthy, onLiveEvent, useLiveHealthy } from "@/lib/live-events";
 import type { PaneHistoryResponse } from "@/lib/types";
 
 interface LiveConversationOptions {
@@ -20,6 +20,12 @@ interface ConversationState {
   loading: boolean;
   error: boolean;
 }
+
+const BUSY_MS = 1_500;
+const IDLE_MS = 12_000;
+// While the live stream is up the bridge watches the journal and names each append (ADR 0058), so a
+// busy transcript only needs the safety-net poll.
+const LIVE_BUSY_MS = 10_000;
 
 /** A small, newest-anchored journal window; the history route owns older turns. */
 export function useLiveConversation({
@@ -56,7 +62,8 @@ export function useLiveConversation({
     const schedule = () => {
       clearTimeout(timer);
       if (!disposed && !document.hidden && !isLocked()) {
-        timer = setTimeout(() => void poll(), failedAt !== null ? 3_000 : stateRef.current.history?.available === false ? 2_000 : busyRef.current ? 1_500 : 12_000);
+        const cadence = !busyRef.current ? IDLE_MS : isLiveHealthy() ? LIVE_BUSY_MS : BUSY_MS;
+        timer = setTimeout(() => void poll(), failedAt !== null ? 3_000 : stateRef.current.history?.available === false ? 2_000 : cadence);
       }
     };
 
@@ -137,10 +144,19 @@ export function useLiveConversation({
     }
   }, [scope, enabled, locked, busy]);
 
-  // The bridge names a transcript change (a status flip, a delivered queue message) as it happens.
+  // The bridge names a transcript change (an append, a status flip, a delivered queue message) as it
+  // happens.
   useEffect(() => onLiveEvent((event) => {
     if (concerns(event, "journal", paneId)) refreshRef.current(true);
   }), [paneId]);
+
+  // The stream dropped: appends may have gone unannounced, so read now and go back to the fast poll.
+  const liveHealthy = useLiveHealthy();
+  const wasHealthy = useRef(liveHealthy);
+  useEffect(() => {
+    if (wasHealthy.current && !liveHealthy) refreshRef.current(true);
+    wasHealthy.current = liveHealthy;
+  }, [liveHealthy]);
 
   const refresh = useCallback(() => refreshRef.current(true), []);
   const current = state.scope === scope && enabled;

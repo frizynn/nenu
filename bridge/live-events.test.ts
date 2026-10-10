@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { LiveEvents, liveEventStream, snapshotWatcher, type LiveEvent } from "./live-events.ts";
+import { LiveEvents, liveEventStream, LiveThrottle, snapshotWatcher, type LiveEvent } from "./live-events.ts";
+import { PaneWatcher } from "./pane-watcher.ts";
+import type { Services, SessionRouteRequest } from "./routes/context.ts";
+import { eventRoutes } from "./routes/events.ts";
 import type { EngineSnapshot } from "./state-engine.ts";
 import { structuralFixture } from "./structural-fixture.test-support.ts";
 import type { AgentView } from "./types.ts";
@@ -23,6 +26,36 @@ describe("snapshotWatcher", () => {
       { session: "s", topic: "pane", paneId: "a" },
       { session: "s", topic: "journal", paneId: "a" },
     ]);
+  });
+});
+
+describe("LiveThrottle", () => {
+  it("sends the first change at once and folds a burst into one trailing event per key", async () => {
+    const events: LiveEvent[] = [];
+    const throttle = new LiveThrottle({ publish: (event) => events.push(event) }, 30);
+    const a = { session: "s", topic: "pane" as const, paneId: "a" };
+    const b = { session: "s", topic: "pane" as const, paneId: "b" };
+    throttle.publish(a);
+    throttle.publish(a);
+    throttle.publish(a);
+    throttle.publish(b);
+    expect(events).toEqual([a, b]);
+    await Bun.sleep(45);
+    expect(events).toEqual([a, b, a]);
+  });
+
+  it("waits out the delay before the first event, and forgets a key on request", async () => {
+    const events: LiveEvent[] = [];
+    const throttle = new LiveThrottle({ publish: (event) => events.push(event) }, 0, 10);
+    const a = { session: "s", topic: "journal" as const, paneId: "a" };
+    throttle.publish(a);
+    expect(events).toEqual([]);
+    await Bun.sleep(20);
+    expect(events).toEqual([a]);
+    throttle.publish(a);
+    throttle.forget(a);
+    await Bun.sleep(20);
+    expect(events).toEqual([a]);
   });
 });
 
@@ -93,6 +126,32 @@ describe("GET /api/events", () => {
   });
 });
 
+describe("GET /api/snapshot", () => {
+  it("answers an unchanged herd with 304, whatever the clock says", async () => {
+    const app = await structuralFixture();
+    try {
+      const first = await fetch(`${app.url}/api/snapshot`);
+      const etag = first.headers.get("etag");
+      expect(etag).toMatch(/^"[0-9a-f]+"$/);
+      const body = await first.json() as { ts: number; looseWorkspaceIds: string[] };
+      expect(typeof body.ts).toBe("number");
+      expect(Array.isArray(body.looseWorkspaceIds)).toBe(true);
+      await Bun.sleep(5);
+      const again = await fetch(`${app.url}/api/snapshot`, { headers: { "if-none-match": etag! } });
+      expect(again.status).toBe(304);
+      expect(again.headers.get("etag")).toBe(etag);
+      expect(await again.text()).toBe("");
+      await app.action("/api/pane/w:p/rename", { label: "After" });
+      await app.engine.refresh();
+      const changed = await fetch(`${app.url}/api/snapshot`, { headers: { "if-none-match": etag! } });
+      expect(changed.status).toBe(200);
+      expect(changed.headers.get("etag")).not.toBe(etag);
+    } finally {
+      await app.dispose();
+    }
+  });
+});
+
 describe("a client that stops reading", () => {
   it("is closed instead of buffered without bound", async () => {
     const hub = new LiveEvents();
@@ -103,5 +162,49 @@ describe("a client that stops reading", () => {
     let frames = 0;
     while (!(await reader.read()).done) frames++;
     expect(frames).toBeLessThan(300);
+  });
+});
+
+describe("GET /api/events ?watch=", () => {
+  function route(herd: () => EngineSnapshot, refreshed: () => EngineSnapshot = herd) {
+    const live = new LiveEvents();
+    const paneWatcher = new PaneWatcher(live, { readEveryMs: 1_000 });
+    const herdr = { async readPane(paneId: string) { return { pane_id: paneId, text: "", truncated: false, revision: 0 }; } };
+    const abort = new AbortController();
+    let refreshes = 0;
+    const engine = { current: herd, async refresh() { refreshes++; return refreshed(); } };
+    const open = async (watch: string) => {
+      const services = { cfg: { transcript: false }, live, paneWatcher, journalWatch: { resolveWith() {} } } as unknown as Services;
+      const request = {
+        req: new Request("http://bridge/api/events", { signal: abort.signal }),
+        url: new URL(`http://bridge/api/events?watch=${encodeURIComponent(watch)}`),
+        rt: { name: "s", engine, herdr },
+        server: { timeout() {} },
+      } as unknown as SessionRouteRequest;
+      return eventRoutes[0]!.handle(services, request);
+    };
+    return { live, paneWatcher, abort, open, refreshes: () => refreshes };
+  }
+
+  it("stops watching when the stream closes itself on a client that stopped reading", async () => {
+    const { live, paneWatcher, abort, open } = route(() => snap(pane("p", "idle")));
+    const response = await open("p");
+    expect(paneWatcher.watching).toEqual(["p"]);
+    for (let n = 0; n < 1000; n++) live.publish({ session: "s", topic: "pane", paneId: `x${n}` });
+    await Bun.sleep(60);
+    const reader = response.body!.getReader();
+    while (!(await reader.read()).done);
+    expect(abort.signal.aborted).toBe(false);
+    expect(paneWatcher.watching).toEqual([]);
+  });
+
+  it("refreshes the herd once for a pane created after the last snapshot", async () => {
+    const { paneWatcher, abort, open, refreshes } = route(() => snap(), () => snap(pane("new", "idle")));
+    await open("new");
+    expect([refreshes(), paneWatcher.watching]).toEqual([1, ["new"]]);
+    await open("bogus");
+    expect([refreshes(), paneWatcher.watching]).toEqual([2, ["new"]]);
+    abort.abort();
+    expect(paneWatcher.watching).toEqual([]);
   });
 });

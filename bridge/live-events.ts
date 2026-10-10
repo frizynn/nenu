@@ -1,4 +1,5 @@
 import type { EngineSnapshot } from "./state-engine.ts";
+import type { LiveEvent, LivePublisher } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Live invalidations for the browser. The bridge already learns about herd changes the moment they
@@ -9,15 +10,9 @@ import type { EngineSnapshot } from "./state-engine.ts";
 // goes through the usual routes, gates and caches.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal";
+export type { LiveEvent, LiveTopic } from "./types.ts";
 
-export interface LiveEvent {
-  session: string;
-  topic: LiveTopic;
-  paneId?: string;
-}
-
-export class LiveEvents {
+export class LiveEvents implements LivePublisher {
   private readonly listeners = new Set<(event: LiveEvent) => void>();
 
   publish(event: LiveEvent): void {
@@ -57,6 +52,45 @@ export function snapshotWatcher(session: string, publish: (event: LiveEvent) => 
   };
 }
 
+const eventKey = (event: LiveEvent) => `${event.session}\u0000${event.topic}\u0000${event.paneId ?? ""}`;
+
+/**
+ * Publish one event key at most once per `gapMs`. A change after a quiet spell goes out after
+ * `delayMs` (0 = at once); changes inside the gap collapse into one trailing publish, so a screen that
+ * repaints four times a second costs a watching phone one re-read a second.
+ */
+export class LiveThrottle {
+  private readonly last = new Map<string, number>();
+  private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+
+  constructor(
+    private readonly live: LivePublisher,
+    private readonly gapMs: number,
+    private readonly delayMs = 0,
+  ) {}
+
+  publish(event: LiveEvent): void {
+    const key = eventKey(event);
+    if (this.pending.has(key)) return;
+    const wait = Math.max(this.delayMs, (this.last.get(key) ?? -Infinity) + this.gapMs - Date.now());
+    const fire = () => {
+      this.pending.delete(key);
+      this.last.set(key, Date.now());
+      this.live.publish(event);
+    };
+    if (wait <= 0) fire();
+    else this.pending.set(key, setTimeout(fire, wait));
+  }
+
+  /** Drop what is held for this event: the producer stopped watching it. */
+  forget(event: LiveEvent): void {
+    const key = eventKey(event);
+    clearTimeout(this.pending.get(key));
+    this.pending.delete(key);
+    this.last.delete(key);
+  }
+}
+
 const encoder = new TextEncoder();
 // Frames a client may leave unread before the stream is closed. A page that stopped reading reopens
 // and refreshes everything on reconnect, so dropping it loses nothing and bounds what one slow phone
@@ -71,6 +105,9 @@ interface StreamOptions {
   /** The reconnect delay suggested to EventSource, in ms. */
   retryMs?: number;
   signal?: AbortSignal;
+  /** Runs once when the stream ends, whoever ended it. Bun does not abort the request's signal when
+   *  the server closes the body (a client that stopped reading), so request-scoped work hangs here. */
+  onClose?: () => void;
 }
 
 /**
@@ -79,7 +116,7 @@ interface StreamOptions {
  * subscription and both timers.
  */
 export function liveEventStream(hub: LiveEvents, session: string, options: StreamOptions = {}): ReadableStream<Uint8Array> {
-  const { heartbeatMs = 15_000, flushMs = 25, retryMs = 2_000, signal } = options;
+  const { heartbeatMs = 15_000, flushMs = 25, retryMs = 2_000, signal, onClose } = options;
   let stop = () => {};
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -119,6 +156,7 @@ export function liveEventStream(hub: LiveEvents, session: string, options: Strea
         } catch {
           // Already closed by the consumer.
         }
+        onClose?.();
       };
       signal?.addEventListener("abort", stop);
       if (signal?.aborted) return stop();
