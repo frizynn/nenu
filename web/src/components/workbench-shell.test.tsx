@@ -128,7 +128,8 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   const { sidebar, user } = setup({ ...data, agents: [{ ...data.agents[0]!, status: "blocked" }] });
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
-  expect(rail.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/space/w%3A1?s=work");
+  // A workspace of one pane opens that pane.
+  expect(rail.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(rail.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   await user.click(rail.getByRole("button", { name: "Needs you, 1" }));
   expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "true");

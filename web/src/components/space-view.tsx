@@ -18,15 +18,23 @@ interface SpaceViewProps {
   tabs: TabView[];
   agents: AgentView[];
   shellPanes: AgentView[];
-  /** The tab picked last; Herdr's active tab when null or gone. */
-  selectedTab: string | null;
-  onSelectTab: (tabId: string) => void;
   onNewTab: () => void;
   /** After a rename or close lands, so the snapshot catches up. */
   onChanged: () => void;
   session?: string;
   readOnly?: boolean;
   now?: number;
+}
+
+/**
+ * The tab last shown in each workspace, so Back from a pane lands on it. In memory, not in the URL:
+ * a search param is a navigation, which waits on a snapshot read before the tab can change.
+ */
+const lastShownTab = new Map<string, string>();
+
+/** Forget every remembered tab, for tests. */
+export function __resetShownTabs(): void {
+  lastShownTab.clear();
 }
 
 /**
@@ -39,17 +47,20 @@ export function SpaceView({
   tabs,
   agents,
   shellPanes,
-  selectedTab,
-  onSelectTab,
   onNewTab,
   onChanged,
   session,
   readOnly,
   now = Date.now(),
 }: SpaceViewProps) {
+  const [picked, setPicked] = useState(() => lastShownTab.get(workspace.workspaceId) ?? null);
   const [sheetTab, setSheetTab] = useState<TabView | null>(null);
+  const pick = (tabId: string) => {
+    lastShownTab.set(workspace.workspaceId, tabId);
+    setPicked(tabId);
+  };
   const groups = groupPanesByTab(workspace.workspaceId, tabs, agents, shellPanes);
-  const shown = shownTab(groups, selectedTab, workspace.activeTabId);
+  const shown = shownTab(groups, picked, workspace.activeTabId);
   const shownRecord = tabs.find((t) => t.tabId === shown?.tabId);
   const shownName = shown ? tabName(shown.label, groups.indexOf(shown) + 1) : "";
   const folder = workspaceFolder(groups.flatMap((g) => g.panes));
@@ -58,7 +69,6 @@ export function SpaceView({
     <>
       <TasksHeader
         title={workspaceName(workspace)}
-        paused={false}
         subtitle={folder && <span className="font-mono text-xs" title={tildeHome(folder)}>{shortCwd(folder, 44)}</span>}
         // A box the title's line height, so the taller touch target centres on the title.
         action={<div className="flex h-7 shrink-0 items-center">
@@ -67,26 +77,31 @@ export function SpaceView({
       />
 
       {shown ? <>
-        <div className="mb-2 flex items-center gap-1 border-b border-border/60">
-          {/* The same quiet tabs as a pane's tab bar, so a tab looks and answers the same in both. */}
+        <div className="mb-2 flex items-end gap-1 border-b border-border/60">
+          {/* The same quiet tabs as a pane's tab bar, so a tab looks and answers the same in both. As
+              there, the chips' 44px touch band hangs 8px past the line into the margin below, and
+              the underline sits on the line. */}
           <div data-workbench-navigation-band="tabs" role="group" aria-label="Tabs"
-            className="-mb-px flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            className="-mb-[9px] flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {groups.map((g, index) => {
               const record = tabs.find((t) => t.tabId === g.tabId);
               return (
                 <Chip key={g.tabId} label={tabName(g.label, index + 1)} active={g === shown} ring={record?.focused}
                   status={worstTriage(g.panes.filter((p) => p.kind !== "shell"))}
-                  onClick={() => onSelectTab(g.tabId)}
+                  onClick={() => pick(g.tabId)}
                   onLongPress={record && (() => setSheetTab(record))}
                   onTapActive={record && (() => setSheetTab(record))} />
               );
             })}
           </div>
+          {/* A box the tabs' height, so the taller touch target centres on them. */}
           {shownRecord && (
-            <button type="button" aria-label={`${shownName} actions`} aria-haspopup="dialog" onClick={() => setSheetTab(shownRecord)}
-              className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-              <Ellipsis aria-hidden className="size-4" />
-            </button>
+            <div className="flex h-9 shrink-0 items-center">
+              <button type="button" className="workbench-icon-button" aria-label={`${shownName} actions`} aria-haspopup="dialog"
+                onClick={() => setSheetTab(shownRecord)}>
+                <Ellipsis aria-hidden className="size-4" />
+              </button>
+            </div>
           )}
         </div>
 
@@ -107,7 +122,7 @@ export function SpaceView({
         // Closing the tab on screen moves to the one beside it, as Herdr and a browser do.
         onClosed={(tabId) => {
           const next = tabId === shown?.tabId ? neighborTab(tabs, tabId) : undefined;
-          if (next) onSelectTab(next);
+          if (next) pick(next);
           onChanged();
         }}
       />

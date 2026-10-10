@@ -8,8 +8,9 @@ import { BottomSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, projectPath, settingsPath, spacePath } from "@/lib/nav";
+import { homePath, projectPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
+import { workspaceName } from "@/lib/spaces";
 import { isReadOnly } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
@@ -190,10 +191,10 @@ function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewCha
         </Link>
       ))}
       {looseWorkspaces(data).workspaces.map((workspace) => {
-        const name = workspace.label || `Workspace ${workspace.number}`;
+        const name = workspaceName(workspace);
         return (
           <Link key={workspace.workspaceId} className={cn("rail-letter rail-letter-outline", currentSpace === workspace.workspaceId && "rail-letter-current")}
-            to={spacePath(workspace.workspaceId, data.session)} aria-label={name} title={name}
+            to={workspacePath(workspace.workspaceId, data, data.session)} aria-label={name} title={name}
             aria-current={currentSpace === workspace.workspaceId ? "page" : undefined}>{initial(name)}</Link>
         );
       })}

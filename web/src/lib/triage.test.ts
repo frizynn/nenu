@@ -194,7 +194,7 @@ describe("flipDir", () => {
   });
 });
 
-describe("worstTriage — what a tab or space chip advertises", () => {
+describe("worstTriage — what a tab chip advertises", () => {
   it("reports the most urgent thing inside, not the first", () => {
     expect(worstTriage([agent("a", "idle", { seen: 5 }), agent("b", "blocked")])).toBe("needs");
     expect(worstTriage([agent("a", "idle", { seen: 5 }), agent("b", "working")])).toBe("working");

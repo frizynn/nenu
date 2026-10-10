@@ -13,10 +13,9 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { Activity as ActivityIcon, ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
-import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
-import { useSpawnState } from "@/lib/spawn";
+import { openNewAgent, useSpawnState } from "@/lib/spawn";
 import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
@@ -83,10 +82,10 @@ import type {
   WizardModel,
 } from "@/lib/blocks";
 
-/** A worker thread takes steering; a coordinator takes questions and new work. */
 /** The chat title's box, whether it opens the workspace overview or has none to open. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left lg:-mx-1 lg:min-h-9";
 
+/** A worker thread takes steering; a coordinator takes questions and new work. */
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
   worker: "Steer this thread…",
   coordinator: "Ask the coordinator…",
@@ -129,7 +128,7 @@ interface AgentChatProps {
   /** Per-device auth from the snapshot; an unauthorised device drops the composer to read-only. */
   device?: DeviceAuth;
   // Global connection state — fed straight to the shared AppHeader, which drives the header Nenu
-  // mark (gallop/rest, identically to the dashboard), and lets us dim the stale StatusBadge while not
+  // mark (gallop/rest, identically to the dashboard), and lets us dim the stale status dot while not
   // live. Defaults describe a healthy link so tests that don't care render "live".
   bridge?: BridgeStatus | undefined;
   error?: boolean;
@@ -196,12 +195,11 @@ export function AgentChat({
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
-  // the Nenu mark + pill; here we use it to dim the StatusBadge, so the badge stops presenting the
+  // the Nenu mark + pill; here we use it to dim the title's status dot, so it stops presenting the
   // last snapshot's status as current while we're reconnecting/lost, and restores instantly on recovery.
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
   const unavailable = bridge !== "connected" || lost;
-  const { newTab } = useSpaceActions();
   const spawning = useSpawnState(paneId);
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
   const displayScope = JSON.stringify([session ?? "default", paneId]);
@@ -869,8 +867,8 @@ export function AgentChat({
     >
       {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
           identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
-          slots: the `space › tab` breadcrumb as the center, the agent StatusBadge as the right-cluster
-          lead, and the find bar as the full-row takeover while searching. */}
+          slots: the title as the center, the pane's tools as the right cluster, and the find bar as
+          the full-row takeover while searching. */}
       {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
         find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
         bridge={bridge}
@@ -900,7 +898,7 @@ export function AgentChat({
         }
       >
         {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
-            it opens the workspace overview (all its tabs + panes). */}
+            it opens the workspace overview (all its tabs + panes), unless this pane is all there is. */}
         {agent ? (titleOpensOverview ? (
           <button
             type="button"
@@ -933,7 +931,7 @@ export function AgentChat({
             agents={agents}
             selected={agent.tabId}
             onSelect={goToTab}
-            onNewTab={newTab}
+            onNewTab={(workspaceId) => openNewAgent({ kind: "tab", workspaceId })}
             session={session}
             readOnly={readOnly}
             onRenamed={() => revalidator.revalidate()}

@@ -7,6 +7,7 @@ import { vi } from "vitest";
 import { server } from "@/test/setup";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
+import { __resetShownTabs } from "@/components/space-view";
 import { SpaceRoute } from "./space";
 
 const openNewAgent = vi.fn();
@@ -59,7 +60,8 @@ const herd = home({
   shellPanes: [pane("w1:s", "w1:t3", { kind: "shell", agent: "shell" })],
 });
 
-// First, while the page remembers no tab picked in `nenu` (the memory lives as long as the module).
+beforeEach(() => __resetShownTabs());
+
 it("lists only this workspace's tabs, opens on Herdr's active one, and switches without an All filter", async () => {
   const { router, user } = setup("/space/w1", herd);
   expect(await screen.findByRole("heading", { name: "nenu" })).toBeInTheDocument();
@@ -114,7 +116,7 @@ it("moves to the tab beside the one it closes", async () => {
     return HttpResponse.json({ ok: true });
   }));
   const { user, setData } = setup("/space/w1", herd);
-  await user.click(await screen.findByRole("button", { name: /review/ }));
+  await user.click(within(await screen.findByRole("group", { name: "Tabs" })).getByRole("button", { name: /review/ }));
   await user.click(screen.getByRole("button", { name: "review actions" }));
   await user.click(screen.getByRole("button", { name: "Close tab" }));
   setData({ ...herd, tabs: herd.tabs.filter((t) => t.tabId !== "w1:t2"), agents: herd.agents.filter((a) => a.tabId !== "w1:t2") });

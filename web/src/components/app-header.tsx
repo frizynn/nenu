@@ -25,7 +25,7 @@ interface AppHeaderProps {
    *  min-w-0` region so a long breadcrumb truncates instead of pushing the pill off the row. Empty on
    *  the dashboard/space, where the region is just the spacer that pushes the right cluster over. */
   children?: ReactNode;
-  /** Right-cluster lead items (the dashboard's SessionSwitcher; the pane's StatusBadge). */
+  /** Right-cluster lead items (the pane's tools). */
   rightLead?: ReactNode;
   /** Right-cluster trailing items (the Settings gear). */
   rightTrail?: ReactNode;

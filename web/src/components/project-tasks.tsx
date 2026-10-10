@@ -176,7 +176,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
 }
 
 /** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
-export function TasksHeader({ title, subtitle, paused, action }: { title: string; subtitle?: ReactNode; paused: boolean; action?: ReactNode }) {
+export function TasksHeader({ title, subtitle, paused = false, action }: { title: string; subtitle?: ReactNode; paused?: boolean; action?: ReactNode }) {
   return (
     <header className="mb-4">
       <div className="flex items-start gap-2">

@@ -11,7 +11,7 @@ interface ChipProps {
   ring?: boolean;
   /**
    * The most urgent thing happening inside this tab ({@link worstTriage}) — drawn as a leading
-   * dot in the same palette the herd list uses, so a chip and a row can't mean different things by
+   * dot in the same palette as the pane rows, so a chip and a row can't mean different things by
    * the same colour. Omit (or pass null) when the container holds no agent at all: that's not the
    * same as idle, and a resting dot would claim otherwise.
    */

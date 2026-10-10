@@ -62,7 +62,7 @@ export const TRIAGE_STATUS: Record<TriageKey, AgentStatus> = {
 };
 
 /**
- * The most urgent bucket among a set of panes — what a tab or space chip should advertise. Null when
+ * The most urgent bucket among a set of panes — what a tab chip should advertise. Null when
  * the set holds no agent at all, which is deliberately NOT the same as "idle": an empty tab has
  * nothing to report, and showing it a resting dot would claim otherwise.
  */

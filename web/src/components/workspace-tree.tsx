@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { ChevronRight, LayoutGrid, Terminal } from "lucide-react";
 
 import { StatusDot } from "@/components/status-badge";
-import { panePath, spacePath } from "@/lib/nav";
+import { panePath, workspacePath } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { defaultOpen, paneSubject, workspaceTree, type TabBranch, type TreeSource, type WorkspaceBranch } from "@/lib/workspace-tree";
 import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
@@ -31,14 +31,17 @@ export function WorkspaceTree({ source, query, session, currentPaneId, expanded,
   const branches = workspaceTree(source, query, currentPaneId);
   if (branches.length === 0) return empty;
   return branches.map((branch) => (
-    <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} session={session} currentPaneId={currentPaneId}
+    <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
+      session={session} currentPaneId={currentPaneId}
       open={searching || (expanded[branch.workspace.workspaceId] ?? defaultOpen(branch, branches.length))} searching={searching}
       onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} onNavigate={onNavigate} compact={compact} />
   ));
 }
 
-function WorkspaceSection({ branch, session, currentPaneId, open, searching, onToggle, onNavigate, compact }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, open, searching, onToggle, onNavigate, compact }: {
   branch: WorkspaceBranch;
+  /** Where the workspace's name opens (see workspacePath). */
+  href: string;
   session?: string;
   currentPaneId?: string;
   open: boolean;
@@ -48,7 +51,7 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
   compact: boolean;
 }) {
   const bodyId = useId();
-  const { name, counts, workspace } = branch;
+  const { name, counts } = branch;
   const status = workspaceStatus(counts);
   return (
     <section aria-label={name} className={compact ? "nav-ws nav-ws-compact" : "nav-ws"}>
@@ -58,7 +61,7 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
             disabled={searching} onClick={() => onToggle(!open)}>
             <ChevronRight aria-hidden size={14} />
           </button>
-          <Link className="nav-row" to={spacePath(workspace.workspaceId, session)} onClick={onNavigate}>
+          <Link className="nav-row" to={href} onClick={onNavigate}>
             <LayoutGrid aria-hidden size={14} />
             <span className="nav-row-text">{name}</span>
             {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
@@ -75,7 +78,7 @@ function WorkspaceSection({ branch, session, currentPaneId, open, searching, onT
             <span className="nav-ws-meta"><WorkspaceSummary counts={counts} tabs={branch.tabs.length} /></span>
           </span>
         </button>
-        <Link className="nav-ws-open" to={spacePath(workspace.workspaceId, session)} onClick={onNavigate} aria-label={`Open workspace ${name}`}>
+        <Link className="nav-ws-open" to={href} onClick={onNavigate} aria-label={`Open workspace ${name}`}>
           <LayoutGrid aria-hidden size={15} />
         </Link>
       </div>}
