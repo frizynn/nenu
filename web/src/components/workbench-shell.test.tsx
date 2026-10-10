@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -7,8 +7,9 @@ import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
 import { QuickJump } from "./home-panels";
 import { setLocked } from "@/lib/idle";
-import { openNewDialog, useNewDialogRequest } from "./new-agent-sheet";
+import { openNewDialog, useNewDialogOpen } from "./new-agent-sheet";
 import type { HomeData } from "@/lib/loaders";
+import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 const data: HomeData = {
   bridge: "connected", device: undefined, session: "work", sessions: [],
@@ -152,6 +153,48 @@ it("keeps desktop reopening outside the composer region and preserves the mounte
   expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
 });
 
+it("remembers a collapsed sidebar across a reload", async () => {
+  const first = setup();
+  await first.user.click(first.sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  first.router.dispose();
+  document.body.innerHTML = "";
+  setup();
+  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+});
+
+/** Stands in for a project frame: a button docks or undocks a thread. */
+function DockProbe() {
+  const onDock = useContext(WorkbenchNavigationContext)?.onDock;
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    if (!docked) return;
+    onDock?.(true);
+    return () => onDock?.(false);
+  }, [docked, onDock]);
+  return <button type="button" onClick={() => setDocked(!docked)}>{docked ? "Undock" : "Dock"}</button>;
+}
+
+it("folds to the rail while a thread is docked, unless expanded during that dock, without moving focus", async () => {
+  const router = createMemoryRouter([{ path: "*", element: <WorkbenchShell data={data}><DockProbe /></WorkbenchShell> }]);
+  render(<RouterProvider router={router} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Dock" }));
+  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undock" })).toHaveFocus();
+
+  await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Undock" }));
+  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
+
+  // The next dock folds it again, and undocking brings back the operator's own choice.
+  await user.click(screen.getByRole("button", { name: "Dock" }));
+  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Undock" }));
+  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
+  expect(localStorage.getItem("nenu:sidebar-collapsed:v1")).toBe("0");
+});
+
 it("can reopen the mobile workspace drawer after navigation and Escape", async () => {
   const { user } = setup();
   const trigger = screen.getByRole("button", { name: "Open navigation" });
@@ -187,12 +230,12 @@ it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async
 });
 
 function NewDialogProbe() {
-  return useNewDialogRequest() ? <p>New dialog</p> : null;
+  return useNewDialogOpen() ? <p>New dialog</p> : null;
 }
 
 it("ignores Cmd+K and Cmd+N behind the idle lock", async () => {
   desktop();
-  onTestFinished(() => { setLocked(false); openNewDialog(null); });
+  onTestFinished(() => { setLocked(false); openNewDialog(false); });
   const element = <WorkbenchShell data={data}><NewDialogProbe /></WorkbenchShell>;
   render(<RouterProvider router={createMemoryRouter([{ path: "*", element }], { initialEntries: ["/?s=work"] })} />);
   const user = userEvent.setup();

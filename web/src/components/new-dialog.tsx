@@ -11,8 +11,6 @@ import {
   inputField,
   liveDirsOf,
   useSpawnInto,
-  type NewKind,
-  type NewRequest,
 } from "@/components/new-agent-sheet";
 import { NoTemplates, ThreadStartForm, errorMessage, useTemplates } from "@/components/new-thread-menu";
 import { Button } from "@/components/ui/button";
@@ -28,6 +26,8 @@ import { isReadOnly, type ProjectView, type WorkspaceView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const DirPicker = lazy(() => import("@/components/dir-picker").then((m) => ({ default: m.DirPicker })));
+
+type NewKind = "thread" | "tab" | "workspace" | "project" | "chat";
 
 const KINDS: ReadonlyArray<{ id: NewKind; label: string; title: string; hint: string; icon: typeof Folder }> = [
   { id: "thread", label: "Thread", title: "New thread", hint: "A worker in its own branch, with the project brief", icon: MessageCircle },
@@ -72,14 +72,13 @@ export function projectCommand(name: string, goal: string, repo: string): string
 }
 
 /** One place to create a thread, tab, workspace, project or quick chat: a sheet on a phone, a two-pane dialog on a desk. */
-export default function NewDialog({ request, onClose }: { request: NewRequest; onClose: () => void }) {
+export default function NewDialog({ onClose }: { onClose: () => void }) {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const params = useParams();
   const [context] = useState(() => newContext(data, params));
   const [workspaceId, setWorkspaceId] = useState(context.workspaceId);
   const [project, setProject] = useState(context.project ?? data?.projects?.[0]?.slug);
   const [kind, setKind] = useState<NewKind | null>(() => {
-    if (request.kind) return request.kind;
     const desktop = typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
     return desktop ? (context.project ? "thread" : "tab") : null;
   });
@@ -359,7 +358,7 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
   return (
     <form className="flex flex-1 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Field label="Name">
-        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Panel mayorista" />
+        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" />
       </Field>
       <Field label="Goal">
         {/* Organizations keeps the goal on one line, so a line break becomes a space. */}

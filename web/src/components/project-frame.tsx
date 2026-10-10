@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 import { ListChecks, MessageSquare, PanelRightClose } from "lucide-react";
 
@@ -13,6 +13,7 @@ import { panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {
@@ -94,6 +95,13 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     return next;
   }, { replace: true });
   const panelShown = wide && panelOpen && !docked;
+  const onDock = useContext(WorkbenchNavigationContext)?.onDock;
+  const isDocked = docked !== undefined;
+  useEffect(() => {
+    if (!onDock || !isDocked) return;
+    onDock(true);
+    return () => onDock(false);
+  }, [onDock, isDocked]);
 
   // Toggling unmounts the button that was pressed; hand focus to its counterpart.
   const toggleFocus = useRef<HTMLButtonElement>(null);

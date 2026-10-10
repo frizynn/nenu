@@ -1,10 +1,8 @@
-import type { ShouldRevalidateFunctionArgs } from "react-router";
-
 // A revalidation re-runs every active loader, so a live event that names only the herd used to
 // re-read the open pane's 600-line mirror too, and a mirror change re-fetched the whole snapshot.
 // The poller says which loader a live event needs; the other one hands back what it last returned.
-// React Router's shouldRevalidate cannot tell the root route from the pane route (both share this
-// module's function), so the loaders ask `needsFetch` themselves.
+// React Router's route-level shouldRevalidate cannot see which live event started the run, so the
+// loaders ask `needsFetch` themselves.
 
 /** The two polled loaders: the herd snapshot and the open pane's mirror. */
 export type RevalidationScope = "root" | "pane";
@@ -27,15 +25,10 @@ export function narrowRevalidation(scope: RevalidationScope): void {
   pending = { ...joined, [scope]: true };
 }
 
-/** A timer tick, a resume or a reconnect: every loader re-reads. */
+/** A timer tick, a resume, a reconnect or a settled revalidator: every loader re-reads. */
 export function widenRevalidation(): void {
   pending = null;
   narrowed = null;
-}
-
-/** The revalidator came to rest: whatever revalidates next without asking first re-reads everything. */
-export function revalidationSettled(): void {
-  widenRevalidation();
 }
 
 /** Whether `scope`'s loader must fetch on the run `request` belongs to. Navigations always fetch. */
@@ -46,14 +39,4 @@ export function needsFetch(scope: RevalidationScope, request?: Request): boolean
   }
   if (narrowed?.request !== request) narrowed = null;
   return narrowed?.wanted[scope] ?? true;
-}
-
-/** Test-only. */
-export function resetRevalidation(): void {
-  revalidationSettled();
-}
-
-/** Route-level hook kept at React Router's default; the per-loader decision is `needsFetch`. */
-export function shouldRevalidate({ defaultShouldRevalidate }: ShouldRevalidateFunctionArgs): boolean {
-  return defaultShouldRevalidate;
 }

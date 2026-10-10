@@ -83,28 +83,35 @@ function Checks({ checks }: { checks: NonNullable<ThreadPullRequest["checks"]> }
 const rowClass = "flex min-h-13 min-w-0 items-center gap-3 sm:rounded-[10px] px-1 py-1.5 sm:px-3.5";
 const actionClass = "inline-flex min-h-9 shrink-0 items-center rounded-lg border border-border bg-secondary px-3 text-[13px] font-medium text-foreground hover:bg-secondary/70 max-lg:min-h-10";
 
+/**
+ * A pull request ready for review. On a desk the diff and checks sit in their own columns; on a
+ * phone the line under the title reads "#1342 · +212 −148", as the narrow row has no room for both.
+ */
 function ReviewRow({ item, session }: { item: ReviewItem; session?: string }) {
   const { project, thread } = item;
   const pr = thread.pr;
   const to = thread.paneId ? panePath(thread.paneId, session) : projectPath(project.slug, session);
+  const numbered = pr?.number !== undefined;
   return (
-    <li className={rowClass}>
-      <GitPullRequest aria-hidden className="size-4 shrink-0 text-status-done" />
-      <span className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className="truncate text-[13.5px] text-foreground">{thread.title}</span>
-        <span className="truncate text-xs text-muted-foreground">
-          {project.name}{pr?.number !== undefined && <> · <span className="font-mono">#{pr.number}</span></>}
+    <li className={cn(rowClass, "grid grid-cols-[auto_minmax(0,1fr)_auto] gap-y-0 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]")}>
+      <GitPullRequest aria-hidden className="row-span-2 size-4 shrink-0 text-status-done" />
+      <span className="col-start-2 truncate text-[13.5px] leading-tight text-foreground">{thread.title}</span>
+      <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-xs leading-tight text-muted-foreground sm:contents">
+        <span className="min-w-0 truncate sm:col-start-2 sm:row-start-2">
+          <span className={cn(numbered && "max-sm:hidden")}>{project.name}{numbered && " · "}</span>
+          {numbered && <span className="font-mono">#{pr.number}</span>}
           {pr?.review === "approved" && " · approved"}
           {pr?.mergeBlocker && <span className="max-sm:hidden"> · {pr.mergeBlocker}</span>}
         </span>
+        {pr?.diff && (
+          <span className="shrink-0 font-mono sm:col-start-3 sm:row-span-2 sm:row-start-1">
+            <span aria-hidden className="sm:hidden">· </span>
+            <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-destructive">−{pr.diff.deletions}</span>
+          </span>
+        )}
       </span>
-      {pr?.diff && (
-        <span className="shrink-0 font-mono text-xs">
-          <span className="text-status-done">+{pr.diff.additions}</span> <span className="text-destructive">−{pr.diff.deletions}</span>
-        </span>
-      )}
-      {pr?.checks && <span className="max-sm:hidden"><Checks checks={pr.checks} /></span>}
-      <Link to={to} className={actionClass} aria-label={`Review ${thread.title}`}>Review</Link>
+      {pr?.checks && <span className="max-sm:hidden sm:col-start-4 sm:row-span-2 sm:row-start-1"><Checks checks={pr.checks} /></span>}
+      <Link to={to} className={cn(actionClass, "col-start-3 row-span-2 row-start-1 sm:col-start-5")} aria-label={`Review ${thread.title}`}>Review</Link>
     </li>
   );
 }
