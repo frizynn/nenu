@@ -1,0 +1,496 @@
+{
+ "now": 1791618000000,
+ "list": {
+  "available": true,
+  "sessionKey": "\"f38a18c9bf0658bc\"",
+  "workflows": [
+   {
+    "runId": "wf_58bd2e6c-e80",
+    "taskId": "wmkvmzo35",
+    "name": "nenu-workflows-view-design",
+    "summary": "Research how Claude Code exposes workflows, background tasks, subagents and artifacts on disk, then design how Nenu shows them on desktop and phone",
+    "status": "completed",
+    "startedAt": 1791595471498,
+    "durationMs": 1043157,
+    "updatedAt": 1791615817369.2395,
+    "phases": [
+     {
+      "title": "Research",
+      "agents": [
+       {
+        "id": "a62346b3ec68b1323",
+        "label": "research:claude-data",
+        "phase": "Research",
+        "state": "done",
+        "model": "claude-opus-5-5[1m]",
+        "startedAt": 1791595471531,
+        "durationMs": 284689,
+        "tokens": 105223,
+        "toolCalls": 29,
+        "resultPreview": "redacted"
+       },
+       {
+        "id": "ac510438353edb795",
+        "label": "research:nenu-today",
+        "phase": "Research",
+        "state": "done",
+        "model": "claude-opus-5-5[1m]",
+        "startedAt": 1791595471531,
+        "durationMs": 156315,
+        "tokens": 97268,
+        "toolCalls": 26,
+        "resultPreview": "redacted"
+       }
+      ]
+     },
+     {
+      "title": "Design",
+      "agents": [
+       {
+        "id": "a3d18255abbdddc4f",
+        "label": "design:activity",
+        "phase": "Design",
+        "state": "done",
+        "model": "claude-opus-5-5[1m]",
+        "startedAt": 1791595756224,
+        "durationMs": 758434,
+        "tokens": 237776,
+        "toolCalls": 59,
+        "resultPreview": "redacted"
+       }
+      ]
+     }
+    ],
+    "agentCount": 3,
+    "doneCount": 3,
+    "totalTokens": 440267,
+    "totalToolCalls": 114
+   },
+   {
+    "runId": "wf_fe5d5046-9d2",
+    "taskId": "woxtq1pnu",
+    "name": "nenu-wave",
+    "summary": "Implement a wave of independent Nenu redesign work packages in their own worktrees, adversarially review, fix",
+    "status": "running",
+    "startedAt": 1791614953546,
+    "updatedAt": 1791618000000,
+    "phases": [
+     {
+      "title": "Implement",
+      "agents": [
+       {
+        "id": "a2755e6a129ea042e",
+        "label": "impl:B1",
+        "phase": "Implement",
+        "state": "running",
+        "startedAt": 1791614960000,
+        "updatedAt": 1791618000000,
+        "lastTool": "Bash · Keep waiting for gate"
+       },
+       {
+        "id": "a5ecc06a0363074c3",
+        "label": "impl:B3",
+        "phase": "Implement",
+        "state": "running",
+        "startedAt": 1791614961000,
+        "updatedAt": 1791618000000,
+        "lastTool": "Bash · Keep waiting for gate"
+       },
+       {
+        "id": "a50eb3dddf8c58664",
+        "label": "impl:B4",
+        "phase": "Implement",
+        "state": "running",
+        "startedAt": 1791614962000,
+        "updatedAt": 1791618000000,
+        "lastTool": "Bash · Keep waiting for gate"
+       }
+      ]
+     }
+    ],
+    "agentCount": 3,
+    "doneCount": 0
+   }
+  ],
+  "tasks": [
+   {
+    "id": "bclff19e4",
+    "kind": "bash",
+    "title": "Background command bclff19e4",
+    "status": "running",
+    "at": 1791617940000,
+    "hasOutput": true
+   },
+   {
+    "id": "bx8ostaai",
+    "kind": "monitor",
+    "title": "F1 gate progress",
+    "status": "completed",
+    "event": "[Monitor expired after 30m with no events delivered. Re-arm it if you still need the watch — and widen the filter if silence was unexpected.]",
+    "at": 1791594083327,
+    "hasOutput": false
+   },
+   {
+    "id": "b25hn9bvi",
+    "kind": "monitor",
+    "title": "60s baseline run completion",
+    "status": "completed",
+    "event": "done",
+    "at": 1791593849641,
+    "hasOutput": false
+   },
+   {
+    "id": "bl638tuih",
+    "kind": "bash",
+    "title": "Run CI gates: fmt, clippy, tests, release build",
+    "status": "completed",
+    "exitCode": 0,
+    "at": 1791593719264,
+    "hasOutput": true
+   },
+   {
+    "id": "b3f8meozt",
+    "kind": "bash",
+    "title": "Typecheck bridge through the gate",
+    "status": "failed",
+    "exitCode": 144,
+    "at": 1791592254123,
+    "hasOutput": true
+   }
+  ],
+  "artifacts": [
+   {
+    "id": "art_redacted_1",
+    "url": "https://claude.ai/code/artifact/00000000-redacted",
+    "title": "Rediseño Nenu sobre Herdr",
+    "icon": "canvas",
+    "version": "1791318979-91a7",
+    "at": 1791597600000
+   }
+  ],
+  "truncated": false
+ },
+ "detail": {
+  "sessionKey": "\"f38a18c9bf0658bc\"",
+  "workflow": {
+   "runId": "wf_58bd2e6c-e80",
+   "taskId": "wmkvmzo35",
+   "name": "nenu-workflows-view-design",
+   "summary": "Research how Claude Code exposes workflows, background tasks, subagents and artifacts on disk, then design how Nenu shows them on desktop and phone",
+   "status": "completed",
+   "startedAt": 1791595471498,
+   "durationMs": 1043157,
+   "updatedAt": 1791615817369.2395,
+   "phases": [
+    {
+     "title": "Research",
+     "agents": [
+      {
+       "id": "a62346b3ec68b1323",
+       "label": "research:claude-data",
+       "phase": "Research",
+       "state": "done",
+       "model": "claude-opus-5-5[1m]",
+       "startedAt": 1791595471531,
+       "durationMs": 284689,
+       "tokens": 105223,
+       "toolCalls": 29,
+       "resultPreview": "redacted"
+      },
+      {
+       "id": "ac510438353edb795",
+       "label": "research:nenu-today",
+       "phase": "Research",
+       "state": "done",
+       "model": "claude-opus-5-5[1m]",
+       "startedAt": 1791595471531,
+       "durationMs": 156315,
+       "tokens": 97268,
+       "toolCalls": 26,
+       "resultPreview": "redacted"
+      }
+     ]
+    },
+    {
+     "title": "Design",
+     "agents": [
+      {
+       "id": "a3d18255abbdddc4f",
+       "label": "design:activity",
+       "phase": "Design",
+       "state": "done",
+       "model": "claude-opus-5-5[1m]",
+       "startedAt": 1791595756224,
+       "durationMs": 758434,
+       "tokens": 237776,
+       "toolCalls": 59,
+       "resultPreview": "redacted"
+      }
+     ]
+    }
+   ],
+   "agentCount": 3,
+   "doneCount": 3,
+   "totalTokens": 440267,
+   "totalToolCalls": 114
+  },
+  "results": {
+   "ac510438353edb795": {
+    "summary": "redacted",
+    "facts": [
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     },
+     {
+      "fact": "redacted",
+      "evidence": "redacted",
+      "label": "redacted"
+     }
+    ],
+    "data_model": [
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted"
+    ],
+    "recommendations": [
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted"
+    ]
+   },
+   "a62346b3ec68b1323": {
+    "summary": "redacted",
+    "facts": [
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     },
+     {
+      "label": "redacted",
+      "fact": "redacted",
+      "evidence": "redacted"
+     }
+    ],
+    "data_model": [
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted"
+    ],
+    "recommendations": [
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted",
+     "redacted"
+    ]
+   },
+   "a3d18255abbdddc4f": "redacted"
+  }
+ }
+}

@@ -1,4 +1,5 @@
 import { deviceAuth, guard } from "./access.ts";
+import { activityPaneActions } from "./activity.ts";
 import type { PaneAction, RequestTimeouts, Route, Services } from "./context.ts";
 import { eventRoutes } from "./events.ts";
 import { filePaneActions } from "./files.ts";
@@ -24,6 +25,7 @@ export const PANE_ACTIONS: Readonly<Record<string, PaneAction>> = {
   ...replyPaneActions,
   ...structurePaneActions,
   ...interactionPaneActions,
+  ...activityPaneActions,
 };
 
 export const PANE_ROUTE = new RegExp(
