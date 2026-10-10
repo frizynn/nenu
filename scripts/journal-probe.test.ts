@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { refFor } from "./journal-probe.ts";
+import { incrementalMatches, refFor } from "./journal-probe.ts";
 
 describe("refFor", () => {
   test("grok takes the session uuid from the parent directory, not the filename", () => {
@@ -27,5 +27,18 @@ describe("refFor", () => {
 
   test("a grok path whose parent is not a uuid is skipped, not guessed", () => {
     expect(refFor("grok", "/tmp/sessions/not-a-uuid/chat_history.jsonl")).toBeNull();
+  });
+});
+
+describe("incrementalMatches", () => {
+  test("a real Claude log replayed as appends matches a whole read", async () => {
+    const { claudeJournal } = await import("../bridge/journal/claude.ts");
+    const bytes = new Uint8Array(await Bun.file(new URL("../web/src/lib/harness/claude/fixtures/journal-queue-and-dialogs-v2296.jsonl", import.meta.url)).arrayBuffer());
+    expect(await incrementalMatches(claudeJournal("/nowhere"), bytes)).toBe(true);
+  });
+
+  test("an adapter without an incremental path is not judged", async () => {
+    const { piJournal } = await import("../bridge/journal/pi.ts");
+    expect(await incrementalMatches(piJournal("/nowhere"), new Uint8Array())).toBeNull();
   });
 });

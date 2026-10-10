@@ -4,6 +4,7 @@ import type { TranscriptPage } from "./journal/types.ts";
 import type { JournalAdapter } from "./journal/types.ts";
 import { parseCodexTranscript } from "./journal/codex.ts";
 import { TranscriptStore } from "./journal/store.ts";
+import { journalImageParams, journalImageResponse, MAX_JOURNAL_IMAGE_BYTES } from "./routes/history.ts";
 
 const page = (text: string): Omit<TranscriptPage, "paneId"> => ({
   entries: [{ uuid: "one", ts: "", role: "assistant", parts: [{ kind: "text", text }] }],
@@ -101,4 +102,33 @@ test("large pages do not retain their encoded body but keep conditional reads ch
     expect(await historyResponse(data, "one", null, "gzip").arrayBuffer()).toEqual(expected);
     expect(stringify).toHaveBeenCalledTimes(1);
   } finally { stringify.mockRestore(); }
+});
+
+describe("journal-image", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex").toString("base64");
+
+  test("takes an entry and an index, never anything shaped like a path", () => {
+    const params = (q: string) => journalImageParams(new URL(`http://x/api/pane/p/journal-image?${q}`));
+    expect(params("entry=u1&n=2")).toEqual({ entry: "u1", n: 2 });
+    expect(params("entry=u1")).toBeNull();
+    expect(params("entry=u1&n=-1")).toBeNull();
+    expect(params("entry=u1&n=1.5")).toBeNull();
+    expect(params(`entry=${"x".repeat(201)}&n=0`)).toBeNull();
+    expect(params("n=0")).toBeNull();
+  });
+
+  test("serves sniffed bytes as no document, refusing what is not an image or too large", async () => {
+    const ok = journalImageResponse({ data: PNG }, '"e"');
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toBe("image/png");
+    expect(ok.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(ok.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(ok.headers.get("cache-control")).toBe("private, no-cache");
+    expect(ok.headers.get("etag")).toBe('"e"');
+    expect(Buffer.from(await ok.arrayBuffer()).toString("base64")).toBe(PNG);
+    // A declared type is never believed: HTML labelled as an image is refused.
+    expect(journalImageResponse({ data: Buffer.from("<script>alert(1)</script>").toString("base64") }, '"e"').status).toBe(415);
+    expect(journalImageResponse({ data: "A".repeat(Math.ceil(MAX_JOURNAL_IMAGE_BYTES / 3) * 4 + 4) }, '"e"').status).toBe(413);
+    expect(journalImageResponse(null, '"e"').status).toBe(404);
+  });
 });
