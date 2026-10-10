@@ -1,8 +1,8 @@
 import { computeEtag, notModified } from "../http-cache.ts";
-import type { AnswerBody, HintSource } from "../interactions.ts";
+import type { HintSource } from "../interactions.ts";
 import { adapterFor } from "../journal/registry.ts";
 import type { SessionRuntime } from "../sessions.ts";
-import type { AgentView, InteractionHint } from "../types.ts";
+import type { AgentView, AnswerRequest, InteractionHint } from "../types.ts";
 import { deviceAuth } from "./access.ts";
 import type { PaneAction, Route, Services } from "./context.ts";
 import { json, jsonError, secure } from "./http.ts";
@@ -38,7 +38,7 @@ async function journalHint({ cfg, journals, transcripts, conversations }: Servic
 }
 
 /** The body, or null when it is not a well-formed answer. */
-export function parseAnswer(raw: unknown): AnswerBody | null {
+export function parseAnswer(raw: unknown): AnswerRequest | null {
   if (!raw || typeof raw !== "object") return null;
   const { signature, optionIndex, text, confirm } = raw as Record<string, unknown>;
   if (typeof signature !== "string" || !signature || signature.length > MAX_SIGNATURE) return null;

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import type { DetectedInteraction } from "./interactions.ts";
 import {
   interactionAlert,
   NotificationCoordinator,
@@ -10,7 +9,7 @@ import {
   type NotifySink,
 } from "./notifications.ts";
 import type { PushMessage } from "./push.ts";
-import type { AgentStatus, AgentView } from "./types.ts";
+import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 
 // The coordinator decides whether/when a blocked/done transition becomes a push, and collapses the
 // herd into a single summary. We drive it with a fake clock (fire timers on demand) and a recording
@@ -291,7 +290,7 @@ describe("makeNotifySink", () => {
 });
 
 describe("interactionAlert", () => {
-  const card = (over: Partial<DetectedInteraction> = {}): DetectedInteraction => ({
+  const card = (over: Partial<Interaction> = {}): Interaction => ({
     paneId: "p1", agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
     context: "mkfifo fixture-fifo", signature: "sig", revision: 0, detectedAt: 0, detailComplete: true,
     options: [

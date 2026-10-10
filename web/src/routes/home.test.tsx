@@ -4,7 +4,7 @@ import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { HomeRoute } from "./home";
 import { WorkbenchShell } from "@/components/workbench-shell";
-import type { LiveInteraction } from "@/hooks/use-interactions";
+import type { Interaction } from "@/lib/types";
 import type { ActivityResponse } from "@/lib/activity";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { ProjectView } from "@/lib/types";
@@ -28,7 +28,7 @@ const data: HomeData = {
   ],
 };
 
-const permission: LiveInteraction = {
+const permission: Interaction = {
   paneId: "w1:p2", agent: "claude", signature: "sig-1", revision: 1, detectedAt: 1,
   kind: "permission", family: "permission", question: "Do you want to proceed?", context: "Bash command\nbun run test",
   options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],

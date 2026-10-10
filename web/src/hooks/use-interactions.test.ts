@@ -2,9 +2,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 
 import { server } from "@/test/setup";
-import { useInteractions, type LiveInteraction } from "./use-interactions";
+import { useInteractions } from "./use-interactions";
+import type { Interaction } from "@/lib/types";
 
-const card: LiveInteraction = {
+const card: Interaction = {
   paneId: "w1:p1", agent: "claude", kind: "question", family: "select", question: "Which fruit?", signature: "sig-1",
   revision: 1, detectedAt: 0, options: [{ index: 0, label: "Apple", role: "neutral" }, { index: 1, label: "Pear", role: "neutral" }],
 };
@@ -20,7 +21,7 @@ describe("useInteractions", () => {
   });
 
   it("leaves a multi-select toggle without a receipt", async () => {
-    const multi: LiveInteraction = { ...card, kind: "multi-select", options: [{ index: 0, label: "Cheese", role: "neutral", checked: false }] };
+    const multi: Interaction = { ...card, kind: "multi-select", options: [{ index: 0, label: "Cheese", role: "neutral", checked: false }] };
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [multi] })));
     const { result } = renderHook(() => useInteractions());
     await waitFor(() => expect(result.current.interactions).toHaveLength(1));

@@ -520,6 +520,11 @@ export interface InteractionOption {
   label: string;
   description?: string;
   role: InteractionOptionRole;
+  /** A multi-select row's tick; absent on every other kind. */
+  checked?: boolean;
+  /** The answer may carry `text` (a verified sequence types it). A `freeText` option without it has
+   *  no measured recipe and is answered in the terminal. */
+  acceptsText?: true;
 }
 
 export type InteractionKind = "permission" | "question" | "plan" | "menu" | "wizard" | "multi-select" | "password";
@@ -553,6 +558,10 @@ export interface Interaction {
   revision: number;
   hints?: InteractionHint[];
   detectedAt: number;
+  /** The full command, file or plan is on the card; only then may Home or a push approve it. */
+  detailComplete?: boolean;
+  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
+  typing?: true;
 }
 
 /** POST /api/interactions/:paneId/answer. `text` only for a `freeText` option. */
@@ -560,6 +569,8 @@ export interface AnswerRequest {
   signature: string;
   optionIndex: number;
   text?: string;
+  /** Acknowledges a `persistent` option. */
+  confirm?: boolean;
 }
 
 export type AnswerOutcome =
@@ -611,17 +622,6 @@ export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "d
 
 /** What the CLI's own queue did with a delivered row, read from its journal. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";
-
-/** The wire additions to a queue row; message-queue.ts adopts them with the delivery rework. */
-export interface QueueRowDelivery {
-  deliveryMode?: DeliveryMode;
-  waitingFor?: QueueWaitReason;
-  /** Set when the row's pane or conversation went away; it then waits for the operator. */
-  stranded?: { reason: string; since: number };
-  native?: NativeQueueState;
-  /** The device that queued it, so a shared outbox says whose message it is. */
-  device?: string | null;
-}
 
 // ── Transcript media without bytes ─────────────────────────────────────────────────────────────────
 

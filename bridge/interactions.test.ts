@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
-import { dialogOnScreen, Interactions, pushActions, toInteraction, type DetectedInteraction, type PaneIO } from "./interactions.ts";
+import { dialogOnScreen, Interactions, pushActions, toInteraction, type PaneIO } from "./interactions.ts";
 import { LiveEvents } from "./live-events.ts";
 import { parseAnswer } from "./routes/interactions.ts";
 import { startServer } from "./server.ts";
 import { StateEngine } from "./state-engine.ts";
-import type { AgentView, InteractionHint, LiveEvent } from "./types.ts";
+import type { AgentView, Interaction, InteractionHint, LiveEvent } from "./types.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const PANES = join(ROOT, "web/src/fixtures/panes");
@@ -147,7 +147,7 @@ describe("the fixture corpus", () => {
 const blocked = (paneId: string, agent = "claude", status: AgentView["status"] = "blocked"): AgentView =>
   ({ paneId, agent, status, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", cwd: "/tmp", focused: false });
 
-function detect(file: string, hints: InteractionHint[] = [], agent = agentOf(file), above = ""): DetectedInteraction {
+function detect(file: string, hints: InteractionHint[] = [], agent = agentOf(file), above = ""): Interaction {
   const text = above + fixture(file);
   return toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, text)!, 0, hints, 0).interaction;
 }
@@ -548,7 +548,7 @@ describe("the interactions routes", () => {
   test("GET lists the blocked pane's card with an ETag, and 304s while it is unchanged", async () => {
     const res = await list();
     expect(res.status).toBe(200);
-    const { interactions } = (await res.json()) as { interactions: DetectedInteraction[] };
+    const { interactions } = (await res.json()) as { interactions: Interaction[] };
     expect(interactions.map((i) => [i.paneId, i.kind, i.question])).toEqual([["w:p", "permission", "Do you want to create hello.txt?"]]);
     const etag = res.headers.get("etag")!;
     expect((await list({ "if-none-match": etag })).status).toBe(304);
@@ -561,7 +561,7 @@ describe("the interactions routes", () => {
   });
 
   test("a stale signature is a 409 with no keys; a fresh one answers in one request", async () => {
-    const { interactions } = (await (await list()).json()) as { interactions: DetectedInteraction[] };
+    const { interactions } = (await (await list()).json()) as { interactions: Interaction[] };
     herdrLog.reads = 0;
     const stale = await answer({ signature: "stale", optionIndex: 0 });
     expect(stale.status).toBe(409);

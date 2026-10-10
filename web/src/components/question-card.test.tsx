@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { LiveInteraction } from "@/hooks/use-interactions";
+import type { Interaction } from "@/lib/types";
 import type { AnswerOutcome } from "@/lib/types";
 import { QuestionCard } from "./question-card";
 
@@ -9,7 +9,7 @@ import { QuestionCard } from "./question-card";
 // claude--plan-approval, claude--v2285-ask-question, claude--select-multiselect-checked).
 const base = { paneId: "w1:p1", agent: "claude", signature: "sig-1", revision: 1, detectedAt: 0 };
 
-const permission: LiveInteraction = {
+const permission: Interaction = {
   ...base, kind: "permission", family: "permission", question: "Do you want to proceed?",
   context: "Bash command\nmkfifo fixture-fifo",
   options: [
@@ -20,7 +20,7 @@ const permission: LiveInteraction = {
   detailComplete: false,
 };
 
-const plan: LiveInteraction = {
+const plan: Interaction = {
   ...base, kind: "plan", family: "plan", question: "Would you like to proceed?",
   options: [
     { index: 0, label: "Yes, and use auto mode", role: "persistent" },
@@ -30,7 +30,7 @@ const plan: LiveInteraction = {
   ],
 };
 
-const question: LiveInteraction = {
+const question: Interaction = {
   ...base, kind: "question", family: "select", question: "Which fruit?",
   options: [
     { index: 0, label: "Apple", role: "neutral" },
@@ -40,7 +40,7 @@ const question: LiveInteraction = {
   ],
 };
 
-const multi: LiveInteraction = {
+const multi: Interaction = {
   ...base, kind: "multi-select", family: "claude", question: "Which toppings?",
   options: [
     { index: 0, label: "Cheese", role: "neutral", checked: false },

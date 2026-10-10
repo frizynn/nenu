@@ -10,20 +10,6 @@ export const INTERACTIONS_POLL_MS = { live: 10_000, fallback: 2_500 } as const;
 /** How long "Answered: X" stays when no new dialog replaces it. */
 export const RECEIPT_MS = 6_000;
 
-/**
- * An interaction as bridge/interactions.ts serves it. The extra fields are wire additions the
- * bridge owns until the shared types name them.
- */
-export interface LiveInteraction extends Interaction {
-  options: Array<InteractionOption & { checked?: boolean }>;
-  /** The full command, file or plan is on the card; only then may Home or a push approve it. */
-  detailComplete?: boolean;
-  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
-  typing?: true;
-}
-
-export type LiveOption = LiveInteraction["options"][number];
-
 /** The optimistic record of an answer, shown until the pane's next dialog or {@link RECEIPT_MS}. */
 export interface Receipt {
   paneId: string;
@@ -33,15 +19,15 @@ export interface Receipt {
 }
 
 /** A multi-select checkbox only ticks a row; the dialog is still there afterwards. */
-export const isToggle = (i: LiveInteraction, o: LiveOption) => i.kind === "multi-select" && o.checked !== undefined;
+export const isToggle = (i: Interaction, o: InteractionOption) => i.kind === "multi-select" && o.checked !== undefined;
 
 export interface InteractionsState {
-  interactions: LiveInteraction[];
+  interactions: Interaction[];
   receipts: Receipt[];
   /** The last read failed; `interactions` is what was last known. */
   stale: boolean;
   refresh: () => void;
-  answer: (i: LiveInteraction, option: LiveOption, extra?: { text?: string; confirm?: boolean }) => Promise<AnswerOutcome>;
+  answer: (i: Interaction, option: InteractionOption, extra?: { text?: string; confirm?: boolean }) => Promise<AnswerOutcome>;
 }
 
 /**
@@ -50,7 +36,7 @@ export interface InteractionsState {
  * POST: the bridge re-reads the screen and refuses a stale signature.
  */
 export function useInteractions(session?: string, enabled = true): InteractionsState {
-  const [list, setList] = useState<LiveInteraction[]>([]);
+  const [list, setList] = useState<Interaction[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [stale, setStale] = useState(false);
   useEffect(() => {
@@ -62,7 +48,7 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     enabled,
     deps: [session],
     read: (signal) => fetchInteractions(session, signal),
-    onRead: (next) => { setList(next.interactions as LiveInteraction[]); setStale(false); },
+    onRead: (next) => { setList(next.interactions); setStale(false); },
     onFail: () => setStale(true),
     delay: () => isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback,
     wakes: (event) => event.topic === "interaction" || event.topic === "resync",
@@ -76,9 +62,8 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     return () => clearTimeout(timer);
   }, [receipts]);
 
-  const answer = useCallback(async (i: LiveInteraction, option: LiveOption, extra: { text?: string; confirm?: boolean } = {}) => {
-    // `confirm` is the bridge's acknowledgement of a persistent option (AnswerBody in bridge/interactions.ts).
-    const body: AnswerRequest & { confirm?: boolean } = {
+  const answer = useCallback(async (i: Interaction, option: InteractionOption, extra: { text?: string; confirm?: boolean } = {}) => {
+    const body: AnswerRequest = {
       signature: i.signature,
       optionIndex: option.index,
       ...(extra.text !== undefined ? { text: extra.text } : {}),

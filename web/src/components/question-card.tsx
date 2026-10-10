@@ -2,9 +2,9 @@ import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 import { Check, Loader2, TerminalSquare } from "lucide-react";
 
-import { isToggle, type LiveInteraction, type LiveOption, type Receipt } from "@/hooks/use-interactions";
+import { isToggle, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import type { AnswerOutcome } from "@/lib/types";
+import type { AnswerOutcome, Interaction, InteractionOption } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // One card for every dialog the bridge detected (ADR 0057): inline at the bottom of a thread, and
@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
 export const CONFIRM_MS = 5_000;
 
 export interface QuestionCardProps {
-  interaction?: LiveInteraction;
+  interaction?: Interaction;
   /** Shown instead of a card once the dialog was answered and before the pane's next one. */
   receipt?: Receipt;
-  onAnswer: (option: LiveOption, extra?: { text?: string; confirm?: boolean }) => Promise<AnswerOutcome>;
+  onAnswer: (option: InteractionOption, extra?: { text?: string; confirm?: boolean }) => Promise<AnswerOutcome>;
   readOnly?: boolean;
   /** Home's variant: one line of options and the question clamped. */
   compact?: boolean;
@@ -76,7 +76,7 @@ export function QuestionCard({
   const reply = i.kind === "plan" ? shown.find((o) => o.role === "freeText") : undefined;
   const choices = shown.filter((o) => o !== reply && !(o.role === "freeText" && !onOpen));
 
-  async function send(option: LiveOption, extra: { text?: string; confirm?: boolean } = {}) {
+  async function send(option: InteractionOption, extra: { text?: string; confirm?: boolean } = {}) {
     setBusy(option.index);
     setNotice(null);
     const outcome = await onAnswer(option, extra).catch((err: Error): AnswerOutcome => ({ ok: false, error: err.message || "Answer failed" }));
@@ -96,7 +96,7 @@ export function QuestionCard({
     } else setNotice({ tone: "error", text: outcome.error || "Answer failed" });
   }
 
-  function press(option: LiveOption) {
+  function press(option: InteractionOption) {
     if (locked) return;
     if (option.role === "freeText") return onOpen?.();
     if (option.role === "persistent" && armed !== option.index) {
@@ -195,7 +195,7 @@ const rowBase = (compact: boolean) => cn(
 );
 
 function OptionRow({ option, toggle, compact, armed, busy, disabled, label, onPress }: {
-  option: LiveOption; toggle: boolean; compact: boolean; armed: boolean; busy: boolean; disabled: boolean; label?: string; onPress: () => void;
+  option: InteractionOption; toggle: boolean; compact: boolean; armed: boolean; busy: boolean; disabled: boolean; label?: string; onPress: () => void;
 }) {
   const tone = armed ? "armed" : option.role;
   return (

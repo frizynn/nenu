@@ -1,5 +1,4 @@
 import { ClaudeActivity } from "../claude-activity.ts";
-import type { LiveTopic } from "../live-events.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { json, jsonError } from "./http.ts";
 
@@ -14,8 +13,6 @@ function readerFor(ctx: Services): ClaudeActivity {
   if (!reader) readers.set(ctx, reader = new ClaudeActivity(ctx.cfg.journalRoots.claude));
   return reader;
 }
-
-const ACTIVITY_TOPIC: LiveTopic = "activity";
 
 async function activityRead(ctx: Services, { req, url, rt, paneId }: PaneRouteRequest): Promise<Response> {
   const encoding = req.headers.get("accept-encoding");
@@ -36,7 +33,7 @@ async function activityRead(ctx: Services, { req, url, rt, paneId }: PaneRouteRe
     }
     const listed = await reader.list(sessionId);
     if (listed.available) {
-      void reader.observe(sessionId, `${rt.name}\0${paneId}`, () => ctx.live.publish({ session: rt.name, topic: ACTIVITY_TOPIC, paneId }))
+      void reader.observe(sessionId, `${rt.name}\0${paneId}`, () => ctx.live.publish({ session: rt.name, topic: "activity", paneId }))
         .catch(() => { /* Watching is an optimisation; the page's fallback poll still runs. */ });
     }
     return json(listed, encoding);
