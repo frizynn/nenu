@@ -65,7 +65,10 @@ still move is the working pane's elapsed seconds, which depend on how long the p
 `bridge/test-support/fake-herdr.ts` is a real Unix socket server with Herdr's newline-delimited JSON:
 one request per connection, `events.subscribe` streaming. It answers `session.snapshot`,
 `workspace.list`, `tab.list`, `pane.list`, `pane.get`, `pane.read`, `pane.process_info`,
-`pane.send_text` and `pane.send_keys`. Anything else returns Herdr's `unknown variant` error, which
+`pane.wait_for_output`, `pane.send_text` and `pane.send_keys`. `pane.wait_for_output` re-reads the
+screen every 5 ms until a line matches (a leading `(?m)` becomes a JavaScript flag) or `timeout_ms`
+ends it with the code `timeout`, as Herdr 0.9.1 does, so the guarded send takes its trigger path
+here too. Anything else returns Herdr's `unknown variant` error, which
 also logs the call as a write. It reports version `0.9.1-fake`, protocol 22.
 
 Panes render a Claude-shaped screen (rule, `❯ draft`, rule, footer). Typed text appears after
@@ -105,6 +108,33 @@ latency.
   10 requests within 2 s of the tap.
 - The planning estimate of about 76 req/min for the chat view, which was INFERRED from code,
   measures at 81. The extra 5 are the subagents poll.
+
+## Baselines, 2026-10-10 (after the redesign)
+
+MEASURED with the same command on `feat/rediseno-herdr-20261010` at `8b8267dc`, two runs
+(09:05 and 09:11 UTC), same host and method. The two runs agree within one request per minute.
+
+| View (agent working unless noted) | HTTP req/min, run 1 | run 2 | By route (run 1) | Herdr calls/min (run 1) | Bridge CPU (run 1) |
+|---|---|---|---|---|---|
+| No client | 0 | 0 | | 5 snapshot + 3 pane.read | 0.2% |
+| Home | 18 | 18 | 6 snapshot, 6 interactions, 6 activity | 5 snapshot + 9 read | 0.3% |
+| Chat view, Claude working | 59 | 59 | 30 history, 6 snapshot, 6 pane, 6 queue, 6 interactions, 5 subagents | 15 read, 6 pane.list, 5 snapshot | 0.5% |
+| Terminal mirror, Claude working | 77 | 77 | 66 pane, 6 snapshot, 5 subagents | 365 read, 5 snapshot | 0.7% |
+| Dialog on screen (blocked) | 34 | 34 | 6 snapshot, 6 pane, 6 queue, 6 interactions, 5 history, 5 subagents | 311 read, 6 pane.list, 5 snapshot | 0.4% |
+
+- The phone sends `?watch=` while the mirror or a dialog is on screen, so the socket rate of those
+  two views is set by the bridge watcher (`bridge/pane-watcher.ts`), not by the phone's poll. It
+  reads the watched pane several times a second, which is why `pane.read` went from 55 to about
+  300 a minute while HTTP fell. The mirror's 66 `pane` requests a minute follow the watcher's change events (inferred), and the
+  fake's spinner repaints at 4 Hz, so that number tracks the fake, not a real Claude.
+- Socket calls per bridge poll, no client: 1.6 (1 `session.snapshot` + 0.6 `pane.read`), down
+  from 4.
+- Send, tap to Enter, idle Claude, 5 sends: run 1 p50 93 ms, max 110 ms. Run 2 p50 91 ms, max 126 ms.
+  Each send is 1 HTTP request (`/send`). These runs predate `pane.wait_for_output` in the
+  FakeHerdr: the first send's wait was refused as an unknown method and the trigger then stayed off,
+  so they time the polling fallback, not the trigger path a real Herdr 0.9.1 takes.
+- Dialog answer: 1 HTTP request before the key (`interactions/…/answer`), 41 ms and 35 ms.
+  16 and 15 requests within 2 s of the tap.
 
 Caveats:
 
