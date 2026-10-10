@@ -1368,9 +1368,12 @@ cmd_push_test() {
   "$BUN" run "${PLUGIN_ROOT}/scripts/push-test.ts" "$@"
 }
 
-# Match the supervised bridge's environment, not Herdr's action-only state directory.
-cmd_subagent_hooks() (
+# Run one Claude settings installer with the supervised bridge's environment (its port and state
+# dir), not Herdr's action-only state directory. Each installer is opt-in: nothing calls these
+# verbs except the operator, through the plugin action or the shell.
+run_claude_installer() (
   [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
+  local script="$1"; shift
   export_bridge_env
   if have_systemd || have_launchd; then
     for key in HERDR_PLUGIN_STATE_DIR COLLIE_STATE_DIR; do
@@ -1380,8 +1383,11 @@ cmd_subagent_hooks() (
       esac
     done
   fi
-  "$BUN" run "${PLUGIN_ROOT}/scripts/install-subagent-hooks.ts" "$@"
+  "$BUN" run "${PLUGIN_ROOT}/scripts/${script}" "$@"
 )
+cmd_subagent_hooks() { run_claude_installer install-subagent-hooks.ts "$@"; }
+# Observer http hooks for live status and dialog text; `--remove` takes them out.
+cmd_claude_hooks() { run_claude_installer install-claude-hooks.ts "$@"; }
 
 # Generate the VAPID keypair Web Push needs and write it into the plugin .env. This exists because the
 # config dir is the hard part: it is resolved four different ways (see resolve_config_dir), so an
@@ -1419,6 +1425,7 @@ case "${1:-}" in
   push-keys) shift || true; cmd_push_keys "$@" ;;
   push-test) shift || true; cmd_push_test "$@" ;;
   subagent-hooks) shift || true; cmd_subagent_hooks "$@" ;;
+  claude-hooks) shift || true; cmd_claude_hooks "$@" ;;
   logs)    cmd_logs "${2:-50}" ;;
-  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|subagent-hooks|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
+  *) echo "usage: collie-ctl.sh {start|stop|restart|uninstall|update|version|push-keys|push-test|subagent-hooks|claude-hooks|build|serve|unserve|status|url|qr|logs}" >&2; exit 2 ;;
 esac

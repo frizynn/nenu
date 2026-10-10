@@ -1549,8 +1549,20 @@ test_update_judges_a_clones_own_upstream
 test_update_leaves_a_branch_without_an_upstream_to_git
 test_registry_refresh_skips_a_managed_checkout
 
+# A fake `herdr` that reports herdr.collie installed at $1, so an installer resolves the stable
+# checkout from it instead of from whichever worktree ran the script.
+install_fake_herdr_plugin_root() {
+  cat > "${BIN_DIR}/herdr" <<FAKE
+#!/bin/sh
+[ "\$1 \$2" = "plugin list" ] || exit 1
+printf '{"result":{"plugins":[{"plugin_id":"herdr.collie","plugin_root":"%s"}]}}\n' "$1"
+FAKE
+  chmod +x "${BIN_DIR}/herdr"
+}
+
 test_subagent_hooks_use_service_state() {
   setup_case subagent-hooks
+  install_fake_herdr_plugin_root "${CASE_DIR}/nowhere"
   printf '#!/bin/sh\necho Darwin\n' > "${BIN_DIR}/uname"
   chmod +x "${BIN_DIR}/uname"
   local settings="${CASE_DIR}/settings.json" output expected
@@ -1568,5 +1580,51 @@ test_subagent_hooks_use_service_state() {
   assert_contains "$(cat "$settings")" "${CASE_DIR}/explicit-plugin-state"
 }
 test_subagent_hooks_use_service_state
+
+test_installers_point_at_the_installed_checkout() {
+  setup_case installer-root
+  local stable="${CASE_DIR}/installed" settings="${CASE_DIR}/settings.json"
+  mkdir -p "${stable}/scripts"
+  : > "${stable}/scripts/subagent-hook.ts"
+  install_fake_herdr_plugin_root "$stable"
+  # A hook left behind by a worktree that no longer exists is re-pointed, not duplicated.
+  printf '{"hooks":{"SubagentStart":[{"hooks":[{"type":"command","command":"bun /gone/worktree/scripts/subagent-hook.ts /s"}]}]}}\n' > "$settings"
+  run_ctl subagent-hooks "$settings" > /dev/null
+  assert_contains "$(cat "$settings")" "${stable}/scripts/subagent-hook.ts"
+  case "$(cat "$settings")" in *"/gone/worktree"*) fail "stale worktree hook kept" ;; esac
+}
+test_installers_point_at_the_installed_checkout
+
+test_claude_hooks_are_opt_in_and_reversible() {
+  setup_case claude-hooks
+  printf '#!/bin/sh\necho Darwin\n' > "${BIN_DIR}/uname"
+  chmod +x "${BIN_DIR}/uname"
+  install_fake_herdr_plugin_root "${CASE_DIR}/nowhere"
+  local claude_dir="${CASE_DIR}/claude" state="${CASE_DIR}/state" settings output token mode
+  settings="${claude_dir}/settings.json"
+  mkdir -p "$claude_dir"
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"mine"}]}]},"model":"x"}\n' > "$settings"
+  printf 'COLLIE_STATE_DIR=%s\nCOLLIE_PORT=8797\n' "$state" > "${CONFIG_DIR}/.env"
+  chmod 600 "${CONFIG_DIR}/.env"
+  CLAUDE_CONFIG_DIR="$claude_dir" run_ctl claude-hooks > /dev/null
+  output="$(cat "$settings")"
+  assert_contains "$output" '"url": "http://127.0.0.1:8797/api/hooks/claude"'
+  assert_contains "$output" '"onFailure": "continue"'
+  assert_contains "$output" '"allowedEnvVars"'
+  assert_contains "$output" '"command": "mine"'
+  token="$(cat "${state}/claude-hooks.token")"
+  [ "${#token}" -eq 64 ] || fail "token not created"
+  assert_contains "$output" "\"NENU_HOOK_TOKEN\": \"${token}\""
+  mode="$(stat -c '%a' "${state}/claude-hooks.token" 2>/dev/null || stat -f '%Lp' "${state}/claude-hooks.token")"
+  assert_eq "$mode" "600"
+  CLAUDE_CONFIG_DIR="$claude_dir" run_ctl claude-hooks > /dev/null
+  assert_eq "$(cat "$settings")" "$output"
+  CLAUDE_CONFIG_DIR="$claude_dir" run_ctl claude-hooks --remove > /dev/null
+  output="$(cat "$settings")"
+  case "$output" in *api/hooks/claude*|*NENU_HOOK_TOKEN*) fail "hooks not removed" ;; esac
+  assert_contains "$output" '"command": "mine"'
+  assert_contains "$output" '"model": "x"'
+}
+test_claude_hooks_are_opt_in_and_reversible
 
 echo "collie-ctl lifecycle tests: passed"

@@ -11,15 +11,20 @@ export function findClaudeExecutable(path = process.env.PATH, home = homedir()):
   return Bun.which("claude", { PATH: servicePath(path, home) });
 }
 
-export interface ClaudeSession { id: string; sessionId: string; pid: number; cwd: string; startedAt?: number }
+/**
+ * One row of `claude agents --json`. Interactive sessions carry a `pid` and no `id`; background ones
+ * carry the `claude attach` `id` and no `pid`. A row needs one of the two to be matchable.
+ */
+export interface ClaudeSession { id?: string; sessionId: string; pid?: number; cwd: string; startedAt?: number }
 
 export function decodeClaudeSessions(value: unknown): ClaudeSession[] {
   if (!Array.isArray(value)) throw new Error("Invalid Claude session list.");
   return value.flatMap((raw) => {
     const row = record(raw);
-    if (typeof row.id !== "string" || typeof row.sessionId !== "string" ||
-        typeof row.pid !== "number" || typeof row.cwd !== "string") return [];
-    return [{ id: row.id, sessionId: row.sessionId, pid: row.pid, cwd: row.cwd, ...(typeof row.startedAt === "number" && Number.isFinite(row.startedAt) && row.startedAt > 0 ? { startedAt: row.startedAt } : {}) }];
+    const id = typeof row.id === "string" ? row.id : undefined;
+    const pid = typeof row.pid === "number" ? row.pid : undefined;
+    if (typeof row.sessionId !== "string" || typeof row.cwd !== "string" || (id === undefined && pid === undefined)) return [];
+    return [{ ...(id !== undefined ? { id } : {}), ...(pid !== undefined ? { pid } : {}), sessionId: row.sessionId, cwd: row.cwd, ...(typeof row.startedAt === "number" && Number.isFinite(row.startedAt) && row.startedAt > 0 ? { startedAt: row.startedAt } : {}) }];
   });
 }
 
@@ -32,7 +37,7 @@ export function matchClaudeSession(info: unknown, sessions: ClaudeSession[]): st
     const process = record(value);
     const argv = Array.isArray(process.argv) ? process.argv : [];
     for (const session of sessions) {
-      if (process.pid === session.pid || (typeof argv[0] === "string" && argv[0].split("/").at(-1) === "claude" && argv[1] === "attach" && argv[2] === session.id)) matches.add(session.sessionId);
+      if ((session.pid !== undefined && process.pid === session.pid) || (typeof argv[0] === "string" && argv[0].split("/").at(-1) === "claude" && argv[1] === "attach" && session.id !== undefined && argv[2] === session.id)) matches.add(session.sessionId);
     }
   }
   return matches.size === 1 ? [...matches][0]! : null;
