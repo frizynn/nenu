@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { answerInteraction, fetchInteractions, isApiErrorStatus } from "@/lib/api";
-import { isLocked, useLocked } from "@/lib/idle";
-import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
+import { isLiveHealthy } from "@/lib/live-events";
+import { useLivePoll } from "./use-live-poll";
 import type { AnswerOutcome, AnswerRequest, Interaction, InteractionOption } from "@/lib/types";
 
 /** Fallback poll for the bridge's dialogs: brisk without the event stream, relaxed with it (ADR 0054). */
@@ -50,69 +50,23 @@ export interface InteractionsState {
  * POST: the bridge re-reads the screen and refuses a stale signature.
  */
 export function useInteractions(session?: string, enabled = true): InteractionsState {
-  const locked = useLocked();
   const [list, setList] = useState<LiveInteraction[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [stale, setStale] = useState(false);
-  const poke = useRef<() => void>(() => {});
-
   useEffect(() => {
     setList([]);
     setReceipts([]);
   }, [session]);
 
-  useEffect(() => {
-    if (!enabled || locked) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let controller: AbortController | undefined;
-    let again = false;
-
-    async function poll() {
-      if (disposed || document.hidden || isLocked()) return;
-      if (controller) return void (again = true);
-      clearTimeout(timer);
-      const request = (controller = new AbortController());
-      try {
-        const next = await fetchInteractions(session, request.signal);
-        if (disposed || request.signal.aborted) return;
-        setList(next.interactions as LiveInteraction[]);
-        setStale(false);
-      } catch {
-        if (!disposed && !request.signal.aborted) setStale(true);
-      } finally {
-        if (controller === request) controller = undefined;
-        if (again && !disposed) {
-          again = false;
-          void poll();
-        } else if (!disposed && !document.hidden) {
-          timer = setTimeout(() => void poll(), isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback);
-        }
-      }
-    }
-    const visibility = () => {
-      if (!document.hidden) return void poll();
-      clearTimeout(timer);
-      controller?.abort();
-      controller = undefined;
-    };
-    poke.current = () => void poll();
-    const stopLive = onLiveEvent((event) => {
-      if (event.topic === "interaction" || event.topic === "resync") void poll();
-    });
-    document.addEventListener("visibilitychange", visibility);
-    window.addEventListener("online", visibility);
-    void poll();
-    return () => {
-      disposed = true;
-      poke.current = () => {};
-      clearTimeout(timer);
-      controller?.abort();
-      stopLive();
-      document.removeEventListener("visibilitychange", visibility);
-      window.removeEventListener("online", visibility);
-    };
-  }, [session, enabled, locked]);
+  const poke = useLivePoll({
+    enabled,
+    deps: [session],
+    read: (signal) => fetchInteractions(session, signal),
+    onRead: (next) => { setList(next.interactions as LiveInteraction[]); setStale(false); },
+    onFail: () => setStale(true),
+    delay: () => isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback,
+    wakes: (event) => event.topic === "interaction" || event.topic === "resync",
+  });
 
   // A receipt lapses on its own, so a dialog that comes back with the same signature shows again.
   useEffect(() => {
@@ -141,9 +95,9 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     if (outcome.ok && !isToggle(i, option)) {
       setReceipts((rs) => [...rs.filter((r) => r.paneId !== i.paneId), { paneId: i.paneId, signature: i.signature, label: option.label, at: Date.now() }]);
     }
-    poke.current();
+    poke();
     return outcome;
-  }, [session]);
+  }, [session, poke]);
 
   // A dialog just answered stays hidden behind its receipt even if a read raced the answer.
   const answered = new Set(receipts.map((r) => `${r.paneId}\0${r.signature}`));
@@ -153,7 +107,7 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     interactions,
     receipts: receipts.filter((r) => !live.has(r.paneId)),
     stale,
-    refresh: useCallback(() => poke.current(), []),
+    refresh: poke,
     answer,
   };
 }
