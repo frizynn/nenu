@@ -13,6 +13,7 @@ import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
 //   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
+//   bun scripts/e2e/run.ts space    [--port 8797] [--out DIR]   The workspace page for each workspace shape
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -384,6 +385,56 @@ async function tabs(): Promise<void> {
   if (result.failed.length) process.exit(1);
 }
 
+/**
+ * The workspace page, on a phone and a desk, for each shape a workspace takes: `nenu` (two tabs of
+ * one agent each), `api` (one tab holding two agents and a shell) and `psag`, added here as Herdr
+ * names an unlabelled tab: one tab called "1" holding one agent. Then a pane's own tab bar, which
+ * shares the page's tabs.
+ */
+async function space(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const fake = bridge.fake!;
+    fake.addWorkspace("w3", "psag").addTab("w3:t1", "1")
+      .addPane({ paneId: "w3:solo", workspaceId: "w3", tabId: "w3:t1", agent: "claude", label: "T-76 Mejoras", cwd: join(bridge.dir, "psag") });
+    for (let i = 0; i < 150; i++) {
+      const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string }> }>);
+      if (snap.agents.some((p) => p.paneId === "w3:solo")) break;
+      await sleep(100);
+    }
+    const shots: string[] = [];
+    const landed: Array<{ name: string; expected: string; landed: string }> = [];
+    const tabBar = '[data-workbench-navigation-band="tabs"] button[aria-current="true"]';
+    // A workspace of one pane opens straight onto it; the others stay on their page.
+    const cases = [
+      ["nenu", "/space/w1", "/space/w1", 'main >> text="nenu"'],
+      ["api", "/space/w2", "/space/w2", 'main >> text="api"'],
+      ["psag", "/space/w3", "/pane/w3:solo", tabBar],
+      ["pane-tabs", `/pane/${encodeURIComponent(bridge.herd!.idle)}`, `/pane/${bridge.herd!.idle}`, tabBar],
+    ] as const;
+    for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      for (const [label, path, expected, ready] of cases) {
+        const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.clock.install({ time: bridge.now() });
+        await page.goto(bridge.url + path);
+        await page.locator(ready).first().waitFor({ timeout: 15_000 });
+        await page.waitForTimeout(1500);
+        const name = `${label}-${deviceName}`;
+        landed.push({ name, expected, landed: await page.evaluate(() => decodeURIComponent(location.pathname), null) });
+        const shot = join(outDir, `space-${name}.png`);
+        await page.screenshot({ path: shot, animations: "disabled" });
+        shots.push(shot);
+        await context.close();
+      }
+    }
+    return { shots, landed, failed: landed.filter((c) => c.landed !== c.expected).map((c) => c.name), unexpectedWrites: fake.writes() };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "space.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed.length || result.unexpectedWrites.length) process.exit(1);
+}
+
 async function baseline(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const windowMs = Number(values.seconds) * 1000;
@@ -542,9 +593,10 @@ if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
 else if (command === "tabs") await tabs();
+else if (command === "space") await space();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|space|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
