@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { EVENT_DEBOUNCE_MS } from "../../bridge/event-poker.ts";
+import { guardedSend } from "../../bridge/guarded-send.ts";
 import { computeEtag } from "../../bridge/http-cache.ts";
 import type { HerdrClient } from "../../bridge/herdr-client.ts";
 import { QueueService } from "../../bridge/queue-service.ts";
@@ -17,6 +18,8 @@ import { sendGuardedReply } from "../../web/src/lib/guarded-reply.ts";
 //   bun scripts/bench/send-latency.ts [runs=5]
 //
 // "delivered" is when the queue row is persisted as sent (or the direct send returned "sent").
+// "trips" counts phone-to-bridge HTTP round trips: the browser guard makes one per read and write, the
+// bridge guard (POST send) makes one.
 // "visible" is when a model browser learns it: the queue hook's 3000ms poll with a random phase, or,
 // with --push, a live-events invalidation followed by one GET.
 
@@ -47,20 +50,47 @@ const pct = (values: number[], p: number) => {
 };
 const summary = (values: number[]) => ({ p50: pct(values, 0.5), max: Math.round(Math.max(...values)) });
 
+/** The browser guard: every read and write is its own phone-to-bridge request. */
 async function direct(echoMs: number, clearMs: number, rtt: number) {
   const term = fakeTerminal(echoMs, clearMs);
+  let trips = 0;
   const start = performance.now();
   const outcome = await sendGuardedReply({
     paneId: "p",
     agent: "claude",
     text: "Bench message",
     transport: {
-      fetchPane: async () => { await sleep(rtt); return term.read(); },
-      sendReply: async (_pane, text, submit) => { await sleep(rtt); return term.write(text, submit); },
+      fetchPane: async () => { trips++; await sleep(rtt); return term.read(); },
+      sendReply: async (_pane, text, submit) => { trips++; await sleep(rtt); return term.write(text, submit); },
     },
   });
   if (outcome.status !== "sent") throw new Error(`direct send ended ${outcome.status}`);
-  return performance.now() - start;
+  return { ms: performance.now() - start, trips };
+}
+
+/** The bridge guard: one request; reads and writes are local socket calls priced at Herdr's p50s. */
+async function oneRequest(echoMs: number, clearMs: number, rtt: number) {
+  const term = fakeTerminal(echoMs, clearMs);
+  const herdr = {
+    getPane: async () => { await sleep(RPC.read); return { agent: "claude" }; },
+    readPane: term.read,
+    sendPaneText: async (_p: string, text: string) => void (await term.write(text, false)),
+    sendPaneKeys: async () => { enter = performance.now(); await term.write("", true); },
+    // Herdr re-reads every 100 ms while it waits; model the echo landing inside that cadence.
+    waitForOutput: async () => { await sleep(Math.min(100, echoMs)); return { matched: false as const }; },
+  } as unknown as HerdrClient;
+  let enter = 0;
+  const start = performance.now();
+  await sleep(rtt / 2);
+  const { outcome } = await guardedSend(
+    { herdr, paneId: "p", readLines: 200, submitKeys: ["Enter"] },
+    { text: "Bench message", requestId: "bench" },
+  );
+  if (!outcome.ok) throw new Error(`one-request send ended at ${outcome.stage}: ${outcome.error}`);
+  await sleep(rtt / 2);
+  // `ms` is when the phone learns Enter went out, comparable with the browser guard's (whose answer
+  // follows the submit ack); `confirmedMs` adds the bridge's wait for the box to let go of the text.
+  return { ms: enter - start + rtt / 2, confirmedMs: performance.now() - start, trips: 1 };
 }
 
 /** POST a queued message while the pane is `working` until `idleAfterMs` (0 = idle already). */
@@ -119,9 +149,18 @@ async function queued(echoMs: number, clearMs: number, idleAfterMs: number, rtt:
 const rows: Record<string, unknown>[] = [];
 for (const [echoMs, clearMs] of [[30, 50], [120, 200]] as const) {
   for (const rtt of [5, 40]) {
-    const times: number[] = [];
-    for (let i = 0; i < runs; i++) times.push(await direct(echoMs, clearMs, rtt));
-    rows.push({ path: "direct reply → Enter sent", echoMs, clearMs, rttMs: rtt, ms: summary(times) });
+    for (const [path, send] of [["direct reply → Enter sent", direct], ["one-request send → Enter sent", oneRequest]] as const) {
+      const times: number[] = [];
+      const confirmed: number[] = [];
+      const trips: number[] = [];
+      for (let i = 0; i < runs; i++) {
+        const r: { ms: number; trips: number; confirmedMs?: number } = await send(echoMs, clearMs, rtt);
+        times.push(r.ms);
+        trips.push(r.trips);
+        if (r.confirmedMs !== undefined) confirmed.push(r.confirmedMs);
+      }
+      rows.push({ path, echoMs, clearMs, rttMs: rtt, ms: summary(times), ...(confirmed.length ? { confirmedMs: summary(confirmed) } : {}), trips: summary(trips) });
+    }
   }
   for (const busy of [false, true]) {
     const delivered: number[] = [];
