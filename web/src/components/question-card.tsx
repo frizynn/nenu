@@ -1,10 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, Loader2, TerminalSquare } from "lucide-react";
+import { Check, Keyboard, Loader2, TerminalSquare } from "lucide-react";
 
-import { isToggle, type LiveInteraction, type LiveOption, type Receipt } from "@/hooks/use-interactions";
+import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
-import type { AnswerOutcome } from "@/lib/types";
+import type { AnswerOutcome, Interaction, InteractionOption } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // One card for every dialog the bridge detected (ADR 0057): inline at the bottom of a thread, and
@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
 export const CONFIRM_MS = 5_000;
 
 export interface QuestionCardProps {
-  interaction?: LiveInteraction;
+  interaction?: Interaction;
   /** Shown instead of a card once the dialog was answered and before the pane's next one. */
   receipt?: Receipt;
-  onAnswer: (option: LiveOption, extra?: { text?: string; confirm?: boolean }) => Promise<AnswerOutcome>;
+  onAnswer: (option: InteractionOption, extra?: AnswerExtra) => Promise<AnswerOutcome>;
   readOnly?: boolean;
   /** Home's variant: one line of options and the question clamped. */
   compact?: boolean;
@@ -27,6 +27,8 @@ export interface QuestionCardProps {
   /** Where the full dialog lives: the terminal mirror in a thread, the thread from Home. */
   onOpen?: () => void;
   openLabel?: string;
+  /** The keys pad next to the terminal, for a text row the card cannot type (Home has none: `onOpen` is on the card). */
+  onKeys?: () => void;
   /**
    * A permission may be approved only while its full command or file is on the card; otherwise the
    * card offers `onOpen` instead. Defaults to on for the compact (Home) card.
@@ -35,23 +37,31 @@ export interface QuestionCardProps {
 }
 
 type Notice = { tone: "warn" | "error"; text: string };
+/** The text box open on the card: a text row's reply (required), or a note other answers may carry. */
+type Writing = { to: "reply"; option: InteractionOption } | { to: "note" } | null;
 
 export function QuestionCard({
   interaction: i, receipt, onAnswer, readOnly = false, compact = false, title, onOpen,
-  openLabel = compact ? "Open" : "Open terminal", approveNeedsDetail = compact,
+  openLabel = compact ? "Open" : "Open terminal", onKeys, approveNeedsDetail = compact,
 }: QuestionCardProps) {
   const [busy, setBusy] = useState<number | null>(null);
   const [armed, setArmed] = useState<number | null>(null);
-  const [replying, setReplying] = useState(false);
+  const [writing, setWriting] = useState<Writing>(null);
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const replyId = useId();
+  const textId = useId();
+  const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (armed === null) return;
     const timer = setTimeout(() => setArmed(null), CONFIRM_MS);
     return () => clearTimeout(timer);
   }, [armed]);
+
+  // The card sits in a capped scroll box under the thread; the box it just opened must be in view.
+  useEffect(() => {
+    if (writing) form.current?.scrollIntoView?.({ block: "nearest" });
+  }, [writing]);
 
   if (!i) {
     if (!receipt) return null;
@@ -71,12 +81,15 @@ export function QuestionCard({
   // Approving needs the whole request on the card; a deny never does.
   const approvalHidden = approveNeedsDetail && i.kind === "permission" && !i.detailComplete;
   const shown = i.options.filter((o) => !(approvalHidden && o.role !== "deny"));
-  // Only the plan's "Tell Claude what to change" takes text from the card (the bridge's verified
-  // feedback sequence); any other free-text row is typed in the terminal.
-  const reply = i.kind === "plan" ? shown.find((o) => o.role === "freeText") : undefined;
-  const choices = shown.filter((o) => o !== reply && !(o.role === "freeText" && !onOpen));
+  // A text row the bridge can type takes a reply on the card; one without a measured recipe is typed
+  // in the terminal. Any other option that accepts text may carry an optional note.
+  const replies = shown.filter((o) => o.role === "freeText" && o.acceptsText);
+  const inTerminal = shown.filter((o) => o.role === "freeText" && !o.acceptsText);
+  const choices = shown.filter((o) => o.role !== "freeText");
+  const notable = choices.some((o) => o.acceptsText);
+  const note = writing?.to === "note" ? draft.trim() : "";
 
-  async function send(option: LiveOption, extra: { text?: string; confirm?: boolean } = {}) {
+  async function send(option: InteractionOption, extra: AnswerExtra = {}) {
     setBusy(option.index);
     setNotice(null);
     const outcome = await onAnswer(option, extra).catch((err: Error): AnswerOutcome => ({ ok: false, error: err.message || "Answer failed" }));
@@ -85,7 +98,7 @@ export function QuestionCard({
     if (outcome.ok) {
       if (extra.text !== undefined) {
         setDraft("");
-        setReplying(false);
+        setWriting(null);
       }
       return;
     }
@@ -96,17 +109,26 @@ export function QuestionCard({
     } else setNotice({ tone: "error", text: outcome.error || "Answer failed" });
   }
 
-  function press(option: LiveOption) {
+  function press(option: InteractionOption) {
     if (locked) return;
-    if (option.role === "freeText") return onOpen?.();
     if (option.role === "persistent" && armed !== option.index) {
       setNotice(null);
       return setArmed(option.index);
     }
-    void send(option, option.role === "persistent" ? { confirm: true } : {});
+    void send(option, {
+      ...(note && option.acceptsText ? { text: note } : {}),
+      ...(option.role === "persistent" ? { confirm: true } : {}),
+    });
+  }
+
+  function write(next: Writing) {
+    setWriting(next);
+    setDraft("");
   }
 
   const question = <p className={cn("text-foreground", compact ? "line-clamp-3 text-sm" : "text-[15.5px] leading-snug")}>{i.question}</p>;
+  const reply = writing?.to === "reply" ? writing.option : undefined;
+  const replyLabel = (o: InteractionOption) => (i.kind === "plan" ? "Reply…" : `${o.label.replace(/[.…]+$/, "")}…`);
 
   return (
     <Frame compact={compact} label={i.question}>
@@ -119,27 +141,51 @@ export function QuestionCard({
       </div>
       {question}
       {i.context && (
-        <pre aria-label="Request details" className={cn(
-          "min-w-0 whitespace-pre-wrap break-words rounded-lg bg-muted/60 px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-foreground",
-          compact ? "line-clamp-3" : "max-h-56 overflow-y-auto",
-        )}>{i.context}</pre>
+        // The padding sits outside the clamped box: a clamp only cuts at its own padding edge, so
+        // padding on the clamped element itself shows the top half of the next line.
+        <div className={cn("min-w-0 rounded-lg bg-muted/60 px-2.5 py-2", !compact && "max-h-56 overflow-y-auto")}>
+          <pre aria-label="Request details" className={cn(
+            "min-w-0 whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-foreground",
+            compact && "line-clamp-3",
+          )}>{i.context}</pre>
+        </div>
       )}
       {typing && <p className="text-xs text-muted-foreground">Someone is typing in this dialog in the terminal. Answer there, or wait.</p>}
       {readOnly && <p className="text-xs text-muted-foreground">Read-only on this device.</p>}
       {approvalHidden && <p className="text-xs text-muted-foreground">The full request isn't on this card. {compact ? "Open the thread" : "Open the terminal"} to approve it.</p>}
 
+      {inTerminal.map((option) => (
+        <p key={option.index} data-in-terminal className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className="min-w-0 break-words"><span className="text-foreground">{option.label}</span> Answer in the terminal.</span>
+          {onKeys && (
+            <button type="button" onClick={onKeys}
+              className="inline-flex min-h-8 items-center gap-1 font-medium text-foreground underline underline-offset-2">
+              <Keyboard aria-hidden className="size-3.5 shrink-0" />Open keys
+            </button>
+          )}
+        </p>
+      ))}
+
       <div className={cn("flex gap-2", compact ? "flex-row flex-wrap" : "flex-col lg:flex-row lg:flex-wrap")}>
         {choices.map((option) => (
           <OptionRow key={option.index} option={option} toggle={isToggle(i, option)} compact={compact}
-            armed={armed === option.index} busy={busy === option.index} disabled={locked}
-            label={option.role === "freeText" ? `${option.label} (in terminal)` : undefined}
+            armed={armed === option.index} busy={busy === option.index}
+            // A typed note must never vanish into an answer that cannot carry it.
+            disabled={locked || (note !== "" && !option.acceptsText)}
             onPress={() => press(option)} />
         ))}
-        {reply && !replying && (
-          <button type="button" disabled={locked} aria-expanded={false} aria-controls={replyId}
-            onClick={() => setReplying(true)}
+        {!reply && replies.map((option) => (
+          <button key={option.index} type="button" disabled={locked} aria-expanded={false} aria-controls={textId}
+            onClick={() => write({ to: "reply", option })}
             className={cn(rowBase(compact), "border border-border bg-transparent text-muted-foreground disabled:opacity-50")}>
-            Reply…
+            {replyLabel(option)}
+          </button>
+        ))}
+        {notable && !writing && (
+          <button type="button" disabled={locked} aria-expanded={false} aria-controls={textId}
+            onClick={() => write({ to: "note" })}
+            className={cn(rowBase(compact), "border border-border bg-transparent text-muted-foreground disabled:opacity-50")}>
+            Add a note…
           </button>
         )}
         {onOpen && (
@@ -150,21 +196,25 @@ export function QuestionCard({
         )}
       </div>
 
-      {reply && replying && (
-        <form id={replyId} className="flex flex-col gap-2" onSubmit={(e) => {
+      {writing && (
+        <form ref={form} id={textId} className="flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();
-          if (!locked && draft.trim()) void send(reply, { text: draft });
+          if (reply && !locked && draft.trim()) void send(reply, { text: draft });
         }}>
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={FEEDBACK_MAX_LENGTH} rows={3} autoFocus
-            aria-label={reply.label} placeholder={reply.label} disabled={readOnly || typing}
-            className="min-h-20 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm" />
-          <div className="flex gap-2">
-            <button type="submit" disabled={locked || !draft.trim()}
-              className={cn(rowBase(compact), "bg-foreground text-background disabled:opacity-50")}>
-              {busy === reply.index && <Loader2 aria-hidden className="size-4 animate-spin" />}Send to Claude
-            </button>
-            <button type="button" disabled={busy !== null} onClick={() => setReplying(false)}
+          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={FEEDBACK_MAX_LENGTH} rows={compact ? 2 : 3} autoFocus
+            aria-label={reply ? reply.label : "Note with your answer"}
+            placeholder={reply ? reply.label : "Add a note, then pick an answer"} disabled={readOnly || typing}
+            className="min-h-16 w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm" />
+          <div className="flex items-center gap-2">
+            {reply && (
+              <button type="submit" disabled={locked || !draft.trim()}
+                className={cn(rowBase(compact), "bg-foreground text-background disabled:opacity-50")}>
+                {busy === reply.index && <Loader2 aria-hidden className="size-4 animate-spin" />}Send
+              </button>
+            )}
+            <button type="button" disabled={busy !== null} onClick={() => write(null)}
               className={cn(rowBase(compact), "border border-border text-muted-foreground")}>Cancel</button>
+            <span aria-live="polite" className="ml-auto text-xs tabular-nums text-muted-foreground">{draft.length}/{FEEDBACK_MAX_LENGTH}</span>
           </div>
         </form>
       )}
@@ -194,8 +244,8 @@ const rowBase = (compact: boolean) => cn(
   compact ? "min-h-10 text-sm" : "min-h-12 text-[15px]",
 );
 
-function OptionRow({ option, toggle, compact, armed, busy, disabled, label, onPress }: {
-  option: LiveOption; toggle: boolean; compact: boolean; armed: boolean; busy: boolean; disabled: boolean; label?: string; onPress: () => void;
+function OptionRow({ option, toggle, compact, armed, busy, disabled, onPress }: {
+  option: InteractionOption; toggle: boolean; compact: boolean; armed: boolean; busy: boolean; disabled: boolean; onPress: () => void;
 }) {
   const tone = armed ? "armed" : option.role;
   return (
@@ -207,7 +257,7 @@ function OptionRow({ option, toggle, compact, armed, busy, disabled, label, onPr
         "disabled:opacity-50",
         busy && "disabled:opacity-100",
         tone === "primary" && "bg-foreground text-background",
-        (tone === "neutral" || tone === "freeText") && "border border-border bg-secondary text-foreground",
+        tone === "neutral" && "border border-border bg-secondary text-foreground",
         tone === "persistent" && "border border-dashed border-border bg-secondary text-foreground",
         tone === "deny" && "border border-status-blocked/40 bg-transparent text-status-blocked",
         tone === "armed" && "border border-status-working bg-status-working/15 text-foreground",
@@ -221,7 +271,7 @@ function OptionRow({ option, toggle, compact, armed, busy, disabled, label, onPr
         <span aria-hidden className={cn("w-3 shrink-0 tabular-nums", tone === "primary" ? "text-background/60" : "text-muted-foreground")}>{option.index + 1}</span>
       )}
       <span className="flex min-w-0 flex-1 flex-col py-1.5">
-        <span className="break-words">{armed ? `Tap again to confirm: ${option.label}` : label ?? option.label}</span>
+        <span className="break-words">{armed ? `Tap again to confirm: ${option.label}` : option.label}</span>
         {!compact && (armed || option.role === "persistent" || option.description) && (
           <span className={cn("text-xs font-normal", tone === "primary" ? "text-background/70" : "text-muted-foreground")}>
             {option.role === "persistent" ? "Changes a setting beyond this answer" : option.description}
