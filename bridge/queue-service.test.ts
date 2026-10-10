@@ -88,14 +88,15 @@ it("delivers a saved message when status is blocked but the live composer is emp
   const { queueReadiness } = await import("./queue-readiness.ts");
   const text = await Bun.file("web/src/fixtures/panes/codex--v0157-idle.txt").text();
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
-  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("ready");
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr, "steer")).toEqual({ ready: true, busy: false });
 });
 
 it("does not mistake a blocked-status busy Codex composer for an idle terminal", async () => {
   const { queueReadiness } = await import("./queue-readiness.ts");
   const text = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
-  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr)).toBe("working");
+  // Busy, so a next-turn row goes to Codex's own queue (Tab) rather than steering the turn.
+  expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr, "afterTurn")).toEqual({ ready: true, busy: true });
 });
 
 it("attempts an explicit Codex message immediately while the agent is working", async () => {
@@ -150,4 +151,181 @@ it("a kick during a delivery pass runs exactly one more pass afterwards", async 
     service.dispose();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// ── ADR 0056 behaviour through the service, against a scripted terminal ─────────────────────────────
+
+type Status = "idle" | "working" | "blocked" | "done";
+const RULE = "─".repeat(60);
+
+/** One agent pane: a Claude- or Codex-shaped screen, Herdr's status and state counter, and a journal. */
+async function agentPane(agent: "claude" | "codex", status: Status) {
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { HerdrClient } = await import("./herdr-client.ts");
+  const codexBusy = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+  const codexDraft = await Bun.file("web/src/lib/harness/codex/fixtures/busy-draft-v0160.txt").text();
+  const pane = {
+    status, seq: 1, session: "first", draft: "", events: 0,
+    submitted: [] as string[], keys: [] as string[][], journal: [] as import("./journal/types.ts").NativeQueueEvent[],
+  };
+  const screen = () => {
+    if (agent === "codex") return pane.draft ? codexDraft.replace("Also say BANANA at the end.", pane.draft) : codexBusy;
+    const footer = pane.status === "working" ? "  ⏵⏵ auto mode on · esc to interrupt · ← for agents" : "  ⏵⏵ auto mode on · ← for agents";
+    return [RULE, `❯ ${pane.draft}`, RULE, footer].join("\n");
+  };
+  class Terminal extends HerdrClient {
+    override async readPane() { return { pane_id: "pane", text: screen(), revision: 1, truncated: false }; }
+    override async getPane() { return { pane_id: "pane", agent } as Awaited<ReturnType<InstanceType<typeof HerdrClient>["getPane"]>>; }
+    override async sendPaneKeys(_id: string, keys: string[]) {
+      pane.keys.push(keys);
+      if (keys[0] === "Tab") { pane.submitted.push(`tab:${pane.draft}`); pane.draft = ""; }
+    }
+    override async waitForOutput(): Promise<never> { throw new Error("no trigger in this test"); }
+  }
+  const herdr = new Terminal("/tmp/unused-queue.sock");
+  const dir = await mkdtemp(join(tmpdir(), "nenu-queue-adr0056-"));
+  const service = new QueueService(
+    dir,
+    async () => ({
+      pane: {
+        paneId: "pane", workspaceId: "w", workspaceLabel: "QA", workspaceNumber: 1, tabId: "t", agent, cwd: "/tmp", focused: false,
+        status: pane.status, stateChangeSeq: pane.seq, agentSession: { kind: "id" as const, value: pane.session },
+      },
+      herdr, connected: true,
+    }),
+    async (_row, text, submit) => {
+      if (submit) {
+        pane.submitted.push(pane.draft);
+        if (pane.status === "working") pane.journal.push({ kind: "enqueue", ts: new Date().toISOString(), content: pane.draft });
+        pane.draft = "";
+      } else pane.draft = text;
+      return { ok: true };
+    },
+    undefined,
+    () => { pane.events++; },
+    async () => ({ queue: pane.journal }),
+  );
+  const call = async (body?: Record<string, unknown>) => {
+    const res = await service.handle(new Request("http://localhost/queue", body ? { method: "POST", body: JSON.stringify(body) } : {}), "session", "pane", null);
+    return { status: res.status, body: await res.json() };
+  };
+  const scope = async () => (await call()).body.scope as string;
+  const add = async (id: string, text: string, deliveryMode?: string) => call({ action: "add", id, scope: await scope(), text, ...(deliveryMode ? { deliveryMode } : {}) });
+  const settle = async (test: () => boolean) => {
+    for (let i = 0; i < 100 && !test(); i++) await Bun.sleep(10);
+  };
+  const close = async () => {
+    service.dispose();
+    const { rm } = await import("node:fs/promises");
+    await rm(dir, { recursive: true, force: true });
+  };
+  return { pane, service, call, add, scope, settle, close };
+}
+
+it("Claude 'asap' types into a working Claude, and a second message reaches its queue too", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "First while you work", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    await t.add("two", "Second while you work", "asap");
+    await t.settle(() => t.pane.submitted.length === 2);
+    expect(t.pane.submitted).toEqual(["First while you work", "Second while you work"]);
+  } finally { await t.close(); }
+});
+
+it("a Claude row for after the turn waits, says why, and costs no write while it waits", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    const added = await t.add("one", "After this turn");
+    expect(added.body.messages[0]).toMatchObject({ state: "queued", waitingFor: "working", deliveryMode: "afterTurn", revision: 0 });
+    const events = t.pane.events;
+    for (let i = 0; i < 10; i++) { t.service.kick(); await Bun.sleep(5); }
+    await Bun.sleep(30);
+    expect(t.pane.events).toBe(events);
+    expect((await t.call()).body.messages[0]).toMatchObject({ waitingFor: "working", revision: 0 });
+    expect(t.pane.submitted).toEqual([]);
+  } finally { await t.close(); }
+});
+
+it("the second Claude row waits for Herdr to see the first one's turn start (state_change_seq)", async () => {
+  const t = await agentPane("claude", "idle");
+  try {
+    const first = await t.add("one", "First");
+    // An add to a free agent answers once its row moved, here already typed and sent.
+    expect(first.body.delivered.map((row: { id: string }) => row.id)).toEqual(["one"]);
+    const second = await t.add("two", "Second");
+    expect(second.body.messages[0]).toMatchObject({ id: "two", waitingFor: "turn-start" });
+    t.pane.seq = 2; // the turn started
+    t.pane.status = "working";
+    t.service.kick();
+    await Bun.sleep(30);
+    expect((await t.call()).body.messages[0]).toMatchObject({ id: "two", waitingFor: "working" });
+    t.pane.seq = 3;
+    t.pane.status = "idle";
+    t.service.kick();
+    await t.settle(() => t.pane.submitted.length === 2);
+    expect(t.pane.submitted).toEqual(["First", "Second"]);
+  } finally { await t.close(); }
+});
+
+it("a row whose conversation changed is stranded with its reason, shown on the pane and never sent", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "For the old conversation");
+    t.pane.session = "second";
+    t.service.kick();
+    await Bun.sleep(30);
+    t.pane.status = "idle";
+    t.service.kick();
+    await Bun.sleep(30);
+    const listed = (await t.call()).body.messages[0];
+    expect(listed).toMatchObject({ id: "one", stranded: { reason: expect.stringContaining("conversation") } });
+    expect(listed.error).toContain("conversation");
+    expect(t.pane.submitted).toEqual([]);
+  } finally { await t.close(); }
+});
+
+it("Claude's journal marks a delivered row queued then read, and 'read it now' asks first", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "Look at this when you can", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    t.service.kick();
+    await Bun.sleep(30);
+    let delivered = (await t.call()).body.delivered;
+    expect(delivered[0]).toMatchObject({ id: "one", native: "enqueued" });
+    const scope = await t.scope();
+    const unconfirmed = await t.call({ action: "now", id: "one", scope });
+    expect(unconfirmed).toMatchObject({ status: 409, body: { code: "confirm_required" } });
+    expect(t.pane.keys).toEqual([]);
+    const confirmed = await t.call({ action: "now", id: "one", scope, confirm: true });
+    expect(confirmed.status).toBe(200);
+    expect(t.pane.keys).toEqual([["ctrl+enter"]]);
+    t.pane.journal.push({ kind: "dequeue", ts: new Date().toISOString() });
+    t.service.kick();
+    await Bun.sleep(30);
+    delivered = (await t.call()).body.delivered;
+    expect(delivered[0]).toMatchObject({ id: "one", native: "absorbed" });
+  } finally { await t.close(); }
+});
+
+it("Codex 'afterTurn' while a turn runs goes to Codex's own queue with Tab; 'steer' with Enter", async () => {
+  const t = await agentPane("codex", "working");
+  try {
+    await t.add("later", "After this turn, run the tests.", "afterTurn");
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect(t.pane.submitted).toEqual(["tab:After this turn, run the tests."]);
+    await t.add("now", "Also check the lint.", "steer");
+    await t.settle(() => t.pane.submitted.length === 2);
+    expect(t.pane.submitted[1]).toBe("Also check the lint.");
+  } finally { await t.close(); }
+});
+
+it("rejects an unknown delivery mode", async () => {
+  const t = await agentPane("claude", "idle");
+  try {
+    expect((await t.add("bad", "Hi", "whenever")).status).toBe(400);
+  } finally { await t.close(); }
 });
