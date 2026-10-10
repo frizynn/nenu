@@ -8,12 +8,20 @@ import { markLive } from "./connection-health";
 import { observeServerBuild, SERVER_BUILD_HEADER } from "./server-build";
 import type {
   ActionResponse,
+  AnswerOutcome,
+  AnswerRequest,
   BridgeConfig,
   CreateResponse,
+  DeliveryMode,
+  Interaction,
+  NativeQueueState,
   NotifyPrefs,
   PaneHistoryResponse,
   PaneSkillsResponse,
   PaneReadResponse,
+  QueueWaitReason,
+  SendOutcome,
+  SendRequest,
   SnapshotResponse,
   TemplateView,
   UpdateInfo,
@@ -282,7 +290,7 @@ export async function fetchPane(
   const cached = paneCache.get(cacheKey);
   // SEEN_HEADER is what tells the bridge this read came from our own page and may mark the pane
   // seen. A cross-site no-cors GET can't set a custom header, so it can't clear your alerts by
-  // guessing pane ids (bridge/server.ts → marksPaneSeen).
+  // guessing pane ids (bridge/routes/index.ts → marksPaneSeen).
   const headers: Record<string, string> = {
     "x-collie-seen": "1",
     [XHR_HEADER]: XHR_HEADER_VALUE,
@@ -416,6 +424,61 @@ export function sendReply(
     },
     recoverPromptChanged,
   );
+}
+
+/**
+ * The whole guarded send in one request: the bridge types, verifies and submits (or queues, per
+ * `deliveryMode`). A refused send is an answer, not a transport failure: the bridge replies with a
+ * SendOutcome body on its error status, and that body is returned instead of thrown.
+ */
+export function sendMessage(paneId: string, request: SendRequest, session?: string): Promise<SendOutcome> {
+  return req<SendOutcome>(
+    withSession(`/api/pane/${encodeURIComponent(paneId)}/send`, session),
+    { method: "POST", body: JSON.stringify(request) },
+    (_status, detail) => refusedSend(detail),
+  );
+}
+
+function refusedSend(detail: string): SendOutcome | null {
+  try {
+    const body = JSON.parse(detail) as Partial<Extract<SendOutcome, { ok: false }>>;
+    if (body.ok === false && typeof body.error === "string" && typeof body.stage === "string") return body as SendOutcome;
+  } catch {
+    // A non-JSON error body follows the usual ApiError path.
+  }
+  return null;
+}
+
+/** Every pane's detected dialog in this session (bridge/interactions.ts). */
+export function fetchInteractions(session?: string, signal?: AbortSignal): Promise<{ interactions: Interaction[] }> {
+  return req(withSession("/api/interactions", session), { signal });
+}
+
+/**
+ * Answer a pane's dialog by option. The bridge re-reads the screen and refuses a stale signature, so
+ * a card that outlived its dialog gets `interaction_changed` back rather than pressing a key.
+ */
+export function answerInteraction(paneId: string, answer: AnswerRequest, session?: string): Promise<AnswerOutcome> {
+  return req<AnswerOutcome>(
+    withSession(`/api/interactions/${encodeURIComponent(paneId)}/answer`, session),
+    { method: "POST", body: JSON.stringify(answer) },
+    (status, detail) => (status === 409 ? refusedAnswer(detail) : null),
+  );
+}
+
+function refusedAnswer(detail: string): AnswerOutcome | null {
+  try {
+    const body = JSON.parse(detail) as { ok?: unknown; error?: unknown };
+    if (body.ok === false && typeof body.error === "string") return body as AnswerOutcome;
+  } catch {
+    // A non-JSON error body follows the usual ApiError path.
+  }
+  return null;
+}
+
+/** An image the pane's journal holds inline, addressed by entry and index — never by path. */
+export function journalImageUrl(paneId: string, entry: string, index: number, session?: string): string {
+  return withSession(`/api/pane/${encodeURIComponent(paneId)}/journal-image?entry=${encodeURIComponent(entry)}&n=${index}`, session);
 }
 
 /** Record a guarded send that did not end in "sent" in the bridge's audit trail. */
@@ -640,12 +703,27 @@ export function fetchProjectFiles(paneId: string, path: string, session?: string
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/files?path=${encodeURIComponent(path)}`, session), { signal });
 }
 
-export interface QueueMessage { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; error?: string }
+export interface QueueMessage {
+  id: string;
+  text: string;
+  state: "queued" | "sending" | "paused";
+  createdAt: number;
+  revision: number;
+  error?: string;
+  deliveryMode?: DeliveryMode;
+  /** Why the row is still waiting, e.g. a dialog the operator has to answer first. */
+  waitingFor?: QueueWaitReason;
+  /** The row's pane or conversation went away; it waits for the operator. */
+  stranded?: { reason: string; since: number };
+  native?: NativeQueueState;
+  /** The device that queued it. */
+  device?: string | null;
+}
 export type MessageQueuePage = { available: false; messages: [] } | { available: true; scope: string; messages: QueueMessage[] };
 export function fetchMessageQueue(paneId: string, session?: string, signal?: AbortSignal): Promise<MessageQueuePage> {
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{signal});
 }
-export function changeMessageQueue(paneId:string, body:{scope:string;action:"add"|"edit"|"remove"|"send";id:string;text?:string;revision?:number},session?:string):Promise<MessageQueuePage>{
+export function changeMessageQueue(paneId:string, body:{scope:string;action:"add"|"edit"|"remove"|"send";id:string;text?:string;revision?:number;deliveryMode?:DeliveryMode},session?:string):Promise<MessageQueuePage>{
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
 }
 
