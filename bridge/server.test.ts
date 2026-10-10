@@ -87,7 +87,7 @@ describe("Codex interrupt cue", () => {
   });
 
   test("accepts the current Codex working cue with styled Escape and background activity", async () => {
-    const capture = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+    const capture = await Bun.file(join(import.meta.dirname, "..", "web/src/fixtures/panes/codex--v0159-busy.txt")).text();
     expect(hasCodexInterruptCue(capture)).toBe(true);
   });
 

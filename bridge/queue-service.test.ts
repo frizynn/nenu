@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { join } from "node:path";
 import { QueueService } from "./queue-service.ts";
+
+const repoFile = (path: string) => Bun.file(join(import.meta.dirname, "..", path)).text();
 
 describe("unavailable queue", () => {
   const service = new QueueService(
@@ -33,7 +36,6 @@ describe("unavailable queue", () => {
 it("refuses a stale conversation scope when the live session changes before enqueue", async () => {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { HerdrClient } = await import("./herdr-client");
   const { computeEtag } = await import("./http-cache");
   const dir = await mkdtemp(join(tmpdir(), "nenu-queue-live-"));
@@ -86,14 +88,14 @@ it("refuses a stale conversation scope when the live session changes before enqu
 
 it("delivers a saved message when status is blocked but the live composer is empty", async () => {
   const { queueReadiness } = await import("./queue-readiness.ts");
-  const text = await Bun.file("web/src/fixtures/panes/codex--v0157-idle.txt").text();
+  const text = await repoFile("web/src/fixtures/panes/codex--v0157-idle.txt");
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr, "steer")).toEqual({ ready: true, busy: false });
 });
 
 it("does not mistake a blocked-status busy Codex composer for an idle terminal", async () => {
   const { queueReadiness } = await import("./queue-readiness.ts");
-  const text = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
+  const text = await repoFile("web/src/fixtures/panes/codex--v0159-busy.txt");
   const herdr = { readPane: async () => ({ pane_id: "pane", text, revision: 1, truncated: false }) };
   // Busy, so a next-turn row goes to Codex's own queue (Tab) rather than steering the turn.
   expect(await queueReadiness({ paneId: "pane", agent: "codex", status: "blocked" }, herdr, "afterTurn")).toEqual({ ready: true, busy: true });
@@ -102,7 +104,6 @@ it("does not mistake a blocked-status busy Codex composer for an idle terminal",
 it("attempts an explicit Codex message immediately while the agent is working", async () => {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { HerdrClient } = await import("./herdr-client.ts");
   const dir = await mkdtemp(join(tmpdir(), "nenu-explicit-send-"));
   let reads = 0;
@@ -130,7 +131,6 @@ it("attempts an explicit Codex message immediately while the agent is working", 
 it("a kick during a delivery pass runs exactly one more pass afterwards", async () => {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { MessageQueue } = await import("./message-queue");
   const dir = await mkdtemp(join(tmpdir(), "nenu-queue-kick-"));
   // One queued row in storage, so every pass has something to resolve.
@@ -162,10 +162,9 @@ const RULE = "─".repeat(60);
 async function agentPane(agent: "claude" | "codex", status: Status, { audited = true } = {}) {
   const { mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { HerdrClient } = await import("./herdr-client.ts");
-  const codexBusy = await Bun.file("web/src/fixtures/panes/codex--v0159-busy.txt").text();
-  const codexDraft = await Bun.file("web/src/lib/harness/codex/fixtures/busy-draft-v0160.txt").text();
+  const codexBusy = await repoFile("web/src/fixtures/panes/codex--v0159-busy.txt");
+  const codexDraft = await repoFile("web/src/lib/harness/codex/fixtures/busy-draft-v0160.txt");
   const pane = {
     status, seq: 1, session: "first", draft: "", events: 0,
     submitted: [] as string[], keys: [] as string[][], journal: [] as import("./journal/types.ts").NativeQueueEvent[],

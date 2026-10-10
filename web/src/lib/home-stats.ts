@@ -90,19 +90,6 @@ export function projectStateCounts(project: ProjectView): ProjectStateCounts {
   return counts;
 }
 
-export interface ProjectProgress {
-  resolved: number;
-  total: number;
-  /** 0..1; 0 for a project with no tasks yet. */
-  ratio: number;
-}
-
-export function projectProgress(project: ProjectView): ProjectProgress {
-  const total = project.threads.length;
-  const resolved = project.threads.filter((thread) => !isOpenThread(thread)).length;
-  return { resolved, total, ratio: total ? resolved / total : 0 };
-}
-
 export interface JumpTarget {
   kind: "project" | "chat";
   /** Project slug or pane id. */

@@ -1,7 +1,6 @@
 import { localFilePath } from "./file-links";
 import { parseMarkdown, type MdBlock, type MdSpan } from "./markdown";
-import type { ShownPart } from "./message-images";
-import type { TranscriptEntry } from "./types";
+import type { TranscriptEntry, TranscriptPart } from "./types";
 
 export type ChatFileKind = "file" | "photo" | "video";
 
@@ -89,14 +88,14 @@ export function filePathsInText(text: string): string[] {
   return paths;
 }
 
-function textInPart(part: ShownPart): string[] {
+function textInPart(part: TranscriptPart): string[] {
   if (part.kind === "image") return [];
   if (part.kind === "text" || part.kind === "thinking") return [part.text];
   return [part.summary, part.result?.text ?? ""];
 }
 
 /** Files the harness itself reports delivering (Claude's SendUserFile), as the tool result names them. */
-export function sentFiles(part: ShownPart): string[] {
+export function sentFiles(part: TranscriptPart): string[] {
   return part.kind === "tool" ? (part.result?.attachments ?? []).flatMap((a) => a.kind === "file" ? [a.path] : []) : [];
 }
 
@@ -105,7 +104,7 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
   const references = new Map<string, ChatFileReference>();
   for (const [order, entry] of entries.entries()) {
     const perEntry = new Set<string>();
-    for (const part of entry.parts as readonly ShownPart[]) {
+    for (const part of entry.parts) {
       const sent = sentFiles(part);
       const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? markdownPaths(part.text, false).map(normalisePath) : sent.map(normalisePath));
       for (const text of textInPart(part)) {
