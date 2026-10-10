@@ -313,7 +313,9 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   const kept = hints.filter((h) => agrees(h, base, dialog, labels));
   const asked = kept.find((h) => h.question && base.kind !== "permission");
   const detail = kept.find((h) => h.detail)?.detail;
-  const context = detail ?? base.context;
+  // A permission hint only agrees when its command is whole rows of the screen's subject, so that
+  // subject (tool header, command, description) already shows it in full. A plan hint is longer.
+  const context = base.kind === "permission" ? base.context : (detail ?? base.context);
   const interaction: DetectedInteraction = {
     paneId: pane.paneId,
     agent: pane.agent,

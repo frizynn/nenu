@@ -157,7 +157,10 @@ describe("hints enrich, the screen decides", () => {
   test("a permission hint whose command is on screen completes the card", () => {
     const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "mkfifo fixture-fifo" }]);
     expect(i.detailComplete).toBe(true);
-    expect(i.context).toBe("mkfifo fixture-fifo");
+    // The screen's own subject stays, so the card still says which tool is asking.
+    expect(i.context).toBe(detect("claude--permission-bash.txt").context!);
+    expect(i.context).toContain("Bash command");
+    expect(i.context).toContain("mkfifo fixture-fifo");
     expect(i.hints?.length).toBe(1);
   });
 
