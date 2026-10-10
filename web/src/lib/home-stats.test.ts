@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { finishedNotices, greeting, homeHeadline, jumpTargets, needsYouItems, projectProgress, projectStateCounts, reviewItems, runningWorkflows } from "./home-stats";
+import { finishedNotices, greeting, homeHeadline, jumpTargets, needsYouItems, projectStateCounts, reviewItems, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -100,11 +100,6 @@ describe("background work", () => {
     const activity = new Map([["a", res([wf("ancient", "completed", NOW - 25 * 60 * MIN)])]]);
     expect(finishedNotices(activity, [agent("a", "idle")], NOW)).toEqual([]);
   });
-});
-
-it("measures project progress as resolved over all tasks", () => {
-  expect(projectProgress(project)).toEqual({ resolved: 2, total: 3, ratio: 2 / 3 });
-  expect(projectProgress({ ...project, threads: [] })).toEqual({ resolved: 0, total: 0, ratio: 0 });
 });
 
 describe("jumpTargets", () => {

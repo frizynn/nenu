@@ -8,6 +8,7 @@ import { StatusDot } from "@/components/status-badge";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
+import { threadState, type ThreadState } from "@/lib/home-stats";
 import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
 import { useSidebarPrefs, type SidebarView } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
@@ -15,7 +16,7 @@ import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import {
   byRecency, chatMatches, isOpenThread, looseChats, matches, paneTitle, projectForPane, projectGroups, projectMatches, type ProjectGroup,
 } from "@/lib/projects";
-import { paneDisplayName, STATUS_LABEL, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { paneDisplayName, STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 /** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
 export type SidebarMode = "browse" | "needs-you";
@@ -327,12 +328,6 @@ export function threadTree(threads: readonly ProjectThreadView[]): ThreadNode[] 
   return roots;
 }
 
-/** What a thread's dot says: a pull request ready for review reads as its own state. */
-type ThreadState = AgentStatus | "review";
-function threadState(thread: ProjectThreadView): ThreadState {
-  const live = thread.paneId ? thread.liveStatus ?? "unknown" : "unknown";
-  return thread.group === "ready-for-review" && live !== "blocked" ? "review" : live;
-}
 const STATE_WORD: Partial<Record<ThreadState, string>> = { blocked: "needs you", review: "review" };
 
 function StateDot({ state, className = "size-2" }: { state: ThreadState; className?: string }) {

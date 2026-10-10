@@ -1,5 +1,5 @@
 import { filePathsInText } from "./chat-files";
-import type { TranscriptEntry, TranscriptImagePart, TranscriptPart } from "./types";
+import type { TranscriptEntry, TranscriptImagePart } from "./types";
 
 // A message that carries images is plain text on the wire: the agent CLIs (Claude Code, Codex) read
 // an image by its absolute path, so the composer appends each uploaded path to the text it sends.
@@ -56,9 +56,6 @@ export function messageMatchKey(text: string): string {
 export function imageLabel(index: number): string {
   return `Image ${index + 1}`;
 }
-
-/** @deprecated TranscriptPart now includes the image marker; kept until chat-files.ts drops it. */
-export type ShownPart = TranscriptPart;
 
 /** The images an entry holds inline, in journal order (what journal-image numbers by `index`). */
 export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
