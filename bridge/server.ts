@@ -45,6 +45,7 @@ export function startServer(opts: ServerDeps) {
   // whose agents write into the same root. Which harnesses have journals at all is decided in
   // journal/registry.ts, never here.
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
+  const transcripts = cfg.transcript ? new TranscriptStore() : null;
   const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
   const input = new PaneWrites();
   const queue = new QueueService(cfg.stateDir, async (session, paneId, fresh) => {
@@ -71,10 +72,19 @@ export function startServer(opts: ServerDeps) {
       live.publish({ session: row.session, topic: "pane", paneId: row.paneId });
       live.publish({ session: row.session, topic: "journal", paneId: row.paneId });
     }
+  }, {
+    audit,
+    // The queue shares the routes' store, so its journal reads hit the same cache.
+    facts: journals && transcripts
+      ? async (pane) => {
+          const adapter = pane.agentSession ? adapterFor(journals, pane.agent) : undefined;
+          return adapter && pane.agentSession ? await transcripts.facts(adapter, pane.agentSession) : null;
+        }
+      : null,
   });
   // A herd change can make a waiting pane ready; deliver now instead of on the fallback tick.
   live.subscribe((event) => {
-    if (event.topic === "snapshot") queue.kick();
+    if (event.topic === "snapshot" || event.topic === "journal") queue.kick();
   });
   // Per-session background notifications live in each session's runtime (built by the factory in
   // index.ts, wired to its StateEngine transitions). The routes only fan preference changes and
@@ -89,7 +99,7 @@ export function startServer(opts: ServerDeps) {
     // The third on that contract: the Quick dock's groups, quick-replies.toml off the hot path.
     operatorQuickReplies: createOperatorQuickReplies(cfg.quickRepliesFile),
     journals,
-    transcripts: cfg.transcript ? new TranscriptStore() : null,
+    transcripts,
     claudeTelemetry: new ClaudeTelemetry(cfg.stateDir),
     subagents: new Subagents(cfg.journalRoots, cfg.stateDir),
     conversations,
