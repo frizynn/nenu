@@ -1,21 +1,21 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
-import { Bot, ChevronRight, Clock, FolderKanban, House, Inbox, LayoutGrid, Plus, Search, Settings, Terminal } from "lucide-react";
+import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
-import { ChatGroups, NavRow } from "@/components/chat-groups";
+import { NavRow } from "@/components/chat-groups";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { StatusDot } from "@/components/status-badge";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
-import { useSidebarPrefs, type SidebarView } from "@/hooks/use-sidebar-prefs";
+import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import {
-  byRecency, chatMatches, isOpenThread, looseChats, matches, paneTitle, projectForPane, projectGroups, projectMatches, type ProjectGroup,
+  chatMatches, isOpenThread, matches, paneTitle, projectForPane, projectGroups, type ProjectGroup,
 } from "@/lib/projects";
-import { paneDisplayName, STATUS_LABEL, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 /** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
 export type SidebarMode = "browse" | "needs-you";
@@ -218,85 +218,6 @@ function HostRow({ data, onNavigate }: { data: HomeData; onNavigate?: () => void
   );
 }
 
-/** The view switch and the chosen view; the sidebar, the drawer and Home share it and its stored choice. */
-export function ChatBrowser({ data, query, onNavigate }: { data: HomeData; query: string; onNavigate?: () => void }) {
-  const { paneId, projectSlug } = useParams();
-  const { prefs, setView, setExpanded, setWorkspaceOpen } = useSidebarPrefs();
-  const hasProjects = (data.projects ?? []).length > 0;
-  const chosen = prefs.view ?? "workspaces";
-  const view: SidebarView = chosen === "projects" && !hasProjects ? "workspaces" : chosen;
-  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  useRevealProject(currentProject, setExpanded);
-
-  return <>
-    <ViewToggle value={view} options={hasProjects ? VIEWS : VIEWS.filter((option) => option.value !== "projects")} onChange={setView} />
-    {view === "workspaces" ? (
-      <WorkspaceTree source={data} query={query} session={data.session} currentPaneId={paneId}
-        expanded={prefs.workspaces} onExpand={setWorkspaceOpen} onNavigate={onNavigate} empty={<Empty query={query} />} />
-    ) : view === "projects"
-      ? <ProjectsView data={data} query={query} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} />
-      : <RecentView data={data} query={query} currentProject={currentProject} onNavigate={onNavigate} />}
-  </>;
-}
-
-const VIEWS: Array<{ value: SidebarView; label: string; Icon: typeof Clock }> = [
-  { value: "workspaces", label: "Workspaces", Icon: LayoutGrid },
-  { value: "projects", label: "Projects", Icon: FolderKanban },
-  { value: "recent", label: "Recent", Icon: Clock },
-];
-
-/** A segmented switch; arrows move the choice, as in any radio group. */
-function ViewToggle({ value, options, onChange }: { value: SidebarView; options: typeof VIEWS; onChange: (view: SidebarView) => void }) {
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-    if (!step) return;
-    event.preventDefault();
-    const next = options[(options.findIndex((view) => view.value === value) + step + options.length) % options.length];
-    onChange(next.value);
-    event.currentTarget.querySelector<HTMLButtonElement>(`[data-view="${next.value}"]`)?.focus();
-  }
-  return (
-    <div className="nav-views" role="radiogroup" aria-label="Group by" onKeyDown={onKeyDown}>
-      {options.map(({ value: option, label, Icon }) => (
-        <button key={option} type="button" role="radio" data-view={option} aria-checked={value === option} tabIndex={value === option ? 0 : -1}
-          onClick={() => onChange(option)}>
-          <Icon aria-hidden size={14} />{label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-interface ViewProps {
-  data: HomeData;
-  query: string;
-  onNavigate?: () => void;
-}
-
-/** Each project with its coordinator and tasks; panes outside every project close the list. */
-function ProjectsView({ data, query, expanded, onExpand, onNavigate }: ViewProps & TreeFolds) {
-  const { paneId } = useParams();
-  const groups = projectGroups(data.projects, query);
-  const chats = byRecency(looseChats(data.agents, data.projects).filter((pane) => chatMatches(pane, query)));
-  const searching = query.trim() !== "";
-  return <>
-    {groups.map((group) => (
-      <ProjectSection key={group.project.slug} group={group} data={data} open={searching || (expanded[group.project.slug] ?? true)}
-        searching={searching} expanded={expanded} onExpand={onExpand} onNavigate={onNavigate} />
-    ))}
-    {chats.length > 0 && (
-      <section aria-label="Other chats">
-        <h3 className="nav-label">Other chats</h3>
-        {chats.map((pane) => (
-          <NavRow key={pane.paneId} status={pane.status} title={paneDisplayName(pane)} to={panePath(pane.paneId, data.session)}
-            current={pane.paneId === paneId} onNavigate={onNavigate} />
-        ))}
-      </section>
-    )}
-    {groups.length + chats.length === 0 && <Empty query={query} />}
-  </>;
-}
-
 interface TreeFolds {
   /** Explicit folds, keyed by project slug or by `slug/threadId` for a coordinator thread. */
   expanded: Record<string, boolean>;
@@ -465,37 +386,6 @@ function ThreadRow({ thread, depth, slug, session, current, onNavigate, fold, ki
       </Link>
     </div>
   );
-}
-
-/** The projects list, then every agent pane by recency; a project's panes carry its name. */
-function RecentView({ data, query, currentProject, onNavigate }: ViewProps & { currentProject?: string }) {
-  const { paneId } = useParams();
-  const projects = (data.projects ?? []).filter((project) => projectMatches(project, query));
-  const panes = data.agents.filter((pane) => {
-    const owner = projectForPane(data.projects, pane.paneId);
-    return chatMatches(pane, query) || matches(query, paneTitle(pane, owner), owner?.project.name);
-  });
-  return <>
-    {projects.length > 0 && (
-      <section aria-label="Projects">
-        <h3 className="nav-label">Projects</h3>
-        {projects.map((project) => {
-          const status = project.coordinator?.liveStatus;
-          return (
-            <Link key={project.slug} className="nav-row" to={projectPath(project.slug, data.session)} onClick={onNavigate}
-              aria-current={currentProject === project.slug ? "page" : undefined}>
-              <FolderKanban aria-hidden size={16} />
-              <span className="nav-row-text">{project.name}</span>
-              {status && <StatusDot status={status} surface="bg-transparent" className="ml-auto size-2" />}
-              {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
-            </Link>
-          );
-        })}
-      </section>
-    )}
-    <ChatGroups panes={panes} projects={data.projects} session={data.session} currentPaneId={paneId} onNavigate={onNavigate} />
-    {projects.length + panes.length === 0 && <Empty query={query} />}
-  </>;
 }
 
 function Empty({ query }: { query: string }) {
