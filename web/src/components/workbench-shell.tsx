@@ -33,10 +33,40 @@ function isShortcut(event: KeyboardEvent): boolean {
 const DESKTOP = "(min-width: 1024px)";
 const isDesktop = () => typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
 
+const COLLAPSED_KEY = "nenu:sidebar-collapsed:v1";
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the desktop sidebar shows as the rail. The operator's choice persists; a docked thread
+ * folds it too, to give the split its width, until the operator expands it during that dock.
+ */
+function useSidebarCollapse() {
+  const [chosen, setChosen] = useState(readCollapsed);
+  const [docked, setDocked] = useState(false);
+  const [expandedInDock, setExpandedInDock] = useState(false);
+  if (!docked && expandedInDock) setExpandedInDock(false);
+  const choose = (next: boolean) => {
+    setChosen(next);
+    if (!next && docked) setExpandedInDock(true);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      // A blocked store only forgets the choice.
+    }
+  };
+  return { collapsed: chosen || (docked && !expandedInDock), choose, setDocked };
+}
+
 // Layout adapted from T3 Code AppSidebarLayout / SidebarChrome at 191a4ef.
 // Routing, session selection and pane lifecycle remain owned by Nenu.
 export function WorkbenchShell({ data, children }: { data: HomeData; children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, choose: setCollapsed, setDocked } = useSidebarCollapse();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [request, setRequest] = useState<SidebarRequest>();
   const canCreate = !isReadOnly(data.device) && !data.error && data.bridge === "connected";
@@ -45,12 +75,17 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
   const collapseButton = useRef<HTMLButtonElement>(null);
-  const wasCollapsed = useRef(false);
+  // Only a press moves focus to the counterpart button; a dock folding the sidebar leaves it alone.
+  const toggled = useRef(false);
   useEffect(() => {
-    if (collapsed) expandButton.current?.focus({ preventScroll: true });
-    else if (wasCollapsed.current) collapseButton.current?.focus({ preventScroll: true });
-    wasCollapsed.current = collapsed;
+    if (!toggled.current) return;
+    toggled.current = false;
+    (collapsed ? expandButton : collapseButton).current?.focus({ preventScroll: true });
   }, [collapsed]);
+  const toggle = (next: boolean) => {
+    toggled.current = true;
+    setCollapsed(next);
+  };
   const location = useLocation();
   // A new route closes the drawer synchronously, including browser Back/Forward.
   const [drawerLocation, setDrawerLocation] = useState(location.key);
@@ -103,7 +138,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
             <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" />
             <span>Nenu</span>
           </Link>
-          <button ref={collapseButton} type="button" className="workbench-icon-button" aria-label="Collapse sidebar" aria-expanded={!collapsed} aria-controls={sidebarId} onClick={() => setCollapsed(true)}>
+          <button ref={collapseButton} type="button" className="workbench-icon-button" aria-label="Collapse sidebar" aria-expanded={!collapsed} aria-controls={sidebarId} onClick={() => toggle(true)}>
             <PanelLeft aria-hidden="true" size={17} />
           </button>
         </div>
@@ -111,10 +146,10 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       </aside>
 
       {collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
-        onExpand={() => setCollapsed(false)} onNewChat={newChat} onSearch={search} onNeedsYou={() => reveal("needs-you")} />}
+        onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} onNeedsYou={() => reveal("needs-you")} />}
 
       <div className="workbench-main">
-        <WorkbenchNavigationContext value={{ open: sheet !== null, onOpen: () => setSheet("browse"), onNewChat: newChat }}>
+        <WorkbenchNavigationContext value={{ open: sheet !== null, onOpen: () => setSheet("browse"), onNewChat: newChat, onDock: setDocked }}>
           {children}
         </WorkbenchNavigationContext>
         {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat}
