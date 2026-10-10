@@ -61,17 +61,21 @@ function browsersCache(): string {
   return process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(userCacheDir(), "ms-playwright");
 }
 
+// NENU_E2E_BROWSER=chromium runs the same flows when the cached WebKit misbehaves on a host. It is a
+// fallback for a broken machine, not a substitute: Safari-only bugs only show up under WebKit.
 export async function launchWebkit(): Promise<Browser> {
+  const engine = process.env.NENU_E2E_BROWSER === "chromium" ? "chromium" : "webkit";
   const cache = browsersCache();
-  if (!existsSync(cache) || !readdirSync(cache).some((d) => d.startsWith("webkit-"))) {
-    throw new Error(`no cached WebKit under ${cache}; this bench never downloads browsers`);
+  const prefix = engine === "chromium" ? "chromium" : "webkit-";
+  if (!existsSync(cache) || !readdirSync(cache).some((d) => d.startsWith(prefix))) {
+    throw new Error(`no cached ${engine} under ${cache}; this bench never downloads browsers`);
   }
   const specifier = "playwright-core";
-  let mod: { webkit: { launch(opts: { headless: boolean }): Promise<Browser> } };
+  let mod: Record<"webkit" | "chromium", { launch(opts: { headless: boolean }): Promise<Browser> }>;
   try {
     mod = await import(specifier);
   } catch {
     throw new Error("playwright-core is not installed: run `bun install` in scripts/e2e");
   }
-  return mod.webkit.launch({ headless: true });
+  return mod[engine].launch({ headless: true });
 }
