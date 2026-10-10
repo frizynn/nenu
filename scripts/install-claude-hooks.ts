@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { constants, existsSync } from "node:fs";
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -103,6 +103,17 @@ export async function ensureHookToken(stateDir: string): Promise<string> {
 }
 
 /**
+ * Install or remove the observer hooks; returns whether settings changed. Removal also deletes the
+ * token, so the bridge refuses every later delivery (the old token survives in settings backups).
+ */
+export async function setObserverHooks(settingsPath: string, stateDir: string, url: string | null): Promise<boolean> {
+  const token = url === null ? "" : await ensureHookToken(stateDir);
+  const changed = (url !== null || existsSync(settingsPath)) && await updateClaudeSettings(settingsPath, (s) => observerHookSettings(s, url, token), "nenu-hooks-backup");
+  if (url === null) await rm(join(stateDir, CLAUDE_HOOK_TOKEN_FILE), { force: true });
+  return changed;
+}
+
+/**
  * The checkout a command hook or status line should run from: COLLIE_PLUGIN_ROOT, else the root Herdr
  * reports for herdr.collie, else this checkout. A worktree that ran the installer is not a stable
  * home: once it is removed, the hook breaks silently. Herdr's root follows `link` and `install`.
@@ -132,8 +143,7 @@ if (import.meta.main) {
   const remove = args.includes("--remove");
   const [settingsPath = defaultSettingsPath(), stateDir = loadConfig().stateDir] = args.filter((a) => a !== "--remove");
   const url = `http://127.0.0.1:${loadConfig().port}${CLAUDE_HOOK_PATH}`;
-  const token = remove ? "" : await ensureHookToken(stateDir);
-  const changed = (!remove || existsSync(settingsPath)) && await updateClaudeSettings(settingsPath, (s) => observerHookSettings(s, remove ? null : url, token), "nenu-hooks-backup");
+  const changed = await setObserverHooks(settingsPath, stateDir, remove ? null : url);
   console.log(remove
     ? `Nenu Claude hooks ${changed ? "removed" : "were not installed"}; other hooks preserved.`
     : `Nenu Claude hooks ${changed ? "installed" : "already installed"} (${url}); other hooks preserved. New Claude sessions pick them up.`);

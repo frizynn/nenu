@@ -8,7 +8,7 @@ import {
 } from "../prompt-binding.ts";
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { StateEngine } from "../state-engine.ts";
-import type { ActionResponse, DeliveryMode, SendOutcome, SendRequest } from "../types.ts";
+import type { ActionResponse, SendOutcome, SendRequest } from "../types.ts";
 import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import type { SessionRuntime } from "../sessions.ts";
@@ -295,8 +295,6 @@ async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: 
 
 // ── POST /api/pane/:id/send ───────────────────────────────────────────────────────────────────────
 
-const DELIVERY_MODES = new Set<DeliveryMode>(["asap", "afterTurn", "steer"]);
-
 type SendRun = GuardedSendResult & { elapsedMs: number };
 const sendLedger = new WriteLedger<SendRun>((run) => run.outcome.ok);
 
@@ -306,13 +304,11 @@ export function parseSendRequest(body: unknown): SendRequest | string {
   const b = body as Record<string, unknown>;
   if (typeof b.text !== "string" || !b.text.trim()) return "bad text";
   if (typeof b.requestId !== "string" || b.requestId.length > MAX_REPLY_REQUEST_ID_CHARS || !/^[A-Za-z0-9._:-]+$/.test(b.requestId)) return "bad requestId";
-  if (b.deliveryMode !== undefined && !DELIVERY_MODES.has(b.deliveryMode as DeliveryMode)) return "bad deliveryMode";
   if (b.paste !== undefined && typeof b.paste !== "boolean") return "bad paste";
   if (b.expectedPrompt !== undefined && (typeof b.expectedPrompt !== "string" || b.expectedPrompt.length > MAX_EXPECTED_PROMPT_CHARS)) return "bad expectedPrompt";
   return {
     text: b.text,
     requestId: b.requestId,
-    ...(b.deliveryMode !== undefined ? { deliveryMode: b.deliveryMode as DeliveryMode } : {}),
     ...(b.paste !== undefined ? { paste: b.paste as boolean } : {}),
     ...(b.expectedPrompt !== undefined ? { expectedPrompt: b.expectedPrompt as string } : {}),
   };
@@ -321,7 +317,7 @@ export function parseSendRequest(body: unknown): SendRequest | string {
 /**
  * One request, the whole guarded send (guarded-send.ts). A refusal is an answer, not a transport
  * failure: it comes back as a SendOutcome body on 409, which the client reads instead of throwing.
- * `deliveryMode` is accepted and validated; every mode types now, since queueing is the queue's job.
+ * Waiting for a turn is the queue's job, so /send always types.
  */
 export async function sendPane(
   rt: Pick<SessionRuntime, "name" | "herdr" | "poker">,

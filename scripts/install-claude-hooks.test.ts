@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CLAUDE_HOOK_EVENTS } from "../bridge/claude-hooks.ts";
-import { ensureHookToken, observerHookSettings, pluginRoot, updateClaudeSettings } from "./install-claude-hooks.ts";
+import { CLAUDE_HOOK_EVENTS, readHookToken } from "../bridge/claude-hooks.ts";
+import { ensureHookToken, observerHookSettings, pluginRoot, setObserverHooks, updateClaudeSettings } from "./install-claude-hooks.ts";
 
 const URL = "http://127.0.0.1:8787/api/hooks/claude";
 
@@ -80,6 +80,23 @@ test("the hook token is created once, private, and reused", async () => {
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     expect(await ensureHookToken(state)).toBe(token);
     expect((await stat(join(state, "claude-hooks.token"))).mode & 0o777).toBe(0o600);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("removing the hooks deletes the token, so the bridge refuses later deliveries", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-hooks-remove-"));
+  try {
+    const settings = join(dir, "settings.json");
+    expect(await setObserverHooks(settings, dir, URL)).toBe(true);
+    const token = await readHookToken(dir);
+    expect(token).not.toBe("");
+    expect(await setObserverHooks(settings, dir, null)).toBe(true);
+    expect(await readHookToken(dir)).toBe("");
+    expect(JSON.parse(await readFile(settings, "utf8"))).toEqual({});
+    expect(await setObserverHooks(settings, dir, URL)).toBe(true);
+    expect(await readHookToken(dir)).not.toBe(token);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -7,6 +7,7 @@ import type { HerdrClient } from "../herdr-client.ts";
 import { LiveEvents } from "../live-events.ts";
 import { startServer } from "../server.ts";
 import { StateEngine } from "../state-engine.ts";
+import { PANE_ACTIONS } from "./index.ts";
 
 // The route contract, pinned over real HTTP: every API route and method reaches its handler only
 // after the same gates, in the same order, as before the routes were split out of server.ts —
@@ -39,7 +40,7 @@ const CASES: Case[] = [
   pane("", "GET", "read"),
   ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "journal-image", "queue", "activity"]
     .map((action) => pane(action, "GET", "read")),
-  ...["start", "reply", "keys", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
+  ...["start", "send", "reply", "keys", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
     .map((action) => pane(action, "POST", "write")),
   // A pane action's gate follows its level, not the method: a mismatched method still clears the
   // gate and the session lookup before it 405s.
@@ -54,6 +55,8 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/notifications/prefs", level: "read", session: false },
   { method: "PUT", path: "/api/notifications/prefs", level: "none", session: false },
   { method: "POST", path: "/api/update/check", level: "read", session: false },
+  { method: "GET", path: "/api/interactions", level: "read", session: true },
+  { method: "POST", path: "/api/interactions/w%3Ap/answer", level: "write", session: true },
 ];
 
 // Paths no route claims for that method: they fall through to static and are never gated.
@@ -148,6 +151,11 @@ describe("every route keeps its gate order", () => {
 });
 
 describe("pane actions", () => {
+  test("every pane action has a contract row", () => {
+    const covered = new Set(CASES.filter((c) => c.path.startsWith("/api/pane/w%3Ap")).map((c) => c.path.slice("/api/pane/w%3Ap/".length)));
+    expect(Object.keys(PANE_ACTIONS).filter((action) => !covered.has(action))).toEqual([]);
+  });
+
   test("a method mismatch 405s after the gate and session, and marks nothing seen", async () => {
     seen.length = 0;
     for (const [method, action] of [["GET", "reply"], ["POST", "history"], ["PUT", "queue"], ["POST", ""]] as const) {

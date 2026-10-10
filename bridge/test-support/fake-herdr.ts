@@ -57,7 +57,7 @@ export interface FakeHerdrOptions {
   viewportRows?: number;
 }
 
-const READ_METHODS = new Set(["session.snapshot", "workspace.list", "tab.list", "pane.list", "pane.read", "pane.get", "pane.process_info", "events.subscribe", "ping"]);
+const READ_METHODS = new Set(["session.snapshot", "workspace.list", "tab.list", "pane.list", "pane.read", "pane.get", "pane.process_info", "pane.wait_for_output", "events.subscribe", "ping"]);
 const RULE = "─".repeat(72);
 const SPINNER = ["✻", "✶", "✳", "✢", "·"];
 
