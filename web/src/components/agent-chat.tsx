@@ -1056,6 +1056,7 @@ export function AgentChat({
             <div className="mx-3 mb-2 max-h-[min(36rem,60dvh)] overflow-y-auto">
               <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
                 readOnly={readOnly || gone || connecting} onOpen={() => setRawTerminal(true)}
+                onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }}
                 onAnswer={async (option, extra) => {
                   const outcome = await interactions.answer(interaction!, option, extra);
                   if (outcome.ok) {

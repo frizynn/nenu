@@ -543,7 +543,8 @@ export interface SubagentHistoryResponse {
 /** What an invalidation names (mirrors LiveTopic in bridge/types.ts). Never state (ADR 0054). */
 export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
 
-// ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
+// ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts, plus the wire
+// additions bridge/interactions.ts serves: DetectedInteraction and AnswerBody) ─────────────────────
 
 /** `persistent` changes a setting beyond this turn and always asks to confirm; `freeText` opens a reply. */
 export type InteractionOptionRole = "primary" | "neutral" | "persistent" | "deny" | "freeText";
@@ -553,6 +554,13 @@ export interface InteractionOption {
   label: string;
   description?: string;
   role: InteractionOptionRole;
+  /** A multi-select row's tick; absent on rows that are not checkboxes. */
+  checked?: boolean;
+  /**
+   * The answer may carry `text` (a verified sequence types it). A `freeText` row without it has no
+   * measured recipe and is answered in the terminal.
+   */
+  acceptsText?: true;
 }
 
 export type InteractionKind = "permission" | "question" | "plan" | "menu" | "wizard" | "multi-select" | "password";
@@ -579,13 +587,19 @@ export interface Interaction {
   revision: number;
   hints?: InteractionHint[];
   detectedAt: number;
+  /** The full command, file or plan is on the card; only then may Home or a push approve it. */
+  detailComplete?: boolean;
+  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
+  typing?: true;
 }
 
 export interface AnswerRequest {
   signature: string;
   optionIndex: number;
-  /** Only for a `freeText` option. */
+  /** Only for an option served with `acceptsText`. */
   text?: string;
+  /** Acknowledges a `persistent` option; without it the bridge answers `confirm_required`. */
+  confirm?: boolean;
 }
 
 export type AnswerOutcome =
