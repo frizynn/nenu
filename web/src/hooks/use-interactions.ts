@@ -29,6 +29,8 @@ export interface InteractionsState {
   receipts: Receipt[];
   /** The last read failed; `interactions` is what was last known. */
   stale: boolean;
+  /** A read for this session has succeeded, so an empty list means no dialog rather than not asked yet. */
+  loaded: boolean;
   refresh: () => void;
   answer: (i: Interaction, option: InteractionOption, extra?: AnswerExtra) => Promise<AnswerOutcome>;
 }
@@ -42,16 +44,18 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
   const [list, setList] = useState<Interaction[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [stale, setStale] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     setList([]);
     setReceipts([]);
+    setLoaded(false);
   }, [session]);
 
   const poke = useLivePoll({
     enabled,
     deps: [session],
     read: (signal) => fetchInteractions(session, signal),
-    onRead: (next) => { setList(next.interactions); setStale(false); },
+    onRead: (next) => { setList(next.interactions); setStale(false); setLoaded(true); },
     onFail: () => setStale(true),
     delay: () => isLiveHealthy() ? INTERACTIONS_POLL_MS.live : INTERACTIONS_POLL_MS.fallback,
     wakes: (event) => event.topic === "interaction" || event.topic === "resync",
@@ -95,6 +99,7 @@ export function useInteractions(session?: string, enabled = true): InteractionsS
     interactions,
     receipts: receipts.filter((r) => !live.has(r.paneId)),
     stale,
+    loaded,
     refresh: poke,
     answer,
   };

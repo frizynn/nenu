@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { Link, useRouteLoaderData } from "react-router";
-import { ArrowUp, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Folder, LayoutGrid, Plus } from "lucide-react";
 
 import { AppHeader, SettingsGear } from "@/components/app-header";
 import { HomeHeading, RecentChats, RunningWorkCard } from "@/components/home-panels";
@@ -34,7 +34,11 @@ export function HomeRoute() {
 
   const byPane = new Map(data.agents.map((agent) => [agent.paneId, agent]));
   const needs = needsYouItems(data.agents, interactions.interactions);
-  const recent = recentChats(data.agents, data.projects, new Set(needs.map((item) => item.paneId)));
+  const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
+  // A pane Needs you holds (asking, or just answered) stays out of Recent.
+  const recent = recentChats(data.agents, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)));
+  // "Nothing needs you" only from a live herd whose dialogs were read; anything older cannot vouch for it.
+  const calm = live && interactions.loaded && !interactions.stale && data.agents.length > 0 && !needs.length && !receipts.length;
   const reviews = reviewQueue(data.projects, data.pullRequests);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
@@ -65,7 +69,10 @@ export function HomeRoute() {
           {notice && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notice}</p>}
         </div>
         <HomeComposer data={data} projects={data.projects ?? []} disabled={!navigation?.onNewChat} />
-        <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} interactions={interactions} readOnly={readOnly || !live} calm={live && data.agents.length > 0} />
+        {calm
+          ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Check aria-hidden className="size-3.5 text-status-done" />Nothing needs you right now</p>
+          : <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
+            interactions={interactions} readOnly={readOnly || !live} />}
         <RecentChats chats={recent} working={counts.working} session={data.session} now={now} />
         <ReadyToReviewList entries={reviews} session={data.session} />
         {running.length > 0 && (

@@ -5,7 +5,7 @@ import { ChevronRight, Workflow } from "lucide-react";
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { StatusDot } from "@/components/status-badge";
 import { agentElapsed, allAgents, formatDuration, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
-import { timeAgoShort } from "@/lib/format";
+import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { RecentChat } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
 import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
@@ -41,8 +41,11 @@ export const RECENT_ROWS = 6;
 
 const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { working: "text-status-working", done: "text-status-done" };
 
+const sr = (text: string) => <span className="sr-only">{text}</span>;
+
+/** Title, then state and place; the place gives up width before the tab, which tells rows apart. */
 function RecentRow({ chat, session, now }: { chat: RecentChat; session?: string; now: number }) {
-  const { agent, title, where, at, unseen } = chat;
+  const { agent, title, place, tab, at, unseen } = chat;
   const status = STATUS_LABEL[agent.status];
   return (
     <li>
@@ -51,13 +54,18 @@ function RecentRow({ chat, session, now }: { chat: RecentChat; session?: string;
         <StatusDot status={agent.status} className="row-span-2 size-2" />
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
           <span className={cn("truncate text-[13.5px] leading-tight", unseen && "font-semibold")}>{title}</span>
-          {unseen && <span className="shrink-0 rounded border border-status-done/50 px-1 text-[11px] leading-4 text-status-done">New</span>}
+          {unseen && <>{sr(", ")}<span className="shrink-0 rounded border border-status-done/50 px-1 text-[11px] leading-4 text-status-done">New</span></>}
         </span>
-        <span className="col-start-2 row-start-2 truncate text-xs leading-tight text-muted-foreground">
-          <span className={STATUS_TEXT[agent.status]}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
-          {where && ` · ${where}`}
+        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-xs leading-tight text-muted-foreground">
+          {sr(", ")}
+          <span className={cn("shrink-0", STATUS_TEXT[agent.status])}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+          <span aria-hidden className="shrink-0">·</span>{sr(", ")}
+          <span className={cn("truncate", tab ? "max-w-[45%] shrink" : "min-w-0 flex-1")}>{place}</span>
+          {tab && <><span aria-hidden className="shrink-0">·</span>{sr(", ")}<span className="min-w-0 flex-1 truncate">{tab}</span></>}
         </span>
-        <span className="col-start-3 row-span-2 row-start-1 text-xs text-muted-foreground tabular-nums">{at > 0 && timeAgoShort(at, now)}</span>
+        {at > 0 && <span className="col-start-3 row-span-2 row-start-1 text-xs text-muted-foreground tabular-nums">
+          {sr(", ")}<span aria-hidden>{timeAgoShort(at, now)}</span>{sr(timeAgo(at, now))}
+        </span>}
       </Link>
     </li>
   );

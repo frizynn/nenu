@@ -140,8 +140,8 @@ describe("recent chats", () => {
 
   it("names a project's pane by its thread and project, a loose chat by its workspace and tab", () => {
     const [worker, old, coord] = recentChats(panes, [project], new Set(["chat-asks"]));
-    expect(worker).toMatchObject({ title: "Build", where: "Hub", at: NOW - 2 * MIN, unseen: true });
-    expect(old).toMatchObject({ title: "Changelog", where: "nenu · docs", at: NOW - 20 * MIN, unseen: false });
-    expect(coord).toMatchObject({ title: "Coordinator", where: "Hub" });
+    expect(worker).toMatchObject({ title: "Build", place: "Hub", tab: null, at: NOW - 2 * MIN, unseen: true });
+    expect(old).toMatchObject({ title: "Changelog", place: "nenu", tab: "docs", at: NOW - 20 * MIN, unseen: false });
+    expect(coord).toMatchObject({ title: "Coordinator", place: "Hub" });
   });
 });

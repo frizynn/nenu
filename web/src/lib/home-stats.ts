@@ -1,7 +1,7 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { chatRecency, isOpenThread, paneTitle, projectForPane } from "./projects";
+import { byRecency, chatRecency, isOpenThread, paneIdentity, type PaneIdentity } from "./projects";
 import { isUnseen } from "./triage";
 import type { AgentStatus, AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
 
@@ -153,13 +153,9 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
   return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
 }
 
-/** A chat in Home's "Recent": what it is about, where it lives, and when it last moved. */
-export interface RecentChat {
+/** A chat in Home's "Recent": what it is, where it lives, and when it last moved. */
+export interface RecentChat extends PaneIdentity {
   agent: AgentView;
-  /** The thread's title inside a project, else the pane's own name. */
-  title: string;
-  /** The project, else the workspace and its tab. */
-  where: string;
   /** Last movement or visit, epoch ms; 0 when unknown. */
   at: number;
   /** Finished since you last opened it. */
@@ -171,19 +167,8 @@ export interface RecentChat {
  * already shows. Equal (or unknown) times keep the bridge's pane order.
  */
 export function recentChats(agents: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>): RecentChat[] {
-  return agents
-    .filter((agent) => !shown.has(agent.paneId))
-    .map((agent): RecentChat => {
-      const owner = projectForPane(projects, agent.paneId);
-      return {
-        agent,
-        title: paneTitle(agent, owner),
-        where: owner?.project.name ?? [agent.workspaceLabel, agent.tabLabel].filter(Boolean).join(" · "),
-        at: chatRecency(agent),
-        unseen: isUnseen(agent),
-      };
-    })
-    .sort((a, b) => b.at - a.at);
+  return byRecency(agents.filter((agent) => !shown.has(agent.paneId)))
+    .map((agent) => ({ agent, ...paneIdentity(agent, projects), at: chatRecency(agent), unseen: isUnseen(agent) }));
 }
 
 /** Workflows still running, with the pane that launched them. */

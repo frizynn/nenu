@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
 import { NavRow } from "@/components/chat-groups";
@@ -14,7 +14,7 @@ import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
 import {
-  chatMatches, isOpenThread, matches, nestThreads, paneTitle, projectForPane, projectGroups, type ProjectGroup, type ThreadNode,
+  chatMatches, isOpenThread, jumpTargets, matches, nestThreads, paneTitle, projectForPane, projectGroups, type ProjectGroup, type ThreadNode,
 } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
@@ -42,6 +42,7 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SidebarMode>("browse");
   const searchBox = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
   const attention = needsYou(data);
 
   const target = request?.target;
@@ -62,6 +63,15 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
     setSearching(false);
   }
 
+  /** Enter opens the project or chat that matches and moved last, the way ⌘K, a few letters and Enter jump. */
+  function openFirstMatch() {
+    const first = query.trim() ? jumpTargets(data.agents, data.projects, query)[0] : undefined;
+    if (!first) return;
+    navigate(first.kind === "project" ? projectPath(first.id, data.session) : panePath(first.id, data.session));
+    closeSearch();
+    onNavigate?.();
+  }
+
   return (
     <nav className="workbench-navigation" aria-label="Projects and chats">
       {(actions || searching) && <div className="nav-top">
@@ -74,7 +84,10 @@ export function WorkbenchSidebar({ data, onNavigate, onNewChat, request, actions
             <input ref={searchBox} type="search" autoFocus value={query} placeholder="Search" aria-label="Search projects and chats"
               onChange={(event) => setQuery(event.target.value)}
               onBlur={() => { if (!query.trim()) closeSearch(); }}
-              onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeSearch(); } }} />
+              onKeyDown={(event) => {
+                if (event.key === "Escape") { event.stopPropagation(); closeSearch(); }
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) openFirstMatch();
+              }} />
           </label>
         ) : actions && (
           <button type="button" className="nav-row" onClick={() => { setMode("browse"); setSearching(true); }} aria-keyshortcuts="Meta+K">

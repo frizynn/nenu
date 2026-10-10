@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
@@ -180,12 +180,12 @@ describe("Recent", () => {
     const { user, router, main } = await setup(recentData);
     const recent = within(main.getByRole("region", { name: /^Recent/ }));
     // "Review changes" is waiting on you, so Needs you shows it and Recent does not.
-    expect(recent.getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Mobile panelNewDone · Hub5m",
-      "LandingWorking · Hub20m",
-      "CoordinatorIdle · Hub2h",
-      "Earlier threadIdle · Nenu · docs3h",
-    ]);
+    expect(recent.getAllByRole("link").map((link) => link.getAttribute("href")))
+      .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
+    // Each row reads as one sentence: title, "New", state, place, tab, how long ago.
+    for (const parts of [["Mobile panel", "New", "Done", "Hub", "5m ago"], ["Landing", "Working", "Hub", "20m ago"], ["Coordinator", "Idle", "Hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
+      expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
+    }
     expect(recent.getByText("1 working now")).toBeInTheDocument();
     await user.click(recent.getByRole("link", { name: /^Landing/ }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
@@ -213,8 +213,18 @@ it("leaves projects and workspaces to the sidebar instead of repeating them", as
 it("says in one line that nothing needs you, only while the herd is live", async () => {
   const quiet = { ...data, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })) };
   const { main } = await setup(quiet);
-  expect(main.getByText("Nothing needs you right now")).toBeInTheDocument();
+  expect(await main.findByText("Nothing needs you right now")).toBeInTheDocument();
   expect(main.queryByRole("region", { name: /^Needs you/ })).not.toBeInTheDocument();
+});
+
+it("does not vouch for a quiet herd until its dialogs were read", async () => {
+  let reads = 0;
+  server.use(http.get("/api/interactions", () => { reads++; return HttpResponse.json({ error: "down" }, { status: 503 }); }));
+  const quiet = { ...data, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })) };
+  const { main } = await setup(quiet);
+  await waitFor(() => expect(reads).toBeGreaterThan(0));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(main.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
 });
 
 it("does not vouch for a quiet herd from a stale snapshot", async () => {
@@ -288,10 +298,13 @@ it("shows the first rows and the rest on request", async () => {
   expect(review.getAllByRole("listitem")).toHaveLength(9);
 });
 
-it("opens the sidebar's search with ⌘K, the one place to jump from", async () => {
-  const { user } = await setup();
+it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one place to jump from", async () => {
+  const { user, router } = await setup();
   await user.keyboard("{Meta>}k{/Meta}");
-  expect(screen.getByRole("searchbox", { name: "Search projects and chats" })).toHaveFocus();
+  const search = screen.getByRole("searchbox", { name: "Search projects and chats" });
+  expect(search).toHaveFocus();
+  await user.type(search, "review{Enter}");
+  expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
 });
 
 it("does not claim an empty live herd or allow creation from stale disconnected data", async () => {
