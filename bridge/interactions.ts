@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { splitLines, type Block } from "../web/src/lib/blocks.ts";
 import { DIALOG_CONTRACT, type DialogKind, type DialogModels } from "../web/src/lib/harness/dialog-contract.ts";
+import { sanitizeTypedText } from "../web/src/lib/harness/guard.ts";
 import { adapterFor } from "../web/src/lib/harness/index.ts";
 import { multiSelectIdentity, type MultiSelectModel } from "../web/src/lib/harness/multi-select-model.ts";
 import { defaultSleep, POLL_ATTEMPTS, POLL_DELAY_MS, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { previewStructureEqual, type PreviewSelectModel } from "../web/src/lib/harness/preview-model.ts";
 import { promptsSameIdentity, type PromptModel } from "../web/src/lib/harness/prompt-model.ts";
 import { WIZARD_CANCEL_KEYS, WIZARD_SUBMIT_KEYS } from "../web/src/lib/harness/wizard-model.ts";
+import { FEEDBACK_MAX_LENGTH } from "../web/src/lib/prompt-action.ts";
 import type { PaneRead } from "./herdr-client.ts";
 import type {
   AgentView,
@@ -39,6 +41,8 @@ export interface DetectedInteraction extends Interaction {
   options: Array<InteractionOption & { checked?: boolean }>;
   /** The full command, file or plan is on the card (a hint carried it and the screen shows it). */
   detailComplete: boolean;
+  /** The dialog's own input has focus in the terminal: any key sent now would be typed into it. */
+  typing?: true;
 }
 
 /** An answer as POSTed; `confirm` acknowledges a `persistent` option. */
@@ -86,18 +90,20 @@ interface Detection {
 
 export type AnswerResult = { status: 200 | 400 | 409 | 422 | 502; outcome: AnswerOutcome; keys?: string[] };
 
-/** Longest plan feedback typed from the phone; the same grammar bound as lib/prompt-action.ts. */
-const FEEDBACK_MAX_LENGTH = 240;
 /** Settle time between the multi-select walk's pointer moves (multi-select-action.ts). */
 const NAV_SETTLE_MS = 250;
 /** A matched dialog regex keeps a pane eligible for detection this long even before Herdr says blocked. */
 const OUTPUT_MATCH_WINDOW_MS = 30_000;
 /** Rows of a prompt's subject kept above its question. */
 const CONTEXT_MAX_ROWS = 12;
+/** Rows of a plan's on-screen tail a plan hint must contain. */
+const PLAN_TAIL_ROWS = 3;
 
 const DENY = /^(no\b|reject|deny|decline|cancel|exit|quit|request changes|chat about this|skip)/i;
 const PERSISTENT = /\b(always|don['’]?t ask again|do not ask again|this session|auto mode|switch to|from this project|remember|as default)\b/i;
 const TYPE_SOMETHING = /^type something\b/i;
+/** A select question's escape row; Claude's prompt model carries no flag for it (wizard and multi-select do). */
+const QUESTION_ESCAPE = /^chat about this$/i;
 
 /** The keyboard-owning dialog at the tail of `text`, through the pane's own adapter. */
 export function dialogOnScreen(agent: string, text: string): Dialog | null {
@@ -127,16 +133,21 @@ export function dialogSignature(dialog: Dialog): string {
   return createHash("sha256").update(`${dialog.kind}\0${JSON.stringify(dialog.model)}`).digest("base64url").slice(0, 22);
 }
 
-function role(label: string, persistent = false): InteractionOption["role"] {
+/**
+ * A dialog that asks the agent's own question has answers, not settings: "No", "Skip tests" or
+ * "Always use tabs" are answers like any other, so only the escape row is deny there.
+ */
+function role(label: string, answers: boolean, persistent = false): InteractionOption["role"] {
   if (TYPE_SOMETHING.test(label)) return "freeText";
+  if (answers) return QUESTION_ESCAPE.test(label) ? "deny" : "neutral";
   if (DENY.test(label)) return "deny";
   return persistent || PERSISTENT.test(label) ? "persistent" : "neutral";
 }
 
 const keys = (k: string[]): Recipe => ({ type: "keys", keys: k });
 /** A "Type something" row is typed into in the terminal; a digit would only focus or tick it. */
-const pick = (label: string, recipe: Recipe, extra: Partial<Option> = {}): Draft => {
-  const option = { label, role: role(label), ...extra };
+const pick = (label: string, recipe: Recipe, extra: Partial<Option> = {}, answers = false): Draft => {
+  const option = { label, role: role(label, answers), ...extra };
   return { option, recipe: option.role === "freeText" && recipe.type !== "feedback" ? { type: "unsupported" } : recipe };
 };
 
@@ -149,7 +160,7 @@ function describe(dialog: Dialog, agent: string): Described {
       if (w.phase === "review") return review(agent, "wizard", w.answers.map((a) => `${a.question} → ${a.answer}`).join("\n"));
       return {
         kind: "wizard", family: agent, question: w.question,
-        choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) })),
+        choices: w.options.map((o) => pick(o.label, keys(o.keys), { ...(o.description ? { description: o.description } : {}), ...(o.escape ? { role: "deny" } : {}) }, true)),
       };
     }
     case "multi-select": {
@@ -158,14 +169,14 @@ function describe(dialog: Dialog, agent: string): Described {
       return {
         kind: "multi-select", family: agent, question: m.question,
         choices: [
-          ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) })),
+          ...m.options.map((o) => pick(o.label, keys([String(o.n)]), { checked: o.checked, ...(o.description ? { description: o.description } : {}) }, true)),
           pick(m.advanceLabel, { type: "advance" }, { role: "primary" }),
           ...(m.escape ? [pick(m.escape.label, keys([String(m.escape.n)]), { role: "deny" })] : []),
         ],
       };
     }
     case "preview-select":
-      return { kind: "question", family: agent, question: dialog.model.question, choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n })) };
+      return { kind: "question", family: agent, question: dialog.model.question, choices: dialog.model.options.map((o) => pick(o.label, { type: "preview", n: o.n }, {}, true)) };
     case "menu":
       return {
         kind: "menu", family: agent, question: dialog.model.title,
@@ -184,7 +195,7 @@ function review(agent: string, kind: "wizard" | "multi-select", context?: string
 function describePrompt(p: PromptModel, agent: string): Described {
   const kind: InteractionKind = p.family === "plan" ? "plan" : p.family === "select" ? "question" : "permission";
   const choices = p.options.map((o) => {
-    const choice = pick(o.label, keys(o.keys), { role: role(o.label, p.family === "trust") });
+    const choice = pick(o.label, keys(o.keys), { role: role(o.label, kind === "question", p.family === "trust") });
     if (o.description) choice.option.description = o.description;
     // Claude 2.1.296: a bare "No" rejects AND ends the turn; only Tab-amend keeps it going (PROBES_2026_10).
     else if (agent === "claude" && p.family === "permission" && o.label === "No") choice.option.description = "Stops Claude's turn";
@@ -220,22 +231,63 @@ function promptContext(p: PromptModel): string | undefined {
   return rows.length ? rows.join("\n") : undefined;
 }
 
-const compact = (s: string) => s.replace(/\s+/g, "").replace(/…$/, "");
+/**
+ * The last rows of a plan's body as the dialog's own region shows them, above the question and its
+ * rule. A plan hint must contain them; a screen that shows none verifies nothing.
+ */
+function planTail(p: PromptModel): string {
+  const lines = p.signature.split("\n");
+  const q = lines.findIndex((l) => l.includes(p.question.slice(0, 40)));
+  const rows = lines.slice(0, Math.max(q, 0)).map((l) => l.trim()).filter((l) => l && !/^[─━▔═╌]+$/.test(l));
+  return rows.slice(-PLAN_TAIL_ROWS).join("\n");
+}
 
-/** A hint agrees when what it says is what the screen shows; otherwise the screen wins and it is dropped. */
-function agrees(hint: InteractionHint, kind: InteractionKind, question: string, labels: string[], region: string): boolean {
-  if (kind === "permission") return !!hint.detail && compact(region).includes(compact(hint.detail));
-  if (kind === "plan") return !hint.question && !!hint.detail;
+const compact = (s: string) => s.replace(/\s+/g, "").replace(/…$/, "");
+/** The screen renders a plan's markdown, so its markers are not compared. */
+const compactPlan = (s: string) => compact(s).replace(/[#*_`>~]/g, "");
+
+/** True when `detail` is exactly a run of whole rows of the dialog's subject (a wrapped command joins up). */
+function isWholeRows(detail: string, context: string | undefined): boolean {
+  const want = compact(detail);
+  const rows = (context ?? "").split("\n").map(compact);
+  for (let i = 0; i < rows.length; i++) {
+    let run = "";
+    for (let j = i; j < rows.length && run.length <= want.length; j++) {
+      run += rows[j];
+      if (run === want || run === `$${want}`) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * A hint agrees when what it says is what the dialog itself shows (never just somewhere in the
+ * scrollback above it); otherwise the screen wins and it is dropped.
+ */
+function agrees(hint: InteractionHint, base: Described, dialog: Dialog, labels: string[]): boolean {
+  if (base.kind === "permission") return !!hint.detail && isWholeRows(hint.detail, base.context);
+  if (base.kind === "plan") {
+    const tail = dialog.kind === "prompt-select" ? compactPlan(planTail(dialog.model)) : "";
+    return !hint.question && !!hint.detail && tail.length > 0 && compactPlan(hint.detail).includes(tail);
+  }
+  const { question } = base;
   if (hint.question && !compact(hint.question).startsWith(compact(question)) && !compact(question).startsWith(compact(hint.question))) return false;
   return (hint.options ?? []).every((o) => labels.some((l) => compact(o).startsWith(compact(l)) && compact(l).length > 0));
 }
 
+/** The dialog's own input has focus: every key sent now would land in it as text (issue #95). */
+function typing(dialog: Dialog): boolean {
+  if (dialog.kind === "prompt-select") return dialog.model.feedback?.focused ?? false;
+  if (dialog.kind === "preview-select") return dialog.model.note.state === "editing";
+  return false;
+}
+
 /** Build the served interaction for `dialog`: screen first, hints only where they agree. */
-export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog: Dialog, read: Pick<PaneRead, "text" | "revision">, hints: InteractionHint[], now: number): Detection {
+export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog: Dialog, revision: number, hints: InteractionHint[], now: number): Detection {
   const base = describe(dialog, pane.agent);
   const choices: Choice[] = base.choices.map((c, index) => ({ option: { index, ...c.option }, recipe: c.recipe }));
   const labels = choices.map((c) => c.option.label);
-  const kept = hints.filter((h) => agrees(h, base.kind, base.question, labels, read.text));
+  const kept = hints.filter((h) => agrees(h, base, dialog, labels));
   const asked = kept.find((h) => h.question && base.kind !== "permission");
   const detail = kept.find((h) => h.detail)?.detail;
   const context = detail ?? base.context;
@@ -248,10 +300,11 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
     ...(context ? { context } : {}),
     options: choices.map((c) => c.option),
     signature: dialogSignature(dialog),
-    revision: read.revision,
+    revision,
     ...(kept.length ? { hints: kept } : {}),
     detectedAt: now,
     detailComplete: base.kind === "permission" && detail !== undefined,
+    ...(typing(dialog) ? { typing: true as const } : {}),
   };
   return { interaction, dialog, choices };
 }
@@ -260,10 +313,10 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
  * The options a notification may answer without opening Nenu: never a persistent or free-text one,
  * only on a question or a permission whose full command/file is on the card, and only when every
  * answer fits in two actions, so the one left out is never an answer. A question's escape row
- * ("Chat about this") is not an answer; a permission's "No" is.
+ * ("Chat about this") is not an answer; a permission's "No" is. Nothing while someone is typing.
  */
 export function pushActions(i: DetectedInteraction): Array<{ optionIndex: number; title: string }> {
-  if (i.kind !== "question" && !(i.kind === "permission" && i.detailComplete)) return [];
+  if (i.typing || (i.kind !== "question" && !(i.kind === "permission" && i.detailComplete))) return [];
   const answers = i.options.filter((o) => o.role === "primary" || o.role === "neutral" || (i.kind === "permission" && o.role === "deny"));
   return answers.length > 0 && answers.length <= 2 ? answers.map((o) => ({ optionIndex: o.index, title: o.label })) : [];
 }
@@ -353,22 +406,44 @@ export class Interactions {
     events: { subscribe(listener: (event: { session: string; topic: string; paneId?: string }) => void): () => void },
     hints: (rt: R) => HintSource,
   ): () => void {
-    const matching = new Set<string>();
+    // The runtime a session name was last seen with: the registry replaces a runtime (and its poker)
+    // under the same name, and the old one's cards and match subscription go with it.
+    const seen = new Map<string, { rt: R; unsubscribe: () => void }>();
     const detect = (rt: R, only?: string) =>
       void this.refresh(rt.name, rt.herdr, rt.engine.current().agents, hints(rt), only).catch(() => {});
-    return events.subscribe(({ session, topic, paneId }) => {
+    const unsubscribe = events.subscribe(({ session, topic, paneId }) => {
       const rt = registry.get(session);
       if (!rt) return;
-      if (rt.poker && !matching.has(session)) {
-        matching.add(session);
-        rt.poker.onOutputMatched((e) => {
-          this.noteOutputMatched(session, e.paneId);
-          detect(rt, e.paneId);
+      const known = seen.get(session);
+      if (known?.rt !== rt) {
+        // Recorded first: forgetting publishes, which re-enters this listener.
+        seen.set(session, {
+          rt,
+          unsubscribe: rt.poker?.onOutputMatched((e) => {
+            this.noteOutputMatched(session, e.paneId);
+            detect(rt, e.paneId);
+          }) ?? (() => {}),
         });
+        if (known) {
+          known.unsubscribe();
+          this.forgetSession(session);
+        }
       }
       if (topic === "snapshot") detect(rt);
       else if (topic === "pane" && paneId !== undefined) detect(rt, paneId);
     });
+    return () => {
+      unsubscribe();
+      for (const { unsubscribe: off } of seen.values()) off();
+      seen.clear();
+    };
+  }
+
+  private forgetSession(session: string): void {
+    for (const key of new Set([...this.panes.keys(), ...this.matched.keys()])) {
+      const [s, paneId] = key.split("\u0000") as [string, string];
+      if (s === session) this.forget(session, paneId);
+    }
   }
 
   /** Drop a pane's card (it stopped being blocked, closed, or was just answered). */
@@ -386,7 +461,7 @@ export class Interactions {
     const previous = this.panes.get(key);
     if (previous?.input === input) return previous.detection;
     const dialog = dialogOnScreen(pane.agent, read.text);
-    const detection = dialog ? toInteraction(pane, dialog, read, hints, this.now()) : null;
+    const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, this.now()) : null;
     this.panes.set(key, { input, detection });
     const before = previous?.detection?.interaction;
     const after = detection?.interaction;
@@ -420,10 +495,7 @@ export class Interactions {
       return { status: 409, outcome: { ok: false, error: "This option changes a setting beyond this answer. Confirm it.", code: "confirm_required" } };
     }
     const { dialog } = detection;
-    // While the dialog's own input row has focus every digit is typed into it (issue #95).
-    if (dialog.kind === "prompt-select" && dialog.model.feedback?.focused && choice.recipe.type !== "feedback") {
-      return changed("Someone is typing in this dialog.");
-    }
+    if (detection.interaction.typing) return changed("Someone is typing in this dialog.");
     let result: AnswerResult;
     try {
       result = await this.run(io, pane, dialog, choice.recipe, body.text);
@@ -508,7 +580,7 @@ export class Interactions {
   private async feedback(io: PaneIO, pane: AgentView, tapped: PromptModel, key: string, raw: string): Promise<AnswerResult> {
     const row = tapped.feedback;
     if (!row || row.focused || row.text !== "") return changed("Someone is typing in this dialog.");
-    const text = raw.replace(/\s+/g, " ").replace(/\p{Cc}/gu, "").trim().slice(0, FEEDBACK_MAX_LENGTH);
+    const text = sanitizeTypedText(raw, FEEDBACK_MAX_LENGTH);
     if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
     await io.sendPaneKeys(pane.paneId, [key]);
     const focused = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === "";

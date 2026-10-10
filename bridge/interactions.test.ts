@@ -77,7 +77,7 @@ const EXPECTED: Record<string, string> = {
   "codex--approval-exec.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
   "codex--ask-fruit.txt": "question: Apple (Recommended)=neutral | Pear=neutral | None of the above=neutral",
   "codex--ask-wizard-q1.txt": "question: Tabs (Recommended)=neutral | Spaces=neutral | None of the above=neutral",
-  "codex--ask-wizard-q2.txt": "question: Yes (Recommended)=neutral | No=deny | None of the above=neutral",
+  "codex--ask-wizard-q2.txt": "question: Yes (Recommended)=neutral | No=neutral | None of the above=neutral",
   "codex--trust-prompt.txt": "permission: Yes, continue=persistent | No, quit=deny",
   "codex--v0156-approval-exec-2opt.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
   "codex--v0156-approval-exec-wrapped-50.txt": "permission: Yes, proceed=primary | No, and tell Codex what to do differently=deny",
@@ -90,7 +90,7 @@ const EXPECTED: Record<string, string> = {
   "grok--ask-esc-park.txt": "question: Apple=neutral | Pear=neutral",
   "grok--ask-size.txt": "question: Small=neutral | Large=neutral",
   "grok--ask-wizard-q1.txt": "question: Grid=neutral | List=neutral",
-  "grok--ask-wizard-q2.txt": "question: Yes=neutral | No=deny",
+  "grok--ask-wizard-q2.txt": "question: Yes=neutral | No=neutral",
   "grok--ask-z-focused.txt": "question: Small=neutral | Large=neutral",
   "grok--ask-z-parked.txt": "question: Red=neutral | Blue=neutral",
   "grok--ask-z-typed.txt": "question: Small=neutral | Large=neutral",
@@ -130,7 +130,7 @@ describe("the fixture corpus", () => {
         const dialog = dialogOnScreen(agent(file), text);
         const got = dialog
           ? (({ interaction: i }) => `${i.kind}: ${i.options.map((o) => `${o.label}=${o.role}`).join(" | ")}`)(
-            toInteraction({ paneId: "p", agent: agent(file) }, dialog, { text, revision: 0 }, [], 0))
+            toInteraction({ paneId: "p", agent: agent(file) }, dialog, 0, [], 0))
           : undefined;
         expect(got).toBe(EXPECTED[file]);
       });
@@ -141,9 +141,9 @@ describe("the fixture corpus", () => {
 const blocked = (paneId: string, agent = "claude", status: AgentView["status"] = "blocked"): AgentView =>
   ({ paneId, agent, status, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", cwd: "/tmp", focused: false });
 
-function detect(file: string, hints: InteractionHint[] = [], agent = agentOf(file)): DetectedInteraction {
-  const text = fixture(file);
-  return toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, text)!, { text, revision: 0 }, hints, 0).interaction;
+function detect(file: string, hints: InteractionHint[] = [], agent = agentOf(file), above = ""): DetectedInteraction {
+  const text = above + fixture(file);
+  return toInteraction({ paneId: "p", agent }, dialogOnScreen(agent, text)!, 0, hints, 0).interaction;
 }
 
 describe("hints enrich, the screen decides", () => {
@@ -161,6 +161,30 @@ describe("hints enrich, the screen decides", () => {
     expect(i.context).toContain("mkfifo fixture-fifo");
   });
 
+  test("a hint whose command is only in the scrollback above the dialog is dropped", () => {
+    const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "git push --force origin main" }], "claude", "⏺ Bash(git push --force origin main)\n  ⎿  done\n\n");
+    expect(i.detailComplete).toBe(false);
+    expect(i.hints).toBeUndefined();
+    expect(i.context).toContain("mkfifo fixture-fifo");
+    expect(pushActions(i)).toEqual([]);
+  });
+
+  test("a hint naming only part of the on-screen command is dropped", () => {
+    const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "mkfifo" }]);
+    expect(i.detailComplete).toBe(false);
+    expect(i.context).toContain("mkfifo fixture-fifo");
+  });
+
+  test("a command the dialog wraps over two rows still matches its hint", () => {
+    const i = detect("claude-lab--permission-bash--w40.txt", [{ source: "claude-hook", observedAt: 1, detail: "touch /tmp/claude-lab/project/scratch-one.txt" }], "claude");
+    expect(i.detailComplete).toBe(true);
+  });
+
+  test("a Codex command matches its hint without the screen's $ prompt", () => {
+    const i = detect("codex--approval-exec.txt", [{ source: "codex-rpc", observedAt: 1, detail: "touch /tmp/collie-codex-probe.txt" }]);
+    expect(i.detailComplete).toBe(true);
+  });
+
   test("a question hint with the screen's options lends its full text; other options are dropped", () => {
     const agreeing = detect("claude--select-menu.txt", [{ source: "claude-journal", observedAt: 1, question: "Which color theme should the dashboard use? (pick one)", options: ["Red", "Green", "Blue"] }]);
     expect(agreeing.question).toBe("Which color theme should the dashboard use? (pick one)");
@@ -169,9 +193,16 @@ describe("hints enrich, the screen decides", () => {
     expect(foreign.hints).toBeUndefined();
   });
 
-  test("a pending plan becomes the plan card's context", () => {
-    const i = detect("claude--plan-approval.txt", [{ source: "claude-journal", observedAt: 1, detail: "# Plan\n1. Write haiku.txt" }]);
-    expect(i.context).toBe("# Plan\n1. Write haiku.txt");
+  test("a pending plan whose tail is on screen becomes the plan card's context", () => {
+    const plan = "## Change\n\nCreate haiku.txt\n\n## Verification\n\n- Confirm the file exists and contains exactly three lines.\n- Read it back to confirm the 5–7–5 structure and dog theme.";
+    const i = detect("claude--plan-approval.txt", [{ source: "claude-journal", observedAt: 1, detail: plan }]);
+    expect(i.context).toBe(plan);
+  });
+
+  test("a plan hint for another plan is dropped", () => {
+    const i = detect("claude--plan-approval.txt", [{ source: "claude-hook", observedAt: 1, detail: "# Plan\n1. Write haiku.txt" }]);
+    expect(i.context).toBeUndefined();
+    expect(i.hints).toBeUndefined();
   });
 
   test("hints never change the options or the signature", () => {
@@ -193,6 +224,18 @@ describe("push actions", () => {
     expect(pushActions(detect("claude--permission-bash.txt"))).toEqual([]);
     const complete = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, detail: "mkfifo fixture-fifo" }]);
     expect(pushActions(complete)).toEqual([{ optionIndex: 0, title: "Yes" }, { optionIndex: 2, title: "No" }]);
+  });
+
+  test("a question's No is an answer, not a deny the notification leaves out", () => {
+    expect(pushActions(detect("grok--ask-wizard-q2.txt"))).toEqual([{ optionIndex: 0, title: "Yes" }, { optionIndex: 1, title: "No" }]);
+    expect(pushActions(detect("codex--ask-wizard-q2.txt"))).toEqual([]);
+  });
+
+  test("nothing while a preview question's note is being typed", () => {
+    expect(detect("claude--wizard-preview-q1.txt").typing).toBeUndefined();
+    const editing = detect("claude--select-preview-note-input.txt");
+    expect(editing.typing).toBe(true);
+    expect(pushActions(editing)).toEqual([]);
   });
 
   test("plans, menus and questions with more than two answers open the app instead", () => {
@@ -312,6 +355,35 @@ describe("Interactions.follow", () => {
     expect(interactions.current("s", "p")?.kind).toBe("permission");
     expect(published.filter((e) => e.startsWith("interaction:"))).toEqual(["interaction:p", "interaction:p", "interaction:p"]);
   });
+
+  test("a replaced runtime drops the old cards and the old match subscription, and follows the new poker", async () => {
+    const hub = new LiveEvents();
+    const interactions = new Interactions(hub, { sleep: noSleep });
+    const runtime = () => {
+      const r = { matched: undefined as ((e: { paneId: string }) => void) | undefined, off: 0 };
+      const pane = scriptedPane(fixture("claude--permission-edit.txt"));
+      const rt = { name: "s", herdr: pane.io, engine: { current: () => ({ agents: [blocked("p")] }) }, poker: { onOutputMatched: (cb: (e: { paneId: string }) => void) => { r.matched = cb; return () => { r.off++; }; } } };
+      return { r, rt };
+    };
+    const first = runtime();
+    let current = first.rt;
+    const stop = interactions.follow({ get: (name?: string) => (name === "s" ? current : undefined) }, hub, () => async () => []);
+    const settle = () => new Promise((r) => setTimeout(r, 5));
+    hub.publish({ session: "s", topic: "snapshot" });
+    await settle();
+    expect(interactions.current("s", "p")?.kind).toBe("permission");
+
+    const second = runtime();
+    current = second.rt;
+    hub.publish({ session: "s", topic: "pane", paneId: "other" });
+    await settle();
+    expect(first.r.off).toBe(1);
+    expect(interactions.current("s", "p")).toBeNull();
+    expect(second.r.matched).toBeDefined();
+
+    stop();
+    expect(second.r.off).toBe(1);
+  });
 });
 
 describe("Interactions.answer", () => {
@@ -385,6 +457,13 @@ describe("Interactions.answer", () => {
     const change = card.options.find((o) => o.role === "freeText")!;
     expect((await answer({ signature: card.signature, optionIndex: change.index, text: "x" })).status).toBe(409);
     expect((await answer({ signature: card.signature, optionIndex: 0, confirm: true })).status).toBe(409);
+    expect(pane.log.keys).toEqual([]);
+  });
+
+  test("a preview question whose note is being typed is refused before any key", async () => {
+    const { pane, card, answer } = await ready("claude--select-preview-note-input.txt");
+    const result = await answer({ signature: card.signature, optionIndex: 1 });
+    expect(result.outcome).toMatchObject({ ok: false, code: "interaction_changed" });
     expect(pane.log.keys).toEqual([]);
   });
 
@@ -500,7 +579,7 @@ describe("free-text rows", () => {
   test("a 'Type something' row is typed in the terminal, never answered by its key", () => {
     // Claude's grammar already leaves the row out; another harness's menu may not.
     const dialog = { kind: "menu" as const, model: { title: "Pick", actions: [{ label: "Type something", keys: ["t"] }, { label: "Ok", keys: ["Enter"] }], nav: { upDown: false }, signature: "Pick" } };
-    const { interaction, choices } = toInteraction({ paneId: "p", agent: "x" }, dialog, { text: "Pick", revision: 0 }, [], 0);
+    const { interaction, choices } = toInteraction({ paneId: "p", agent: "x" }, dialog, 0, [], 0);
     expect(interaction.options.map((o) => o.role)).toEqual(["freeText", "neutral"]);
     expect(choices.map((c) => c.recipe.type)).toEqual(["unsupported", "keys"]);
   });
