@@ -21,7 +21,8 @@
 // Human turns carry a STRING content; a `user` row whose content is a LIST is tool-result traffic,
 // not something the user typed — we fold those into the tool call that produced them rather than
 // rendering 705 fake "user" turns. `isSidechain` marks subagent traffic (dropped by default);
-// `isCompactSummary` marks the summary Claude writes when a session is compacted.
+// `isCompactSummary` marks the summary Claude writes when a session is compacted; `isMeta` marks
+// text written for the model rather than by the operator (verified against 2.1.296, see line()).
 
 import { claudeUsageRow, parseClaudeUsage } from "./usage.ts";
 import { ClaudeTurnTracker } from "./turns.ts";
@@ -80,6 +81,7 @@ function isEnvelope(tag: string, text: string): boolean {
  *    shown to the operator in the TUI (the caveat literally says "DO NOT respond to these").
  *  - `command-name` → a slash command the user really did run; shown as `/compact`, args included.
  *  - `local-command-stdout` → that command's output. Real, but not speech → a `note`.
+ *  - `bash-input` / `bash-stdout` → the same pair for `!` shell mode: `! pwd`, then a `note`.
  *  - `task-notification` → a background agent finishing. Reduced to its `<summary>` line → a `note`.
  *
  * Returns null for "drop this row entirely".
@@ -92,7 +94,8 @@ export function classifyUserText(
   if (isEnvelope("system-reminder", text)) return null;
   if (isEnvelope("local-command-caveat", text)) return null;
 
-  if (isEnvelope("command-name", text)) {
+  // Newer versions lead a slash command with `<command-message>`; the command line is the same.
+  if (isEnvelope("command-name", text) || isEnvelope("command-message", text)) {
     const name = inner("command-name", text) ?? "";
     const args = inner("command-args", text) ?? "";
     const line = `${name} ${args}`.trim();
@@ -102,6 +105,17 @@ export function classifyUserText(
   if (isEnvelope("local-command-stdout", text)) {
     const stdout = inner("local-command-stdout", text) ?? "";
     return stdout === "" ? null : { role: "note", text: stdout };
+  }
+
+  // `!` shell mode: the command the user ran, then its output in a row of its own.
+  if (isEnvelope("bash-input", text)) {
+    const command = inner("bash-input", text) ?? "";
+    return command === "" ? null : { role: "user", text: `! ${command}` };
+  }
+
+  if (isEnvelope("bash-stdout", text)) {
+    const output = [inner("bash-stdout", text), inner("bash-stderr", text)].filter(Boolean).join("\n");
+    return output === "" ? null : { role: "note", text: output };
   }
 
   if (isEnvelope("task-notification", text)) {
@@ -130,6 +144,8 @@ interface RawRow extends Record<string, unknown> {
   timestamp?: unknown;
   isSidechain?: unknown;
   isCompactSummary?: unknown;
+  isMeta?: unknown;
+  turnCompanion?: unknown;
   message?: { role?: unknown; content?: unknown } | unknown;
 }
 
@@ -289,14 +305,20 @@ export class ClaudeParser implements JournalParser {
     const message = row.message;
     if (message === null || typeof message !== "object") return;
     const content = (message as { content?: unknown }).content;
-    const human = type === "user" && row.isCompactSummary !== true && (
+    // `isMeta` marks text Claude Code wrote for the model, never typed by the operator; its own
+    // human-turn test excludes it. Text riding along with a call (`turnCompanion`: an image's
+    // dimensions, a loaded skill's body) has nothing to show. Text that drives the agent (another
+    // session's message, a scheduled prompt, hook feedback) explains its next step, so it is a note.
+    const meta = type === "user" && row.isMeta === true;
+    const human = type === "user" && !meta && row.isCompactSummary !== true && (
       typeof content === "string" ? classifyUserText(content)?.role === "user" :
       Array.isArray(content) && content.some((block) => block?.type === "text" && typeof block.text === "string" && classifyUserText(block.text)?.role === "user")
     );
     this.turns.observe(row, human);
+    if (meta && row.turnCompanion === true) return;
     const parts: TranscriptPart[] = [];
-    // Set by a `user` row whose string content turns out to be injected plumbing rather than speech.
-    let roleOverride: "note" | undefined;
+    // Set by a meta row, or a `user` row whose string content turns out to be injected plumbing.
+    let roleOverride: "note" | undefined = meta ? "note" : undefined;
     // Counts every image of the row in claudeRowImages' order, whether or not it lands on a part.
     let nth = 0;
     const locate = (): ImageLocator => ({ offset, bytes, nth: nth++ });
