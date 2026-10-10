@@ -29,16 +29,22 @@ import { toolQuestions } from "./questions.ts";
 // kind-`id` ref exactly like Claude's. It needs `herdr integration install codex`; without the hook
 // there is no id and the journal correctly reports "no-session".
 
-import { parseCodexUsage } from "./usage.ts";
+import { codexUsageRow, parseCodexUsage } from "./usage.ts";
+import { feedText } from "./lines.ts";
 import { CodexTurnTracker } from "./turns.ts";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { containedRealpath, exists, loadTail, rootList, statFile } from "./files.ts";
+import { containedRealpath, exists, loadTail, readRange, rootList, statFile } from "./files.ts";
 import { clamp, MAX_RESULT_CHARS, MAX_TEXT_CHARS, oneLine, stripAnsi, summarizeToolInput } from "./text.ts";
 import type {
   AgentSessionRef,
+  ImageLocator,
   JournalAdapter,
+  JournalFacts,
+  JournalParser,
+  SessionTelemetry,
+  ToolAttachment,
   TranscriptEntry,
   TranscriptPart,
   TranscriptSource,
@@ -166,61 +172,135 @@ interface CodexRow {
   payload?: unknown;
 }
 
-/**
- * Parse a Codex rollout log into oldest-first turns. PURE — no fs, no clock.
- *
- * Unparseable lines are skipped: the log is appended to live, so the last line can be a partial
- * write, and a tail-read window starts mid-line by construction.
- */
-export function parseCodexTranscript(text: string): TranscriptEntry[] {
-  const entries: TranscriptEntry[] = [];
-  const turns = new CodexTurnTracker();
-  const emit = (entry: TranscriptEntry) => { turns.attach(entry); entries.push(entry); };
-  const seen = new Map<string, number>();
-  // call_id → the part awaiting its output, so a `function_call_output` lands on its own call.
-  const pendingTools = new Map<string, Extract<TranscriptPart, { kind: "tool" }>>();
+type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
+type ImageAttachment = Extract<ToolAttachment, { kind: "image" }>;
 
-  for (const line of text.split("\n")) {
-    if (line.trim() === "") continue;
+/** An `input_image` block carrying a base64 data URL, split into its type and bytes; else null. */
+function dataImage(block: unknown): { mediaType?: string; data: string } | null {
+  if (block === null || typeof block !== "object") return null;
+  const b = block as Record<string, unknown>;
+  if (b.type !== "input_image" || typeof b.image_url !== "string") return null;
+  const m = /^data:([a-z0-9.+/-]{1,100})?;base64,/i.exec(b.image_url.slice(0, 160));
+  if (!m) return null; // a remote URL is never fetched, so it is not an image we can serve
+  return { ...(m[1] ? { mediaType: m[1] } : {}), data: b.image_url.slice(m[0].length) };
+}
+
+/** The list a row's images live in: a message's content, or a tool output's content list. */
+function imageCarrier(p: Record<string, unknown>): unknown[] {
+  if (p.type === "message" && Array.isArray(p.content)) return p.content;
+  if ((p.type === "function_call_output" || p.type === "custom_tool_call_output") && Array.isArray(p.output)) return p.output;
+  return [];
+}
+
+/** Every inline image of a rollout row, in the order the parser numbers them (see ImageLocator). */
+export function codexRowImages(row: unknown): Array<{ mediaType?: string; data: string }> {
+  const payload = row !== null && typeof row === "object" ? (row as CodexRow).payload : undefined;
+  if (row === null || typeof row !== "object" || (row as CodexRow).type !== "response_item") return [];
+  if (payload === null || typeof payload !== "object") return [];
+  return imageCarrier(payload as Record<string, unknown>).flatMap((block) => dataImage(block) ?? []);
+}
+
+/** Codex wraps a pasted image in `<image name=[Image #1] …>` / `</image>` text blocks around it. */
+const IMAGE_WRAPPER_RE = /^(?:<image\b[^\n]*>|<\/image>)$/;
+
+/**
+ * Codex's grammar as a resumable parser (see JournalParser). The cursor counter, the calls awaiting
+ * output and the turn tracker are the carried state.
+ */
+export class CodexParser implements JournalParser {
+  private readonly list: TranscriptEntry[] = [];
+  private readonly turns = new CodexTurnTracker();
+  private readonly seen = new Map<string, number>();
+  // call_id → the part awaiting its output, so a `function_call_output` lands on its own call.
+  private readonly pendingTools = new Map<string, { part: ToolPart; entry: string }>();
+  private readonly imageIndex = new Map<string, ImageLocator[]>();
+  private usageState: Omit<SessionTelemetry, "fileTruncated"> | undefined;
+
+  entries(): TranscriptEntry[] {
+    return this.turns.finish(this.list);
+  }
+
+  facts(): JournalFacts {
+    return { queue: [] };
+  }
+
+  usage() {
+    return this.usageState;
+  }
+
+  images(entryUuid: string): readonly ImageLocator[] {
+    return this.imageIndex.get(entryUuid) ?? [];
+  }
+
+  /** Index the row's images under `entry` and return their attachments, in row order. */
+  private index(entry: string, blocks: unknown[], offset: number, bytes: number): ImageAttachment[] {
+    const found: ImageAttachment[] = [];
+    let nth = 0;
+    for (const block of blocks) {
+      const image = dataImage(block);
+      if (!image) continue;
+      const list = this.imageIndex.get(entry) ?? [];
+      list.push({ offset, bytes, nth: nth++ });
+      this.imageIndex.set(entry, list);
+      found.push({ kind: "image", index: list.length - 1, ...(image.mediaType ? { mediaType: image.mediaType } : {}) });
+    }
+    return found;
+  }
+
+  private emit(entry: TranscriptEntry): void {
+    this.turns.attach(entry);
+    this.list.push(entry);
+  }
+
+  line(line: string, offset: number, bytes: number): void {
+    if (line.trim() === "") return;
     let row: CodexRow;
     try {
       row = JSON.parse(line) as CodexRow;
     } catch {
-      continue;
+      return;
     }
-    turns.observe(row);
+    if (row === null || typeof row !== "object") return;
+    this.usageState = codexUsageRow(row as Record<string, unknown>, this.usageState);
+    this.turns.observe(row);
     const payload = row.payload;
-    if (payload === null || typeof payload !== "object") continue;
+    if (payload === null || typeof payload !== "object") return;
     const p = payload as Record<string, unknown>;
     const ts = typeof row.timestamp === "string" ? row.timestamp : "";
     if (row.type === "compacted") {
-      if (typeof p.message !== "string") continue;
+      if (typeof p.message !== "string") return;
       const summary = stripAnsi(p.message).trim() || "Context compacted";
-      emit({
-        uuid: codexCursor(line, seen), ts, role: "summary",
+      this.emit({
+        uuid: codexCursor(line, this.seen), ts, role: "summary",
         parts: [{ kind: "text", ...clamp(summary, MAX_TEXT_CHARS) }],
       });
-      continue;
+      return;
     }
     // The double-booking guard: ordinary UI stream events already occur in response_item.
-    if (row.type !== "response_item") continue;
-    const uuid = codexCursor(line, seen);
+    if (row.type !== "response_item") return;
+    const uuid = codexCursor(line, this.seen);
 
     if (p.type === "message") {
       // Roles are matched EXPLICITLY, never "assistant or else user". Codex 0.145 writes `developer`
       // rows carrying the injected system prompts (permissions, multi-agent instructions) — three of
       // them before the first real turn — and treating an unknown role as speech would render those
       // as things the operator said. Anything that isn't user or assistant is plumbing: drop it.
-      if (p.role !== "user" && p.role !== "assistant") continue;
+      if (p.role !== "user" && p.role !== "assistant") return;
       const role = p.role;
-      const rawBody = stripAnsi(blockText(p.content));
+      const images = this.index(uuid, imageCarrier(p), offset, bytes);
+      const blocks = images.length && Array.isArray(p.content)
+        ? p.content.filter((b) => !(b && typeof b === "object" && typeof b.text === "string" && IMAGE_WRAPPER_RE.test(b.text.trim())))
+        : p.content;
+      const rawBody = stripAnsi(blockText(blocks));
       const body = role === "assistant" ? visibleAssistantText(rawBody, p.phase) : rawBody;
-      if (body.trim() === "") continue;
-      if (role === "user" && isInjectedContext(body)) continue;
-      emit({ uuid, ts, role, parts: [{ kind: "text", ...clamp(body, MAX_TEXT_CHARS) }],
+      if (body.trim() === "" && !images.length) return;
+      if (role === "user" && isInjectedContext(body)) return;
+      const parts: TranscriptPart[] = images.map((image) => ({ ...image, kind: "image" as const }));
+      if (body.trim() !== "") parts.push({ kind: "text", ...clamp(body, MAX_TEXT_CHARS) });
+      this.emit({ uuid, ts, role, parts,
         ...(role === "assistant" && (p.phase === "commentary" || p.phase === "final_answer") ? { phase: p.phase } : {}),
       });
-      continue;
+      return;
     }
 
     if (p.type === "reasoning") {
@@ -236,18 +316,18 @@ export function parseCodexTranscript(text: string): TranscriptEntry[] {
             .filter(Boolean)
             .join("\n\n")
         : "";
-      if (summary.trim() === "") continue; // encrypted-only reasoning row — nothing to show
-      emit({
+      if (summary.trim() === "") return; // encrypted-only reasoning row — nothing to show
+      this.emit({
         uuid,
         ts,
         role: "assistant",
         parts: [{ kind: "thinking", ...clamp(stripAnsi(summary), MAX_TEXT_CHARS) }],
       });
-      continue;
+      return;
     }
 
     if (p.type === "function_call" || p.type === "custom_tool_call") {
-      const part: Extract<TranscriptPart, { kind: "tool" }> = {
+      const part: ToolPart = {
         kind: "tool",
         name: typeof p.name === "string" ? p.name : "tool",
         // Custom tools carry raw code/text, not JSON arguments (even when the code happens to be
@@ -256,36 +336,41 @@ export function parseCodexTranscript(text: string): TranscriptEntry[] {
       };
       const questions = toolQuestions(p.name, p.arguments);
       if (questions) part.questions = questions;
-      if (typeof p.call_id === "string") pendingTools.set(p.call_id, part);
-      emit({ uuid, ts, role: "assistant", parts: [part] });
-      continue;
+      if (typeof p.call_id === "string") this.pendingTools.set(p.call_id, { part, entry: uuid });
+      this.emit({ uuid, ts, role: "assistant", parts: [part] });
+      return;
     }
 
     if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
       const id = typeof p.call_id === "string" ? p.call_id : "";
-      const target = pendingTools.get(id);
+      const target = this.pendingTools.get(id);
       const outputText = stripAnsi(codexToolOutput(p.output));
+      const attachments = this.index(target?.entry ?? uuid, imageCarrier(p), offset, bytes);
+      const result = { ...clamp(outputText, MAX_RESULT_CHARS), ...(attachments.length ? { attachments } : {}) };
       if (target) {
         // Mutated in place — the part already sits in an emitted entry, which is exactly why results
         // attach without reordering anything.
-        pendingTools.delete(id);
-        target.result = clamp(outputText, MAX_RESULT_CHARS);
-      } else if (outputText.trim() !== "") {
+        this.pendingTools.delete(id);
+        target.part.result = result;
+      } else if (outputText.trim() !== "" || attachments.length) {
         // Orphan output (its call fell outside a tail-read window) — kept unattached so the window
         // never silently drops output.
-        emit({
-          uuid,
-          ts,
-          role: "assistant",
-          parts: [
-            { kind: "tool", name: "result", summary: "", result: clamp(outputText, MAX_RESULT_CHARS) },
-          ],
-        });
+        this.emit({ uuid, ts, role: "assistant", parts: [{ kind: "tool", name: "result", summary: "", result }] });
       }
     }
   }
+}
 
-  return turns.finish(entries);
+/**
+ * Parse a Codex rollout log into oldest-first turns. PURE — no fs, no clock.
+ *
+ * Unparseable lines are skipped: the log is appended to live, so the last line can be a partial
+ * write, and a tail-read window starts mid-line by construction.
+ */
+export function parseCodexTranscript(text: string): TranscriptEntry[] {
+  const parser = new CodexParser();
+  feedText(text, (line, offset, bytes) => parser.line(line, offset, bytes));
+  return parser.entries();
 }
 
 /**
@@ -358,6 +443,8 @@ export class CodexTranscriptSource implements TranscriptSource {
   stat = statFile;
 
   load = loadTail;
+
+  read = readRange;
 }
 
 /** Directory entries, newest-name first. Empty when the directory doesn't exist. */
@@ -376,5 +463,7 @@ export function codexJournal(roots: string | readonly string[]): JournalAdapter 
     parseUsage: parseCodexUsage,
     source: new CodexTranscriptSource(roots),
     parse: parseCodexTranscript,
+    parser: () => new CodexParser(),
+    rowImages: codexRowImages,
   };
 }

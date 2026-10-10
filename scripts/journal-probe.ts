@@ -17,9 +17,11 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { loadConfig } from "../bridge/config.ts";
+import { MAX_TRANSCRIPT_BYTES } from "../bridge/journal/files.ts";
 import { isGrokSessionId } from "../bridge/journal/grok.ts";
 import { buildJournalRegistry } from "../bridge/journal/registry.ts";
-import type { AgentSessionRef, JournalAdapter, TranscriptEntry } from "../bridge/journal/types.ts";
+import { TranscriptStore } from "../bridge/journal/store.ts";
+import type { AgentSessionRef, JournalAdapter, TranscriptEntry, TranscriptSource } from "../bridge/journal/types.ts";
 
 /**
  * Every `.jsonl` under `dir`, newest first.
@@ -143,6 +145,49 @@ async function candidateRefsUnder(
   return { refs, total: logs.length };
 }
 
+/**
+ * Does appending this log in pieces leave the store exactly where one whole read leaves it?
+ *
+ * The incremental reader is only as right as the parser's carried state, and the format is
+ * undocumented, so this replays the log's own window as a sequence of appends (cut mid-line on
+ * purpose) and compares every observable — entries, facts, telemetry — against a cold read of the
+ * same bytes. In memory, read-only. Null when the adapter has no incremental path.
+ */
+export async function incrementalMatches(adapter: JournalAdapter, bytes: Uint8Array, pieces = 12): Promise<boolean | null> {
+  if (!adapter.parser || !adapter.source.read) return null;
+  const view = async (window: () => Uint8Array, steps: number[]): Promise<string> => {
+    let size = 0;
+    let mtimeMs = 0;
+    const source: TranscriptSource = {
+      resolve: async () => "/probe",
+      stat: async () => ({ size, mtimeMs, ino: 1 }),
+      load: async () => { throw new Error("unused"); },
+      read: async (_path, start, end) => window().slice(start, Math.min(end, size)),
+    };
+    const store = new TranscriptStore();
+    const live = { ...adapter, source };
+    const ref = { kind: "id", value: "probe" } as const;
+    for (const step of steps) {
+      size = step;
+      mtimeMs++;
+      await store.page(live, ref, { limit: Number.MAX_SAFE_INTEGER });
+    }
+    return JSON.stringify([await store.page(live, ref, { limit: Number.MAX_SAFE_INTEGER }), await store.facts(live, ref)]);
+  };
+  const steps = Array.from({ length: pieces }, (_, i) => Math.round((bytes.length * (i + 1)) / pieces));
+  return await view(() => bytes, steps) === await view(() => bytes, [bytes.length]);
+}
+
+/** The bytes a store's window would hold for this log: all of it, or its tail below the cap. */
+async function windowOf(adapter: JournalAdapter, path: string): Promise<Uint8Array | null> {
+  const meta = await adapter.source.stat(path);
+  if (!meta || !adapter.source.read) return null;
+  const start = Math.max(0, meta.size - MAX_TRANSCRIPT_BYTES);
+  const bytes = await adapter.source.read(path, start, meta.size);
+  // A clipped head is a partial line; drop it so the replay and the cold read frame lines alike.
+  return start === 0 ? bytes : bytes.subarray(bytes.indexOf(10) + 1);
+}
+
 function summarise(entries: TranscriptEntry[]): string {
   const roles = new Map<string, number>();
   let parts = 0;
@@ -185,10 +230,17 @@ async function probeRoot(
 
     const cursors = new Set(entries.map((e) => e.uuid));
     const dupes = entries.length - cursors.size;
+    const window = await windowOf(adapter, resolved);
+    const incremental = window ? await incrementalMatches(adapter, window) : null;
     console.log(
       `${label} ✓ ${summarise(entries)}${complete ? "" : " [tail-clipped]"}` +
-        `${dupes > 0 ? ` ⚠ ${dupes} duplicate cursors` : ""}`,
+        `${dupes > 0 ? ` ⚠ ${dupes} duplicate cursors` : ""}` +
+        `${incremental === null ? "" : incremental ? ", incremental = whole" : " ✗ incremental differs from a whole read"}`,
     );
+    if (incremental === false) {
+      lastProblem = "incremental read differs from a whole read";
+      continue;
+    }
     console.log(`${" ".repeat(10)}${resolved}  (candidate ${tried} of ${total})`);
     return true;
   }

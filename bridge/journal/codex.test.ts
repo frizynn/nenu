@@ -213,7 +213,7 @@ describe("parseCodexTranscript", () => {
     ].join("\n"));
     expect(entries).toHaveLength(2);
     expect(entries[0]).toMatchObject({ turnId: "custom-turn", turn: { status: "completed", durationMs: 50 } });
-    expect(entries[0]!.parts[0]).toEqual({ kind: "tool", name: "exec", summary: "const result = await run(); text(result);", result: { text: 'Script completed\nError: <script>alert("literal")</script>' } });
+    expect(entries[0]!.parts[0]).toEqual({ kind: "tool", name: "exec", summary: "const result = await run(); text(result);", result: { text: 'Script completed\nError: <script>alert("literal")</script>', attachments: [{ kind: "image", index: 0, mediaType: "image/png" }] } });
     expect(entries[1]!.parts[0]).toMatchObject({ summary: '"literal JSON-looking code"', result: { text: "Second result" } });
     expect(JSON.stringify(entries)).not.toContain("PRIVATE_IMAGE");
     expect(parseCodexTranscript([

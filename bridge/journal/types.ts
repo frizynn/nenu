@@ -8,6 +8,8 @@
 // make "read that log" a per-harness decision behind one interface, so a new harness is an adapter
 // rather than a fork of the reader.
 
+import type { InteractionHint } from "../types.ts";
+
 /**
  * How an agent named its session, straight off Herdr's `agent_session` record.
  *
@@ -39,8 +41,81 @@ export type TranscriptPart =
       /** One-line gist of the call's input (the file read, the command run) — never the whole input. */
       summary: string;
       questions?: Array<{ title: string; options: string[] }>;
-      result?: { text: string; truncated?: boolean; isError?: boolean };
-    };
+      result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };
+    }
+  | TranscriptImagePart;
+
+/**
+ * An image the journal holds inline (a pasted screenshot), as a marker only. The bytes are fetched on
+ * demand from the journal-image route by entry uuid and `index` — never by path, never inlined into
+ * /history, where one image is routinely 100-600 KB of base64.
+ */
+export interface TranscriptImagePart {
+  kind: "image";
+  /** Zero-based index among the images of its entry, tool-result images included. */
+  index: number;
+  mediaType?: string;
+}
+
+/**
+ * What a tool call produced or showed: an inline image (addressed like {@link TranscriptImagePart},
+ * by its entry and index) or a file the harness itself reports delivering (Claude's SendUserFile).
+ */
+export type ToolAttachment =
+  | { kind: "image"; index: number; mediaType?: string }
+  | { kind: "file"; path: string };
+
+/** One row of a harness's own input queue, as its journal records it (Claude's `queue-operation`). */
+export interface NativeQueueEvent {
+  /**
+   * The native operation. `queued_command` is the attachment Claude writes when a queued message is
+   * absorbed into the running turn; the rest are `queue-operation` rows. P0 measured, on 2.1.296:
+   * enqueue on Enter, then either remove(absorbed_mid_turn) + queued_command or dequeue + a new user
+   * row; popAll when Up recalls the queue into the input box.
+   */
+  kind: "enqueue" | "dequeue" | "remove" | "popAll" | "queued_command";
+  ts: string;
+  content?: string;
+  reason?: string;
+  commandUuid?: string;
+  deliveryId?: string;
+}
+
+/** Structured facts a journal carries beside the conversation itself. */
+export interface JournalFacts {
+  /** The name the operator gave the session (Claude's `/rename`, a `custom-title` row). */
+  title?: string;
+  /** Oldest-first, the newest {@link MAX_QUEUE_EVENTS} only. */
+  queue: NativeQueueEvent[];
+  /** The newest question or plan the agent asked that has no answer in the journal yet. */
+  pendingQuestion?: InteractionHint;
+}
+
+export const MAX_QUEUE_EVENTS = 100;
+
+/** Where the bytes of one inline image sit: the log line holding it, and its position in that row. */
+export interface ImageLocator {
+  offset: number;
+  bytes: number;
+  /** Index among the row's images, in the order {@link JournalAdapter.rowImages} returns them. */
+  nth: number;
+}
+
+/**
+ * A resumable parse. The store feeds it complete lines in file order — the whole window on a first
+ * read, then only what was appended — so a growing log costs the size of its growth. Feeding a log in
+ * any split must leave exactly the state one feed of the whole log would.
+ */
+export interface JournalParser {
+  /** One complete line, and where its bytes sit in the file (so images can be found again). */
+  line(text: string, offset: number, bytes: number): void;
+  /** Every entry so far, oldest first. Entries already returned may be updated in place later. */
+  entries(): TranscriptEntry[];
+  facts(): JournalFacts;
+  usage(): Omit<SessionTelemetry, "fileTruncated"> | undefined;
+  /** The images of one entry, indexed as its image parts and attachments are. */
+  images(entryUuid: string): readonly ImageLocator[];
+}
 
 /**
  * One turn of the conversation.
@@ -131,9 +206,15 @@ export interface TranscriptSource {
    * conversation asks for the same file over and over. Reading it to discover the cache was already
    * valid made every "load older" tap a full re-read.
    */
-  stat(path: string): Promise<{ size: number; mtimeMs: number } | null>;
+  stat(path: string): Promise<{ size: number; mtimeMs: number; ino?: number } | null>;
   /** Tail-read a log. `complete` is false when the byte cap clipped the head. */
   load(path: string): Promise<{ text: string; complete: boolean; size: number; mtimeMs: number }>;
+  /**
+   * Bytes `[start, end)` of a log — the incremental path. Only file-backed sources have it; a source
+   * without it (OpenCode's database) is always re-read whole. Its `stat` then also reports `ino`, so
+   * a log replaced under the same name is never mistaken for one that grew.
+   */
+  read?(path: string, start: number, end: number): Promise<Uint8Array>;
 }
 
 /**
@@ -151,4 +232,8 @@ export interface JournalAdapter {
   parse(text: string): TranscriptEntry[];
   /** Runs only when the cached log changes, over the same contained read as the transcript. */
   parseUsage?(text: string): Omit<SessionTelemetry, "fileTruncated"> | undefined;
+  /** A resumable parser, for a harness whose log is append-only. Without one every change re-parses. */
+  parser?(): JournalParser;
+  /** The inline images of one parsed row, in the order an {@link ImageLocator}'s `nth` counts. */
+  rowImages?(row: unknown): Array<{ mediaType?: string; data: string }>;
 }

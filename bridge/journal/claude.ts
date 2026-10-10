@@ -23,19 +23,29 @@
 // rendering 705 fake "user" turns. `isSidechain` marks subagent traffic (dropped by default);
 // `isCompactSummary` marks the summary Claude writes when a session is compacted.
 
-import { parseClaudeUsage } from "./usage.ts";
+import { claudeUsageRow, parseClaudeUsage } from "./usage.ts";
 import { ClaudeTurnTracker } from "./turns.ts";
+import { askUserQuestions } from "./questions.ts";
+import { feedText } from "./lines.ts";
+import type { InteractionHint } from "../types.ts";
 import { readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { containedRealpath, exists, head, loadTail, rootList, statFile } from "./files.ts";
+import { containedRealpath, exists, head, loadTail, readRange, rootList, statFile } from "./files.ts";
 import { clamp, MAX_RESULT_CHARS, MAX_TEXT_CHARS, stripAnsi, summarizeToolInput } from "./text.ts";
-import type {
-  AgentSessionRef,
-  JournalAdapter,
-  TranscriptEntry,
-  TranscriptPart,
-  TranscriptSource,
+import {
+  MAX_QUEUE_EVENTS,
+  type AgentSessionRef,
+  type ImageLocator,
+  type JournalAdapter,
+  type JournalFacts,
+  type JournalParser,
+  type NativeQueueEvent,
+  type SessionTelemetry,
+  type ToolAttachment,
+  type TranscriptEntry,
+  type TranscriptPart,
+  type TranscriptSource,
 } from "./types.ts";
 
 /** A session uuid as Claude writes it — canonical 8-4-4-4-12 hex. Anything else never touches fs. */
@@ -123,108 +133,244 @@ interface RawRow extends Record<string, unknown> {
   message?: { role?: unknown; content?: unknown } | unknown;
 }
 
+type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
+type Usage = Omit<SessionTelemetry, "fileTruncated">;
+
+const QUEUE_OPERATIONS = new Set(["enqueue", "dequeue", "remove", "popAll"]);
+const str = (value: unknown, max = 200): string | undefined =>
+  typeof value === "string" && value !== "" && value.length <= max ? value : undefined;
+
+/** A base64 image block (`{type:"image", source:{type:"base64", media_type, data}}`), or null. */
+function base64Image(block: unknown): { mediaType?: string; data: string } | null {
+  if (block === null || typeof block !== "object") return null;
+  const b = block as Record<string, unknown>;
+  const source = b.source as Record<string, unknown> | undefined;
+  if (b.type !== "image" || !source || source.type !== "base64" || typeof source.data !== "string") return null;
+  const mediaType = str(source.media_type, 100);
+  return { ...(mediaType ? { mediaType } : {}), data: source.data };
+}
+
 /**
- * Parse a Claude session log into oldest-first turns.
- *
- * PURE — no fs, no clock — so the whole grammar is unit-testable (`bun test`). Unparseable lines are
- * skipped rather than thrown on: a log is appended to live, so the final line can be a partial write,
- * and a tail-read window starts mid-line by construction.
+ * Every inline image of a row, in the one order the parser numbers them: the message's own image
+ * blocks and the images inside its tool results, as they appear. journal-image re-reads a row and
+ * picks the n-th from this list, so the parser and this walk must never disagree.
+ */
+export function claudeRowImages(row: unknown): Array<{ mediaType?: string; data: string }> {
+  const message = row !== null && typeof row === "object" ? (row as RawRow).message : undefined;
+  const content = message !== null && typeof message === "object" ? (message as { content?: unknown }).content : undefined;
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block) => {
+    const image = base64Image(block);
+    if (image) return [image];
+    const inner = block && typeof block === "object" && (block as { type?: unknown }).type === "tool_result"
+      ? (block as { content?: unknown }).content : undefined;
+    return Array.isArray(inner) ? inner.flatMap((b) => base64Image(b) ?? []) : [];
+  });
+}
+
+/** Files SendUserFile reports delivering, from the row's structured `toolUseResult`. */
+function sentFiles(row: RawRow): Array<{ kind: "file"; path: string }> {
+  const result = row.toolUseResult;
+  const attachments = result && typeof result === "object" ? (result as { attachments?: unknown }).attachments : undefined;
+  if (!Array.isArray(attachments)) return [];
+  return attachments.flatMap((a) => {
+    const path = a && typeof a === "object" ? str((a as { path?: unknown }).path, 4096) : undefined;
+    return path?.startsWith("/") ? [{ kind: "file" as const, path }] : [];
+  });
+}
+
+/** The hint a pending AskUserQuestion or ExitPlanMode gives a dialog the screen detects. */
+function questionHint(name: string, input: unknown, ts: string): InteractionHint | undefined {
+  const observedAt = Date.parse(ts) || 0;
+  const questions = askUserQuestions(name, input);
+  if (questions) {
+    const [first] = questions;
+    return { source: "claude-journal", observedAt, question: first!.title, options: first!.options };
+  }
+  if (name !== "ExitPlanMode") return undefined;
+  const plan = input && typeof input === "object" ? (input as { plan?: unknown }).plan : undefined;
+  return { source: "claude-journal", observedAt, ...(typeof plan === "string" ? { detail: plan.slice(0, MAX_TEXT_CHARS) } : {}) };
+}
+
+/**
+ * Claude's grammar as a resumable parser (see JournalParser). All carried state lives here: the tool
+ * calls awaiting results, the turn tracker, the image index and the journal's facts.
  *
  * `includeSidechains` defaults false: subagent traffic is a different conversation and would swamp
  * the thread you opened.
  */
-export function parseClaudeTranscript(
-  text: string,
-  opts: { includeSidechains?: boolean } = {},
-): TranscriptEntry[] {
-  const entries: TranscriptEntry[] = [];
-  const turns = new ClaudeTurnTracker();
+export class ClaudeParser implements JournalParser {
+  private readonly list: TranscriptEntry[] = [];
+  private readonly turns = new ClaudeTurnTracker();
   // tool_use id → the part awaiting its result, so a `tool_result` row lands on the call that made it.
-  const pendingTools = new Map<string, Extract<TranscriptPart, { kind: "tool" }>>();
+  private readonly pendingTools = new Map<string, { part: ToolPart; entry: string }>();
+  private readonly pendingQuestions = new Map<string, InteractionHint>();
+  private readonly imageIndex = new Map<string, ImageLocator[]>();
+  private readonly queue: NativeQueueEvent[] = [];
+  private title: string | undefined;
+  private usageState: Usage | undefined;
 
-  for (const line of text.split("\n")) {
-    if (line.trim() === "") continue;
+  constructor(private readonly opts: { includeSidechains?: boolean } = {}) {}
+
+  entries(): TranscriptEntry[] {
+    return this.turns.finish(this.list);
+  }
+
+  facts(): JournalFacts {
+    const pending = [...this.pendingQuestions.values()].at(-1);
+    return {
+      ...(this.title ? { title: this.title } : {}),
+      queue: [...this.queue],
+      ...(pending ? { pendingQuestion: pending } : {}),
+    };
+  }
+
+  usage(): Usage | undefined {
+    return this.usageState;
+  }
+
+  images(entryUuid: string): readonly ImageLocator[] {
+    return this.imageIndex.get(entryUuid) ?? [];
+  }
+
+  private addImage(entry: string, locator: ImageLocator): number | null {
+    if (entry === "") return null; // an entry without a uuid has no address to serve it by
+    const list = this.imageIndex.get(entry) ?? [];
+    list.push(locator);
+    this.imageIndex.set(entry, list);
+    return list.length - 1;
+  }
+
+  private note(event: NativeQueueEvent): void {
+    this.queue.push(event);
+    if (this.queue.length > MAX_QUEUE_EVENTS) this.queue.shift();
+  }
+
+  /** Bookkeeping rows that carry facts rather than speech. True when the row was one. */
+  private fact(row: RawRow, ts: string): boolean {
+    if (row.type === "custom-title") {
+      const title = str(row.customTitle);
+      if (title) this.title = title;
+      return true;
+    }
+    if (row.type === "queue-operation") {
+      const kind = row.operation;
+      if (typeof kind !== "string" || !QUEUE_OPERATIONS.has(kind)) return true;
+      const content = str(row.content, MAX_TEXT_CHARS);
+      const reason = str(row.reason), commandUuid = str(row.commandUuid), deliveryId = str(row.deliveryId);
+      this.note({
+        kind: kind as NativeQueueEvent["kind"], ts,
+        ...(content ? { content } : {}), ...(reason ? { reason } : {}),
+        ...(commandUuid ? { commandUuid } : {}), ...(deliveryId ? { deliveryId } : {}),
+      });
+      return true;
+    }
+    return false;
+  }
+
+  line(line: string, offset: number, bytes: number): void {
+    if (line.trim() === "") return;
     let row: RawRow;
     try {
       row = JSON.parse(line) as RawRow;
     } catch {
-      continue; // partial trailing write, or the clipped first line of a tail read
+      return; // partial trailing write, or the clipped first line of a tail read
     }
+    if (row === null || typeof row !== "object") return;
+    this.usageState = claudeUsageRow(row, this.usageState);
     const type = row.type;
-    if (row.isSidechain === true && !opts.includeSidechains) continue;
-    if (type !== "user" && type !== "assistant") { turns.observe(row); continue; }
+    if (row.isSidechain === true && !this.opts.includeSidechains) return;
+    const uuid = typeof row.uuid === "string" ? row.uuid : "";
+    const ts = typeof row.timestamp === "string" ? row.timestamp : "";
+    if (this.fact(row, ts)) { this.turns.observe(row); return; }
+    if (type === "attachment") { this.absorbed(row, uuid, ts); return; }
+    if (type !== "user" && type !== "assistant") { this.turns.observe(row); return; }
 
     const message = row.message;
-    if (message === null || typeof message !== "object") continue;
+    if (message === null || typeof message !== "object") return;
     const content = (message as { content?: unknown }).content;
     const human = type === "user" && row.isCompactSummary !== true && (
       typeof content === "string" ? classifyUserText(content)?.role === "user" :
       Array.isArray(content) && content.some((block) => block?.type === "text" && typeof block.text === "string" && classifyUserText(block.text)?.role === "user")
     );
-    turns.observe(row, human);
-    const uuid = typeof row.uuid === "string" ? row.uuid : "";
-    const ts = typeof row.timestamp === "string" ? row.timestamp : "";
+    this.turns.observe(row, human);
     const parts: TranscriptPart[] = [];
     // Set by a `user` row whose string content turns out to be injected plumbing rather than speech.
     let roleOverride: "note" | undefined;
+    // Counts every image of the row in claudeRowImages' order, whether or not it lands on a part.
+    let nth = 0;
+    const locate = (): ImageLocator => ({ offset, bytes, nth: nth++ });
 
     if (typeof content === "string") {
       // A string content is the HUMAN-turn carrier — but Claude Code also routes injected plumbing
       // through it, so classify before believing it (see classifyUserText).
       const classified = classifyUserText(content);
-      if (classified === null) continue;
+      if (classified === null) return;
       if (classified.role === "note") roleOverride = "note";
       parts.push({ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) });
     } else if (Array.isArray(content)) {
+      const results = content.filter((block) => block?.type === "tool_result").length;
       for (const block of content) {
         if (block === null || typeof block !== "object") continue;
         const b = block as Record<string, unknown>;
-        if (b.type === "text" && typeof b.text === "string") {
+        const image = base64Image(b);
+        if (image) {
+          const index = this.addImage(uuid, locate());
+          if (index !== null) parts.push({ kind: "image", index, ...(image.mediaType ? { mediaType: image.mediaType } : {}) });
+        } else if (b.type === "text" && typeof b.text === "string") {
           if (b.text.trim() !== "")
             parts.push({ kind: "text", ...clamp(stripAnsi(b.text), MAX_TEXT_CHARS) });
         } else if (b.type === "thinking" && typeof b.thinking === "string") {
           if (b.thinking.trim() !== "")
             parts.push({ kind: "thinking", ...clamp(stripAnsi(b.thinking), MAX_TEXT_CHARS) });
         } else if (b.type === "tool_use") {
-          const part: Extract<TranscriptPart, { kind: "tool" }> = {
-            kind: "tool",
-            name: typeof b.name === "string" ? b.name : "tool",
-            summary: summarizeToolInput(b.input),
-          };
-          if (typeof b.id === "string") pendingTools.set(b.id, part);
+          const name = typeof b.name === "string" ? b.name : "tool";
+          const part: ToolPart = { kind: "tool", name, summary: summarizeToolInput(b.input) };
+          const questions = askUserQuestions(name, b.input);
+          if (questions) part.questions = questions;
+          if (typeof b.id === "string") {
+            this.pendingTools.set(b.id, { part, entry: uuid });
+            const hint = questionHint(name, b.input, ts);
+            if (hint) this.pendingQuestions.set(b.id, hint);
+          }
           parts.push(part);
         } else if (b.type === "tool_result") {
           // Fold onto the call that produced it. The awaited part is MUTATED in place — it already
           // sits in an emitted entry, which is exactly why results attach without reordering anything.
           const id = typeof b.tool_use_id === "string" ? b.tool_use_id : "";
-          const target = pendingTools.get(id);
+          const target = this.pendingTools.get(id);
+          this.pendingQuestions.delete(id);
           // Tool output routinely carries colour codes (any command run through a shell) — strip
           // them, since this view renders text nodes rather than interpreting escapes.
           const resultText = stripAnsi(toolResultText(b.content));
+          const owner = target?.entry ?? uuid;
+          const attachments: ToolAttachment[] = [];
+          for (const inner of Array.isArray(b.content) ? b.content : []) {
+            const img = base64Image(inner);
+            if (!img) continue;
+            const index = this.addImage(owner, locate());
+            if (index !== null) attachments.push({ kind: "image", index, ...(img.mediaType ? { mediaType: img.mediaType } : {}) });
+          }
+          // toolUseResult describes the row's one result; with several it would be ambiguous.
+          if (target?.part.name === "SendUserFile" && results === 1 && b.is_error !== true) attachments.push(...sentFiles(row));
+          const result = {
+            ...clamp(resultText, MAX_RESULT_CHARS),
+            ...(b.is_error === true ? { isError: true } : {}),
+            ...(attachments.length ? { attachments } : {}),
+          };
           if (target) {
-            pendingTools.delete(id);
-            target.result = {
-              ...clamp(resultText, MAX_RESULT_CHARS),
-              ...(b.is_error === true ? { isError: true } : {}),
-            };
-          } else if (resultText.trim() !== "") {
+            this.pendingTools.delete(id);
+            target.part.result = result;
+          } else if (resultText.trim() !== "" || attachments.length) {
             // Orphan result (its call fell outside a tail-read window) — keep it, unattached, so the
             // window never silently drops output.
-            parts.push({
-              kind: "tool",
-              name: "result",
-              summary: "",
-              result: {
-                ...clamp(resultText, MAX_RESULT_CHARS),
-                ...(b.is_error === true ? { isError: true } : {}),
-              },
-            });
+            parts.push({ kind: "tool", name: "result", summary: "", result });
           }
         }
       }
     }
 
-    if (parts.length === 0) continue; // bookkeeping row with nothing to show
+    if (parts.length === 0) return; // bookkeeping row with nothing to show
     const role: TranscriptEntry["role"] =
       row.isCompactSummary === true
         ? "summary"
@@ -234,12 +380,53 @@ export function parseClaudeTranscript(
     const stop = (message as { stop_reason?: unknown }).stop_reason;
     const phase = role === "assistant" && parts.some((part) => part.kind === "text")
       ? stop === "end_turn" ? "final_answer" : stop === "tool_use" ? "commentary" : undefined : undefined;
-    const entry: TranscriptEntry = { uuid, ts, role, parts, ...(phase ? { phase } : {}) };
-    turns.attach(entry);
-    entries.push(entry);
+    this.push({ uuid, ts, role, parts, ...(phase ? { phase } : {}) });
   }
 
-  return turns.finish(entries);
+  /**
+   * A message the operator queued while Claude worked, absorbed into the running turn. Claude writes
+   * it ONLY as this attachment (never as a user row), so without it the history would lose something
+   * the operator said. It stays in the running turn, as it did on screen.
+   */
+  private absorbed(row: RawRow, uuid: string, ts: string): void {
+    this.turns.observe(row);
+    const attachment = row.attachment;
+    if (attachment === null || typeof attachment !== "object") return;
+    const a = attachment as Record<string, unknown>;
+    if (a.type !== "queued_command") return;
+    const prompt = str(a.prompt, MAX_TEXT_CHARS);
+    const commandUuid = str(a.source_uuid), deliveryId = str(a.delivery_id);
+    this.note({
+      kind: "queued_command", ts, ...(prompt ? { content: prompt } : {}),
+      ...(commandUuid ? { commandUuid } : {}), ...(deliveryId ? { deliveryId } : {}),
+    });
+    const origin = a.origin && typeof a.origin === "object" ? (a.origin as { kind?: unknown }).kind : undefined;
+    if (origin !== "human" || !prompt || uuid === "") return;
+    const classified = classifyUserText(prompt);
+    if (classified?.role !== "user") return;
+    this.push({ uuid, ts, role: "user", parts: [{ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) }] });
+  }
+
+  private push(entry: TranscriptEntry): void {
+    this.turns.attach(entry);
+    this.list.push(entry);
+  }
+}
+
+/**
+ * Parse a Claude session log into oldest-first turns.
+ *
+ * PURE — no fs, no clock — so the whole grammar is unit-testable (`bun test`). Unparseable lines are
+ * skipped rather than thrown on: a log is appended to live, so the final line can be a partial write,
+ * and a tail-read window starts mid-line by construction.
+ */
+export function parseClaudeTranscript(
+  text: string,
+  opts: { includeSidechains?: boolean } = {},
+): TranscriptEntry[] {
+  const parser = new ClaudeParser(opts);
+  feedText(text, (line, offset, bytes) => parser.line(line, offset, bytes));
+  return parser.entries();
 }
 
 /**
@@ -287,6 +474,8 @@ export function conversationRoot(text: string): string | null {
  */
 export class ClaudeTranscriptSource implements TranscriptSource {
   private readonly pathCache = new Map<string, { path: string; root: string }>();
+  /** followContinuation's answer per log, valid while its directory's listing is unchanged. */
+  private readonly followCache = new Map<string, { dirMtimeMs: number; best: string }>();
 
   private readonly roots: string[];
 
@@ -356,6 +545,27 @@ export class ClaudeTranscriptSource implements TranscriptSource {
    */
   private async followContinuation(path: string, root: string): Promise<string> {
     const dir = dirname(path);
+    // Memoised on the directory's mtime, which moves when a log is created, renamed or deleted —
+    // the only way a continuation can appear. Appends don't move it, and every history read and
+    // every watched journal asks this question, so the scan (a head read of each sibling) runs once
+    // per new file instead of once per request. One more case invalidates it: the reported log
+    // written after the continuation we picked, which the full scan would have switched back to.
+    const dirMtimeMs = (await stat(dir).catch(() => null))?.mtimeMs;
+    const memo = this.followCache.get(path);
+    if (memo && dirMtimeMs !== undefined && memo.dirMtimeMs === dirMtimeMs) {
+      if (memo.best === path) return path;
+      const [best, own] = await Promise.all([statFile(memo.best), statFile(path)]);
+      if (best && own && best.mtimeMs >= own.mtimeMs) return memo.best;
+    }
+    const best = await this.scanContinuation(path, root, dir);
+    if (dirMtimeMs !== undefined) {
+      this.followCache.set(path, { dirMtimeMs, best });
+      if (this.followCache.size > 256) this.followCache.delete(this.followCache.keys().next().value!);
+    }
+    return best;
+  }
+
+  private async scanContinuation(path: string, root: string, dir: string): Promise<string> {
     let self: { root: string | null; size: number; mtimeMs: number };
     try {
       const st = await stat(path);
@@ -397,6 +607,8 @@ export class ClaudeTranscriptSource implements TranscriptSource {
   stat = statFile;
 
   load = loadTail;
+
+  read = readRange;
 }
 
 /**
@@ -411,5 +623,7 @@ export function claudeJournal(roots: string | readonly string[]): JournalAdapter
     parseUsage: parseClaudeUsage,
     source: new ClaudeTranscriptSource(roots),
     parse: (text) => parseClaudeTranscript(text),
+    parser: () => new ClaudeParser(),
+    rowImages: claudeRowImages,
   };
 }
