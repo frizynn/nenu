@@ -8,6 +8,29 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-10-10
+
+### Added
+- Redesigned shell: desktop sidebar with the Organizations project tree, loose workspaces and a collapsible rail; phone tab bar with New in the middle. (93ac4856)
+- Home answers what needs you in place, lists PRs ready to review, projects and workspaces. (e16497dd)
+- Project view: coordinator chat with thread cards, threads/PRs/Activity panel, split view with tabs and a PR/CI bar with Merge, auto-fix and auto-merge. (43161711)
+- One New dialog for thread, tab, workspace, project and quick chat. (b28c916f)
+- Sending while an agent works offers Send now or Queue for later, and rows follow each CLI's own queue. (3b9d0af8, 62bd2189)
+- One QuestionCard answers every dialog, with notes and typed answers. (d5d8a584, 8cac5dd6)
+- Images, artifact cards and a sandboxed HTML viewer in chat. (781853a0)
+- Claude workflows, background commands and artifacts in the chat and Activity panel. (40c52c02, 64b05af8)
+- Opt-in observer hooks for Claude Code. (16df8cb9)
+
+### Changed
+- A send is one request; the bridge types, verifies and submits. (84fa17c1)
+- The bridge watches only the panes and journals a page shows; the browser polls less. (f4fcf096)
+- Journals are read incrementally; Codex history is paged. (1df29d0b, 74d58d06)
+- Projects are read from Organizations' `--json` contract, files stay as fallback. (8af33440)
+
+### Fixed
+- A retried send is never typed or submitted twice. (3094d8ee, 259294d4)
+- Typed text no longer reaches the audit log at a password prompt. (034e917c)
+
 ## [0.53.0] - 2026-10-09
 
 ### Added

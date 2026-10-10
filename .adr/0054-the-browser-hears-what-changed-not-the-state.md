@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-Amended by: [ADR 0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) (Accepted, not yet shipped). The bridge polls the panes a browser watches and announces journal changes, so a mirror on screen no longer keeps its fast poll; the hidden mirror falls back to 10 s. The stream still carries only names and the fallback poll stays.
+Amended by: [ADR 0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) (Accepted, shipped in 0.54.0). The bridge polls the panes a browser watches and announces journal changes, so a mirror on screen no longer keeps its fast poll; the hidden mirror falls back to 10 s. The stream still carries only names and the fallback poll stays.
 
 ## Context
 

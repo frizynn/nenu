@@ -1,6 +1,6 @@
 # 0056. Queued messages follow each CLI's native queue
 
-- **Status:** Accepted 2026-10-10, not yet shipped. Fran decided the direction; the P0 probes
+- **Status:** Accepted 2026-10-10, shipped in 0.54.0. Fran decided the direction; the P0 probes
   (`web/src/lib/grammar/PROBES_2026_10_NOTES.md`) filled in the measured semantics below. The
   bridge side is built; the journal reader and audit trail still have to be handed to the queue
   in `bridge/server.ts`, and the send-time choice is the phone's (C1).

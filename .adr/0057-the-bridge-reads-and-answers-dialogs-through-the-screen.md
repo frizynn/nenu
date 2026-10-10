@@ -1,6 +1,6 @@
 # 0057. The bridge reads and answers dialogs; the screen is the actuator and hooks only observe
 
-- **Status:** Accepted (2026-10-10), not yet shipped. Observe-only hooks are a coordinator default,
+- **Status:** Accepted (2026-10-10), shipped in 0.54.0. Observe-only hooks are a coordinator default,
   reversible. Free-text answers ("Type something", "Tab to amend", Codex notes) stay out until the P0
   probes measure their key recipes.
 - **Extends:** [ADR 0009](./0009-a-generic-menu-is-driven-by-the-keys-it-names.md) and

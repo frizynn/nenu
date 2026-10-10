@@ -1,6 +1,6 @@
 # 0059. Agent images, SVG and HTML assets render without widening file access
 
-- **Status:** Accepted (2026-10-10), not yet shipped. SVG as an image and sibling-asset inlining were
+- **Status:** Accepted (2026-10-10), shipped in 0.54.0. SVG as an image and sibling-asset inlining were
   approved as coordinator defaults, reversible.
 - **Amends:** [ADR 0021](./0021-html-previews-run-in-an-opaque-no-network-sandbox.md) (SVG is no
   longer source-only; a preview may carry its own sibling assets) and the artifacts half of

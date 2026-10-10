@@ -1,6 +1,6 @@
 # 0058. The bridge watches the panes a browser is looking at
 
-- **Status:** Accepted (2026-10-10, coordinator default, reversible), not yet shipped.
+- **Status:** Accepted (2026-10-10, coordinator default, reversible), shipped in 0.54.0.
 - **Amends:** [ADR 0054](./0054-the-browser-hears-what-changed-not-the-state.md). The stream still
   names only what changed and the fallback poll stays. What changes is the clause "a terminal mirror
   on screen keeps its fast poll", and the hidden mirror's fallback goes from 4 s to 10 s.
