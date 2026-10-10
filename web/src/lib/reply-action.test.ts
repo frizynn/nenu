@@ -6,6 +6,7 @@ import { server } from "@/test/setup";
 import * as registry from "./harness/registry";
 import { VERIFY_DELAYS_MS } from "./harness/poll";
 import { draftCarriesSend, sendGuardedReply } from "./reply-action";
+import { replyOutcomeFrom, retryKeepsRequestId } from "./guarded-reply";
 
 // The regression suite for #34: a free-text reply must never fire the submit key until the text is
 // verifiably sitting in the harness's input box. Before this, the reply path typed and then submitted
@@ -459,7 +460,7 @@ describe("sendGuardedReply", () => {
     expect(calls).toEqual([{ text: "please do not approve anything", submit: false }]);
   });
 
-  it("the stalled message states uncertainty and keeps the draft recoverable", async () => {
+  it("the stalled message states uncertainty and points at Terminal before any retry", async () => {
     harness(() => paneWithDialog);
     const out = await sendGuardedReply({
       paneId: "w1:p1",
@@ -468,7 +469,7 @@ describe("sendGuardedReply", () => {
       force: true,
       ...instant,
     });
-    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
+    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*check terminal before retrying/i) });
   });
 
   it("#34: does not mistake somebody else's stranded draft for our text", async () => {
@@ -998,8 +999,8 @@ describe("an unsent reply reports itself and names its cause", () => {
 
     const out = await sendGuardedReply({ paneId: "w1:p1", text: "please do the thing", agent: "claude", ...instant });
 
-    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/couldn't read the terminal.*connection/i) });
-    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*draft is saved/i) });
+    expect(out).toMatchObject({ status: "stalled", error: expect.stringMatching(/couldn't read the terminal/i) });
+    expect(out).toMatchObject({ error: expect.stringMatching(/nothing was submitted.*check terminal before retrying/i) });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
     expect(seen[0]).toMatchObject({ phase: "verify", preflight: "read-failed", attempts: Array(VERIFY_DELAYS_MS.length).fill("read-failed") });
     expect(seen[0]).not.toHaveProperty("screen");
@@ -1067,5 +1068,34 @@ describe("an unsent reply reports itself and names its cause", () => {
     expect(out.status).toBe("blocked");
     // Re-posted a bounded number of times, then dropped.
     await vi.waitFor(() => expect(posts).toBe(3));
+  });
+});
+
+describe("the bridge's one-request send in the composer's terms", () => {
+  const base = { ok: false as const, requestId: "r1" };
+  it("maps each answer to what the composer does next", () => {
+    expect(replyOutcomeFrom({ ok: true, requestId: "r1", ack: "submitted" }, () => null)).toEqual({ status: "sent" });
+    expect(replyOutcomeFrom({ ...base, stage: "preflight", error: "no box", textDelivered: false, code: "not_ready" }, () => null)).toEqual({ status: "blocked", error: "no box" });
+    expect(replyOutcomeFrom({ ...base, stage: "verify", error: "unseen", textDelivered: true }, () => null)).toEqual({ status: "error", error: "unseen", textDelivered: true });
+  });
+
+  it("names the password prompt on screen when the bridge refused at one", () => {
+    const refusedAt = (textDelivered: boolean) => ({
+      ...base,
+      stage: "preflight" as const,
+      error: "That's a password prompt — it shows nothing as you type.",
+      textDelivered,
+      ...(textDelivered ? {} : { code: "not_ready" as const }),
+    });
+    expect(replyOutcomeFrom(refusedAt(false), () => "[sudo] password for altan:")).toMatchObject({ status: "blocked", noEcho: "[sudo] password for altan:" });
+    expect(replyOutcomeFrom(refusedAt(true), () => null)).toMatchObject({ status: "stalled", noEcho: "" });
+  });
+
+  it("keeps a request id only while the bridge can still act on the earlier try", () => {
+    expect(retryKeepsRequestId({ ...base, stage: "submit", error: "x", textDelivered: true })).toBe(true);
+    expect(retryKeepsRequestId({ ...base, stage: "verify", error: "x", textDelivered: true })).toBe(true);
+    expect(retryKeepsRequestId({ ...base, stage: "type", error: "x", textDelivered: false })).toBe(false);
+    expect(retryKeepsRequestId({ ...base, stage: "preflight", error: "gone from the box", textDelivered: true })).toBe(false);
+    expect(retryKeepsRequestId({ ok: true, requestId: "r1", ack: "submitted" })).toBe(false);
   });
 });
