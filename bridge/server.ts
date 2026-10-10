@@ -15,6 +15,7 @@ import { defaultOrgRun } from "./org-cli.ts";
 import { PaneWatcher } from "./pane-watcher.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { ProjectRegistry } from "./projects.ts";
+import { PullRequestRegistry } from "./pull-requests.ts";
 import { QueueService } from "./queue-service.ts";
 import { isLoopbackPeer } from "./routes/access.ts";
 import type { ServerDeps, Services } from "./routes/context.ts";
@@ -107,6 +108,7 @@ export function startServer(opts: ServerDeps) {
     input,
     queue,
     projects: new ProjectRegistry({ live }),
+    pullRequests: new PullRequestRegistry({ live }),
     orgRun: defaultOrgRun(),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,
     interactions: new Interactions(live),

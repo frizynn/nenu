@@ -18,6 +18,7 @@ import type { OrgRun } from "../org-cli.ts";
 import type { PaneWatcher } from "../pane-watcher.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import type { ProjectRegistry } from "../projects.ts";
+import type { PullRequestRegistry } from "../pull-requests.ts";
 import type { Push } from "../push.ts";
 import type { QueueService } from "../queue-service.ts";
 import type { SessionRegistry, SessionRuntime } from "../sessions.ts";
@@ -53,6 +54,8 @@ export interface Services extends ServerDeps {
   input: PaneWrites;
   queue: QueueService;
   projects: ProjectRegistry;
+  /** The person's open PRs in the repos agents work in, read with `gh` in the background. */
+  pullRequests: PullRequestRegistry;
   orgRun: OrgRun;
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   hasJournal: (agent: string) => boolean;

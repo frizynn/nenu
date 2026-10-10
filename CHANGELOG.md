@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-10-10
+
+### Added
+- Ready to review lists every open PR you authored in the repos your agents work in, read from GitHub with `gh`, with checks, diff and review state. (ebb01f67)
+
+### Fixed
+- Ready to review no longer lists failed background commands. (ebb01f67)
+- Closing a thread works with upstream herdr-projects (`thread resolve --keep-worktree`) when Herdr Organizations is not installed. (292513d5)
+
 ## [0.55.0] - 2026-10-10
 
 ### Added
