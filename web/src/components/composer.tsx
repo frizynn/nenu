@@ -343,7 +343,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const page = queue.page;
     if (!page?.available) return;
     for (const echo of listLocalSends(sendScope)) {
-      if (echo.state !== "queued" || !echo.queueId) continue;
+      if (!echo.queueId) continue;
+      // A delivered bubble still learns what the CLI's own queue did with it (Claude's journal).
+      if (echo.state === "sent") {
+        const done = queue.delivered.find((item) => item.id === echo.queueId);
+        if (!done?.native || done.native === echo.native) continue;
+        updateLocalSend(sendScope, echo.id, done.native === "enqueued" ? { state: "queued", native: "enqueued" } : { native: done.native });
+        continue;
+      }
+      if (echo.state !== "queued") continue;
       const row = page.messages.find((message) => message.id === echo.queueId);
       if (row) {
         const patch = { queueState: row.state, error: row.error, deliveryMode: row.deliveryMode, waitingFor: row.waitingFor, stranded: row.stranded };

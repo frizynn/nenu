@@ -2226,6 +2226,33 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     );
   });
 
+  it("a message delivered at once still learns that Claude's own queue holds it, then that Claude read it", async () => {
+    const user = userEvent.setup();
+    const queue = serveQueueRoute();
+    renderComposer({ nativeWorkbench: true, working: true });
+    const scope = localSendScope("w1:p1", undefined);
+    const queueOne = async (text: string, choice: RegExp) => {
+      await user.type(screen.getByRole("textbox"), text);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      await user.click(await screen.findByRole("button", { name: choice }));
+    };
+    await queueOne("use staging", /^Send now(?!$)/);
+    await waitFor(() => expect(queue.rows).toHaveLength(1));
+    const id = queue.rows[0]!.id;
+    // The bridge typed it before answering the add: no row waits, the journal has not spoken yet.
+    queue.rows = [];
+    queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap" }];
+    await queueOne("later", /queue for later/i);
+    await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "sent" }));
+    queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "enqueued" }];
+    await queueOne("again", /queue for later/i);
+    await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "queued", native: "enqueued" }));
+    queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "absorbed" }];
+    await queueOne("once more", /queue for later/i);
+    await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "sent", native: "absorbed" }));
+  });
+
   it("Read it now takes a second tap, then asks the bridge with an explicit confirm", async () => {
     const user = userEvent.setup();
     const queue = serveQueueRoute();
