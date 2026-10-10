@@ -208,6 +208,7 @@ export class FakeHerdr {
       this.counters.set(req.method, (this.counters.get(req.method) ?? 0) + 1);
       this.calls.push({ method: req.method, params, at: Date.now() });
       if (req.method === "events.subscribe") return this.subscribe(socket, id, params);
+      if (req.method === "pane.wait_for_output") return this.waitForOutput(socket, id, params);
       socket.end(JSON.stringify({ id, result: this.dispatch(req.method, params) }) + "\n");
     } catch (err) {
       const e = err instanceof FakeError ? err : new FakeError("internal", (err as Error).message);
@@ -243,6 +244,44 @@ export class FakeHerdr {
       default:
         throw new FakeError("invalid_request", `invalid request: unknown variant \`${method}\``);
     }
+  }
+
+  /**
+   * Herdr waits server-side until a read matches, line by line on the stripped text, and answers
+   * with that read; a miss ends at `timeout_ms` with the code `timeout`. Rust's leading inline flags
+   * (`(?m)`) become JavaScript flags, which is all the bridge's trigger pattern uses.
+   */
+  private waitForOutput(socket: Socket<unknown>, id: string, params: Record<string, unknown>): void {
+    const reply = (body: Record<string, unknown>) => void socket.end(JSON.stringify({ id, ...body }) + "\n");
+    const fail = (e: FakeError) => reply({ error: { code: e.code, message: e.message } });
+    const paneId = String(params.pane_id ?? "");
+    const match = (params.match ?? {}) as { type?: string; value?: string };
+    const value = String(match.value ?? "");
+    let test: (line: string) => boolean;
+    if (match.type === "regex") {
+      const [, flags = "", body] = /^(?:\(\?([a-z]+)\))?([\s\S]*)$/.exec(value)!;
+      try {
+        const re = new RegExp(body!, flags.replace(/[^imsu]/g, ""));
+        test = (line) => re.test(line);
+      } catch (err) {
+        return fail(new FakeError("invalid_regex", (err as Error).message));
+      }
+    } else {
+      test = (line) => line.includes(value);
+    }
+    const deadline = Date.now() + (Number(params.timeout_ms) || 0);
+    const look = () => {
+      try {
+        const read = this.read(paneId, String(params.source), Number(params.lines) || this.viewportRows);
+        const line = read.text.split("\n").find(test);
+        if (line !== undefined) return reply({ result: { type: "output_matched", pane_id: paneId, matched_line: line, read, revision: 0 } });
+        if (Date.now() >= deadline) return fail(new FakeError("timeout", "timed out waiting for output match"));
+        setTimeout(look, 5);
+      } catch (err) {
+        fail(err instanceof FakeError ? err : new FakeError("internal", (err as Error).message));
+      }
+    };
+    look();
   }
 
   private read(paneId: string, source: string, lines: number): { pane_id: string; text: string; truncated: boolean; revision: number } {

@@ -81,6 +81,21 @@ describe("FakeHerdr", () => {
     stream.close();
   });
 
+  test("waits for output server-side: a later echo matches, a miss times out, a bad pattern is refused", async () => {
+    const hit = client.waitForOutput("w1:p1", { source: "visible", match: { type: "regex", value: "(?m)^.{0,8}?[❯›>][  ]+ship" }, timeoutMs: 500 });
+    await client.sendPaneText("w1:p1", "ship it");
+    const r = await hit;
+    expect(r.matched && r.matchedLine).toBe("❯ ship it");
+    expect(r.matched && r.read.text).toContain("❯ ship it");
+
+    const started = Date.now();
+    expect(await client.waitForOutput("w1:p1", { source: "visible", match: { type: "substring", value: "never" }, timeoutMs: 60 })).toEqual({ matched: false });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(55);
+
+    await expect(client.waitForOutput("w1:p1", { source: "visible", match: { type: "regex", value: "(" }, timeoutMs: 60 })).rejects.toThrow("invalid_regex");
+    expect(fake.writes().map((c) => c.method)).toEqual(["pane.send_text"]);
+  });
+
   test("rejects a method it does not implement the way Herdr rejects an unknown variant", async () => {
     await expect(client.closePane("w1:p1")).rejects.toThrow("unknown variant");
     expect(fake.writes().map((c) => c.method)).toEqual(["pane.close"]);
