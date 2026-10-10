@@ -29,17 +29,17 @@ export async function fixtureDialog(name: string): Promise<string> {
 }
 
 let seq = 0;
-function journalRow(type: "user" | "assistant", text: string, parentUuid: string | null): { uuid: string; line: string } {
+function journalRow(type: "user" | "assistant", text: string, parentUuid: string | null, at: number): { uuid: string; line: string } {
   const uuid = `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
   const message = type === "user" ? { role: "user", content: text } : { role: "assistant", content: [{ type: "text", text }] };
-  return { uuid, line: JSON.stringify({ type, uuid, parentUuid, timestamp: new Date().toISOString(), message }) + "\n" };
+  return { uuid, line: JSON.stringify({ type, uuid, parentUuid, timestamp: new Date(at).toISOString(), message }) + "\n" };
 }
 
-async function writeJournal(file: string, turns: Array<["user" | "assistant", string]>): Promise<string | null> {
+async function writeJournal(file: string, turns: Array<["user" | "assistant", string]>, at: number): Promise<string | null> {
   let parent: string | null = null;
   let body = "";
   for (const [type, text] of turns) {
-    const row = journalRow(type, text, parent);
+    const row = journalRow(type, text, parent, at);
     body += row.line;
     parent = row.uuid;
   }
@@ -47,7 +47,8 @@ async function writeJournal(file: string, turns: Array<["user" | "assistant", st
   return parent;
 }
 
-export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; cwd: string }): Promise<DemoHerd> {
+/** `shift` moves journal timestamps onto the bench clock (bridge.ts `epoch`). */
+export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; cwd: string; shift: number }): Promise<DemoHerd> {
   const projectDir = join(opts.claudeRoot, "-tmp-nenu-e2e");
   await mkdir(projectDir, { recursive: true });
   const ids = { working: "w1:working", idle: "w1:idle", blocked: "w2:blocked" };
@@ -63,7 +64,7 @@ export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; 
     await writeJournal(file, [
       ["user", `Demo task for the ${key} pane`],
       ["assistant", `Looking at the ${key} pane now.`],
-    ]);
+    ], Date.now() + opts.shift);
   }
   const dialog = await fixtureDialog("claude--permission-bash");
 
@@ -86,11 +87,11 @@ export async function seedDemoHerd(fake: FakeHerdr, opts: { claudeRoot: string; 
 }
 
 /** Keep the working pane's journal growing, like an agent streaming tool calls. Returns a stop function. */
-export function tickJournal(file: string, everyMs = 2000): () => void {
+export function tickJournal(file: string, now: () => number, everyMs = 2000): () => void {
   let n = 0;
   let parent: string | null = null;
   const timer = setInterval(() => {
-    const row = journalRow("assistant", `Step ${++n}: still working.`, parent);
+    const row = journalRow("assistant", `Step ${++n}: still working.`, parent, now());
     parent = row.uuid;
     void appendFile(file, row.line);
   }, everyMs);

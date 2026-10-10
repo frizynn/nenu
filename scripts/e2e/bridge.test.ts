@@ -29,4 +29,18 @@ describe("test bridge guards", () => {
   test("needs --fake or an explicit disposable socket", async () => {
     await expect(startTestBridge({ port: 8797 })).rejects.toThrow("--fake or --socket");
   });
+
+  test("sees no real projects, Codex daemon or clock", async () => {
+    const epoch = Date.parse("2026-10-10T14:00:00Z");
+    const bridge = await startTestBridge({ port: 8796, fake: true, epoch });
+    try {
+      const snapshot = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ projects: unknown[] }>);
+      expect(snapshot.projects).toEqual([]);
+      const codex = await fetch(`${bridge.url}/api/pane/${encodeURIComponent(bridge.herd!.codex)}/conversations`);
+      expect(await codex.text()).toContain("Codex server is unavailable");
+      expect(Math.abs(bridge.now() - epoch)).toBeLessThan(60_000);
+    } finally {
+      await bridge.stop();
+    }
+  }, 20_000);
 });

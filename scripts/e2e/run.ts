@@ -1,9 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchWebkit, PHONE, type Browser } from "./browser.ts";
+import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { tickJournal } from "./scenario.ts";
 
@@ -14,7 +13,7 @@ import { tickJournal } from "./scenario.ts";
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
-// Output goes outside the repo: --out, else $NENU_E2E_OUT, else ~/Library/Caches/nenu-e2e/<stamp>.
+// Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -27,8 +26,10 @@ const { values, positionals } = parseArgs({
 });
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(homedir(), "Library", "Caches", "nenu-e2e"), stamp);
+const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), stamp);
 const port = Number(values.port);
+// Captures render at this instant (a Saturday afternoon, UTC) whenever they are taken.
+const CAPTURE_EPOCH = Date.parse("2026-10-10T14:00:00Z");
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Bridge process CPU time in ms, from ps (macOS and Linux print [[dd-]hh:]mm:ss[.cc]). */
@@ -61,8 +62,8 @@ const perMinute = (o: Record<string, number>, ms: number) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round((v * 60_000 / ms) * 10) / 10]));
 const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 
-async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>): Promise<T> {
-  const bridge = await startTestBridge({ port, fake: true });
+async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number): Promise<T> {
+  const bridge = await startTestBridge({ port, fake: true, epoch });
   let browser: Browser | null = null;
   try {
     browser = await launchWebkit();
@@ -93,8 +94,9 @@ async function smoke(): Promise<void> {
   const result = await withBench(async (bridge, browser) => {
     const shots: string[] = [];
     for (const [name, device] of [["home-phone", PHONE], ["home-desktop", DESKTOP]] as const) {
-      const context = await browser.newContext(device);
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
       const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
       await page.goto(bridge.url + "/");
       await page.getByText("Working Claude").first().waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1500);
@@ -103,11 +105,13 @@ async function smoke(): Promise<void> {
       shots.push(path);
       await context.close();
     }
-    return { shots, herdrCalls: bridge.fake!.counts(), unexpectedWrites: bridge.fake!.writes() };
-  });
+    // The temp registry is empty; a project here means the operator's real one leaked in.
+    const { projects } = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ projects?: unknown[] }>);
+    return { shots, projects: projects?.length ?? 0, herdrCalls: bridge.fake!.counts(), unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "smoke.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
+  if (result.unexpectedWrites.length || result.projects) process.exit(1);
 }
 
 async function baseline(): Promise<void> {
@@ -118,7 +122,7 @@ async function baseline(): Promise<void> {
   const report = await withBench(async (bridge, browser) => {
     const fake = bridge.fake!;
     const herd = bridge.herd!;
-    const stopJournal = tickJournal(herd.journals.get(herd.working)!);
+    const stopJournal = tickJournal(herd.journals.get(herd.working)!, bridge.now);
     const out: Record<string, unknown> = {
       measuredAt: new Date().toISOString(),
       against: "FakeHerdr (bridge/test-support/fake-herdr.ts), demo herd in scripts/e2e/scenario.ts",
@@ -215,7 +219,9 @@ async function baseline(): Promise<void> {
     }
 
     stopJournal();
-    out.unexpectedWrites = fake.writes().filter((c) => !["pane.send_text", "pane.send_keys"].includes(c.method));
+    // The only writes this run drives: the sends on the idle pane and the dialog key on the blocked one.
+    const expected = new Set([`pane.send_text ${herd.idle}`, `pane.send_keys ${herd.idle}`, `pane.send_keys ${herd.blocked}`]);
+    out.unexpectedWrites = fake.writes().filter((c) => !expected.has(`${c.method} ${String(c.params.pane_id)}`));
     return out;
   });
 

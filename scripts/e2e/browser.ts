@@ -5,7 +5,7 @@ import { join } from "node:path";
 // Playwright is a dependency of scripts/e2e only (its own package.json, pinned, 7-day cooldown), so
 // the root typecheck must not need it installed. It is loaded by a computed specifier and typed by
 // the few calls the bench makes. playwright-core never downloads a browser: it uses the revision
-// already in ~/Library/Caches/ms-playwright (webkit-2287 for 1.60.0).
+// already in Playwright's cache (webkit-2287 for 1.60.0).
 
 export interface Request { url(): string; method(): string }
 export interface Locator {
@@ -24,6 +24,7 @@ export interface Page {
   locator(selector: string): Locator;
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
+  clock: { install(opts: { time: number }): Promise<void> };
   waitForTimeout(ms: number): Promise<void>;
   close(): Promise<void>;
 }
@@ -50,8 +51,14 @@ export const DESKTOP = {
   colorScheme: "dark",
 } as const;
 
+/** The per-user cache dir: ~/Library/Caches on macOS, $XDG_CACHE_HOME or ~/.cache elsewhere. */
+export function userCacheDir(): string {
+  if (process.platform === "darwin") return join(homedir(), "Library", "Caches");
+  return process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
+}
+
 function browsersCache(): string {
-  return process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(homedir(), "Library", "Caches", "ms-playwright");
+  return process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(userCacheDir(), "ms-playwright");
 }
 
 export async function launchWebkit(): Promise<Browser> {

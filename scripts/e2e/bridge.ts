@@ -1,17 +1,17 @@
 import { closeSync, openSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { defaultSocketPath } from "../../bridge/config.ts";
 import { FakeHerdr } from "../../bridge/test-support/fake-herdr.ts";
 import { seedDemoHerd, type DemoHerd } from "./scenario.ts";
 
-// A throwaway Nenu bridge for e2e runs: real bridge/index.ts, its own port, a temporary state,
+// A throwaway Nenu bridge for e2e runs: real bridge/index.ts, its own port, a temporary HOME, state,
 // config and journal tree, and (with --fake) a FakeHerdr on a temporary socket. It must never reach
-// the operator's live service or Herdr, so it refuses port 8787 and any socket that is, or sits next
-// to, Herdr's default one.
+// the operator's live service, Herdr, Codex daemon or project registry, so it refuses port 8787 and
+// any socket that is, or sits next to, Herdr's default one, and stubs the CLIs the bridge shells out to.
 //
 //   bun scripts/e2e/bridge.ts --port 8797 --fake            # runs until Ctrl-C
 //   bun scripts/e2e/bridge.ts --port 8797 --socket <path>   # a disposable real Herdr session
@@ -27,6 +27,8 @@ export interface TestBridge {
   dir: string;
   socketPath: string;
   pid: number;
+  /** The bench's wall clock, epoch ms (see `epoch`). */
+  now(): number;
   fake: FakeHerdr | null;
   herd: DemoHerd | null;
   stop(): Promise<void>;
@@ -59,7 +61,12 @@ async function portIsFree(port: number): Promise<boolean> {
   }
 }
 
-export async function startTestBridge(opts: { port: number; fake?: boolean; socketPath?: string }): Promise<TestBridge> {
+/**
+ * `epoch` pins the bench's clock: the bridge, the demo journals and (in run.ts) the browser all read
+ * `epoch` plus the time since the bridge started, so captures taken hours apart render the same
+ * greeting, date and activity chart.
+ */
+export async function startTestBridge(opts: { port: number; fake?: boolean; socketPath?: string; epoch?: number }): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.socketPath) throw new Error("pass --fake or --socket <disposable herdr socket>");
   if (!(await portIsFree(opts.port))) throw new Error(`port ${opts.port} is busy`);
@@ -69,31 +76,52 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
   assertDisposableSocket(socketPath);
 
   const paths = {
+    home: join(dir, "home"),
+    projects: join(dir, "projects"),
     state: join(dir, "state"),
     config: join(dir, "config"),
     claude: join(dir, "journals", "claude"),
     codex: join(dir, "journals", "codex"),
     other: join(dir, "journals", "other"),
-    orgBin: join(dir, "herdr-organizations"),
+    bin: join(dir, "bin"),
   };
-  for (const p of [paths.state, paths.config, paths.claude, paths.codex, paths.other]) await mkdir(p, { recursive: true });
-  // Organizations is an external CLI with its own state; the stub answers "no templates".
-  await writeFile(paths.orgBin, "#!/bin/sh\necho 'error: unrecognized subcommand' >&2\nexit 2\n");
-  await chmod(paths.orgBin, 0o755);
+  for (const p of Object.values(paths)) await mkdir(p, { recursive: true });
+  // The bridge shells out to these two. Organizations answers "no templates"; `claude agents` fails,
+  // so session discovery never lists the operator's real Claude processes.
+  const stubs = { "herdr-organizations": "echo 'error: unrecognized subcommand' >&2\nexit 2", claude: "exit 1" };
+  for (const [name, body] of Object.entries(stubs)) {
+    await writeFile(join(paths.bin, name), `#!/bin/sh\n${body}\n`);
+    await chmod(join(paths.bin, name), 0o755);
+  }
+  const shift = opts.epoch === undefined ? 0 : opts.epoch - Date.now();
 
   let fake: FakeHerdr | null = null;
   let herd: DemoHerd | null = null;
   if (opts.fake) {
     fake = new FakeHerdr({ socketPath });
-    herd = await seedDemoHerd(fake, { claudeRoot: paths.claude, cwd: dir });
+    herd = await seedDemoHerd(fake, { claudeRoot: paths.claude, cwd: dir, shift });
     await fake.start();
   }
 
   // Inherit nothing Nenu- or Herdr-specific: HERDR_PLUGIN_STATE_DIR alone would point the bridge at
-  // the live service's state.
+  // the live service's state. Every agent home goes under the temporary HOME: CODEX_HOME would
+  // otherwise dial the live Codex app-server, and HERDR_PROJECTS_ROOT would list real projects.
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !/^(COLLIE|HERDR)_/.test(k)) env[k] = v;
   Object.assign(env, {
+    HOME: paths.home,
+    PATH: `${paths.bin}${delimiter}${process.env.PATH ?? ""}`,
+    TZ: "UTC",
+    HERDR_PROJECTS_ROOT: paths.projects,
+    CODEX_HOME: join(paths.home, ".codex"),
+    CLAUDE_CONFIG_DIR: join(paths.home, ".claude"),
+    PI_CODING_AGENT_DIR: join(paths.home, ".pi", "agent"),
+    GROK_HOME: join(paths.home, ".grok"),
+    XDG_CONFIG_HOME: join(paths.home, ".config"),
+    XDG_DATA_HOME: join(paths.home, ".local", "share"),
+    XDG_STATE_HOME: join(paths.home, ".local", "state"),
+    XDG_CACHE_HOME: join(paths.home, ".cache"),
+    NENU_E2E_CLOCK_SHIFT_MS: String(shift),
     COLLIE_PORT: String(opts.port),
     COLLIE_HOST: "127.0.0.1",
     COLLIE_STATE_DIR: paths.state,
@@ -105,12 +133,12 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
     COLLIE_PI_ROOT: paths.other,
     COLLIE_OPENCODE_ROOT: paths.other,
     COLLIE_GROK_ROOT: paths.other,
-    COLLIE_HERDR_ORGANIZATIONS_BIN: paths.orgBin,
+    COLLIE_HERDR_ORGANIZATIONS_BIN: join(paths.bin, "herdr-organizations"),
   });
 
   const logPath = join(dir, "bridge.log");
   const logFd = openSync(logPath, "a");
-  const child = Bun.spawn(["bun", join(ROOT, "bridge/index.ts")], { cwd: ROOT, env, stdout: logFd, stderr: logFd });
+  const child = Bun.spawn(["bun", "--preload", join(import.meta.dir, "clock-shift.ts"), join(ROOT, "bridge/index.ts")], { cwd: ROOT, env, stdout: logFd, stderr: logFd });
 
   const url = `http://127.0.0.1:${opts.port}`;
   const stop = async () => {
@@ -125,7 +153,7 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; sock
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) break;
     const ok = await fetch(`${url}/api/snapshot`).then((r) => r.ok, () => false);
-    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, fake, herd, stop };
+    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, now: () => Date.now() + shift, fake, herd, stop };
     await Bun.sleep(100);
   }
   const tail = (await Bun.file(logPath).text()).slice(-2000);

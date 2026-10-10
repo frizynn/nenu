@@ -11,8 +11,9 @@ cd scripts/e2e && bun install     # playwright-core 1.60.0, pinned, same 7-day c
 cd web && bun run build            # the bridge serves web/dist
 ```
 
-`playwright-core` downloads no browser. It uses the WebKit already cached in
-`~/Library/Caches/ms-playwright` (revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
+`playwright-core` downloads no browser. It uses the WebKit already in Playwright's cache
+(`~/Library/Caches/ms-playwright` on macOS, `${XDG_CACHE_HOME:-~/.cache}/ms-playwright` on Linux;
+revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 `tsc` does not need it installed, because `scripts/e2e/browser.ts` loads it with a computed import.
 
 ## Commands
@@ -26,7 +27,7 @@ cd web && bun run build            # the bridge serves web/dist
 | `bun scripts/e2e/run.ts compare A.png B.png` | Share of differing pixels between two captures |
 
 Output goes outside the repo: `--out DIR`, else `$NENU_E2E_OUT/<stamp>`, else
-`~/Library/Caches/nenu-e2e/<stamp>`. `NENU_E2E_KEEP=1` keeps the test bridge's temp dir (state,
+`nenu-e2e/<stamp>` in the same user cache dir. `NENU_E2E_KEEP=1` keeps the test bridge's temp dir (state,
 journals, `bridge.log`).
 
 ## Isolation
@@ -36,11 +37,28 @@ journals, `bridge.log`).
   a Herdr pane that variable names the live server, so the bench never uses it.
 - The child bridge inherits no `COLLIE_*` or `HERDR_*` variable. `HERDR_PLUGIN_STATE_DIR` alone
   would point it at the live service's state. State, config and every journal root
-  (Claude, Codex, pi, OpenCode, Grok) go to a temp dir, multi-session is off, and
-  `herdr-organizations` is a stub that answers "no templates".
-- The FakeHerdr counts calls by method and logs every write. `smoke` and `baseline` print
-  `unexpectedWrites`. `smoke` exits 1 on any write. `baseline` allows only the `send_text` and
-  `send_keys` it drives itself.
+  (Claude, Codex, pi, OpenCode, Grok) go to a temp dir, and multi-session is off.
+- `HOME` is a temp dir too, and so are `HERDR_PROJECTS_ROOT` (an empty project registry),
+  `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `GROK_HOME` and the `XDG_*` dirs. The
+  bridge therefore never lists the operator's projects or skills, and the Codex pane answers "Codex
+  server is unavailable" instead of dialing the live Codex app-server. `bridge.test.ts` checks both.
+- The two CLIs the bridge runs are stubs placed first on `PATH`. `herdr-organizations` answers "no
+  templates" and `claude agents` fails, so Claude session discovery never sees real processes.
+  `PATH` itself is inherited, and so is everything outside the bridge process: the FakeHerdr and
+  the browser run in the bench's own process.
+- The FakeHerdr counts calls by method and keeps a log of every call for the whole run (resetting
+  the counters leaves it alone). `smoke` and `baseline` print `unexpectedWrites`. `smoke` exits 1 on
+  any write or on any project in the snapshot. `baseline` allows only the writes it drives itself:
+  `send_text` and `send_keys` on the idle pane, `send_keys` on the blocked one.
+
+## Comparing captures
+
+`smoke` pins the clock. The bridge (through `clock-shift.ts`, preloaded), the demo journals and the
+browser all start at 2026-10-10 14:00 UTC and tick from there, in the UTC time zone and the `en-US`
+locale. The greeting, the date and the 12-hour activity chart are therefore the same whenever the
+capture is taken. Two back-to-back runs measured 0% differing pixels on both captures. What can
+still move is the working pane's elapsed seconds, which depend on how long the page took to load.
+`baseline` does not pin the clock, so its timers run as they do on a real phone.
 
 ## FakeHerdr
 

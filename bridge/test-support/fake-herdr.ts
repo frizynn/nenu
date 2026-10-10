@@ -148,9 +148,9 @@ export class FakeHerdr {
     return Object.fromEntries(this.counters);
   }
 
+  /** Clears the counters only: `calls` stays the whole run's log, so `writes()` misses nothing. */
   resetCounts(): void {
     this.counters.clear();
-    this.calls.length = 0;
   }
 
   /** Calls that would change Herdr or a terminal: anything that is not a read or a subscription. */
@@ -231,7 +231,7 @@ export class FakeHerdr {
       case "pane.read":
         return { type: "pane_read", read: this.read(paneId, String(params.source), Number(params.lines) || this.viewportRows) };
       case "pane.process_info":
-        return { type: "process_info", process_info: { pane_id: paneId, processes: [] } };
+        return { type: "process_info", process_info: { pane_id: paneId, foreground_processes: [] } };
       case "pane.send_text":
         this.typeText(paneId, String(params.text ?? ""));
         return { type: "ok" };
