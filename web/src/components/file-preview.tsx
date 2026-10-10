@@ -48,7 +48,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const owner = error?.outside ? paneOwningPath(panes, filePath, source) : undefined;
   const sourceLabel = source === paneId ? "" : panes.find((pane) => pane.paneId === source)?.label ?? source;
   const fail = (cause: unknown) => setError(cause instanceof PaneFileError
-    ? { message: cause.message, outside: cause.outside }
+    ? { message: cause.message, outside: cause.outside, status: cause.status }
     : { message: cause instanceof Error ? cause.message : "Could not open this file.", outside: false });
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
         <button type="button" aria-label="Close document" onClick={onClose} className="file-preview-action"><X className="size-5" /></button>
       </header>
       {error ? <div className="file-preview-content">
-          <FileUnavailable failure={error} path={filePath} owner={owner} onRetry={() => setAttempt((value) => value + 1)}
+          <FileUnavailable failure={error} path={filePath} paneId={source} session={session} owner={owner} onRetry={() => setAttempt((value) => value + 1)}
             onOpenFrom={(paneId) => setFrom({ itemKey, paneId })} />
         </div>
         : html ? <HtmlViewer paneId={source} session={session} path={filePath} name={name} reload={attempt} onError={fail} />

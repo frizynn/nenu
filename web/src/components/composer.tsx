@@ -3,7 +3,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { Check, Gauge, Keyboard, Loader2, Plus, Send, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Gauge, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -19,6 +19,8 @@ import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
 import { DisplayPrefsContent } from "@/components/display-prefs";
 import { SectionLabel } from "@/components/ui/section-label";
+import { WorkbenchPopover } from "@/components/ui/workbench-popover";
+import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
 import { commandsFor } from "@/lib/agent-commands";
 import { useOperatorCommands, useOperatorKeys } from "@/lib/operator-config";
@@ -137,8 +139,9 @@ interface ComposerProps {
 //
 // Keys, Quick, Display and Usage open as in-flow docks above the input (they act on, or change how
 // you read, what is on screen, so the conversation stays visible while they are up). Their entry
-// points are the header's ⋯ menu (onControlsChange): the input row itself holds only attach, the
-// draft, the model chip and Send.
+// points are the header's ⋯ menu (onControlsChange) and, for the Terminal and Shortcuts rows, the
+// chevron under the draft. The box holds only the draft and its one action (send, stop or confirm);
+// attach, the chevron and the model/context controls sit in the quiet row beneath it.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
 
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
@@ -166,7 +169,7 @@ function ComposerDock({
   children: ReactNode;
 }) {
   return (
-    <div className="-mx-3 mb-2 flex flex-col border-t border-border/50 bg-background">
+    <div className="mb-2 flex flex-col overflow-hidden rounded-2xl border border-border/65 bg-card">
       <div className="flex items-center justify-between px-3">
         <SectionLabel>{title}</SectionLabel>
         <Button
@@ -191,7 +194,7 @@ function ComposerDock({
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
   const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
   return (
-    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-lg border border-border/60 bg-background p-1">
+    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-2xl border border-border/65 bg-card p-1">
       <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
       <button type="button" className={row} onClick={() => onPick(choice.now)}>
         <span className="text-sm font-medium">Send now</span>
@@ -1038,23 +1041,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     stop: () => void interruptGeneration(),
   };
   const canStopWithDraft = working && agent === "codex" && hasDraft;
+  const dockControl = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
+    disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
+  });
+  const controls: ComposerControl[] = [
+    { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
+    // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
+    { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
+    { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
+    { id: "display", group: "View", label: "Display", icon: Settings2, ...dockControl("display", false) },
+  ];
+  if (canStopWithDraft) controls.splice(2, 0, { id: "stop", group: "Terminal", label: "Stop generation", icon: X, disabled: locked || interrupting, on: false, run: () => controlActions.current.stop() });
+  if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
+  if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dockControl("usage", false) });
+  const latestControls = useRef(controls);
+  latestControls.current = controls;
   useEffect(() => {
-    if (!onControlsChange) return;
-    const dock = (id: "keys" | "quick" | "display" | "usage", disabled: boolean) => ({
-      disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
-    });
-    const controls: ComposerControl[] = [
-      { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dock("keys", locked) },
-      // Arming stays an explicit named choice (use-direct-typing.ts); the row only moved.
-      { id: "type", group: "Terminal", label: "Type into terminal", icon: Terminal, disabled: locked || sending, on: direct.active, run: () => controlActions.current.type() },
-      { id: "quick", group: "Shortcuts", label: "Quick replies", icon: Zap, ...dock("quick", locked) },
-      { id: "display", group: "View", label: "Display", icon: Settings2, ...dock("display", false) },
-    ];
-    if (canStopWithDraft) controls.splice(2, 0, { id: "stop", group: "Terminal", label: "Stop generation", icon: X, disabled: locked || interrupting, on: false, run: () => controlActions.current.stop() });
-    if (commands.length > 0) controls.splice(controls.findIndex((c) => c.id === "quick") + 1, 0, { id: "commands", group: "Shortcuts", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") });
-    if (usageControls) controls.push({ id: "usage", group: "View", label: "Context and usage", icon: Gauge, ...dock("usage", false) });
-    onControlsChange(controls);
+    onControlsChange?.(latestControls.current);
   }, [onControlsChange, drawer, direct.active, locked, sending, interrupting, canStopWithDraft, commands.length, Boolean(usageControls)]);
+  // The chevron under the draft reaches the message-side rows (Terminal, Shortcuts) without the
+  // header; View stays in the header's ⋯ menu.
+  const shortcutGroups: ConversationActionGroup[] = (["Terminal", "Shortcuts"] as const).map((group) => ({
+    label: group,
+    actions: controls.filter((control) => control.group === group),
+  }));
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsRef = useRef<HTMLButtonElement>(null);
 
   const [dragging, setDragging] = useState(false);
   const dropHandlers = locked || direct.active ? {} : {
@@ -1076,7 +1088,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   return (
     <>
-      <div {...dropHandlers} className={cn("workbench-composer-surface border-t border-border/60 bg-muted px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 md:p-1.5", dragging && "ring-2 ring-primary/50")}>
+      <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {deliveryPhase && !lastSent && !nativeWorkbench && (
           <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
@@ -1217,8 +1229,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         )}
 
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
-        {/* The draft takes the full width and grows upward; a slim toolbar under it holds attach,
-            the model chip and Send. Everything else is in the header's ⋯ menu. */}
+        {/* One rounded box: the draft grows upward to its cap and the single action sits inside on
+            the right (send, stop, or the confirm pill). Quiet controls live in the row below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
             <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
@@ -1226,125 +1238,132 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
-          <ChatInput
-            ref={inputRef}
-            value={direct.active ? direct.value : input}
-            onChange={direct.active ? direct.onChange : (e) => skills.onChange(e.target.value, e.target.selectionStart)}
-            onSelect={(e) => skills.onSelect(e.currentTarget.selectionStart)}
-            onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
-            onBlur={skills.onBlur}
-            aria-autocomplete={skills.open ? "list" : undefined}
-            aria-controls={skills.open && (!(skills.loading || skills.error) || skills.skills.length > 0) ? skills.id : undefined}
-            aria-activedescendant={skills.open && skills.skills.length > 0 ? `${skills.id}-option-${skills.activeIndex}` : undefined}
-            onCompositionStart={direct.active ? direct.onCompositionStart : undefined}
-            onCompositionEnd={direct.active ? direct.onCompositionEnd : undefined}
-            onKeyDown={
-              direct.active
-                ? direct.onKeyDown
-                : (e) => {
-                    // The IME owns Enter while committing a word. Safari can expose only 229
-                    // on the final event, with isComposing already false.
-                    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-                    if (skills.onKeyDown(e)) return;
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      onSendClick();
+          <div className={cn("composer-box", direct.active && "composer-box-armed")}>
+            <ChatInput
+              ref={inputRef}
+              value={direct.active ? direct.value : input}
+              onChange={direct.active ? direct.onChange : (e) => skills.onChange(e.target.value, e.target.selectionStart)}
+              onSelect={(e) => skills.onSelect(e.currentTarget.selectionStart)}
+              onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
+              onBlur={skills.onBlur}
+              aria-autocomplete={skills.open ? "list" : undefined}
+              aria-controls={skills.open && (!(skills.loading || skills.error) || skills.skills.length > 0) ? skills.id : undefined}
+              aria-activedescendant={skills.open && skills.skills.length > 0 ? `${skills.id}-option-${skills.activeIndex}` : undefined}
+              onCompositionStart={direct.active ? direct.onCompositionStart : undefined}
+              onCompositionEnd={direct.active ? direct.onCompositionEnd : undefined}
+              onKeyDown={
+                direct.active
+                  ? direct.onKeyDown
+                  : (e) => {
+                      // The IME owns Enter while committing a word. Safari can expose only 229
+                      // on the final event, with isComposing already false.
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                      if (skills.onKeyDown(e)) return;
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        onSendClick();
+                      }
                     }
-                  }
-            }
-            onPaste={onPasteImage}
-            placeholder={
-              gone
-                ? "Pane is gone"
-                : readOnly
-                  ? "Read-only — device not authorised"
-                  : disconnected
-                    ? "Write a draft while reconnecting…"
-                  : direct.active
-                    ? "Type into the terminal…"
-                    : isShell
-                      ? "Type a shell command…"
-                      : placeholder ?? "Type a reply…"
-            }
-            autoCorrect={direct.active ? "off" : undefined}
-            spellCheck={direct.active ? false : undefined}
-            className={cn(
-              "workbench-chat-input block min-h-10 px-2.5 pb-1 pt-2 md:min-h-9",
-              direct.active &&
-                "border-primary focus-visible:border-primary focus-visible:ring-primary/30",
+              }
+              onPaste={onPasteImage}
+              placeholder={
+                gone
+                  ? "Pane is gone"
+                  : readOnly
+                    ? "Read-only — device not authorised"
+                    : disconnected
+                      ? "Write a draft while reconnecting…"
+                    : direct.active
+                      ? "Type into the terminal…"
+                      : isShell
+                        ? "Type a shell command…"
+                        : placeholder ?? "Type a reply…"
+              }
+              autoCorrect={direct.active ? "off" : undefined}
+              spellCheck={direct.active ? false : undefined}
+              className="composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-3.5 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm"
+              disabled={gone || readOnly}
+              rows={1}
+            />
+            <div className="flex shrink-0 items-center self-end p-1.5 md:p-1">
+            {working && agent === "codex" && !hasDraft ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="composer-action composer-stop hit-area"
+                onClick={() => { void interruptGeneration(); }}
+                disabled={locked || interrupting}
+                aria-label="Stop generation"
+              >
+                {interrupting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true" className="!size-2.5">
+                    <rect width="10" height="10" rx="2" />
+                  </svg>
+                )}
+              </Button>
+            ) : !direct.active && forcingSend ? (
+              // The pre-flight refused and the user is being offered the override. Labelled for what it
+              // actually does — TYPE the text into whatever is on screen — not "send", because the
+              // submit key is still conditional on the verify step behind it.
+              <Button
+                variant="destructive"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                onClick={onSendClick}
+                disabled={locked || !hasDraft || sending}
+                aria-label="Type anyway?"
+              >
+                Type anyway?
+              </Button>
+            ) : !direct.active && confirmingSend ? (
+              <Button
+                variant="destructive"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                onClick={onSendClick}
+                disabled={locked || !hasDraft || sending}
+                aria-label="Really send?"
+              >
+                Really send?
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                className="composer-action composer-send hit-area"
+                onClick={direct.active ? () => direct.deactivate() : onSendClick}
+                disabled={locked || sending || queue.busy || (!direct.active && (!hasDraft || attachments.uploading))}
+                aria-label={direct.active ? "Stop typing into terminal" : "Send"}
+                aria-pressed={direct.active}
+              >
+                {direct.active ? (
+                  <Keyboard className="size-4" />
+                ) : sending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : justSent ? (
+                  <Check className="size-4" />
+                ) : (
+                  <ArrowUp className="size-4" strokeWidth={2.5} />
+                )}
+              </Button>
             )}
-            disabled={gone || readOnly}
-            rows={1}
-          />
+            </div>
+          </div>
         </div>
-        <div role="group" aria-label="Message tools" className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full text-muted-foreground md:size-8" title="Attach image" aria-label="Attach image"
+        <div role="group" aria-label="Message tools" className="composer-meta">
+          <button type="button" className="composer-quiet hit-area" title="Attach image" aria-label="Attach image"
             disabled={locked || direct.active} onPointerDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-            <Plus className="size-5 md:size-4" />
-          </Button>
+            <Plus aria-hidden="true" className="size-4" />
+          </button>
+          <button ref={shortcutsRef} type="button" className="composer-quiet hit-area" aria-label="Message shortcuts" aria-haspopup="dialog" aria-expanded={shortcutsOpen}
+            onClick={() => setShortcutsOpen(!shortcutsOpen)}>
+            <ChevronDown aria-hidden="true" className="size-4" />
+          </button>
+          <WorkbenchPopover open={shortcutsOpen} onDismiss={() => setShortcutsOpen(false)} anchorRef={shortcutsRef} label="Message shortcuts" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+            <ActionGroups groups={shortcutGroups} onRun={(run) => { setShortcutsOpen(false); run(); }} />
+          </WorkbenchPopover>
           <div className="flex-1" />
-          {modelControl && <div className="flex h-11 min-w-0 items-center md:h-8">{modelControl}</div>}
-          {working && agent === "codex" && !hasDraft ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="size-11 min-h-11 shrink-0 rounded-full bg-destructive/10 text-destructive shadow-none hover:bg-destructive/20 md:size-8 md:min-h-8"
-              onClick={() => { void interruptGeneration(); }}
-              disabled={locked || interrupting}
-              aria-label="Stop generation"
-            >
-              {interrupting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                  <rect x="2" y="2" width="8" height="8" rx="1.5" />
-                </svg>
-              )}
-            </Button>
-          ) : !direct.active && forcingSend ? (
-            // The pre-flight refused and the user is being offered the override. Labelled for what it
-            // actually does — TYPE the text into whatever is on screen — not "send", because the
-            // submit key is still conditional on the verify step behind it.
-            <Button
-              variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
-              onClick={onSendClick}
-              disabled={locked || !hasDraft || sending}
-              aria-label="Type anyway?"
-            >
-              Type anyway?
-            </Button>
-          ) : !direct.active && confirmingSend ? (
-            <Button
-              variant="destructive"
-              className="h-11 shrink-0 rounded-full px-4 text-sm font-semibold md:h-8 md:px-3 md:text-xs"
-              onClick={onSendClick}
-              disabled={locked || !hasDraft || sending}
-              aria-label="Really send?"
-            >
-              Really send?
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              className="composer-send size-11 shrink-0 rounded-full shadow-none md:size-8"
-              onClick={direct.active ? () => direct.deactivate() : onSendClick}
-              disabled={locked || sending || queue.busy || (!direct.active && (!hasDraft || attachments.uploading))}
-              aria-label={direct.active ? "Stop typing into terminal" : "Send"}
-              aria-pressed={direct.active}
-            >
-              {direct.active ? (
-                <Keyboard className="size-4" />
-              ) : sending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : justSent ? (
-                <Check className="size-4" />
-              ) : (
-                <Send className="size-4" />
-              )}
-            </Button>
-          )}
+          {modelControl && <div className="flex min-w-0 items-center justify-end">{modelControl}</div>}
         </div>
       </div>
 

@@ -159,6 +159,28 @@ export async function paneFileError(res: Response): Promise<PaneFileError> {
     res.headers.get("x-file-state") === "outside-project");
 }
 
+/** A single-use link to open a file outside the preview (bridge/file-open.ts, ADR 0063). */
+export interface FileOpenGrant { url: string; name: string; size: number; type: string }
+
+/**
+ * Ask the bridge for a two-minute, single-use link to `path` (absolute, or relative to the pane's
+ * folder). A refusal (private, missing, too large) comes back as `{ error }`, not a throw.
+ */
+export function grantFileOpen(paneId: string, path: string, session?: string): Promise<FileOpenGrant | { error: string }> {
+  return req<FileOpenGrant | { error: string }>(withSession("/api/files/grant", session), {
+    method: "POST",
+    body: JSON.stringify({ paneId, path }),
+  }, (status, detail) => {
+    if (status < 400 || status >= 500) return null;
+    try {
+      const body = JSON.parse(detail) as { error?: unknown };
+      return typeof body.error === "string" ? { error: body.error } : null;
+    } catch {
+      return null;
+    }
+  });
+}
+
 export async function fetchPaneFile(paneId: string, path: string, session: string | undefined, signal: AbortSignal): Promise<Response> {
   const res = await apiFetch(paneFileUrl(paneId, path, session), {
     signal: withTimeout(signal, UPLOAD_TIMEOUT_MS), cache: "no-store",

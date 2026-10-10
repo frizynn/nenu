@@ -2,7 +2,7 @@ import { deviceAuth, guard } from "./access.ts";
 import { activityPaneActions } from "./activity.ts";
 import type { PaneAction, RequestTimeouts, Route, Services } from "./context.ts";
 import { eventRoutes } from "./events.ts";
-import { filePaneActions } from "./files.ts";
+import { fileOpenRoutes, filePaneActions } from "./files.ts";
 import { historyPaneActions } from "./history.ts";
 import { hookRoutes } from "./hooks.ts";
 import { jsonError, text } from "./http.ts";
@@ -106,6 +106,7 @@ export const ROUTES: readonly Route[] = [
   ...structureRoutes,
   paneRoute,
   ...settingsRoutes,
+  ...fileOpenRoutes,
   ...interactionRoutes,
   ...hookRoutes,
 ];

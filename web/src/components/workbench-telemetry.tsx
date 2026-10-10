@@ -1,5 +1,5 @@
 import { modelDisplayName } from "@/lib/model-display";
-import { ChevronDown, Gauge } from "lucide-react";
+import { Gauge } from "lucide-react";
 import { Fragment, useRef, useState, type RefObject } from "react";
 import { WorkbenchContextMeter } from "@/components/workbench-context-meter";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
@@ -46,7 +46,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
       {mode !== "metrics" && <button
         ref={modelTriggerRef}
         type="button"
-        className="flex min-h-11 min-w-0 max-w-[10rem] items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 aria-expanded:text-foreground md:min-h-8 md:max-w-[16rem]"
+        className="composer-quiet hit-area flex min-w-0 max-w-[13rem] items-center gap-2.5 md:max-w-[18rem]"
         disabled={(disabled && !modelOpen) || !modelAvailable}
         onClick={() => {
           if (controlledPanel === undefined) setLocalPanel(null);
@@ -58,13 +58,17 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         title={modelAvailable ? [telemetry?.model, telemetry?.effort].filter(Boolean).join(" · ") || "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
         <span className="truncate">{telemetry?.model ? modelDisplayName(telemetry.model) : "Model"}</span>
-        {telemetry?.effort && <span className="shrink-0 capitalize">· {telemetry.effort}</span>}
-        <ChevronDown aria-hidden="true" className="size-3 shrink-0" />
+        {telemetry?.effort && <span className="shrink-0 capitalize">{telemetry.effort}</span>}
       </button>}
-      {mode !== "model" && <>
-      <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
+      {/* The composer row carries the context ring (and its Compact action); the metrics dock
+          keeps only usage, so one context popover can be open at a time. */}
+      {mode === "model" && <WorkbenchContextMeter compact reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
         onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
-        onOpenChange={(open) => changePanel(open ? "context" : null)} />
+        onOpenChange={(open) => changePanel(open ? "context" : null)} />}
+      {mode !== "model" && <>
+      {mode === undefined && <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
+        onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
+        onOpenChange={(open) => changePanel(open ? "context" : null)} />}
       <div className="relative min-w-0">
         <button ref={usageRef} type="button" aria-label={stale ? "Usage · stale" : "Usage"} aria-expanded={panel === "usage"} aria-haspopup="dialog" onClick={() => changePanel(panel === "usage" ? null : "usage")} className="flex min-h-11 cursor-pointer items-center gap-1 rounded-md px-1.5 hover:bg-accent">
           <Gauge className="size-3.5" />
