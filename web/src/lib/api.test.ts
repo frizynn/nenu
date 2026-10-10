@@ -82,12 +82,26 @@ describe("api client", () => {
     expect(session).toBe("phone");
   });
 
-  it("throws with the status and body on a non-2xx response", async () => {
+  // Measured 2026-10-10: the queue strip showed `/api/pane/w4F%3Ap1/queue → 409 {"error":…,"code":…}`.
+  it("throws the bridge's own sentence on a refusal, never the route, the status or the JSON", async () => {
+    const error = "Only a message waiting in Claude's own queue can be read now.";
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ error, code: "unsupported" }, { status: 409 })),
+    );
+    await expect(changeMessageQueue("w4F:p1", { scope: "s", action: "remove", id: "a", revision: 1 })).rejects.toMatchObject({
+      name: "ApiError",
+      status: 409,
+      message: error,
+    });
+  });
+
+  it("says what the status means when the body carries no sentence", async () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("herdr down", { status: 502 })),
+      http.post(/\/api\/pane\/[^/]+\/keys$/, () => new HttpResponse("bad body", { status: 400 })),
     );
-    await expect(sendReply("w1:p1", "hi")).rejects.toThrow(/502/);
-    await expect(sendReply("w1:p1", "hi")).rejects.toThrow(/herdr down/);
+    await expect(sendReply("w1:p1", "hi")).rejects.toMatchObject({ status: 502, message: "Nenu couldn't finish that. Try again in a moment." });
+    await expect(sendKeys("w1:p1", ["Enter"])).rejects.toMatchObject({ status: 400, message: "Nenu couldn't use that request. Refresh and try again." });
   });
 
   it("adds expected_prompt to reply and keys bodies only when supplied", async () => {

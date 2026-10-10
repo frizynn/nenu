@@ -13,6 +13,7 @@ import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import type { SendOutcome, SendRequest, SendStage } from "@/lib/types";
 import { Composer, type ComposerControl } from "./composer";
+import { pendingStatus } from "./pending-turns";
 import { ActionGroups } from "./conversation-actions";
 
 // The composer's secondary controls are reached from the pane header's ⋯ menu. These tests render
@@ -2122,7 +2123,7 @@ describe("Composer — images and the pending bubble", () => {
 
 describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () => {
   type Row = { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; deliveryMode?: string; waitingFor?: string; stranded?: { reason: string; since: number }; device?: string | null };
-  type Delivered = { id: string; text: string; sentAt: number; deliveryMode?: string; native?: string };
+  type Delivered = { id: string; text: string; sentAt: number; deliveryMode?: string; native?: string; readNowAt?: number };
   /** The bridge's queue route, stateful: rows added here are listed until a test moves them. */
   function serveQueueRoute() {
     const state = { rows: [] as Row[], delivered: [] as Delivered[], posts: [] as Array<Record<string, unknown>>, reads: 0 };
@@ -2136,6 +2137,8 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
         const body = (await request.json()) as Record<string, unknown>;
         state.posts.push(body);
         if (body.action === "add") state.rows.push({ id: String(body.id), text: String(body.text), state: "queued", createdAt: 1, revision: 1, deliveryMode: String(body.deliveryMode), waitingFor: "working" });
+        // The bridge records the press on the row (bridge/queue-service.ts sendNow).
+        if (body.action === "now") state.delivered = state.delivered.map((row) => (row.id === body.id ? { ...row, readNowAt: 2 } : row));
         return HttpResponse.json(page());
       }),
     );
@@ -2332,6 +2335,30 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     expect(screen.getByTestId("status")).toHaveTextContent(/moves a running command to the background/i);
     await user.click(within(strip).getByRole("button", { name: /tap again to read it now/i }));
     await waitFor(() => expect(queue.posts).toEqual([{ scope: "scope", action: "now", id: "row-1", confirm: true }]));
+    // Until Claude's journal says it read the row, the strip says it was asked and offers nothing to repeat.
+    expect(await within(strip).findByText("Asked Claude to read it now.")).toBeInTheDocument();
+    expect(within(strip).queryByRole("button", { name: /read it now/i })).not.toBeInTheDocument();
+  });
+
+  it("its own bubble learns that Read it now went out, so it stops offering it", async () => {
+    const user = userEvent.setup();
+    const queue = serveQueueRoute();
+    renderComposer({ nativeWorkbench: true, working: true });
+    const scope = localSendScope("w1:p1", undefined);
+    const queueOne = async (text: string, choice: RegExp) => {
+      await user.type(screen.getByRole("textbox"), text);
+      await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      await user.click(await screen.findByRole("button", { name: choice }));
+    };
+    await queueOne("use staging", /^Send now(?!$)/);
+    await waitFor(() => expect(queue.rows).toHaveLength(1));
+    const id = queue.rows[0]!.id;
+    queue.rows = [];
+    queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "enqueued", readNowAt: 2 }];
+    await queueOne("later", /queue for later/i);
+    await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, native: "enqueued", readNowAt: 2 }));
+    expect(pendingStatus(listLocalSends(scope)[0]!).actions).toEqual([]);
   });
 });
 

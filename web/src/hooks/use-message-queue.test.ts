@@ -330,6 +330,8 @@ describe("queueRowStatus says what each CLI does with the row", () => {
 
   it("offers Read it now only for a row Claude's own queue holds", () => {
     expect(queueRowStatus("claude", { state: "sent", native: "enqueued" }).actions).toEqual(["readNow"]);
+    // Pressed once already: the chord backgrounds the running command, so nothing invites a repeat.
+    expect(queueRowStatus("claude", { state: "sent", native: "enqueued", readNowAt: 1 })).toEqual({ tone: "busy", label: "Asked Claude to read it now.", actions: [] });
     expect(queueRowStatus("codex", { state: "sent", native: "enqueued" }).actions).toEqual([]);
     expect(queueRowStatus("claude", { state: "sent", native: "absorbed" }).actions).toEqual([]);
   });
