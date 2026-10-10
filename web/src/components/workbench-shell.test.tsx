@@ -7,7 +7,7 @@ import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
 import { QuickJump } from "./home-panels";
 import { setLocked } from "@/lib/idle";
-import { openNewDialog, useNewDialogRequest } from "./new-agent-sheet";
+import { openNewDialog, useNewDialogOpen } from "./new-agent-sheet";
 import type { HomeData } from "@/lib/loaders";
 
 const data: HomeData = {
@@ -187,12 +187,12 @@ it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async
 });
 
 function NewDialogProbe() {
-  return useNewDialogRequest() ? <p>New dialog</p> : null;
+  return useNewDialogOpen() ? <p>New dialog</p> : null;
 }
 
 it("ignores Cmd+K and Cmd+N behind the idle lock", async () => {
   desktop();
-  onTestFinished(() => { setLocked(false); openNewDialog(null); });
+  onTestFinished(() => { setLocked(false); openNewDialog(false); });
   const element = <WorkbenchShell data={data}><NewDialogProbe /></WorkbenchShell>;
   render(<RouterProvider router={createMemoryRouter([{ path: "*", element }], { initialEntries: ["/?s=work"] })} />);
   const user = userEvent.setup();

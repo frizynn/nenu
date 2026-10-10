@@ -8,7 +8,6 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { ProjectView, TemplateView } from "@/lib/types";
 import { server } from "@/test/setup";
 import NewDialog, { newContext, projectCommand } from "./new-dialog";
-import type { NewRequest } from "./new-agent-sheet";
 
 const HOME = "/home/me";
 const project: ProjectView = {
@@ -55,13 +54,13 @@ beforeEach(() => {
   );
 });
 
-function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", request = {} }: { data?: HomeData; entry?: string; request?: NewRequest } = {}) {
+function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work" }: { data?: HomeData; entry?: string } = {}) {
   const onClose = vi.fn();
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID,
     path: "/",
     loader: () => data,
-    element: <><NewDialog request={request} onClose={onClose} /><Outlet /></>,
+    element: <><NewDialog onClose={onClose} /><Outlet /></>,
     children: [
       { path: "pane/:paneId", element: <p>Pane page</p> },
       { path: "project/:projectSlug", element: <p>Project page</p> },
@@ -99,7 +98,8 @@ it("opens a tab with the chosen agent in the workspace on screen, then opens its
 });
 
 it("creates a project with the exact command it previews and opens it", async () => {
-  const { user, router, onClose } = setup({ request: { kind: "project" } });
+  const { user, router, onClose } = setup();
+  await user.click(await screen.findByRole("button", { name: /^Project/ }));
   await user.type(await screen.findByLabelText("Name"), "Panel mayorista");
   await user.type(screen.getByLabelText("Goal"), "Stock by depot");
   expect(screen.getByLabelText("Command")).toHaveTextContent("herdr-organizations new --goal='Stock by depot' --json -- 'Panel mayorista'");
@@ -125,7 +125,8 @@ it("starts a thread in the project on screen, straight away on a desk", async ()
 
 it("makes the scratch workspace on the bridge's home for the first quick chat, then reuses it", async () => {
   localStorage.setItem("collie.spawn.dirs", JSON.stringify([`${HOME}/code/awam`]));
-  const first = setup({ request: { kind: "chat" } });
+  const first = setup();
+  await first.user.click(await screen.findByRole("button", { name: /^Quick chat/ }));
   await first.user.type(await screen.findByLabelText("Message"), "what is 2+2");
   await first.user.click(screen.getByRole("button", { name: "Start chat" }));
   // No cwd: the bridge puts a new workspace on its home, and ~ never becomes the last folder picked.
@@ -135,7 +136,8 @@ it("makes the scratch workspace on the bridge's home for the first quick chat, t
   document.body.innerHTML = "";
 
   const scratch = { workspaceId: "w:5", number: 5, label: "scratch", focused: false, activeTabId: "t5", tabCount: 1, paneCount: 1 };
-  const second = setup({ data: { ...base, workspaces: [...base.workspaces, scratch] }, request: { kind: "chat" } });
+  const second = setup({ data: { ...base, workspaces: [...base.workspaces, scratch] } });
+  await second.user.click(await screen.findByRole("button", { name: /^Quick chat/ }));
   expect(await screen.findByText(/Opens in the/)).toHaveTextContent("Opens in the scratch workspace on ~.");
   await second.user.click(screen.getByRole("button", { name: "Start chat" }));
   await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w:5" }]));
@@ -150,14 +152,16 @@ it("opens on Tab on a desk when nothing on screen belongs to a project, and show
 });
 
 it("points a thread at a new project when there is none", async () => {
-  const { user } = setup({ data: { ...base, projects: [] }, request: { kind: "thread" } });
+  const { user } = setup({ data: { ...base, projects: [] } });
+  await user.click(await screen.findByRole("button", { name: /^Thread/ }));
   await user.click(await screen.findByRole("button", { name: "New project" }));
   expect(screen.getByRole("heading", { name: "New project" })).toBeInTheDocument();
 });
 
 it("creates nothing from a read-only device", async () => {
-  setup({ data: { ...base, device: { enforced: true, authorized: false } as HomeData["device"] }, request: { kind: "project" } });
-  await userEvent.setup().type(await screen.findByLabelText("Name"), "x");
+  const { user } = setup({ data: { ...base, device: { enforced: true, authorized: false } as HomeData["device"] } });
+  await user.click(await screen.findByRole("button", { name: /^Project/ }));
+  await user.type(await screen.findByLabelText("Name"), "x");
   expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
 });
 

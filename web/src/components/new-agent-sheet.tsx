@@ -291,18 +291,16 @@ export function useSpawnInto(onDone: () => void) {
 // ── The New dialog's request ──────────────────────────────────────────────────────────────────
 // The New entry points (sidebar, ⌘N, the phone's center +) open one dialog mounted here, at the app
 // root, so any of them can open it without threading state through their parents.
-export type NewKind = "thread" | "tab" | "workspace" | "project" | "chat";
-export interface NewRequest { kind?: NewKind }
-let newRequest: NewRequest | null = null;
+let newOpen = false;
 const newListeners = new Set<() => void>();
-export function openNewDialog(request: NewRequest | null = {}): void {
-  newRequest = request;
+export function openNewDialog(open = true): void {
+  newOpen = open;
   for (const fn of newListeners) fn();
 }
-export function useNewDialogRequest(): NewRequest | null {
+export function useNewDialogOpen(): boolean {
   return useSyncExternalStore(
     (fn) => (newListeners.add(fn), () => void newListeners.delete(fn)),
-    () => newRequest,
+    () => newOpen,
   );
 }
 
@@ -312,7 +310,7 @@ const NewDialog = lazy(() => import("@/components/new-dialog"));
 /** The create surfaces, mounted at the app root: the agent sheet ({@link openNewAgent}) and the New dialog. */
 export function NewAgentHost() {
   const target = useNewAgentRequest();
-  const request = useNewDialogRequest();
+  const dialogOpen = useNewDialogOpen();
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const spawnInto = useSpawnInto(() => openNewAgent(null));
   // The sheet keeps rendering through its close so a failed re-open never flashes empty content.
@@ -336,9 +334,9 @@ export function NewAgentHost() {
           onSubmit={(values) => spawnInto(shown, values)}
         />
       )}
-      {request && (
+      {dialogOpen && (
         <Suspense fallback={null}>
-          <NewDialog request={request} onClose={() => openNewDialog(null)} />
+          <NewDialog onClose={() => openNewDialog(false)} />
         </Suspense>
       )}
     </>
