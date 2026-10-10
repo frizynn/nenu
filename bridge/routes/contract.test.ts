@@ -34,7 +34,7 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/tab/t1/rename", level: "write", session: true },
   { method: "POST", path: "/api/tab/t1/close", level: "write", session: true },
   pane("", "GET", "read"),
-  ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "queue"]
+  ...["history", "conversations", "skills", "models", "file", "subagents", "subagent-history", "files", "html-preview", "queue", "activity"]
     .map((action) => pane(action, "GET", "read")),
   ...["start", "reply", "keys", "interrupt", "upload", "close", "rename", "connect", "send-report", "queue"]
     .map((action) => pane(action, "POST", "write")),

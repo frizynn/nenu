@@ -1,0 +1,1 @@
+{"agentType": "workflow-subagent", "description": "impl:B4", "workflowPhase": "Implement", "spawnDepth": 1, "requestShape": "foreground", "requestNonInteractive": false}

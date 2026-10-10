@@ -1,0 +1,1 @@
+{"agentType": "workflow-subagent", "description": "research:nenu-today", "workflowPhase": "Research", "spawnDepth": 1, "requestShape": "foreground", "requestNonInteractive": false}
