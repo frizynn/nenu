@@ -238,6 +238,7 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     ["claude", { state: "queued", deliveryMode: "afterTurn", waitingFor: "working" }, "Waiting for Claude to finish this turn."],
     ["codex", { state: "queued", deliveryMode: "afterTurn" }, "Queued. It goes when Codex finishes this turn."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "dialog" }, "Waiting. Answer the dialog first."],
+    ["codex", { state: "queued", deliveryMode: "steer" }, "Goes as soon as Codex's input box is free."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "turn-start" }, "Waiting for Claude to start on the previous message."],
     ["claude", { state: "sent", native: "enqueued" }, "In Claude's queue. Claude reads it after the step it's on."],
     ["claude", { state: "sent", native: "absorbed" }, "Read by Claude"],
@@ -252,6 +253,11 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     expect(queueRowStatus("claude", { state: "sent", native: "enqueued" }).actions).toEqual(["readNow"]);
     expect(queueRowStatus("codex", { state: "sent", native: "enqueued" }).actions).toEqual([]);
     expect(queueRowStatus("claude", { state: "sent", native: "absorbed" }).actions).toEqual([]);
+  });
+
+  it("offers Send now only on a row that waits for the turn", () => {
+    expect(queueRowStatus("codex", { state: "queued", deliveryMode: "afterTurn" }).actions).toEqual(["sendNow", "edit", "remove"]);
+    expect(queueRowStatus("codex", { state: "queued", deliveryMode: "steer" }).actions).toEqual(["edit", "remove"]);
   });
 
   it("a stranded row says why and offers only Send here or Remove", () => {

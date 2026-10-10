@@ -78,7 +78,9 @@ export function queueRowStatus(
     if (agent === "codex" && row.deliveryMode === "steer") return { tone: "done", label: "Sent into Codex's current turn", actions: [] };
     return { tone: "done", label: "Sent", actions: [] };
   }
-  return { tone: "waiting", label: waitingLabel(name, row), actions: ["sendNow", "edit", "remove"] };
+  // "Send now" lifts the wait for the turn; a row already going as soon as it can has nothing to lift.
+  const holds = row.deliveryMode === undefined || row.deliveryMode === "afterTurn";
+  return { tone: "waiting", label: waitingLabel(name, row), actions: holds ? ["sendNow", "edit", "remove"] : ["edit", "remove"] };
 }
 
 function waitingLabel(name: string, row: QueueRowView): string {
@@ -94,7 +96,8 @@ function waitingLabel(name: string, row: QueueRowView): string {
     case "working":
       return row.deliveryMode === "afterTurn" ? `Waiting for ${name} to finish this turn.` : `Waiting for ${name}'s input box.`;
     default:
-      return row.deliveryMode === "afterTurn" ? `Queued. It goes when ${name} finishes this turn.` : "Waiting";
+      if (row.deliveryMode === "afterTurn") return `Queued. It goes when ${name} finishes this turn.`;
+      return row.deliveryMode ? `Goes as soon as ${name}'s input box is free.` : "Waiting";
   }
 }
 
