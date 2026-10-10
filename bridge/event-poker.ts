@@ -147,6 +147,7 @@ export class EventPoker {
   private readonly pokeListeners = new Set<() => void>();
   private readonly healthListeners = new Set<(healthy: boolean) => void>();
   private readonly outputListeners = new Set<(event: OutputMatched) => void>();
+  private readonly watchRejectedListeners = new Set<(reason: string) => void>();
   // Last `paneMetaKey` per pane seen on this stream; reset on every subscribe.
   private readonly paneMeta = new Map<string, string>();
 
@@ -172,6 +173,15 @@ export class EventPoker {
   onOutputMatched(cb: (event: OutputMatched) => void): () => void {
     this.outputListeners.add(cb);
     return () => this.outputListeners.delete(cb);
+  }
+
+  /**
+   * Hears a subscribe Herdr rejected because of a watch (a regex its engine cannot compile). The
+   * watches are dropped by then, so the status stream comes back; setting them again retries.
+   */
+  onOutputWatchesRejected(cb: (reason: string) => void): () => void {
+    this.watchRejectedListeners.add(cb);
+    return () => this.watchRejectedListeners.delete(cb);
   }
 
   start(): void {
@@ -275,6 +285,15 @@ export class EventPoker {
         if (extended && !acked && reason.includes("unknown variant")) {
           this.extendedRejected = true;
           console.log(`[events] server rejected the protocol ${protocol} subscriptions, using the base list: ${reason}`);
+          return this.connect();
+        }
+        // Herdr compiles every watch regex at subscribe time and rejects the whole subscribe over
+        // one it cannot compile, so a bad watch would keep the status stream down for good. The
+        // error does not say which watch, so all of them go and the base list reconnects at once.
+        if (!acked && code === "invalid_regex" && this.outputWatches.length) {
+          this.outputWatches = [];
+          console.log(`[events] server rejected the output watches, dropping them: ${reason}`);
+          for (const cb of this.watchRejectedListeners) cb(reason);
           return this.connect();
         }
         this.setHealthy(false, subs.length, reason);

@@ -427,7 +427,10 @@ state by itself. `bridge/event-poker.ts` adds:
 - the `**` types above, only when `ping` reports protocol 22 or newer, and the base list for good if
   a server rejects them anyway;
 - `pane.output_matched` entries only for watches a caller sets (`setOutputWatches`), delivered to
-  `onOutputMatched` listeners at once and never as a poke;
+  `onOutputMatched` listeners at once and never as a poke. Herdr compiles each regex while handling
+  the subscribe and rejects the whole subscribe with `invalid_regex` over one it cannot compile (Rust
+  regex syntax: no look-around), so the poker drops every watch, tells `onOutputWatchesRejected`
+  listeners and resubscribes the base list at once;
 - `pane.updated` pokes only when the pane's agent, label, session ref or allowlisted tokens changed,
   so Codex's animated title does not turn into a poll a second;
 - on `events_lost`, an immediate re-poll and resubscribe; on `pane_not_found`, an immediate re-poll

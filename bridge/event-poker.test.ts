@@ -339,6 +339,24 @@ describe("EventPoker — output watches", () => {
     poker.stop();
   });
 
+  test("a watch Herdr rejects at subscribe (invalid_regex) is dropped so the status stream comes back", async () => {
+    const { client, poker, health } = makePoker();
+    const rejected: string[] = [];
+    poker.onOutputWatchesRejected((r) => rejected.push(r));
+    poker.setAgentPanes(["w1:p1"]);
+    poker.setOutputWatches([{ ...watch, match: { type: "regex", value: "(?=x)" } }]);
+    poker.start();
+    await tick();
+    client.last.onDown("look-around, including look-ahead and look-behind, is not supported", "invalid_regex");
+    expect(rejected).toEqual(["look-around, including look-ahead and look-behind, is not supported"]);
+    // Reconnected at once, without the watch and without waiting on the backoff.
+    expect(client.streams.length).toBe(2);
+    expect(client.last.subscriptions.some((s) => s.type === "pane.output_matched")).toBe(false);
+    client.last.onUp();
+    expect(health).toEqual([true]);
+    poker.stop();
+  });
+
   test("a match named dot-form, as 0.9.3 names pane-scoped events, is delivered too", async () => {
     const { client, poker } = makePoker();
     const seen: OutputMatched[] = [];
