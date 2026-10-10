@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { ProjectTasks, coordinatedThreads, prSummary, threadBucket, threadTree } from "./project-tasks";
+import { ProjectTasks, coordinatedThreads, prSummary, threadTree } from "./project-tasks";
 
 const project: ProjectView = {
   slug: "hub", name: "Hub", goal: "Ship it", status: "active",
@@ -17,36 +17,25 @@ const project: ProjectView = {
 };
 
 function setup(overrides: Partial<Parameters<typeof ProjectTasks>[0]> = {}) {
-  const props = { project, panes: [], session: "work", currentPaneId: "a", readOnly: false, onOpenPane: vi.fn(), onChanged: vi.fn(), ...overrides };
+  const props = { project, panes: [], session: "work", currentPaneId: "a", readOnly: false, onOpenPane: vi.fn(), onOpenNode: vi.fn(), onChanged: vi.fn(), ...overrides };
   render(<ProjectTasks {...props} />);
   return { ...props, user: userEvent.setup() };
 }
 
-it("lists the coordinator, then threads grouped by what they need, resolved ones folded", async () => {
+it("lists the coordinator, then the open threads, with the resolved ones folded into History", async () => {
   const { user, onOpenPane } = setup();
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
   expect(screen.getByText("Ship it")).toBeInTheDocument();
   const build = screen.getByRole("button", { name: /^Build/ });
   expect(build).toHaveTextContent("Asked you a question");
   expect(build.closest("li")).toHaveAttribute("aria-current", "true");
-  expect(build.closest("details")).toHaveTextContent(/^Needs you/);
-  const resolved = screen.getByText("Audit").closest("details")!;
-  expect(resolved).toHaveTextContent(/^Resolved/);
-  expect(resolved).not.toHaveAttribute("open");
-  expect(within(resolved).getByText("Audit")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /Coordinator/ }));
+  expect(screen.getByRole("button", { name: /^History/ })).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("Audit")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^Coordinator/ }));
   expect(onOpenPane).toHaveBeenCalledWith("c");
 });
 
-it("buckets threads by their state and pull request", () => {
-  const base = { parentId: "root", role: "worker", status: "open" } as const;
-  expect(threadBucket({ ...base, id: "a", title: "a", paneId: "p", liveStatus: "blocked" })).toBe("needs");
-  expect(threadBucket({ ...base, id: "b", title: "b", status: "failed" })).toBe("needs");
-  expect(threadBucket({ ...base, id: "g", title: "g", group: "waiting-on-you" })).toBe("needs");
-  expect(threadBucket({ ...base, id: "c", title: "c", group: "ready-for-review" })).toBe("ready");
-  expect(threadBucket({ ...base, id: "d", title: "d", pr: { state: "open", review: "approved" } })).toBe("ready");
-  expect(threadBucket({ ...base, id: "e", title: "e", paneId: "p", liveStatus: "working" })).toBe("working");
-  expect(threadBucket({ ...base, id: "f", title: "f", status: "resolved" })).toBe("resolved");
+it("sums up a pull request as far as Organizations reported it", () => {
   expect(prSummary({ number: 7, state: "open", review: "approved", checks: { passed: 6, failed: 0, pending: 0 } })).toBe("PR #7 · approved · checks passed");
   expect(prSummary({ number: 7, state: "open", checks: { passed: 4, failed: 0, pending: 2 } })).toBe("PR #7 · checks 4/6");
   expect(prSummary({ number: 7, state: "merged" })).toBe("PR #7 merged");

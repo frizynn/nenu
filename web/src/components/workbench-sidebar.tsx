@@ -3,20 +3,19 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Bot, ChevronRight, House, Inbox, Plus, Search, Settings, Terminal } from "lucide-react";
 
 import { NavRow } from "@/components/chat-groups";
+import { NodeDot } from "@/components/node-row";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { StatusDot } from "@/components/status-badge";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
-import { threadState, type ThreadState } from "@/lib/home-stats";
 import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, panePath, projectPath, settingsPath } from "@/lib/nav";
-import {
-  chatMatches, isOpenThread, jumpTargets, matches, nestThreads, paneTitle, projectForPane, projectGroups, type ProjectGroup, type ThreadNode,
-} from "@/lib/projects";
-import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
+import { STATE_LABEL, historyCount, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
+import { chatMatches, isOpenThread, jumpTargets, matches, paneTitle, projectForPane, projectGroups, type ProjectGroup } from "@/lib/projects";
+import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 /** What the sidebar lists: the whole tree, or only what is waiting on the operator. */
 export type SidebarMode = "browse" | "needs-you";
@@ -179,7 +178,7 @@ function sidebarProjects(data: HomeData, query: string): Array<ProjectGroup & { 
     const whole = matches(query, project.name, project.slug, project.goal);
     const panes = projectPanes(data, project).filter((pane) => whole || chatMatches(pane, query) || matches(query, paneSubject(pane)));
     if (group) return [{ ...group, panes }];
-    return panes.length ? [{ project, coordinator: false, open: [], resolved: [], panes }] : [];
+    return panes.length ? [{ project, coordinator: false, threads: [], panes }] : [];
   });
 }
 
@@ -233,18 +232,12 @@ function HostRow({ data, onNavigate }: { data: HomeData; onNavigate?: () => void
 }
 
 interface TreeFolds {
-  /** Explicit folds, keyed by project slug or by `slug/threadId` for a coordinator thread. */
+  /** Explicit folds, keyed by project slug, `slug/threadId` for a coordinator, `slug/history` and `slug/history/threadId`. */
   expanded: Record<string, boolean>;
   onExpand: (key: string, open: boolean) => void;
 }
 
-const STATE_WORD: Partial<Record<ThreadState, string>> = { blocked: "needs you", review: "review" };
-
-function StateDot({ state, className = "size-2" }: { state: ThreadState; className?: string }) {
-  return state === "review"
-    ? <span aria-hidden className={cn("inline-flex shrink-0 rounded-full bg-primary", className)} />
-    : <StatusDot status={state} surface="bg-transparent" className={className} />;
-}
+const STATE_WORD: Partial<Record<NodeState, string>> = { needs: "needs you", review: "review" };
 
 function ProjectSection({ group, data, open, searching, expanded, onExpand, onNavigate, panes = [] }: TreeFolds & {
   group: ProjectGroup;
@@ -255,31 +248,35 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
   /** The project's workspace panes outside every thread, listed after its threads. */
   panes?: AgentView[];
 }) {
-  const { paneId, projectSlug } = useParams();
+  const { paneId, projectSlug, nodeId } = useParams();
   const listId = useId();
   const { project, coordinator } = group;
   const session = data.session;
   const status = project.coordinator?.liveStatus;
   const openCount = project.threads.filter(isOpenThread).length;
-  const row = (thread: ProjectThreadView, depth: number) => (
-    <ThreadRow key={thread.id} thread={thread} depth={depth} slug={project.slug} session={session} current={thread.paneId !== undefined && thread.paneId === paneId} onNavigate={onNavigate} />
-  );
-  const branch = (node: ThreadNode, depth: number): ReactNode => {
-    if (node.children.length === 0) return row(node.thread, depth);
-    const key = `${project.slug}/${node.thread.id}`;
-    const nodeOpen = searching || (expanded[key] ?? true);
+  const tree = orgTree(group.threads);
+  const isCurrent = (node: OrgNode) => (node.thread.paneId !== undefined && node.thread.paneId === paneId) || (projectSlug === project.slug && nodeId === node.thread.id);
+  const holdsCurrent = (node: OrgNode): boolean => isCurrent(node) || node.children.some(holdsCurrent);
+  // Open coordinators start open and History's start folded; a search or the node on screen opens them.
+  const branch = (node: OrgNode, depth: number, key: string, foldedByDefault: boolean): ReactNode => {
+    const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
+      onNavigate={onNavigate} fold={fold} />;
+    if (node.children.length === 0) return row();
+    const foldKey = `${key}/${node.thread.id}`;
+    const nodeOpen = searching || (expanded[foldKey] ?? (!foldedByDefault || node.children.some(holdsCurrent)));
     return (
       <div key={node.thread.id} role="group" aria-label={node.thread.title}>
-        <ThreadRow thread={node.thread} depth={depth} slug={project.slug} session={session} current={node.thread.paneId !== undefined && node.thread.paneId === paneId}
-          onNavigate={onNavigate} fold={{ open: nodeOpen, disabled: searching, onToggle: () => onExpand(key, !nodeOpen) }} kids={node.children.map((child) => threadState(child.thread))} />
-        {nodeOpen && node.children.map((child) => branch(child, depth + 1))}
+        {row({ open: nodeOpen, disabled: searching, onToggle: () => onExpand(foldKey, !nodeOpen) })}
+        {nodeOpen && node.children.map((child) => branch(child, depth + 1, key, foldedByDefault))}
       </div>
     );
   };
+  const historyKey = `${project.slug}/history`;
+  const historyOpen = searching || (expanded[historyKey] ?? tree.history.some(holdsCurrent));
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
-        <Link className="nav-row" to={projectPath(project.slug, session)} onClick={onNavigate} aria-current={projectSlug === project.slug ? "page" : undefined}>
+        <Link className="nav-row" to={projectPath(project.slug, session)} onClick={onNavigate} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
           <span className="nav-avatar" aria-hidden>{project.name.trim().charAt(0).toUpperCase() || "P"}</span>
           <span className="nav-row-text">{project.name}</span>
           {status && <StatusDot status={status} surface="bg-transparent" className="size-2" />}
@@ -305,7 +302,7 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
                 : <span className="nav-row-note">{project.coordinator.agent}</span>}
             </Link>
           )}
-          {nestThreads(group.open).map((node) => branch(node, 1))}
+          {tree.open.map((node) => branch(node, 1, project.slug, false))}
           {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)} onClick={onNavigate}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
@@ -315,12 +312,13 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
               <span className="nav-row-note">{pane.kind === "shell" ? "shell" : pane.agent}</span>
             </Link>
           ))}
-          {group.resolved.length > 0 && (
-            <details className="nav-history" open={searching || group.resolved.some((thread) => thread.paneId !== undefined && thread.paneId === paneId)}>
-              <summary className="nav-row nav-row-nested"><ChevronRight aria-hidden size={14} />History <span className="nav-count">{group.resolved.length}</span></summary>
-              {group.resolved.map((thread) => row(thread, 2))}
-            </details>
-          )}
+          {tree.history.length > 0 && <>
+            <button type="button" className="nav-row nav-row-nested nav-history" aria-expanded={historyOpen} disabled={searching}
+              title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
+              <ChevronRight aria-hidden size={14} />History <span className="nav-count">{tree.resolved.coordinators + tree.resolved.threads}</span>
+            </button>
+            {historyOpen && tree.history.map((node) => branch(node, 2, historyKey, true))}
+          </>}
         </div>
       )}
     </section>
@@ -336,21 +334,26 @@ function projectPanes(data: HomeData, project: ProjectView): AgentView[] {
 
 const depthStyle = (depth: number) => ({ "--nav-depth": depth }) as CSSProperties;
 
-function ThreadRow({ thread, depth, slug, session, current, onNavigate, fold, kids }: {
-  thread: ProjectThreadView;
+interface ThreadRowFold {
+  open: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}
+
+/** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
+function ThreadRow({ node, depth, slug, session, current, onNavigate, fold }: {
+  node: OrgNode;
   depth: number;
   slug: string;
   session?: string;
   current: boolean;
   onNavigate?: () => void;
-  /** Present on a coordinator thread with threads under it. */
-  fold?: { open: boolean; disabled: boolean; onToggle: () => void };
-  /** The states of the threads it coordinates, shown as dots while it is folded or open. */
-  kids?: ThreadState[];
+  /** Present on a coordinator with nodes under it. */
+  fold?: ThreadRowFold;
 }) {
-  const state = threadState(thread);
+  const { thread, state } = node;
   const word = STATE_WORD[state];
-  const note = thread.paneId || !isOpenThread(thread) ? undefined : thread.status === "open" ? "not running" : thread.status;
+  const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
   return (
     <div className="nav-thread">
       {fold && (
@@ -359,14 +362,14 @@ function ThreadRow({ thread, depth, slug, session, current, onNavigate, fold, ki
           <ChevronRight aria-hidden size={13} />
         </button>
       )}
-      <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head")} style={depthStyle(depth)} to={thread.paneId ? panePath(thread.paneId, session) : projectPath(slug, session)}
-        onClick={onNavigate} aria-current={current ? "page" : undefined}>
-        <StateDot state={state} />
+      <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head", state === "resolved" && "nav-tree-resolved")} style={depthStyle(depth)}
+        to={thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session)} onClick={onNavigate} aria-current={current ? "page" : undefined}>
+        <NodeDot state={state} />
         <span className="nav-row-text">{thread.title}</span>
-        <span className="sr-only">, {state === "review" ? "ready for review" : STATUS_LABEL[state]}</span>
-        {kids && kids.length > 0 && <span className="nav-dots" aria-hidden>{kids.slice(0, 6).map((kid, index) => <StateDot key={index} state={kid} className="size-1.5" />)}</span>}
+        <span className="sr-only">, {STATE_LABEL[state].toLowerCase()}</span>
+        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
-        {note && !word && !kids?.length && <span className="nav-row-note">{note}</span>}
+        {note && !word && !fold && <span className="nav-row-note">{note}</span>}
       </Link>
     </div>
   );

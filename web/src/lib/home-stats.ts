@@ -1,9 +1,10 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
+import { nodeState } from "./org-tree";
 import { byRecency, chatRecency, isOpenThread, paneIdentity, type PaneIdentity } from "./projects";
 import { isUnseen } from "./triage";
-import type { AgentStatus, AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
+import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -55,26 +56,19 @@ export function needsYouItems<I extends { paneId: string; detectedAt: number }>(
   return [...asked.map((interaction) => ({ paneId: interaction.paneId, interaction })), ...blocked.map((agent) => ({ paneId: agent.paneId }))];
 }
 
-/** What a thread's dot says: Organizations' ready-for-review group reads as its own state. */
-export type ThreadState = AgentStatus | "review";
-export function threadState(thread: ProjectThreadView): ThreadState {
-  const live = thread.paneId ? thread.liveStatus ?? "unknown" : "unknown";
-  return thread.group === "ready-for-review" && live !== "blocked" ? "review" : live;
-}
-
 export interface ReviewItem {
   project: ProjectView;
   thread: ProjectThreadView;
 }
 
 /**
- * Open threads waiting on a review. Organizations' `ready-for-review` group decides; a files-only
+ * Open threads waiting on a review, as the organization tree reads them (`nodeState`); a files-only
  * project carries no group, so there an open pull request on an agent that stopped counts instead.
  */
 export function reviewItems(projects: readonly ProjectView[] | undefined): ReviewItem[] {
   return (projects ?? []).flatMap((project) => project.threads
     .filter((thread) => isOpenThread(thread) && (thread.group
-      ? threadState(thread) === "review"
+      ? nodeState(thread) === "review"
       : thread.pr?.state === "open" && thread.liveStatus !== "working" && thread.liveStatus !== "blocked"))
     .map((thread) => ({ project, thread })));
 }
@@ -97,7 +91,7 @@ export interface ReviewEntry {
   /** Epoch ms; 0 when unknown. */
   updatedAt: number;
   /** Where Review goes inside Nenu; absent means the PR's page on GitHub. */
-  open?: { paneId: string } | { project: string };
+  open?: { paneId: string } | { project: string; node: string };
 }
 
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/;
@@ -146,7 +140,7 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
       ...(pr?.mergeBlocker !== undefined ? { mergeBlocker: pr.mergeBlocker } : {}),
       updatedAt: Date.parse(thread.updated ?? "") || 0,
       ...github,
-      open: thread.paneId ? { paneId: thread.paneId } : { project: project.slug },
+      open: thread.paneId ? { paneId: thread.paneId } : { project: project.slug, node: thread.id },
     });
   }
   const ready = (row: ReviewEntry) => Number(checksPassed(row.checks)) + Number(row.review === "approved");

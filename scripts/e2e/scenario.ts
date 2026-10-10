@@ -160,7 +160,7 @@ export function demoOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
  */
 export function orgTreeSeed(herd: Pick<DemoHerd, "working" | "idle" | "blocked" | "codex">, at: number, { coordinator = false } = {}): OrgSeed {
   const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
-  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0], tab_id: tabId, pane_id: paneId });
+  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
   const node = (id: number, title: string, parent: string, role: "worker" | "coordinator", group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
     id: `t-${String(id).padStart(4, "0")}`, title, parent_id: parent, role, status: group === "resolved" ? "resolved" : "open", group,
     group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes),

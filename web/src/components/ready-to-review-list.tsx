@@ -8,7 +8,7 @@ import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import type { ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
-import { panePath, projectPath } from "@/lib/nav";
+import { nodePath, panePath } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import type { AgentView } from "@/lib/types";
 
@@ -127,7 +127,7 @@ function ReviewRow({ entry, session }: { entry: ReviewEntry; session?: string })
       )}
       <span className="col-start-3 row-span-2 row-start-1 sm:col-start-4">{entry.checks && <Checks checks={entry.checks} />}</span>
       {entry.open ? (
-        <Link to={"paneId" in entry.open ? panePath(entry.open.paneId, session) : projectPath(entry.open.project, session)}
+        <Link to={"paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session)}
           className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</Link>
       ) : entry.url ? (
         <a href={entry.url} target="_blank" rel="noopener noreferrer" className={cn(actionClass, "col-start-4 row-span-2 row-start-1 sm:col-start-5")} aria-label={label}>Review</a>

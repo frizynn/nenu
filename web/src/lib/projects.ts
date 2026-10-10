@@ -7,30 +7,6 @@ import { paneDisplayName } from "./types";
 
 export const isOpenThread = (thread: ProjectThreadView) => thread.status !== "resolved";
 
-/** A thread with the threads it coordinates, as Organizations nests them. */
-export interface ThreadNode {
-  thread: ProjectThreadView;
-  children: ThreadNode[];
-}
-
-/** Nests threads under their parent; one whose parent is missing (resolved, filtered out) is a root. */
-export function nestThreads(threads: readonly ProjectThreadView[]): ThreadNode[] {
-  const nodes = new Map(threads.map((thread) => [thread.id, { thread, children: [] as ThreadNode[] }]));
-  const parentOf = (node: ThreadNode) => {
-    // A corrupt record could loop its parents; such a thread is listed at the root instead.
-    for (let seen = 0, id = node.thread.parentId; seen <= nodes.size; seen++) {
-      const ancestor = nodes.get(id);
-      if (!ancestor) return nodes.get(node.thread.parentId);
-      if (ancestor === node) return undefined;
-      id = ancestor.thread.parentId;
-    }
-    return undefined;
-  };
-  const roots: ThreadNode[] = [];
-  for (const node of nodes.values()) (parentOf(node)?.children ?? roots).push(node);
-  return roots;
-}
-
 /** One line under a project's name: live activity (coordinator and open threads), then how much is open. */
 export function projectSummary(project: ProjectView): string {
   const threads = project.threads.filter(isOpenThread);
@@ -169,8 +145,8 @@ export function jumpTargets(agents: readonly AgentView[], projects: readonly Pro
 export interface ProjectGroup {
   project: ProjectView;
   coordinator: boolean;
-  open: ProjectThreadView[];
-  resolved: ProjectThreadView[];
+  /** The threads the search keeps, open and resolved; the sidebar draws them as one org tree. */
+  threads: ProjectThreadView[];
 }
 
 /**
@@ -183,6 +159,6 @@ export function projectGroups(projects: readonly ProjectView[] | undefined, quer
     const threads = project.threads.filter((thread) => whole || matches(query, thread.id, thread.title));
     const coordinator = project.coordinator !== undefined && (whole || matches(query, "Coordinator"));
     if (!whole && !coordinator && threads.length === 0) return [];
-    return [{ project, coordinator, open: threads.filter(isOpenThread), resolved: threads.filter((thread) => !isOpenThread(thread)) }];
+    return [{ project, coordinator, threads }];
   });
 }

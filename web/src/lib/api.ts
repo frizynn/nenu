@@ -641,6 +641,14 @@ export function openOrgProject(input: { project: string }, session?: string): Pr
   }, undefined, ORG_OPEN_TIMEOUT_MS);
 }
 
+/** Stop the project's coordinator and start a new one on `profile` (Organizations' `coordinator replace`). */
+export function replaceOrgCoordinator(input: { project: string; profile: string }, session?: string): Promise<{ ok: true; message: string }> {
+  return req(withSession("/api/org/coordinator/replace", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_OPEN_TIMEOUT_MS);
+}
+
 export function resolveOrgNode(
   input: { project: string; id: string },
   session?: string,

@@ -235,14 +235,45 @@ async function org(): Promise<void> {
     }
   }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
 
+  let flowError: string | null = null;
+  let orgCalls: string[][] = [];
   await withBench(async (bridge, browser) => {
     const coordinator = `/pane/${encodeURIComponent(bridge.herd!.codex)}`;
+    const calledWith = async (...argv: string[]) => {
+      for (let i = 0; i < 100; i++) {
+        if ((await bridge.orgCalls()).some((call) => argv.every((arg, index) => call[index] === arg))) return;
+        await sleep(100);
+      }
+      throw new Error(`Organizations was never asked to ${argv.join(" ")}`);
+    };
     {
       const { page, close } = await open(browser, bridge, DESKTOP, coordinator, 'aside[aria-label="Project"] >> text="Panel depósito"');
+      const panel = page.locator('aside[aria-label="Project"]');
       await shoot(page, "panel-desktop");
-      await history(page.locator('aside[aria-label="Project"]')).click({ timeout: 5000 });
+      await history(panel).click({ timeout: 5000 });
       await page.waitForTimeout(300);
       await shoot(page, "panel-history-desktop");
+      // Each node's actions: a coordinator with open work refuses to close, a thread closes, the coordinator is replaced.
+      try {
+        await panel.getByRole("button", { name: "Close Rediseño mobile" }).click({ timeout: 5000 });
+        await page.getByRole("dialog", { name: "Close its work first" }).waitFor({ timeout: 5000 });
+        await shoot(page, "close-refused-desktop");
+        await page.getByRole("button", { name: "OK" }).click();
+        await panel.getByRole("button", { name: "Close Hotfix login" }).click({ timeout: 5000 });
+        await page.getByRole("dialog", { name: "Close this thread?" }).getByRole("button", { name: "Close thread" }).click({ timeout: 5000 });
+        await calledWith("node", "resolve", "awam", "t-0108", "--close-view");
+        await panel.getByRole("button", { name: "Replace coordinator" }).click({ timeout: 5000 });
+        const dialog = page.getByRole("dialog", { name: "Replace the coordinator?" });
+        await dialog.getByLabel("New one runs on").selectOption("claude");
+        await shoot(page, "replace-desktop");
+        await dialog.getByRole("button", { name: "Replace" }).click();
+        await calledWith("coordinator", "replace", "awam", "--profile=claude");
+        await page.waitForTimeout(500);
+        await shoot(page, "after-actions-desktop");
+      } catch (error) {
+        flowError ??= `desktop: ${(error as Error).message.split("\n")[0]}`;
+        await shoot(page, "failed-desktop");
+      }
       await close();
     }
     {
@@ -254,12 +285,26 @@ async function org(): Promise<void> {
       await history(page.locator(".project-overlay")).click({ timeout: 5000 });
       await page.waitForTimeout(300);
       await shoot(page, "threads-history-phone");
+      // A resolved node opens its detail inside Nenu, not its coordinator's chat.
+      try {
+        await page.locator(".project-overlay").getByRole("button", { name: /^Mergear PRs restantes Coordinator/ }).click({ timeout: 5000 });
+        await page.locator('main >> text="Coordinator under"').first().waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        await shoot(page, "node-detail-phone");
+      } catch (error) {
+        flowError ??= `phone: ${(error as Error).message.split("\n")[0]}`;
+        await shoot(page, "failed-phone");
+      }
       await close();
     }
+    orgCalls = await bridge.orgCalls();
   }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
 
-  await writeFile(join(outDir, "org.json"), JSON.stringify({ shots }, null, 2));
-  console.log(JSON.stringify({ shots }, null, 2));
+  const writes = orgCalls.filter((argv) => argv[0] !== "overview" && argv[1] !== "list");
+  const result = { shots, flowError, orgWrites: writes };
+  await writeFile(join(outDir, "org.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (flowError) process.exit(1);
 }
 
 async function baseline(): Promise<void> {

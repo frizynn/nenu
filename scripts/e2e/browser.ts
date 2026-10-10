@@ -16,6 +16,7 @@ export interface Locator {
   first(): Locator;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
+  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
 }
 export interface Page {
   goto(url: string, opts?: { waitUntil?: "load" | "domcontentloaded" }): Promise<unknown>;

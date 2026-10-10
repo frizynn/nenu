@@ -9,7 +9,7 @@ import { ThreadCards } from "@/components/thread-cards";
 import { PrList, ThreadsPanel, prThreads } from "@/components/threads-panel";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { HomeData } from "@/lib/loaders";
-import { panePath } from "@/lib/nav";
+import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -82,6 +82,7 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   const readOnly = isReadOnly(data.device);
   const refresh = () => revalidator.revalidate();
   const openPane = (id: string) => { setView("chat"); if (id !== paneId) navigate(panePath(id, data.session)); };
+  const openNode = (id: string) => navigate(nodePath(project.slug, id, data.session));
 
   // A docked thread is only meaningful beside its own coordinator on a wide screen.
   const splitPane = search.get(SPLIT_PARAM);
@@ -122,8 +123,6 @@ export function ProjectFrame({ owner, paneId, data, children }: {
 
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prThreads(scope.threads).filter((candidate) => candidate.pr!.state === "open" || candidate.pr!.state === "draft").length;
-  // The project coordinator's row is the way back up from a thread or a nested coordinator.
-  const showCoordinator = project.coordinator !== undefined && project.coordinator.paneId !== paneId;
   // A phone thread switches between its chat and the project's threads with one header button.
   const phoneWorker = !wide && !scope.coordinating;
   const tasksShown = phoneWorker && view === "threads";
@@ -159,16 +158,16 @@ export function ProjectFrame({ owner, paneId, data, children }: {
   ) : undefined;
 
   const tasks = <ProjectTasks project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
-    currentPaneId={paneId} readOnly={readOnly} showCoordinator={showCoordinator} onOpenPane={openPane} onChanged={refresh} />;
+    currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
-      {view === "threads" ? tasks : <PrList threads={scope.threads} onOpenPane={openPane} />}
+      {view === "threads" ? tasks : <PrList threads={scope.threads} onOpenPane={openPane} onOpenNode={openNode} />}
     </div></div>
   ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
   const cards = scope.coordinating ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
-      onOpen={(target) => { if (wide && target.paneId) setDocked(target.paneId); else if (target.paneId) openPane(target.paneId); }} />
+      onOpen={(target) => { if (!target.paneId) openNode(target.id); else if (wide) setDocked(target.paneId); else openPane(target.paneId); }} />
   ) : undefined;
 
   return (
@@ -194,8 +193,9 @@ export function ProjectFrame({ owner, paneId, data, children }: {
       {panelShown && (
         <aside className="flex min-h-0 w-[400px] shrink-0 flex-col border-l border-border" aria-label="Project">
           <ThreadsPanel project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle}
-            activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly} showCoordinator={showCoordinator}
-            onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }} onChanged={refresh}
+            activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
+            onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
+            onOpenNode={openNode} onChanged={refresh}
             action={<button ref={toggleFocus} type="button" className="workbench-icon-button" aria-label="Hide project panel" onClick={() => setPanelOpen(false)}>
               <PanelRightClose aria-hidden className="size-4" />
             </button>} />

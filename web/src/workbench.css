@@ -62,15 +62,14 @@
 .nav-disclosure { position: absolute; z-index: 1; inset-block: 0; left: 4px; display: inline-flex; align-items: center; justify-content: center; width: 26px; color: var(--muted-foreground); cursor: pointer; }
 .nav-disclosure-end { left: auto; right: 4px; }
 .nav-disclosure:disabled { cursor: default; }
-.nav-disclosure > svg, .nav-history > summary > svg { transition: transform 150ms ease-out; }
-.nav-disclosure[aria-expanded="true"] > svg, .nav-history[open] > summary > svg { transform: rotate(90deg); }
+.nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
+.nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
 .nav-row-nested { padding-left: 32px; }
 .nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 12px; }
 .nav-count { margin-left: auto; color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
-.nav-history > summary { gap: 6px; padding-left: 29px; color: var(--muted-foreground); font-size: 12px; list-style: none; }
-.nav-history > summary::-webkit-details-marker { display: none; }
-.nav-history > summary > .nav-count { margin-left: 0; }
-.nav-history > .nav-row-nested { padding-left: 50px; }
+/* History: everything resolved, grey, behind one row that starts closed. */
+.nav-history { gap: 6px; padding-left: 29px; color: var(--muted-foreground); font-size: 12px; }
+.nav-history > .nav-count { margin-left: 0; }
 
 /* Workspace → tab → pane. A workspace is a heading with its tally; rows carry title, session and state. */
 .nav-ws { margin-top: 6px; }
@@ -110,6 +109,7 @@
 .nav-tree-row { min-height: 28px; padding-left: calc(var(--nav-depth, 1) * 20px - 6px); color: var(--muted-foreground); }
 .nav-tree-row[aria-current="page"] { color: var(--foreground); }
 .nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 20px + 14px); color: var(--foreground); }
+.nav-tree-row.nav-tree-resolved:not([aria-current="page"]) { color: var(--muted-foreground); }
 .nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 20px - 8px); width: 20px; }
 .nav-dots { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
 .nav-row-word { flex-shrink: 0; font-size: 11px; }
@@ -174,10 +174,13 @@
 .task-close { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); opacity: 0; cursor: pointer; }
 .task-row:hover .task-close, .task-close:focus-visible { opacity: 1; }
 .task-close:hover { color: var(--foreground); background: var(--workbench-row-selected); }
-.task-history > summary { cursor: pointer; list-style: none; }
-.task-history > summary::-webkit-details-marker { display: none; }
-.task-history > summary > svg { transition: transform 150ms ease-out; }
-.task-history[open] > summary > svg { transform: rotate(90deg); }
+.task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: 7px; color: var(--muted-foreground); cursor: pointer; }
+.task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); }
+/* History: everything resolved, in grey, behind one row that opens and closes in place. */
+.task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; text-align: left; cursor: pointer; }
+.task-history-toggle:hover { background: var(--workbench-row-hover); }
+.task-fold > svg, .task-history-toggle > svg { transition: transform 150ms ease-out; }
+.task-fold[aria-expanded="true"] > svg, .task-history-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
 
 /* Native modal: the browser owns focus and the inert page; this only dresses it. */
 .app-dialog { margin: auto; width: min(26rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--popover); color: var(--popover-foreground); box-shadow: 0 24px 48px -12px rgb(0 0 0 / 25%); }
@@ -232,7 +235,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-history > summary > svg, .nav-disclosure > svg, .nav-history > summary > svg, .nav-ws-chevron, .bottom-tab-new { transition: none; }
+  .task-fold > svg, .task-history-toggle > svg, .nav-disclosure > svg, .nav-history > svg, .nav-ws-chevron, .bottom-tab-new { transition: none; }
   .bottom-tab-new:active { scale: none; }
 }
 
@@ -252,7 +255,8 @@
 /* Touch: every target reaches 44px, and the hover-only close is always visible. */
 @media (max-width: 1023px), (pointer: coarse) {
   .nav-row, .workbench-context-trigger, .quiet-action, .task-main { min-height: 44px; }
-  .task-close { opacity: 1; width: 44px; height: 44px; margin: 0; }
+  .task-close, .task-fold { opacity: 1; width: 44px; height: 44px; margin: 0; }
+  .task-history-toggle { min-height: 44px; }
   .workbench-icon-button { width: 44px; height: 44px; }
   .nav-row { font-size: 15px; }
   .nav-disclosure { width: 36px; left: 0; }
@@ -263,8 +267,7 @@
   .nav-tree-row.nav-tree-head { padding-left: calc(var(--nav-depth, 1) * 22px + 26px); }
   .nav-thread > .nav-disclosure { left: calc(var(--nav-depth, 1) * 22px - 10px); width: 36px; }
   .nav-kbd { display: none; }
-  .nav-history > summary { padding-left: 33px; font-size: 13px; }
-  .nav-history > .nav-row-nested { padding-left: 54px; }
+  .nav-history { padding-left: 33px; font-size: 13px; }
   .nav-ws-toggle { min-height: 52px; }
   .nav-ws-name { font-size: 16px; }
   .nav-ws-meta { font-size: 13px; }

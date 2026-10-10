@@ -130,7 +130,8 @@ describe("the sidebar", () => {
     expect(within(lead).getByRole("link", { name: "panel merca, ready for review" })).toHaveTextContent("review");
     // A root worker sits beside the coordinator thread, and the resolved one folds into History.
     expect(within(project).getByRole("link", { name: /^landing/ }).closest("[role=group]")).toBeNull();
-    expect(within(project).getByText("old").closest("details")).not.toHaveAttribute("open");
+    expect(within(project).getByRole("button", { name: /^History/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(project).queryByText("old")).not.toBeInTheDocument();
     // A pane in the project's workspace that runs no thread still has a row.
     expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
   });
@@ -186,7 +187,7 @@ describe("the sidebar", () => {
     ] };
     const user = open("/", { ...herd, projects: [org] });
     const project = within(screen.getByRole("region", { name: "AWAM" }));
-    const names = () => project.getAllByRole("link").map((link) => link.textContent?.replace(/(needs you|review|not running|codex|claude)$/, "").trim());
+    const names = () => project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
     expect(names()).toEqual(["AWAM", "Coordinator", "rediseño", "merca", "panel depo", "landing", "stray"]);
     // A node with no live pane opens its own detail, not the project.
     expect(project.getByRole("link", { name: /^landing/ })).toHaveAttribute("href", "/project/awam/node/t1");

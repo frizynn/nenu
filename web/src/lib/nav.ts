@@ -25,6 +25,11 @@ export function projectPath(slug: string, session?: string): string {
   return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
 }
 
+/** One node of a project's organization: its detail, for a node that runs in no live pane. */
+export function nodePath(slug: string, nodeId: string, session?: string): string {
+  return `/project/${encodeURIComponent(slug)}/node/${encodeURIComponent(nodeId)}${sessionSearch(session)}`;
+}
+
 /** The dashboard path, carrying the current session so "go home" doesn't drop you back to primary. */
 export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;

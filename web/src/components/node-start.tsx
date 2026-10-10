@@ -16,7 +16,7 @@ type StartForm = { title: string; parent: string; task: string; profile: string;
 
 const ROLE_NOUN: Record<NodeRole, string> = { worker: "thread", coordinator: "coordinator" };
 const ROLES: ReadonlyArray<{ id: NodeRole; label: string }> = [{ id: "worker", label: "Thread" }, { id: "coordinator", label: "Coordinator" }];
-const FIELD = "mt-1 min-h-11 w-full rounded-md border bg-background px-3 text-sm font-normal";
+export const FIELD = "mt-1 min-h-11 w-full rounded-md border bg-background px-3 text-sm font-normal";
 
 /**
  * The roles a project can start: none while it is paused (Organizations refuses), and no
@@ -28,7 +28,7 @@ export function startableRoles(project: ProjectView): NodeRole[] {
 }
 
 /** A project's templates and the profiles a node can run, read once the form is on screen. */
-function useStartOptions(project: string, session: string | undefined): StartOptions {
+export function useStartOptions(project: string, session: string | undefined): StartOptions {
   const [options, setOptions] = useState<StartOptions>({ kind: "loading" });
   useEffect(() => {
     let current = true;

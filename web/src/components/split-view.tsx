@@ -4,11 +4,12 @@ import { Maximize2, MessageSquare, TerminalSquare, X } from "lucide-react";
 
 import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
 import { PrBar } from "@/components/pr-bar";
-import { ThreadStateDot, threadDot } from "@/components/project-tasks";
+import { NodeDot } from "@/components/node-row";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { fetchPane } from "@/lib/api";
 import { getRequestedLines, type HomeData, type PaneData } from "@/lib/loaders";
+import { nodeState } from "@/lib/org-tree";
 import { isReadOnly, type ProjectThreadView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -127,7 +128,7 @@ export function ThreadChips({ threads, coordinator, currentPaneId, onOpen, class
   };
   return (
     <nav aria-label="Threads" className={cn("flex shrink-0 gap-1.5 overflow-x-auto border-b border-border/60 px-3 py-2 [scrollbar-width:none]", className)}>
-      {live.map((thread) => chip(thread.id, thread.paneId!, thread.title, <ThreadStateDot state={threadDot(thread)} />))}
+      {live.map((thread) => chip(thread.id, thread.paneId!, thread.title, <NodeDot state={nodeState(thread)} />))}
       {coordinator && chip("coordinator", coordinator.paneId, coordinator.label, <span aria-hidden className="size-2 shrink-0 rounded-full border border-muted-foreground" />)}
     </nav>
   );
@@ -157,7 +158,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
     ? <div className="flex min-h-12 shrink-0 items-center border-b border-border px-3">{find}</div>
     : (
     <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-      <ThreadStateDot state={threadDot(thread)} />
+      <NodeDot state={nodeState(thread)} />
       <span className="shrink-0 text-sm font-semibold">{thread.title}</span>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{subtitle}</span>
       {canToggle && <div role="group" aria-label="View" className="flex shrink-0 rounded-lg bg-muted/50 p-0.5">

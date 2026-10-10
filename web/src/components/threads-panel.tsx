@@ -4,9 +4,11 @@ import { Activity, BookText, GitPullRequest, MessageSquare } from "lucide-react"
 import { ActivityPanel } from "@/components/activity/activity-panel";
 import { TaskOutput } from "@/components/activity/task-output";
 import { WorkflowScreen, useActivityClock, type OpenWorkflow } from "@/components/activity/running-workflows";
-import { ProjectTasks, ThreadStateDot, prSummary, threadAge, threadDot } from "@/components/project-tasks";
+import { NodeDot } from "@/components/node-row";
+import { ProjectTasks, prSummary, threadAge } from "@/components/project-tasks";
 import { BottomSheet } from "@/components/ui/sheet";
 import { useActivity } from "@/hooks/use-activity";
+import { nodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +20,10 @@ export function prThreads(threads: readonly ProjectThreadView[]): ProjectThreadV
   return threads.filter((thread) => thread.pr).sort((a, b) => rank[a.pr!.state] - rank[b.pr!.state]);
 }
 
-export function PrList({ threads, onOpenPane, now = Date.now() }: {
+export function PrList({ threads, onOpenPane, onOpenNode, now = Date.now() }: {
   threads: readonly ProjectThreadView[];
   onOpenPane: (paneId: string) => void;
+  onOpenNode: (id: string) => void;
   now?: number;
 }) {
   const list = prThreads(threads);
@@ -29,7 +32,7 @@ export function PrList({ threads, onOpenPane, now = Date.now() }: {
     <ul className="task-list">
       {list.map((thread) => {
         const body = <>
-          <ThreadStateDot state={threadDot(thread)} className="mt-1.5 size-2" />
+          <NodeDot state={nodeState(thread)} className="mt-1.5 size-2" />
           <span className="min-w-0 flex-1">
             <span className="block break-words text-sm font-medium">{thread.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{prSummary(thread.pr!)}</span>
@@ -41,7 +44,7 @@ export function PrList({ threads, onOpenPane, now = Date.now() }: {
         </>;
         return (
           <li key={thread.id} className="task-row">
-            {thread.paneId ? <button type="button" className="task-main" onClick={() => onOpenPane(thread.paneId!)}>{body}</button> : <div className="task-main">{body}</div>}
+            <button type="button" className="task-main" onClick={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}>{body}</button>
           </li>
         );
       })}
@@ -78,10 +81,10 @@ const TABS: Array<[PanelTab, string, typeof MessageSquare]> = [
 ];
 
 /**
- * The project's side panel beside a coordinator or thread: its threads grouped by what they need,
- * their pull requests, the coordinator session's background activity, and what every thread shares.
+ * The project's side panel beside a coordinator or thread: its organization, their pull requests,
+ * the coordinator session's background activity, and what every thread shares.
  */
-export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, showCoordinator, onOpenPane, onChanged, action }: {
+export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, action }: {
   project: ProjectView;
   threads: ProjectThreadView[];
   title: string;
@@ -92,9 +95,8 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
   session?: string;
   currentPaneId?: string;
   readOnly: boolean;
-  /** List the project coordinator first, the way back up from a thread or a nested coordinator. */
-  showCoordinator: boolean;
   onOpenPane: (paneId: string) => void;
+  onOpenNode: (id: string) => void;
   onChanged: () => void;
   action?: ReactNode;
 }) {
@@ -113,8 +115,8 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
       </div>
       <div role="tabpanel" aria-label={TABS.find(([key]) => key === tab)![1]} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
         {tab === "threads" && <ProjectTasks project={project} threads={threads} title={title} subtitle={subtitle} panes={panes} session={session}
-          currentPaneId={currentPaneId} readOnly={readOnly} showCoordinator={showCoordinator} onOpenPane={onOpenPane} onChanged={onChanged} />}
-        {tab === "prs" && <PrList threads={threads} onOpenPane={onOpenPane} />}
+          currentPaneId={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
+        {tab === "prs" && <PrList threads={threads} onOpenPane={onOpenPane} onOpenNode={onOpenNode} />}
         {tab === "activity" && (activityPaneId
           ? <PaneActivity paneId={activityPaneId} session={session} />
           : <p className="text-sm text-muted-foreground">The coordinator is not running, so there is no activity to show.</p>)}

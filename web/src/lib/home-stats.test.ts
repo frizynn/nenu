@@ -108,7 +108,7 @@ describe("review queue", () => {
     const rows = reviewQueue([hub], [gh(7, { paneIds: ["other"], updatedAt: 5_000 })]);
     expect(rows).toHaveLength(2);
     expect(rows.find((row) => row.number === 7)).toMatchObject({ title: "PR 7", repo: "shop", open: { paneId: "p2" }, mergeBlocker: "checks failing" });
-    expect(rows.find((row) => row.number === 12)).toMatchObject({ title: "Org only", repo: "Hub", open: { project: "hub" } });
+    expect(rows.find((row) => row.number === 12)).toMatchObject({ title: "Org only", repo: "Hub", open: { project: "hub", node: "t3" } });
   });
 });
 

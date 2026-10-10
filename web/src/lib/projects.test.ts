@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupChats, jumpTargets, looseChats, nestThreads, paneIdentity, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
+import { groupChats, jumpTargets, looseChats, paneIdentity, paneTitle, projectForPane, projectGroups, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -69,17 +69,16 @@ describe("pane ownership", () => {
 });
 
 describe("project groups", () => {
-  const titles = (query: string) => projectGroups([project], query).map((group) =>
-    [group.coordinator, group.open.map((thread) => thread.id), group.resolved.map((thread) => thread.id)]);
+  const titles = (query: string) => projectGroups([project], query).map((group) => [group.coordinator, group.threads.map((thread) => thread.id)]);
 
-  it("splits open tasks from history and keeps every row when the project itself matches", () => {
-    expect(titles("")).toEqual([[true, ["T1", "T2", "T3"], ["T0"]]]);
-    expect(titles("hub")).toEqual([[true, ["T1", "T2", "T3"], ["T0"]]]);
+  it("keeps every row when the project itself matches", () => {
+    expect(titles("")).toEqual([[true, ["T1", "T2", "T3", "T0"]]]);
+    expect(titles("hub")).toEqual([[true, ["T1", "T2", "T3", "T0"]]]);
   });
 
   it("narrows to matching tasks, including resolved ones, and drops projects with nothing left", () => {
-    expect(titles("review")).toEqual([[false, ["T2"], []]]);
-    expect(titles("old")).toEqual([[false, [], ["T0"]]]);
+    expect(titles("review")).toEqual([[false, ["T2"]]]);
+    expect(titles("old")).toEqual([[false, ["T0"]]]);
     expect(titles("nothing")).toEqual([]);
   });
 
@@ -88,12 +87,6 @@ describe("project groups", () => {
     expect(paneTitle(pane("c"), projectForPane([project], "c"))).toBe("Coordinator");
     expect(paneTitle(pane("x", { paneLabel: "Loose" }), undefined)).toBe("Loose");
   });
-});
-
-it("nests threads by parent and lists an orphan or a parent loop at the root", () => {
-  const t = (id: string, parentId: string) => ({ id, title: id, parentId, role: "worker" as const, status: "open" as const });
-  const tree = nestThreads([t("a", "root"), t("b", "a"), t("c", "gone"), t("x", "y"), t("y", "x")]);
-  expect(tree.map((node) => [node.thread.id, node.children.map((child) => child.thread.id)])).toEqual([["a", ["b"]], ["c", []], ["x", []], ["y", []]]);
 });
 
 describe("pane identity", () => {

@@ -64,6 +64,9 @@ function setup(path: string, data: HomeData) {
   return { router, user: userEvent.setup() };
 }
 
+/** The titles of a list's own items, not of the ones nested inside them. */
+const titlesOf = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-main .font-medium")?.textContent);
+
 it("opens a project on its coordinator's chat with thread cards, and switches Chat, Threads and PRs on a phone", async () => {
   const { router, user } = setup("/project/hub", home([pane("coord"), pane("worker"), pane("docs")]));
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:coord");
@@ -79,7 +82,7 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   const tabs = within(screen.getByRole("tablist", { name: "Project" }));
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
   expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
-  expect(screen.getByText("Ready to review")).toBeInTheDocument();
+  expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Docs", "Build"]);
   await user.click(tabs.getByRole("tab", { name: /PRs/ }));
   expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · approved · checks passed");
   await user.click(tabs.getByRole("tab", { name: "Chat" }));
@@ -147,7 +150,7 @@ it("keeps a phone thread's way to the project's threads and coordinator when it 
 });
 
 it("shows the organization with a way to start the coordinator when none is running", async () => {
-  const { router } = setup("/project/hub", home([pane("worker")]));
+  const { router } = setup("/project/hub", home([pane("worker")], [{ ...project, coordinator: undefined }]));
   expect(await screen.findByRole("button", { name: "Start coordinator" })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/project/hub");
   const main = within(screen.getByRole("main"));
@@ -160,7 +163,7 @@ it("opens the coordinator's chat once Start has brought it up", async () => {
   server.use(http.post("/api/org/project/open", () => { running = true; return HttpResponse.json({ ok: true, message: "started codex as hp-hub" }); }));
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID, path: "/", element: <Outlet />,
-    loader: () => home(running ? [pane("coord"), pane("worker")] : [pane("worker")]),
+    loader: () => running ? home([pane("coord"), pane("worker")]) : home([pane("worker")], [{ ...project, coordinator: undefined }]),
     children: [
       { path: "project/:projectSlug", element: <ProjectRoute /> },
       { path: "pane/:paneId", element: <p>PANE</p> },
