@@ -130,11 +130,11 @@ the unit name; the Herdr action runs from anywhere.
 - `/api/events` (SSE) only names what changed; readers re-fetch through the usual routes and polling
   relaxes to a fallback while it is open. Never put state or pane text on it, and never drop the
   fallback poll ([ADR 0054](./.adr/0054-the-browser-hears-what-changed-not-the-state.md)).
-  The fast poll of an open mirror lives on the bridge: the web client names every pane whose
-  screen it shows in `/api/events?watch=` (the route's mirror and any docked thread,
-  `web/src/hooks/use-live-events.ts`), `bridge/pane-watcher.ts` reads only those and names a pane
-  when its screen changes, and `bridge/journal-watch.ts` names a journal when its file changes.
-  While the stream is healthy the snapshot, mirror, transcript and queue polls fall back to 10 s
+  The fast poll of an open mirror moves to the bridge: `/api/events?watch=` takes the panes a
+  client shows, `bridge/pane-watcher.ts` reads only those and names a pane when its screen
+  changes, and `bridge/journal-watch.ts` names a journal when its file changes. The web client
+  does not send `?watch=` yet, and only the queue relaxes to 10 s on a healthy stream; the mirror
+  and transcript keep their own polls until it does
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.

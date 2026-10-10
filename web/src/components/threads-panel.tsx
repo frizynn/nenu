@@ -104,7 +104,7 @@ const TABS: Array<[PanelTab, string, typeof MessageSquare]> = [
  * The project's side panel beside a coordinator or thread: its threads grouped by what they need,
  * their pull requests, the coordinator session's background activity, and what every thread shares.
  */
-export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, onOpenPane, onChanged, action }: {
+export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId, panes, session, currentPaneId, readOnly, showCoordinator, onOpenPane, onChanged, action }: {
   project: ProjectView;
   threads: ProjectThreadView[];
   title: string;
@@ -115,6 +115,8 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
   session?: string;
   currentPaneId?: string;
   readOnly: boolean;
+  /** List the project coordinator first, the way back up from a thread or a nested coordinator. */
+  showCoordinator: boolean;
   onOpenPane: (paneId: string) => void;
   onChanged: () => void;
   action?: ReactNode;
@@ -134,7 +136,7 @@ export function ThreadsPanel({ project, threads, title, subtitle, activityPaneId
       </div>
       <div role="tabpanel" aria-label={TABS.find(([key]) => key === tab)![1]} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4">
         {tab === "threads" && <ProjectTasks project={project} threads={threads} title={title} subtitle={subtitle} panes={panes} session={session}
-          currentPaneId={currentPaneId} readOnly={readOnly} showCoordinator={false} onOpenPane={onOpenPane} onChanged={onChanged} />}
+          currentPaneId={currentPaneId} readOnly={readOnly} showCoordinator={showCoordinator} onOpenPane={onOpenPane} onChanged={onChanged} />}
         {tab === "prs" && <PrList threads={threads} onOpenPane={onOpenPane} />}
         {tab === "activity" && (activityPaneId
           ? <PaneActivity paneId={activityPaneId} session={session} />

@@ -13,12 +13,12 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void }) => ReactNode } }
+interface StubProps { paneId: string; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
   AgentChat: ({ paneId, title, headerAction, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
     <div data-testid={docked ? "docked" : "chat"}>
-      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {} }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
-      {strip}
+      {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
+      {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
       {composerTop}
     </div>
@@ -44,8 +44,8 @@ const project: ProjectView = {
   ],
 };
 
-function home(agents: AgentView[]): HomeData {
-  return { bridge: "connected", agents, shellPanes: [], workspaces: [], tabs: [], projects: [project], device: undefined, sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
+function home(agents: AgentView[], projects: ProjectView[] = [project]): HomeData {
+  return { bridge: "connected", agents, shellPanes: [], workspaces: [], tabs: [], projects, device: undefined, sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false };
 }
 
 function setup(path: string, data: HomeData) {
@@ -116,11 +116,30 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   const docked = within(await screen.findByTestId("docked"));
   expect(docked.getByText("conversation:worker")).toBeInTheDocument();
   expect(docked.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
+  // The docked header keeps the chat's own menu (keys, find, files and the rest).
+  expect(docked.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   // The panel steps aside for the docked thread.
   expect(screen.queryByRole("tablist", { name: "Project panel" })).not.toBeInTheDocument();
   await user.click(docked.getByRole("button", { name: "Close thread" }));
   expect(router.state.location.search).toBe("");
-  expect(screen.getByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
+  expect(await screen.findByRole("tablist", { name: "Project panel" })).toBeInTheDocument();
+});
+
+it("keeps a phone thread's way to the project's threads and coordinator when it has no chips", async () => {
+  // Only this thread runs and the coordinator is gone: no chips, so the workspace strip stays.
+  const docsStopped = { ...project, threads: project.threads.map((thread) => thread.id === "T2" ? { ...thread, paneId: undefined } : thread) };
+  const { router, user } = setup("/pane/worker", home([pane("worker")], [docsStopped]));
+  expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
+  expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Workspace tabs" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Threads, 2 open" }));
+  expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Build/ }).closest("li")).toHaveAttribute("aria-current", "true");
+  expect(screen.getByRole("button", { name: "Close Docs" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Coordinator/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Back to chat" }));
+  expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker");
+  expect(router.state.location.pathname).toBe("/pane/worker");
 });
 
 it("shows the task list as the project page when no coordinator is running", async () => {

@@ -2,23 +2,37 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useRevalidator } from "react-router";
 import { Maximize2, MessageSquare, TerminalSquare, X } from "lucide-react";
 
-import { AgentChat } from "@/components/agent-chat";
+import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
 import { PrBar } from "@/components/pr-bar";
 import { ThreadStateDot, threadDot } from "@/components/project-tasks";
-import { useWatchPane } from "@/hooks/use-live-events";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
-import { readPane, type HomeData, type PaneData } from "@/lib/loaders";
+import { fetchPane } from "@/lib/api";
+import { getRequestedLines, type HomeData, type PaneData } from "@/lib/loaders";
 import { isReadOnly, type ProjectThreadView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Fallback cadence of a docked mirror: the stream names its changes while it is healthy (ADR 0058). */
+/**
+ * Poll cadence of a docked mirror. The stream names only the route's own pane to the bridge watcher
+ * (ADR 0058), so a docked screen keeps its own fast poll; its chat view relaxes on a healthy stream.
+ */
 export const DOCKED_POLL_MS = { live: 10_000, terminal: 1_500, hidden: 4_000 } as const;
+
+/** One read of a docked pane. It skips the route loader's text cache, so a failure keeps the last read. */
+async function readDocked(paneId: string, session: string | undefined, previous: PaneData | null): Promise<PaneData> {
+  const lines = getRequestedLines(paneId, session);
+  try {
+    const read = await fetchPane(paneId, lines, session);
+    return { paneId, session, text: read.text, truncated: read.truncated, requestedLines: lines, revision: read.revision,
+      nativeTelemetry: read.nativeTelemetry, error: false, authError: false };
+  } catch {
+    return { ...(previous ?? { paneId, session, text: "", truncated: false, requestedLines: lines, revision: 0, authError: false }), error: true };
+  }
+}
 
 /**
  * The mirror of a pane shown beside the route's own: read on mount, on a live event naming it, after
- * every app-wide revalidation (a send or an answer asks for one), and on the fallback poll. While its
- * screen is on display the bridge watches it for this page.
+ * every app-wide revalidation (a send or an answer asks for one), and on its poll.
  */
 export function usePaneMirror(paneId: string, session: string | undefined, screenShown: boolean): PaneData | null {
   const [pane, setPane] = useState<PaneData | null>(null);
@@ -27,7 +41,8 @@ export function usePaneMirror(paneId: string, session: string | undefined, scree
   const refreshRef = useRef<() => void>(() => {});
   const shownRef = useRef(screenShown);
   shownRef.current = screenShown;
-  useWatchPane(screenShown ? paneId : undefined);
+  const paneRef = useRef(pane);
+  paneRef.current = pane;
 
   useEffect(() => {
     setPane(null);
@@ -42,7 +57,7 @@ export function usePaneMirror(paneId: string, session: string | undefined, scree
     const schedule = () => {
       clearTimeout(timer);
       if (disposed || document.hidden) return;
-      const ms = isLiveHealthy() ? DOCKED_POLL_MS.live : shownRef.current ? DOCKED_POLL_MS.terminal : DOCKED_POLL_MS.hidden;
+      const ms = shownRef.current ? DOCKED_POLL_MS.terminal : isLiveHealthy() ? DOCKED_POLL_MS.live : DOCKED_POLL_MS.hidden;
       timer = setTimeout(() => void read(), ms);
     };
     async function read() {
@@ -51,7 +66,7 @@ export function usePaneMirror(paneId: string, session: string | undefined, scree
       inFlight = true;
       clearTimeout(timer);
       try {
-        const next = await readPane(paneId, session);
+        const next = await readDocked(paneId, session, paneRef.current);
         if (!disposed) setPane((previous) => previous && previous.text === next.text && previous.revision === next.revision && previous.error === next.error ? previous : next);
       } finally {
         inFlight = false;
@@ -82,6 +97,13 @@ export function usePaneMirror(paneId: string, session: string | undefined, scree
   return pane;
 }
 
+const chipThreads = (threads: readonly ProjectThreadView[]) => threads.filter((thread) => thread.paneId && thread.status !== "resolved");
+
+/** Chips earn their row only when there is somewhere else to switch to. */
+export function threadChipsShown(threads: readonly ProjectThreadView[], withCoordinator: boolean): boolean {
+  return chipThreads(threads).length + (withCoordinator ? 1 : 0) >= 2;
+}
+
 /** A coordinator's threads as chips: tap one to switch, the current one is raised. */
 export function ThreadChips({ threads, coordinator, currentPaneId, onOpen, className }: {
   threads: readonly ProjectThreadView[];
@@ -91,8 +113,8 @@ export function ThreadChips({ threads, coordinator, currentPaneId, onOpen, class
   onOpen: (paneId: string) => void;
   className?: string;
 }) {
-  const live = threads.filter((thread) => thread.paneId && thread.status !== "resolved");
-  if (live.length + (coordinator ? 1 : 0) < 2) return null;
+  if (!threadChipsShown(threads, coordinator !== undefined)) return null;
+  const live = chipThreads(threads);
   const chip = (key: string, paneId: string, label: string, dot: ReactNode) => {
     const current = paneId === currentPaneId;
     return (
@@ -131,7 +153,9 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
   const agent = data.agents.find((candidate) => candidate.paneId === thread.paneId);
   const onMirrorShown = useCallback((shown: boolean) => setScreenShown(shown), []);
   const readOnly = isReadOnly(data.device);
-  const header = ({ terminal, canToggle, setTerminal }: { terminal: boolean; canToggle: boolean; setTerminal: (terminal: boolean) => void }) => (
+  const header = ({ terminal, canToggle, setTerminal, find, menu }: DockedHeaderView) => find
+    ? <div className="flex min-h-12 shrink-0 items-center border-b border-border px-3">{find}</div>
+    : (
     <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-3">
       <ThreadStateDot state={threadDot(thread)} />
       <span className="shrink-0 text-sm font-semibold">{thread.title}</span>
@@ -144,6 +168,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
           </button>
         ))}
       </div>}
+      {menu}
       <button type="button" aria-label="Open full view" title="Open full view" onClick={onExpand} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent">
         <Maximize2 aria-hidden className="size-3.5" />
       </button>

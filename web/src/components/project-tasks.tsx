@@ -16,7 +16,7 @@ export const BUCKETS: readonly ThreadBucket[] = ["needs", "ready", "working", "r
 
 export function threadBucket(thread: ProjectThreadView): ThreadBucket {
   if (thread.status === "resolved") return "resolved";
-  if (thread.status === "failed" || (thread.paneId && thread.liveStatus === "blocked")) return "needs";
+  if (thread.status === "failed" || thread.group === "waiting-on-you" || (thread.paneId && thread.liveStatus === "blocked")) return "needs";
   const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
   if (thread.group === "ready-for-review" || approved || (thread.paneId && thread.liveStatus === "done")) return "ready";
   return "working";
@@ -87,6 +87,22 @@ export function coordinatedThreads(project: ProjectView, coordinatorId?: string)
   const ids = new Set(project.threads.map((thread) => thread.id));
   return project.threads.filter((thread) => thread.id !== parent &&
     (thread.parentId === parent || (parent === "root" && !ids.has(thread.parentId))));
+}
+
+/** Every thread under one coordinator, nested ones included: the whole project at its root. */
+export function threadTree(project: ProjectView, coordinatorId?: string): ProjectThreadView[] {
+  const tree: ProjectThreadView[] = [];
+  const seen = new Set<string>();
+  const walk = (id?: string) => {
+    for (const thread of coordinatedThreads(project, id)) {
+      if (seen.has(thread.id)) continue;
+      seen.add(thread.id);
+      tree.push(thread);
+      walk(thread.id);
+    }
+  };
+  walk(coordinatorId);
+  return tree;
 }
 
 /** Threads grouped by bucket, in display order, empty groups dropped. */

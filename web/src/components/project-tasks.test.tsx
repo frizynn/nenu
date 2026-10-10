@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { ProjectTasks, coordinatedThreads, prSummary, threadBucket } from "./project-tasks";
+import { ProjectTasks, coordinatedThreads, prSummary, threadBucket, threadTree } from "./project-tasks";
 
 const project: ProjectView = {
   slug: "hub", name: "Hub", goal: "Ship it", status: "active",
@@ -42,6 +42,7 @@ it("buckets threads by their state and pull request", () => {
   const base = { parentId: "root", role: "worker", status: "open" } as const;
   expect(threadBucket({ ...base, id: "a", title: "a", paneId: "p", liveStatus: "blocked" })).toBe("needs");
   expect(threadBucket({ ...base, id: "b", title: "b", status: "failed" })).toBe("needs");
+  expect(threadBucket({ ...base, id: "g", title: "g", group: "waiting-on-you" })).toBe("needs");
   expect(threadBucket({ ...base, id: "c", title: "c", group: "ready-for-review" })).toBe("ready");
   expect(threadBucket({ ...base, id: "d", title: "d", pr: { state: "open", review: "approved" } })).toBe("ready");
   expect(threadBucket({ ...base, id: "e", title: "e", paneId: "p", liveStatus: "working" })).toBe("working");
@@ -60,6 +61,9 @@ it("scopes a coordinator to the threads it runs", () => {
   ] };
   expect(coordinatedThreads(tree, "C").map((t) => t.id)).toEqual(["W1"]);
   expect(coordinatedThreads(tree).map((t) => t.id)).toEqual(["C", "W2", "O"]);
+  // Lists and counts at a coordinator cover what its own threads run too.
+  expect(threadTree(tree).map((t) => t.id)).toEqual(["C", "W1", "W2", "O"]);
+  expect(threadTree(tree, "C").map((t) => t.id)).toEqual(["W1"]);
 });
 
 it("closes a thread only after the in-app confirmation", async () => {

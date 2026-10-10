@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
-import { MessageSquare, PanelRightClose } from "lucide-react";
+import { ListChecks, MessageSquare, PanelRightClose } from "lucide-react";
 
 import { PrBar } from "@/components/pr-bar";
-import { ProjectTasks, coordinatedThreads } from "@/components/project-tasks";
-import { DockedThread, ThreadChips } from "@/components/split-view";
+import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
+import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { ThreadCards } from "@/components/thread-cards";
 import { PrList, ThreadsPanel, prThreads } from "@/components/threads-panel";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -42,25 +42,27 @@ type PhoneView = "chat" | "threads" | "prs";
 export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">) {
   const { project, thread } = owner;
   const coordinating = !thread || thread.role === "coordinator";
-  // A coordinator lists the threads it runs; a worker lists its siblings under the same coordinator.
+  // A coordinator scopes to the threads it runs; a worker to its siblings under the same coordinator.
   const parentId = coordinating ? thread?.id : thread.parentId === "root" ? undefined : thread.parentId;
   const parent = parentId ? project.threads.find((candidate) => candidate.id === parentId) : undefined;
-  const threads = coordinatedThreads(project, parentId);
+  // Lists and counts cover the whole subtree; chips and tabs only the direct siblings.
+  const threads = threadTree(project, parentId);
+  const siblings = coordinatedThreads(project, parentId);
   const coordinatorPane = parentId ? parent?.paneId : project.coordinator?.paneId;
   const panelTitle = parent?.title ?? project.name;
   const live = coordinatorPane !== undefined && data.agents.some((pane) => pane.paneId === coordinatorPane);
   const subtitle = parent
     ? `Coordinator under ${project.name} · ${threads.length} ${threads.length === 1 ? "thread" : "threads"}`
     : project.goal;
-  return { coordinating, threads, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
+  return { coordinating, threads, siblings, coordinatorPane: live ? coordinatorPane : undefined, panelTitle, subtitle };
 }
 
 /**
  * A pane that belongs to a project renders inside this frame. A coordinator's chat carries its
  * threads as cards; a wide screen keeps the project panel beside it, or docks a thread there
  * (`?thread=`). A phone switches the coordinator between Chat, Threads and PRs in place, keeping
- * the chat mounted so its draft and scroll survive; a thread shows its siblings as chips and its
- * pull request above the composer.
+ * the chat mounted so its draft and scroll survive; a thread shows its siblings as chips, a header
+ * button to the project's threads, and its pull request above the composer.
  */
 export function ProjectFrame({ owner, paneId, data, children }: {
   owner: PaneProject;
@@ -112,10 +114,23 @@ export function ProjectFrame({ owner, paneId, data, children }: {
 
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prThreads(scope.threads).filter((candidate) => candidate.pr!.state === "open" || candidate.pr!.state === "draft").length;
+  // The project coordinator's row is the way back up from a thread or a nested coordinator.
+  const showCoordinator = project.coordinator !== undefined && project.coordinator.paneId !== paneId;
+  // A phone thread switches between its chat and the project's threads with one header button.
+  const phoneWorker = !wide && !scope.coordinating;
+  const tasksShown = phoneWorker && view === "threads";
   const headerAction = wide && !panelShown && !docked ? (
     <button ref={toggleFocus} type="button" className="project-toggle" aria-label={`Threads, ${openCount} open`} onClick={() => setPanelOpen(true)}>
       <MessageSquare aria-hidden className="size-3.5" />Threads
       {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
+    </button>
+  ) : phoneWorker ? (
+    <button type="button" className="project-toggle" aria-label={tasksShown ? "Back to chat" : `Threads, ${openCount} open`}
+      onClick={() => setView(tasksShown ? "chat" : "threads")}>
+      {tasksShown ? <><MessageSquare aria-hidden className="size-3.5" />Chat</> : <>
+        <ListChecks aria-hidden className="size-3.5" />Threads
+        {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
+      </>}
     </button>
   ) : undefined;
 
@@ -130,19 +145,18 @@ export function ProjectFrame({ owner, paneId, data, children }: {
     </div>
   ) : undefined;
 
-  const chips = !scope.coordinating ? (
-    <ThreadChips threads={scope.threads} currentPaneId={paneId} onOpen={openPane}
-      coordinator={scope.coordinatorPane ? { paneId: scope.coordinatorPane, label: "coordinator" } : undefined} />
+  const chipCoordinator = scope.coordinatorPane ? { paneId: scope.coordinatorPane, label: "coordinator" } : undefined;
+  const chips = !scope.coordinating && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
+    <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
+  const tasks = <ProjectTasks project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
+    currentPaneId={paneId} readOnly={readOnly} showCoordinator={showCoordinator} onOpenPane={openPane} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
-      {view === "threads"
-        ? <ProjectTasks project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle} panes={data.agents} session={data.session}
-          currentPaneId={paneId} readOnly={readOnly} showCoordinator={false} onOpenPane={openPane} onChanged={refresh} />
-        : <PrList threads={scope.threads} onOpenPane={openPane} />}
+      {view === "threads" ? tasks : <PrList threads={scope.threads} onOpenPane={openPane} />}
     </div></div>
-  ) : undefined;
+  ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
 
   const cards = scope.coordinating ? (
     <ThreadCards project={project} coordinatorId={thread?.id} panes={data.agents} session={data.session} readOnly={readOnly} onChanged={refresh}
@@ -156,14 +170,14 @@ export function ProjectFrame({ owner, paneId, data, children }: {
         headerAction,
         overlay,
         conversationFooter: cards,
-        // A phone strip replaces the workspace tabs; on a wide coordinator the panel stands in for them.
+        // Project chips or tabs replace the workspace tabs; on a wide coordinator the panel stands in for them.
         strip: phoneTabs ?? chips ?? (wide ? null : undefined),
         composerTop: thread?.pr && !scope.coordinating
           ? <PrBar project={project} thread={thread} session={data.session} readOnly={readOnly} onChanged={refresh} />
           : undefined,
       })}
       {docked && (
-        <DockedThread thread={docked} project={project} siblings={scope.threads} data={data}
+        <DockedThread thread={docked} project={project} siblings={coordinatedThreads(project, docked.parentId === "root" ? undefined : docked.parentId)} data={data}
           subtitle={[scope.panelTitle, docked.agent].filter(Boolean).join(" · ")}
           onSwitch={(id) => setDocked(id)}
           onExpand={() => navigate(panePath(docked.paneId, data.session))}
@@ -172,8 +186,8 @@ export function ProjectFrame({ owner, paneId, data, children }: {
       {panelShown && (
         <aside className="flex min-h-0 w-[400px] shrink-0 flex-col border-l border-border" aria-label="Project">
           <ThreadsPanel project={project} threads={scope.threads} title={scope.panelTitle} subtitle={scope.subtitle}
-            activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
-            onOpenPane={(id) => { if (scope.coordinating && id !== scope.coordinatorPane) setDocked(id); else openPane(id); }} onChanged={refresh}
+            activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly} showCoordinator={showCoordinator}
+            onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }} onChanged={refresh}
             action={<button ref={toggleFocus} type="button" className="workbench-icon-button" aria-label="Hide project panel" onClick={() => setPanelOpen(false)}>
               <PanelRightClose aria-hidden className="size-4" />
             </button>} />
