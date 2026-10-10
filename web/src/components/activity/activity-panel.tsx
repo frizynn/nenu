@@ -74,7 +74,7 @@ function RunningWorkflow({ workflow, now, initiallyOpen, onOpenWorkflow }: { wor
   return (
     <div className="flex flex-col">
       <div className="flex min-h-11 items-center gap-2 px-2.5 lg:min-h-9">
-        <button type="button" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} ${workflow.name}`} onClick={() => setOpen(!open)} className="flex size-6 items-center justify-center">
+        <button type="button" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} ${workflow.name}`} onClick={() => setOpen(!open)} className="-mx-2.5 flex size-11 shrink-0 items-center justify-center lg:mx-0 lg:size-6">
           {open ? <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground" /> : <ChevronRight aria-hidden="true" className="size-3 text-muted-foreground" />}
         </button>
         <button type="button" onClick={() => onOpenWorkflow(workflow.runId)} className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left">
@@ -184,7 +184,7 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
             type="button"
             aria-pressed={filter === key}
             onClick={() => setFilter(key)}
-            className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs lg:min-h-[26px]", filter === key ? "bg-foreground font-medium text-background" : "text-muted-foreground ring-1 ring-border hover:text-foreground")}
+            className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs lg:min-h-[26px]", "relative after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] lg:after:hidden", filter === key ? "bg-foreground font-medium text-background" : "text-muted-foreground ring-1 ring-border hover:text-foreground")}
           >
             {label}
             {count !== null && <span className={cn("tabular-nums", filter === key ? "text-background/70" : "text-muted-foreground/70")}>{count}</span>}
@@ -194,7 +194,7 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
       {stale && (
         <div role="status" className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>Couldn’t refresh. Showing last known activity.</span>
-          {onRetry && <button type="button" onClick={onRetry} className="min-h-9 rounded-md px-2 text-foreground hover:bg-muted/50">Retry</button>}
+          {onRetry && <button type="button" onClick={onRetry} className="min-h-11 rounded-md px-2 text-foreground hover:bg-muted/50 lg:min-h-9">Retry</button>}
         </div>
       )}
       {empty && (
@@ -213,7 +213,7 @@ export function ActivityPanel({ data, stale = false, now, onOpenWorkflow, onOpen
           title="Finished"
           count={finished.length}
           extra={finished.length > FINISHED_PREVIEW && (
-            <button type="button" onClick={() => setShowAll(!showAll)} className="min-h-9 px-1 text-xs font-normal text-muted-foreground hover:text-foreground lg:min-h-0">
+            <button type="button" onClick={() => setShowAll(!showAll)} className="min-h-11 px-1 text-xs font-normal text-muted-foreground hover:text-foreground lg:min-h-0">
               {showAll ? "Show less" : "Show all"}
             </button>
           )}

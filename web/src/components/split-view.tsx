@@ -119,7 +119,7 @@ export function ThreadChips({ threads, coordinator, currentPaneId, onOpen, class
     const current = paneId === currentPaneId;
     return (
       <button key={key} type="button" aria-current={current ? "page" : undefined} onClick={() => !current && onOpen(paneId)}
-        className={cn("inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[13px] lg:h-7 lg:rounded-md lg:px-2.5",
+        className={cn("inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 text-[13px] lg:h-7 lg:rounded-md lg:px-2.5", "relative after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] lg:after:hidden",
           current ? "bg-muted font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground")}>
         {dot}{label}
       </button>

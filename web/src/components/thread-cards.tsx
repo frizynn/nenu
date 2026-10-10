@@ -74,11 +74,11 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
         );
         return (
           <article key={thread.id} aria-label={thread.title}
-            className={cn("rounded-xl border border-border bg-card/40 px-3.5", actions ? "py-3" : "py-2")}>
+            className={cn("relative rounded-xl border border-border bg-card/40 px-3.5", actions ? "py-3" : "py-2")}>
             <div className="flex min-h-7 items-center gap-2.5">
               {bucket === "ready" ? <Eye aria-hidden className="size-3.5 shrink-0 text-primary" /> : <ThreadStateDot state={threadDot(thread)} />}
               {!actions && open
-                ? <button type="button" onClick={open} className="flex min-w-0 flex-1 items-baseline gap-2.5 text-left">
+                ? <button type="button" onClick={open} className="flex min-w-0 flex-1 items-baseline gap-2.5 text-left after:absolute after:inset-0 after:rounded-xl after:content-['']">
                   <span className="shrink-0 text-sm font-medium">{thread.title}</span>
                   <span className="truncate text-[13px] text-muted-foreground">{threadDetail(thread, panes)}</span>
                 </button>
@@ -92,10 +92,10 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
             </div>
             {actions && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {mergeable && <button type="button" className="h-9 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
+                {mergeable && <button type="button" className="h-11 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
                   onClick={() => { setError(null); setMerging(thread); }}>Merge it</button>}
-                {bucket === "needs" && open && <button type="button" className="h-9 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
-                {open && <button type="button" className="h-9 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>}
+                {bucket === "needs" && open && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
+                {open && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>}
               </div>
             )}
           </article>
