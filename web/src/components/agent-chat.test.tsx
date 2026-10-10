@@ -88,7 +88,7 @@ describe("AgentChat — reply flow", () => {
 
   it("keeps the draft and surfaces the error when the bridge rejects the send", async () => {
     server.use(
-      http.post(/\/api\/pane\/[^/]+\/reply$/, () =>
+      http.post(/\/api\/pane\/[^/]+\/send$/, () =>
         HttpResponse.json({ ok: false, error: "agent busy" }),
       ),
     );
@@ -926,7 +926,7 @@ it("keeps an open session on screen when a newer build is announced, even withou
 
 it("allows a send attempt during a brief signal loss and retains the draft if it fails", async () => {
   __resetConnectionHealth();
-  server.use(http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
+  server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => new HttpResponse("Signal unavailable", { status: 503 })));
   renderChat({ error: true });
   const box = screen.getByPlaceholderText(/type a reply/i);
   await userEvent.type(box, "keep this during weak signal");

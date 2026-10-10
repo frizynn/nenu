@@ -1149,7 +1149,7 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
-            working={agent?.agent === "codex" && (agent.status === "working" || hasCodexInterruptCue(modelSource.text))}
+            working={agent?.status === "working" || (agent?.agent === "codex" && hasCodexInterruptCue(modelSource.text))}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
