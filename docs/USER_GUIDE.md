@@ -190,10 +190,19 @@ Discovery follows `HERDR_PROJECTS_ROOT`, then `root` in `~/.config/herdr-project
 `~/.herdr-projects`. Projects are scoped to their recorded Herdr session. The overview reads existing
 project records and live panes; it does not create projects or start agents.
 
-On a project page, **Templates** lists available `herdr-organizations` templates. Choose **Open** to
-enter a title, parent, and task, then choose **Start** to open the node. Choose **Close** on an active
-thread to close its node and view while keeping its branch, worktree, and report. These actions
-require a device with write access and a `herdr-organizations` CLI that supports templates.
+Every view of a project (its page, the panel beside a coordinator, the phone's **Threads** tab and
+the sidebar) draws the same tree as Herdr Organizations' popup. It shows only what is open, nested
+under the coordinators that run it, coordinators first and then needs you, review, working and idle.
+Everything resolved sits in one grey **History** at the end, closed until you open it; each resolved
+coordinator folds over the threads it ran, newest first. Tapping a node opens its chat when it runs in
+a live pane, and its detail page otherwise; nothing jumps elsewhere.
+
+**Close** (the check on an open row) stops a node and its view and keeps its branch, worktree and
+report. A coordinator that still runs open work is refused until those are closed. **Replace
+coordinator** (on the coordinator's row) stops the project coordinator and starts a new one on the
+agent you choose (`herdr-organizations coordinator replace`). **New thread** and **New coordinator**
+start nodes, from a template when the project has them. These actions need a device with write
+access and Herdr Organizations; upstream herdr-projects can only close and start top-level threads.
 
 In a chat, open **Files and photos** to browse file references and images from its available journal.
 The browser can load older entries and reports when the underlying journal is truncated. File

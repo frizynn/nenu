@@ -138,8 +138,12 @@ the unit name; the Herdr action runs from anywhere.
   the journal events. On a healthy stream the router poll (snapshot + pane), the busy transcript,
   the queue and the dialogs all relax to a 10 s safety net
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
-- Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
-  `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
+- Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/project/:projectSlug`,
+  `/project/:projectSlug/node/:nodeId`, `/settings`, `/pane/:paneId` and `/pane/:paneId/history`.
+  The router instance is module-scoped so it keeps its location.
+- **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
+  Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
+  Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
   describe connection health. Brief failures retry quietly; only sustained outages show the
