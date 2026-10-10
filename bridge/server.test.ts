@@ -2,31 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  BUILD_HEADER,
-  cacheControlFor,
-  checkAccess,
-  marksPaneSeen,
-  SEEN_HEADER,
-  deviceAuth,
-  guard,
-  historyParams,
-  hasCodexInterruptCue,
-  interruptCodexPane,
-  isHostAllowed,
-  isLoopbackPeer,
-  isReservedAuthPath,
-  keysPane,
-  normalizeTabLabel,
-  paneReadResponse,
-  replyPane,
-  resolveStaticPath,
-  sendReplySteps,
-  startupWarnings,
-  staticContentType,
-  withBuildHeader,
-  type ReplySender,
-} from "./server.ts";
+import { startupWarnings } from "./server.ts";
+import { checkAccess, deviceAuth, guard, isHostAllowed, isLoopbackPeer } from "./routes/access.ts";
+import { historyParams } from "./routes/history.ts";
+import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
+import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
+import { paneReadResponse } from "./routes/pane.ts";
+import { interruptCodexPane, keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
+import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
+import { normalizeTabLabel } from "./routes/structure.ts";
+import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
 import type { Config } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";

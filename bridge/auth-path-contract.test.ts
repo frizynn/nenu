@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isReservedAuthPath } from "./server.ts";
+import { isReservedAuthPath } from "./routes/static.ts";
 import { isNetworkOnlyNavigation } from "../web/src/lib/sw-routes.ts";
 
 // The `/auth/` reservation is implemented twice — once in the service worker's navigation denylist

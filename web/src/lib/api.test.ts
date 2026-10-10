@@ -4,7 +4,12 @@ import { server } from "@/test/setup";
 import { fixtureSnapshot } from "@/test/handlers";
 import { __resetConnectionHealth, lastHealthyAt } from "./connection-health";
 import {
+  answerInteraction,
+  changeMessageQueue,
   checkForUpdates,
+  fetchInteractions,
+  journalImageUrl,
+  sendMessage,
   createTab,
   fetchPane,
   fetchSnapshot,
@@ -158,6 +163,80 @@ describe("api client", () => {
 // fast-forward a 10s budget. Instead we spy on AbortSignal.timeout to assert the RIGHT budget is
 // requested per endpoint class and that its signal reaches fetch, plus one real-timer test (tiny ms)
 // proving the produced signal actually aborts a pending op with a TimeoutError.
+describe("api client — guarded send, interactions and queue", () => {
+  it("sendMessage posts the request as-is and returns the bridge's outcome", async () => {
+    let body: unknown;
+    server.use(
+      http.post(/\/api\/pane\/w1%3Ap1\/send$/, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ ok: true, requestId: "r1", ack: "queued", queueId: "q1" });
+      }),
+    );
+    const request = { text: "hi", requestId: "r1", deliveryMode: "afterTurn" as const };
+    await expect(sendMessage("w1:p1", request)).resolves.toEqual({ ok: true, requestId: "r1", ack: "queued", queueId: "q1" });
+    expect(body).toEqual(request);
+  });
+
+  it("sendMessage returns a refused send's outcome instead of throwing", async () => {
+    const refused = { ok: false, requestId: "r1", stage: "verify", error: "text not seen", textDelivered: true };
+    server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => HttpResponse.json(refused, { status: 409 })));
+    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).resolves.toEqual(refused);
+  });
+
+  it("sendMessage still throws on a failure that carries no outcome", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => new HttpResponse("herdr down", { status: 502 })));
+    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).rejects.toThrow(/502/);
+  });
+
+  it("fetchInteractions reads the session's dialogs", async () => {
+    let session: string | null = null;
+    server.use(
+      http.get("/api/interactions", ({ request }) => {
+        session = new URL(request.url).searchParams.get("session");
+        return HttpResponse.json({ interactions: [] });
+      }),
+    );
+    await expect(fetchInteractions("phone")).resolves.toEqual({ interactions: [] });
+    expect(session).toBe("phone");
+  });
+
+  it("answerInteraction posts the signature and option, and returns a stale-card refusal", async () => {
+    let body: unknown;
+    server.use(
+      http.post(/\/api\/interactions\/w1%3Ap1\/answer$/, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ ok: false, error: "menu changed", code: "interaction_changed" }, { status: 409 });
+      }),
+    );
+    await expect(answerInteraction("w1:p1", { signature: "sig", optionIndex: 1 })).resolves.toEqual({
+      ok: false,
+      error: "menu changed",
+      code: "interaction_changed",
+    });
+    expect(body).toEqual({ signature: "sig", optionIndex: 1 });
+  });
+
+  it("journalImageUrl addresses an image by entry and index, never by path", () => {
+    expect(journalImageUrl("w1:p1", "u 1", 2, "phone")).toBe("/api/pane/w1%3Ap1/journal-image?entry=u%201&n=2&session=phone");
+  });
+
+  it("changeMessageQueue sends deliveryMode only when given", async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ available: true, scope: "s", messages: [] });
+      }),
+    );
+    await changeMessageQueue("w1:p1", { scope: "s", action: "add", id: "m1", text: "hi" });
+    await changeMessageQueue("w1:p1", { scope: "s", action: "add", id: "m2", text: "hi", deliveryMode: "asap" });
+    expect(bodies).toEqual([
+      { scope: "s", action: "add", id: "m1", text: "hi" },
+      { scope: "s", action: "add", id: "m2", text: "hi", deliveryMode: "asap" },
+    ]);
+  });
+});
+
 describe("api client — request timeouts", () => {
   afterEach(() => vi.restoreAllMocks());
 

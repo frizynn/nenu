@@ -165,6 +165,14 @@ export const handlers = [
     recordReply((await request.json()) as { text?: string; submit?: boolean });
     return HttpResponse.json({ ok: true });
   }),
+  // The one-request guarded send: it lands like a submitted reply, so the fake input line clears.
+  http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+    const body = (await request.json()) as { text: string; requestId: string };
+    recordReply({ text: body.text, submit: true });
+    return HttpResponse.json({ ok: true, requestId: body.requestId, ack: "submitted" });
+  }),
+  http.get("/api/interactions", () => HttpResponse.json({ interactions: [] })),
+  http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/close$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/rename$/, () => HttpResponse.json({ ok: true })),
