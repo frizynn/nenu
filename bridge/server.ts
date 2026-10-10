@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { ClaudeHooks } from "./claude-hooks.ts";
 import { ClaudeTelemetry } from "./claude-telemetry.ts";
-import { CodexLive } from "./codex-live.ts";
 import { isLoopbackBindHost, type Config } from "./config.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
@@ -112,7 +111,6 @@ export function startServer(opts: ServerDeps) {
     interactions: new Interactions(live),
     paneWatcher: new PaneWatcher(live),
     journalWatch: new JournalWatch(live),
-    codexLive: new CodexLive(live),
     claudeHooks: new ClaudeHooks(live),
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.

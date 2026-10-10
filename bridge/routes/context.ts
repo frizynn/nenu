@@ -2,7 +2,6 @@ import type { ActivityLedger } from "../activity.ts";
 import type { AuditLog } from "../audit.ts";
 import type { ClaudeHooks } from "../claude-hooks.ts";
 import type { ClaudeTelemetry } from "../claude-telemetry.ts";
-import type { CodexLive } from "../codex-live.ts";
 import type { Config } from "../config.ts";
 import type { ConversationService } from "../conversation-service.ts";
 import type { Interactions } from "../interactions.ts";
@@ -59,7 +58,6 @@ export interface Services extends ServerDeps {
   interactions: Interactions;
   paneWatcher: PaneWatcher;
   journalWatch: JournalWatch;
-  codexLive: CodexLive;
   claudeHooks: ClaudeHooks;
 }
 
