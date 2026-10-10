@@ -195,10 +195,10 @@ describe("the sidebar", () => {
     projects: [awam], sessions: [], session: undefined, bridge: "connected", error: false,
   } as unknown as HomeData;
 
-  function open(path = "/") {
+  function open(path = "/", source: HomeData = herd) {
     const router = createMemoryRouter([
-      { path: "/", element: <WorkbenchSidebar data={herd} /> },
-      { path: "/pane/:paneId", element: <WorkbenchSidebar data={herd} /> },
+      { path: "/", element: <WorkbenchSidebar data={source} /> },
+      { path: "/pane/:paneId", element: <WorkbenchSidebar data={source} /> },
     ], { initialEntries: [path] });
     render(<RouterProvider router={router} />);
     return userEvent.setup();
@@ -227,6 +227,23 @@ describe("the sidebar", () => {
     await user.click(screen.getByRole("button", { name: "rediseño mobile threads" }));
     expect(screen.queryByText("panel depo")).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "awam/t1": false });
+  });
+
+  it("finds a project pane that runs no thread, under its project", async () => {
+    const user = open();
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.keyboard("stray");
+    const project = screen.getByRole("region", { name: "AWAM" });
+    expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
+    expect(within(project).queryByRole("link", { name: /^Coordinator/ })).not.toBeInTheDocument();
+  });
+
+  it("shows a coordinator thread's own state beside its threads' dots", () => {
+    const blocked = { ...awam, threads: awam.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "blocked" as const } : item) };
+    open("/", { ...herd, projects: [blocked] });
+    const head = screen.getByRole("link", { name: /^rediseño mobile/ });
+    expect(head).toHaveAccessibleName("rediseño mobile, needs you");
+    expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs you");
   });
 
   it("counts what needs you and narrows the list to it", async () => {

@@ -6,6 +6,7 @@ import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { looseWorkspaces, needsYou, WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet } from "@/components/ui/sheet";
 import { useSpaceActions } from "@/hooks/use-spaces";
+import { isCatchingUp, isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, projectPath, settingsPath, spacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
@@ -16,6 +17,17 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 /** What the phone's navigation sheet opened for; null while it is closed. */
 type Sheet = "browse" | "needs-you" | "search" | null;
 const SHEET_TITLE = { browse: "Navigation", "needs-you": "Needs you", search: "Search" } as const;
+
+/** A page's own search box, which ⌘K focuses instead of opening the sidebar search. */
+const PAGE_SEARCH = '.workbench-main [aria-keyshortcuts~="Meta+K"], .workbench-main input[aria-label="Jump to a project or chat"]';
+
+/** ⌘ on Apple keyboards. Elsewhere Ctrl, except in a text field, where Ctrl+K and Ctrl+N edit text. */
+function isShortcut(event: KeyboardEvent): boolean {
+  if (event.metaKey) return !event.ctrlKey;
+  if (!event.ctrlKey || /Mac|iPhone|iPad/.test(navigator.platform)) return false;
+  const target = event.target as HTMLElement | null;
+  return !target?.closest?.("input, textarea, select, [contenteditable]:not([contenteditable=false])");
+}
 
 /** The breakpoint where workbench.css shows the sidebar instead of the tab bar. */
 const DESKTOP = "(min-width: 1024px)";
@@ -56,17 +68,21 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   }
   const search = () => reveal("search");
 
-  // ⌘K searches and ⌘N starts something new. A screen that binds the same key first (Home's
-  // jump box) keeps it by preventing the default.
+  // ⌘K searches and ⌘N starts something new. A screen with its own search box (Home's jump box)
+  // gets ⌘K: the shell focuses that box, so the outcome does not depend on listener order.
   const latest = useRef({ search, newChat });
   latest.current = { search, newChat };
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.defaultPrevented || event.altKey || event.shiftKey || !isShortcut(event) || isLocked() || isCatchingUp()) return;
       const key = event.key.toLowerCase();
       if (key === "k") {
         event.preventDefault();
-        latest.current.search();
+        const own = document.querySelector<HTMLInputElement>(PAGE_SEARCH);
+        if (own) {
+          own.focus();
+          own.select();
+        } else latest.current.search();
       } else if (key === "n" && latest.current.newChat) {
         event.preventDefault();
         latest.current.newChat();

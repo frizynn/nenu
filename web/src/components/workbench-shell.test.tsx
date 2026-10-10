@@ -1,9 +1,13 @@
+import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
 import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
+import { QuickJump } from "./home-panels";
+import { setLocked } from "@/lib/idle";
+import { openNewAgent, useNewAgentRequest } from "@/lib/spawn";
 import type { HomeData } from "@/lib/loaders";
 
 const data: HomeData = {
@@ -160,4 +164,54 @@ it("can reopen the mobile workspace drawer after navigation and Escape", async (
   expect(trigger).toHaveFocus();
   await user.click(trigger);
   expect(screen.getByRole("dialog", { name: "Navigation" })).toBeInTheDocument();
+});
+
+function desktop() {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+  onTestFinished(() => { window.matchMedia = matchMedia; });
+}
+
+it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async () => {
+  desktop();
+  const shell = (page: ReactNode) => <WorkbenchShell data={data}>{page}</WorkbenchShell>;
+  const router = createMemoryRouter([
+    { path: "/pane/:paneId", element: shell(<p>Pane</p>) },
+    { path: "/", element: shell(<QuickJump agents={data.agents} session="work" now={Date.now()} />) },
+  ], { initialEntries: ["/pane/w%3A1%3Ap2?s=work"] });
+  render(<RouterProvider router={router} />);
+  await router.navigate("/?s=work");
+  await userEvent.setup().keyboard("{Meta>}k{/Meta}");
+  expect(await screen.findByRole("searchbox", { name: "Jump to a project or chat" })).toHaveFocus();
+  expect(screen.queryByRole("searchbox", { name: "Search projects and chats" })).not.toBeInTheDocument();
+});
+
+function NewAgentProbe() {
+  return useNewAgentRequest() ? <p>New agent sheet</p> : null;
+}
+
+it("ignores Cmd+K and Cmd+N behind the idle lock", async () => {
+  desktop();
+  onTestFinished(() => { setLocked(false); openNewAgent(null); });
+  const element = <WorkbenchShell data={data}><NewAgentProbe /></WorkbenchShell>;
+  render(<RouterProvider router={createMemoryRouter([{ path: "*", element }], { initialEntries: ["/?s=work"] })} />);
+  const user = userEvent.setup();
+  setLocked(true);
+  await user.keyboard("{Meta>}k{/Meta}{Meta>}n{/Meta}");
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(screen.queryByText("New agent sheet")).not.toBeInTheDocument();
+  setLocked(false);
+  await user.keyboard("{Meta>}n{/Meta}");
+  expect(screen.getByText("New agent sheet")).toBeInTheDocument();
+});
+
+it("leaves Ctrl+K to a text field off Apple platforms, and opens search from elsewhere", async () => {
+  desktop();
+  const { sidebar, user } = setup(data, "/pane/w%3A1%3Ap2?s=work");
+  await user.click(screen.getByRole("textbox", { name: "Draft" }));
+  await user.keyboard("{Control>}k{/Control}");
+  expect(sidebar.queryByRole("searchbox")).not.toBeInTheDocument();
+  (document.activeElement as HTMLElement).blur();
+  await user.keyboard("{Control>}k{/Control}");
+  expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });

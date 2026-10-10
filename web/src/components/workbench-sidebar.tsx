@@ -126,7 +126,7 @@ function SidebarTree({ data, query, onNavigate }: { data: HomeData; query: strin
   const { paneId, projectSlug } = useParams();
   const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs();
   const searching = query.trim() !== "";
-  const groups = projectGroups(data.projects, query);
+  const groups = sidebarProjects(data, query);
   const loose = looseWorkspaces(data);
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
   useRevealProject(currentProject, setExpanded);
@@ -140,7 +140,7 @@ function SidebarTree({ data, query, onNavigate }: { data: HomeData; query: strin
         <h3 className="nav-label">Projects</h3>
         {groups.map((group) => (
           <ProjectSection key={group.project.slug} group={group} data={data} open={searching || (prefs.expanded[group.project.slug] ?? true)}
-            searching={searching} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} withPanes />
+            searching={searching} expanded={prefs.expanded} onExpand={setExpanded} onNavigate={onNavigate} panes={group.panes} />
         ))}
       </section>
     )}
@@ -152,6 +152,21 @@ function SidebarTree({ data, query, onNavigate }: { data: HomeData; query: strin
     )}
     {groups.length === 0 && !hasWorkspaces && <Empty query={query} />}
   </>;
+}
+
+/**
+ * The project groups matching the query, each with the panes in its workspaces outside every thread.
+ * The sidebar has no "Other chats", so a project also shows up when only one of those panes matches.
+ */
+function sidebarProjects(data: HomeData, query: string): Array<ProjectGroup & { panes: AgentView[] }> {
+  const groups = projectGroups(data.projects, query);
+  return (data.projects ?? []).flatMap((project) => {
+    const group = groups.find((match) => match.project === project);
+    const whole = matches(query, project.name, project.slug, project.goal);
+    const panes = projectPanes(data, project).filter((pane) => whole || chatMatches(pane, query) || matches(query, paneSubject(pane)));
+    if (group) return [{ ...group, panes }];
+    return panes.length ? [{ project, coordinator: false, open: [], resolved: [], panes }] : [];
+  });
 }
 
 /**
@@ -326,14 +341,14 @@ function StateDot({ state, className = "size-2" }: { state: ThreadState; classNa
     : <StatusDot status={state} surface="bg-transparent" className={className} />;
 }
 
-function ProjectSection({ group, data, open, searching, expanded, onExpand, onNavigate, withPanes = false }: TreeFolds & {
+function ProjectSection({ group, data, open, searching, expanded, onExpand, onNavigate, panes = [] }: TreeFolds & {
   group: ProjectGroup;
   data: HomeData;
   open: boolean;
   searching: boolean;
   onNavigate?: () => void;
-  /** Also list the project's workspace panes outside every thread; the sidebar has no "Other chats". */
-  withPanes?: boolean;
+  /** The project's workspace panes outside every thread, listed after its threads. */
+  panes?: AgentView[];
 }) {
   const { paneId, projectSlug } = useParams();
   const listId = useId();
@@ -341,7 +356,6 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
   const session = data.session;
   const status = project.coordinator?.liveStatus;
   const openCount = project.threads.filter(isOpenThread).length;
-  const others = withPanes && !searching ? projectPanes(data, project) : [];
   const row = (thread: ProjectThreadView, depth: number) => (
     <ThreadRow key={thread.id} thread={thread} depth={depth} slug={project.slug} session={session} current={thread.paneId !== undefined && thread.paneId === paneId} onNavigate={onNavigate} />
   );
@@ -387,7 +401,7 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
             </Link>
           )}
           {threadTree(group.open).map((node) => branch(node, 1))}
-          {others.map((pane) => (
+          {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)} onClick={onNavigate}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
               {pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} surface="bg-transparent" className="size-2" />}
@@ -442,11 +456,11 @@ function ThreadRow({ thread, depth, slug, session, current, onNavigate, fold, ki
       )}
       <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head")} style={depthStyle(depth)} to={thread.paneId ? panePath(thread.paneId, session) : projectPath(slug, session)}
         onClick={onNavigate} aria-current={current ? "page" : undefined}>
-        {!fold && <StateDot state={state} />}
+        <StateDot state={state} />
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {state === "review" ? "ready for review" : STATUS_LABEL[state]}</span>
         {kids && kids.length > 0 && <span className="nav-dots" aria-hidden>{kids.slice(0, 6).map((kid, index) => <StateDot key={index} state={kid} className="size-1.5" />)}</span>}
-        {!kids && word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
+        {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
         {note && !word && !kids?.length && <span className="nav-row-note">{note}</span>}
       </Link>
     </div>
