@@ -313,7 +313,7 @@ export class QueueService {
           }),
         ),
         // Delivered in the last minutes, with what the CLI's own queue did with each.
-        delivered: delivered.map(({ id, text, sentAt, deliveryMode, native }) => ({ id, text, sentAt, deliveryMode, native })),
+        delivered: delivered.map(({ id, text, sentAt, deliveryMode, native, readNowAt }) => ({ id, text, sentAt, deliveryMode, native, readNowAt })),
       });
     } catch {
       return Response.json(
@@ -324,11 +324,14 @@ export class QueueService {
   }
   /**
    * "Read it now": Claude's send-now chord for a row its native queue still holds. It can background
-   * the running tool, so the operator confirms it first. Null when it went out, else the refusal.
+   * the running tool, so the operator confirms it first, and it goes once per row: a repeat, or a tap
+   * after Claude read the row, presses nothing. Null when the row went out now or before, else the
+   * refusal.
    */
   private async sendNow(scope: string, id: string, confirmed: boolean, current: Context, device: string | null) {
     const keys = sendNowKeys(current.pane.agent);
     const row = (await this.queue.recent(scope)).find((item) => item.id === id);
+    if (row && (row.readNowAt !== undefined || row.native === "absorbed")) return null;
     if (!keys || !row || row.native !== "enqueued" || !this.extras.audit)
       return { error: "Only a message waiting in Claude's own queue can be read now.", code: "unsupported" };
     if (!confirmed)
@@ -336,7 +339,11 @@ export class QueueService {
         error: "Claude reads it now and moves a running command to the background. Confirm to continue.",
         code: "confirm_required",
       };
-    const result = await this.input.run(row.session, row.paneId, () => sendQueuedNow(row.paneId, row.agent, keys, this.audited({ ...row, device }, current.herdr, "queue.now")));
+    const result = await this.input.run(row.session, row.paneId, async () => {
+      const sent = await sendQueuedNow(row.paneId, row.agent, keys, this.audited({ ...row, device }, current.herdr, "queue.now"));
+      if (sent.ok) await this.queue.markReadNow(row.id);
+      return sent;
+    });
     if (result.busy) return { error: "Another terminal action is finishing. Try again.", code: "busy" };
     return result.value.ok ? null : { error: result.value.error, code: "not_ready" };
   }

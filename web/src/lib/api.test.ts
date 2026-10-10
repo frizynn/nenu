@@ -173,7 +173,7 @@ describe("api client", () => {
       http.post(/\/api\/pane\/[^/]+\/upload$/, () => new HttpResponse("too big", { status: 413 })),
     );
     const file = new File(["x"], "x.png", { type: "image/png" });
-    await expect(uploadImage("w1:p1", file)).rejects.toThrow(/413/);
+    await expect(uploadImage("w1:p1", file)).rejects.toMatchObject({ status: 413, message: "That's too large to send." });
   });
 
   it("checkForUpdates POSTs (no body) and returns the fresh UpdateInfo", async () => {
@@ -200,7 +200,7 @@ describe("api client", () => {
 
   it("checkForUpdates throws on a non-2xx response", async () => {
     server.use(http.post("/api/update/check", () => new HttpResponse("down", { status: 503 })));
-    await expect(checkForUpdates()).rejects.toThrow(/503/);
+    await expect(checkForUpdates()).rejects.toMatchObject({ status: 503 });
   });
 });
 
@@ -231,7 +231,7 @@ describe("api client — guarded send, interactions and queue", () => {
 
   it("sendMessage still throws on a failure that carries no outcome", async () => {
     server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => new HttpResponse("herdr down", { status: 502 })));
-    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).rejects.toThrow(/502/);
+    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).rejects.toMatchObject({ status: 502 });
   });
 
   it("fetchInteractions reads the session's dialogs", async () => {
@@ -409,7 +409,7 @@ describe("api client — connection-health stamping", () => {
   it("does NOT stamp when a poll fails (the throw precedes the stamp)", async () => {
     server.use(http.get("/api/snapshot", () => new HttpResponse("boom", { status: 502 })));
     __resetConnectionHealth(1);
-    await expect(fetchSnapshot()).rejects.toThrow(/502/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 502 });
     expect(lastHealthyAt()).toBe(1);
   });
 });
@@ -453,13 +453,13 @@ describe("api client — identity proxy refusals", () => {
 
   it("turns a fronting proxy 3xx into the 401 auth path the loader understands", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 302 }));
-    await expect(fetchSnapshot()).rejects.toThrow(/401.*requires sign-in/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 401, message: "Your sign-in expired. Sign in again." });
   });
 
   it("turns a browser manual opaqueredirect into the same 401 auth path", async () => {
     const response = new Response(null, { status: 200 });
     Object.defineProperty(response, "type", { value: "opaqueredirect" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
-    await expect(fetchSnapshot()).rejects.toThrow(/401.*requires sign-in/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 401, message: "Your sign-in expired. Sign in again." });
   });
 });

@@ -25,6 +25,8 @@ export interface QueuedMessage {
   stranded?: { reason: string; since: number };
   /** What the CLI's own queue did with it, from the CLI's journal (queue-native.ts). */
   native?: NativeQueueState;
+  /** When the operator had the CLI read it now. The keys go once; a repeat presses nothing. */
+  readNowAt?: number;
   device: string | null;
 }
 export type QueueOutcome = {
@@ -294,6 +296,12 @@ export class MessageQueue {
     });
     if (row) this.notify(row);
   }
+  /** Record that the CLI was told to read a delivered row now. */
+  async markReadNow(id: string) {
+    await this.settle({ id }, (row) => {
+      row.readNowAt = this.now();
+    });
+  }
   /** Rows the journal may still say something about: delivered recently, or paused after a claim. */
   async unconfirmed() {
     await this.ready;
@@ -432,7 +440,7 @@ export class MessageQueue {
     });
     return !run.busy && run.value;
   }
-  private async settle(target: QueuedMessage, apply: (row: QueuedMessage) => void) {
+  private async settle(target: Pick<QueuedMessage, "id">, apply: (row: QueuedMessage) => void) {
     const row = await this.mutate(() => {
       const row = this.rows.find((item) => item.id === target.id);
       if (!row) return null;
