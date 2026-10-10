@@ -1,12 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchMessageQueue, changeMessageQueue } from "@/lib/api";
+import { ApiError, fetchMessageQueue, changeMessageQueue } from "@/lib/api";
 import { setLocked } from "@/lib/idle";
 import { resetLiveEvents } from "@/lib/live-events";
 import { fakeLiveStream } from "@/test/live-stream";
 import { queueRowStatus, useMessageQueue } from "./use-message-queue";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
   fetchMessageQueue: vi.fn(),
   changeMessageQueue: vi.fn(),
 }));
@@ -229,6 +230,46 @@ describe("the send-time choice reaches the bridge", () => {
     expect(changeMessageQueue).toHaveBeenCalledTimes(1);
     expect(vi.mocked(changeMessageQueue).mock.calls[0]![1]).toMatchObject({ text: "Next" });
     hook.unmount();
+  });
+
+  // A refused add would be refused again on every resend, and a pending add holds every later send.
+  it("forgets an add the bridge refused, so the next message is not held behind it", async () => {
+    const long = "x".repeat(20_001);
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(
+      new ApiError("Use a message between 1 and 20,000 characters without terminal controls.", 400),
+    );
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.add(long, "afterTurn")).toBeNull();
+    });
+    expect(hook.result.current.error).toMatch(/20,000 characters/);
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => {
+      expect(await hook.result.current.add("short follow up", "afterTurn")).not.toBeNull();
+    });
+    hook.unmount();
+  });
+
+  it("stops resending a saved add once the bridge refuses it", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(key, JSON.stringify({ id: "full", text: "Later", scope: "conversation-one", createdAt: Date.now() }));
+    vi.mocked(changeMessageQueue).mockRejectedValue(new ApiError("Queue is full.", 409));
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    try {
+      await act(async () => {});
+      expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(key)).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+    } finally {
+      hook.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it("sends a new mode for the same text as a new row, so the latest pick is the one that goes", async () => {

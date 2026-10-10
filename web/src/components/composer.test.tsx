@@ -376,6 +376,54 @@ describe("Composer — send", () => {
     expect(sends[2]!.requestId).not.toBe(sends[0]!.requestId);
   });
 
+  // The bridge may have typed and submitted before the answer was lost, so the retry has to be the
+  // same request: the ledger replays the success instead of typing a second copy.
+  it("retries a send whose answer was lost under the same request id", async () => {
+    const user = userEvent.setup();
+    let dropped = false;
+    const requests = serveSend();
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+        if (dropped) return undefined;
+        dropped = true;
+        requests.push((await request.clone().json()) as SendRequest);
+        return HttpResponse.error();
+      }),
+    );
+    const props = renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "deploy the thing");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/may already be sent/i));
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.requestId).toBe(requests[0]!.requestId);
+  });
+
+  it("a send the server refused outright gets a fresh request id on retry", async () => {
+    const user = userEvent.setup();
+    let refused = false;
+    const requests = serveSend();
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+        if (refused) return undefined;
+        refused = true;
+        requests.push((await request.clone().json()) as SendRequest);
+        return new HttpResponse("bad request", { status: 400 });
+      }),
+    );
+    const props = renderComposerWithStatus();
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "fix the typo");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/bad request/i));
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.requestId).not.toBe(requests[0]!.requestId);
+  });
+
   it("two identical messages are two requests, each answered on its own", async () => {
     const user = userEvent.setup();
     const sends = serveSend();

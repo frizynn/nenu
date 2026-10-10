@@ -729,6 +729,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       : { paneId, text: t, id: crypto.randomUUID(), typeAttempted: true, keep: false };
     pendingDeliveryRef.current = delivery;
     if (!action) setDeliveryPhase("queued");
+    // Set once the write is on the wire: from then on a lost answer may hide a message already typed.
+    let posted = false;
     try {
       if (action !== "model" && prepareSend && !(await prepareSend())) {
         failSend(started, "");
@@ -739,6 +741,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return false;
       }
       let res: ReplyOutcome;
+      posted = true;
       if (force) {
         // "Type anyway" skips the pre-flight, which the bridge's one-request send never does, so the
         // override keeps the browser guard: it still withholds Enter until it sees the text.
@@ -835,9 +838,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return false;
       }
     } catch (e) {
-      failSend(started, e instanceof Error ? e.message : String(e));
-      setDeliveryPhase("retry");
-      setStatus(e instanceof Error ? e.message : String(e), "error");
+      // The answer was lost after the request went out (network drop, timeout, 5xx): the bridge may
+      // already have typed and submitted it. Keep the request id so a retry replays that outcome
+      // instead of typing a second copy, and point the operator at Terminal rather than a resend.
+      const unknown = posted && !api.isDefiniteRefusal(e);
+      if (unknown) delivery.keep = true;
+      const error = unknown ? "No answer from Nenu, so the message may already be sent. Check Terminal before sending again." : e instanceof Error ? e.message : String(e);
+      failSend(started, error, false, unknown);
+      setDeliveryPhase(unknown ? "check" : "retry");
+      setStatus(error, "error");
       return false;
     } finally {
       setSending(false);

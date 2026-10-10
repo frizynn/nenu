@@ -60,7 +60,7 @@ export type { NotifyPrefs, UpdateInfo };
 export const XHR_HEADER = "x-requested-with";
 export const XHR_HEADER_VALUE = "XMLHttpRequest";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
     super(message);
@@ -72,6 +72,15 @@ class ApiError extends Error {
 /** True when an API request failed with the given HTTP status. */
 export function isApiErrorStatus(error: unknown, status: number): boolean {
   return error instanceof ApiError && error.status === status;
+}
+
+/**
+ * True when the server answered a request with a definite no (a 4xx other than a timeout), so the
+ * write did not happen. A network error, a timeout or a 5xx leaves the outcome unknown: the request
+ * may have run before its answer was lost.
+ */
+export function isDefiniteRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408;
 }
 
 // Every request gets a deadline so a black-holed connection (phone sleep/wake, a Tailscale route
