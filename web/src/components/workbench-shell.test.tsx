@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
+import { onTestFinished } from "vitest";
 import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
 import type { HomeData } from "@/lib/loaders";
@@ -14,7 +15,6 @@ const data: HomeData = {
 };
 
 beforeEach(() => localStorage.clear());
-const chooseView = (nav: string) => localStorage.setItem("collie:sidebar:v1", JSON.stringify({ nav }));
 
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><span>Screen</span></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
@@ -53,36 +53,17 @@ const projectData: HomeData = {
   }],
 };
 
-it("lists projects with their coordinator status and keeps project panes out of other chats", () => {
-  chooseView("projects");
+it("lists projects with their coordinator status, and the loose chat under Workspaces", () => {
   const { sidebar } = setup(projectData, "/pane/w%3A1%3Ap9?s=work");
   const link = sidebar.getByRole("link", { name: /^Nenu Project/ });
   expect(link).toHaveAttribute("href", "/project/nenu?s=work");
   expect(link).toHaveAccessibleName("Nenu Project, coordinator needs you, 1 open task");
   // The open pane is the project's coordinator, so its row inside the project is the current one.
   expect(sidebar.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("aria-current", "page");
-  expect(sidebar.queryByRole("link", { name: /Coordinator pane/ })).not.toBeInTheDocument();
-  expect(within(sidebar.getByRole("region", { name: "Other chats" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
-});
-
-it("groups chats by recency with a status for each", () => {
-  chooseView("recent");
-  const now = Date.now();
-  const { sidebar } = setup({
-    ...data,
-    agents: [
-      { ...data.agents[0]!, paneId: "a", paneLabel: "Fresh", lastActiveAt: now },
-      { ...data.agents[0]!, paneId: "b", paneLabel: "Last week", status: "done", lastActiveAt: now - 3 * 86_400_000 },
-      { ...data.agents[0]!, paneId: "c", paneLabel: "Ancient", status: "idle" },
-    ],
-  });
-  expect(within(sidebar.getByRole("region", { name: "Today" })).getByRole("link")).toHaveAccessibleName("Fresh, working");
-  expect(within(sidebar.getByRole("region", { name: "Last 7 days" })).getByRole("link")).toHaveAccessibleName("Last week, done");
-  expect(within(sidebar.getByRole("region", { name: "Older" })).getByRole("link")).toHaveAccessibleName("Ancient, idle");
+  expect(within(sidebar.getByRole("region", { name: "Workspaces" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
 });
 
 it("searches projects by thread metadata and chats by name, then closes on Escape", async () => {
-  chooseView("projects");
   const { sidebar, user } = setup(projectData);
   await user.click(sidebar.getByRole("button", { name: "Search" }));
   const search = sidebar.getByRole("searchbox", { name: "Search projects and chats" });
@@ -111,9 +92,44 @@ it("filters without disturbing a mounted composer draft", async () => {
   expect(draft).toHaveValue("Keep this draft plus edits");
 });
 
-it("disables New chat on a read-only device", () => {
+it("disables New on a read-only device, in the sidebar and the tab bar", () => {
   const { sidebar } = setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
-  expect(sidebar.getByRole("button", { name: "New chat" })).toBeDisabled();
+  expect(sidebar.getByRole("button", { name: "New" })).toBeDisabled();
+  expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "New" })).toBeDisabled();
+});
+
+it("shows the tab bar off a pane, and its tabs open the navigation in the matching mode", async () => {
+  const { user } = setup({ ...data, agents: [{ ...data.agents[0]!, status: "blocked" }] });
+  const bar = within(screen.getByRole("navigation", { name: "Primary" }));
+  expect(bar.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  await user.click(bar.getByRole("button", { name: "Needs you, 1" }));
+  const sheet = within(screen.getByRole("dialog", { name: "Needs you" }));
+  // The tab bar already offers New, Search and Home, so the sheet starts at the list.
+  expect(sheet.queryByRole("button", { name: "New" })).not.toBeInTheDocument();
+  expect(sheet.getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  await user.click(bar.getByRole("button", { name: "Search" }));
+  expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
+});
+
+it("hides the tab bar on a pane, where the composer owns the bottom edge", () => {
+  setup(data, "/pane/w%3A1%3Ap2?s=work");
+  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
+});
+
+it("searches with Cmd+K and reaches every action from the collapsed rail", async () => {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
+  onTestFinished(() => { window.matchMedia = matchMedia; });
+  const { sidebar, user } = setup({ ...data, agents: [{ ...data.agents[0]!, status: "blocked" }] });
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
+  expect(rail.getByRole("link", { name: "Nenu" })).toHaveAttribute("href", "/space/w%3A1?s=work");
+  expect(rail.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
+  await user.click(rail.getByRole("button", { name: "Needs you, 1" }));
+  expect(sidebar.getByRole("button", { name: "Needs you, 1" })).toHaveAttribute("aria-pressed", "true");
+  await user.keyboard("{Meta>}k{/Meta}");
+  expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
 
 it("keeps desktop reopening outside the composer region and preserves the mounted draft", async () => {
