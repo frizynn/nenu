@@ -13,7 +13,7 @@ import { paneSubject, workspaceTree } from "@/lib/workspace-tree";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, settingsPath } from "@/lib/nav";
-import { STATE_LABEL, historyCount, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
+import { STATE_LABEL, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { chatMatches, isOpenThread, jumpTargets, matches, paneTitle, projectForPane, projectGroups, type ProjectGroup } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
@@ -232,7 +232,7 @@ function HostRow({ data, onNavigate }: { data: HomeData; onNavigate?: () => void
 }
 
 interface TreeFolds {
-  /** Explicit folds, keyed by project slug, `slug/threadId` for a coordinator, `slug/history` and `slug/history/threadId`. */
+  /** Explicit folds, keyed by project slug, `slug/threadId` for a coordinator, and `slug/history`. */
   expanded: Record<string, boolean>;
   onExpand: (key: string, open: boolean) => void;
 }
@@ -256,23 +256,22 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
   const openCount = project.threads.filter(isOpenThread).length;
   const tree = orgTree(group.threads);
   const isCurrent = (node: OrgNode) => (node.thread.paneId !== undefined && node.thread.paneId === paneId) || (projectSlug === project.slug && nodeId === node.thread.id);
-  const holdsCurrent = (node: OrgNode): boolean => isCurrent(node) || node.children.some(holdsCurrent);
-  // Open coordinators start open and History's start folded; a search or the node on screen opens them.
-  const branch = (node: OrgNode, depth: number, key: string, foldedByDefault: boolean): ReactNode => {
+  // Open coordinators start open and resolved ones folded; a search or the node on screen opens them.
+  const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
       onNavigate={onNavigate} fold={fold} />;
     if (node.children.length === 0) return row();
-    const foldKey = `${key}/${node.thread.id}`;
-    const nodeOpen = searching || (expanded[foldKey] ?? (!foldedByDefault || node.children.some(holdsCurrent)));
+    const key = `${project.slug}/${node.thread.id}`;
+    const nodeOpen = searching || (expanded[key] ?? (node.state !== "resolved" || node.children.some((child) => holds(child, isCurrent))));
     return (
       <div key={node.thread.id} role="group" aria-label={node.thread.title}>
-        {row({ open: nodeOpen, disabled: searching, onToggle: () => onExpand(foldKey, !nodeOpen) })}
-        {nodeOpen && node.children.map((child) => branch(child, depth + 1, key, foldedByDefault))}
+        {row({ open: nodeOpen, disabled: searching, onToggle: () => onExpand(key, !nodeOpen) })}
+        {nodeOpen && node.children.map((child) => branch(child, depth + 1))}
       </div>
     );
   };
   const historyKey = `${project.slug}/history`;
-  const historyOpen = searching || (expanded[historyKey] ?? tree.history.some(holdsCurrent));
+  const historyOpen = searching || (expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent)));
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
@@ -302,7 +301,7 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
                 : <span className="nav-row-note">{project.coordinator.agent}</span>}
             </Link>
           )}
-          {tree.open.map((node) => branch(node, 1, project.slug, false))}
+          {tree.open.map((node) => branch(node, 1))}
           {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)} onClick={onNavigate}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
@@ -317,7 +316,7 @@ function ProjectSection({ group, data, open, searching, expanded, onExpand, onNa
               title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
               <ChevronRight aria-hidden size={14} />History <span className="nav-count">{tree.resolved.coordinators + tree.resolved.threads}</span>
             </button>
-            {historyOpen && tree.history.map((node) => branch(node, 2, historyKey, true))}
+            {historyOpen && tree.history.map((node) => branch(node, 2))}
           </>}
         </div>
       )}

@@ -4,10 +4,11 @@
 // resolved coordinator holding the threads it ran, coordinators first and the newest first.
 import type { AgentStatus, ProjectThreadView } from "./types";
 
-/** What an open node waits on, most urgent first: the order open nodes are listed in. */
-export const OPEN_STATES = ["needs", "review", "working", "idle"] as const;
-export type OpenState = typeof OPEN_STATES[number];
+/** What an open node waits on. */
+export type OpenState = "needs" | "review" | "working" | "idle";
 export type NodeState = OpenState | "resolved";
+/** Most urgent first: the order open nodes are listed in. */
+const URGENCY: Record<NodeState, number> = { needs: 0, review: 1, working: 2, idle: 3, resolved: 4 };
 
 export const STATE_LABEL: Record<NodeState, string> = { needs: "Needs you", review: "Ready for review", working: "Working", idle: "Idle", resolved: "Resolved" };
 
@@ -47,7 +48,7 @@ export interface OrgTree {
 }
 
 const coordinatorsFirst = (a: OrgNode, b: OrgNode) => Number(a.thread.role !== "coordinator") - Number(b.thread.role !== "coordinator");
-const byUrgency = (a: OrgNode, b: OrgNode) => coordinatorsFirst(a, b) || OPEN_STATES.indexOf(a.state as OpenState) - OPEN_STATES.indexOf(b.state as OpenState);
+const byUrgency = (a: OrgNode, b: OrgNode) => coordinatorsFirst(a, b) || URGENCY[a.state] - URGENCY[b.state];
 const updatedAt = (node: OrgNode) => Date.parse(node.thread.updated ?? "") || 0;
 const newestFirst = (a: OrgNode, b: OrgNode) => coordinatorsFirst(a, b) || updatedAt(b) - updatedAt(a);
 
@@ -110,4 +111,9 @@ export function closeRefusal(node: OrgNode): string | undefined {
 /** Every node in a tree, depth first. */
 export function flatten(nodes: readonly OrgNode[]): OrgNode[] {
   return nodes.flatMap((node) => [node, ...flatten(node.children)]);
+}
+
+/** Whether a node or one under it passes `test`, e.g. holds the pane on screen. */
+export function holds(node: OrgNode, test: (node: OrgNode) => boolean): boolean {
+  return test(node) || node.children.some((child) => holds(child, test));
 }

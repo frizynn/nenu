@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 
-import { TaskRow, type Fold } from "@/components/node-row";
+import { TaskRow } from "@/components/node-row";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
 import { ProjectCoordinator } from "@/components/project-coordinator";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { closeRefusal, historyCount, nodeState, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
+import { closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
@@ -38,12 +38,11 @@ export function canMerge(project: ProjectView, thread: ProjectThreadView): boole
 export function threadDetail(thread: ProjectThreadView, panes: readonly AgentView[]): string {
   const state = nodeState(thread);
   const title = thread.paneId ? panes.find((pane) => pane.paneId === thread.paneId)?.terminalTitle : undefined;
-  if (state === "resolved") return thread.pr ? prSummary(thread.pr) : "Resolved";
   if (thread.status === "failed") return thread.note ?? "Failed to start";
   if (state === "needs") return title ?? thread.note ?? "Asked you a question";
   if (state === "review" && thread.pr) return prSummary(thread.pr);
   // Organizations' own note (pane closed, session unreachable, a remote agent's state) says more than Nenu can.
-  if (!thread.paneId) return thread.note || (state === "working" ? "working" : thread.status === "open" ? "not running" : thread.status);
+  if (!thread.paneId) return thread.note || (thread.status !== "open" ? thread.status : state === "working" ? "working" : "not running");
   return title ?? thread.note ?? STATUS_LABEL[thread.liveStatus ?? "unknown"];
 }
 
@@ -89,13 +88,10 @@ export function threadTree(project: ProjectView, coordinatorId?: string): Projec
   return tree;
 }
 
-interface ProjectTasksProps {
+interface OrgTreeProps {
   project: ProjectView;
-  /** The threads to list; the whole project when omitted. */
-  threads?: ProjectThreadView[];
-  /** Heading and its second line; the project's name and goal by default. */
-  title?: string;
-  subtitle?: ReactNode;
+  /** The nodes to draw: the whole project, or the work under one coordinator. */
+  threads: readonly ProjectThreadView[];
   /** Live panes, so a running thread can say what it is doing right now. */
   panes: readonly AgentView[];
   session?: string;
@@ -106,9 +102,17 @@ interface ProjectTasksProps {
   /** Opens any other node: its detail. */
   onOpenNode: (id: string) => void;
   onChanged: () => Promise<void> | void;
+  now?: number;
+}
+
+interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
+  /** The nodes to list; the whole project when omitted. */
+  threads?: readonly ProjectThreadView[];
+  /** Heading and its second line; the project's name and goal by default. */
+  title?: string;
+  subtitle?: ReactNode;
   /** Extra header control, e.g. the panel's collapse button. */
   action?: ReactNode;
-  now?: number;
 }
 
 /**
@@ -116,72 +120,58 @@ interface ProjectTasksProps {
  * urgent first) and one grey History of everything resolved. Every node opens its chat or its
  * detail; an open one can be closed and the coordinator replaced.
  */
-export function ProjectTasks({ project, threads = project.threads, title = project.name, subtitle = project.goal, panes, session, currentPaneId, readOnly,
-  onOpenPane, onOpenNode, onChanged, action, now = Date.now() }: ProjectTasksProps) {
+export function ProjectTasks({ threads, title, subtitle, action, ...tree }: ProjectTasksProps) {
+  const { project, panes, session, currentPaneId, readOnly, onOpenPane, onChanged } = tree;
   return (
     <div className="project-tasks">
-      <TasksHeader title={title} subtitle={subtitle} paused={project.status === "paused"} action={action} />
+      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} action={action} />
       <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />
-      <OrgTreeList project={project} threads={threads} panes={panes} session={session} currentPaneId={currentPaneId} readOnly={readOnly}
-        onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} now={now} />
+      <OrgTreeList {...tree} threads={threads ?? project.threads} />
       {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={() => void onChanged()} /></div>}
     </div>
   );
 }
 
-/** The open tree and History of a set of nodes: the shared body of every organization view. */
-export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }:
-  Omit<ProjectTasksProps, "title" | "subtitle" | "action" | "threads"> & { threads: readonly ProjectThreadView[] }) {
-  const [closing, setClosing] = useState<OrgNode | null>(null);
+/**
+ * The open tree and History of a set of nodes, the body of every organization view. History is
+ * grey behind one row that starts closed, each resolved coordinator folded over the threads it ran;
+ * what holds the pane on screen opens by itself.
+ */
+export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: OrgTreeProps) {
   const tree = orgTree(threads);
-  const open = (thread: ProjectThreadView) => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id);
-  const row = (node: OrgNode, extra: { fold?: Fold; children?: ReactNode } = {}) => (
-    <TaskRow key={node.thread.id} state={node.state} title={node.thread.title} detail={nodeDetail(node, panes)} age={threadAge(node.thread, now)}
-      current={currentPaneId !== undefined && node.thread.paneId === currentPaneId} onOpen={() => open(node.thread)} fold={extra.fold}
-      action={node.state !== "resolved" && !readOnly && <button type="button" className="task-close" aria-label={`Close ${node.thread.title}`}
-        title={node.thread.role === "coordinator" ? "Close coordinator" : "Close thread"} onClick={() => setClosing(node)}><Check aria-hidden className="size-4" /></button>}>
-      {extra.children}
-    </TaskRow>
-  );
-  const branch = (node: OrgNode): ReactNode => row(node, {
-    children: node.children.length > 0 && <ul aria-label={`${node.thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>,
-  });
+  const onScreen = (node: OrgNode) => currentPaneId !== undefined && node.thread.paneId === currentPaneId;
+  const [closing, setClosing] = useState<OrgNode | null>(null);
+  const [historyShown, setHistoryShown] = useState(() => tree.history.some((node) => holds(node, onScreen)));
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
+
+  const branch = (node: OrgNode): ReactNode => {
+    const { thread, state } = node;
+    const resolved = state === "resolved";
+    // Open coordinators always show their work; a resolved one folds until opened.
+    const open = !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
+    const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
+    return (
+      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
+        onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}
+        fold={resolved && node.children.length > 0 ? { open, onToggle: toggle } : undefined}
+        action={!resolved && !readOnly && <button type="button" className="task-close" aria-label={`Close ${thread.title}`}
+          title={thread.role === "coordinator" ? "Close coordinator" : "Close thread"} onClick={() => setClosing(node)}><Check aria-hidden className="size-4" /></button>}>
+        {open && node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>}
+      </TaskRow>
+    );
+  };
 
   return <>
     {tree.open.length > 0 && <ul className="task-list mb-2" aria-label="Open threads">{tree.open.map(branch)}</ul>}
+    {tree.history.length > 0 && <>
+      <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
+        <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
+      </button>
+      {historyShown && <ul className="task-list mb-2" aria-label="History">{tree.history.map(branch)}</ul>}
+    </>}
     {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No threads yet.</p>}
-    <History tree={tree} currentPaneId={currentPaneId} row={row} />
     <CloseNodeDialog project={project} node={closing} session={session} onCancel={() => setClosing(null)}
       onClosed={() => { setClosing(null); void onChanged(); }} />
-  </>;
-}
-
-/**
- * Everything resolved, in grey, behind one row that starts closed: each resolved coordinator folds
- * over the threads it ran. What holds the pane on screen opens by itself.
- */
-function History({ tree, currentPaneId, row }: {
-  tree: OrgTree;
-  currentPaneId?: string;
-  row: (node: OrgNode, extra?: { fold?: Fold; children?: ReactNode }) => ReactNode;
-}) {
-  const holdsCurrent = (node: OrgNode): boolean => currentPaneId !== undefined && (node.thread.paneId === currentPaneId || node.children.some(holdsCurrent));
-  const [shown, setShown] = useState(() => tree.history.some(holdsCurrent));
-  const [folds, setFolds] = useState<Record<string, boolean>>({});
-  if (tree.history.length === 0) return null;
-  const branch = (node: OrgNode): ReactNode => {
-    if (node.children.length === 0) return row(node);
-    const open = folds[node.thread.id] ?? node.children.some(holdsCurrent);
-    return row(node, {
-      fold: { open, onToggle: () => setFolds((current) => ({ ...current, [node.thread.id]: !open })) },
-      children: open && <ul aria-label={`${node.thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>,
-    });
-  };
-  return <>
-    <button type="button" className="task-history-toggle" aria-expanded={shown} onClick={() => setShown(!shown)}>
-      <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
-    </button>
-    {shown && <ul className="task-list mb-2" aria-label="History">{tree.history.map(branch)}</ul>}
   </>;
 }
 
