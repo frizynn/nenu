@@ -3,7 +3,7 @@ import { realpath } from "node:fs/promises";
 import { ConversationService, explicitSession } from "./conversation-service.ts";
 import { matchClaudeSession } from "./claude-sessions.ts";
 import { launchAgent, startPaneAgent } from "./agent-start.ts";
-import { codexEntries } from "./codex-history.ts";
+import { CodexHistory, codexItemEntry } from "./codex-history.ts";
 import type { AgentView } from "./types.ts";
 
 const id = "11111111-2222-3333-4444-555555555555";
@@ -111,31 +111,76 @@ describe("identity recovery", () => {
     await same.attach(pane, id, client);
     expect((await same.resolve(pane, client)).agentSession?.value).toBe(id);
   });
-  test("pages app-server history without resuming it or starting a second agent", async () => {
+  test("pages app-server history without hydrating every turn, resuming it or starting a second agent", async () => {
     const methods: string[] = [];
-    const service = new ConversationService({ request: async (method) => {
+    const items = [
+      { turnId: "turn", item: { id: "u", type: "userMessage", content: [{ type: "text", text: "Hello" }] } },
+      { turnId: "turn", item: { id: "a", type: "agentMessage", text: "Answer", phase: "final_answer" } },
+    ];
+    const service = new ConversationService({ request: async (method, params) => {
       methods.push(method);
-      return { thread: { id, cwd: await realpath("/tmp"), turns: [{ id: "turn", status: "completed", items: [
-        { id: "u", type: "userMessage", content: [{ type: "text", text: "Hello" }] },
-        { id: "a", type: "agentMessage", text: "Answer", phase: "final_answer" },
-      ] }] } };
+      if (method === "thread/read") {
+        expect(params?.includeTurns).toBe(false);
+        return { thread: { id, cwd: await realpath("/tmp") } };
+      }
+      if (method === "thread/turns/list") return { data: [{ id: "turn", status: "completed", items: [], itemsView: "notLoaded" }], nextCursor: null };
+      // Newest first, one item per call, cursor = index of the next item.
+      const start = Number(params?.cursor ?? 0);
+      const reversed = [...items].reverse();
+      return { data: reversed.slice(start, start + 1), nextCursor: start + 1 < reversed.length ? String(start + 1) : null };
     } });
     const connected = { ...pane, agentSession: { kind: "id" as const, value: id } };
     const latest = await service.page(connected, { limit: 1 });
-    expect(latest?.entries[0]?.uuid).toBe("a");
+    expect(latest?.entries.map((e) => [e.uuid, e.turn?.status])).toEqual([["a", "completed"]]);
     expect(latest?.hasMore).toBe(true);
     const older = await service.page(connected, { limit: 1, before: "a" });
     expect(older?.entries[0]?.uuid).toBe("u");
-    expect(methods).toEqual(["thread/read"]);
+    expect(older?.hasMore).toBe(false);
+    expect(methods).not.toContain("thread/resume");
+    expect(methods.filter((m) => m === "thread/read")).toHaveLength(1);
+    expect(methods.filter((m) => m === "thread/items/list")).toHaveLength(2);
+  });
+  test("caches the conversation picker list per directory", async () => {
+    let lists = 0;
+    const service = new ConversationService({ request: async () => { lists++; return { data: [{ id, name: "Fix parser" }] }; } });
+    expect(await service.choices(pane)).toEqual([{ id, title: "Fix parser" }]);
+    await service.choices(pane);
+    expect(lists).toBe(1);
   });
 });
 
 test("structured Codex history hides injected instructions and marks clipped tool output", () => {
-  const entries = codexEntries({ turns: [{ id: "turn", status: "inProgress", items: [
-    { id: "context", type: "userMessage", content: [{ type: "text", text: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nhidden\n</INSTRUCTIONS>" }] },
-    { id: "cmd", type: "commandExecution", command: "echo test", aggregatedOutput: "a".repeat(21_000), exitCode: 1 },
-  ] }] });
-  expect(entries).toHaveLength(1);
-  expect(entries[0]?.turn?.status).toBe("running");
-  expect(entries[0]?.parts[0]).toMatchObject({ result: { truncated: true, isError: true } });
+  expect(codexItemEntry({ id: "context", type: "userMessage", content: [{ type: "text", text: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nhidden\n</INSTRUCTIONS>" }] }, "turn")).toBeNull();
+  const entry = codexItemEntry({ id: "cmd", type: "commandExecution", command: "echo test", aggregatedOutput: "a".repeat(21_000), exitCode: 1 }, "turn", { status: "running" });
+  expect(entry?.turn?.status).toBe("running");
+  expect(entry?.parts[0]).toMatchObject({ result: { truncated: true, isError: true } });
+});
+
+test("Codex images, plans and diffs map to transcript parts without image bytes", () => {
+  const user = codexItemEntry({ id: "u", type: "userMessage", content: [
+    { type: "text", text: "Look" }, { type: "localImage", path: "/tmp/uploads/shot.png" }, { type: "image", url: "data:image/png;base64,AAAA" },
+  ] }, "t");
+  expect(user?.parts).toEqual([{ kind: "text", text: "Look" }, { kind: "text", text: "[Image: shot.png]" }, { kind: "text", text: "[Image]" }]);
+  expect(codexItemEntry({ id: "v", type: "imageView", path: "/repo/out.png" }, "t")?.parts).toEqual([{ kind: "tool", name: "view_image", summary: "/repo/out.png" }]);
+  const generated = codexItemEntry({ id: "g", type: "imageGeneration", status: "completed", revisedPrompt: "a cat", result: "QUJD".repeat(1000), savedPath: "/h/.codex/generated_images/cat.png", failure: null }, "t");
+  expect(generated?.parts).toEqual([{ kind: "tool", name: "image_generation", summary: "/h/.codex/generated_images/cat.png" }]);
+  expect(JSON.stringify(generated)).not.toContain("QUJD");
+  expect(codexItemEntry({ id: "p", type: "plan", text: "1. Read\n2. Fix" }, "t")?.parts).toEqual([{ kind: "text", text: "1. Read\n2. Fix" }]);
+  const edit = codexItemEntry({ id: "f", type: "fileChange", status: "completed", changes: [{ path: "a.ts", kind: { type: "update", move_path: null }, diff: "@@ -1 +1 @@\n-a\n+b" }] }, "t");
+  expect(edit?.parts[0]).toMatchObject({ name: "Edit", summary: "a.ts", result: { text: "@@ -1 +1 @@\n-a\n+b", isError: false } });
+});
+
+test("an older page survives a lost cursor by walking down to its anchor", async () => {
+  const items = Array.from({ length: 5 }, (_, i) => ({ turnId: "turn", item: { id: `m${i}`, type: "agentMessage", text: `msg ${i}` } }));
+  const rpc = { request: async (method: string, params?: Record<string, unknown>) => {
+    if (method === "thread/turns/list") return { data: [{ id: "turn", status: "completed" }], nextCursor: null };
+    const start = Number(params?.cursor ?? 0);
+    const reversed = [...items].reverse();
+    return { data: reversed.slice(start, start + 2), nextCursor: start + 2 < reversed.length ? String(start + 2) : null };
+  } };
+  const fresh = new CodexHistory(rpc);
+  const older = await fresh.page("t", { limit: 2, before: "m3" });
+  expect(older.entries.map((e) => e.uuid)).toEqual(["m1", "m2"]);
+  expect(older.hasMore).toBe(true);
+  expect(await fresh.page("t", { limit: 2, before: "gone" })).toEqual({ entries: [], hasMore: false });
 });

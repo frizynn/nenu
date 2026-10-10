@@ -1,11 +1,10 @@
 import { ConversationBindings } from "./conversation-bindings.ts";
 import { computeEtag } from "./http-cache.ts";
 import { realpath } from "node:fs/promises";
-import { CodexRpc, record } from "./codex-rpc.ts";
-import { codexEntries } from "./codex-history.ts";
+import { codexRpc, record, type CodexRpc } from "./codex-rpc.ts";
+import { CodexHistory } from "./codex-history.ts";
 import { ClaudeSessions, matchClaudeSession } from "./claude-sessions.ts";
 import { CodexSessions } from "./codex-sessions.ts";
-import { pageEntries } from "./journal/store.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import type { AgentView } from "./types.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -15,14 +14,31 @@ export interface ConversationChoice { id: string; title: string }
 type Rpc = Pick<CodexRpc, "request">;
 type SessionClient = Pick<HerdrClient, "processInfo">;
 
+type Cached<T> = Map<string, { expires: number; value: Promise<T> }>;
+
+/** Share one read per key for `ttl` ms; a failed read is forgotten at once. At most 16 keys. */
+function cached<T>(cache: Cached<T>, key: string, ttl: number, read: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  if (cache.size >= 16) cache.delete(cache.keys().next().value!);
+  const value = read();
+  cache.set(key, { expires: Date.now() + ttl, value });
+  value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
+  return value;
+}
+
 /** Owns session identity; the existing terminal remains the only input/approval owner. */
 export class ConversationService {
-  private readonly pages = new Map<string, { expires: number; value: Promise<Record<string, unknown>> }>();
+  private readonly pages: Cached<Omit<TranscriptPage, "paneId">> = new Map();
+  private readonly threads: Cached<Record<string, unknown>> = new Map();
+  private readonly lists: Cached<ConversationChoice[]> = new Map();
   private readonly bindings: ConversationBindings;
   private readonly codexSessions: CodexSessions;
-  constructor(private readonly codex: Rpc = new CodexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string) {
+  private readonly history: CodexHistory;
+  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string) {
     this.bindings = new ConversationBindings(stateFile);
     this.codexSessions = new CodexSessions(codex);
+    this.history = new CodexHistory(codex);
   }
 
   async resolve(pane: AgentView, herdr: SessionClient, session = "default"): Promise<AgentView> {
@@ -48,8 +64,13 @@ export class ConversationService {
     return pane;
   }
 
+  /** thread/list scans the rollout folder (about 0.2 to 3 s measured), so the picker reuses it briefly. */
   async choices(pane: AgentView): Promise<ConversationChoice[]> {
     if (pane.agent !== "codex") return [];
+    return cached(this.lists, pane.cwd, 15_000, () => this.list(pane));
+  }
+
+  private async list(pane: AgentView): Promise<ConversationChoice[]> {
     const result = record(await this.codex.request("thread/list", { cwd: pane.cwd, limit: 100, sourceKinds: [], sortKey: "updated_at" }));
     if (!Array.isArray(result.data)) throw new Error("Invalid Codex conversation list.");
     return result.data.flatMap((value): ConversationChoice[] => {
@@ -60,9 +81,9 @@ export class ConversationService {
     });
   }
 
-  private async thread(pane: AgentView, id: string, includeTurns: boolean): Promise<Record<string, unknown>> {
+  private async thread(pane: AgentView, id: string): Promise<Record<string, unknown>> {
     if (!isCodexSessionId(id)) throw new Error("Invalid conversation id.");
-    const thread = record(record(await this.codex.request("thread/read", { threadId: id, includeTurns })).thread);
+    const thread = record(record(await this.codex.request("thread/read", { threadId: id, includeTurns: false })).thread);
     if (thread.id !== id || typeof thread.cwd !== "string" ||
         await realpath(thread.cwd) !== await realpath(pane.cwd)) throw new Error("This conversation belongs to another directory.");
     return thread;
@@ -71,7 +92,7 @@ export class ConversationService {
   async attach(pane: AgentView, id: string, herdr: SessionClient, session = "default"): Promise<void> {
     if (pane.agent !== "codex") throw new Error("Only Codex supports this conversation picker.");
     const before = await herdr.processInfo(pane.paneId);
-    await this.thread(pane, id, false);
+    await this.thread(pane, id);
     if (JSON.stringify(before) !== JSON.stringify(await herdr.processInfo(pane.paneId)))
       throw new Error("The terminal changed. Check it before connecting history.");
     await this.bindings.set(JSON.stringify([session, pane.paneId]), {
@@ -83,15 +104,13 @@ export class ConversationService {
     if (pane.agent !== "codex" || pane.agentSession?.kind !== "id") return null;
     const id = pane.agentSession.value;
     const key = JSON.stringify([pane.cwd, id]);
-    let cached = this.pages.get(key);
-    if (!cached || cached.expires <= Date.now()) {
-      if (this.pages.size >= 16) this.pages.delete(this.pages.keys().next().value!);
-      cached = { expires: Date.now() + 3_000, value: this.thread(pane, id, true) };
-      this.pages.set(key, cached);
-    }
-    const entries = codexEntries(await cached.value);
-    const { window, hasMore } = pageEntries(entries, opts);
-    return { entries: window, total: entries.length, hasMore, fileTruncated: false };
+    return cached(this.pages, JSON.stringify([pane.cwd, id, opts.limit, opts.before ?? null]), 3_000, async () => {
+      // Metadata only: the directory check. History comes in pages instead of every turn at once.
+      await cached(this.threads, key, 30_000, () => this.thread(pane, id));
+      const { entries, hasMore } = await this.history.page(id, opts);
+      // The app-server has no cheap count; this is what is known so far.
+      return { entries, total: entries.length, hasMore, fileTruncated: false };
+    });
   }
 }
 

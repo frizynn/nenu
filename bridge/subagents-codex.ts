@@ -1,6 +1,6 @@
 import type { TranscriptSource } from "./journal/types.ts";
-import { CodexRpc } from "./codex-rpc.ts";
-import { codexEntries } from "./codex-history.ts";
+import { codexRpc } from "./codex-rpc.ts";
+import { CodexHistory } from "./codex-history.ts";
 import { object, shortText, isAgentId, SubagentFiles, jsonRows } from "./subagent-files.ts";
 import type { SubagentStatus, SubagentView } from "./subagents-types.ts";
 
@@ -44,7 +44,8 @@ export function codexJournalState(text: string, now = Date.now()): SubagentStatu
 export class CodexSubagents {
   private files = new SubagentFiles();
   private turns = new Map<string, { stamp: string | undefined; status: unknown; expires: number }>();
-  constructor(private rpc: Rpc = new CodexRpc(), private source?: TranscriptSource) {}
+  private pages: CodexHistory;
+  constructor(private rpc: Rpc = codexRpc(), private source?: TranscriptSource) { this.pages = new CodexHistory(rpc); }
   async list(parentId: string): Promise<{ agents: SubagentView[]; truncated: boolean }> {
     const candidates: SubagentView[] = [];
     let cursor: string | undefined;
@@ -100,10 +101,10 @@ export class CodexSubagents {
     return { agents, truncated: !!cursor };
   }
   async history(agent: SubagentView) {
-    const thread = object(object(await this.rpc.request("thread/read", { threadId: agent.id, includeTurns: true })).thread);
+    const thread = object(object(await this.rpc.request("thread/read", { threadId: agent.id, includeTurns: false })).thread);
     if (thread.id !== agent.id || thread.parentThreadId !== agent.parentId) throw new Error("Subagent no longer belongs to this session.");
-    const entries = codexEntries(thread);
+    const { entries, hasMore } = await this.pages.page(agent.id, { limit: 120 });
     const model = shortText(thread.model);
-    return { agent: { ...agent, ...(model ? { model } : {}) }, entries: entries.slice(-120), truncated: entries.length > 120 };
+    return { agent: { ...agent, ...(model ? { model } : {}) }, entries: entries.slice(-120), truncated: hasMore || entries.length > 120 };
   }
 }
