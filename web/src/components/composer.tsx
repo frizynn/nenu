@@ -87,6 +87,8 @@ interface ComposerProps {
   agent: string | undefined | null;
   /** True for a bare shell pane (tweaks the placeholder copy). */
   isShell: boolean;
+  /** Idle copy for an agent pane in place of "Type a reply…"; lock and shell states still win. */
+  placeholder?: string;
   /** The agent is working. Send then offers "now" or "after this turn" where the CLI has both
    *  (ADR 0056); for Codex with an empty draft the primary action becomes an interrupt control. */
   working?: boolean;
@@ -216,7 +218,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, modelControl, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1267,7 +1269,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     ? "Type into the terminal…"
                     : isShell
                       ? "Type a shell command…"
-                      : "Type a reply…"
+                      : placeholder ?? "Type a reply…"
             }
             autoCorrect={direct.active ? "off" : undefined}
             spellCheck={direct.active ? false : undefined}

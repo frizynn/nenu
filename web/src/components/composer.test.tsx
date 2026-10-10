@@ -2310,3 +2310,16 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     await waitFor(() => expect(queue.posts).toEqual([{ scope: "scope", action: "now", id: "row-1", confirm: true }]));
   });
 });
+
+describe("Composer — placeholder", () => {
+  it("uses the caller's idle copy in place of the reply default", () => {
+    renderComposer({ placeholder: "Steer this thread…" });
+    expect(screen.getByPlaceholderText("Steer this thread…")).not.toBeDisabled();
+    expect(screen.queryByPlaceholderText("Type a reply…")).not.toBeInTheDocument();
+  });
+
+  it("keeps the lock copy over the caller's placeholder", () => {
+    renderComposer({ placeholder: "Steer this thread…", readOnly: true });
+    expect(screen.getByPlaceholderText(/read-only — device not authorised/i)).toBeDisabled();
+  });
+});

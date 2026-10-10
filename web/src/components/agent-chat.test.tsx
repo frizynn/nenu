@@ -1023,3 +1023,20 @@ describe("AgentChat — bridge-detected dialog", () => {
     expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
   });
 });
+
+describe("AgentChat — project composer copy", () => {
+  it("asks a worker thread to be steered", () => {
+    renderChat({ project: { slug: "hub", name: "Hub", role: "worker" } });
+    expect(screen.getByPlaceholderText("Steer this thread…")).toBeInTheDocument();
+  });
+
+  it("points a coordinator's composer at the coordinator", () => {
+    renderChat({ project: { slug: "hub", name: "Hub", role: "coordinator" } });
+    expect(screen.getByPlaceholderText("Ask the coordinator…")).toBeInTheDocument();
+  });
+
+  it("keeps the reply copy outside a project", () => {
+    renderChat();
+    expect(screen.getByPlaceholderText("Type a reply…")).toBeInTheDocument();
+  });
+});

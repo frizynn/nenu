@@ -187,7 +187,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
         agents={data.agents}
         shellPanes={data.shellPanes}
         tabs={data.tabs}
-        project={{ slug: project.slug, name: project.name }}
+        project={{ slug: project.slug, name: project.name, role: thread.role }}
         title={thread.title}
         text={pane?.text ?? ""}
         nativeTelemetry={pane?.nativeTelemetry}

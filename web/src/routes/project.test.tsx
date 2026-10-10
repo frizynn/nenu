@@ -13,10 +13,10 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
+interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; overlay?: ReactNode; strip?: ReactNode; conversationFooter?: ReactNode; composerTop?: ReactNode; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, title, headerAction, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
-    <div data-testid={docked ? "docked" : "chat"}>
+  AgentChat: ({ paneId, project, title, headerAction, overlay, strip, conversationFooter, composerTop, docked }: StubProps) => (
+    <div data-testid={docked ? "docked" : "chat"} data-role={project?.role}>
       {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}</header>}
       {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
@@ -69,6 +69,7 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:coord");
   expect(router.state.location.pathname).toBe("/pane/coord");
   expect(screen.getByRole("heading", { name: "Hub" })).toBeInTheDocument();
+  expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "coordinator");
 
   // Cards under the conversation: Merge only where Organizations says nothing blocks it.
   const cards = within(screen.getByRole("region", { name: "Threads" }));
@@ -89,6 +90,7 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   expect(router.state.location.pathname).toBe("/pane/worker");
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
+  expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "worker");
   const chips = within(screen.getByRole("navigation", { name: "Threads" }));
   expect(chips.getByRole("button", { name: /Build/ })).toHaveAttribute("aria-current", "page");
   expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
@@ -113,7 +115,8 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   expect(screen.queryByRole("tablist", { name: "Project" })).not.toBeInTheDocument();
   await user.click(within(screen.getByRole("article", { name: "Build" })).getByRole("button", { name: /Build/ }));
   expect(router.state.location.search).toBe("?thread=worker");
-  const docked = within(await screen.findByTestId("docked"));
+  expect(await screen.findByTestId("docked")).toHaveAttribute("data-role", "worker");
+  const docked = within(screen.getByTestId("docked"));
   expect(docked.getByText("conversation:worker")).toBeInTheDocument();
   expect(docked.getByRole("button", { name: "CI 1/2, checks" })).toBeInTheDocument();
   // The docked header keeps the chat's own menu (keys, find, files and the rest).
