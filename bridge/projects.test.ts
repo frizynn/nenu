@@ -117,6 +117,20 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(project.threads.find((candidate) => candidate.id === "t-0003")).toMatchObject({ role: "coordinator", depth: 1, reportUnacked: false });
   });
 
+  test("a coordinator still running open nodes is refused a close, with the count, before the CLI runs", () => {
+    const root = fixture();
+    writeFileSync(join(root, "demo", "threads", "t-0003.toml"), `id = "t-0003"\ntitle = "Lead"\nstatus = "open"\nrole = "coordinator"\n`);
+    writeFileSync(join(root, "demo", "threads", "t-0004.toml"), `id = "t-0004"\ntitle = "Step"\nstatus = "open"\nparent_id = "t-0003"\n`);
+    writeFileSync(join(root, "demo", "threads", "t-0005.toml"), `id = "t-0005"\ntitle = "Done step"\nstatus = "resolved"\nparent_id = "t-0003"\n`);
+    const registry = registryFor(root);
+    registry.list("default", true, []);
+    expect(registry.closeRefusal("demo", "t-0003")).toBe("Lead still has 1 open under it; close those first.");
+    expect(registry.closeRefusal("demo", "t-0004")).toBeUndefined();
+    // What the registry does not know, Organizations decides.
+    expect(registry.closeRefusal("demo", "t-9999")).toBeUndefined();
+    expect(registry.closeRefusal("other", "t-0003")).toBeUndefined();
+  });
+
   test("a resolved thread's never-read PR is left out instead of labelled open", () => {
     const root = fixture();
     writeFileSync(join(root, "demo", "threads", "t-0002.toml"), `id = "t-0002"\ntitle = "Old"\nstatus = "resolved"\npr = "https://github.com/acme/demo/pull/7"\n`);

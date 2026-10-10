@@ -173,6 +173,34 @@ describe("the sidebar", () => {
     expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
   });
 
+  it("lists open work most urgent first with coordinators ahead, and History as a closed grey tree of node details", async () => {
+    const org: ProjectView = { ...awam, threads: [
+      thread("t1", "landing", "root"),
+      thread("t2", "panel depo", "root", { paneId: "depo", liveStatus: "blocked" }),
+      thread("t3", "rediseño", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle" }),
+      thread("t4", "merca", "t3", { paneId: "merca", liveStatus: "idle", group: "ready-for-review" }),
+      thread("t9", "old plan", "root", { role: "coordinator", status: "resolved", updated: "2026-09-01T00:00:00Z" }),
+      thread("t10", "old step", "t9", { status: "resolved", updated: "2026-09-01T01:00:00Z" }),
+      thread("t11", "new fix", "root", { status: "resolved", updated: "2026-10-01T00:00:00Z" }),
+      thread("t12", "newer plan", "root", { role: "coordinator", status: "resolved", updated: "2026-10-02T00:00:00Z" }),
+    ] };
+    const user = open("/", { ...herd, projects: [org] });
+    const project = within(screen.getByRole("region", { name: "AWAM" }));
+    const names = () => project.getAllByRole("link").map((link) => link.textContent?.replace(/(needs you|review|not running|codex|claude)$/, "").trim());
+    expect(names()).toEqual(["AWAM", "Coordinator", "rediseño", "merca", "panel depo", "landing", "stray"]);
+    // A node with no live pane opens its own detail, not the project.
+    expect(project.getByRole("link", { name: /^landing/ })).toHaveAttribute("href", "/project/awam/node/t1");
+
+    const history = project.getByRole("button", { name: /^History/ });
+    expect(history).toHaveAttribute("aria-expanded", "false");
+    expect(project.queryByText("new fix")).not.toBeInTheDocument();
+    await user.click(history);
+    expect(names().slice(7)).toEqual(["newer plan", "old plan", "new fix"]);
+    expect(project.getByRole("link", { name: /^new fix/ })).toHaveAttribute("href", "/project/awam/node/t11");
+    await user.click(project.getByRole("button", { name: "old plan threads" }));
+    expect(names().slice(7)).toEqual(["newer plan", "old plan", "old step", "new fix"]);
+  });
+
   it("names the host and what it holds in the footer, beside Settings", () => {
     open();
     expect(screen.getByText("2 workspaces · 6 agents")).toBeInTheDocument();
