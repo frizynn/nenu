@@ -377,7 +377,7 @@ describe("Composer — send", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "fix the typo");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/bad request/i));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("Nenu couldn't use that request. Refresh and try again."));
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(requests).toHaveLength(2);
@@ -2335,6 +2335,8 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     expect(screen.getByTestId("status")).toHaveTextContent(/moves a running command to the background/i);
     await user.click(within(strip).getByRole("button", { name: /tap again to read it now/i }));
     await waitFor(() => expect(queue.posts).toEqual([{ scope: "scope", action: "now", id: "row-1", confirm: true }]));
+    // The prompt asked for that tap; still showing it would ask for another one.
+    expect(screen.getByTestId("status")).not.toHaveTextContent(/tap again/i);
     // Until Claude's journal says it read the row, the strip says it was asked and offers nothing to repeat.
     expect(await within(strip).findByText("Asked Claude to read it now.")).toBeInTheDocument();
     expect(within(strip).queryByRole("button", { name: /read it now/i })).not.toBeInTheDocument();
