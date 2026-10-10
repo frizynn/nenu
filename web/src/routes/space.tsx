@@ -9,6 +9,7 @@ import { TabStrip } from "@/components/tab-strip";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, panePath, spacePath } from "@/lib/nav";
+import { neighborTab } from "@/lib/spaces";
 import { setStatus } from "@/lib/status";
 import { isReadOnly } from "@/lib/types";
 
@@ -93,10 +94,11 @@ export function SpaceRoute() {
               session={data.session}
               readOnly={isReadOnly(data.device)}
               onRenamed={() => revalidator.revalidate()}
-              // Closing the tab you're filtered to would strand you on an empty view — fall back to
-              // "All" (setTab(null)) in that case; either way revalidate so it drops out of the strip.
+              // Closing the tab you're filtered to would strand you on an empty view — move to the
+              // tab beside it, or "All" when it was the only one; either way revalidate so it drops
+              // out of the strip.
               onClosed={(tabId) => {
-                if (tab === tabId) setTab(null);
+                if (tab === tabId) setTab(neighborTab(data.tabs, tabId) ?? null);
                 revalidator.revalidate();
               }}
             />

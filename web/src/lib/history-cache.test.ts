@@ -46,8 +46,8 @@ it("auth rejection discards private bodies and refuses an orphan 304", async () 
     return new HttpResponse(null, { status: 304 });
   }));
   await fetchHistory("auth-cache", { limit: 60 });
-  await expect(fetchHistory("auth-cache", { limit: 60 })).rejects.toThrow(/403/);
-  await expect(fetchHistory("auth-cache", { limit: 60 })).rejects.toThrow(/304/);
+  await expect(fetchHistory("auth-cache", { limit: 60 })).rejects.toMatchObject({ status: 403 });
+  await expect(fetchHistory("auth-cache", { limit: 60 })).rejects.toMatchObject({ status: 304 });
 });
 
 it("an aborted request cannot populate the next poll's cache", async () => {
@@ -85,7 +85,7 @@ it.each([200, 304])("does not resurrect history from a delayed %s after another 
   await fetchHistory(id, { limit: 60 });
   const old = fetchHistory(id, { limit: 60 });
   await started;
-  await expect(fetchHistory("other-auth-request", { limit: 60 })).rejects.toThrow(/403/);
+  await expect(fetchHistory("other-auth-request", { limit: 60 })).rejects.toMatchObject({ status: 403 });
   release();
   await expect(old).rejects.toThrow(/authorization changed/);
   await fetchHistory(id, { limit: 60 });

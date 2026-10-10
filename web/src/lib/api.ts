@@ -159,7 +159,7 @@ export class PaneFileError extends ApiError {
 
 /** The refusal a failed /file or /html-preview response describes. */
 export async function paneFileError(res: Response): Promise<PaneFileError> {
-  return new PaneFileError(`Could not open file (${res.status}): ${await errorDetail(res)}`, res.status,
+  return new PaneFileError(refusalMessage(res.status, await errorDetail(res)), res.status,
     res.headers.get("x-file-state") === "outside-project");
 }
 
@@ -194,7 +194,36 @@ export async function fetchPaneFile(paneId: string, path: string, session: strin
   return res;
 }
 
-// Best-effort human-readable failure detail: the response body if present, else the status text.
+const STATUS_MESSAGES: Record<number, string> = {
+  400: "Nenu couldn't use that request. Refresh and try again.",
+  401: "Your sign-in expired. Sign in again.",
+  403: "This device isn't allowed to do that.",
+  404: "That's no longer there. Refresh and try again.",
+  409: "Something changed meanwhile. Refresh and try again.",
+  413: "That's too large to send.",
+  415: "Nenu can't show this kind of file.",
+  429: "Too many requests. Wait a moment and try again.",
+};
+
+/**
+ * A refusal as the operator reads it: the bridge's own sentence when its JSON body carries one
+ * (`{ error }`), else what the status means. Never the route, the status code or a raw body.
+ */
+function refusalMessage(status: number, detail: string): string {
+  try {
+    const body: unknown = JSON.parse(detail);
+    if (body && typeof body === "object" && "error" in body && typeof body.error === "string" && body.error.trim()) return body.error;
+  } catch {
+    // Not JSON: the status speaks for it.
+  }
+  return STATUS_MESSAGES[status] ?? (status >= 500 ? "Nenu couldn't finish that. Try again in a moment." : "Nenu refused that request. Refresh and try again.");
+}
+
+async function apiError(res: Response): Promise<ApiError> {
+  return new ApiError(refusalMessage(res.status, await errorDetail(res)), res.status);
+}
+
+// The response body if present, else the status text.
 async function errorDetail(res: Response): Promise<string> {
   try {
     return (await res.text()) || res.statusText;
@@ -284,7 +313,7 @@ async function doReq<T>(path: string, init?: RequestInit, recover?: Recover<T>, 
     const detail = await errorDetail(res);
     const recovered = recover?.(res.status, detail);
     if (recovered !== null && recovered !== undefined) return recovered;
-    throw new ApiError(`${path} → ${res.status} ${detail}`, res.status);
+    throw new ApiError(refusalMessage(res.status, detail), res.status);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -363,9 +392,7 @@ export async function fetchPane(
     return { ...cached.response, notModified: true };
   }
 
-  if (!res.ok) {
-    throw new ApiError(`${url} → ${res.status} ${await errorDetail(res)}`, res.status);
-  }
+  if (!res.ok) throw await apiError(res);
 
   // Parse the body BEFORE recording the ETag, so the cache only ever holds an (etag, text) pair
   // that actually arrived intact.
@@ -439,7 +466,7 @@ export async function fetchHistory(
       historyAuthEpoch++;
       historyCache.clear();
     } else assertCurrentAuthorization();
-    throw new ApiError(`${url} → ${res.status} ${await errorDetail(res)}`, res.status);
+    throw await apiError(res);
   }
   assertCurrentAuthorization();
   const data = await res.json() as PaneHistoryResponse;
@@ -773,9 +800,7 @@ export function uploadImage(paneId: string, file: File, session?: string): Promi
         headers: { [XHR_HEADER]: XHR_HEADER_VALUE },
         signal: withTimeout(undefined, UPLOAD_TIMEOUT_MS),
       });
-      if (!res.ok) {
-        throw new ApiError(`upload → ${res.status} ${await errorDetail(res)}`, res.status);
-      }
+      if (!res.ok) throw await apiError(res);
       return (await res.json()) as UploadResponse;
     })(),
   );
@@ -825,7 +850,15 @@ export function changeMessageQueue(paneId:string, body:{scope:string;action:"add
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
 }
 
-export interface ArtifactMetadata { path: string; kind: "designboard"; title: string }
+/**
+ * Where a file name in the chat leads (bridge/artifact-metadata.ts): `preview` opens in the viewer,
+ * `outside` only through the confirmed Open, `missing` reaches nothing. `resolved` is the absolute
+ * file when the name alone would not find it.
+ */
+export type ArtifactMetadata = { path: string } & (
+  | { state: "preview"; resolved?: string; designboard?: string }
+  | { state: "outside"; resolved?: string }
+  | { state: "missing" });
 export function fetchArtifactMetadata(paneId: string, paths: string[], session?: string, signal?: AbortSignal): Promise<ArtifactMetadata[]> {
   const query = new URLSearchParams();
   paths.forEach(path => query.append("inspect", path));

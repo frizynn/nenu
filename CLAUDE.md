@@ -264,6 +264,10 @@ write-level grant for one non-private path, answered with a single-use, two-minu
 that device and the resolved file, served `no-store` with HTML and SVG under the preview CSP plus
 `sandbox allow-scripts`. Never skip the confirmation, reuse a link or widen `/file` with it
 ([ADR 0063](./.adr/0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md)).
+Before the chat offers a file, `files?inspect=` (`bridge/artifact-metadata.ts`) follows the name:
+the pane's cwd, delivered files, then folders the pane's journal names. It serves no bytes, and
+outside the cwd it reports a file only to a device that could mint an Open link for it. Compaction
+summaries and notes name files without delivering them, so they draw no file cards.
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

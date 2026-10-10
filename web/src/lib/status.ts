@@ -21,16 +21,17 @@ function emit() {
   for (const fn of listeners) fn();
 }
 
-/** Latest foreground feedback wins; errors persist until explicitly dismissed. */
+/** Latest foreground feedback wins; errors persist until explicitly dismissed. Returns its id, for clearStatus. */
 export function setStatus(text: string, tone: StatusTone = "info", ttlMs?: number | null,
-  options: { description?: string; background?: boolean } = {}): void {
-  if (options.background && current?.tone === "error") return;
+  options: { description?: string; background?: boolean } = {}): number | undefined {
+  if (options.background && current?.tone === "error") return undefined;
   if (timer) clearTimeout(timer);
   timer = null;
   current = { id: nextId++, text, tone, ...(options.description ? { description: options.description } : {}) };
   remaining = ttlMs === undefined ? (tone === "error" ? null : 2500) : ttlMs;
   resumeStatus(current.id);
   emit();
+  return current.id;
 }
 
 /** An old close handler must never dismiss a newer message. */

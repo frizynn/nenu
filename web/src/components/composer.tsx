@@ -8,7 +8,7 @@ import { ArrowUp, Check, ChevronDown, Gauge, Keyboard, Loader2, Plus, Settings2,
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
 import { useDirectTyping } from "@/hooks/use-direct-typing";
-import { setStatus } from "@/lib/status";
+import { clearStatus, setStatus } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ChatInput } from "@/components/ui/chat/chat-input";
@@ -352,7 +352,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (echo.state === "sent") {
         const done = queue.delivered.find((item) => item.id === echo.queueId);
         if (!done?.native || done.native === echo.native) continue;
-        updateLocalSend(sendScope, echo.id, done.native === "enqueued" ? { state: "queued", native: "enqueued" } : { native: done.native });
+        updateLocalSend(sendScope, echo.id, done.native === "enqueued" ? { state: "queued", native: "enqueued", readNowAt: done.readNowAt } : { native: done.native });
         continue;
       }
       if (echo.state !== "queued") continue;
@@ -366,7 +366,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const done = queue.delivered.find((item) => item.id === echo.queueId);
       // Still in the CLI's own queue: the bubble keeps waiting, with "Read it now" where it exists.
       if (done?.native === "enqueued") {
-        if (echo.native !== "enqueued") updateLocalSend(sendScope, echo.id, { native: "enqueued", queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
+        if (echo.native !== "enqueued" || echo.readNowAt !== done.readNowAt)
+          updateLocalSend(sendScope, echo.id, { native: "enqueued", readNowAt: done.readNowAt, queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
       } else if (done) {
         updateLocalSend(sendScope, echo.id, { state: "sent", native: done.native, queueState: undefined, waitingFor: undefined, deliveryMode: done.deliveryMode ?? echo.deliveryMode });
       } else {
@@ -424,11 +425,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
   // "Read it now" backgrounds Claude's running command, so it takes a second tap.
   const readNowConfirm = usePendingConfirm(8_000);
+  const readNowPrompt = useRef<number | undefined>(undefined);
   function readNow(rowId: string) {
     if (!readNowConfirm.confirm(rowId)) {
-      setStatus("Claude moves a running command to the background to read it now. Tap again to confirm.", "info");
+      readNowPrompt.current = setStatus("Claude moves a running command to the background to read it now. Tap again to confirm.", "info");
       return;
     }
+    // The prompt asked for this tap; left up, it would ask for another.
+    if (readNowPrompt.current !== undefined) clearStatus(readNowPrompt.current);
     void queue.readNow(rowId);
   }
   const [sending, setSending] = useState(false);

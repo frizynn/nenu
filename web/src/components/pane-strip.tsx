@@ -20,7 +20,7 @@ interface PaneStripProps {
   readOnly?: boolean;
   /** Revalidate after a rename. Long-press pane actions turn on only when this AND onClosed are set. */
   onRenamed?: () => void;
-  /** Navigate/refresh after a close (Home if it's the open pane). Enables long-press with onRenamed. */
+  /** Refresh after a close (DetailRoute moves off the open pane). Enables long-press with onRenamed. */
   onClosed?: (paneId: string) => void;
 }
 
@@ -39,7 +39,7 @@ export function PaneStrip({
   onClosed,
 }: PaneStripProps) {
   const [sheetPane, setSheetPane] = useState<AgentView | null>(null);
-  // Actions need both callbacks wired (revalidate on rename, navigate on close); without them the
+  // Actions need both callbacks wired (revalidate on rename, refresh on close); without them the
   // pills stay plain tap-to-switch — long-press is inert.
   const actionsEnabled = !!onRenamed && !!onClosed;
 

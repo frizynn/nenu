@@ -82,12 +82,26 @@ describe("api client", () => {
     expect(session).toBe("phone");
   });
 
-  it("throws with the status and body on a non-2xx response", async () => {
+  // Measured 2026-10-10: the queue strip showed `/api/pane/w4F%3Ap1/queue → 409 {"error":…,"code":…}`.
+  it("throws the bridge's own sentence on a refusal, never the route, the status or the JSON", async () => {
+    const error = "Only a message waiting in Claude's own queue can be read now.";
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ error, code: "unsupported" }, { status: 409 })),
+    );
+    await expect(changeMessageQueue("w4F:p1", { scope: "s", action: "remove", id: "a", revision: 1 })).rejects.toMatchObject({
+      name: "ApiError",
+      status: 409,
+      message: error,
+    });
+  });
+
+  it("says what the status means when the body carries no sentence", async () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/reply$/, () => new HttpResponse("herdr down", { status: 502 })),
+      http.post(/\/api\/pane\/[^/]+\/keys$/, () => new HttpResponse("bad body", { status: 400 })),
     );
-    await expect(sendReply("w1:p1", "hi")).rejects.toThrow(/502/);
-    await expect(sendReply("w1:p1", "hi")).rejects.toThrow(/herdr down/);
+    await expect(sendReply("w1:p1", "hi")).rejects.toMatchObject({ status: 502, message: "Nenu couldn't finish that. Try again in a moment." });
+    await expect(sendKeys("w1:p1", ["Enter"])).rejects.toMatchObject({ status: 400, message: "Nenu couldn't use that request. Refresh and try again." });
   });
 
   it("adds expected_prompt to reply and keys bodies only when supplied", async () => {
@@ -159,7 +173,7 @@ describe("api client", () => {
       http.post(/\/api\/pane\/[^/]+\/upload$/, () => new HttpResponse("too big", { status: 413 })),
     );
     const file = new File(["x"], "x.png", { type: "image/png" });
-    await expect(uploadImage("w1:p1", file)).rejects.toThrow(/413/);
+    await expect(uploadImage("w1:p1", file)).rejects.toMatchObject({ status: 413, message: "That's too large to send." });
   });
 
   it("checkForUpdates POSTs (no body) and returns the fresh UpdateInfo", async () => {
@@ -186,7 +200,7 @@ describe("api client", () => {
 
   it("checkForUpdates throws on a non-2xx response", async () => {
     server.use(http.post("/api/update/check", () => new HttpResponse("down", { status: 503 })));
-    await expect(checkForUpdates()).rejects.toThrow(/503/);
+    await expect(checkForUpdates()).rejects.toMatchObject({ status: 503 });
   });
 });
 
@@ -217,7 +231,7 @@ describe("api client — guarded send, interactions and queue", () => {
 
   it("sendMessage still throws on a failure that carries no outcome", async () => {
     server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => new HttpResponse("herdr down", { status: 502 })));
-    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).rejects.toThrow(/502/);
+    await expect(sendMessage("w1:p1", { text: "hi", requestId: "r1" })).rejects.toMatchObject({ status: 502 });
   });
 
   it("fetchInteractions reads the session's dialogs", async () => {
@@ -395,7 +409,7 @@ describe("api client — connection-health stamping", () => {
   it("does NOT stamp when a poll fails (the throw precedes the stamp)", async () => {
     server.use(http.get("/api/snapshot", () => new HttpResponse("boom", { status: 502 })));
     __resetConnectionHealth(1);
-    await expect(fetchSnapshot()).rejects.toThrow(/502/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 502 });
     expect(lastHealthyAt()).toBe(1);
   });
 });
@@ -439,13 +453,13 @@ describe("api client — identity proxy refusals", () => {
 
   it("turns a fronting proxy 3xx into the 401 auth path the loader understands", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 302 }));
-    await expect(fetchSnapshot()).rejects.toThrow(/401.*requires sign-in/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 401, message: "Your sign-in expired. Sign in again." });
   });
 
   it("turns a browser manual opaqueredirect into the same 401 auth path", async () => {
     const response = new Response(null, { status: 200 });
     Object.defineProperty(response, "type", { value: "opaqueredirect" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
-    await expect(fetchSnapshot()).rejects.toThrow(/401.*requires sign-in/);
+    await expect(fetchSnapshot()).rejects.toMatchObject({ status: 401, message: "Your sign-in expired. Sign in again." });
   });
 });

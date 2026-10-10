@@ -4,13 +4,15 @@ import FilePreview from "./file-preview";
 import { HTML_VERSION_POLL_MS } from "./html-viewer";
 import { MarkdownText } from "./markdown-text";
 import { FilePreviewContext } from "@/lib/file-preview-context";
-import { fetchPaneFile, PaneFileError } from "@/lib/api";
+import { fetchArtifactMetadata, fetchPaneFile, PaneFileError } from "@/lib/api";
 
-vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn() }));
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn(), fetchArtifactMetadata: vi.fn() }));
 vi.mock("./pdf-preview", () => ({ default: () => <div>PDF canvas</div> }));
 const fetchFile = vi.mocked(fetchPaneFile);
+const inspect = vi.mocked(fetchArtifactMetadata);
 beforeEach(() => {
   vi.clearAllMocks();
+  inspect.mockResolvedValue([]);
   URL.createObjectURL = vi.fn(() => "blob:document-preview");
   URL.revokeObjectURL = vi.fn();
 });
@@ -51,6 +53,26 @@ it("renders Markdown as safe text, resolves sibling documents, releases the URL 
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:document-preview");
   expect(focus).toHaveBeenCalledWith({ preventScroll: true });
   opener.remove();
+});
+
+// A link in prose names a file relative to whatever folder the text was about; the pane's folder
+// answers 404 for it. The viewer asks the bridge where the name leads before reporting a failure.
+it("follows a name the pane's folder lacks to the file the bridge finds, and says when there is none", async () => {
+  const unavailable = new PaneFileError("Could not open file (404): File unavailable in this workspace.", 404, false);
+  fetchFile.mockImplementation(async (_pane, path) => {
+    if (path === "/repo/assets/notes.md") return new Response("# Found it", { headers: { "content-type": "text/markdown" } });
+    throw unavailable;
+  });
+  inspect.mockImplementation(async (_pane, [path]) => [path === "assets/notes.md"
+    ? { path, state: "preview" as const, resolved: "/repo/assets/notes.md" }
+    : { path: path!, state: "missing" as const }]);
+  const { unmount } = render(<FilePreview paneId="w1:p1" path="assets/notes.md" onClose={() => {}} />);
+  expect(await screen.findByText("Found it")).toBeInTheDocument();
+  expect(screen.getByText("/repo/assets/notes.md")).toBeInTheDocument();
+  unmount();
+  render(<FilePreview paneId="w1:p1" path="gone.md" onClose={() => {}} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+  expect(inspect).toHaveBeenCalledWith("w1:p1", ["gone.md"], undefined);
 });
 
 it("surfaces unavailable files and retries without leaving the chat", async () => {

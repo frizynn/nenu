@@ -30,6 +30,8 @@ export interface LocalSend {
   stranded?: { reason: string; since: number };
   /** What the CLI's own queue did with it, once delivered. */
   native?: NativeQueueState;
+  /** When the bridge pressed "Read it now" for it. */
+  readNowAt?: number;
   /** The pane's agent when it was sent, for wording that names it. */
   agent?: string;
   /** Sent to an agent whose input box Nenu cannot read back, so nothing confirmed the text arrived. */
