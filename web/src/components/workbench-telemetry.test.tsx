@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { WorkbenchTelemetry } from "./workbench-telemetry";
@@ -69,11 +69,14 @@ it("lets the parent own model toggling and one active inspection panel", async (
   expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
 });
 
-it("names the model and effort in one compact chip", () => {
+it("names the model and effort as quiet labels in one picker button", () => {
   const { rerender } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} />);
   expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent("Model");
   rerender(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "claude-opus-4-1", effort: "high" }} />);
-  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent(/Opus.*· high/);
+  const chip = screen.getByRole("button", { name: "Choose model" });
+  expect(chip).toHaveTextContent(/Opus.*high/);
+  expect(within(chip).getByText("high")).toHaveClass("capitalize");
+  expect(chip).not.toHaveTextContent("·");
 });
 
 it("shows the native context percentage and both quota windows", async () => {
@@ -84,4 +87,19 @@ it("shows the native context percentage and both quota windows", async () => {
   expect(screen.getByText("Weekly")).toBeVisible();
   expect(screen.getByText("8% used")).toBeVisible();
   expect(screen.getByText("19% used")).toBeVisible();
+});
+
+it("puts the context ring beside the model in the composer row and keeps one context meter", async () => {
+  const telemetry = { source: "statusline" as const, fileTruncated: false, model: "claude-opus-4-1", context: { usedPercent: 40 } };
+  const onCompact = vi.fn();
+  const { unmount } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} onCompact={onCompact} telemetry={telemetry} />);
+  const ring = screen.getByRole("button", { name: "Context window 40% used" });
+  expect(ring).not.toHaveTextContent("40%");
+  await userEvent.click(ring);
+  await userEvent.click(screen.getByRole("button", { name: "Compact context" }));
+  expect(onCompact).toHaveBeenCalledOnce();
+  unmount();
+  render(<WorkbenchTelemetry mode="metrics" modelAvailable disabled={false} onChooseModel={vi.fn()} telemetry={telemetry} />);
+  expect(screen.queryByRole("button", { name: /Context window/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Usage" })).toBeVisible();
 });

@@ -213,15 +213,34 @@
 .workbench-shell :is(a, button, summary):focus-visible, .workbench-context-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 .workbench-chat > header { min-height: 52px; background: var(--background); }
-/* The send control: a quiet filled circle that only takes the accent once there is something to send. */
-.workbench-composer .composer-send:disabled { opacity: 1; background: var(--muted); color: var(--muted-foreground); }
 .workbench-chat-menu { width: 44px; height: 44px; flex-shrink: 0; justify-content: center; margin-inline: 0; padding: 0; }
 .workbench-chat-menu > span { width: 28px; height: 28px; background: transparent; box-shadow: none; }
 .workbench-chat-menu .nenu-mark { width: 24px; height: 24px; }
 .workbench-composer { width: calc(100% - 16px); margin-bottom: 8px; max-width: 960px; align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
-.workbench-composer-surface { background: var(--card); border: 1px solid color-mix(in srgb, var(--border) 65%, transparent); border-radius: 12px; }
-.workbench-composer textarea { background: transparent; border-color: transparent; box-shadow: none; }
+/* The composer: one rounded box (draft + a single round action), then a thin row of quiet controls. */
+.composer-surface { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+.composer-dragging .composer-box { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 50%, transparent); }
+.composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: 16px; transition: border-color 150ms ease-out; }
+.composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
+.composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
+.composer-input::placeholder { color: var(--muted-foreground); }
+/* The one action: a 32px circle. Send takes the accent only once there is something to send. */
+.composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
+.composer-send:disabled { opacity: 1; background: var(--muted); color: var(--muted-foreground); }
+.composer-stop { border: 1.5px solid currentColor; color: var(--foreground); background: transparent; }
+.composer-stop:hover { background: var(--accent); }
+.composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: 13px; color: var(--muted-foreground); }
+.composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
+@media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
+.composer-quiet:disabled { opacity: 0.5; cursor: default; }
+.composer-quiet:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+/* Touch reach without visual bulk: a centred, invisible 44px target around a smaller control. */
+.hit-area { position: relative; }
+@media (pointer: coarse) {
+  .hit-area::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+}
 .workbench-composer > button[aria-label="Switch pane"] { padding-block: 8px; }
 
 /* The draft spans the composer and grows upward until the cap, then scrolls inside itself. The soft
