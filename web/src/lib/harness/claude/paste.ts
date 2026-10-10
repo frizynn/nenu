@@ -1,6 +1,6 @@
 // Claude's PASTE PLACEHOLDER, read as evidence that a long send landed.
 //
-// The #34 guard (lib/reply-action.ts) only presses the submit key once it can SEE the text it typed
+// The #34 guard (bridge/guarded-send.ts) only presses the submit key once it can SEE the text it typed
 // on the "❯" line. For anything long enough to trip Claude Code's paste heuristic that never happens:
 // Claude collapses the incoming bytes into a token of its own —
 //

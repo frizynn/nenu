@@ -310,7 +310,7 @@ export function AgentChat({
   // the TUI's keyboard belongs to it, so the composer must refuse a free-text send: the text would
   // be swallowed and the submit key would answer the dialog (#34). Same parse source and adapter as
   // the two probes above, so the three can't drift. This is the zero-latency fail-fast; the
-  // load-bearing protection is reply-action's verify-before-submit, which also covers a dialog that
+  // load-bearing protection is the bridge send's verify-before-submit, which also covers a dialog that
   // appears after this render.
   const liveBlocks = useMemo(
     () => grammarsOn ? adapterFor(agent?.agent)?.buildBlocks(inputLines) ?? [] : [],

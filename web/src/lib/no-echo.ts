@@ -2,7 +2,7 @@
 //
 // Everything the free-text reply path does is built on reading back what it typed: type unsubmitted →
 // poll fresh reads until the adapter sees the text on the input line → only then send the submit key
-// (lib/reply-action.ts). A password prompt breaks that by construction rather than by failing — `sudo`,
+// (bridge/guarded-send.ts). A password prompt breaks that by construction rather than by failing — `sudo`,
 // an SSH passphrase and `gpg` all turn echo OFF, so the characters are in the pane and the screen
 // deliberately shows nothing. The guard is right to withhold the submit key (it has no evidence), and
 // it will be right forever, so no amount of retrying or waiting gets the operator through.

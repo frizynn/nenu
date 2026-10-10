@@ -27,7 +27,7 @@
 // What ships here is the read-only layer (chrome.ts), and it is not cosmetic: the statusline omp paints
 // into its composer's top border, a stranded draft, and — the reason this layer is worth its own PR —
 // `composerReady`. Which reply path core takes is decided by whether an adapter EXISTS at all
-// (reply-action.ts opens with `if (!adapter) return oneShot(args)`), so before this file omp panes took
+// (the guarded send's `if (!adapter) return oneShot(...)`), so before this file omp panes took
 // the legacy one-shot send: type AND submit in a single call. A phone reply sent while any modal owned
 // the keyboard therefore fired the submit key at that modal, which confirms whatever row it had
 // highlighted. Registering ANY adapter swaps that for type-then-verify — the submit key waits until

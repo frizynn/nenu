@@ -121,23 +121,6 @@ function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}
   return props;
 }
 
-/**
- * Wait for a send that can never verify to reach its terminal `stalled` outcome.
- *
- * A reply handler that doesn't `recordReply` leaves the fake pane's input line empty, so the
- * type-then-verify guard polls POLL_ATTEMPTS × POLL_DELAY_MS (~2.8s) and only then reports. That
- * report is a `setStatus` on a MODULE-SCOPED singleton, which outlives the test that started it: a
- * test that returns first hands its stall to whichever test is running ~2.8s later, past this file's
- * `clearStatus()`, where it reads as that test's own failure. Every test that fires a send it never
- * lets verify ends with this. Needs a status sentinel in the render (`renderComposerWithStatus`).
- */
-async function awaitTerminalStall() {
-  await waitFor(
-    () => expect(screen.getByTestId("status")).toHaveTextContent(/wasn't seen in the agent's input box/i),
-    { timeout: 5000 },
-  );
-}
-
 function StatusSentinel() {
   const status = useStatus();
   return <div data-testid="status">{status?.text ?? ""}</div>;
@@ -266,34 +249,13 @@ describe("Composer — send", () => {
 
   // The override tap, end to end, on an omp pane. omp lifts no interactive block kind at all, so
   // `dialogPresent` is STRUCTURALLY false for it and the reply pre-flight is the only guard there is.
-  // The bridge's send cannot skip its pre-flight, so "Type anyway" goes through the browser guard,
-  // which types without any sweep and still withholds the submit key until it sees the text.
-  it("the `Type anyway?` retry types into the pane but never sweeps it", async () => {
+  // "Type anyway" is the same one request with `force`: the bridge skips only its no-input-box
+  // refusal, and still withholds Enter until it sees the text. The browser sends no keys of its own.
+  it("the `Type anyway?` retry is one forced /send, and the browser sends no keys of its own", async () => {
     const user = userEvent.setup();
-    const wire: string[] = [];
-    const COLS = 189;
-    const pad = (open: string, body: string, close: string, filler: string) =>
-      open + body + filler.repeat(COLS - open.length - body.length - close.length) + close;
-    // omp with a `/model` picker up: no `╰─ … ─╯` anywhere, so `composerReady` is false.
-    const ompModal = [
-      pad("╭──", " Select a model ", "╮", "─"),
-      pad("│ ", " ❯ 1. claude-opus  ", " │", " "),
-      pad("╰──", "", "──╯", "─"),
-    ].join("\n");
-    const sends = serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
-    server.use(
-      http.get(/\/api\/pane\/[^/]+$/, () =>
-        HttpResponse.json({ paneId: "w1:p1", text: ompModal, truncated: false, revision: 2 }),
-      ),
-      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
-        const body = (await request.json()) as { keys: string[] };
-        wire.push(`keys:${body.keys[0]}×${body.keys.length}`);
-        return HttpResponse.json({ ok: true });
-      }),
-      replyHandler(
-        (text) => wire.push(`type:${text}`),
-        () => wire.push("submit"),
-      ),
+    const wire = watchWrites();
+    const sends = serveSend((body) =>
+      body.force ? refusal(body, "verify", UNSEEN, true) : refusal(body, "preflight", NO_BOX, false, "not_ready"),
     );
     renderComposerWithStatus({ agent: "omp", rawTerminalDraft: "leftover" });
     const box = screen.getByPlaceholderText(/type a reply/i);
@@ -304,18 +266,15 @@ describe("Composer — send", () => {
       expect(screen.getByTestId("status")).toHaveTextContent(/Tap Send again to type anyway/i),
     );
     expect(sends).toHaveLength(1);
-    expect(wire).toEqual([]);
+    expect(sends[0]!.force).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Type anyway?" }));
-    await waitFor(() => expect(wire).toContain("type:please do not approve anything"));
-    // The picker never turns into an input box, so type-then-verify polls out and reports `stalled`.
-    // Wait for that terminal outcome INSIDE the test: it lands on the module-scoped status singleton.
-    await awaitTerminalStall();
-    expect(wire.some((w) => w.startsWith("keys:"))).toBe(false);
-    expect(wire).not.toContain("submit");
-    expect(sends).toHaveLength(1);
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/wasn't seen in the agent's input box/i));
+    expect(sends).toHaveLength(2);
+    expect(sends[1]).toMatchObject({ text: "please do not approve anything", force: true });
+    expect(wire).toEqual(["send", "send"]);
     expect(box).toHaveValue("please do not approve anything");
-  }, 15000);
+  });
 
   // The ledger: a failed submit's text is still in the box, so the same request id lets the bridge
   // submit it rather than type a second copy.
@@ -930,17 +889,16 @@ describe("Composer — blocked pre-flight override", () => {
     "   Enter to set as default · s to use this session only · Esc to cancel",
   ].join("\n");
 
+  /** The bridge refuses an unforced send at the picker; a forced one types, never sees it, no Enter. */
   function servePicker(calls: string[]) {
-    serveSend((body) => refusal(body, "preflight", NO_BOX, false, "not_ready"));
+    serveSend((body) => {
+      calls.push(body.force ? "forced" : "send");
+      return body.force ? refusal(body, "verify", UNSEEN, true) : refusal(body, "preflight", NO_BOX, false, "not_ready");
+    });
     server.use(
       http.get(/\/api\/pane\/[^/]+$/, () =>
         HttpResponse.json({ paneId: "w1:p1", text: PICKER, truncated: false, revision: 1 }),
       ),
-      http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
-        const body = (await request.json()) as { text: string; submit?: boolean };
-        calls.push(body.submit ? "submit" : "type");
-        return HttpResponse.json({ ok: true });
-      }),
     );
   }
 
@@ -958,14 +916,14 @@ describe("Composer — blocked pre-flight override", () => {
       expect(screen.getByTestId("status")).toHaveTextContent(/input box isn't on screen/i),
     );
     expect(screen.getByTestId("status")).toHaveTextContent(/tap send again to type anyway/i);
-    expect(calls).toEqual([]); // nothing was typed into the picker
+    expect(calls).toEqual(["send"]); // one refused send, nothing forced into the picker
     expect(box).toHaveValue("use fable please"); // the message survives
     expect(props.onSent).not.toHaveBeenCalled();
     // The button names what the override actually does — type, not send.
     expect(screen.getByRole("button", { name: /type anyway/i })).toBeInTheDocument();
   });
 
-  it("the second tap types anyway, but STILL withholds the submit key", async () => {
+  it("the second tap is a forced send, and Enter stays the bridge's to withhold", async () => {
     const user = userEvent.setup();
     const calls: string[] = [];
     servePicker(calls);
@@ -978,13 +936,12 @@ describe("Composer — blocked pre-flight override", () => {
 
     await user.click(screen.getByRole("button", { name: /type anyway/i }));
 
-    // The text goes in (the user overruled the pre-flight) — but the pane never echoes it onto an
-    // input line, so the verify step never passes and Enter is never fired. THE #34 invariant.
-    await waitFor(() => expect(calls).toContain("type"));
-    expect(calls).not.toContain("submit");
+    // The second tap overrules the pre-flight: one forced send. The bridge never sees the text in an
+    // input box, so it never presses Enter, and the composer keeps the message. THE #34 invariant.
+    await waitFor(() => expect(calls).toEqual(["send", "forced"]));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent(/check Terminal/i));
     expect(box).toHaveValue("use fable please");
-    await awaitTerminalStall(); // see the helper: an unawaited stall lands in a later test
-  }, 15000);
+  });
 });
 
 // A draft too big for the disk tier survives a pane switch but not the app closing, and the only

@@ -284,7 +284,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   if (!adapter) return prior?.typeAttempted ? send.fail(NO_READBACK, false) : oneShot(send, deps, wire, seen?.text ?? null);
   if (seen && seen.composer !== null) {
     send.trace.preflight = seen.composer ? "composer" : "no-composer";
-    if (!seen.composer) return send.fail(send.trace.noEcho ? NO_ECHO : NO_BOX, false, "not_ready");
+    if (!seen.composer && !request.force) return send.fail(send.trace.noEcho ? NO_ECHO : NO_BOX, false, "not_ready");
   }
 
   // An earlier attempt with this id may have typed before it failed (an ack lost after the bytes
@@ -328,7 +328,8 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   } catch {
     return send.fail(MOVED, true);
   }
-  if (last.composer === false || !send.carries(last)) return send.fail(MOVED, true);
+  // A forced send already overrode "no input box": the text in the box is the evidence it trusts.
+  if ((last.composer === false && !request.force) || !send.carries(last)) return send.fail(MOVED, true);
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
   } catch {

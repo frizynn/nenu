@@ -39,7 +39,7 @@ export interface HarnessAdapter {
    * Whether this agent's free-text input box is on screen right now — i.e. whether typing a reply
    * would reach the composer at all, rather than a modal that has the keyboard.
    *
-   * OPTIONAL, and its absence means "no idea": the reply path's pre-flight (lib/reply-action.ts)
+   * OPTIONAL, and its absence means "no idea": the reply path's pre-flight (bridge/guarded-send.ts)
    * only refuses to type when an adapter answers a definite `false`. An adapter that can't tell
    * omits it and keeps today's type-then-verify behaviour, which is still safe — the submit key is
    * withheld either way; the pre-flight just avoids depositing the text in a menu first.
@@ -50,7 +50,7 @@ export interface HarnessAdapter {
    * aimed at that composer may be bound to. Null = no composer at the tail (the same screens
    * `composerReady` answers false about).
    *
-   * The reply path's pre-clear sweep (`ctrl+k` + a run of Backspaces, lib/reply-action.ts) is the one
+   * The reply path's pre-clear sweep (`ctrl+k` + a run of Backspaces, bridge/guarded-send.ts) is the one
    * keystroke burst in the app that is authorised by a client-side read rather than by a dialog
    * model, so it has no `signature` to carry. This is its equivalent: pass the region through as
    * `expected_prompt` and the bridge re-reads the pane immediately before `send_keys`, 409ing the
@@ -70,7 +70,7 @@ export interface HarnessAdapter {
    * a TOKEN of its own instead (Claude's `[Pasted text #N +M lines]`), so the box never holds our
    * words at all and the send stalls forever while every retry re-collapses.
    *
-   * OPTIONAL, and consulted ONLY after the generic match has already failed (lib/reply-action.ts) —
+   * OPTIONAL, and consulted ONLY after the generic match has already failed (bridge/guarded-send.ts) —
    * it can widen what counts as evidence, never narrow it. The contract is strict-or-false: return
    * true only when the token on screen is CONSISTENT with this exact send, because a `true` here fires
    * the submit key. An adapter that can't tell omits it and keeps today's stall.

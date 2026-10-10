@@ -86,7 +86,7 @@ const INPUT_PLACEHOLDERS = ["Press up to edit queued messages"];
  * as the whole-box test rather than a per-run one.
  *
  * Three consequences follow from misreading one as a draft, and all three are fixed by classifying it
- * here, at the single place a draft is derived (lib/reply-action.ts and composer.tsx both take their
+ * here, at the single place a draft is derived (bridge/guarded-send.ts and composer.tsx both take their
  * draft from `extractInputDraft`, so neither needs its own ghost test):
  *
  *  1. the app offered to "recover" a stranded draft the operator never wrote;
@@ -287,7 +287,7 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
  * Two callers, both of which need exactly this and must not re-derive it:
  *  - the generic menu grammar (menu.ts), whose last-resort footer match would otherwise claim an
  *    ordinary prompt screen that happens to end in a `·`-separated hint row;
- *  - the reply path's pre-flight (lib/reply-action.ts via the adapter's `composerReady`), which
+ *  - the reply path's pre-flight (bridge/guarded-send.ts via the adapter's `composerReady`), which
  *    refuses to type at all when the box isn't there.
  */
 export function hasInputBox(lines: StyledLine[]): boolean {

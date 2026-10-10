@@ -309,12 +309,14 @@ export function parseSendRequest(body: unknown): SendRequest | string {
   if (b.deliveryMode !== undefined && !DELIVERY_MODES.has(b.deliveryMode as DeliveryMode)) return "bad deliveryMode";
   if (b.paste !== undefined && typeof b.paste !== "boolean") return "bad paste";
   if (b.expectedPrompt !== undefined && (typeof b.expectedPrompt !== "string" || b.expectedPrompt.length > MAX_EXPECTED_PROMPT_CHARS)) return "bad expectedPrompt";
+  if (b.force !== undefined && typeof b.force !== "boolean") return "bad force";
   return {
     text: b.text,
     requestId: b.requestId,
     ...(b.deliveryMode !== undefined ? { deliveryMode: b.deliveryMode as DeliveryMode } : {}),
     ...(b.paste !== undefined ? { paste: b.paste as boolean } : {}),
     ...(b.expectedPrompt !== undefined ? { expectedPrompt: b.expectedPrompt as string } : {}),
+    ...(b.force === true ? { force: true } : {}),
   };
 }
 

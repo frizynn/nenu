@@ -9,7 +9,7 @@
 //     which the dialog routes every keystroke into the box as text. Enter then submits the box as
 //     DENY-WITH-FEEDBACK: the plan is rejected, the agent is handed the text and re-plans. That Enter
 //     is irreversible and it is the LAST thing sent, only after a fresh read shows our own words in
-//     the box — the same "never submit blind" rule as reply-action and submitPreviewNote.
+//     the box — the same "never submit blind" rule as the bridge send and submitPreviewNote.
 //
 // Both flows start with the same guard as their siblings: a FRESH pane read, the unconditional
 // revision check, and a re-derivation THROUGH THE PANE'S ADAPTER compared against what the user
@@ -103,7 +103,7 @@ export async function submitPromptOption(
  * If focus never lands, nothing has been typed and nothing is submitted — the digit's pointer move is
  * the only side effect, and `Up` (from the keys pad, or the terminal) undoes it. If the text never
  * lands, NO Enter is sent: the words sit unsubmitted in the box for a human to finish or discard,
- * which is the same bargain reply-action's `stalled` strikes.
+ * which is the same bargain the bridge send's unseen-text failure strikes.
  */
 export async function submitPromptFeedback(
   args: GuardArgs & { text: string },

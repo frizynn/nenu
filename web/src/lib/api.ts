@@ -3,7 +3,6 @@ import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
 import { trackBusy } from "./busy";
-import type { UnsentReport } from "./guarded-reply";
 import { markLive } from "./connection-health";
 import { observeServerBuild, SERVER_BUILD_HEADER } from "./server-build";
 import type {
@@ -491,14 +490,6 @@ function refusedAnswer(detail: string): AnswerOutcome | null {
 /** An image the pane's journal holds inline, addressed by entry and index — never by path. */
 export function journalImageUrl(paneId: string, entry: string, index: number, session?: string): string {
   return withSession(`/api/pane/${encodeURIComponent(paneId)}/journal-image?entry=${encodeURIComponent(entry)}&n=${index}`, session);
-}
-
-/** Record a guarded send that did not end in "sent" in the bridge's audit trail. */
-export function reportUnsentReply(paneId: string, report: UnsentReport, session?: string): Promise<ActionResponse> {
-  return doReq<ActionResponse>(
-    withSession(`/api/pane/${encodeURIComponent(paneId)}/send-report`, session),
-    { method: "POST", body: JSON.stringify(report) },
-  );
 }
 
 export function sendKeys(

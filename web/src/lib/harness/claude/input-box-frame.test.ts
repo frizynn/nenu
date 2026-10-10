@@ -7,7 +7,7 @@ import { splitLines, type StyledLine } from "../../blocks";
 import { detectAutocompleteRegion } from "./autocomplete";
 import { namesAMenuKey } from "../menu-hints";
 import { extractInputDraft, extractStatusLines, hasInputBox, inputBoxTail } from "./chrome";
-import { draftCarriesSend } from "../../reply-action";
+import { draftCarriesSend } from "../../guarded-reply";
 import { claudeAdapter, claudeBuildBlocks } from "./index";
 import { lineText } from "./markers";
 import { detectMenuRegion } from "./menu";

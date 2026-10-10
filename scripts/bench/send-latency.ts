@@ -8,7 +8,6 @@ import { computeEtag } from "../../bridge/http-cache.ts";
 import type { HerdrClient } from "../../bridge/herdr-client.ts";
 import { QueueService } from "../../bridge/queue-service.ts";
 import type { AgentView } from "../../bridge/types.ts";
-import { sendGuardedReply } from "../../web/src/lib/guarded-reply.ts";
 
 // Send latency on the two write paths, against a fake Claude input box. No Herdr socket, no real
 // terminal and no operator message is touched. Herdr RPC costs default to the p50s measured on the
@@ -18,8 +17,7 @@ import { sendGuardedReply } from "../../web/src/lib/guarded-reply.ts";
 //   bun scripts/bench/send-latency.ts [runs=5]
 //
 // "delivered" is when the queue row is persisted as sent (or the direct send returned "sent").
-// "trips" counts phone-to-bridge HTTP round trips: the browser guard makes one per read and write, the
-// bridge guard (POST send) makes one.
+// "trips" counts phone-to-bridge HTTP round trips: the bridge guard (POST send) makes one.
 // "visible" is when a model browser learns it: the queue hook's 3000ms poll with a random phase, or,
 // with --push, a live-events invalidation followed by one GET.
 
@@ -50,24 +48,6 @@ const pct = (values: number[], p: number) => {
 };
 const summary = (values: number[]) => ({ p50: pct(values, 0.5), max: Math.round(Math.max(...values)) });
 
-/** The browser guard: every read and write is its own phone-to-bridge request. */
-async function direct(echoMs: number, clearMs: number, rtt: number) {
-  const term = fakeTerminal(echoMs, clearMs);
-  let trips = 0;
-  const start = performance.now();
-  const outcome = await sendGuardedReply({
-    paneId: "p",
-    agent: "claude",
-    text: "Bench message",
-    transport: {
-      fetchPane: async () => { trips++; await sleep(rtt); return term.read(); },
-      sendReply: async (_pane, text, submit) => { trips++; await sleep(rtt); return term.write(text, submit); },
-    },
-  });
-  if (outcome.status !== "sent") throw new Error(`direct send ended ${outcome.status}`);
-  return { ms: performance.now() - start, trips };
-}
-
 /** The bridge guard: one request; reads and writes are local socket calls priced at Herdr's p50s. */
 async function oneRequest(echoMs: number, clearMs: number, rtt: number) {
   const term = fakeTerminal(echoMs, clearMs);
@@ -88,8 +68,8 @@ async function oneRequest(echoMs: number, clearMs: number, rtt: number) {
   );
   if (!outcome.ok) throw new Error(`one-request send ended at ${outcome.stage}: ${outcome.error}`);
   await sleep(rtt / 2);
-  // `ms` is when the phone learns Enter went out, comparable with the browser guard's (whose answer
-  // follows the submit ack); `confirmedMs` adds the bridge's wait for the box to let go of the text.
+  // `ms` is when the phone learns Enter went out; `confirmedMs` adds the bridge's wait for the box to
+  // let go of the text.
   return { ms: enter - start + rtt / 2, confirmedMs: performance.now() - start, trips: 1 };
 }
 
@@ -149,18 +129,16 @@ async function queued(echoMs: number, clearMs: number, idleAfterMs: number, rtt:
 const rows: Record<string, unknown>[] = [];
 for (const [echoMs, clearMs] of [[30, 50], [120, 200]] as const) {
   for (const rtt of [5, 40]) {
-    for (const [path, send] of [["direct reply → Enter sent", direct], ["one-request send → Enter sent", oneRequest]] as const) {
-      const times: number[] = [];
-      const confirmed: number[] = [];
-      const trips: number[] = [];
-      for (let i = 0; i < runs; i++) {
-        const r: { ms: number; trips: number; confirmedMs?: number } = await send(echoMs, clearMs, rtt);
-        times.push(r.ms);
-        trips.push(r.trips);
-        if (r.confirmedMs !== undefined) confirmed.push(r.confirmedMs);
-      }
-      rows.push({ path, echoMs, clearMs, rttMs: rtt, ms: summary(times), ...(confirmed.length ? { confirmedMs: summary(confirmed) } : {}), trips: summary(trips) });
+    const times: number[] = [];
+    const confirmed: number[] = [];
+    const trips: number[] = [];
+    for (let i = 0; i < runs; i++) {
+      const r = await oneRequest(echoMs, clearMs, rtt);
+      times.push(r.ms);
+      trips.push(r.trips);
+      confirmed.push(r.confirmedMs);
     }
+    rows.push({ path: "one-request send → Enter sent", echoMs, clearMs, rttMs: rtt, ms: summary(times), confirmedMs: summary(confirmed), trips: summary(trips) });
   }
   for (const busy of [false, true]) {
     const delivered: number[] = [];

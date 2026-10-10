@@ -583,6 +583,11 @@ export interface SendRequest {
   paste?: boolean;
   /** The dialog text the operator saw, when sending into one (the reply prompt binding). */
   expectedPrompt?: string;
+  /**
+   * The operator's "Type anyway" after a `not_ready` refusal: a screen the adapter misreads still
+   * gets the text. It skips only that refusal. The text is still verified in the box before Enter.
+   */
+  force?: boolean;
 }
 
 export type SendStage = "preflight" | "type" | "verify" | "submit" | "confirm";

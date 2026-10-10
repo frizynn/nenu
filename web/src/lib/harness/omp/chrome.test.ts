@@ -106,7 +106,7 @@ describe("locateComposer — the real corpus, pinned so any change to the walk s
 
 describe("the composer gate — a dialog on screen means a phone reply must NOT be typed", () => {
   // This is the assertion that matters most in the file. With no adapter at all, omp panes took
-  // reply-action.ts's legacy one-shot path (type AND submit in one call), so a reply sent while one
+  // the guarded send's one-shot path (type AND submit in one call), so a reply sent while one
   // of these modals held the keyboard fired the submit key at THAT modal, confirming whatever row it
   // had highlighted. `composerReady === false` on every one of these captures is what makes the
   // pre-flight refuse before a byte is typed.
