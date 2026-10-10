@@ -700,13 +700,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const t = value.trim();
     if (!t || locked || sending) return false;
     const queueable = nativeWorkbench && queue.page?.available && !action && !force;
+    // A dialog owns the TUI's keyboard: Nenu's queue holds the message until the dialog is answered.
+    if (queueable && dialogPresent) return enqueueDraft(t, isDraft, "afterTurn");
+    // A queue add whose answer never came is resent by the queue's poll. Going through the queue
+    // again reuses its row id, so the message is delivered once instead of also through /send.
+    const unsaved = queueable ? queue.pendingAdd() : null;
+    if (unsaved) return enqueueDraft(t, isDraft, unsaved.text === t ? unsaved.deliveryMode : "afterTurn");
     // A busy agent: the operator picks now or after this turn. An idle one gets the message directly.
     if (queueable && working && busyChoice) {
       setBusyPick({ text: t, isDraft });
       return false;
     }
-    // A dialog owns the TUI's keyboard: Nenu's queue holds the message until the dialog is answered.
-    if (queueable && dialogPresent) return enqueueDraft(t, isDraft, "afterTurn");
     // Without the queue, a dialog on screen refuses the send: our text would be swallowed and the
     // submit key would ANSWER the dialog, approving whatever option was highlighted (#34). The input
     // is kept: the user answers the dialog with its own buttons, then taps Send again. We never

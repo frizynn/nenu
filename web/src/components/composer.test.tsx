@@ -2174,6 +2174,49 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
   });
 
+  it("an idle Send of a message whose queue add never got an answer goes back through the queue, with the same row", async () => {
+    // A failed "Queue for later" left its add in storage; the queue's poll resends it on its own.
+    localStorage.setItem(
+      `collie.queue.pending:${JSON.stringify(["w1:p1", undefined])}`,
+      JSON.stringify({ id: "row-lost", text: "deploy it", scope: "scope", createdAt: Date.now(), deliveryMode: "afterTurn" }),
+    );
+    const posts: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ available: true, scope: "scope", messages: [] })),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        posts.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ error: "down" }, { status: 503 });
+      }),
+    );
+    const user = userEvent.setup();
+    const wire = watchWrites();
+    renderComposer({ nativeWorkbench: true });
+    await waitFor(() => expect(posts.length).toBeGreaterThan(0));
+    await user.type(screen.getByRole("textbox"), "deploy it");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(posts.length).toBeGreaterThan(1));
+    expect(wire).not.toContain("send");
+    expect(posts.every((post) => post.id === "row-lost" && post.text === "deploy it")).toBe(true);
+    // Other text waits until that one is saved, as before: it must not race the resend.
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "something else");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText(/previous message is still being saved/i)).toBeInTheDocument();
+    expect(wire).not.toContain("send");
+  });
+
+  it("a busy agent with a dialog on screen queues for after the turn without asking", async () => {
+    const user = userEvent.setup();
+    const queue = serveQueueRoute();
+    renderComposer({ nativeWorkbench: true, agent: "codex", working: true, dialogPresent: true });
+    await user.type(screen.getByRole("textbox"), "after the dialog");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(queue.posts).toEqual([expect.objectContaining({ action: "add", deliveryMode: "afterTurn" })]));
+    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
+  });
+
   it("Cancel keeps the draft and sends nothing", async () => {
     const user = userEvent.setup();
     serveQueueRoute();

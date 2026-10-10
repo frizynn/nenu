@@ -213,6 +213,44 @@ describe("the send-time choice reaches the bridge", () => {
     hook.unmount();
   });
 
+  it.each([
+    ["past the resend window", { scope: "conversation-one", createdAt: Date.now() - 6 * 60_000 }],
+    ["for another conversation", { scope: "conversation-old", createdAt: Date.now() }],
+  ])("drops a saved add %s instead of blocking the next one", async (_, stale) => {
+    localStorage.setItem(key, JSON.stringify({ id: "old", text: "Lost", ...stale }));
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    await act(async () => {
+      expect(await hook.result.current.add("Next", "afterTurn")).not.toBeNull();
+    });
+    expect(changeMessageQueue).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(changeMessageQueue).mock.calls[0]![1]).toMatchObject({ text: "Next" });
+    hook.unmount();
+  });
+
+  it("sends a new mode for the same text as a new row, so the latest pick is the one that goes", async () => {
+    vi.mocked(changeMessageQueue).mockRejectedValueOnce(new Error("lost response"));
+    const hook = renderHook(() => useMessageQueue("pane", "session", true));
+    await waitFor(() => expect(hook.result.current.page).toEqual(page));
+    await act(async () => {
+      expect(await hook.result.current.add("Fix it", "afterTurn")).toBeNull();
+    });
+    expect(hook.result.current.pendingAdd()).toEqual({ text: "Fix it", deliveryMode: "afterTurn" });
+    vi.mocked(changeMessageQueue).mockResolvedValue(page);
+    await act(async () => {
+      await hook.result.current.add("Fix it", "steer");
+    });
+    const [first, second] = vi.mocked(changeMessageQueue).mock.calls.map((call) => call[1]);
+    expect(second).toMatchObject({ text: "Fix it", deliveryMode: "steer" });
+    expect(second!.id).not.toBe(first!.id);
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(hook.result.current.pendingAdd()).toBeNull();
+    hook.unmount();
+  });
+
   it("asks for Read it now with an explicit confirm", async () => {
     vi.mocked(changeMessageQueue).mockResolvedValue(page);
     const hook = renderHook(() => useMessageQueue("pane", "session", true));

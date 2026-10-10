@@ -130,6 +130,11 @@ type PendingMessage = {
   deliveryMode?: DeliveryMode;
 };
 // localStorage, so an add whose answer was lost survives the PWA being killed until the bridge acks it.
+const RESEND_WINDOW_MS = 5 * 60_000;
+/** Past the resend window, or for a conversation the pane no longer shows: the poll would never resend it. */
+function expired(row: PendingMessage, scope: string): boolean {
+  return row.scope !== scope || typeof row.createdAt !== "number" || Date.now() - row.createdAt >= RESEND_WINDOW_MS;
+}
 function readPending(key: string): PendingMessage | null {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
@@ -209,15 +214,19 @@ export function useMessageQueue(
       try {
         let next = await fetchMessageQueue(paneId, session, controller.signal);
         const waiting = pending.current;
-        if (
+        if (!stopped && current.current === scope && next.available && waiting && expired(waiting, next.scope)) {
+          savePending(storageKey, null);
+          pending.current = null;
+        } else if (
           !stopped &&
           current.current === scope &&
           !mutating.current &&
           next.available &&
-          waiting?.scope === next.scope &&
-          typeof waiting.createdAt === "number" &&
-          Date.now() - waiting.createdAt < 5 * 60_000
+          waiting
         ) {
+          // The read already succeeded: show it even if the resend fails, so the composer keeps
+          // routing this text through the queue instead of falling back to a direct send.
+          if (!stopped && current.current === scope) setPage(next);
           next = await changeMessageQueue(
             paneId,
             {
@@ -313,6 +322,27 @@ export function useMessageQueue(
     [page, paneId, session],
   );
 
+  /** The add still waiting for the bridge's answer in this conversation; an expired one is dropped. */
+  const pendingFor = useCallback(
+    (scope: string): PendingMessage | null => {
+      pending.current ??= readPending(storageKey);
+      if (pending.current && expired(pending.current, scope)) {
+        savePending(storageKey, null);
+        pending.current = null;
+      }
+      return pending.current;
+    },
+    [storageKey],
+  );
+  /** A pending add the operator's next send of the same text must reuse, so it is delivered once. */
+  const pendingAdd = useCallback(
+    (): { text: string; deliveryMode: DeliveryMode } | null => {
+      const row = page?.available ? pendingFor(page.scope) : null;
+      return row ? { text: row.text, deliveryMode: row.deliveryMode ?? "afterTurn" } : null;
+    },
+    [page, pendingFor],
+  );
+
   /**
    * Queue a message with the operator's choice of mode. The row id is minted here and kept in
    * localStorage until the bridge acknowledges it, so a lost answer is retried with the same id.
@@ -321,26 +351,23 @@ export function useMessageQueue(
   const add = useCallback(
     async (text: string, deliveryMode: DeliveryMode): Promise<string | null> => {
       if (!page?.available || mutating.current) return null;
-      if (pending.current && (pending.current.text !== text || pending.current.scope !== page.scope)) {
+      const waiting = pendingFor(page.scope);
+      if (waiting && waiting.text !== text) {
         setError(
           "The previous message is still being saved. Keep this draft until it reconnects.",
         );
         return null;
       }
-      pending.current ??= readPending(storageKey);
-      if (!pending.current || pending.current.text !== text || pending.current.scope !== page.scope)
-        pending.current = {
-          id: crypto.randomUUID(),
-          text,
-          scope: page.scope,
-          createdAt: Date.now(),
-          deliveryMode,
-        };
-      const row = pending.current;
+      // The same text in another mode is a new request: the operator's latest pick is what goes.
+      const row =
+        waiting && (waiting.deliveryMode ?? "afterTurn") === deliveryMode
+          ? waiting
+          : { id: crypto.randomUUID(), text, scope: page.scope, createdAt: Date.now(), deliveryMode };
+      pending.current = row;
       savePending(storageKey, row);
       const key = current.current;
       const saved = await write(
-        (scope) => ({ scope, action: "add", id: row.id, text, deliveryMode: row.deliveryMode ?? deliveryMode }),
+        (scope) => ({ scope, action: "add", id: row.id, text, deliveryMode }),
         () => savePending(storageKey, null),
       );
       if (!saved) return null;
@@ -350,7 +377,7 @@ export function useMessageQueue(
       }
       return row.id;
     },
-    [page, storageKey, write],
+    [page, pendingFor, storageKey, write],
   );
 
   const mutate = useCallback(
@@ -373,5 +400,5 @@ export function useMessageQueue(
     [write],
   );
 
-  return { page, delivered: deliveredRows(page), error, refreshError, busy, add, mutate, readNow, accepted };
+  return { page, delivered: deliveredRows(page), error, refreshError, busy, add, pendingAdd, mutate, readNow, accepted };
 }
