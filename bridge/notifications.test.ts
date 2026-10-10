@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import type { DetectedInteraction } from "./interactions.ts";
 import {
+  interactionAlert,
   NotificationCoordinator,
   makeNotifySink,
   type HerdSummary,
@@ -285,5 +287,37 @@ describe("makeNotifySink", () => {
     sink.render(summary);
     sink.clear();
     expect(push.sent).toEqual([]);
+  });
+});
+
+describe("interactionAlert", () => {
+  const card = (over: Partial<DetectedInteraction> = {}): DetectedInteraction => ({
+    paneId: "p1", agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+    context: "mkfifo fixture-fifo", signature: "sig", revision: 0, detectedAt: 0, detailComplete: true,
+    options: [
+      { index: 0, label: "Yes", role: "primary" },
+      { index: 1, label: "Yes, and always allow access", role: "persistent" },
+      { index: 2, label: "No", role: "deny" },
+    ],
+    ...over,
+  });
+  const alert: PushMessage = { title: "claude needs you", body: "demo · /tmp", tag: "collie:herd", paneId: "p1", renotify: true };
+
+  test("the question and the full command become the body, with the one-tap answers", () => {
+    expect(interactionAlert(alert, card())).toEqual({
+      ...alert,
+      body: "Do you want to proceed?\nmkfifo fixture-fifo",
+      interaction: { signature: "sig", actions: [{ optionIndex: 0, title: "Yes" }, { optionIndex: 2, title: "No" }] },
+    });
+  });
+
+  test("a command that does not fit is cut, and then nothing can be approved from the notification", () => {
+    const long = interactionAlert(alert, card({ context: "x".repeat(400) }));
+    expect(long.body!.length).toBe(300);
+    expect(long.interaction?.actions).toEqual([]);
+  });
+
+  test("an incomplete permission shows its question but offers no actions", () => {
+    expect(interactionAlert(alert, card({ detailComplete: false })).interaction?.actions).toEqual([]);
   });
 });

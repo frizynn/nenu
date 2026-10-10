@@ -1,3 +1,4 @@
+import { pushActions, type DetectedInteraction } from "./interactions.ts";
 import type { PushMessage } from "./push.ts";
 import type { AgentStatus, AgentView } from "./types.ts";
 
@@ -77,6 +78,32 @@ export function makeNotifySink(
       if (mute.isMuted()) return;
       void push.send({ type: "clear", tag: herdTag });
     },
+  };
+}
+
+/** The dialog a push carries: enough for the service worker to answer it without opening Nenu. */
+export interface PushInteraction {
+  signature: string;
+  /** One-tap answers; empty when the dialog must be answered in the app. */
+  actions: Array<{ optionIndex: number; title: string }>;
+}
+
+/** Longest body the alert shows; a detail that does not fit is never answerable from the notification. */
+const ALERT_BODY_MAX = 300;
+
+/**
+ * A single-pane alert rewritten around its detected dialog: the question (and the command or file it
+ * is about) becomes the body. Answer actions ride along only when the whole detail fits in the body,
+ * so a permission is never approved from a notification that cut its command off.
+ */
+export function interactionAlert(msg: PushMessage, interaction: DetectedInteraction): PushMessage {
+  const detail = interaction.kind === "permission" ? interaction.context : undefined;
+  const body = detail ? `${interaction.question}\n${detail}` : interaction.question;
+  const fits = body.length <= ALERT_BODY_MAX;
+  return {
+    ...msg,
+    body: fits ? body : `${body.slice(0, ALERT_BODY_MAX - 1)}…`,
+    interaction: { signature: interaction.signature, actions: fits ? pushActions(interaction) : [] },
   };
 }
 

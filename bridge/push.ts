@@ -1,6 +1,8 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
+import type { DetectedInteraction } from "./interactions.ts";
+import { interactionAlert, type PushInteraction } from "./notifications.ts";
 
 // Optional Web Push (VAPID). Zero hard dependency: if `web-push` isn't installed or VAPID keys
 // aren't configured, push is silently disabled and the rest of the bridge works unchanged.
@@ -170,7 +172,12 @@ export interface PushMessage {
    *  absent = today's pane deep-link (so the agent-alert payload is unchanged). */
   target?: "settings";
   renotify?: boolean;
+  /** The dialog the alert is about, so the notification can show it and (where allowed) answer it. */
+  interaction?: PushInteraction;
 }
+
+/** The detected dialog of a pane, if any; `session` is undefined for the primary. */
+export type InteractionLookup = (session: string | undefined, paneId: string) => DetectedInteraction | null;
 
 export class Push {
   private lib: WebPushModule | null = null;
@@ -186,6 +193,7 @@ export class Push {
   // Saves are funnelled through this chain so concurrent writes never interleave (last enqueued
   // wins deterministically); a failed write is swallowed here so it can't poison later saves.
   private saveChain: Promise<void> = Promise.resolve();
+  private interactionFor: InteractionLookup | null = null;
 
   constructor(
     private readonly cfg: Config,
@@ -277,8 +285,17 @@ export class Push {
     return doomed.length;
   }
 
+  /** Let agent alerts carry the pane's detected dialog (bridge/interactions.ts). */
+  useInteractions(lookup: InteractionLookup): void {
+    this.interactionFor = lookup;
+  }
+
   /** Send a notification instruction (render, clear, or update) to every subscribed device. */
   async send(msg: PushMessage): Promise<void> {
+    if (msg.type === undefined && msg.paneId !== undefined && this.interactionFor) {
+      const interaction = this.interactionFor(msg.session, msg.paneId);
+      if (interaction) msg = interactionAlert(msg, interaction);
+    }
     // The SW reads deep-link fields from `data`. `session` is omitted for the primary (absent on the
     // message), keeping that payload identical to the pre-multi-session shape.
     const data: { paneId?: string; session?: string; target?: "settings" } = { paneId: msg.paneId };

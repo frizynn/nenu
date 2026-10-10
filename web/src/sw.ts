@@ -105,8 +105,21 @@ async function anyVisibleClient(): Promise<boolean> {
   return windows.some((c) => c.visibilityState === "visible");
 }
 
+/** The dialog an agent alert carries (bridge/notifications.ts interactionAlert). */
+interface PushInteraction {
+  signature: string;
+  actions: Array<{ optionIndex: number; title: string }>;
+}
+
+const ANSWER_ACTION = "answer:";
+
+// Notification actions are unsupported on some platforms (iOS Safari), which report 0 here.
+function canShowActions(): boolean {
+  return ((Notification as unknown as { maxActions?: number }).maxActions ?? 0) > 0;
+}
+
 async function handlePush(event: PushEvent): Promise<void> {
-  let payload: PushPayload = {};
+  let payload: PushPayload & { interaction?: PushInteraction } = {};
   try {
     payload = (event.data?.json() as PushPayload) ?? {};
   } catch {
@@ -124,13 +137,16 @@ async function handlePush(event: PushEvent): Promise<void> {
   }
   // `renotify` isn't in this TS lib's NotificationOptions yet, though it's honoured by browsers that
   // support it (and it needs a tag).
-  const options: NotificationOptions & { renotify?: boolean } = {
+  const interaction = payload.interaction;
+  const actions = interaction && canShowActions() ? interaction.actions : [];
+  const options: NotificationOptions & { renotify?: boolean; actions?: Array<{ action: string; title: string }> } = {
     body: decision.body,
-    data: { paneId: decision.paneId, session: decision.session, target: decision.target },
+    data: { paneId: decision.paneId, session: decision.session, target: decision.target, signature: interaction?.signature },
     icon: ICON,
     badge: ICON,
     tag: decision.tag,
     renotify: decision.renotify,
+    ...(actions.length ? { actions: actions.map((a) => ({ action: `${ANSWER_ACTION}${a.optionIndex}`, title: a.title })) } : {}),
   };
   await self.registration.showNotification(decision.title, options);
 }
@@ -141,6 +157,8 @@ interface NotifData {
   session?: string;
   /** Non-pane tap destination (e.g. "settings"); absent = the default agent deep-link. */
   target?: string;
+  /** The dialog the notification's answer actions are bound to. */
+  signature?: string;
 }
 
 // Session query builder, inlined so the SW bundle stays dependency-free (it imports only
@@ -149,9 +167,10 @@ function sessionSearchParam(session?: string): string {
   return session ? `?s=${encodeURIComponent(session)}` : "";
 }
 
-// Tap a notification: an update push routes to Settings; everything else deep-links to the agent's
-// pane (never act on it blind — the reply lives in-app). An old cached SW that predates `target`
-// simply ignores it and takes the pane path, opening "/" for a pushed update — acceptable.
+// Tap a notification: an update push routes to Settings; an answer action (offered only for a
+// non-persistent option whose whole dialog is in the notification) answers through the bridge's
+// signature guard; everything else deep-links to the agent's pane. An old cached SW that predates
+// `target` simply ignores it and takes the pane path, opening "/" for a pushed update — acceptable.
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
   const data = (event.notification.data as NotifData | null) ?? {};
@@ -159,8 +178,30 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
     event.waitUntil(openPath("/settings"));
     return;
   }
+  if (event.action.startsWith(ANSWER_ACTION) && data.paneId && data.signature) {
+    event.waitUntil(answer(data.paneId, data.session, data.signature, Number(event.action.slice(ANSWER_ACTION.length))));
+    return;
+  }
   event.waitUntil(openPane(data.paneId, data.session));
 });
+
+// An answer action: the bridge re-reads the screen and refuses a stale signature, so a notification
+// that outlived its dialog presses nothing. Anything but a clean answer opens the pane instead.
+async function answer(paneId: string, session: string | undefined, signature: string, optionIndex: number): Promise<void> {
+  const query = session ? `?session=${encodeURIComponent(session)}` : "";
+  try {
+    const res = await fetch(`/api/interactions/${encodeURIComponent(paneId)}/answer${query}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-requested-with": "XMLHttpRequest" },
+      body: JSON.stringify({ signature, optionIndex }),
+      redirect: "manual",
+    });
+    if (res.ok && ((await res.json()) as { ok?: boolean }).ok) return;
+  } catch {
+    // Offline or refused: fall through to opening the pane.
+  }
+  await openPane(paneId, session);
+}
 
 // Deep-link to the agent's pane — the body-tap path. The session rides along as `?s=` so it lands in
 // the right herd (omitted for primary). Delegates the focus/navigate/open to openPath.
