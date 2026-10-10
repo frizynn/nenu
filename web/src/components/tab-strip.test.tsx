@@ -22,7 +22,7 @@ describe("TabStrip", () => {
           { ...tabs[0]!, label: "First" },
         ]}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
       />,
@@ -35,7 +35,7 @@ describe("TabStrip", () => {
     expect(renderedTabs).toEqual(["Second", "First"]);
   });
 
-  it("shows All plus only this workspace's tabs, and reports selection", async () => {
+  it("shows only this workspace's tabs, and reports selection", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     render(
@@ -43,16 +43,15 @@ describe("TabStrip", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={onSelect}
         onNewTab={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
-    // w2's tab (also labelled "1") must be excluded, so there's exactly one "1".
-    expect(screen.getAllByRole("button", { name: "1" })).toHaveLength(1);
+    // w2's tab (also labelled "1") must be excluded, so there's exactly one "Tab 1".
+    expect(screen.getAllByRole("button", { name: "Tab 1" })).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "2" }));
+    await user.click(screen.getByRole("button", { name: "Tab 2" }));
     expect(onSelect).toHaveBeenCalledWith("w1:t2");
   });
 
@@ -64,7 +63,7 @@ describe("TabStrip", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={onNewTab}
       />,
@@ -83,7 +82,7 @@ describe("TabStrip — long-press actions", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
         onRenamed={vi.fn()}
@@ -91,7 +90,7 @@ describe("TabStrip — long-press actions", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
-    fireEvent.contextMenu(screen.getByRole("button", { name: "2" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" }));
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close tab" })).toBeInTheDocument();
   });
@@ -102,12 +101,12 @@ describe("TabStrip — long-press actions", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
       />,
     );
-    fireEvent.contextMenu(screen.getByRole("button", { name: "2" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" }));
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
@@ -117,13 +116,13 @@ describe("TabStrip — long-press actions", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
         onRenamed={vi.fn()}
       />,
     );
-    fireEvent.contextMenu(screen.getByRole("button", { name: "2" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" }));
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
@@ -144,7 +143,7 @@ describe("TabStrip — long-press actions", () => {
         onClosed={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: "Tab 1" }));
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -164,7 +163,7 @@ describe("TabStrip — long-press actions", () => {
         onClosed={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "2" }));
+    await user.click(screen.getByRole("button", { name: "Tab 2" }));
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("w1:t2");
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
@@ -193,7 +192,7 @@ describe("TabStrip — long-press actions", () => {
         onClosed={onClosed}
       />,
     );
-    fireEvent.contextMenu(screen.getByRole("button", { name: "2" })); // w1:t2, paneCount 1
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tab 2" })); // w1:t2, paneCount 1
     await user.click(screen.getByRole("button", { name: "Close tab" }));
     await user.click(screen.getByRole("button", { name: "Tap again to close 1 pane" }));
 
@@ -209,7 +208,7 @@ describe("TabStrip — long-press actions", () => {
         workspaceId="w1"
         tabs={[{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: xss, focused: false, paneCount: 1 }]}
         agents={[]}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
       />,
@@ -243,7 +242,7 @@ describe("TabStrip — status on the chips", () => {
         workspaceId="w1"
         tabs={tabs}
         agents={agents}
-        selected={null}
+        selected="w1:t1"
         onSelect={vi.fn()}
         onNewTab={vi.fn()}
       />,

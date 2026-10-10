@@ -649,7 +649,7 @@ describe("cold boot with no network", () => {
     const data = await rootLoader();
 
     // `error` is the flag the empty state keys off: an empty herd here means "we don't know", and
-    // components/agent-list.tsx must not read it as "nothing is running".
+    // no view may read it as "nothing is running".
     expect(data.error).toBe(true);
     expect(data.agents).toEqual([]);
     expect(data.lastSeenAt).toBeUndefined();

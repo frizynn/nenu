@@ -1,14 +1,14 @@
 import {
-  filterSpaces,
   groupPanesByTab,
   neighborTab,
   paneAfterClose,
-  sortSpacesByRecency,
+  shownTab,
+  soloPane,
   spaceLastSeenMap,
-  spaceTriageMap,
+  tabName,
+  workspaceFolder,
 } from "./spaces";
-import { worstTriage } from "./triage";
-import type { AgentStatus, AgentView, TabView, WorkspaceView } from "./types";
+import type { AgentView, TabView } from "./types";
 
 function agent(
   partial: Partial<AgentView> & { paneId: string; workspaceId: string; tabId: string },
@@ -52,12 +52,12 @@ describe("groupPanesByTab", () => {
     expect(group!.panes).toEqual([a1, shell]);
   });
 
-  it("collects panes whose tab isn't listed yet into a trailing '…' group", () => {
+  it("collects panes whose tab isn't listed yet into a trailing 'Other panes' group", () => {
     const orphan = agent({ paneId: "w1:p9", workspaceId: "w1", tabId: "w1:tX" });
     const groups = groupPanesByTab("w1", tabs, [orphan], []);
     const last = groups.at(-1)!;
     expect(last.tabId).toBe("w1:other");
-    expect(last.label).toBe("…");
+    expect(last.label).toBe("Other panes");
     expect(last.panes).toEqual([orphan]);
   });
 
@@ -65,111 +65,6 @@ describe("groupPanesByTab", () => {
     const other = agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1" });
     const groups = groupPanesByTab("w1", tabs, [other], []);
     expect(groups.every((g) => g.panes.length === 0)).toBe(true);
-  });
-});
-
-describe("spaceTriageMap — one classifier for rows and chips", () => {
-  const mk = (id: string, ws: string, status: AgentStatus, extra: Partial<AgentView> = {}) =>
-    agent({ paneId: id, workspaceId: ws, tabId: `${ws}:t1`, status, ...extra });
-
-  it("keeps the most urgent bucket per workspace and omits spaces with no agent", () => {
-    const m = spaceTriageMap([
-      mk("w1:p1", "w1", "idle"),
-      mk("w1:p2", "w1", "blocked"),
-      mk("w2:p1", "w2", "working"),
-    ]);
-    expect(m.get("w1")).toBe("needs");
-    expect(m.get("w2")).toBe("working");
-    // Not the same as idle: an empty space has nothing to report.
-    expect(m.get("w3")).toBeUndefined();
-  });
-
-  it("ranks an unseen-done agent ABOVE a working one — the disagreement this replaced", () => {
-    // STATUS_RANK put working (1) ahead of done (4), so the old space row said "working" while the
-    // space chip, which already routed through bucketOf, said "ready". Same input, one answer now.
-    const m = spaceTriageMap([
-      mk("w1:p1", "w1", "working"),
-      mk("w1:p2", "w1", "done", { lastActiveAt: 2000, lastSeenAt: 1000 }),
-    ]);
-    expect(m.get("w1")).toBe("ready");
-  });
-
-  it("agrees with worstTriage, which is the point of sharing bucketOf", () => {
-    const agents = [
-      mk("w1:p1", "w1", "done", { lastActiveAt: 2000, lastSeenAt: 1000 }),
-      mk("w1:p2", "w1", "working"),
-      mk("w1:p3", "w1", "idle"),
-    ];
-    expect(spaceTriageMap(agents).get("w1")).toBe(worstTriage(agents));
-  });
-
-  it("a done agent you have already seen is not 'ready'", () => {
-    const m = spaceTriageMap([mk("w1:p1", "w1", "done", { lastActiveAt: 1000, lastSeenAt: 2000 })]);
-    expect(m.get("w1")).toBe("recent");
-  });
-});
-
-const ws = (workspaceId: string, label: string, number: number): WorkspaceView => ({
-  workspaceId,
-  number,
-  label,
-  focused: false,
-  activeTabId: `${workspaceId}:t1`,
-  tabCount: 1,
-  paneCount: 1,
-});
-
-describe("sortSpacesByRecency", () => {
-  const spaces = [ws("w1", "alpha", 1), ws("w2", "beta", 2), ws("w3", "gamma", 3)];
-
-  it("floats the space you used most recently to the top", () => {
-    const panes = [
-      agent({ paneId: "w1:p1", workspaceId: "w1", tabId: "w1:t1", lastSeenAt: 100 }),
-      agent({ paneId: "w3:p1", workspaceId: "w3", tabId: "w3:t1", lastSeenAt: 900 }),
-    ];
-    expect(sortSpacesByRecency(spaces, panes).map((w) => w.workspaceId)).toEqual([
-      "w3",
-      "w1",
-      "w2",
-    ]);
-  });
-
-  it("leaves never-used spaces in Herdr's own order behind the used ones", () => {
-    const panes = [agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1", lastSeenAt: 5 })];
-    expect(sortSpacesByRecency(spaces, panes).map((w) => w.workspaceId)).toEqual([
-      "w2",
-      "w1",
-      "w3",
-    ]);
-  });
-
-  it("changes nothing at all on a bridge that reports no timestamps", () => {
-    const panes = [agent({ paneId: "w1:p1", workspaceId: "w1", tabId: "w1:t1" })];
-    expect(sortSpacesByRecency(spaces, panes)).toEqual(spaces);
-  });
-
-  it("does not mutate its input", () => {
-    const panes = [agent({ paneId: "w3:p1", workspaceId: "w3", tabId: "w3:t1", lastSeenAt: 9 })];
-    sortSpacesByRecency(spaces, panes);
-    expect(spaces.map((w) => w.workspaceId)).toEqual(["w1", "w2", "w3"]);
-  });
-});
-
-describe("filterSpaces", () => {
-  const spaces = [ws("w1", "moonward_os", 1), ws("w2", "trader", 2), ws("w3", "MOON_probe", 3)];
-
-  it("matches case-insensitively, anywhere in the label", () => {
-    expect(filterSpaces(spaces, "moon").map((w) => w.workspaceId)).toEqual(["w1", "w3"]);
-    expect(filterSpaces(spaces, "RAD").map((w) => w.workspaceId)).toEqual(["w2"]);
-  });
-
-  it("returns everything for an empty or whitespace query", () => {
-    expect(filterSpaces(spaces, "")).toHaveLength(3);
-    expect(filterSpaces(spaces, "   ")).toHaveLength(3);
-  });
-
-  it("returns nothing when nothing matches", () => {
-    expect(filterSpaces(spaces, "zzz")).toEqual([]);
   });
 });
 
@@ -187,14 +82,6 @@ describe("spaceLastSeenMap", () => {
 
   it("omits spaces with no panes, which callers read as 0", () => {
     expect(spaceLastSeenMap([]).get("w1")).toBeUndefined();
-  });
-
-  it("gives the same ordering whether or not the map is passed in", () => {
-    const spaces = [ws("w1", "alpha", 1), ws("w2", "beta", 2)];
-    const panes = [agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1", lastSeenAt: 900 })];
-    expect(sortSpacesByRecency(spaces, panes, spaceLastSeenMap(panes))).toEqual(
-      sortSpacesByRecency(spaces, panes),
-    );
   });
 });
 
@@ -233,5 +120,58 @@ describe("paneAfterClose", () => {
     const now = { tabs: [before[1]!, before[2]!], agents: [agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1" })], shellPanes: [shell("w1:p2", "w1:t2")] };
     expect(paneAfterClose({ tabId: "w1:t1" }, before, now)).toBe("w1:p2");
     expect(paneAfterClose({ tabId: "w1:t1" }, before, { ...now, tabs: [before[2]!], shellPanes: [] })).toBeUndefined();
+  });
+});
+
+describe("tabName", () => {
+  it("names a tab Herdr numbered by position, and keeps a label someone wrote", () => {
+    expect(tabName("1", 1)).toBe("Tab 1");
+    expect(tabName(" 12 ", 2)).toBe("Tab 12");
+    expect(tabName("redesign", 1)).toBe("redesign");
+    expect(tabName("v2 review", 1)).toBe("v2 review");
+    expect(tabName("  ", 3)).toBe("Tab 3");
+  });
+});
+
+describe("shownTab", () => {
+  const groups = [{ tabId: "w1:t1", label: "a", panes: [] }, { tabId: "w1:t2", label: "b", panes: [] }];
+
+  it("shows the tab asked for, else Herdr's active tab, else the first", () => {
+    expect(shownTab(groups, "w1:t1", "w1:t2")?.tabId).toBe("w1:t1");
+    expect(shownTab(groups, null, "w1:t2")?.tabId).toBe("w1:t2");
+    // A tab closed since the link was made falls back like no ask at all.
+    expect(shownTab(groups, "w1:gone", "w1:t2")?.tabId).toBe("w1:t2");
+    expect(shownTab(groups, null, "w1:gone")?.tabId).toBe("w1:t1");
+    expect(shownTab([], null, "w1:t1")).toBeUndefined();
+  });
+});
+
+describe("workspaceFolder", () => {
+  const at = (paneId: string, cwd: string) => agent({ paneId, workspaceId: "w1", tabId: "w1:t1", cwd });
+
+  it("is the directory most panes sit in, the first one on a tie", () => {
+    expect(workspaceFolder([at("w1:a", "/r/wt"), at("w1:b", "/r"), at("w1:c", "/r")])).toBe("/r");
+    expect(workspaceFolder([at("w1:a", "/r/wt"), at("w1:b", "/r")])).toBe("/r/wt");
+  });
+
+  it("is unknown without a pane that reports one", () => {
+    expect(workspaceFolder([])).toBeUndefined();
+    expect(workspaceFolder([at("w1:a", "")])).toBeUndefined();
+  });
+});
+
+describe("soloPane", () => {
+  const a = agent({ paneId: "w1:a", workspaceId: "w1", tabId: "w1:t1" });
+  const shell = agent({ paneId: "w1:s", workspaceId: "w1", tabId: "w1:t2", kind: "shell" });
+  const elsewhere = agent({ paneId: "w2:a", workspaceId: "w2", tabId: "w2:t1" });
+
+  it("is the workspace's only pane, agent or shell", () => {
+    expect(soloPane("w1", [a, elsewhere], [])).toBe(a);
+    expect(soloPane("w1", [elsewhere], [shell])).toBe(shell);
+  });
+
+  it("is nothing when the workspace holds several panes or none", () => {
+    expect(soloPane("w1", [a], [shell])).toBeUndefined();
+    expect(soloPane("w3", [a, elsewhere], [shell])).toBeUndefined();
   });
 });

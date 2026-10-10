@@ -1,10 +1,9 @@
 import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
-import { AppHeader, SettingsGear } from "@/components/app-header";
+import { ColumnPage } from "@/components/column-page";
 import { ProjectTasks } from "@/components/project-tasks";
-import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { homePath, nodePath, panePath } from "@/lib/nav";
+import { nodePath, panePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
 
 // A project opens on its coordinator's conversation; the pane route frames it with the task list.
@@ -21,19 +20,10 @@ export function ProjectRoute() {
     return <Navigate to={panePath(coordinator, data.session)} replace />;
   }
 
-  return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
-    <AppHeader bridge={data.bridge} error={data.error} onHome={() => navigate(homePath(data.session))}
-      rightTrail={<SettingsGear session={data.session} />}>
-      <span className="truncate text-sm font-medium">{project?.name ?? "Project"}</span>
-    </AppHeader>
-    <ReadOnlyBanner device={data.device} />
-    <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-12">
-      <div className="mx-auto w-full max-w-2xl">
-        {!project ? <p className="py-16 text-center text-sm text-muted-foreground">Project not found in this Herdr session.</p>
-          : <ProjectTasks project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
-            onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
-            onChanged={() => revalidator.revalidate()} />}
-      </div>
-    </main>
-  </div>;
+  return <ColumnPage data={data} title={project?.name ?? "Project"}>
+    {!project ? <p className="py-16 text-center text-sm text-muted-foreground">Project not found in this Herdr session.</p>
+      : <ProjectTasks project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
+        onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
+        onChanged={() => revalidator.revalidate()} />}
+  </ColumnPage>;
 }

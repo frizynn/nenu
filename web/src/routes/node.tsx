@@ -2,13 +2,12 @@ import { useState } from "react";
 import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 import { ExternalLink, MessageSquare } from "lucide-react";
 
-import { AppHeader, SettingsGear } from "@/components/app-header";
+import { ColumnPage } from "@/components/column-page";
 import { NodeDot } from "@/components/node-row";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
-import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { Button } from "@/components/ui/button";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
+import { nodePath, panePath, projectPath } from "@/lib/nav";
 import { STATE_LABEL, flatten, orgTree } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
@@ -63,14 +62,5 @@ export function NodeRoute() {
     </>;
   }
 
-  return <div className="workbench-home flex min-h-0 min-w-0 flex-1 flex-col">
-    <AppHeader bridge={data.bridge} error={data.error} onHome={() => navigate(homePath(data.session))}
-      rightTrail={<SettingsGear session={data.session} />}>
-      <span className="truncate text-sm font-medium">{project?.name ?? "Project"}</span>
-    </AppHeader>
-    <ReadOnlyBanner device={data.device} />
-    <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-8 sm:pt-12">
-      <div className="mx-auto w-full max-w-2xl">{body}</div>
-    </main>
-  </div>;
+  return <ColumnPage data={data} title={project?.name ?? "Project"}>{body}</ColumnPage>;
 }

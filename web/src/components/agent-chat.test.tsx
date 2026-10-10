@@ -123,9 +123,12 @@ function SpaceOverviewSentinel() {
   return <div>overview:{spaceId ?? "none"}</div>;
 }
 
+/** A shell in another tab of fixtureAgents[0]'s workspace, so the workspace overview has more to show. */
+const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
+
 describe("AgentChat — header title block", () => {
   it("leads with the space, puts the directory on the subline, and drops the redundant agent name", () => {
-    renderChat(); // claude @ /home/you/webapp → ~/webapp
+    renderChat({ shellPanes: [neighbourShell] }); // claude @ /home/you/webapp → ~/webapp
     expect(screen.getByText("webapp")).toBeInTheDocument(); // space leads
     expect(screen.getByText("~/webapp")).toBeInTheDocument(); // directory on the subline
     // The agent is conveyed by its icon (aria-label only), so its name isn't repeated as text.
@@ -146,7 +149,7 @@ describe("AgentChat — header title block", () => {
               paneId={agent.paneId}
               agent={agent}
               agents={fixtureAgents}
-              shellPanes={[]}
+              shellPanes={[neighbourShell]}
               tabs={[]}
               text="out"
               onBack={vi.fn()}
@@ -161,6 +164,13 @@ describe("AgentChat — header title block", () => {
 
     await user.click(screen.getByRole("button", { name: /open webapp overview/i }));
     expect(await screen.findByText("overview:w1")).toBeInTheDocument();
+  });
+
+  // The overview of a workspace holding only this pane opens straight back onto it.
+  it("offers no overview when the workspace holds only this pane", () => {
+    renderChat();
+    expect(screen.getByText("webapp")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
   });
 });
 
@@ -609,7 +619,7 @@ describe("AgentChat — mirror tap must not pop the keyboard on option taps", ()
 });
 
 // Connection copy now lives in the single top ConnectionBanner (mounted in RootLayout), not in the
-// header — so the pane header has no pill. What it still owns: the agent StatusBadge, which shows the
+// header — so the pane header has no pill. What it still owns: the agent's status dot, which shows the
 // LAST snapshot's status and must stop reading as current during an outage (it dims on any not-live).
 describe("AgentChat — shared header: stale-status dimming", () => {
   beforeEach(() => __resetConnectionHealth());
@@ -626,7 +636,7 @@ describe("AgentChat — shared header: stale-status dimming", () => {
           paneId={agent.paneId}
           agent={agent}
           agents={fixtureAgents}
-          shellPanes={[]}
+          shellPanes={[neighbourShell]}
           tabs={[]}
           text="out"
           error={error}

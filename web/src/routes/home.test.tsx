@@ -10,8 +10,6 @@ import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
 
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
-const newSpace = vi.fn();
-vi.mock("@/hooks/use-spaces", () => ({ useSpaceActions: () => ({ newSpace }) }));
 const openNewAgent = vi.fn();
 vi.mock("@/lib/spawn", async (original) => ({ ...(await original<typeof import("@/lib/spawn")>()), openNewAgent: (target: unknown) => openNewAgent(target) }));
 

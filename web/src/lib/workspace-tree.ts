@@ -1,5 +1,5 @@
 import { matches } from "@/lib/projects";
-import { groupPanesByTab, spaceLastSeenMap } from "@/lib/spaces";
+import { groupPanesByTab, spaceLastSeenMap, tabName, workspaceName } from "@/lib/spaces";
 import { paneDisplayName, type AgentView, type TabView, type WorkspaceView } from "@/lib/types";
 
 /** A tab in the navigation tree; `panes` is never empty. */
@@ -39,11 +39,11 @@ export function workspaceTree(source: TreeSource, query = "", currentPaneId?: st
 
   return source.workspaces
     .map((workspace): WorkspaceBranch => {
-      const name = workspace.label || `Workspace ${workspace.number}`;
+      const name = workspaceName(workspace);
       const wholeWorkspace = matches(query, name);
       const tabs = groupPanesByTab(workspace.workspaceId, [...source.tabs], [...source.agents], [...shells])
         .map((group, index): TabBranch => {
-          const label = group.label === "…" ? "Other panes" : group.label || `Tab ${index + 1}`;
+          const label = tabName(group.label, index + 1);
           const wholeTab = wholeWorkspace || matches(query, label);
           return { tabId: group.tabId, label, panes: wholeTab ? group.panes : group.panes.filter((pane) => paneMatches(pane, query)) };
         })

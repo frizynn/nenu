@@ -13,10 +13,9 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { Activity as ActivityIcon, ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
-import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
-import { useSpawnState } from "@/lib/spawn";
+import { openNewAgent, useSpawnState } from "@/lib/spawn";
 import { useDashPrefs, openForCount } from "@/hooks/use-dash-prefs";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
@@ -72,7 +71,7 @@ import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
-import { paneInTab } from "@/lib/spaces";
+import { paneInTab, soloPane } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -82,6 +81,9 @@ import type {
   PromptModel,
   WizardModel,
 } from "@/lib/blocks";
+
+/** The chat title's box, whether it opens the workspace overview or has none to open. */
+const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left lg:-mx-1 lg:min-h-9";
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
 const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
@@ -126,7 +128,7 @@ interface AgentChatProps {
   /** Per-device auth from the snapshot; an unauthorised device drops the composer to read-only. */
   device?: DeviceAuth;
   // Global connection state — fed straight to the shared AppHeader, which drives the header Nenu
-  // mark (gallop/rest, identically to the dashboard), and lets us dim the stale StatusBadge while not
+  // mark (gallop/rest, identically to the dashboard), and lets us dim the stale status dot while not
   // live. Defaults describe a healthy link so tests that don't care render "live".
   bridge?: BridgeStatus | undefined;
   error?: boolean;
@@ -193,12 +195,11 @@ export function AgentChat({
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
-  // the Nenu mark + pill; here we use it to dim the StatusBadge, so the badge stops presenting the
+  // the Nenu mark + pill; here we use it to dim the title's status dot, so it stops presenting the
   // last snapshot's status as current while we're reconnecting/lost, and restores instantly on recovery.
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
   const unavailable = bridge !== "connected" || lost;
-  const { newTab } = useSpaceActions();
   const spawning = useSpawnState(paneId);
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
   const displayScope = JSON.stringify([session ?? "default", paneId]);
@@ -842,6 +843,23 @@ export function AgentChat({
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
   /> : undefined;
 
+  // A workspace of only this pane opens straight back onto it, so the title has no overview to open.
+  const titleOpensOverview = !!agent && (!!project || !soloPane(agent.workspaceId, agents, shellPanes));
+  const titleLabel = agent && <>
+    {isShell
+      ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+    <div className="min-w-0 flex-1">
+      <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
+        {title}
+        {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
+      </div>
+      <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
+        {shortCwd(agent.cwd)}
+      </div>
+    </div>
+  </>;
+
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
@@ -849,8 +867,8 @@ export function AgentChat({
     >
       {/* Header — the SAME AppHeader shell the dashboard and space mount, so the Nenu mark is
           identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
-          slots: the `space › tab` breadcrumb as the center, the agent StatusBadge as the right-cluster
-          lead, and the find bar as the full-row takeover while searching. */}
+          slots: the title as the center, the pane's tools as the right cluster, and the find bar as
+          the full-row takeover while searching. */}
       {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
         find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
         bridge={bridge}
@@ -880,28 +898,17 @@ export function AgentChat({
         }
       >
         {/* One quiet title: a status dot and the name. Desktop adds the cwd as a second line. Tapping
-            it opens the workspace overview (all its tabs + panes). */}
-        {agent ? (
+            it opens the workspace overview (all its tabs + panes), unless this pane is all there is. */}
+        {agent ? (titleOpensOverview ? (
           <button
             type="button"
             onClick={() => openSpace(agent.workspaceId)}
             aria-label={`Open ${project?.name ?? agent.workspaceLabel} overview`}
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left transition-colors active:bg-muted/60 lg:-mx-1 lg:min-h-9"
+            className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
           >
-            {isShell
-              ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold leading-tight lg:text-sm">
-                {title}
-                {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
-              </div>
-              <div className="hidden truncate font-mono text-[11px] leading-tight text-muted-foreground lg:block">
-                {shortCwd(agent.cwd)}
-              </div>
-            </div>
+            {titleLabel}
           </button>
-        ) : (
+        ) : <div className={TITLE_SHAPE}>{titleLabel}</div>) : (
           <div className="min-w-0 flex-1 px-1">
             <span className="truncate font-semibold">(agent gone)</span>
           </div>
@@ -916,16 +923,15 @@ export function AgentChat({
 
         {strip !== undefined ? strip : <>
         {/* In-pane tab bar: the current space's tabs above the mirror — switch tab without leaving the
-            pane, or create one with +. No "All" here (you're always in a specific tab). */}
+            pane, or create one with +. */}
         {agent && (
           <TabStrip
             workspaceId={agent.workspaceId}
             tabs={tabs}
             agents={agents}
             selected={agent.tabId}
-            onSelect={(id) => id && goToTab(id)}
-            onNewTab={newTab}
-            allowAll={false}
+            onSelect={goToTab}
+            onNewTab={(workspaceId) => openNewAgent({ kind: "tab", workspaceId })}
             session={session}
             readOnly={readOnly}
             onRenamed={() => revalidator.revalidate()}

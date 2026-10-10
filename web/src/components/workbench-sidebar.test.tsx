@@ -140,7 +140,8 @@ describe("the sidebar", () => {
     const user = open();
     const workspaces = screen.getByRole("region", { name: "Workspaces" });
     expect(within(workspaces).getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["soflex"]);
-    expect(within(workspaces).getByRole("link", { name: /^soflex/ })).toHaveAttribute("href", "/space/w2");
+    // soflex holds one pane, so its name opens that pane rather than a page of one.
+    expect(within(workspaces).getByRole("link", { name: /^soflex/ })).toHaveAttribute("href", "/pane/loose");
     await user.click(screen.getByRole("button", { name: "rediseño mobile threads" }));
     expect(screen.queryByText("panel depo")).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "awam/t1": false });
