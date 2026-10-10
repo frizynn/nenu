@@ -6,8 +6,14 @@ import type { LivePublisher } from "./types.ts";
 // changed (ADR 0058). Herdr 0.9.1 announces no output, so the poll that used to run on the phone over
 // the network runs here instead, next to the socket, and only for panes a live stream asked about.
 
-/** Reads per watched pane while it is quiet or changing. A visible read costs ~0.23 ms (measured). */
+/** Reads per watched pane while it is changing. A visible read costs ~0.23 ms (measured). */
 const READ_EVERY_MS = 200;
+/**
+ * A quiet pane backs off by doubling up to this, so a phone left on a static dialog stops costing
+ * Herdr five connections a second. It equals PUBLISH_GAP_MS, so a first change is not seen later
+ * than an event could go out anyway.
+ */
+const QUIET_MAX_MS = 1_000;
 /** After a failed read: a pane that went away or a Herdr restart should not be hammered. */
 const RETRY_MS = 2_000;
 /** At most one `pane` event a second per pane; the phone re-reads the mirror on each. */
@@ -17,6 +23,11 @@ export const MAX_WATCHED_PER_CLIENT = 4;
 // `visible` is the rendered viewport whatever the count (HERDR_API.md), so this only has to cover it.
 const VISIBLE_LINES = 1_000;
 
+/** The wait before the next read after `quiet` unchanged reads: doubling from `every`, up to `max`. */
+export function quietDelay(quiet: number, every: number, max: number): number {
+  return Math.min(every * 2 ** quiet, Math.max(max, every));
+}
+
 export type PaneReader = Pick<HerdrClient, "readPane">;
 
 interface Watch {
@@ -25,12 +36,15 @@ interface Watch {
   readonly herdr: PaneReader;
   clients: number;
   hash?: string;
+  /** Consecutive reads that found the screen unchanged. */
+  quiet: number;
   timer?: ReturnType<typeof setTimeout>;
   stopped: boolean;
 }
 
 export interface PaneWatcherOptions {
   readEveryMs?: number;
+  quietMaxMs?: number;
   retryMs?: number;
   publishGapMs?: number;
 }
@@ -39,10 +53,12 @@ export class PaneWatcher {
   private readonly watches = new Map<string, Watch>();
   private readonly throttle: LiveThrottle;
   private readonly readEveryMs: number;
+  private readonly quietMaxMs: number;
   private readonly retryMs: number;
 
   constructor(readonly live: LivePublisher, options: PaneWatcherOptions = {}) {
     this.readEveryMs = options.readEveryMs ?? READ_EVERY_MS;
+    this.quietMaxMs = options.quietMaxMs ?? QUIET_MAX_MS;
     this.retryMs = options.retryMs ?? RETRY_MS;
     this.throttle = new LiveThrottle(live, options.publishGapMs ?? PUBLISH_GAP_MS);
   }
@@ -54,7 +70,7 @@ export class PaneWatcher {
       const key = `${session}\u0000${paneId}`;
       let watch = this.watches.get(key);
       if (!watch) {
-        watch = { session, paneId, herdr, clients: 0, stopped: false };
+        watch = { session, paneId, herdr, clients: 0, quiet: 0, stopped: false };
         this.watches.set(key, watch);
         void this.read(watch);
       }
@@ -87,10 +103,12 @@ export class PaneWatcher {
       if (!watch.stopped && watch.hash !== undefined && hash !== watch.hash) {
         this.throttle.publish({ session: watch.session, topic: "pane", paneId: watch.paneId });
       }
+      watch.quiet = hash === watch.hash ? watch.quiet + 1 : 0;
       watch.hash = hash;
     } catch {
       failed = true;
     }
-    if (!watch.stopped) watch.timer = setTimeout(() => void this.read(watch), failed ? this.retryMs : this.readEveryMs);
+    const next = failed ? this.retryMs : quietDelay(watch.quiet, this.readEveryMs, this.quietMaxMs);
+    if (!watch.stopped) watch.timer = setTimeout(() => void this.read(watch), next);
   }
 }

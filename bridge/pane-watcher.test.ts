@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { MAX_WATCHED_PER_CLIENT, PaneWatcher, type PaneReader } from "./pane-watcher.ts";
+import { MAX_WATCHED_PER_CLIENT, PaneWatcher, quietDelay, type PaneReader } from "./pane-watcher.ts";
 import type { LiveEvent } from "./types.ts";
 
 function screen(initial = "a") {
@@ -26,7 +26,7 @@ describe("PaneWatcher", () => {
   it("publishes pane only when the screen changes, and nothing for a quiet pane", async () => {
     const { events, live } = recorder();
     const pane = screen();
-    const watcher = new PaneWatcher(live, { readEveryMs: 5, publishGapMs: 0 });
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 5, publishGapMs: 0 });
     const abort = new AbortController();
     watcher.watch("s", pane.herdr, ["p"], abort.signal);
     await Bun.sleep(40);
@@ -38,10 +38,30 @@ describe("PaneWatcher", () => {
     abort.abort();
   });
 
+  it("backs off on a quiet pane and returns to the fast cadence on the first change", async () => {
+    const { events, live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 40, publishGapMs: 0 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(200);
+    // Reads at 0, 5, 15, 35, 75, 115, 155, 195 ms instead of every 5 ms.
+    expect(pane.reads.length).toBeLessThan(12);
+    pane.set("b");
+    await Bun.sleep(60);
+    expect(events).toEqual([{ session: "s", topic: "pane", paneId: "p" }]);
+    abort.abort();
+  });
+
+  it("a change resets the wait to the fast cadence; quiet reads double it up to the cap", () => {
+    expect([0, 1, 2, 3, 4, 10].map((quiet) => quietDelay(quiet, 200, 1_000))).toEqual([200, 400, 800, 1_000, 1_000, 1_000]);
+    expect(quietDelay(3, 200, 0)).toBe(200);
+  });
+
   it("stops reading when the last client watching a pane leaves", async () => {
     const { live } = recorder();
     const pane = screen();
-    const watcher = new PaneWatcher(live, { readEveryMs: 5 });
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 5 });
     const first = new AbortController();
     const second = new AbortController();
     watcher.watch("s", pane.herdr, ["p"], first.signal);
@@ -90,7 +110,7 @@ describe("PaneWatcher", () => {
   it("keeps going after a failed read without publishing", async () => {
     const { events, live } = recorder();
     const pane = screen();
-    const watcher = new PaneWatcher(live, { readEveryMs: 5, retryMs: 5, publishGapMs: 0 });
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 5, retryMs: 5, publishGapMs: 0 });
     const abort = new AbortController();
     watcher.watch("s", pane.herdr, ["p"], abort.signal);
     await Bun.sleep(15);
