@@ -7,7 +7,7 @@ import { WorkbenchShell } from "./workbench-shell";
 import { AppHeader } from "./app-header";
 import { QuickJump } from "./home-panels";
 import { setLocked } from "@/lib/idle";
-import { openNewAgent, useNewAgentRequest } from "@/lib/spawn";
+import { openNewDialog, useNewDialogRequest } from "./new-agent-sheet";
 import type { HomeData } from "@/lib/loaders";
 
 const data: HomeData = {
@@ -186,23 +186,23 @@ it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async
   expect(screen.queryByRole("searchbox", { name: "Search projects and chats" })).not.toBeInTheDocument();
 });
 
-function NewAgentProbe() {
-  return useNewAgentRequest() ? <p>New agent sheet</p> : null;
+function NewDialogProbe() {
+  return useNewDialogRequest() ? <p>New dialog</p> : null;
 }
 
 it("ignores Cmd+K and Cmd+N behind the idle lock", async () => {
   desktop();
-  onTestFinished(() => { setLocked(false); openNewAgent(null); });
-  const element = <WorkbenchShell data={data}><NewAgentProbe /></WorkbenchShell>;
+  onTestFinished(() => { setLocked(false); openNewDialog(null); });
+  const element = <WorkbenchShell data={data}><NewDialogProbe /></WorkbenchShell>;
   render(<RouterProvider router={createMemoryRouter([{ path: "*", element }], { initialEntries: ["/?s=work"] })} />);
   const user = userEvent.setup();
   setLocked(true);
   await user.keyboard("{Meta>}k{/Meta}{Meta>}n{/Meta}");
   expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-  expect(screen.queryByText("New agent sheet")).not.toBeInTheDocument();
+  expect(screen.queryByText("New dialog")).not.toBeInTheDocument();
   setLocked(false);
   await user.keyboard("{Meta>}n{/Meta}");
-  expect(screen.getByText("New agent sheet")).toBeInTheDocument();
+  expect(screen.getByText("New dialog")).toBeInTheDocument();
 });
 
 it("leaves Ctrl+K to a text field off Apple platforms, and opens search from elsewhere", async () => {
