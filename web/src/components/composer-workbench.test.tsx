@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createRef, type ComponentProps } from "react";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -157,19 +159,48 @@ it("does not send or arm force when the model cannot be dismissed", async () => 
   expect(sent()).toEqual([expect.objectContaining({ text: "Keep me" })]);
 });
 
-it("gives the draft the full width above a toolbar of attach, model chip and send", () => {
+it("keeps the draft and its one action in a box, with quiet controls in a row beneath it", () => {
   setup({ modelControl: <button>Choose model</button> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "More message actions" })).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
   const toolbar = screen.getByRole("group", { name: "Message tools" });
-  // Regression: the draft used to share a row with these buttons and wrapped every few words.
+  const box = input.parentElement!;
+  // Regression: the draft used to share a row with the tools and wrapped every few words. Only the
+  // single action shares the box, after the draft.
   expect(toolbar).not.toContainElement(input);
-  expect(within(input.parentElement!).queryAllByRole("button")).toHaveLength(0);
-  expect(input.parentElement!.nextElementSibling).toBe(toolbar);
-  const order = ["Attach image", "Choose model", "Send"].map((name) => within(toolbar).getByRole("button", { name }));
+  expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Send"]);
+  expect(input.compareDocumentPosition(within(box).getByRole("button", { name: "Send" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(box.parentElement!.nextElementSibling).toBe(toolbar);
+  const order = ["Attach image", "Message shortcuts", "Choose model"].map((name) => within(toolbar).getByRole("button", { name }));
   expect(order[0]!.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(within(toolbar).queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+});
+
+it("opens the message shortcuts from the chevron and runs a row like the header menu does", async () => {
+  const { user } = setup();
+  const input = screen.getByRole("textbox");
+  await user.type(input, "Keep writing here");
+  await user.click(screen.getByRole("button", { name: "Message shortcuts" }));
+  const menu = screen.getByRole("dialog", { name: "Message shortcuts" });
+  expect(within(menu).getByRole("button", { name: "Keys" })).toBeVisible();
+  expect(within(menu).getByRole("button", { name: "Type into terminal" })).toBeVisible();
+  expect(within(menu).queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
+  await user.click(within(menu).getByRole("button", { name: "Quick replies" }));
+  expect(screen.queryByRole("dialog", { name: "Message shortcuts" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
+  expect(input).toHaveValue("Keep writing here");
+  expect(sendMessage).not.toHaveBeenCalled();
+});
+
+it("gives every small composer control a 44px touch target", () => {
+  setup({ modelControl: <button>Choose model</button> });
+  const toolbar = screen.getByRole("group", { name: "Message tools" });
+  for (const name of ["Attach image", "Message shortcuts"]) expect(within(toolbar).getByRole("button", { name })).toHaveClass("hit-area");
+  expect(screen.getByRole("button", { name: "Send" })).toHaveClass("hit-area");
+  const css = readFileSync(resolve(import.meta.dirname, "../workbench.css"), "utf8");
+  expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.hit-area::before \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
 });
 
 it("opens quick replies from the menu without changing or sending the draft", async () => {

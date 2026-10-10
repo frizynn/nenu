@@ -286,7 +286,8 @@ describe("AgentChat — raw-terminal escape hatch", () => {
     renderChat({ agent: working, agents: [working], session: "phone", text: "Codex is working" });
 
     const stop = screen.getByRole("button", { name: "Stop generation" });
-    expect(stop).toHaveClass("min-h-11");
+    // 32px visual circle; the 44px target comes from the hit-area pseudo-element (workbench.css).
+    expect(stop).toHaveClass("hit-area");
     await user.click(stop);
 
     await waitFor(() => expect(requests).toHaveLength(1));
