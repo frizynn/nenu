@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { appendFile, cp, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, cp, mkdir, mkdtemp, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  AppendTail,
   ClaudeActivity,
   describeTask,
   lastToolFromTail,
   parseTaskNotification,
+  readAppended,
   resultPreview,
 } from "./claude-activity.ts";
 
@@ -117,6 +117,43 @@ describe("list", () => {
     expect(result).toMatchObject({ available: true, workflows: [], artifacts: [] });
   });
 
+  test("a session read again after its cached index was evicted keeps what it had indexed", async () => {
+    const activity = reader();
+    const before = await listed(activity);
+    const log = join(base, "projects", PROJECT, `${SID}.jsonl`);
+    for (let i = 0; i < 20; i++) {
+      const other = `11111111-2222-3333-4444-${String(i).padStart(12, "0")}`;
+      await copyFile(log, join(base, "projects", PROJECT, `${other}.jsonl`));
+      await activity.list(other);
+    }
+    const after = await listed(activity);
+    expect(after.workflows.map((w) => [w.name, w.taskId])).toEqual(before.workflows.map((w) => [w.name, w.taskId]));
+    expect(after.tasks.map((t) => t.id).sort()).toEqual(before.tasks.map((t) => t.id).sort());
+  });
+
+  test("a command cut off by a session end is failed, not completed", async () => {
+    const notice = `<task-notification>\n<task-id>bstopped1</task-id>\n<status>stopped</status>\n<summary>Background shell command didn't finish before the previous session ended</summary>\n</task-notification>`;
+    await appendFile(join(base, "projects", PROJECT, `${SID}.jsonl`), `${JSON.stringify({ type: "queue-operation", operation: "enqueue", timestamp: "2026-10-10T08:00:00.000Z", content: notice })}\n`);
+    const { tasks } = await listed();
+    expect(tasks.find((t) => t.id === "bstopped1")!.status).toBe("failed");
+  });
+
+  test("a run whose notice says killed is failed, not running", async () => {
+    const notice = `<task-notification>\n<task-id>woxtq1pnu</task-id>\n<status>killed</status>\n<summary>Dynamic workflow "x" was stopped</summary>\n</task-notification>`;
+    await appendFile(join(base, "projects", PROJECT, `${SID}.jsonl`), `${JSON.stringify({ type: "queue-operation", operation: "enqueue", timestamp: "2026-10-10T08:00:00.000Z", content: notice })}\n`);
+    const { workflows } = await listed();
+    expect(workflows.find((w) => w.runId === "wf_fe5d5046-9d2")!.status).toBe("failed");
+  });
+
+  test("a session directory symlinked out of the projects root is not read", async () => {
+    const outside = join(base, "outside-session");
+    await rename(sessionDir, outside);
+    await symlink(outside, sessionDir);
+    const { workflows } = await listed();
+    // Only the launch row in the log remains; nothing is read from the linked directory.
+    expect(workflows.every((w) => w.agentCount === 0)).toBe(true);
+  });
+
   test("a runs directory symlinked out of the session is not read", async () => {
     const outside = join(base, "outside");
     await mkdir(join(outside, "wf_aaaaaaaa-bbb"), { recursive: true });
@@ -200,6 +237,24 @@ describe("observe", () => {
     fires[0]!();
     expect(closed).toBe(4);
   });
+
+  test("a quiet session stops being watched without any event", async () => {
+    let closed = 0;
+    const activity = reader(Date.now, { watchTtlMs: 20, watch: () => ({ close() { closed++; } }) });
+    await activity.observe(SID, "k", () => {});
+    await new Promise((r) => setTimeout(r, 60));
+    expect(closed).toBe(4);
+  });
+
+  test("overlapping reads of one session share one set of watchers", async () => {
+    let opened = 0;
+    let closed = 0;
+    const activity = reader(Date.now, { watch: () => { opened++; return { close() { closed++; } }; } });
+    await Promise.all([activity.observe(SID, "a", () => {}), activity.observe(SID, "b", () => {}), activity.observe(SID, "c", () => {})]);
+    expect(opened).toBe(4);
+    activity.close();
+    expect(closed).toBe(4);
+  });
 });
 
 describe("parsers", () => {
@@ -231,24 +286,26 @@ describe("parsers", () => {
   });
 });
 
-describe("AppendTail", () => {
+describe("readAppended", () => {
   test("reads appended complete lines only, and resets when the file is replaced", async () => {
-    const tail = new AppendTail();
     const path = join(base, "log.jsonl");
     await writeFile(path, "a\nb\npart");
-    expect((await tail.read(path, 1024)).lines).toEqual(["a", "b"]);
+    let read = await readAppended(path, 1024);
+    expect(read.lines).toEqual(["a", "b"]);
     await appendFile(path, "ial\nc\n");
-    expect((await tail.read(path, 1024)).lines).toEqual(["partial", "c"]);
-    expect((await tail.read(path, 1024)).lines).toEqual([]);
+    read = await readAppended(path, 1024, read.tail);
+    expect(read.lines).toEqual(["partial", "c"]);
+    read = await readAppended(path, 1024, read.tail);
+    expect(read.lines).toEqual([]);
     await rm(path);
     await writeFile(path, "z\n");
-    expect(await tail.read(path, 1024)).toMatchObject({ lines: ["z"], reset: true });
+    expect(await readAppended(path, 1024, read.tail)).toMatchObject({ lines: ["z"], reset: true });
   });
 
   test("a first read of a large file keeps only the newest whole lines", async () => {
     const path = join(base, "big.jsonl");
     await writeFile(path, `${"x".repeat(50)}\nkeep1\nkeep2\n`);
     await utimes(path, new Date(), new Date());
-    expect(await new AppendTail().read(path, 14)).toMatchObject({ lines: ["keep1", "keep2"], truncated: true });
+    expect(await readAppended(path, 14)).toMatchObject({ lines: ["keep1", "keep2"], truncated: true });
   });
 });

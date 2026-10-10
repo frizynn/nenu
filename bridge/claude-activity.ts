@@ -80,6 +80,8 @@ const MAX_AGENTS = 200;
 const MAX_TASKS = 100;
 const MAX_ARTIFACTS = 50;
 const QUIET_TASK_MS = 10 * 60_000;
+/** Notice statuses for work that did not finish; `stopped` is a command cut off by a session end. */
+const ENDED_BADLY = new Set(["failed", "killed", "stopped", "error", "cancelled"]);
 const RUN_ID = /^wf_[A-Za-z0-9-]{1,64}$/;
 const TASK_ID = /^[a-z0-9]{6,32}$/;
 
@@ -148,35 +150,31 @@ export function resultPreview(result: unknown): string | undefined {
 
 // ── Byte-offset tail of append-only files ──────────────────────────────────────────────────────
 
-interface TailState { ino: number; offset: number; rest: Buffer }
+export interface TailState { ino: number; offset: number; rest: Buffer }
 
 /**
- * Newly appended complete lines since the last call. The first read (or one after the file was
- * replaced or shrank, `reset`) starts at most `cap` bytes from the end and drops the partial line
- * there. A burst larger than `cap` is treated like a reset, so memory stays bounded.
+ * Complete lines appended since `prev`. The first read (or one after the file was replaced or
+ * shrank, `reset`) starts at most `cap` bytes from the end and drops the partial line there. A burst
+ * larger than `cap` is treated like a reset, so memory stays bounded. The caller keeps the returned
+ * `tail` with whatever it folded the lines into, so the two can never be evicted apart.
  */
-export class AppendTail {
-  private files = new Map<string, TailState>();
-  async read(path: string, cap: number): Promise<{ lines: string[]; reset: boolean; truncated: boolean; mtime: number }> {
-    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    try {
-      const st = await file.stat();
-      if (!st.isFile()) throw new Error("not a file");
-      const old = this.files.get(path);
-      const reset = !old || old.ino !== st.ino || st.size < old.offset || st.size - old.offset > cap;
-      const start = reset ? Math.max(0, st.size - cap) : old.offset;
-      const fresh = Buffer.alloc(st.size - start);
-      const { bytesRead } = await file.read(fresh, 0, fresh.length, start);
-      let bytes = fresh.subarray(0, bytesRead);
-      if (reset && start > 0) bytes = bytes.subarray(bytes.indexOf(0x0a) + 1);
-      else if (!reset) bytes = Buffer.concat([old.rest, bytes]);
-      const end = bytes.lastIndexOf(0x0a) + 1;
-      if (this.files.size >= 256 && !this.files.has(path)) this.files.delete(this.files.keys().next().value!);
-      this.files.set(path, { ino: st.ino, offset: start + bytesRead, rest: Buffer.from(bytes.subarray(end)) });
-      const lines = bytes.subarray(0, end).toString("utf8").split("\n").filter(Boolean);
-      return { lines, reset, truncated: reset && start > 0, mtime: st.mtimeMs };
-    } finally { await file.close(); }
-  }
+export async function readAppended(path: string, cap: number, prev?: TailState): Promise<{ lines: string[]; reset: boolean; truncated: boolean; mtime: number; tail: TailState }> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const st = await file.stat();
+    if (!st.isFile()) throw new Error("not a file");
+    const reset = !prev || prev.ino !== st.ino || st.size < prev.offset || st.size - prev.offset > cap;
+    const start = reset ? Math.max(0, st.size - cap) : prev.offset;
+    const fresh = Buffer.alloc(st.size - start);
+    const { bytesRead } = await file.read(fresh, 0, fresh.length, start);
+    let bytes = fresh.subarray(0, bytesRead);
+    if (reset && start > 0) bytes = bytes.subarray(bytes.indexOf(0x0a) + 1);
+    else if (!reset) bytes = Buffer.concat([prev.rest, bytes]);
+    const end = bytes.lastIndexOf(0x0a) + 1;
+    const lines = bytes.subarray(0, end).toString("utf8").split("\n").filter(Boolean);
+    const tail = { ino: st.ino, offset: start + bytesRead, rest: Buffer.from(bytes.subarray(end)) };
+    return { lines, reset, truncated: reset && start > 0, mtime: st.mtimeMs, tail };
+  } finally { await file.close(); }
 }
 
 async function readBounded(path: string, cap: number, fromEnd = false): Promise<{ text: string; truncated: boolean; mtime: number } | null> {
@@ -203,6 +201,7 @@ interface SessionIndex {
   toolUses: Map<string, { name: string; description?: string }>;
   artifacts: Map<string, ActivityArtifact>;
   truncated: boolean;
+  tail?: TailState;
 }
 const emptyIndex = (): SessionIndex => ({ launches: new Map(), notifications: new Map(), bgTitles: new Map(), toolUses: new Map(), artifacts: new Map(), truncated: false });
 // Only these lines can matter, so everything else (most of a long log) is never JSON-parsed.
@@ -256,7 +255,7 @@ export function indexLogLine(index: SessionIndex, line: string): void {
 
 // ── Workflow runs ──────────────────────────────────────────────────────────────────────────────
 
-interface RunJournal { started: Map<string, { label: string; phase: string }>; results: Map<string, string | undefined>; mtime: number; truncated: boolean }
+interface RunJournal { started: Map<string, { label: string; phase: string }>; results: Map<string, string | undefined>; mtime: number; truncated: boolean; tail?: TailState }
 
 /** Fold journal rows into a run: who started in which phase, and who returned. */
 export function indexJournalLine(run: RunJournal, line: string): void {
@@ -339,10 +338,12 @@ function nodeWatch(path: string, recursive: boolean, onEvent: () => void): { clo
   } catch { return null; }
 }
 
-interface Watched { paths: string[]; watchers: { close(): void }[]; expires: number; debounce?: ReturnType<typeof setTimeout>; digest?: string; listeners: Map<string, () => void> }
+interface Watched {
+  paths: string[]; watchers: { close(): void }[]; expires: number; listeners: Map<string, () => void>;
+  debounce?: ReturnType<typeof setTimeout>; ttl?: ReturnType<typeof setTimeout>; digest?: string;
+}
 
 export class ClaudeActivity {
-  private tail = new AppendTail();
   private locations = new Map<string, Location>();
   private indexes = new Map<string, SessionIndex>();
   private journals = new Map<string, RunJournal>();
@@ -380,9 +381,13 @@ export class ClaudeActivity {
     return null;
   }
 
-  /** A directory under the session dir, only if it resolves inside it. */
+  /**
+   * A path under the session dir, only if nothing on the way is a symlink: `loc.dir` is built from
+   * the resolved log, so any link (the session dir itself included) changes the resolved path.
+   */
   private async sessionPath(loc: Location, ...parts: string[]): Promise<string | null> {
-    return containedRealpath(join(loc.dir, ...parts), loc.dir);
+    const path = join(loc.dir, ...parts);
+    return (await containedRealpath(path, loc.root)) === path ? path : null;
   }
 
   private async tasksDir(sessionId: string, loc: Location): Promise<string | null> {
@@ -395,8 +400,9 @@ export class ClaudeActivity {
 
   private async index(sessionId: string, loc: Location): Promise<SessionIndex> {
     let index = this.indexes.get(sessionId) ?? emptyIndex();
-    const read = await this.tail.read(loc.log, MAX_LOG_BYTES);
+    const read = await readAppended(loc.log, MAX_LOG_BYTES, index.tail);
     if (read.reset) index = emptyIndex();
+    index.tail = read.tail;
     index.truncated ||= read.truncated;
     for (const line of read.lines) indexLogLine(index, line);
     bounded(this.indexes, sessionId, index, 16);
@@ -418,9 +424,10 @@ export class ClaudeActivity {
 
   private async journal(path: string): Promise<RunJournal | null> {
     let run = this.journals.get(path);
-    const read = await this.tail.read(path, MAX_JOURNAL_BYTES).catch(() => null);
+    const read = await readAppended(path, MAX_JOURNAL_BYTES, run?.tail).catch(() => null);
     if (!read) return null;
     if (!run || read.reset) run = { started: new Map(), results: new Map(), mtime: 0, truncated: false };
+    run.tail = read.tail;
     run.mtime = read.mtime;
     run.truncated ||= read.truncated;
     for (const line of read.lines) indexJournalLine(run, line);
@@ -428,7 +435,7 @@ export class ClaudeActivity {
     return run;
   }
 
-  private async run(loc: Location, runId: string, launch: Launch | undefined, taskId: string | undefined, index: SessionIndex): Promise<ActivityWorkflow> {
+  private async run(loc: Location, runId: string, launch: Launch | undefined, taskId: string | undefined, index: SessionIndex): Promise<[ActivityWorkflow, boolean]> {
     const runDir = await this.sessionPath(loc, "subagents", "workflows", runId);
     const summaryPath = await this.sessionPath(loc, "workflows", `${runId}.json`);
     const summary = summaryPath ? await this.summary(summaryPath) : null;
@@ -462,17 +469,18 @@ export class ClaudeActivity {
       phase.agents.push(agent);
     }
     const list = [...agents.values()];
+    const ended = summary?.status ?? notice?.status;
     const status: ActivityWorkflowStatus = summary?.status === "completed" || notice?.status === "completed" ? "completed"
-      : summary?.status === "failed" || notice?.status === "failed" ? "failed"
-        : summary?.status ? "unknown" : "running";
+      : ended && ENDED_BADLY.has(ended) ? "failed"
+        : finished ? "unknown" : "running";
     const startedAt = summary?.startedAt ?? launch?.at ?? list.reduce<number | undefined>((min, a) => a.startedAt && (!min || a.startedAt < min) ? a.startedAt : min, undefined);
-    return {
+    return [{
       runId, taskId, name: summary?.name ?? launch?.name ?? runId, summary: summary?.summary ?? launch?.summary, status, startedAt,
       durationMs: summary?.durationMs ?? (notice?.at && startedAt ? notice.at - startedAt : undefined), updatedAt,
       phases: phases.filter((p) => p.agents.length || order.includes(p.title)),
       agentCount: list.length, doneCount: list.filter((a) => a.state !== "running").length,
       totalTokens: summary?.totalTokens, totalToolCalls: summary?.totalToolCalls,
-    };
+    }, !!journal?.truncated];
   }
 
   private async agentFiles(runDir: string, id: string, running: boolean): Promise<{ startedAt?: number; updatedAt?: number; lastTool?: string } | null> {
@@ -505,7 +513,8 @@ export class ClaudeActivity {
       if (described.kind === "workflow" || index.launches.get(n.taskId)?.runId) continue;
       tasks.set(n.taskId, {
         id: n.taskId, kind: described.kind, title: index.bgTitles.get(n.taskId) ?? described.title,
-        status: n.status === "failed" || n.status === "killed" ? "failed" : "completed",
+        // A monitor's event notices carry no status; any other status than completed did not finish.
+        status: !n.status || n.status === "completed" ? "completed" : "failed",
         exitCode: described.exitCode, event: n.event, at: n.at, hasOutput: false,
       });
     }
@@ -535,9 +544,10 @@ export class ClaudeActivity {
     let truncated = index.truncated;
     for (const runId of await this.runIds(loc, index)) {
       const [taskId, launch] = byRun.get(runId) ?? [undefined, undefined];
-      workflows.push(await this.run(loc, runId, launch, taskId, index));
+      const [workflow, journalTruncated] = await this.run(loc, runId, launch, taskId, index);
+      workflows.push(workflow);
+      truncated ||= journalTruncated;
     }
-    for (const j of this.journals.values()) truncated ||= j.truncated;
     const artifacts = [...index.artifacts.values()].reverse();
     return { available: true, sessionKey: ClaudeActivity.sessionKey(sessionId), workflows, tasks: await this.tasks(sessionId, loc, index), artifacts, truncated };
   }
@@ -584,26 +594,37 @@ export class ClaudeActivity {
   async observe(sessionId: string, listenerKey: string, notify: () => void): Promise<void> {
     const loc = await this.locate(sessionId);
     if (!loc) return;
-    let entry = this.watched.get(sessionId);
     // Only the runs directory nests (one folder per run); the others are flat.
     const runs = await this.sessionPath(loc, "subagents", "workflows");
     const paths = [loc.log, runs, await this.sessionPath(loc, "workflows"), await this.tasksDir(sessionId, loc)]
       .filter((p): p is string => !!p);
+    // From here to `watched.set` nothing awaits, so overlapping calls share one entry.
+    let entry = this.watched.get(sessionId);
     if (entry && entry.paths.join("\n") !== paths.join("\n")) { this.unwatch(sessionId); entry = undefined; }
+    const created = !entry;
     if (!entry) {
       if (this.watched.size >= 8) this.unwatch(this.watched.keys().next().value!);
       const fresh: Watched = { paths, watchers: [], expires: 0, listeners: new Map() };
       const fire = () => {
+        if (this.watched.get(sessionId) !== fresh) return;
         if (this.now() > fresh.expires) return this.unwatch(sessionId);
         clearTimeout(fresh.debounce);
         fresh.debounce = setTimeout(() => void this.changed(sessionId, fresh), this.debounceMs);
       };
       fresh.watchers = paths.flatMap((p) => this.watchFn(p, p === runs, fire) ?? []);
-      this.watched.set(sessionId, entry = fresh);
-      fresh.digest = await this.digest(sessionId);
+      entry = fresh;
     }
+    // Re-inserted so the 8-session cap evicts the least recently read.
+    this.watched.delete(sessionId);
+    this.watched.set(sessionId, entry);
     entry.expires = this.now() + this.watchTtlMs;
     entry.listeners.set(listenerKey, notify);
+    // A quiet session fires no event that could notice its own expiry.
+    clearTimeout(entry.ttl);
+    const armed = entry;
+    entry.ttl = setTimeout(() => { if (this.watched.get(sessionId) === armed) this.unwatch(sessionId); }, this.watchTtlMs);
+    entry.ttl.unref?.();
+    if (created) entry.digest = await this.digest(sessionId);
   }
 
   private async digest(sessionId: string): Promise<string> {
@@ -622,6 +643,7 @@ export class ClaudeActivity {
     const entry = this.watched.get(sessionId);
     if (!entry) return;
     clearTimeout(entry.debounce);
+    clearTimeout(entry.ttl);
     for (const w of entry.watchers) w.close();
     this.watched.delete(sessionId);
   }
