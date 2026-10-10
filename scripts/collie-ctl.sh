@@ -610,10 +610,27 @@ cmd_exec_bridge() {
 # Reached two ways — a host with neither supervisor (a Linux box with no user systemd instance, a
 # BSD), and a Mac whose launchd bootstrap refused (see cmd_start). Both want the identical process,
 # so it lives here rather than being written twice and drifting.
+# Herdr hands plugin actions their own HERDR_PLUGIN_STATE_DIR. The supervised bridge never sees it, so
+# on a host with a supervisor anything started from an action must drop it too, or it reads and
+# writes a different state dir: a fallback bridge after a failed bootstrap kept its queue there, and
+# the next supervised start lost the queued messages. The operator's own .env keys still win.
+drop_action_state_dir() {
+  local key
+  if have_systemd || have_launchd; then
+    for key in HERDR_PLUGIN_STATE_DIR COLLIE_STATE_DIR; do
+      case " $COLLIE_ENV_KEYS " in
+        *" $key "*) ;;
+        *) unset "$key" ;;
+      esac
+    done
+  fi
+}
+
 start_unsupervised() {
   mkdir -p "$CONFIG_DIR"
   [ -n "$BUN" ] || { echo "error: bun not found" >&2; exit 1; }
   export_bridge_env
+  drop_action_state_dir
   discover_tailscale_hosts
   HERDR_SOCKET_PATH="$SOCKET" COLLIE_PORT="$PORT" HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR" \
     nohup "$BUN" run "${PLUGIN_ROOT}/bridge/index.ts" >>"${CONFIG_DIR}/collie.log" 2>&1 &
@@ -638,6 +655,13 @@ cmd_start() {
     # second bridge is the failure this branch removes. `enable` undoes a previous `stop`.
     launchctl bootout "$(launchd_target)" 2>/dev/null || true
     launchctl enable "$(launchd_target)" 2>/dev/null || true
+    # Wait (up to 10 s) for the old job to finish tearing down; bootstrapping before that is the
+    # usual cause of the EIO the retry loop below absorbs.
+    local waited
+    for waited in 1 2 3 4 5 6 7 8 9 10; do
+      launchctl print "$(launchd_target)" >/dev/null 2>&1 || break
+      sleep 1
+    done
     # `bootout` does not promise to wait for teardown, and the bridge drains connections before it
     # exits — bootstrapping into that window fails with "Bootstrap failed: 5: Input/output error",
     # and under set -e that ends `start` with the bridge DOWN: the outage this branch exists to
@@ -1375,14 +1399,7 @@ run_claude_installer() (
   [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
   local script="$1"; shift
   export_bridge_env
-  if have_systemd || have_launchd; then
-    for key in HERDR_PLUGIN_STATE_DIR COLLIE_STATE_DIR; do
-      case " $COLLIE_ENV_KEYS " in
-        *" $key "*) ;;
-        *) unset "$key" ;;
-      esac
-    done
-  fi
+  drop_action_state_dir
   "$BUN" run "${PLUGIN_ROOT}/scripts/${script}" "$@"
 )
 cmd_subagent_hooks() { run_claude_installer install-subagent-hooks.ts "$@"; }
