@@ -88,7 +88,8 @@ it("opens a project on its coordinator's chat with thread cards, and switches Ch
   // A thread shows its siblings as chips and its PR above the composer.
   await user.click(within(screen.getByRole("article", { name: "Build" })).getByRole("button", { name: /Build/ }));
   expect(router.state.location.pathname).toBe("/pane/worker");
-  expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
+  // The coordinator's conversation is still mounted until the route re-renders; wait for the swap.
+  await waitFor(() => expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker"));
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "worker");
   const chips = within(screen.getByRole("navigation", { name: "Threads" }));
