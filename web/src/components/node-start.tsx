@@ -14,12 +14,16 @@ type StartOptions =
 
 type StartForm = { title: string; parent: string; task: string; profile: string; template: string };
 
-export const ROLE_NOUN: Record<NodeRole, string> = { worker: "thread", coordinator: "coordinator" };
+const ROLE_NOUN: Record<NodeRole, string> = { worker: "thread", coordinator: "coordinator" };
 const ROLES: ReadonlyArray<{ id: NodeRole; label: string }> = [{ id: "worker", label: "Thread" }, { id: "coordinator", label: "Coordinator" }];
 const FIELD = "mt-1 min-h-11 w-full rounded-md border bg-background px-3 text-sm font-normal";
 
-/** The roles a project can start: a coordinator needs Organizations' nodes, which upstream lacks. */
+/**
+ * The roles a project can start: none while it is paused (Organizations refuses), and no
+ * coordinator under upstream herdr-projects, which has no nodes.
+ */
 export function startableRoles(project: ProjectView): NodeRole[] {
+  if (project.status === "paused") return [];
   return project.nodeActions === false ? ["worker"] : ["worker", "coordinator"];
 }
 
@@ -46,9 +50,11 @@ export function NewNodeActions({ project, session, onStarted }: {
 }) {
   const [role, setRole] = useState<NodeRole | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const roles = startableRoles(project);
+  if (roles.length === 0) return null;
   return <>
     <div className="flex flex-wrap gap-1">
-      {startableRoles(project).map((candidate) => (
+      {roles.map((candidate) => (
         <button key={candidate} type="button" className="quiet-action" aria-haspopup="dialog" onClick={() => setRole(candidate)}>
           <Plus aria-hidden className="size-4" />New {ROLE_NOUN[candidate]}
         </button>
@@ -81,12 +87,13 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
   const [form, setForm] = useState<StartForm>({ title: "", parent: "root", task: "", profile: "", template: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const nodes = project.nodeActions !== false;
+  const roles = startableRoles(project);
   const templates = options.kind === "ready" ? options.templates.filter((candidate) => candidate.role === role) : [];
   const profiles = options.kind === "ready" ? options.profiles : [];
   // A template chosen under the other role no longer applies once the role switches.
   const template = templates.some((candidate) => candidate.name === form.template) ? form.template : "";
-  const parents = nodes ? project.threads.filter((thread) => thread.role === "coordinator" && thread.status === "open") : [];
+  // Nesting comes with coordinators: a host that cannot start one cannot start under one either.
+  const parents = roles.includes("coordinator") ? project.threads.filter((thread) => thread.role === "coordinator" && thread.status === "open") : [];
   const busy = (next: boolean) => {
     setSubmitting(next);
     onSubmitting?.(next);
@@ -115,7 +122,7 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, onCan
 
   return (
     <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)}>
-      {onRole && nodes && <Segmented label="Role" options={ROLES} value={role} onChange={onRole} />}
+      {onRole && roles.length > 1 && <Segmented label="Role" options={ROLES.filter((option) => roles.includes(option.id))} value={role} onChange={onRole} />}
       <label className="block text-sm font-medium">Title
         <input className={FIELD} value={form.title} required onChange={set("title")} />
       </label>

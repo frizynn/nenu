@@ -174,7 +174,7 @@ export async function startNode(
   socketPath: string,
   input: { project: unknown; title: unknown; parent: unknown; task: unknown; role?: unknown; profile?: unknown; template?: unknown },
   upstream: () => boolean = upstreamOnly,
-): Promise<{ id: string }> {
+): Promise<{ id: string; project: string; title: string; parent: string; role: NodeRole; profile: string; template: string }> {
   const project = validateProjectSlug(input.project);
   const title = validateTitle(input.title);
   const parent = validateParent(input.parent);
@@ -199,17 +199,21 @@ export async function startNode(
   if (!isRecord(value) || typeof value.id !== "string" || !NODE_ID_RE.test(value.id)) {
     throw new OrgCliError("herdr-organizations returned an invalid start response.");
   }
-  return { id: value.id };
+  return { id: value.id, project, title, parent, role, profile, template };
 }
 
 /**
  * `open`: start the project's coordinator in the project's workspace of this Herdr session, or focus
  * it when one already runs. The bridge has no terminal, so it never starts in the bridge's own pane.
+ * Returns the CLI's first line, which says what happened ("started …", or "… is not ready yet …"
+ * when the agent waits on a dialog); `open` exits 0 in both cases.
  */
-export async function openProject(run: OrgRun, socketPath: string, input: { project: unknown }): Promise<void> {
+export async function openProject(run: OrgRun, socketPath: string, input: { project: unknown }): Promise<{ message: string }> {
   const project = validateProjectSlug(input.project);
   const result = await run(["open", project], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
   if (result.code !== 0) throw commandError(result);
+  const first = result.stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return { message: first.slice(0, 300) };
 }
 
 export async function resolveNode(

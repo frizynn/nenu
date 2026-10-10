@@ -204,6 +204,28 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(calls.length).toBeGreaterThan(before);
   });
 
+  test("an invalidation during a refresh resolves only after a refresh that started after it", async () => {
+    const gates: Array<() => void> = [];
+    const run: OrgRun = async () => {
+      await new Promise<void>((resolve) => gates.push(resolve));
+      return { code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [] }), stderr: "" };
+    };
+    const registry = registryFor(fixture(), { run });
+    const first = registry.invalidate();
+    await Bun.sleep(0);
+    let settled = false;
+    const second = registry.invalidate().then(() => { settled = true; });
+    gates[0]!();
+    await first;
+    await Bun.sleep(0);
+    // The read that was running when the write landed may predate it; the caller waits for the next.
+    expect(settled).toBe(false);
+    expect(gates).toHaveLength(2);
+    gates[1]!();
+    await second;
+    expect(settled).toBe(true);
+  });
+
   test("fs.watch announces an org change without a snapshot read", async () => {
     const root = fixture();
     const live: LiveEvent[] = [];

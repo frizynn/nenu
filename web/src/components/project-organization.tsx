@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Play } from "lucide-react";
 
 import { NewNodeActions, errorMessage } from "@/components/node-start";
@@ -14,7 +14,7 @@ function ranked(node: ThreadNode): { node: ThreadNode; rank: number } {
 }
 
 /** Siblings most urgent first, a coordinator ranked by the most urgent thread under it; ties keep Organizations' order. */
-export function byUrgency(nodes: readonly ThreadNode[]): ThreadNode[] {
+function byUrgency(nodes: readonly ThreadNode[]): ThreadNode[] {
   return nodes.map(ranked).sort((a, b) => a.rank - b.rank).map((entry) => entry.node);
 }
 
@@ -34,21 +34,15 @@ export function ProjectOrganization({ project, panes, session, readOnly, onOpenP
   const [closing, setClosing] = useState<ProjectThreadView | null>(null);
   const open = project.threads.filter(isOpenThread);
   const resolved = project.threads.filter((thread) => !isOpenThread(thread));
-  const row = (thread: ProjectThreadView) => {
+  const row = (thread: ProjectThreadView, team?: ReactNode) => {
     const detail = threadDetail(thread, panes);
     return <TaskRow key={thread.id} dot={threadDot(thread)} title={thread.title} age={threadAge(thread, now)} current={false}
       detail={thread.role === "coordinator" ? `Coordinator · ${detail}` : detail}
       onOpen={thread.paneId ? () => onOpenPane(thread.paneId!) : undefined}
-      onClose={isOpenThread(thread) && !readOnly ? () => setClosing(thread) : undefined} />;
+      onClose={isOpenThread(thread) && !readOnly ? () => setClosing(thread) : undefined}>{team}</TaskRow>;
   };
-  const branch = (node: ThreadNode): ReactNode => (
-    <Fragment key={node.thread.id}>
-      {row(node.thread)}
-      {node.children.length > 0 && <li>
-        <ul role="group" aria-label={`${node.thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>
-      </li>}
-    </Fragment>
-  );
+  const branch = (node: ThreadNode): ReactNode => row(node.thread, node.children.length > 0 &&
+    <ul aria-label={`${node.thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>);
 
   return (
     <div className="project-tasks">
@@ -58,10 +52,9 @@ export function ProjectOrganization({ project, panes, session, readOnly, onOpenP
         ? <ul className="task-list mb-2" aria-label="Open threads">{byUrgency(nestThreads(open)).map(branch)}</ul>
         : <p className="mb-2 py-1 text-sm text-muted-foreground">No open threads.</p>}
       {resolved.length > 0 && <TaskGroup label="Resolved" count={resolved.length} open={false}>
-        <ul className="task-list mt-1">{resolved.map(row)}</ul>
+        <ul className="task-list mt-1">{resolved.map((thread) => row(thread))}</ul>
       </TaskGroup>}
-      {/* Organizations refuses to start threads in a paused project. */}
-      {!readOnly && project.status !== "paused" && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={onChanged} /></div>}
+      {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={onChanged} /></div>}
 
       <CloseThreadDialog project={project} thread={closing} session={session} onCancel={() => setClosing(null)}
         onClosed={() => { setClosing(null); void onChanged(); }} />
@@ -77,17 +70,20 @@ function CoordinatorStart({ project, session, readOnly, onStarted }: {
   onStarted: () => Promise<void> | void;
 }) {
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ error: boolean; text: string } | null>(null);
 
   async function start() {
     setStarting(true);
-    setError(null);
+    setOutcome(null);
     try {
-      await openOrgProject({ project: project.slug }, session);
-      // The re-read snapshot carries the running coordinator, and the route then opens its chat.
+      const { message } = await openOrgProject({ project: project.slug }, session);
+      // Shown only if this page outlives the refresh: the re-read snapshot normally carries the
+      // running coordinator and the route opens its chat. If the agent waits on a dialog, the line
+      // says where to answer it.
+      setOutcome({ error: false, text: message });
       await onStarted();
     } catch (failure) {
-      setError(errorMessage(failure));
+      setOutcome({ error: true, text: errorMessage(failure) });
     } finally {
       setStarting(false);
     }
@@ -108,7 +104,8 @@ function CoordinatorStart({ project, session, readOnly, onStarted }: {
           </button>
         )}
       </div>
-      {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+      {outcome?.error && <p role="alert" className="mt-2 text-sm text-destructive">{outcome.text}</p>}
+      {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-xs text-muted-foreground">{outcome.text}</p>}
     </section>
   );
 }

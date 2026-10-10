@@ -112,6 +112,11 @@ it("offers only a top-level thread when upstream herdr-projects runs the project
   expect(within(dialog.getByLabelText("Profile")).getAllByRole("option").map((option) => option.textContent)).toEqual(["Project default"]);
 });
 
+it("offers nothing to start in a paused project, which Organizations would refuse", () => {
+  const { container } = render(<NewNodeActions project={{ ...project, status: "paused" }} onStarted={() => {}} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
 it("keeps the dialog open with Organizations' refusal", async () => {
   const user = userEvent.setup();
   serveOptions();

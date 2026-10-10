@@ -157,7 +157,7 @@ it("shows the organization with a way to start the coordinator when none is runn
 
 it("opens the coordinator's chat once Start has brought it up", async () => {
   let running = false;
-  server.use(http.post("/api/org/project/open", () => { running = true; return HttpResponse.json({ ok: true }); }));
+  server.use(http.post("/api/org/project/open", () => { running = true; return HttpResponse.json({ ok: true, message: "started codex as hp-hub" }); }));
   const router = createMemoryRouter([{
     id: ROOT_ROUTE_ID, path: "/", element: <Outlet />,
     loader: () => home(running ? [pane("coord"), pane("worker")] : [pane("worker")]),

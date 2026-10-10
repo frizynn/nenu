@@ -99,8 +99,9 @@ const ORG_MUTATION_TIMEOUT_MS = 35_000;
 //   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
 //     its 120 s idle timeout, so the client outlasts the CLI.
 const ORG_MERGE_TIMEOUT_MS = 100_000;
-//   - Starting a coordinator waits for its shell and agent; the bridge gives `open` 60 s.
-const ORG_OPEN_TIMEOUT_MS = 70_000;
+//   - Starting a coordinator waits for its shell and agent (the bridge gives `open` 60 s), then for
+//     the projects re-read, which can queue behind one already running (up to 10 s each).
+const ORG_OPEN_TIMEOUT_MS = 90_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -633,7 +634,7 @@ export function startOrgNode(
 }
 
 /** Start the project's coordinator (Organizations' `open`); it focuses one that already runs. */
-export function openOrgProject(input: { project: string }, session?: string): Promise<{ ok: true }> {
+export function openOrgProject(input: { project: string }, session?: string): Promise<{ ok: true; message: string }> {
   return req(withSession("/api/org/project/open", session), {
     method: "POST",
     body: JSON.stringify(input),

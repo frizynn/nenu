@@ -231,7 +231,8 @@ export function CloseThreadDialog({ project, thread, session, onClosed, onCancel
   );
 }
 
-export function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
+/** One thread's row; `children` hangs the threads a coordinator runs inside the same list item. */
+export function TaskRow({ dot, title, detail, age, current, onOpen, onClose, children }: {
   dot: ThreadDot;
   title: string;
   detail: string;
@@ -239,6 +240,7 @@ export function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
   current: boolean;
   onOpen?: () => void;
   onClose?: () => void;
+  children?: ReactNode;
 }) {
   const body = <>
     <ThreadStateDot state={dot} className="mt-1.5 size-2" />
@@ -249,9 +251,12 @@ export function TaskRow({ dot, title, detail, age, current, onOpen, onClose }: {
     {age && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
   </>;
   return (
-    <li className="task-row" aria-current={current ? "true" : undefined}>
-      {onOpen ? <button type="button" className="task-main" onClick={onOpen}>{body}</button> : <div className="task-main opacity-75">{body}</div>}
-      {onClose && <button type="button" className="task-close" aria-label={`Close ${title}`} title="Close thread" onClick={onClose}><Check aria-hidden className="size-4" /></button>}
+    <li aria-current={current ? "true" : undefined}>
+      <div className="task-row">
+        {onOpen ? <button type="button" className="task-main" onClick={onOpen}>{body}</button> : <div className="task-main opacity-75">{body}</div>}
+        {onClose && <button type="button" className="task-close" aria-label={`Close ${title}`} title="Close thread" onClick={onClose}><Check aria-hidden className="size-4" /></button>}
+      </div>
+      {children}
     </li>
   );
 }

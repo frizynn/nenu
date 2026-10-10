@@ -93,7 +93,7 @@ describe("herdr-organizations CLI adapter", () => {
 
     expect(await startNode(run, "/tmp/herdr.sock", {
       project: "nenu", template: "review-worker", title: "Review accessibility", parent: "root", task,
-    }, () => false)).toEqual({ id: "t-1234" });
+    }, () => false)).toEqual({ id: "t-1234", project: "nenu", title: "Review accessibility", parent: "root", role: "worker", profile: "", template: "review-worker" });
     expect(calls).toEqual([{
       argv: ["node", "start", "nenu", "--template=review-worker", "--parent=root", "--title=Review accessibility", "--task-file", "-"],
       opts: { stdin: task, env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
@@ -105,7 +105,7 @@ describe("herdr-organizations CLI adapter", () => {
 
     expect(await startNode(run, "/tmp/herdr.sock", {
       project: "awam", title: "-Billing", parent: "t-0010", task: "Coordinate billing.", role: "coordinator", profile: "codex",
-    }, () => false)).toEqual({ id: "t-0042" });
+    }, () => false)).toMatchObject({ id: "t-0042", role: "coordinator", parent: "t-0010", profile: "codex" });
     expect(calls[0]!.argv).toEqual(["node", "start", "awam", "--role=coordinator", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
   });
 
@@ -113,7 +113,7 @@ describe("herdr-organizations CLI adapter", () => {
     const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ id: "t-0007", kind: "tab", profile: "", agent: "claude", branch: "", pane_id: "w1:p3" }), stderr: "" });
     const thread = { project: "awam", title: "Hotfix", parent: "root", task: "Fix the login." };
 
-    expect(await startNode(run, "/tmp/herdr.sock", thread, () => true)).toEqual({ id: "t-0007" });
+    expect(await startNode(run, "/tmp/herdr.sock", thread, () => true)).toMatchObject({ id: "t-0007", role: "worker", parent: "root" });
     expect(calls[0]!.argv).toEqual(["thread", "start", "awam", "--title=Hotfix", "--task-file", "-"]);
     for (const refused of [{ role: "coordinator" }, { parent: "t-0001" }, { template: "review-worker" }]) {
       await expect(startNode(run, "/tmp/herdr.sock", { ...thread, ...refused }, () => true)).rejects.toThrow("need Herdr Organizations");
@@ -131,7 +131,7 @@ describe("herdr-organizations CLI adapter", () => {
   it("opens a project's coordinator in the bridge's Herdr session", async () => {
     const { run, calls } = fakeRun({ code: 0, stdout: "started codex as hp-awam", stderr: "" });
 
-    await openProject(run, "/tmp/herdr.sock", { project: "awam" });
+    expect(await openProject(run, "/tmp/herdr.sock", { project: "awam" })).toEqual({ message: "started codex as hp-awam" });
     expect(calls).toEqual([{ argv: ["open", "awam"], opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 } }]);
     await expect(openProject(fakeRun({ code: 1, stdout: "", stderr: "error: `awam` is archived" }).run, "/s", { project: "awam" })).rejects.toThrow("is archived");
   });

@@ -228,6 +228,7 @@ function ThreadPane({ projects, project, onProject, readOnly, session, onDone, o
       </div>
     );
   }
+  const roles = startableRoles(current);
   return (
     <div className="flex flex-col">
       <Field label="Project">
@@ -235,13 +236,14 @@ function ThreadPane({ projects, project, onProject, readOnly, session, onDone, o
           {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
         </select>
       </Field>
-      <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
-        role={startableRoles(current).includes(role) ? role : "worker"} onRole={setRole}
+      {roles.length === 0 && <p className="py-3 text-sm text-muted-foreground">{current.name} is paused, so it starts no threads.</p>}
+      {roles.length > 0 && <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
+        role={roles.includes(role) ? role : "worker"} onRole={setRole}
         onStarted={() => {
           void revalidator.revalidate();
           navigate(projectPath(current.slug, session));
           onDone();
-        }} />
+        }} />}
     </div>
   );
 }

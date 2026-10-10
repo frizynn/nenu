@@ -22,10 +22,11 @@ export const orgRoutes: Route[] = [
     },
   },
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
-    const node = await startNode(orgRun, rt.socketPath, {
+    const started = await startNode(orgRun, rt.socketPath, {
       project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
     });
-    return { response: { node }, detail: { project: body.project, id: node.id, role: body.role, parent: body.parent, profile: body.profile, template: body.template, title: body.title } };
+    // The audit records what ran, as validated; the task stays out of it.
+    return { response: { node: { id: started.id } }, detail: started };
   }),
   orgWrite("/api/org/node/resolve", "org.node.resolve", "Could not close node.", async ({ orgRun }, body, rt) => {
     await resolveNode(orgRun, rt.socketPath, { project: body.project, id: body.id });
@@ -33,8 +34,8 @@ export const orgRoutes: Route[] = [
   }),
   // The person waits on the redirect to the coordinator's chat, so the projects are re-read first.
   orgWrite("/api/org/project/open", "org.project.open", "Could not start the coordinator.", async ({ orgRun }, body, rt) => {
-    await openProject(orgRun, rt.socketPath, { project: body.project });
-    return { response: {}, detail: { project: body.project } };
+    const { message } = await openProject(orgRun, rt.socketPath, { project: body.project });
+    return { response: { message }, detail: { project: body.project } };
   }, { settle: true }),
   orgWrite("/api/org/project/create", "org.project.create", "Could not create the project.", async ({ orgRun }, body) => {
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });

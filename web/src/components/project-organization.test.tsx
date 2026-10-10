@@ -34,17 +34,18 @@ function setup(overrides: Partial<ProjectView> = {}, props: { readOnly?: boolean
   return { onChanged, onOpenPane, user: userEvent.setup() };
 }
 
-const titles = (list: HTMLElement) => within(list).getAllByRole("listitem")
-  .filter((item) => item.classList.contains("task-row") && item.closest("ul") === list)
-  .map((item) => item.querySelector(".text-sm.font-medium")?.textContent);
+/** The titles of a list's own items, not of the teams nested inside them. */
+const titles = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-row .font-medium")?.textContent);
 
 it("nests open threads under their coordinator, most urgent first, and folds the resolved away", () => {
   setup();
   const open = screen.getByRole("list", { name: "Open threads" });
   // Mobile has a thread that needs you, so it ranks above the working Hotfix.
   expect(titles(open)).toEqual(["Mobile", "Hotfix"]);
-  const team = within(open).getByRole("group", { name: "Mobile threads" });
+  const team = within(open).getByRole("list", { name: "Mobile threads" });
   expect(titles(team)).toEqual(["Depot", "Landing"]);
+  // The team sits inside its coordinator's item, so the coordinator and its threads read as one entry.
+  expect(team.parentElement).toBe(within(open).getByRole("button", { name: /^Mobile/ }).closest("li"));
   expect(within(open).getByRole("button", { name: /^Mobile/ })).toHaveTextContent("Coordinator · idle");
 
   const resolved = document.querySelector("details")!;
@@ -55,7 +56,8 @@ it("nests open threads under their coordinator, most urgent first, and folds the
 
 it("starts the project coordinator and refreshes, so the route can open its chat", async () => {
   let posted: unknown;
-  server.use(http.post("/api/org/project/open", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true }); }));
+  const message = "codex is not ready yet (agent_not_ready). If it shows a dialog, answer it in pane w1:p3; it primes itself from AGENTS.md.";
+  server.use(http.post("/api/org/project/open", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, message }); }));
   const { onChanged, user } = setup();
 
   const coordinator = within(screen.getByRole("region", { name: "Project coordinator" }));
@@ -63,6 +65,8 @@ it("starts the project coordinator and refreshes, so the route can open its chat
   await user.click(coordinator.getByRole("button", { name: "Start coordinator" }));
   await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   expect(posted).toEqual({ project: "awam" });
+  // Still here after the refresh (the agent waits on a dialog): Organizations' own line says where.
+  expect(coordinator.getByRole("status")).toHaveTextContent(message);
 });
 
 it("shows why the coordinator did not start and lets the person try again", async () => {

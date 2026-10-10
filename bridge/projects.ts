@@ -418,12 +418,16 @@ export class ProjectRegistry {
     if (this.fingerprint() !== this.stamp) void this.schedule(false);
   }
 
-  /** One refresh at a time; a request during one runs once more after it. */
+  /**
+   * One refresh at a time; a request during one runs once more after it, and its promise settles
+   * with that rerun, so a caller awaiting it sees a read that began after its own change.
+   */
   private schedule(force: boolean): Promise<void> {
     if (this.closed) return Promise.resolve();
     if (this.inFlight) {
       this.again = { force: force || this.again?.force === true };
-      return this.inFlight;
+      // The running refresh's `finally` starts the rerun before this continuation runs.
+      return this.inFlight.then(() => this.inFlight);
     }
     const wait = force ? 0 : Math.max(0, this.lastRefresh + MIN_REFRESH_MS - this.now());
     if (wait > 0) {
