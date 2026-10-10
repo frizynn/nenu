@@ -32,7 +32,7 @@ export async function structuralFixture(cadenceMs = 12_000) {
   const server = startServer({
     cfg,
     registry: { get: () => runtime, list: () => [] },
-    push: {}, snooze: { until: () => null }, notifyPrefs: {}, updateMonitor: { status: () => ({}) },
+    push: { useInteractions: () => {} }, snooze: { until: () => null }, notifyPrefs: {}, updateMonitor: { status: () => ({}) },
     audit: { record: () => {} }, activity: { get: () => undefined, noteSeen: () => {} }, live,
   } as unknown as Parameters<typeof startServer>[0]);
   const url = `http://127.0.0.1:${server.port}`;

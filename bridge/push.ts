@@ -176,8 +176,11 @@ export interface PushMessage {
   interaction?: PushInteraction;
 }
 
-/** The detected dialog of a pane, if any; `session` is undefined for the primary. */
-export type InteractionLookup = (session: string | undefined, paneId: string) => DetectedInteraction | null;
+/**
+ * The detected dialog of a pane, if any; `session` is undefined for the primary. May read the pane
+ * first: an alert usually fires before any client asked for the card.
+ */
+export type InteractionLookup = (session: string | undefined, paneId: string) => DetectedInteraction | null | Promise<DetectedInteraction | null>;
 
 export class Push {
   private lib: WebPushModule | null = null;
@@ -292,8 +295,8 @@ export class Push {
 
   /** Send a notification instruction (render, clear, or update) to every subscribed device. */
   async send(msg: PushMessage): Promise<void> {
-    if (msg.type === undefined && msg.paneId !== undefined && this.interactionFor) {
-      const interaction = this.interactionFor(msg.session, msg.paneId);
+    if (this.enabled && msg.type === undefined && msg.paneId !== undefined && this.interactionFor) {
+      const interaction = await this.lookup(msg.session, msg.paneId);
       if (interaction) msg = interactionAlert(msg, interaction);
     }
     // The SW reads deep-link fields from `data`. `session` is omitted for the primary (absent on the
@@ -304,6 +307,15 @@ export class Push {
     // Per-message collapse topic — update alerts must not share the herd slot (see UPDATE_SEND_OPTIONS).
     const options = msg.type === "update" ? UPDATE_SEND_OPTIONS : SEND_OPTIONS;
     await this.broadcast(JSON.stringify({ ...msg, data }), options);
+  }
+
+  /** A failed lookup is no dialog: the plain alert still goes out. */
+  private async lookup(session: string | undefined, paneId: string): Promise<DetectedInteraction | null> {
+    try {
+      return (await this.interactionFor?.(session, paneId)) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Convenience for a one-off render (used by the manual push-test script). */

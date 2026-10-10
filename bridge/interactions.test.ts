@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.ts";
 import type { HerdrClient, PaneRead } from "./herdr-client.ts";
+import type { InteractionLookup } from "./push.ts";
 import { dialogOnScreen, Interactions, pushActions, toInteraction, type DetectedInteraction, type PaneIO } from "./interactions.ts";
 import { LiveEvents } from "./live-events.ts";
 import { parseAnswer } from "./routes/interactions.ts";
@@ -156,7 +157,10 @@ describe("hints enrich, the screen decides", () => {
   test("a permission hint whose command is on screen completes the card", () => {
     const i = detect("claude--permission-bash.txt", [{ source: "claude-hook", observedAt: 1, question: "Bash", detail: "mkfifo fixture-fifo" }]);
     expect(i.detailComplete).toBe(true);
-    expect(i.context).toBe("mkfifo fixture-fifo");
+    // The screen's own subject stays, so the card still says which tool is asking.
+    expect(i.context).toBe(detect("claude--permission-bash.txt").context!);
+    expect(i.context).toContain("Bash command");
+    expect(i.context).toContain("mkfifo fixture-fifo");
     expect(i.hints?.length).toBe(1);
   });
 
@@ -278,6 +282,23 @@ function recorder() {
 }
 
 const noSleep = async () => {};
+
+describe("Interactions.list", () => {
+  test("reuses a read from the last two seconds and shares a list already running", async () => {
+    let now = 1_000;
+    const interactions = new Interactions(recorder().live, { sleep: noSleep, now: () => now });
+    const pane = scriptedPane(fixture("claude--permission-edit.txt"));
+    const [a, b] = await Promise.all([interactions.list("s", pane.io, [blocked("p")]), interactions.list("s", pane.io, [blocked("p")])]);
+    expect(a).toEqual(b);
+    expect(pane.log.reads).toBe(1);
+    now += 1_999;
+    expect((await interactions.list("s", pane.io, [blocked("p")])).length).toBe(1);
+    expect(pane.log.reads).toBe(1);
+    now += 1;
+    await interactions.list("s", pane.io, [blocked("p")]);
+    expect(pane.log.reads).toBe(2);
+  });
+});
 
 describe("Interactions.refresh", () => {
   test("reads only blocked panes, and parses a pane again only when its screen changed", async () => {
@@ -498,6 +519,8 @@ describe("the interactions routes", () => {
   let dispose = async () => {};
   const herdrLog = { reads: 0, keys: [] as string[][] };
   let screen = fixture("claude--permission-edit.txt");
+  let lookup: InteractionLookup = () => null;
+  const live = new LiveEvents();
 
   beforeAll(async () => {
     const dir = await mkdtemp(join(tmpdir(), "nenu-interactions-"));
@@ -524,11 +547,11 @@ describe("the interactions routes", () => {
     const server = startServer({
       cfg,
       registry: { get: (name?: string) => (!name || name === "default" ? runtime : undefined), list: () => [], all: () => [runtime] },
-      push: { enabled: false, publicKey: "", useInteractions: () => {} }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
+      push: { enabled: false, publicKey: "", useInteractions: (fn: InteractionLookup) => void (lookup = fn) }, snooze: { until: () => null }, notifyPrefs: { current: () => ({}) },
       updateMonitor: { status: () => ({}), checkRelease: async () => {} },
       audit: { record: () => {} },
       activity: { get: () => undefined, noteSeen: () => {} },
-      live: new LiveEvents(),
+      live,
     } as unknown as Parameters<typeof startServer>[0]);
     url = `http://127.0.0.1:${server.port}`;
     dispose = async () => {
@@ -572,6 +595,24 @@ describe("the interactions routes", () => {
     const res = await answer({ signature: interactions[0]!.signature, optionIndex: 0 });
     expect(await res.json()).toEqual({ ok: true });
     expect(herdrLog).toEqual({ reads: 1, keys: [["1"]] });
+  });
+
+  test("an agent alert's lookup reads the pane and finds its dialog before any client asked", async () => {
+    herdrLog.reads = 0;
+    expect((await lookup(undefined, "w:p"))?.question).toBe("Do you want to create hello.txt?");
+    expect(herdrLog.reads).toBe(1);
+    expect(await lookup("elsewhere", "w:p")).toBeNull();
+  });
+
+  test("a herd change re-detects and publishes the card without a GET", async () => {
+    const heard: string[] = [];
+    const off = live.subscribe((e) => void heard.push(`${e.topic}:${e.paneId ?? ""}`));
+    screen = fixture("claude--permission-bash.txt");
+    live.publish({ session: "default", topic: "snapshot" });
+    for (let i = 0; i < 50 && !heard.includes("interaction:w:p"); i++) await new Promise((r) => setTimeout(r, 5));
+    off();
+    screen = fixture("claude--permission-edit.txt");
+    expect(heard).toContain("interaction:w:p");
   });
 
   test("bad bodies and unknown panes", async () => {

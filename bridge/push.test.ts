@@ -512,4 +512,24 @@ describe("agent alerts carry the pane's dialog", () => {
     expect(payloads[1]).toMatchObject({ body: "demo" });
     expect((payloads[1] as { interaction?: unknown }).interaction).toBeUndefined();
   });
+
+  test("a lookup that reads first is awaited, and one that fails still sends the plain alert", async () => {
+    const cfg = await tempCfg();
+    const payloads: Array<{ body?: string; interaction?: unknown }> = [];
+    const push = new Push(cfg, async (_s, payload) => void payloads.push(JSON.parse(payload)));
+    enable(push, [sub("live")]);
+    push.useInteractions(async (_session, paneId) => {
+      if (paneId === "broken") throw new Error("herdr read failed");
+      return {
+        paneId, agent: "claude", kind: "question", family: "select", question: "Ship it?", signature: "sig",
+        revision: 0, detectedAt: 0, detailComplete: false,
+        options: [{ index: 0, label: "Yes", role: "neutral" }],
+      };
+    });
+    await push.send({ title: "claude needs you", body: "demo", paneId: "p1" });
+    await push.send({ title: "claude needs you", body: "demo", paneId: "broken" });
+    expect(payloads[0]).toMatchObject({ body: "Ship it?", interaction: { signature: "sig" } });
+    expect(payloads[1]).toMatchObject({ body: "demo" });
+    expect(payloads[1]?.interaction).toBeUndefined();
+  });
 });

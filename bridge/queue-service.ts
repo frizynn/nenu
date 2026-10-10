@@ -13,6 +13,8 @@ import type { AuditLog } from "./audit.ts";
 import type { SendHerdr } from "./guarded-send.ts";
 
 type Context = { pane: AgentView; herdr: HerdrClient; connected: boolean };
+/** A row ready to go: how to submit it, and whether the agent was mid-turn when it was assessed. */
+type Ready = { context: Context; submit: "enter" | "tab"; busy: boolean };
 /** The journal facts of a pane's conversation (journal/store.ts), when the bridge reads journals. */
 export type FactsReader = (pane: AgentView) => Promise<JournalFacts | null>;
 
@@ -96,7 +98,7 @@ export class QueueService {
       this.confirmFromJournal(),
     ]);
   }
-  private async assess(row: QueuedMessage): Promise<Verdict<{ context: Context; submit: "enter" | "tab" }>> {
+  private async assess(row: QueuedMessage): Promise<Verdict<Ready>> {
     const current = await this.resolve(row.session, row.paneId, true);
     if (!current) return { stranded: "The agent's pane closed. This message will not be sent." };
     if (!current.connected) return { wait: "disconnected" };
@@ -111,7 +113,7 @@ export class QueueService {
     const submit = submitKind(row.agent, mode, readiness.busy);
     // Tab only goes out audited; without the trail the row waits for the turn and goes with Enter.
     if (submit === "tab" && !this.extras.audit) return { wait: "working" };
-    return { ready: { context: current, submit } };
+    return { ready: { context: current, submit, busy: readiness.busy } };
   }
   /** Whether the turn the scope's last delivery started has visibly begun (ADR 0056 rule 5). */
   private turnStarted(scope: string, pane: AgentView): boolean {
@@ -127,14 +129,16 @@ export class QueueService {
     }
     return false;
   }
-  private async deliver(row: QueuedMessage, ready: { context: Context; submit: "enter" | "tab" }) {
+  private async deliver(row: QueuedMessage, ready: Ready) {
     const { context } = ready;
     const write: QueueWrite = (text, submit, id, paste) => this.write(row, text, submit, id, paste);
     const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
     }, ready.submit);
-    if (outcome.status === "sent") {
+    // Only a delivery to a free agent starts a turn. A steer or a native-queue Tab into a working one
+    // does not, and marking it would hold the next row for the whole TURN_START_CAP_MS.
+    if (outcome.status === "sent" && !ready.busy) {
       const { stateChangeSeq, status } = context.pane;
       this.turns.set(row.scope, { ...(stateChangeSeq !== undefined ? { seq: stateChangeSeq } : {}), status, at: Date.now() });
     }

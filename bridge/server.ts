@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { ClaudeHooks } from "./claude-hooks.ts";
 import { ClaudeTelemetry } from "./claude-telemetry.ts";
-import { CodexLive } from "./codex-live.ts";
 import { isLoopbackBindHost, type Config } from "./config.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
@@ -20,6 +19,7 @@ import { isLoopbackPeer } from "./routes/access.ts";
 import type { ServerDeps, Services } from "./routes/context.ts";
 import { WEB_DIR, text } from "./routes/http.ts";
 import { dispatch } from "./routes/index.ts";
+import { interactionHints } from "./routes/interactions.ts";
 import { replyPane } from "./routes/reply.ts";
 import { Subagents } from "./subagents.ts";
 import type { ActionResponse } from "./types.ts";
@@ -111,9 +111,18 @@ export function startServer(opts: ServerDeps) {
     interactions: new Interactions(live),
     paneWatcher: new PaneWatcher(live),
     journalWatch: new JournalWatch(live),
-    codexLive: new CodexLive(live),
     claudeHooks: new ClaudeHooks(live),
   };
+  // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
+  services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));
+  // An agent alert carries the pane's dialog. The alert usually fires before anything read the
+  // pane, so the lookup reads it first.
+  opts.push.useInteractions(async (session, paneId) => {
+    const rt = registry.get(session);
+    if (!rt) return null;
+    await services.interactions.refresh(rt.name, rt.herdr, rt.engine.current().agents, interactionHints(services, rt), paneId);
+    return services.interactions.current(rt.name, paneId);
+  });
 
   const server = Bun.serve({
     hostname: cfg.host,

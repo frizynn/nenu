@@ -101,6 +101,8 @@ export type AnswerResult = { status: 200 | 400 | 409 | 422 | 502; outcome: Answe
 const NAV_SETTLE_MS = 250;
 /** A matched dialog regex keeps a pane eligible for detection this long even before Herdr says blocked. */
 const OUTPUT_MATCH_WINDOW_MS = 30_000;
+/** How long a client's list reuses a pane read; follow() re-reads on every herd or screen change. */
+const LIST_FRESH_MS = 2_000;
 /** Rows of a prompt's subject kept above its question. */
 const CONTEXT_MAX_ROWS = 12;
 /** Rows above a prompt's question that must hold still while its amend field opens and fills. */
@@ -311,7 +313,9 @@ export function toInteraction(pane: Pick<AgentView, "paneId" | "agent">, dialog:
   const kept = hints.filter((h) => agrees(h, base, dialog, labels));
   const asked = kept.find((h) => h.question && base.kind !== "permission");
   const detail = kept.find((h) => h.detail)?.detail;
-  const context = detail ?? base.context;
+  // A permission hint only agrees when its command is whole rows of the screen's subject, so that
+  // subject (tool header, command, description) already shows it in full. A plan hint is longer.
+  const context = base.kind === "permission" ? base.context : (detail ?? base.context);
   const interaction: DetectedInteraction = {
     paneId: pane.paneId,
     agent: pane.agent,
@@ -348,6 +352,7 @@ interface Entry {
   /** Screen text plus hints the detection was built from; the same input is never re-parsed. */
   input: string;
   detection: Detection | null;
+  readAt: number;
 }
 
 export type HintSource = (session: string, pane: AgentView) => Promise<InteractionHint[]>;
@@ -380,6 +385,7 @@ function typedText(raw: string): string | AnswerResult {
 export class Interactions {
   private readonly panes = new Map<string, Entry>();
   private readonly matched = new Map<string, number>();
+  private readonly listing = new Map<string, Promise<DetectedInteraction[]>>();
   private readonly lines: number;
   private readonly now: () => number;
   private readonly sleep: Sleep;
@@ -401,11 +407,23 @@ export class Interactions {
   }
 
   /**
+   * The cards a client asks for. A pane read in the last LIST_FRESH_MS is not read again, and callers
+   * that arrive while a list is running share it, so more open phones do not mean more pane reads.
+   */
+  list(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource): Promise<DetectedInteraction[]> {
+    const running = this.listing.get(session);
+    if (running) return running;
+    const run = this.refresh(session, io, agents, hints, undefined, LIST_FRESH_MS).finally(() => this.listing.delete(session));
+    this.listing.set(session, run);
+    return run;
+  }
+
+  /**
    * Re-detect the session's eligible panes (blocked, or a dialog regex matched lately) and forget the
    * rest. A pane is read every time (one local read, no revision to skip on: pane.read's is 0) but only
    * parsed when its text or hints changed. Publishes `interaction` for every pane whose card changed.
    */
-  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string): Promise<DetectedInteraction[]> {
+  async refresh(session: string, io: PaneIO, agents: readonly AgentView[], hints?: HintSource, only?: string, maxAgeMs = 0): Promise<DetectedInteraction[]> {
     const now = this.now();
     const eligible = agents.filter((a) => {
       const matchedAt = this.matched.get(paneKey(session, a.paneId));
@@ -418,7 +436,8 @@ export class Interactions {
         if (s === session && !live.has(paneId)) this.forget(session, paneId);
       }
     }
-    await Promise.all(eligible.filter((a) => only === undefined || a.paneId === only).map(async (pane) => {
+    const stale = (paneId: string) => now - (this.panes.get(paneKey(session, paneId))?.readAt ?? -Infinity) >= maxAgeMs;
+    await Promise.all(eligible.filter((a) => (only === undefined || a.paneId === only) && stale(a.paneId)).map(async (pane) => {
       try {
         const read = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
         this.store(session, pane, read, hints ? await hints(session, pane) : []);
@@ -491,10 +510,14 @@ export class Interactions {
     const key = paneKey(session, pane.paneId);
     const input = `${pane.agent}\0${read.text}\0${JSON.stringify(hints)}`;
     const previous = this.panes.get(key);
-    if (previous?.input === input) return previous.detection;
+    const readAt = this.now();
+    if (previous?.input === input) {
+      previous.readAt = readAt;
+      return previous.detection;
+    }
     const dialog = dialogOnScreen(pane.agent, read.text);
-    const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, this.now()) : null;
-    this.panes.set(key, { input, detection });
+    const detection = dialog ? toInteraction(pane, dialog, read.revision, hints, readAt) : null;
+    this.panes.set(key, { input, detection, readAt });
     const before = previous?.detection?.interaction;
     const after = detection?.interaction;
     if (before?.signature !== after?.signature || JSON.stringify(before?.hints) !== JSON.stringify(after?.hints)) {
@@ -572,19 +595,10 @@ export class Interactions {
     return dialog?.kind === kind ? (dialog.model as DialogModels[K]) : null;
   }
 
-  /** Bounded polling until `accept`; "drifted" when another dialog (or none) replaced this one. */
-  private async poll<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, tapped: DialogModels[K], accept: (m: DialogModels[K]) => boolean): Promise<"ok" | "drifted" | "timeout"> {
+  /** Until `accept` on the dialog `tapped` showed; false once another dialog replaced it or time ran out. */
+  private async settles<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, tapped: DialogModels[K], accept: (m: DialogModels[K]) => boolean): Promise<boolean> {
     const identity = DIALOG_CONTRACT[kind].identity as (a: DialogModels[K], b: DialogModels[K]) => boolean;
-    let seen = false;
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      await this.sleep(POLL_DELAY_MS);
-      const m = await this.model(io, pane, kind).catch(() => null);
-      if (!m) continue;
-      seen = true;
-      if (accept(m)) return "ok";
-      if (!identity(m, tapped)) return "drifted";
-    }
-    return seen ? "timeout" : "drifted";
+    return (await this.waitFor(io, pane, kind, (m) => identity(m, tapped), accept)) !== null;
   }
 
   /** Multi-select Submit/Next: move the pointer onto the advance row one verified step at a time, then Enter. */
@@ -610,8 +624,7 @@ export class Interactions {
   /** Preview question: the digit moves the pointer; Enter only once the pointer is verified there. */
   private async preview(io: PaneIO, pane: AgentView, tapped: PreviewSelectModel, n: number): Promise<AnswerResult> {
     await io.sendPaneKeys(pane.paneId, [String(n)]);
-    const pointed = await this.poll(io, pane, "preview-select", tapped, (m) => previewStructureEqual(m, tapped) && (m.options.find((o) => o.n === n)?.pointed ?? false));
-    if (pointed !== "ok") return changed();
+    if (!(await this.settles(io, pane, "preview-select", tapped, (m) => previewStructureEqual(m, tapped) && (m.options.find((o) => o.n === n)?.pointed ?? false)))) return changed();
     await io.sendPaneKeys(pane.paneId, ["Enter"]);
     return sent([String(n), "Enter"]);
   }
@@ -627,10 +640,10 @@ export class Interactions {
     if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
     const focused = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === "";
-    if ((await this.poll(io, pane, "prompt-select", tapped, focused)) !== "ok") return failed("The feedback box didn't open. Check the pane.");
+    if (!(await this.settles(io, pane, "prompt-select", tapped, focused))) return failed("The feedback box didn't open. Check the pane.");
     await io.sendPaneText(pane.paneId, text);
     const landed = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === text;
-    if ((await this.poll(io, pane, "prompt-select", tapped, landed)) !== "ok") return failed("The feedback didn't arrive. Nothing was submitted.");
+    if (!(await this.settles(io, pane, "prompt-select", tapped, landed))) return failed("The feedback didn't arrive. Nothing was submitted.");
     // The Enter is the irreversible write: one more read right before it.
     const fresh = await this.model(io, pane, "prompt-select");
     if (!fresh || !landed(fresh)) return changed();
@@ -638,14 +651,19 @@ export class Interactions {
     return sent([key, "Enter"]);
   }
 
-  /** Read once until `accept`, giving up after the shared poll budget or when another dialog shows. */
-  private async waitFor<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, same: (m: DialogModels[K]) => boolean, accept: (m: DialogModels[K]) => boolean): Promise<DialogModels[K] | null> {
+  /** Read `kind` until `accept`, giving up after the shared poll budget or when another dialog shows. */
+  private waitFor<K extends DialogKind>(io: PaneIO, pane: AgentView, kind: K, same: (m: DialogModels[K]) => boolean, accept: (m: DialogModels[K]) => boolean): Promise<DialogModels[K] | null> {
+    return this.until(() => this.model(io, pane, kind), accept, same);
+  }
+
+  /** The shared bounded poll: a null or failed read is retried, a read that is not `same` stops it. */
+  private async until<T>(read: () => Promise<T | null>, accept: (v: T) => boolean, same: (v: T) => boolean = () => true): Promise<T | null> {
     for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
       await this.sleep(POLL_DELAY_MS);
-      const m = await this.model(io, pane, kind).catch(() => null);
-      if (!m) continue;
-      if (accept(m)) return m;
-      if (!same(m)) return null;
+      const v = await read().catch(() => null);
+      if (v === null) continue;
+      if (accept(v)) return v;
+      if (!same(v)) return null;
     }
     return null;
   }
@@ -676,9 +694,9 @@ export class Interactions {
     }
     await io.sendPaneKeys(pane.paneId, ["Tab"]);
     sentKeys.push("Tab");
-    if ((await this.waitForField(io, pane, field, tapped, n, "")) !== "ok") return failed("The text field didn't open. Check the pane.");
+    if (!(await this.fieldHolds(io, pane, field, tapped, n, ""))) return failed("The text field didn't open. Check the pane.");
     await io.sendPaneText(pane.paneId, text);
-    if ((await this.waitForField(io, pane, field, tapped, n, text)) !== "ok") return failed("Your text didn't arrive. Nothing was submitted.");
+    if (!(await this.fieldHolds(io, pane, field, tapped, n, text))) return failed("Your text didn't arrive. Nothing was submitted.");
     // The Enter is the irreversible write: one more read right before it.
     const fresh = await io.readPane(pane.paneId, "recent", this.lines, "ansi");
     if (field(fresh.text, tapped, n) !== text) return changed();
@@ -686,14 +704,10 @@ export class Interactions {
     return sent([...sentKeys, "Enter"]);
   }
 
-  /** Poll until the open field on row `n` holds `want`; "gone" once the screen shows no such field. */
-  private async waitForField(io: PaneIO, pane: AgentView, field: AmendField, tapped: PromptModel, n: number, want: string): Promise<"ok" | "gone"> {
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      await this.sleep(POLL_DELAY_MS);
-      const read = await io.readPane(pane.paneId, "recent", this.lines, "ansi").catch(() => null);
-      if (read && field(read.text, tapped, n) === want) return "ok";
-    }
-    return "gone";
+  /** Whether the open field on row `n` comes to hold `want` within the poll budget. */
+  private async fieldHolds(io: PaneIO, pane: AgentView, field: AmendField, tapped: PromptModel, n: number, want: string): Promise<boolean> {
+    const read = async () => field((await io.readPane(pane.paneId, "recent", this.lines, "ansi")).text, tapped, n);
+    return (await this.until(read, (v) => v === want)) !== null;
   }
 
   /**

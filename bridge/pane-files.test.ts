@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TranscriptEntry } from "./journal/types.ts";
-import { deliveredFilePaths, FILE_STATE_HEADER, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse } from "./pane-files.ts";
+import { deliveredFilePaths } from "./journal/delivered.ts";
+import { FILE_STATE_HEADER, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse } from "./pane-files.ts";
 
 describe("pane project files", () => {
   let dir: string;

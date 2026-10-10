@@ -6,7 +6,8 @@ import { chatUploadPreviewResponse, isChatUploadPath } from "../chat-upload-prev
 import type { Config } from "../config.ts";
 import { renderedHtmlResponse } from "../html-preview.ts";
 import { adapterFor } from "../journal/registry.ts";
-import { deliveredFilePaths, paneFileResponse } from "../pane-files.ts";
+import { deliveredFilePaths } from "../journal/delivered.ts";
+import { paneFileResponse } from "../pane-files.ts";
 import { projectFiles } from "../project-files.ts";
 import type { UploadResponse } from "../types.ts";
 import { imageExtFromBytes, SNIFF_BYTES } from "../uploads.ts";

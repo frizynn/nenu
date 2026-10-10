@@ -270,6 +270,19 @@ it("the second Claude row waits for Herdr to see the first one's turn start (sta
   } finally { await t.close(); }
 });
 
+it("a steer into a working Codex starts no turn, so the next 'after the turn' row goes to Codex's queue at once", async () => {
+  const t = await agentPane("codex", "working");
+  try {
+    await t.add("one", "codex steer", "steer");
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect(t.pane.submitted).toEqual(["codex steer"]);
+    const second = await t.add("two", "codex next turn");
+    expect(second.body.messages[0]?.waitingFor).not.toBe("turn-start");
+    await t.settle(() => t.pane.submitted.length === 2);
+    expect(t.pane.submitted).toEqual(["codex steer", "tab:codex next turn"]);
+  } finally { await t.close(); }
+});
+
 it("a row whose conversation changed is stranded with its reason, shown on the pane and never sent", async () => {
   const t = await agentPane("claude", "working");
   try {

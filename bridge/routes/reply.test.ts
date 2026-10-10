@@ -118,6 +118,18 @@ describe("POST send", () => {
     expect(box.count("pane.send_text")).toBe(1);
   });
 
+  test("a send refused at a password prompt never writes the typed text to the audit log", async () => {
+    const box = new Box();
+    box.dialog = "[sudo] password for user:";
+    const { audit, lines } = recorder();
+    const res = await sendPane(runtime(box), cfg, new PaneWrites(), "w1:send-noecho", post({ text: "MyS3cretPass", requestId: "a12" }), audit, "phone");
+    expect(await res.json()).toMatchObject({ ok: false, stage: "preflight", textDelivered: false });
+    expect(box.count("pane.send_text")).toBe(0);
+    expect(lines.map((l) => l.action)).toEqual(["reply", "reply.unsent"]);
+    expect(lines[0]?.detail).toMatchObject({ noEcho: true, submitted: false });
+    expect(JSON.stringify(lines)).not.toContain("MyS3cretPass");
+  });
+
   test("a retry after an Enter whose ack was lost does not submit the message twice", async () => {
     const box = new Box();
     box.failKeysAfterLanding = 1;
@@ -164,7 +176,7 @@ describe("POST send", () => {
     await sendPane(runtime(box), cfg, writes, "w1:send-conflict", post({ text: "first", requestId: "a5" }), audit, null);
     const conflict = await sendPane(runtime(box), cfg, writes, "w1:send-conflict", post({ text: "second", requestId: "a5" }), audit, null);
     expect(conflict.status).toBe(409);
-    for (const body of ["nope", { text: "", requestId: "a6" }, { text: "x", requestId: "bad id" }, { text: "x", requestId: "a7", deliveryMode: "later" }, { text: "x", requestId: "a8", expectedPrompt: "y".repeat(8193) }]) {
+    for (const body of ["nope", { text: "", requestId: "a6" }, { text: "x", requestId: "bad id" }, { text: "x", requestId: "a8", expectedPrompt: "y".repeat(8193) }]) {
       expect((await sendPane(runtime(box), cfg, writes, "w1:send-conflict", post(body), audit, null)).status).toBe(400);
     }
     expect(box.count("pane.send_text")).toBe(1);

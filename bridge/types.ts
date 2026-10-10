@@ -579,7 +579,6 @@ export interface SendRequest {
   text: string;
   /** Idempotency key; a retry with the same id never types twice. */
   requestId: string;
-  deliveryMode?: DeliveryMode;
   paste?: boolean;
   /** The dialog text the operator saw, when sending into one (the reply prompt binding). */
   expectedPrompt?: string;
@@ -588,7 +587,7 @@ export interface SendRequest {
 export type SendStage = "preflight" | "type" | "verify" | "submit" | "confirm";
 
 export type SendOutcome =
-  | { ok: true; requestId: string; ack: "submitted" | "queued"; queueId?: string; replayed?: boolean }
+  | { ok: true; requestId: string; ack: "submitted"; replayed?: boolean }
   | {
       ok: false;
       requestId: string;

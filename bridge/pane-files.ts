@@ -6,7 +6,6 @@ import { constants } from "node:fs";
 import { open, realpath, type FileHandle } from "node:fs/promises";
 import { basename, extname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
-import type { TranscriptEntry } from "./journal/types.ts";
 import { imageExtFromBytes } from "./uploads.ts";
 
 export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
@@ -52,25 +51,6 @@ function fileKind(path: string): FileKind | null {
 
 function kindLimit(kind: FileKind): number {
   return kind === "video" ? MAX_VIDEO_BYTES : kind === "text" || kind === "markdown" ? MAX_TEXT_FILE_BYTES : MAX_PREVIEW_FILE_BYTES;
-}
-
-const deliveredCache = new WeakMap<readonly TranscriptEntry[], string[]>();
-
-/**
- * Absolute paths Claude Code confirmed it delivered through SendUserFile, read from the harness's
- * own tool result ("N files delivered to user." then one "  <path> → file_uuid: …" line per file),
- * never from the model's prose or the call's input. Memoized per parsed journal window.
- */
-export function deliveredFilePaths(entries: readonly TranscriptEntry[]): string[] {
-  let paths = deliveredCache.get(entries);
-  if (!paths) {
-    paths = entries.flatMap((entry) => entry.parts.flatMap((part) =>
-      part.kind === "tool" && part.name === "SendUserFile" && part.result && !part.result.isError
-        ? [...part.result.text.matchAll(/^ {2}(\/.+) → file_uuid: /gm)].map((match) => resolve(match[1]!))
-        : []));
-    deliveredCache.set(entries, paths);
-  }
-  return paths;
 }
 
 /** A contained, opened, bounded regular file. The caller owns `handle` and must close it. */
