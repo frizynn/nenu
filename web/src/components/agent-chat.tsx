@@ -7,6 +7,7 @@ import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
 import { SessionSubagents } from "@/components/session-subagents";
 import { PaneActivity } from "@/components/threads-panel";
+import { RunningWorkflows } from "@/components/activity/running-workflows";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
@@ -964,7 +965,8 @@ export function AgentChat({
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
-              onMatchCount={findOpen ? handleMatchCount : undefined} footer={conversationFooter} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              onMatchCount={findOpen ? handleMatchCount : undefined}
+              footer={<>{conversationFooter}{agent?.agent === "claude" && <RunningWorkflows key={displayScope} paneId={paneId} session={session} />}</>} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
