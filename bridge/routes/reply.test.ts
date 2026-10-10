@@ -22,6 +22,9 @@ class Box {
   /** Typed text shows up at the next read, the way a TUI repaints after the write. */
   pending = "";
   failKeys = 0;
+  /** Enter lands, then the ack is lost. */
+  failKeysAfterLanding = 0;
+  readonly submitted: string[] = [];
   failTextAfterLanding = 0;
   failReads = false;
   readonly calls: Array<{ method: string; arg?: unknown }> = [];
@@ -49,7 +52,11 @@ class Box {
   async sendPaneKeys(_paneId: string, keys: string[]) {
     this.calls.push({ method: "pane.send_keys", arg: keys });
     if (this.failKeys-- > 0) throw new Error("herdr pane.send_keys: internal: lost");
-    if (keys.includes("Enter") && !this.dialog) this.draft = "";
+    if (keys.includes("Enter") && !this.dialog) {
+      if (this.draft) this.submitted.push(this.draft);
+      this.draft = "";
+    }
+    if (this.failKeysAfterLanding-- > 0) throw new Error("herdr request timed out");
   }
   async waitForOutput() {
     this.calls.push({ method: "pane.wait_for_output" });
@@ -111,13 +118,39 @@ describe("POST send", () => {
     expect(box.count("pane.send_text")).toBe(1);
   });
 
+  test("a retry after an Enter whose ack was lost does not submit the message twice", async () => {
+    const box = new Box();
+    box.failKeysAfterLanding = 1;
+    const { audit } = recorder();
+    const writes = new PaneWrites();
+    const first = await sendPane(runtime(box), cfg, writes, "w1:send-lost-enter", post({ text: "deploy now", requestId: "a10" }), audit, null);
+    expect(await first.json()).toMatchObject({ ok: false, stage: "submit", textDelivered: true });
+    const retry = await sendPane(runtime(box), cfg, writes, "w1:send-lost-enter", post({ text: "deploy now", requestId: "a10" }), audit, null);
+    expect(await retry.json()).toMatchObject({ ok: false, textDelivered: true });
+    expect(box.submitted).toEqual(["deploy now"]);
+    expect(box.count("pane.send_text")).toBe(1);
+  });
+
+  test("a retry on a pane with no adapter does not type the message again", async () => {
+    const box = new Box();
+    box.agent = "pi";
+    box.failKeys = 1;
+    const { audit } = recorder();
+    const writes = new PaneWrites();
+    const first = await sendPane(runtime(box), cfg, writes, "w1:send-pi", post({ text: "deploy now", requestId: "a11" }), audit, null);
+    expect(await first.json()).toMatchObject({ ok: false, textDelivered: true });
+    const retry = await sendPane(runtime(box), cfg, writes, "w1:send-pi", post({ text: "deploy now", requestId: "a11" }), audit, null);
+    expect(await retry.json()).toMatchObject({ ok: false, textDelivered: true });
+    expect(box.count("pane.send_text")).toBe(1);
+  });
+
   test("a stall records every read in the unsent line", async () => {
     const box = new Box();
     box.agent = "claude";
     box.sendPaneText = async (_p: string, text: string) => void box.calls.push({ method: "pane.send_text", arg: text });
     const { audit, lines } = recorder();
     const res = await sendPane(runtime(box), cfg, new PaneWrites(), "w1:send-stall", post({ text: "ship the release", requestId: "a4" }), audit, null);
-    expect(await res.json()).toMatchObject({ ok: false, stage: "verify", textDelivered: false });
+    expect(await res.json()).toMatchObject({ ok: false, stage: "verify", textDelivered: true });
     expect(box.count("pane.send_keys")).toBe(0);
     const unsent = lines.find((l) => l.action === "reply.unsent")!;
     expect(unsent.detail).toMatchObject({ status: "stalled", phase: "verify", text: "ship the release" });
@@ -189,6 +222,38 @@ describe("POST reply (kept for the browser guard and the queue)", () => {
     const retry = await reply(box, "w1:reply-retype", { text: "one durable message", submit: false, request_id: "d3:type" });
     expect(await retry.json()).toMatchObject({ ok: true, ack: "typed" });
     expect(box.count("pane.send_text")).toBe(2);
+  });
+
+  test("a retry after an Enter whose ack was lost does not submit the message twice", async () => {
+    const box = new Box();
+    box.failKeysAfterLanding = 1;
+    const first = await reply(box, "w1:reply-lost-enter", { text: "deploy now", submit: true, request_id: "d5" });
+    expect(await first.json()).toMatchObject({ ok: false, textDelivered: true });
+    const retry = await reply(box, "w1:reply-lost-enter", { text: "deploy now", submit: true, request_id: "d5" });
+    expect(await retry.json()).toMatchObject({ ok: false, textDelivered: true });
+    expect(box.submitted).toEqual(["deploy now"]);
+    expect(box.count("pane.send_text")).toBe(1);
+  });
+
+  test("a failed submit retried on a pane with no adapter does not type the message again", async () => {
+    const box = new Box();
+    box.agent = "pi";
+    box.failKeys = 1;
+    const first = await reply(box, "w1:reply-pi", { text: "deploy now", submit: true, request_id: "d6" });
+    expect(await first.json()).toMatchObject({ ok: false, textDelivered: true });
+    const retry = await reply(box, "w1:reply-pi", { text: "deploy now", submit: true, request_id: "d6" });
+    expect(await retry.json()).toMatchObject({ ok: false, textDelivered: true });
+    expect(box.count("pane.send_text")).toBe(1);
+  });
+
+  test("a failed submit retried while the text is still in the box presses Enter without retyping", async () => {
+    const box = new Box();
+    box.failKeys = 1;
+    await reply(box, "w1:reply-resubmit", { text: "deploy now", submit: true, request_id: "d7" });
+    const retry = await reply(box, "w1:reply-resubmit", { text: "deploy now", submit: true, request_id: "d7" });
+    expect(await retry.json()).toMatchObject({ ok: true, ack: "submitted" });
+    expect(box.submitted).toEqual(["deploy now"]);
+    expect(box.count("pane.send_text")).toBe(1);
   });
 
   test("a failed type is not retyped while the box cannot be read", async () => {

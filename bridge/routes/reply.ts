@@ -238,11 +238,13 @@ export async function replyPane(
   const observe = async () => (await herdr.readPane(paneId, "recent", cfg.readLines, "ansi")).text;
   const operation = async (prior: ReplyOutcome | null): Promise<ReplyOutcome> => {
     // A retry of a failed attempt may find that attempt's text already typed (the ack failed after
-    // the bytes reached the PTY). Look before typing a second copy.
+    // the bytes reached the PTY). Look before typing a second copy. Text it delivered that is gone
+    // from the box may have been submitted by an Enter whose ack was lost: never type it again.
     if (prior && txt) {
       const box = await boxCarries(herdr, cfg, paneId, txt);
-      if (box === "unknown") return { ok: false, textDelivered: false, error: "Couldn't read the terminal to check the earlier attempt. Nothing was typed." };
       if (box === "carries") return sendReplySteps(herdr, paneId, "", submit, cfg.submitKeys).then((out) => ({ ...out, textDelivered: true }));
+      if (box === "unknown") return { ok: false, textDelivered: prior.textDelivered, error: "Couldn't read the terminal to check the earlier attempt. Nothing was typed; check Terminal." };
+      if (prior.textDelivered) return { ok: false, textDelivered: true, error: "The earlier attempt is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal." };
     }
     return sendReplySteps(herdr, paneId, wireText, submit, cfg.submitKeys, defaultSleep, observe);
   };
@@ -277,12 +279,12 @@ const replyLedger = new WriteLedger<ReplyOutcome>((outcome) => outcome.ok);
 
 /**
  * Whether the pane's input box already holds `txt`, as its adapter reads it. A pane with no adapter
- * cannot be read back, which is "absent": its sends were never verifiable.
+ * cannot be read back, which is "unknown", the same as a read that fails.
  */
 async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: string): Promise<"carries" | "absent" | "unknown"> {
   try {
     const adapter = adapterFor((await herdr.getPane(paneId)).agent ?? undefined);
-    if (!adapter) return "absent";
+    if (!adapter) return "unknown";
     const lines = splitLines(parseAnsi((await herdr.readPane(paneId, "recent", cfg.readLines, "ansi")).text));
     const draft = adapter.extractInputDraft(lines);
     return draftCarriesSend(txt, draft) || (draft !== null && adapter.draftCarriesSend?.(txt, draft)) ? "carries" : "absent";
@@ -343,16 +345,17 @@ export async function sendPane(
   const fingerprint = JSON.stringify([send.text, send.paste === true, send.expectedPrompt ?? null]);
   const result = await sendLedger.run(key, fingerprint, async (prior) => {
     const started = Date.now();
+    const delivered = prior !== null && !prior.outcome.ok && prior.outcome.textDelivered;
     const locked = await input.run(rt.name, paneId, () =>
       guardedSend(
         { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker) },
         send,
-        prior ? { typeAttempted: prior.trace.typeAttempted } : undefined,
+        prior ? { typeAttempted: prior.trace.typeAttempted, textDelivered: delivered } : undefined,
       ),
     );
     if (locked.busy) {
       return {
-        outcome: { ok: false, requestId: send.requestId, stage: "preflight", error: "A saved message is being delivered. Wait before sending.", textDelivered: false, code: "busy" },
+        outcome: { ok: false, requestId: send.requestId, stage: "preflight", error: "A saved message is being delivered. Wait before sending.", textDelivered: delivered, code: "busy" },
         trace: { ...(prior?.trace ?? emptyTrace()), phase: "preflight" },
         elapsedMs: Date.now() - started,
       } satisfies SendRun;

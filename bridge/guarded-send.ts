@@ -36,10 +36,12 @@ export interface GuardedSendDeps {
   now?: () => number;
 }
 
-/** What an earlier attempt with the same request id left behind, when it failed. */
+/** What earlier attempts with the same request id left behind, when they failed. */
 export interface PriorAttempt {
-  /** The earlier attempt sent (or tried to send) the text, so it may already be in the box. */
+  /** An earlier attempt sent (or tried to send) the text, so it may already be in the box. */
   typeAttempted: boolean;
+  /** An earlier attempt knows the text reached the pane: it is in the box, or already submitted. */
+  textDelivered: boolean;
 }
 
 /** Where a send stopped, in the vocabulary of the `reply.unsent` audit line (send-report.ts). */
@@ -51,6 +53,7 @@ export interface SendTrace {
   phase: SendPhase;
   preflight: "skipped" | "read-failed" | "no-composer" | "composer";
   attempts: VerifyRead[];
+  /** This request id has sent (or tried to send) the text, in this attempt or an earlier one. */
   typeAttempted: boolean;
   noEcho: boolean;
   draft: string | null;
@@ -72,9 +75,15 @@ const NO_ECHO_TYPED =
   "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.";
 const UNREAD =
   "Couldn't read the terminal to confirm your message. Nothing was submitted; the text may already be typed, so check Terminal before retrying.";
-const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was submitted. Retry or open Terminal.";
+const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was submitted; it may still be typed, so check Terminal before retrying.";
 const MOVED = "The input box changed right before Enter. Nothing was submitted; check Terminal before retrying.";
 const UNCONFIRMED = "Enter went out, but the message is still in the input box. Check Terminal before retrying.";
+const UNCHECKED =
+  "Couldn't read the terminal to check the earlier try of this message. Nothing was typed; check Terminal before retrying.";
+const NO_READBACK =
+  "This agent's input box can't be read back, so the earlier try of this message can't be checked. Nothing was typed; check Terminal.";
+const MAYBE_SENT =
+  "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 const NOT_SUBMITTED = "Typed into the pane but not submitted — check the pane before resending.";
 const ESCAPES = "The message contains terminal escape sequences, which a paste cannot carry. Nothing was typed.";
 
@@ -190,14 +199,18 @@ class Send {
     private readonly deps: GuardedSendDeps,
     readonly request: SendRequest,
     private readonly adapter: HarnessAdapter | undefined,
+    private readonly prior?: PriorAttempt,
   ) {
     this.sleep = deps.sleep ?? defaultSleep;
+    if (prior?.typeAttempted) this.trace.typeAttempted = true;
   }
 
+  /** `textDelivered` is this attempt's; text an earlier attempt delivered may still be there too. */
   fail(error: string, textDelivered: boolean, code?: "prompt_changed" | "not_ready" | "busy"): GuardedSendResult {
     const stage: SendStage = this.trace.phase === "pre-type" ? "preflight" : this.trace.phase;
+    const delivered = textDelivered || this.prior?.textDelivered === true;
     return {
-      outcome: { ok: false, requestId: this.request.requestId, stage, error, textDelivered, ...(code ? { code } : {}) },
+      outcome: { ok: false, requestId: this.request.requestId, stage, error, textDelivered: delivered, ...(code ? { code } : {}) },
       trace: this.trace,
     };
   }
@@ -246,11 +259,11 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   try {
     agent = (await deps.herdr.getPane(deps.paneId)).agent;
   } catch (err) {
-    const send = new Send(deps, request, undefined);
+    const send = new Send(deps, request, undefined, prior);
     return send.fail(herdrErrorCode(err) === "pane_not_found" ? NO_PANE : `herdr pane.get failed: ${message(err)}`, false);
   }
   const adapter = adapterFor(agent ?? undefined);
-  const send = new Send(deps, request, adapter);
+  const send = new Send(deps, request, adapter, prior);
   const bracketed = adapter?.bracketedPaste === true || request.paste === true;
   if (bracketed && /[\x1b\x9b]/.test(request.text)) return send.fail(ESCAPES, false);
   const wire = bracketed ? `\x1b[200~${request.text}\x1b[201~` : request.text;
@@ -268,7 +281,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   if (request.expectedPrompt !== undefined && seen && !verifyExpectedPrompt(seen.text, request.expectedPrompt).ok) {
     return send.fail("prompt changed", false, "prompt_changed");
   }
-  if (!adapter) return oneShot(send, deps, wire, seen?.text ?? null);
+  if (!adapter) return prior?.typeAttempted ? send.fail(NO_READBACK, false) : oneShot(send, deps, wire, seen?.text ?? null);
   if (seen && seen.composer !== null) {
     send.trace.preflight = seen.composer ? "composer" : "no-composer";
     if (!seen.composer) return send.fail(send.trace.noEcho ? NO_ECHO : NO_BOX, false, "not_ready");
@@ -276,8 +289,11 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
 
   // An earlier attempt with this id may have typed before it failed (an ack lost after the bytes
   // reached the PTY). Its text, still in the box, is this send's text: submit it rather than type a
-  // second copy.
+  // second copy. Text it delivered that is no longer in the box may have been submitted by an Enter
+  // whose ack was lost, so nothing is typed; neither when the box cannot be read to tell.
+  if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
   const alreadyTyped = prior?.typeAttempted === true && seen !== null && send.carries(seen);
+  if (prior?.textDelivered && !alreadyTyped) return send.fail(MAYBE_SENT, true);
 
   if (!alreadyTyped && seen?.composer === true && seen.draft !== null) {
     send.trace.phase = "pre-type";
@@ -300,7 +316,8 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   if (!(await verify(send, deps))) {
     if (send.trace.noEcho) return send.fail(NO_ECHO_TYPED, true);
     const unread = send.trace.attempts.length > 0 && send.trace.attempts.every((read) => read === "read-failed");
-    return send.fail(unread ? UNREAD : UNSEEN, false);
+    // The text went out (or an earlier attempt's was already there): a resend could duplicate it.
+    return send.fail(unread ? UNREAD : UNSEEN, true);
   }
 
   // The last word before Enter: a fresh read must still show this message in the input box.

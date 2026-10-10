@@ -170,7 +170,7 @@ describe("guardedSend", () => {
     const term = new Term();
     term.echo = "never";
     const { outcome, trace } = await run(term);
-    expect(outcome).toMatchObject({ ok: false, stage: "verify", textDelivered: false });
+    expect(outcome).toMatchObject({ ok: false, stage: "verify", textDelivered: true });
     expect(term.count("pane.send_keys")).toBe(0);
     expect(trace.attempts.length).toBeGreaterThan(1);
   });
@@ -238,10 +238,38 @@ describe("guardedSend", () => {
   test("a retry of an attempt that typed submits the text in the box instead of retyping", async () => {
     const term = new Term();
     term.draft = "deploy the staging build";
-    const { outcome } = await run(term, {}, { prior: { typeAttempted: true } });
+    const { outcome } = await run(term, {}, { prior: { typeAttempted: true, textDelivered: true } });
     expect(outcome.ok).toBe(true);
     expect(term.count("pane.send_text")).toBe(0);
     expect(term.keys()).toEqual([["Enter"]]);
+  });
+
+  test("a retry of an attempt that delivered the text finds the box empty and types nothing", async () => {
+    const term = new Term();
+    const { outcome } = await run(term, {}, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(0);
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("a retry of an attempt that typed does not type while the box cannot be read", async () => {
+    const term = new Term();
+    term.onRead = () => {
+      throw new Error("herdr request timed out");
+    };
+    const { outcome } = await run(term, {}, { prior: { typeAttempted: true, textDelivered: false } });
+    expect(outcome.ok).toBe(false);
+    expect(term.count("pane.send_text")).toBe(0);
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("a retry of an attempt that typed on a pane with no adapter types nothing", async () => {
+    const term = new Term();
+    term.agent = "pi";
+    const { outcome } = await run(term, {}, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(0);
+    expect(term.count("pane.send_keys")).toBe(0);
   });
 
   test("without an earlier attempt, the same text in the box is a stranded draft and is swept", async () => {
