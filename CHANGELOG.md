@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.54.4] - 2026-10-10
+
+### Fixed
+- `file://` links an agent writes open their real path instead of a bare name that 404s. (7aa287fa)
+- A file outside the agent's folder says so, with the full path, Copy path and "Open from <agent>" when another pane owns it. (7aa287fa)
+
 ## [0.54.3] - 2026-10-10
 
 ### Fixed
