@@ -20,8 +20,8 @@ interface PaneActionsSheetProps {
   readOnly?: boolean;
   /** Fired after a successful rename so the parent can revalidate (the label lands on the next poll). */
   onRenamed: () => void;
-  /** Fired after a successful close, with the closed pane id — the parent navigates Home if it's the
-   *  pane currently open, or revalidates so it drops out of the list. */
+  /** Fired after a successful close, with the closed pane id — the parent revalidates so it drops out
+   *  of the list (and, if it was the pane open, the pane view moves to the one beside it). */
   onClosed: (paneId: string) => void;
 }
 

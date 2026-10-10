@@ -11,6 +11,7 @@ import { demoOrg, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts
 //
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
+//   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -192,6 +193,82 @@ async function project(): Promise<void> {
   if (result.flowError || result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * Closing what is on screen, on a phone and a desk: the open pane's tab from Nenu (its actions
+ * sheet) and from Herdr (the fake closes it while the page shows it), the open pane beside a
+ * sibling, and the tab a space view is filtered to. The demo's `nenu` space holds `redesign`
+ * (working) then `review` (idle); throwaway tabs go after them, so `review` is where a close lands.
+ * Then the first tab closes (lands on the next one) and the only tab of `api` closes (lands Home).
+ */
+async function tabs(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const fake = bridge.fake!;
+    const herd = bridge.herd!;
+    const cases: Array<{ name: string; expected: string; landed: string }> = [];
+    const pathname = (page: Page) => page.evaluate(() => decodeURIComponent(location.pathname), null);
+    // A chip's last child is its label; a status dot's screen-reader text comes before it.
+    const activeTab = (page: Page) => page.evaluate(() => document.querySelector('[data-workbench-navigation-band="tabs"] button[aria-current="true"]')?.lastChild?.textContent ?? "", null);
+    const sheetClose = (band: "tabs" | "panes", row: "Close tab" | "Close pane") => async (page: Page) => {
+      await page.locator(`[data-workbench-navigation-band="${band}"] button[aria-current="true"]`).click();
+      await page.getByRole("button", { name: row, exact: true }).click({ timeout: 5000 });
+      await page.getByRole("button", { name: /^Tap again to close/ }).click({ timeout: 5000 });
+    };
+    const inHerdr = (tabId: string) => async () => fake.closeTab(tabId);
+
+    const run = async (name: string, device: typeof PHONE | typeof DESKTOP, path: string, close: (page: Page) => Promise<void>, expected: string, read = pathname) => {
+      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.goto(bridge.url + path);
+      await page.locator('[data-workbench-navigation-band="tabs"] button[aria-current="true"]').waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1000);
+      await close(page);
+      for (let i = 0; i < 100 && (await read(page)) !== expected; i++) await sleep(100);
+      // Settle: a second hop (a stale snapshot bouncing Home) would land within a poll.
+      await page.waitForTimeout(2500);
+      cases.push({ name, expected, landed: await read(page) });
+      await page.screenshot({ path: join(outDir, `${name}.png`), animations: "disabled" });
+      await context.close();
+    };
+    // Adding a pane emits no event, so wait for the bridge's next poll to list it before opening it.
+    const scratchTab = async (n: number) => {
+      const tabId = `w1:t${n}`;
+      const paneId = `w1:scratch${n}`;
+      fake.addTab(tabId, `scratch ${n}`).addPane({ paneId, workspaceId: "w1", tabId, agent: null, label: `Scratch ${n}`, cwd: bridge.dir });
+      for (let i = 0; i < 150; i++) {
+        const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ shellPanes: Array<{ paneId: string }> }>);
+        if (snap.shellPanes.some((p) => p.paneId === paneId)) return { tabId, path: `/pane/${encodeURIComponent(paneId)}` };
+        await sleep(100);
+      }
+      throw new Error(`the bridge never listed ${paneId}`);
+    };
+
+    const review = `/pane/${herd.idle}`;
+    let n = 3;
+    for (const [device, deviceName] of [[PHONE, "phone"], [DESKTOP, "desktop"]] as const) {
+      const nenu = await scratchTab(n++);
+      await run(`last-tab-nenu-${deviceName}`, device, nenu.path, sheetClose("tabs", "Close tab"), review);
+      const herdr = await scratchTab(n++);
+      await run(`last-tab-herdr-${deviceName}`, device, herdr.path, inHerdr(herdr.tabId), review);
+    }
+    // `server` holds Blocked Claude, Codex and a shell: closing the shell keeps you in the tab.
+    await run("sibling-pane-nenu-phone", PHONE, `/pane/${encodeURIComponent(herd.shell)}`, sheetClose("panes", "Close pane"), `/pane/${herd.blocked}`);
+    await scratchTab(n);
+    await run("space-tab-nenu-phone", PHONE, "/space/w1", async (page) => {
+      await page.getByRole("button", { name: `scratch ${n}`, exact: true }).click({ timeout: 5000 });
+      await sheetClose("tabs", "Close tab")(page);
+    }, "review", activeTab);
+    await run("first-tab-herdr-phone", PHONE, `/pane/${encodeURIComponent(herd.working)}`, inHerdr("w1:t1"), review);
+    await run("only-tab-nenu-desktop", DESKTOP, `/pane/${encodeURIComponent(herd.blocked)}`, sheetClose("tabs", "Close tab"), "/");
+    const closes = fake.writes().filter((c) => c.method.endsWith(".close")).map((c) => `${c.method} ${String(c.params.tab_id ?? c.params.pane_id)}`);
+    return { cases, failed: cases.filter((c) => c.landed !== c.expected).map((c) => c.name), closes };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "tabs.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed.length) process.exit(1);
+}
+
 async function baseline(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const windowMs = Number(values.seconds) * 1000;
@@ -348,9 +425,10 @@ async function compare(a: string, b: string): Promise<void> {
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
+else if (command === "tabs") await tabs();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|tabs|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

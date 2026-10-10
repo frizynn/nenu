@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { panePath } from "@/lib/nav";
-import type { AgentView } from "@/lib/types";
+import type { AgentView, TabView } from "@/lib/types";
 import { DetailRoute } from "./detail";
 
 // Stub the heavy terminal view: this test is about DetailRoute's routing/freshPane logic, not the
@@ -15,13 +15,13 @@ vi.mock("@/components/agent-chat", () => ({
   ),
 }));
 
-function agentView(paneId: string, kind: "agent" | "shell"): AgentView {
+function agentView(paneId: string, kind: "agent" | "shell", tabId = "w1:t1"): AgentView {
   return {
     paneId,
-    workspaceId: "w1",
+    workspaceId: tabId.split(":")[0]!,
     workspaceLabel: "proj",
     workspaceNumber: 1,
-    tabId: "w1:t1",
+    tabId,
     agent: kind === "agent" ? "claude" : "shell",
     status: "unknown",
     cwd: "/home",
@@ -30,12 +30,16 @@ function agentView(paneId: string, kind: "agent" | "shell"): AgentView {
   };
 }
 
-const connected = (agents: AgentView[], shellPanes: AgentView[] = []): HomeData => ({
+const tab = (tabId: string): TabView => ({
+  tabId, workspaceId: tabId.split(":")[0]!, number: 1, label: tabId, focused: false, paneCount: 1,
+});
+
+const connected = (agents: AgentView[], shellPanes: AgentView[] = [], tabs: TabView[] = []): HomeData => ({
   bridge: "connected",
   agents,
   shellPanes,
   workspaces: [],
-  tabs: [],
+  tabs,
   device: undefined,
   sessions: [],
   session: undefined,
@@ -125,6 +129,54 @@ describe("DetailRoute — freshPane bootstrap", () => {
       await router.revalidate();
     });
 
+    await screen.findByTestId("home");
+    expect(router.state.location.pathname).toBe("/");
+  });
+});
+
+describe("DetailRoute — the open pane closes", () => {
+  // w1 holds three tabs in Herdr's order and w2 one; a tab's id names its pane (w1:t2 → w1:p2).
+  const panes = [agentView("w1:p1", "agent", "w1:t1"), agentView("w1:p2", "agent", "w1:t2"), agentView("w1:p3", "shell", "w1:t3"), agentView("w2:p1", "agent", "w2:t1")];
+  const herd = (paneIds: string[]) => {
+    const kept = panes.filter((p) => paneIds.includes(p.paneId));
+    return connected(kept.filter((p) => p.kind === "agent"), kept.filter((p) => p.kind === "shell"), [...new Set(kept.map((p) => p.tabId))].map(tab));
+  };
+
+  async function closeUnder(open: string, after: HomeData, before = herd(panes.map((p) => p.paneId))) {
+    let home = before;
+    const router = makeRouter(panePath(open), () => home);
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("chat")).toHaveTextContent(`pane:${open}:live`);
+    home = after;
+    await act(async () => {
+      await router.revalidate();
+    });
+    return router;
+  }
+
+  it("lands on the tab to the left when its tab closes", async () => {
+    const router = await closeUnder("w1:p3", herd(["w1:p1", "w1:p2", "w2:p1"]));
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p2:live");
+    expect(router.state.location.pathname).toBe(panePath("w1:p2"));
+  });
+
+  it("lands on the next tab when the first one closes", async () => {
+    const router = await closeUnder("w1:p1", herd(["w1:p2", "w1:p3", "w2:p1"]));
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p2:live");
+    expect(router.state.location.pathname).toBe(panePath("w1:p2"));
+  });
+
+  it("stays in its tab when the pane closes beside another one", async () => {
+    const sibling = agentView("w1:p1b", "shell", "w1:t1");
+    const before = connected(panes.filter((p) => p.kind === "agent"), [sibling], ["w1:t1", "w1:t2", "w2:t1"].map(tab));
+    const after = connected(panes.filter((p) => p.kind === "agent" && p.paneId !== "w1:p1"), [sibling], ["w1:t1", "w1:t2", "w2:t1"].map(tab));
+    const router = await closeUnder("w1:p1", after, before);
+    expect(await screen.findByTestId("chat")).toHaveTextContent("pane:w1:p1b:live");
+    expect(router.state.location.pathname).toBe(panePath("w1:p1b"));
+  });
+
+  it("goes Home when the last tab of its workspace closes, never into another workspace", async () => {
+    const router = await closeUnder("w2:p1", herd(["w1:p1", "w1:p2", "w1:p3"]));
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
   });

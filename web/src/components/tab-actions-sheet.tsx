@@ -19,8 +19,8 @@ interface TabActionsSheetProps {
   readOnly?: boolean;
   /** Fired after a successful rename so the parent can revalidate (the label lands on the next poll). */
   onRenamed: () => void;
-  /** Fired after a successful close, with the closed tab id — the parent falls back to "All"/Home if
-   *  it was the selected/viewed tab, or revalidates so it drops out of the strip. */
+  /** Fired after a successful close, with the closed tab id — the parent moves off it if it was the
+   *  selected/viewed tab, and revalidates so it drops out of the strip. */
   onClosed: (tabId: string) => void;
 }
 

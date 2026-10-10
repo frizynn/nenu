@@ -1,6 +1,8 @@
 import {
   filterSpaces,
   groupPanesByTab,
+  neighborTab,
+  paneAfterClose,
   sortSpacesByRecency,
   spaceLastSeenMap,
   spaceTriageMap,
@@ -193,5 +195,43 @@ describe("spaceLastSeenMap", () => {
     expect(sortSpacesByRecency(spaces, panes, spaceLastSeenMap(panes))).toEqual(
       sortSpacesByRecency(spaces, panes),
     );
+  });
+});
+
+describe("neighborTab", () => {
+  // Snapshot order, not number order: w1 reads t3, t1, t2 in Herdr.
+  const tabs = [tab("w1:t3", "w1", 3), tab("w1:t1", "w1", 1), tab("w1:t2", "w1", 2), tab("w2:t1", "w2", 1)];
+
+  it("is the tab to the left, else the one to the right, in snapshot order", () => {
+    expect(neighborTab(tabs, "w1:t2")).toBe("w1:t1");
+    expect(neighborTab(tabs, "w1:t1")).toBe("w1:t3");
+    expect(neighborTab(tabs, "w1:t3")).toBe("w1:t1");
+  });
+
+  it("stays in the workspace, and is undefined for its only tab or an unknown one", () => {
+    expect(neighborTab(tabs, "w2:t1")).toBeUndefined();
+    expect(neighborTab(tabs, "w9:t1")).toBeUndefined();
+  });
+
+  it("skips tabs that closed with it", () => {
+    const alive = (id: string) => id !== "w1:t1";
+    expect(neighborTab(tabs, "w1:t2", alive)).toBe("w1:t3");
+    expect(neighborTab(tabs, "w1:t3", (id) => id === "w2:t1")).toBeUndefined();
+  });
+});
+
+describe("paneAfterClose", () => {
+  const before = [tab("w1:t1", "w1", 1), tab("w1:t2", "w1", 2), tab("w2:t1", "w2", 1)];
+  const shell = (paneId: string, tabId: string) => ({ ...agent({ paneId, workspaceId: tabId.split(":")[0]!, tabId }), agent: "shell", kind: "shell" as const });
+
+  it("prefers another pane in its tab, an agent before a shell", () => {
+    const now = { tabs: before, agents: [agent({ paneId: "w1:p1c", workspaceId: "w1", tabId: "w1:t1" })], shellPanes: [shell("w1:p1b", "w1:t1")] };
+    expect(paneAfterClose({ tabId: "w1:t1" }, before, now)).toBe("w1:p1c");
+  });
+
+  it("opens the neighbor tab's pane once its own tab is gone, and nothing once its workspace is", () => {
+    const now = { tabs: [before[1]!, before[2]!], agents: [agent({ paneId: "w2:p1", workspaceId: "w2", tabId: "w2:t1" })], shellPanes: [shell("w1:p2", "w1:t2")] };
+    expect(paneAfterClose({ tabId: "w1:t1" }, before, now)).toBe("w1:p2");
+    expect(paneAfterClose({ tabId: "w1:t1" }, before, { ...now, tabs: [before[2]!], shellPanes: [] })).toBeUndefined();
   });
 });

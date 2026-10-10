@@ -72,6 +72,7 @@ import { canGrowRequestedLines, growRequestedLines } from "@/lib/loaders";
 import { shortCwd } from "@/lib/format";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, projectPath, spacePath } from "@/lib/nav";
+import { paneInTab } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -752,7 +753,7 @@ export function AgentChat({
   // Jump to another tab in this space by opening one of its panes (the in-pane tab bar).
   function goToTab(tabId: string) {
     if (!agent || tabId === agent.tabId) return;
-    const target = [...agents, ...shellPanes].find((p) => p.tabId === tabId);
+    const target = paneInTab(tabId, agents, shellPanes);
     if (target) switchTo(target.paneId);
   }
 
@@ -928,9 +929,9 @@ export function AgentChat({
             session={session}
             readOnly={readOnly}
             onRenamed={() => revalidator.revalidate()}
-            // Closing the tab this pane lives in kills the pane too — leave for Home the same way a
-            // pane-close does (onBack); closing any other tab just revalidates so it drops out.
-            onClosed={(tabId) => (agent?.tabId === tabId ? onBack() : revalidator.revalidate())}
+            // Closing the tab this pane lives in kills the pane too; the refreshed snapshot without it
+            // is what moves you to the tab beside it (DetailRoute), the same as a close made in Herdr.
+            onClosed={() => revalidator.revalidate()}
           />
         )}
         </>}
@@ -947,8 +948,8 @@ export function AgentChat({
             session={session}
             readOnly={readOnly}
             onRenamed={() => revalidator.revalidate()}
-            // Mirror closePane's success branch: closing the open pane returns Home, else revalidate.
-            onClosed={(id) => (id === paneId ? onBack() : revalidator.revalidate())}
+            // As with a tab: closing the open pane lands on another one in its tab (DetailRoute).
+            onClosed={() => revalidator.revalidate()}
           />
         )}
 

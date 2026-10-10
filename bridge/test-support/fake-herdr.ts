@@ -175,6 +175,21 @@ export class FakeHerdr {
     this.setStatus(paneId, text ? "blocked" : "idle");
   }
 
+  /** Close a tab and every pane in it, as `tab.close` does; also how a test closes one "in Herdr". */
+  closeTab(tabId: string): void {
+    const panes = [...this.panes.values()].filter((p) => p.tabId === tabId);
+    if (panes.length === 0) throw new FakeError("tab_not_found", `tab ${tabId} not found`);
+    for (const pane of panes) this.panes.delete(pane.paneId);
+    this.broadcast("tab.closed", "tab_closed", { tab_id: tabId, workspace_id: panes[0]!.workspaceId });
+  }
+
+  /** Close one pane, as `pane.close` does. Tabs are derived from panes, so an emptied tab goes too. */
+  closePane(paneId: string): void {
+    const pane = this.pane(paneId);
+    this.panes.delete(paneId);
+    this.broadcast("pane.closed", "pane_closed", { pane_id: paneId, workspace_id: pane.workspaceId });
+  }
+
   appendLines(paneId: string, ...lines: string[]): void {
     const pane = this.pane(paneId);
     pane.lines.push(...lines);
@@ -240,6 +255,12 @@ export class FakeHerdr {
         return { type: "ok" };
       case "pane.send_keys":
         for (const key of (params.keys as unknown[]) ?? []) this.pressKey(paneId, String(key));
+        return { type: "ok" };
+      case "pane.close":
+        this.closePane(paneId);
+        return { type: "ok" };
+      case "tab.close":
+        this.closeTab(String(params.tab_id ?? ""));
         return { type: "ok" };
       default:
         throw new FakeError("invalid_request", `invalid request: unknown variant \`${method}\``);
@@ -346,6 +367,12 @@ export class FakeHerdr {
         sub.socket.write(line);
       }
     }
+  }
+
+  /** A global event to everyone subscribed to its type, as `emit` does for pane-scoped ones. */
+  private broadcast(type: string, event: string, data: Record<string, unknown>): void {
+    const line = JSON.stringify({ event, data: { type: event, ...data } }) + "\n";
+    for (const sub of this.subscribers) if (sub.types.has(type)) sub.socket.write(line);
   }
 
   private wirePane(pane: FakePane) {
