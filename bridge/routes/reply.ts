@@ -6,9 +6,16 @@ import {
   verifyExpectedPrompt,
   type PromptBindingResult,
 } from "../prompt-binding.ts";
-import { reportUnsentReply } from "../send-report.ts";
+import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { StateEngine } from "../state-engine.ts";
-import type { ActionResponse } from "../types.ts";
+import type { ActionResponse, DeliveryMode, SendOutcome, SendRequest } from "../types.ts";
+import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import type { PaneWrites } from "../pane-writes.ts";
+import type { SessionRuntime } from "../sessions.ts";
+import { parseAnsi } from "../../web/src/lib/ansi.ts";
+import { splitLines } from "../../web/src/lib/blocks.ts";
+import { draftCarriesSend } from "../../web/src/lib/guarded-reply.ts";
+import { adapterFor } from "../../web/src/lib/harness/index.ts";
 import { hasCodexInterruptCue } from "../../web/src/lib/harness/codex/interrupt.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { json, jsonError, secure, text } from "./http.ts";
@@ -28,6 +35,13 @@ function exclusive(write: (ctx: Services, r: PaneRouteRequest) => Promise<Respon
 }
 
 export const replyPaneActions: Record<string, PaneAction> = {
+  // The whole guarded send in one request. Not wrapped in `exclusive`: the ledger answers a retry of
+  // a send already in flight or done before the lock is asked, and the send takes the lock itself.
+  send: {
+    level: "write",
+    marksSeen: true,
+    handle: ({ cfg, audit, input }, { req, rt, paneId, device }) => sendPane(rt, cfg, input, paneId, req, audit, device),
+  },
   reply: {
     level: "write",
     marksSeen: true,
@@ -70,9 +84,13 @@ export type ReplyOutcome =
  */
 export type SleepFn = (ms: number) => Promise<void>;
 const defaultSleep: SleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-/** Pause between typing and Enter so the TUI accepts the submit key (preview-action polls ~350ms). */
+/** Pause between typing and Enter when nothing can watch the pane for the TUI to take the text. */
 const REPLY_SETTLE_MS = 350;
 
+/**
+ * `observe` reads the pane's screen. With it, the pause between typing and Enter ends once the
+ * screen has visibly changed and held (capped at the old 350 ms) instead of always taking 350 ms.
+ */
 export async function sendReplySteps(
   client: ReplySender,
   paneId: string,
@@ -80,15 +98,18 @@ export async function sendReplySteps(
   submit: boolean,
   submitKeys: string[],
   sleep: SleepFn = defaultSleep,
+  observe?: () => Promise<string>,
 ): Promise<ReplyOutcome> {
   let textDelivered = false;
   try {
+    const settles = Boolean(txt && submit);
+    const before = settles && observe ? await observe().catch(() => null) : null;
     if (txt) {
       await client.sendPaneText(paneId, txt);
       textDelivered = true;
     }
     if (submit) {
-      if (txt) await sleep(REPLY_SETTLE_MS);
+      if (settles) await (observe ? settleAfterType(observe, before, sleep) : sleep(REPLY_SETTLE_MS));
       await client.sendPaneKeys(paneId, submitKeys);
     }
     return { ok: true, textDelivered };
@@ -214,11 +235,21 @@ export async function replyPane(
     });
     return promptBindingFailure(binding, ae);
   }
-  const operation = () => sendReplySteps(herdr, paneId, wireText, submit, cfg.submitKeys);
+  const observe = async () => (await herdr.readPane(paneId, "recent", cfg.readLines, "ansi")).text;
+  const operation = async (prior: ReplyOutcome | null): Promise<ReplyOutcome> => {
+    // A retry of a failed attempt may find that attempt's text already typed (the ack failed after
+    // the bytes reached the PTY). Look before typing a second copy.
+    if (prior && txt) {
+      const box = await boxCarries(herdr, cfg, paneId, txt);
+      if (box === "unknown") return { ok: false, textDelivered: false, error: "Couldn't read the terminal to check the earlier attempt. Nothing was typed." };
+      if (box === "carries") return sendReplySteps(herdr, paneId, "", submit, cfg.submitKeys).then((out) => ({ ...out, textDelivered: true }));
+    }
+    return sendReplySteps(herdr, paneId, wireText, submit, cfg.submitKeys, defaultSleep, observe);
+  };
   const fingerprint = JSON.stringify([session, paneId, txt, submit, body.paste === true, expected.present ? expected.value : null]);
   const deduped = requestId === undefined
-    ? { outcome: await operation(), replayed: false }
-    : await runReplyOnce(`${session}\0${paneId}\0${requestId}`, fingerprint, operation);
+    ? { outcome: await operation(null), replayed: false }
+    : await replyLedger.run(`${session}\0${paneId}\0${requestId}`, fingerprint, operation);
   if ("conflict" in deduped) return text("request_id payload mismatch", 409);
   const { outcome } = deduped;
   // Audit the attempt regardless of outcome — text may have landed even when the submit failed.
@@ -242,23 +273,134 @@ export async function replyPane(
   );
 }
 
-type ReplyLedgerEntry = { fingerprint: string; promise: Promise<ReplyOutcome>; expires: number };
-const replyLedger = new Map<string, ReplyLedgerEntry>();
-const REPLY_LEDGER_TTL_MS = 10 * 60_000;
-const REPLY_LEDGER_MAX = 512;
+const replyLedger = new WriteLedger<ReplyOutcome>((outcome) => outcome.ok);
 
-async function runReplyOnce(key: string, fingerprint: string, operation: () => Promise<ReplyOutcome>): Promise<{ outcome: ReplyOutcome; replayed: boolean } | { conflict: true }> {
-  const now = Date.now();
-  for (const [candidate, entry] of replyLedger) if (entry.expires <= now) replyLedger.delete(candidate);
-  const existing = replyLedger.get(key);
-  if (existing) {
-    if (existing.fingerprint !== fingerprint) return { conflict: true };
-    return { outcome: await existing.promise, replayed: true };
+/**
+ * Whether the pane's input box already holds `txt`, as its adapter reads it. A pane with no adapter
+ * cannot be read back, which is "absent": its sends were never verifiable.
+ */
+async function boxCarries(herdr: HerdrClient, cfg: Config, paneId: string, txt: string): Promise<"carries" | "absent" | "unknown"> {
+  try {
+    const adapter = adapterFor((await herdr.getPane(paneId)).agent ?? undefined);
+    if (!adapter) return "absent";
+    const lines = splitLines(parseAnsi((await herdr.readPane(paneId, "recent", cfg.readLines, "ansi")).text));
+    const draft = adapter.extractInputDraft(lines);
+    return draftCarriesSend(txt, draft) || (draft !== null && adapter.draftCarriesSend?.(txt, draft)) ? "carries" : "absent";
+  } catch {
+    return "unknown";
   }
-  const promise = operation();
-  replyLedger.set(key, { fingerprint, promise, expires: now + REPLY_LEDGER_TTL_MS });
-  while (replyLedger.size > REPLY_LEDGER_MAX) replyLedger.delete(replyLedger.keys().next().value!);
-  return { outcome: await promise, replayed: false };
+}
+
+// ── POST /api/pane/:id/send ───────────────────────────────────────────────────────────────────────
+
+const DELIVERY_MODES = new Set<DeliveryMode>(["asap", "afterTurn", "steer"]);
+
+type SendRun = GuardedSendResult & { elapsedMs: number };
+const sendLedger = new WriteLedger<SendRun>((run) => run.outcome.ok);
+
+/** The body of a send, validated, or why it is not one. */
+export function parseSendRequest(body: unknown): SendRequest | string {
+  if (body === null || typeof body !== "object") return "bad body";
+  const b = body as Record<string, unknown>;
+  if (typeof b.text !== "string" || !b.text.trim()) return "bad text";
+  if (typeof b.requestId !== "string" || b.requestId.length > MAX_REPLY_REQUEST_ID_CHARS || !/^[A-Za-z0-9._:-]+$/.test(b.requestId)) return "bad requestId";
+  if (b.deliveryMode !== undefined && !DELIVERY_MODES.has(b.deliveryMode as DeliveryMode)) return "bad deliveryMode";
+  if (b.paste !== undefined && typeof b.paste !== "boolean") return "bad paste";
+  if (b.expectedPrompt !== undefined && (typeof b.expectedPrompt !== "string" || b.expectedPrompt.length > MAX_EXPECTED_PROMPT_CHARS)) return "bad expectedPrompt";
+  return {
+    text: b.text,
+    requestId: b.requestId,
+    ...(b.deliveryMode !== undefined ? { deliveryMode: b.deliveryMode as DeliveryMode } : {}),
+    ...(b.paste !== undefined ? { paste: b.paste as boolean } : {}),
+    ...(b.expectedPrompt !== undefined ? { expectedPrompt: b.expectedPrompt as string } : {}),
+  };
+}
+
+/**
+ * One request, the whole guarded send (guarded-send.ts). A refusal is an answer, not a transport
+ * failure: it comes back as a SendOutcome body on 409, which the client reads instead of throwing.
+ * `deliveryMode` is accepted and validated; every mode types now, since queueing is the queue's job.
+ */
+export async function sendPane(
+  rt: Pick<SessionRuntime, "name" | "herdr" | "poker">,
+  cfg: Config,
+  input: PaneWrites,
+  paneId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+): Promise<Response> {
+  let request: SendRequest | string;
+  try {
+    request = parseSendRequest(await req.json());
+  } catch {
+    request = "bad body";
+  }
+  if (typeof request === "string") return text(request, 400);
+  const send = request;
+  const ae = req.headers.get("accept-encoding");
+  const key = `${rt.name}\0${paneId}\0send\0${send.requestId}`;
+  const fingerprint = JSON.stringify([send.text, send.paste === true, send.expectedPrompt ?? null]);
+  const result = await sendLedger.run(key, fingerprint, async (prior) => {
+    const started = Date.now();
+    const locked = await input.run(rt.name, paneId, () =>
+      guardedSend(
+        { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker) },
+        send,
+        prior ? { typeAttempted: prior.trace.typeAttempted } : undefined,
+      ),
+    );
+    if (locked.busy) {
+      return {
+        outcome: { ok: false, requestId: send.requestId, stage: "preflight", error: "A saved message is being delivered. Wait before sending.", textDelivered: false, code: "busy" },
+        trace: { ...(prior?.trace ?? emptyTrace()), phase: "preflight" },
+        elapsedMs: Date.now() - started,
+      } satisfies SendRun;
+    }
+    const run = { ...locked.value, elapsedMs: Date.now() - started };
+    auditSend(audit, run, send.text, paneId, rt.name, device);
+    return run;
+  });
+  if ("conflict" in result) return text("request_id payload mismatch", 409);
+  const outcome: SendOutcome = result.outcome.outcome.ok && result.replayed ? { ...result.outcome.outcome, replayed: true } : result.outcome.outcome;
+  return json(outcome, ae, outcome.ok ? 200 : 409);
+}
+
+function emptyTrace(): SendTrace {
+  return { phase: "preflight", preflight: "skipped", attempts: [], typeAttempted: false, noEcho: false, draft: null, screen: null, unverified: false };
+}
+
+/** One `reply` line per attempt, plus the `reply.unsent` account of one that did not go out. */
+function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, session: string, device: string | null): void {
+  const { outcome, trace } = run;
+  audit.record({
+    action: "reply",
+    paneId,
+    session,
+    device,
+    detail: {
+      text: txt,
+      submit: true,
+      submitted: outcome.ok,
+      textDelivered: outcome.ok || outcome.textDelivered,
+      phase: trace.phase,
+      ...(trace.unverified ? { unverified: true } : {}),
+    },
+  });
+  if (outcome.ok) return;
+  const detail = sendReportDetail({
+    status: outcome.code === "not_ready" || trace.phase === "preflight" || trace.phase === "pre-type" ? "blocked" : trace.phase === "verify" ? "stalled" : "error",
+    phase: trace.phase,
+    error: outcome.error,
+    preflight: trace.preflight,
+    attempts: trace.attempts,
+    elapsedMs: run.elapsedMs,
+    noEcho: trace.noEcho,
+    text: txt,
+    ...(trace.draft !== null ? { draft: trace.draft } : {}),
+    ...(trace.screen !== null ? { screen: trace.screen } : {}),
+  });
+  if (detail) audit.record({ action: "reply.unsent", paneId, session, device, detail });
 }
 
 export async function keysPane(

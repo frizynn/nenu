@@ -1,25 +1,24 @@
 import type { AuditLog } from "./audit.ts";
 import { stripAnsi } from "./journal/text.ts";
 
-// The client's account of a guarded send that did NOT end in "sent".
+// The account of a guarded send that did NOT end in "sent", as one `reply.unsent` audit line.
 //
-// The type-then-verify guard runs in the browser (web/src/lib/guarded-reply.ts): it types, re-reads
-// the pane, and withholds the submit key when it can't see the text. The bridge only ever saw the
-// unsubmitted type call succeed, so a stalled send left no trace anywhere but the phone's screen.
-// This turns that outcome into one `reply.unsent` audit line carrying what is needed to tell the
-// causes apart later: which phase gave up, what each verification read saw (or that it failed), the
-// last draft the adapter extracted and a short tail of the last screen.
+// Two guards produce it. The browser's (web/src/lib/guarded-reply.ts) posts it to send-report: the
+// bridge only saw its unsubmitted type call succeed, so a stalled send left no trace but the phone's
+// screen. The bridge's own (guarded-send.ts, POST send) builds it from its trace. Either way the line
+// carries what tells the causes apart later: which phase gave up, what each verification read saw
+// (or that it failed), the last draft the adapter extracted and a short tail of the last screen.
 //
-// Everything here is client-supplied, so nothing is trusted: enums are checked against the values
-// the guard can produce, and every size is bounded again on this side.
+// A posted report is client-supplied, so nothing is trusted: enums are checked against the values
+// the guards can produce, and every size is bounded again on this side.
 
 /** Largest body accepted. A well-formed report is a few hundred bytes to ~3 KiB. */
 export const SEND_REPORT_MAX_BODY = 16 * 1024;
 
 const STATUSES = new Set(["blocked", "stalled", "error"]);
 /** Where the send gave up: the pre-flight refused, the pre-type clear failed, the type call failed,
- *  verification ran out of attempts, or the submit key failed. */
-const PHASES = new Set(["preflight", "pre-type", "type", "verify", "submit"]);
+ *  verification ran out of attempts, the submit key failed, or the box kept the text after Enter. */
+const PHASES = new Set(["preflight", "pre-type", "type", "verify", "submit", "confirm"]);
 const PREFLIGHT_READS = new Set(["skipped", "read-failed", "no-composer", "composer"]);
 /** One verification read: it threw, its screen could not be parsed, or it succeeded and saw no
  *  composer / an empty input box / a draft that was not the message. */
