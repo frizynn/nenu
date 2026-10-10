@@ -28,6 +28,9 @@ import { WebAssetArchive } from "./web-assets.ts";
 // The bridge's composition root: build the process-wide services once, then hand every request to
 // the route table (bridge/routes/index.ts). Routes, gates and handlers live under bridge/routes/.
 
+// Seconds a request may stay silent before Bun closes it; above the slowest org CLI budget (90 s).
+export const SERVER_IDLE_TIMEOUT_S = 120;
+
 // Hard cap the runtime enforces on ANY request body (Bun.serve maxRequestBodySize). Bigger than the
 // upload cap + overhead so the handler's own 413 fires first for honest clients; this cuts off a
 // chunked or lying client that never sends an accurate Content-Length.
@@ -108,6 +111,10 @@ export function startServer(opts: ServerDeps) {
     // Runtime cap on any request body — a chunked/lying client is cut off here even if its
     // Content-Length is absent or false. The upload handler still does its own precise check.
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    // Bun's 10 s default would cut `thread merge` (90 s), project create (30 s) and thread set
+    // (15 s) while the CLI keeps running, so the phone reports a failure that actually happened.
+    // The SSE route still opts out per request with server.timeout(req, 0).
+    idleTimeout: SERVER_IDLE_TIMEOUT_S,
 
     fetch(req): Response | Promise<Response> {
       const peer = server.requestIP(req)?.address;

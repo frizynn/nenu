@@ -87,7 +87,8 @@ const GET_TIMEOUT_MS = 10_000;
 const MUTATION_TIMEOUT_MS = 20_000;
 const ORG_LIST_TIMEOUT_MS = 15_000;
 const ORG_MUTATION_TIMEOUT_MS = 35_000;
-//   - A merge waits on GitHub; the bridge gives `thread merge` 90 s, so the client outlasts it.
+//   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
+//     its 120 s idle timeout, so the client outlasts the CLI.
 const ORG_MERGE_TIMEOUT_MS = 100_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;

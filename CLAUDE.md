@@ -130,10 +130,11 @@ the unit name; the Herdr action runs from anywhere.
 - `/api/events` (SSE) only names what changed; readers re-fetch through the usual routes and polling
   relaxes to a fallback while it is open. Never put state or pane text on it, and never drop the
   fallback poll ([ADR 0054](./.adr/0054-the-browser-hears-what-changed-not-the-state.md)).
-  The fast poll of an open mirror runs on the bridge, not the phone: a client names the panes it
-  shows with `?watch=`, `bridge/pane-watcher.ts` reads only those and names a pane when its screen
-  changes, and `bridge/journal-watch.ts` names a journal when its file changes. With the stream
-  healthy the mirror and the transcript fall back to 10 s
+  The fast poll of an open mirror moves to the bridge: `/api/events?watch=` takes the panes a
+  client shows, `bridge/pane-watcher.ts` reads only those and names a pane when its screen
+  changes, and `bridge/journal-watch.ts` names a journal when its file changes. The web client
+  does not send `?watch=` yet, and only the queue relaxes to 10 s on a healthy stream; the mirror
+  and transcript keep their own polls until it does
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/pane/:paneId` and
   `/pane/:paneId/history`. The router instance is module-scoped so it keeps its location.
@@ -243,8 +244,8 @@ grammar, the probe catches on-disk format drift.
 Project file previews (`bridge/pane-files.ts`) separately accept a client path under the live pane's
 cwd, or an exact path Claude Code's own SendUserFile result in the current pane's contained journal
 reports as delivered (never a path the model merely mentions). Every read is bounded and contained after realpath resolution; private paths are refused.
-Source renders as text. SVG renders only as an `<img>` from an `image/svg+xml` blob, never as a
-document. HTML may execute only in the opaque-origin `allow-scripts` iframe
+Source renders as text, and so does SVG for now. SVG may render only as an `<img>` from an
+`image/svg+xml` blob, never as a document. HTML may execute only in the opaque-origin `allow-scripts` iframe
 defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and the sandbox grants no
 same-origin, forms, popups, top navigation or downloads. The bridge may inline same-directory
 sibling assets into the preview through the same containment checks as `/file`
