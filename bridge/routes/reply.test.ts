@@ -118,6 +118,18 @@ describe("POST send", () => {
     expect(box.count("pane.send_text")).toBe(1);
   });
 
+  test("a send refused at a password prompt never writes the typed text to the audit log", async () => {
+    const box = new Box();
+    box.dialog = "[sudo] password for user:";
+    const { audit, lines } = recorder();
+    const res = await sendPane(runtime(box), cfg, new PaneWrites(), "w1:send-noecho", post({ text: "MyS3cretPass", requestId: "a12" }), audit, "phone");
+    expect(await res.json()).toMatchObject({ ok: false, stage: "preflight", textDelivered: false });
+    expect(box.count("pane.send_text")).toBe(0);
+    expect(lines.map((l) => l.action)).toEqual(["reply", "reply.unsent"]);
+    expect(lines[0]?.detail).toMatchObject({ noEcho: true, submitted: false });
+    expect(JSON.stringify(lines)).not.toContain("MyS3cretPass");
+  });
+
   test("a retry after an Enter whose ack was lost does not submit the message twice", async () => {
     const box = new Box();
     box.failKeysAfterLanding = 1;

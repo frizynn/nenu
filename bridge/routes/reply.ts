@@ -373,7 +373,10 @@ function emptyTrace(): SendTrace {
   return { phase: "preflight", preflight: "skipped", attempts: [], typeAttempted: false, noEcho: false, draft: null, screen: null, unverified: false };
 }
 
-/** One `reply` line per attempt, plus the `reply.unsent` account of one that did not go out. */
+/**
+ * One `reply` line per attempt, plus the `reply.unsent` account of one that did not go out. At a
+ * password prompt the text is likely a secret, so only the fact is kept, as sendReportDetail does.
+ */
 function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, session: string, device: string | null): void {
   const { outcome, trace } = run;
   audit.record({
@@ -382,7 +385,7 @@ function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, s
     session,
     device,
     detail: {
-      text: txt,
+      ...(trace.noEcho ? { noEcho: true } : { text: txt }),
       submit: true,
       submitted: outcome.ok,
       textDelivered: outcome.ok || outcome.textDelivered,
