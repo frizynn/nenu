@@ -7,9 +7,9 @@ import {
   describeTask,
   lastToolFromTail,
   parseTaskNotification,
-  readAppended,
   resultPreview,
 } from "./claude-activity.ts";
+import { readAppended } from "./journal/lines.ts";
 
 // The fixture is this repo's own Claude Code session files, reduced to their structure with every
 // free-text value redacted (bridge/test-support/claude-activity). One run finished, one running.

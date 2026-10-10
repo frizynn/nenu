@@ -2,6 +2,7 @@ import { constants, watch as fsWatch, type FSWatcher } from "node:fs";
 import { lstat, open, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
+import { readAppended, type TailState } from "./journal/lines.ts";
 import { isSessionId } from "./journal/claude.ts";
 import { computeEtag } from "./http-cache.ts";
 import { isAgentId, object, shortText } from "./subagent-files.ts";
@@ -149,33 +150,6 @@ export function resultPreview(result: unknown): string | undefined {
 }
 
 // ── Byte-offset tail of append-only files ──────────────────────────────────────────────────────
-
-export interface TailState { ino: number; offset: number; rest: Buffer }
-
-/**
- * Complete lines appended since `prev`. The first read (or one after the file was replaced or
- * shrank, `reset`) starts at most `cap` bytes from the end and drops the partial line there. A burst
- * larger than `cap` is treated like a reset, so memory stays bounded. The caller keeps the returned
- * `tail` with whatever it folded the lines into, so the two can never be evicted apart.
- */
-export async function readAppended(path: string, cap: number, prev?: TailState): Promise<{ lines: string[]; reset: boolean; truncated: boolean; mtime: number; tail: TailState }> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const st = await file.stat();
-    if (!st.isFile()) throw new Error("not a file");
-    const reset = !prev || prev.ino !== st.ino || st.size < prev.offset || st.size - prev.offset > cap;
-    const start = reset ? Math.max(0, st.size - cap) : prev.offset;
-    const fresh = Buffer.alloc(st.size - start);
-    const { bytesRead } = await file.read(fresh, 0, fresh.length, start);
-    let bytes = fresh.subarray(0, bytesRead);
-    if (reset && start > 0) bytes = bytes.subarray(bytes.indexOf(0x0a) + 1);
-    else if (!reset) bytes = Buffer.concat([prev.rest, bytes]);
-    const end = bytes.lastIndexOf(0x0a) + 1;
-    const lines = bytes.subarray(0, end).toString("utf8").split("\n").filter(Boolean);
-    const tail = { ino: st.ino, offset: start + bytesRead, rest: Buffer.from(bytes.subarray(end)) };
-    return { lines, reset, truncated: reset && start > 0, mtime: st.mtimeMs, tail };
-  } finally { await file.close(); }
-}
 
 async function readBounded(path: string, cap: number, fromEnd = false): Promise<{ text: string; truncated: boolean; mtime: number } | null> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
