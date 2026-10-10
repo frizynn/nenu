@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { paneParts, paneTitleInTab, TITLE_SEP } from "./pane-name";
+import { paneParts, TITLE_SEP } from "./pane-name";
 import type { AgentView } from "./types";
 
 function pane(over: Partial<AgentView> = {}): AgentView {
@@ -134,19 +134,5 @@ describe("paneParts — the cwd fallback only when it says something", () => {
   it("still prefers the pane's own name over either", () => {
     const t = paneParts(pane({ workspaceLabel: "collie", cwd: "/home/kon/dev/ai/collie", sessionName: "oauth" }));
     expect(t.secondary).toBe("oauth");
-  });
-});
-
-describe("paneTitleInTab — inside a space view, where project and tab are already established", () => {
-  it("leads with the pane's own name, since repeating project · tab would say nothing", () => {
-    const t = paneTitleInTab(pane({ tabLabel: "fix-auth", sessionName: "oauth-refactor" }));
-    expect(t.primary).toBe("oauth-refactor");
-    expect(t.secondary).toBe("~/dev/moonward");
-  });
-
-  it("falls back through paneDisplayName's precedence: label, session name, then agent", () => {
-    expect(paneTitleInTab(pane({ paneLabel: "hand-named", sessionName: "auto" })).primary).toBe("hand-named");
-    expect(paneTitleInTab(pane()).primary).toBe("claude");
-    expect(paneTitleInTab(pane({ kind: "shell", agent: "shell" })).primary).toBe("shell");
   });
 });

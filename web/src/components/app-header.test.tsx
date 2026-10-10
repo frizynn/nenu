@@ -4,7 +4,6 @@ import { MemoryRouter, useLocation } from "react-router";
 import type { ReactElement } from "react";
 
 import { AppHeader, SettingsGear } from "./app-header";
-import { StatusBadge } from "./status-badge";
 import { CONNECTION_LOST_MS, TROUBLE_MS } from "@/hooks/use-connection-lost";
 import { __resetConnectionHealth } from "@/lib/connection-health";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
@@ -30,7 +29,7 @@ describe("AppHeader — the one shared header shell", () => {
         bridge="connected"
         error={false}
         onHome={() => {}}
-        rightLead={<StatusBadge status="working" />}
+        rightLead={<span>working</span>}
       >
         <span>webapp › main</span>
       </AppHeader>,
@@ -94,7 +93,7 @@ describe("AppHeader — the one shared header shell", () => {
         bridge="connected"
         error
         onHome={() => {}}
-        rightLead={<StatusBadge status="working" />}
+        rightLead={<span>working</span>}
         override={<div>FINDBAR</div>}
       >
         <span>webapp › main</span>

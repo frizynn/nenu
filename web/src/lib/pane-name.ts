@@ -6,15 +6,7 @@
 // Nothing is lost: the pane's own name (a herdr `pane.rename` label, or Claude's own `/rename`
 // session name) moves down one line, where it displaces the cwd.
 import { baseName, shortCwd } from "./format";
-import { paneDisplayName, type AgentView } from "./types";
-
-/** A two-line row label. Only {@link paneTitleInTab} returns one — the herd list renders
- *  {@link PaneParts} instead, so the project can give up width before the tab does. */
-export interface PaneTitle {
-  primary: string;
-  /** The pane's own name if it has one, else a shortened cwd. Null when there's neither. */
-  secondary: string | null;
-}
+import type { AgentView } from "./types";
 
 /**
  * The title's parts, unjoined — because at 390px they must not truncate as one string.
@@ -63,18 +55,4 @@ export function paneParts(pane: AgentView): PaneParts {
     tab: pane.tabLabel ?? null,
     secondary: own || informativeCwd(pane.cwd, project),
   };
-}
-
-/**
- * The same row, rendered where the space and tab are ALREADY established by the surrounding UI —
- * the space detail view, which groups panes under a per-tab heading. Repeating `project · tab` on
- * every card there would say nothing, and worse: two panes in one tab would become indistinguishable,
- * since the only thing telling them apart is the pane's own name.
- *
- * So in that scope the pane's own name leads, exactly as it always has, and the cwd sits beneath.
- */
-export function paneTitleInTab(pane: AgentView): PaneTitle {
-  // paneDisplayName IS this precedence (label -> session name -> agent/"shell"); it was reproduced
-  // here line for line, which is two copies of the rule pane-name.ts exists to keep in one place.
-  return { primary: paneDisplayName(pane), secondary: pane.cwd ? shortCwd(pane.cwd) : null };
 }

@@ -210,7 +210,7 @@ function staleHome(session: string | undefined): HomeData {
   }
   // Nothing cached at all — an outage on a tab that never saw a good snapshot. `error: true` is what
   // keeps this apart from a genuinely empty herd downstream: the empty state is only allowed to say
-  // "No agents running" when the bridge really answered (components/agent-list.tsx).
+  // "No agents running" when the bridge really answered.
   return {
     lastSeenAt: undefined,
     bridge: undefined,
