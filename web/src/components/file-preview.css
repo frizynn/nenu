@@ -8,7 +8,7 @@
 .file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; transition: background-color 120ms ease-out; }
 .file-preview-action:hover { background: var(--muted); }
 .file-preview-content { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; }
-.file-preview-html { display: block; width: 100%; height: 100%; min-height: 480px; border: 0; background: white; }
+.file-preview-html { display: block; width: 100%; height: 100%; min-height: 480px; border: 0; background: white; touch-action: pan-x pan-y; }
 .pdf-preview-toolbar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--background); font-size: 13px; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) { .file-preview-panel { height: 100%; border-radius: 12px; } }
 @media (prefers-reduced-motion: no-preference) { @starting-style { .file-preview-panel { opacity: 0; transform: translateY(8px); } } .file-preview-panel { transition: opacity 160ms ease-out, transform 160ms ease-out; } }

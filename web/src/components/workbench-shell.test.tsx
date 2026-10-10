@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState, type ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { onTestFinished } from "vitest";
@@ -224,8 +224,10 @@ it("gives Cmd+K to Home's jump box even when Home mounts after the shell", async
   ], { initialEntries: ["/pane/w%3A1%3Ap2?s=work"] });
   render(<RouterProvider router={router} />);
   await router.navigate("/?s=work");
+  // Press only once Home's box is on the page; pressing earlier races the route's render.
+  const box = await screen.findByRole("searchbox", { name: "Jump to a project or chat" });
   await userEvent.setup().keyboard("{Meta>}k{/Meta}");
-  expect(await screen.findByRole("searchbox", { name: "Jump to a project or chat" })).toHaveFocus();
+  await waitFor(() => expect(box).toHaveFocus());
   expect(screen.queryByRole("searchbox", { name: "Search projects and chats" })).not.toBeInTheDocument();
 });
 
