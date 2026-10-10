@@ -366,6 +366,17 @@ interface Options {
   sleep?: Sleep;
 }
 
+/**
+ * The exact string to type, or the 400 to answer. Over-long text is refused rather than cut: a cut can
+ * end in a space that no trimmed read-back ever matches, and a silent cut submits words nobody chose.
+ */
+function typedText(raw: string): string | AnswerResult {
+  const text = sanitizeTypedText(raw, Infinity);
+  if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+  if (text.length > FEEDBACK_MAX_LENGTH) return { status: 400, outcome: { ok: false, error: `Keep it under ${FEEDBACK_MAX_LENGTH + 1} characters.` } };
+  return text;
+}
+
 export class Interactions {
   private readonly panes = new Map<string, Entry>();
   private readonly matched = new Map<string, number>();
@@ -612,8 +623,8 @@ export class Interactions {
   private async feedback(io: PaneIO, pane: AgentView, tapped: PromptModel, key: string, raw: string): Promise<AnswerResult> {
     const row = tapped.feedback;
     if (!row || row.focused || row.text !== "") return changed("Someone is typing in this dialog.");
-    const text = sanitizeTypedText(raw, FEEDBACK_MAX_LENGTH);
-    if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
     await io.sendPaneKeys(pane.paneId, [key]);
     const focused = (m: PromptModel) => promptsSameIdentity(m, tapped) && (m.feedback?.focused ?? false) && m.feedback?.text === "";
     if ((await this.poll(io, pane, "prompt-select", tapped, focused)) !== "ok") return failed("The feedback box didn't open. Check the pane.");
@@ -646,8 +657,8 @@ export class Interactions {
    * unless the field shows our text.
    */
   private async amend(io: PaneIO, pane: AgentView, tapped: PromptModel, n: number, raw: string, field: AmendField): Promise<AnswerResult> {
-    const text = sanitizeTypedText(raw, FEEDBACK_MAX_LENGTH);
-    if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
     if (tapped.feedback || tapped.pointer === undefined) return changed();
     const sentKeys: string[] = [];
     let at = tapped.pointer;
@@ -693,8 +704,8 @@ export class Interactions {
    * nothing: Submit stays the operator's tap.
    */
   private async typeSomething(io: PaneIO, pane: AgentView, tapped: MultiSelectModel, n: number, raw: string): Promise<AnswerResult> {
-    const text = sanitizeTypedText(raw, FEEDBACK_MAX_LENGTH);
-    if (!text) return { status: 400, outcome: { ok: false, error: "Nothing to send" } };
+    const text = typedText(raw);
+    if (typeof text !== "string") return text;
     if (tapped.phase !== "checkbox" || emptyTypeSomethingRow(tapped) !== n) return changed();
     const same = (m: MultiSelectModel) => sameQuestionRows(m, tapped, n - 1);
     const sentKeys: string[] = [];

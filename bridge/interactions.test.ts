@@ -638,6 +638,15 @@ describe("free-text answers (Tab-amend, Type something, Codex notes)", () => {
     expect(pane.log.keys).toEqual([]);
   });
 
+  test("text over the limit is refused before any key, never cut to a string the field cannot echo", async () => {
+    const pane = sequencePane(bash, []);
+    const { card: c, answer } = await card(pane.io);
+    const result = await answer({ signature: c.signature, optionIndex: 0, text: `${"a".repeat(239)} bc` });
+    expect(result.status).toBe(400);
+    expect(pane.log.keys).toEqual([]);
+    expect(pane.log.text).toEqual([]);
+  });
+
   test("Yes without text is still the digit alone", async () => {
     const pane = sequencePane(bash, []);
     const { card: c, answer } = await card(pane.io);
