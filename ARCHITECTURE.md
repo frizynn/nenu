@@ -299,3 +299,23 @@ so they don't get re-discovered from scratch or acted on by accident.
   the desktop. The full argument, the costs the proposal hides, and the narrow shape that would be
   admissible if this is ever revisited:
   [ADR 0008](./.adr/0008-collie-does-not-run-a-terminal-emulator.md).
+
+## 9. Decided, not yet built
+
+These decisions change sections above once they ship. Until then the sections describe the code as
+it runs today. Fold each one in, and drop it from this list, in the release that ships it.
+
+- **Message queue (§5).** Sends follow each CLI's native queue, with a choice between steering the
+  current turn and queueing for after it while the agent is busy. The per-CLI key semantics are
+  pending live probes ([ADR 0056](./.adr/0056-queued-messages-follow-each-clis-native-queue.md),
+  Proposed).
+- **Dialogs.** The bridge detects one interaction per blocked pane and answers it with the same
+  signature and `expected_prompt` binding; hooks and RPC only enrich
+  ([ADR 0057](./.adr/0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md)).
+- **Live events (§5).** The bridge polls the panes a browser watches and watches requested journals,
+  still sending only names ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
+- **Media.** Journal images by entry and index, SVG as an image, inlined sibling assets in HTML
+  previews, ETags on media
+  ([ADR 0059](./.adr/0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md)).
+- **Organizations.** Reads through the versioned `--json` contract, with the files as a fallback
+  ([ADR 0061](./.adr/0061-nenu-reads-organizations-through-its-json-contract.md)).
