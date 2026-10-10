@@ -358,7 +358,7 @@ function ProjectPane({ data, readOnly, onBrowsing, onDone }: {
   return (
     <form className="flex flex-1 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <Field label="Name">
-        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Panel mayorista" />
+        <input className={inputField} value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="Wholesale dashboard" />
       </Field>
       <Field label="Goal">
         {/* Organizations keeps the goal on one line, so a line break becomes a space. */}
