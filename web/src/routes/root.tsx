@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Outlet, useLoaderData, useParams, useRouteError, useRouteLoaderData } from "react-router";
 
 import { usePolling } from "@/hooks/use-polling";
@@ -17,6 +18,7 @@ import { FilePreviewProvider } from "@/components/file-preview-provider";
 import { homePath } from "@/lib/nav";
 import { SESSION_PARAM, normalizeSession } from "@/lib/session";
 import { PANE_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
+import { paneDisplayName } from "@/lib/types";
 
 /**
  * The "last seen" stamp the ONE connection surface should show — the stamp of the data actually on
@@ -56,6 +58,8 @@ export function RootLayout() {
   // SAFETY: PANE_ROUTE_ID names the route whose `loader` is paneLoader (router.tsx pairs the two),
   // so the only value that can appear under that id is the PaneData that loader returned.
   const pane = useRouteLoaderData(PANE_ROUTE_ID) as PaneData | undefined;
+  const paneRoots = useMemo(() => [...data.agents, ...data.shellPanes]
+    .map((entry) => ({ paneId: entry.paneId, cwd: entry.cwd, label: paneDisplayName(entry) })), [data.agents, data.shellPanes]);
 
   // One live-events stream per page: herd/queue/transcript changes arrive as they happen, and
   // polling relaxes to a fallback while it is open (lib/live-events.ts).
@@ -79,7 +83,7 @@ export function RootLayout() {
         authError={data.authError}
         lastSeenAt={shownLastSeenAt(data, pane)}
       />
-      <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session}><Outlet /></FilePreviewProvider></WorkbenchShell>
+      <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session} panes={paneRoots}><Outlet /></FilePreviewProvider></WorkbenchShell>
       <NewAgentHost />
       <StatusArea />
     </div>

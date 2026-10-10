@@ -4,7 +4,7 @@ import FilePreview from "./file-preview";
 import { HTML_VERSION_POLL_MS } from "./html-viewer";
 import { MarkdownText } from "./markdown-text";
 import { FilePreviewContext } from "@/lib/file-preview-context";
-import { fetchPaneFile } from "@/lib/api";
+import { fetchPaneFile, PaneFileError } from "@/lib/api";
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), fetchPaneFile: vi.fn() }));
 vi.mock("./pdf-preview", () => ({ default: () => <div>PDF canvas</div> }));
@@ -63,6 +63,52 @@ it("surfaces unavailable files and retries without leaving the chat", async () =
   expect(await screen.findByText("hello")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(close).toHaveBeenCalledOnce();
+});
+
+it("explains a file outside the pane's folder with its path instead of a Retry that cannot work", async () => {
+  const path = "/Users/fran/Obsidian/board/resultado-shopify.md";
+  fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): This file is outside the project.", 404, true));
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  render(<FilePreview paneId="w1:p1" path={path} panes={[{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }]} onClose={() => {}} />);
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("outside this agent's folder");
+  expect(alert).toHaveTextContent(path);
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Open from/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(path));
+  expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+});
+
+it("opens a refused file from the pane whose folder holds it", async () => {
+  const path = "/repo/.worktrees/fix/report.md";
+  fetchFile.mockImplementation(async (paneId) => {
+    if (paneId === "w1:p1") throw new PaneFileError("Could not open file (404): This file is outside the project.", 404, true);
+    return new Response("# Report", { headers: { "content-type": "text/markdown" } });
+  });
+  render(<FilePreview paneId="w1:p1" path={path} panes={[
+    { paneId: "w1:p1", cwd: "/elsewhere", label: "coordinator" },
+    { paneId: "w1:p2", cwd: "/repo/.worktrees/fix", label: "worker" },
+  ]} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Open from worker" }));
+  expect(await screen.findByText("Report")).toBeInTheDocument();
+  expect(fetchFile).toHaveBeenLastCalledWith("w1:p2", path, undefined, expect.any(AbortSignal));
+  expect(screen.getByText(`${path} · from worker`)).toBeInTheDocument();
+});
+
+it("replaces a refused HTML frame with the reason once the frame has loaded", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+    new Response("This file is outside the project.", { status: 404, headers: { "x-file-state": "outside-project" } }));
+  try {
+    render(<FilePreview paneId="w1:p1" path="/Users/fran/Obsidian/board/resultado-shopify.html" onClose={() => {}} />);
+    fireEvent.load(screen.getByTitle("Rendered preview of resultado-shopify.html"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("outside this agent's folder");
+    expect(screen.queryByTitle("Rendered preview of resultado-shopify.html")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Download file" })).not.toBeInTheDocument();
+  } finally {
+    fetchSpy.mockRestore();
+  }
 });
 
 it("loads the PDF renderer only for PDF responses", async () => {

@@ -2,6 +2,7 @@ import { checkForUpdate } from "@/lib/pwa";
 import { journalImageUrl, paneFileUrl } from "@/lib/api";
 import { Component, createContext, lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
 import { FilePreviewContext, FileMediaContext } from "@/lib/file-preview-context";
+import type { PaneRoot } from "@/lib/file-links";
 
 const FilePreview = lazy(() => import("./file-preview"));
 
@@ -35,7 +36,7 @@ class PreviewBoundary extends Component<{ children: ReactNode; onClose: () => vo
 
 interface Selection { paneId: string; session?: string; items: readonly PreviewItem[]; start: number; seq: number }
 
-export function FilePreviewProvider({ paneId, session, children }: { paneId?: string; session?: string; children: ReactNode }) {
+export function FilePreviewProvider({ paneId, session, panes, children }: { paneId?: string; session?: string; panes?: readonly PaneRoot[]; children: ReactNode }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const openItems = useCallback((items: readonly PreviewItem[], start = 0) => {
     if (paneId && items.length) setSelection((previous) => ({ paneId, session, items, start: Math.min(Math.max(start, 0), items.length - 1), seq: (previous?.seq ?? 0) + 1 }));
@@ -52,7 +53,7 @@ export function FilePreviewProvider({ paneId, session, children }: { paneId?: st
   return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}><MediaViewerContext.Provider value={viewer}>
     {children}
     {visible && <PreviewBoundary key={visible.seq} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-sm">Opening document…</div>}>
-      <FilePreview key={`${paneId}:${session}`} paneId={visible.paneId} session={session} items={visible.items} start={visible.start} onClose={close} />
+      <FilePreview key={`${paneId}:${session}`} paneId={visible.paneId} session={session} items={visible.items} start={visible.start} panes={panes} onClose={close} />
     </Suspense></PreviewBoundary>}
   </MediaViewerContext.Provider></FilePreviewContext.Provider></FileMediaContext.Provider>;
 }

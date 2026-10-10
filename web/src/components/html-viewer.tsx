@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Code2, Expand, Eye, Loader2, Monitor, ShieldCheck, Smartphone } from "lucide-react";
-import { fetchPaneFile, paneFileUrl } from "@/lib/api";
+import { fetchPaneFile, paneFileError, paneFileUrl, type PaneFileError } from "@/lib/api";
 
 // The in-app HTML viewer. The document only ever runs in the opaque-origin `allow-scripts` iframe
 // served by /html-preview with its own no-network CSP (ADR 0021, 0059): never srcdoc, never this
@@ -20,9 +20,10 @@ export function htmlRenderUrl(paneId: string, path: string, session?: string): s
 /**
  * Bumps when the file's ETag changes while the viewer is open. The first check runs once the frame
  * has loaded, so it neither delays the page nor misses an edit made right after opening. A 304
- * costs a header round trip; a changed file's body is dropped as soon as the headers arrive.
+ * costs a header round trip; a changed file's body is dropped as soon as the headers arrive. The
+ * frame shows a refusal as a bare text page, so a refused check (4xx) is reported to `onRefused`.
  */
-function useFileVersion(url: string, enabled: boolean): number {
+function useFileVersion(url: string, enabled: boolean, onRefused: RefObject<(error: PaneFileError) => void>): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
     if (!enabled) return;
@@ -35,6 +36,10 @@ function useFileVersion(url: string, enabled: boolean): number {
       try {
         const response = await fetch(url, { cache: "no-store", redirect: "manual", signal: inflight.signal, headers: etag ? { "if-none-match": etag } : {} });
         const next = response.status === 200 ? response.headers.get("etag") : null;
+        if (response.status >= 400 && response.status < 500 && !stopped) {
+          const error = await paneFileError(response);
+          if (!stopped) onRefused.current(error);
+        }
         inflight.abort();
         if (next && etag && next !== etag && !stopped) setVersion((n) => n + 1);
         if (next) etag = next;
@@ -49,12 +54,22 @@ function useFileVersion(url: string, enabled: boolean): number {
   return version;
 }
 
-export function HtmlViewer({ paneId, session, path, name, reload }: { paneId: string; session?: string; path: string; name: string; reload: number }) {
+export function HtmlViewer({ paneId, session, path, name, reload, onError }: {
+  paneId: string;
+  session?: string;
+  path: string;
+  name: string;
+  reload: number;
+  /** The file cannot be read through this pane; the caller replaces the viewer with the reason. */
+  onError: (error: unknown) => void;
+}) {
   const [view, setView] = useState<View>("render");
   const [width, setWidth] = useState<Width>("desktop");
-  const [source, setSource] = useState<{ text: string } | { error: string } | null>(null);
+  const [source, setSource] = useState<{ text: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const version = useFileVersion(paneFileUrl(paneId, path, session), view === "render" && loaded);
+  const reportError = useRef(onError);
+  reportError.current = onError;
+  const version = useFileVersion(paneFileUrl(paneId, path, session), view === "render" && loaded, reportError);
   const tabs = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,7 +79,7 @@ export function HtmlViewer({ paneId, session, path, name, reload }: { paneId: st
     void fetchPaneFile(paneId, path, session, controller.signal)
       .then((response) => response.text())
       .then((text) => { if (!controller.signal.aborted) setSource({ text }); })
-      .catch((cause: unknown) => { if (!controller.signal.aborted) setSource({ error: cause instanceof Error ? cause.message : "Could not load the source." }); });
+      .catch((cause: unknown) => { if (!controller.signal.aborted) reportError.current(cause); });
     return () => controller.abort();
   }, [paneId, session, path, view, reload]);
 
@@ -110,9 +125,7 @@ export function HtmlViewer({ paneId, session, path, name, reload }: { paneId: st
           />
         : source === null
           ? <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" />Loading source…</div>
-          : "error" in source
-            ? <div role="alert" className="p-6 text-sm">{source.error}</div>
-            : <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{source.text}</pre>}
+          : <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{source.text}</pre>}
     </div>
   </>;
 }

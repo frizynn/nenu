@@ -1,11 +1,13 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Download, Globe, ImageIcon, RefreshCw, FileText, Loader2, X } from "lucide-react";
-import { fetchPaneFile, journalImageUrl, paneFileUrl } from "@/lib/api";
+import { fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
+import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { useHoldReload } from "@/lib/reload-guard";
 import { MarkdownText } from "./markdown-text";
 import { HtmlViewer } from "./html-viewer";
+import { FileUnavailable, type FileFailure } from "./file-unavailable";
 import type { PreviewItem } from "./file-preview-provider";
 import "./file-preview.css";
 
@@ -14,9 +16,11 @@ type DocumentData = { kind: "video"; url: string } | { kind: "pdf"; bytes: Array
 
 const isHtml = (item: PreviewItem | undefined) => item?.kind === "file" && /\.html?$/i.test(item.path);
 
-export default function FilePreview({ paneId, session, items, start = 0, path, onClose }: {
+export default function FilePreview({ paneId, session, items, start = 0, path, panes = [], onClose }: {
   paneId: string;
   session?: string;
+  /** Live panes, so a file beyond this pane's folder can be opened from the pane that holds it. */
+  panes?: readonly PaneRoot[];
   /** A gallery to step through; `path` is the one-file shorthand. */
   items?: readonly PreviewItem[];
   start?: number;
@@ -28,7 +32,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, o
   const [index, setIndex] = useState(start);
   const item = list[Math.min(index, list.length - 1)];
   const [data, setData] = useState<DocumentData | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<FileFailure | null>(null);
   const [attempt, setAttempt] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const openFile = useContext(FilePreviewContext);
@@ -37,16 +41,25 @@ export default function FilePreview({ paneId, session, items, start = 0, path, o
   const name = item?.kind === "journal" ? item.label : filePath.split("/").pop() || "Document";
   const html = isHtml(item);
   const itemKey = item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${filePath}`;
+  // The pane this item is read through: the open one, unless the operator chose the pane whose
+  // folder holds it. The choice belongs to one item, so stepping the gallery drops it.
+  const [from, setFrom] = useState<{ itemKey: string; paneId: string } | null>(null);
+  const source = from?.itemKey === itemKey ? from.paneId : paneId;
+  const owner = error?.outside ? paneOwningPath(panes, filePath, source) : undefined;
+  const sourceLabel = source === paneId ? "" : panes.find((pane) => pane.paneId === source)?.label ?? source;
+  const fail = (cause: unknown) => setError(cause instanceof PaneFileError
+    ? { message: cause.message, outside: cause.outside }
+    : { message: cause instanceof Error ? cause.message : "Could not open this file.", outside: false });
 
   useEffect(() => {
     const controller = new AbortController();
     let url: string | undefined;
-    setError(""); setData(null);
+    setError(null); setData(null);
     if (!item || html) return;
     if (item.kind === "journal") { setData({ kind: "image", url: journalImageUrl(paneId, item.entry, item.index, session) }); return; }
-    if (/\.(mp4|m4v|mov|webm)$/i.test(item.path)) { setData({ kind: "video", url: paneFileUrl(paneId, item.path, session) }); return; }
+    if (/\.(mp4|m4v|mov|webm)$/i.test(item.path)) { setData({ kind: "video", url: paneFileUrl(source, item.path, session) }); return; }
     void (async () => {
-      const response = await fetchPaneFile(paneId, item.path, session, controller.signal);
+      const response = await fetchPaneFile(source, item.path, session, controller.signal);
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(blob);
@@ -59,10 +72,10 @@ export default function FilePreview({ paneId, session, items, start = 0, path, o
         const text = await blob.text();
         if (!controller.signal.aborted) setData({ kind: "text", text, markdown: /\.(md|markdown)$/i.test(item.path), url });
       } else throw new Error("This file type cannot be previewed.");
-    })().catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not open this file."); });
+    })().catch((cause: unknown) => { if (!controller.signal.aborted) fail(cause); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
     // itemKey names the item; the object itself is rebuilt on every render of a one-file preview.
-  }, [paneId, session, itemKey, html, attempt]);
+  }, [paneId, source, session, itemKey, html, attempt]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -71,7 +84,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, o
   }, []);
 
   const step = (by: number) => setIndex((current) => (current + by + list.length) % list.length);
-  const downloadUrl = data?.url ?? (html ? paneFileUrl(paneId, filePath, session) : undefined);
+  const downloadUrl = error ? undefined : data?.url ?? (html ? paneFileUrl(source, filePath, session) : undefined);
   const Icon = html ? Globe : item?.kind === "journal" ? ImageIcon : FileText;
 
   return createPortal(<div className="file-preview-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -88,17 +101,18 @@ export default function FilePreview({ paneId, session, items, start = 0, path, o
       <header className="file-preview-header">
         <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-medium">{name}</h2>
-          <p className="truncate text-xs text-muted-foreground" title={filePath || undefined}>{item?.kind === "journal" ? "From the conversation" : filePath}</p></div>
+          <p className="truncate text-xs text-muted-foreground" title={filePath || undefined}>{item?.kind === "journal" ? "From the conversation" : sourceLabel ? `${filePath} · from ${sourceLabel}` : filePath}</p></div>
         <button type="button" aria-label="Refresh preview" onClick={() => setAttempt(n=>n+1)} className="file-preview-action"><RefreshCw className="size-4" /></button>
         {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-4" /></a>}
         <button type="button" aria-label="Close document" onClick={onClose} className="file-preview-action"><X className="size-5" /></button>
       </header>
-      {html ? <HtmlViewer paneId={paneId} session={session} path={filePath} name={name} reload={attempt} />
+      {error ? <div className="file-preview-content">
+          <FileUnavailable failure={error} path={filePath} owner={owner} onRetry={() => setAttempt((value) => value + 1)}
+            onOpenFrom={(paneId) => setFrom({ itemKey, paneId })} />
+        </div>
+        : html ? <HtmlViewer paneId={source} session={session} path={filePath} name={name} reload={attempt} onError={fail} />
         : <div className="file-preview-content">
-          {error ? <div role="alert" className="p-6 text-sm">
-            <p>{error}</p>
-            <button type="button" className="mt-3 min-h-11 rounded-md border px-4" onClick={() => setAttempt((value) => value + 1)}>Retry</button>
-          </div> : <DocumentContent data={data} name={name} openRelated={openRelated} onError={setError} />}
+          <DocumentContent data={data} name={name} openRelated={openRelated} onError={(message) => setError({ message, outside: false })} />
         </div>}
       {list.length > 1 && <nav aria-label="Gallery" className="file-preview-gallery">
         <button type="button" aria-label="Previous" onClick={() => step(-1)} className="file-preview-action"><ChevronLeft className="size-5" /></button>

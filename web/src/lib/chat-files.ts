@@ -16,7 +16,9 @@ export interface ChatFileReference {
 }
 
 const PHOTO_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
-const QUOTED_CANDIDATE = /(["'`])([^"'`\n]{1,4096})\1/g;
+/** The same image-or-link shape the Markdown parser reads; group 1 is the target. */
+const MARKDOWN_LINK = /!?\[[^\]\n]*\]\((<[^>\n]+>|[^)\s]+)\)/g;
+const QUOTED_CANDIDATE =/(["'`])([^"'`\n]{1,4096})\1/g;
 // This deliberately recognises only the extensions already accepted by localFilePath. The bridge
 // remains authoritative about whether the named file exists, is inside the pane cwd, is private,
 // and is small enough to preview.
@@ -73,6 +75,9 @@ export function markdownImagePaths(text: string): string[] {
 /** Extract previewable local-file mentions from prose and compact tool summaries/results. */
 export function filePathsInText(text: string): string[] {
   const paths = markdownPaths(text);
+  // A link to a local file names it by its target; its label ("report.html") is only a caption and
+  // must not become a second, relative mention that resolves somewhere else.
+  text = text.replace(MARKDOWN_LINK, (link, target: string) => localFilePath(target) ? " " : link);
   for (const match of text.matchAll(QUOTED_CANDIDATE)) {
     const path = localFilePath(match[2] ?? "");
     if (path) paths.push(path);

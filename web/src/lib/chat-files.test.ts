@@ -12,6 +12,15 @@ describe("chat file references", () => {
     expect(filePathsInText("https://example.com/public.pdf javascript:bad.png")).toEqual([]);
   });
 
+  it("reads a file:// link by its target and never offers its label as a second, relative file", () => {
+    // The shape that 404'd on the phone: the label resolved against the pane's folder.
+    const target = "/Users/fran/Obsidian/acme/Research/artifacts/board-20261009/resultado-shopify.html";
+    expect(filePathsInText(`El tablero: [resultado-shopify.html](file://${target}). Faltan capturas.`)).toEqual([target]);
+    expect(filePathsInText("[`guide.md`](docs/guide.md)")).toEqual(["docs/guide.md"]);
+    // A remote link keeps its label as a mention, as before.
+    expect(filePathsInText("[docs/a.md](https://example.com/a)")).toEqual(["docs/a.md"]);
+  });
+
   it("extracts prose and tool references, classifies photos, and deduplicates per path", () => {
     const entries: TranscriptEntry[] = [
       { uuid: "one", ts: "2026-09-21T10:00:00Z", role: "user", parts: [{ kind: "text", text: "See ./docs/../assets/hero.png" }] },
