@@ -35,6 +35,47 @@ export function groupPanesByTab(
   return groups;
 }
 
+/** The pane Nenu opens for a tab: its first agent, else its first shell. */
+export function paneInTab(
+  tabId: string,
+  agents: readonly AgentView[],
+  shellPanes: readonly AgentView[],
+): AgentView | undefined {
+  return agents.find((p) => p.tabId === tabId) ?? shellPanes.find((p) => p.tabId === tabId);
+}
+
+/**
+ * The tab that takes a closed tab's place, as in Herdr or a browser: the one to its left, else the
+ * one to its right, within its workspace and in snapshot order. `alive` skips tabs that closed with
+ * it. Undefined when its workspace has no other tab.
+ */
+export function neighborTab(
+  tabs: readonly TabView[],
+  tabId: string,
+  alive: (tabId: string) => boolean = () => true,
+): string | undefined {
+  const closed = tabs.find((t) => t.tabId === tabId);
+  if (!closed) return undefined;
+  const order = tabs.filter((t) => t.workspaceId === closed.workspaceId && (t === closed || alive(t.tabId)));
+  const i = order.indexOf(closed);
+  return (order[i - 1] ?? order[i + 1])?.tabId;
+}
+
+/**
+ * Where to go when the open pane closes: another pane in its tab, else one in the tab that takes
+ * its tab's place. `before` is the tab list of the last snapshot that listed the pane, `now` the
+ * snapshot without it. Undefined when its workspace has nothing left.
+ */
+export function paneAfterClose(
+  closed: Pick<AgentView, "tabId">,
+  before: readonly TabView[],
+  now: { tabs: readonly TabView[]; agents: readonly AgentView[]; shellPanes: readonly AgentView[] },
+): string | undefined {
+  const alive = new Set(now.tabs.map((t) => t.tabId));
+  const tabId = alive.has(closed.tabId) ? closed.tabId : neighborTab(before, closed.tabId, (id) => alive.has(id));
+  return tabId === undefined ? undefined : paneInTab(tabId, now.agents, now.shellPanes)?.paneId;
+}
+
 /**
  * The most urgent bucket in each workspace, in ONE pass over the agents.
  *
