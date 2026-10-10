@@ -2245,6 +2245,25 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     expect(wire).toEqual(["send"]);
   });
 
+  it("a queued message that leaves the queue with no delivery record is never shown as sent", async () => {
+    const user = userEvent.setup();
+    const queue = serveQueueRoute();
+    renderComposer({ nativeWorkbench: true, working: true });
+    const scope = localSendScope("w1:p1", undefined);
+    await user.type(screen.getByRole("textbox"), "lost one");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await waitFor(() => expect(listLocalSends(scope)[0]).toEqual(expect.objectContaining({ state: "queued" })));
+    // A bridge restart on another state dir: the row is simply gone, and nothing says it was delivered.
+    queue.rows = [];
+    await user.type(screen.getByRole("textbox"), "x");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await waitFor(() => expect(listLocalSends(scope)[0]).toEqual(expect.objectContaining({ state: "failed", textDelivered: true })));
+    expect(listLocalSends(scope)[0]!.error).toMatch(/left the queue without being delivered/);
+  });
+
   it("two identical messages follow their own rows, matched by id", async () => {
     const user = userEvent.setup();
     const queue = serveQueueRoute();
