@@ -6,10 +6,11 @@ import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
 import type { SubagentSelection } from "@/components/session-subagents";
 import { SessionSubagents } from "@/components/session-subagents";
+import { PaneActivity } from "@/components/threads-panel";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
+import { Activity as ActivityIcon, ArrowUpToLine, ChevronDown, Hourglass, Keyboard, Loader2, MessageSquareText, Paperclip, ScrollText, Search, TerminalSquare, Users, X } from "lucide-react";
 import { useSwipeUp } from "@/hooks/use-swipe";
 import { useSpaceActions } from "@/hooks/use-spaces";
 import { StartAgent } from "@/components/start-agent";
@@ -98,6 +99,15 @@ interface AgentChatProps {
   headerAction?: ReactNode;
   /** Replaces the conversation body while set; the chat stays mounted underneath. */
   overlay?: ReactNode;
+  /** Rendered under the newest turn of the conversation (a coordinator's thread cards). */
+  conversationFooter?: ReactNode;
+  /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
+  strip?: ReactNode;
+  /** A band right above the composer (a thread's pull request). */
+  composerTop?: ReactNode;
+  /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
+   *  watched through `onMirrorShown` rather than the route's flag. */
+  docked?: DockedChat;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
@@ -115,6 +125,20 @@ interface AgentChatProps {
   authError?: boolean;
   onBack: () => void;
   onSelect: (paneId: string) => void;
+}
+
+export interface DockedHeaderView {
+  terminal: boolean;
+  canToggle: boolean;
+  setTerminal: (terminal: boolean) => void;
+  find?: ReactNode;
+  menu?: ReactNode;
+}
+
+export interface DockedChat {
+  /** `find` is the find bar while searching; `menu` holds the chat's files, subagents and ⋯ actions. */
+  header: (view: DockedHeaderView) => ReactNode;
+  onMirrorShown: (shown: boolean) => void;
 }
 
 // At most one drawer/sheet is open at a time; null = none. (The composer's own Keys/Quick/Agent
@@ -142,6 +166,10 @@ export function AgentChat({
   title: titleOverride,
   headerAction,
   overlay,
+  conversationFooter,
+  strip,
+  composerTop,
+  docked,
   text,
   nativeTelemetry,
   requestedLines = 0,
@@ -153,7 +181,7 @@ export function AgentChat({
   onBack,
   onSelect,
 }: AgentChatProps) {
-  useHoldReload("open-agent-session", true);
+  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true);
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
@@ -189,6 +217,7 @@ export function AgentChat({
   const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [followKey, setFollowKey] = useState(0);
   const [historyRequest, setHistoryRequest] = useState(0);
   const [subagent, setSubagent] = useState<SubagentSelection | null>(null);
@@ -368,10 +397,13 @@ export function AgentChat({
   const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
+  const mirrorShown = !showConversation || dialogPresent;
+  const onDockedMirror = docked?.onMirrorShown;
   useEffect(() => {
-    setMirrorShown(!showConversation || dialogPresent);
+    if (onDockedMirror) return onDockedMirror(mirrorShown);
+    setMirrorShown(mirrorShown);
     return () => setMirrorShown(true);
-  }, [showConversation, dialogPresent]);
+  }, [mirrorShown, onDockedMirror]);
 
   // Both are threaded to the composer: the RAW value (live) plus a stabilised one. extractInputDraft
   // is stateless, so it can't distinguish a stranded draft from the ~350ms flash where our OWN
@@ -773,6 +805,7 @@ export function AgentChat({
     ...(hasConversation ? [{ id: "history", label: "Conversation history", icon: ScrollText,
       run: () => showConversation ? setHistoryRequest((key) => key + 1) : navigate(historyPath(paneId, session)) }] : []),
     ...(conversationCapable ? [{ id: "files", label: "Artifacts and files", icon: Paperclip, run: () => setFilesOpen(true) }] : []),
+    ...(conversationCapable && agent?.agent === "claude" ? [{ id: "activity", label: "Background activity", icon: ActivityIcon, run: () => setActivityOpen(true) }] : []),
     ...(!desktop && harnessWithSubagents ? [{ id: "subagents", label: "Subagents", icon: Users, disabled: connecting || gone, run: () => setSubagentsOpen(true) }] : []),
     ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal mirror", icon: TerminalSquare, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
   ];
@@ -786,6 +819,21 @@ export function AgentChat({
     agent?.sessionName ??
     (agent ? `${agent.workspaceLabel}${tabLabel ? ` › ${tabLabel}` : ""}` : "");
 
+  const findBar = findOpen ? (
+    <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch}
+      onPrev={() => gotoMatch(-1)} onNext={() => gotoMatch(1)} onClose={closeFind} />
+  ) : undefined;
+  const sessionTools = agent ? <>
+    {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />}
+    {harnessWithSubagents && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone}
+      {...(desktop ? {} : { open: subagentsOpen, onOpenChange: setSubagentsOpen, anchorRef: moreRef })} />}
+  </> : undefined;
+  const actionsMenu = agent && !subagent ? <ConversationActions
+    ref={moreRef}
+    groups={menuGroups}
+    recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
+  /> : undefined;
+
   return (
     <div
       className="workbench-chat flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
@@ -795,30 +843,17 @@ export function AgentChat({
           identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
           slots: the `space › tab` breadcrumb as the center, the agent StatusBadge as the right-cluster
           lead, and the find bar as the full-row takeover while searching. */}
-      <AppHeader
+      {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
+        find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
         bridge={bridge}
         error={error}
         onHome={onBack}
-        override={
-          findOpen ? (
-            <FindBar
-              query={findQuery}
-              onQueryChange={setFindQuery}
-              count={matchCount}
-              current={currentMatch}
-              onPrev={() => gotoMatch(-1)}
-              onNext={() => gotoMatch(1)}
-              onClose={closeFind}
-            />
-          ) : undefined
-        }
+        override={findBar}
         rightLead={
           agent ? (
             <>
               {headerAction}
-              {conversationCapable && <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />}
-              {harnessWithSubagents && <SessionSubagents key={displayScope} paneId={paneId} session={session} selected={subagent} onSelect={selectSubagent} enabled={!connecting && !gone}
-                {...(desktop ? {} : { open: subagentsOpen, onOpenChange: setSubagentsOpen, anchorRef: moreRef })} />}
+              {sessionTools}
               {desktop && conversationCapable && (
                 <button
                   type="button"
@@ -831,11 +866,7 @@ export function AgentChat({
                   {prefs.rawTerminal ? <MessageSquareText aria-hidden="true" className="size-4" /> : <TerminalSquare aria-hidden="true" className="size-4" />}
                 </button>
               )}
-              {!subagent && <ConversationActions
-                ref={moreRef}
-                groups={menuGroups}
-                recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
-              />}
+              {actionsMenu}
             </>
           ) : headerAction
         }
@@ -867,7 +898,7 @@ export function AgentChat({
             <span className="truncate font-semibold">(agent gone)</span>
           </div>
         )}
-      </AppHeader>
+      </AppHeader>}
       {overlay}
 
       {/* Content region below the header — the mirror inside is the scroller. */}
@@ -875,6 +906,7 @@ export function AgentChat({
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
+        {strip !== undefined ? strip : <>
         {/* In-pane tab bar: the current space's tabs above the mirror — switch tab without leaving the
             pane, or create one with +. No "All" here (you're always in a specific tab). */}
         {agent && (
@@ -894,6 +926,7 @@ export function AgentChat({
             onClosed={(tabId) => (agent?.tabId === tabId ? onBack() : revalidator.revalidate())}
           />
         )}
+        </>}
 
         {/* Pane switcher: the panes that share this tab (space › tab › pane). Mobile shows them as a
             tabbed row rather than tiling the panes; only appears when the tab holds more than one. */}
@@ -931,7 +964,7 @@ export function AgentChat({
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
-              onMatchCount={findOpen ? handleMatchCount : undefined} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
+              onMatchCount={findOpen ? handleMatchCount : undefined} footer={conversationFooter} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1012,6 +1045,7 @@ export function AgentChat({
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
+          {!showConversation && conversationFooter && <div className="max-h-[40dvh] overflow-y-auto px-3 pb-1">{conversationFooter}</div>}
           {showCard && (
             <div className="mx-3 mb-2 max-h-[min(36rem,60dvh)] overflow-y-auto">
               <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
@@ -1108,6 +1142,7 @@ export function AgentChat({
               off the mirror, so this is its one surface. One row until tapped (agents-footer.tsx). */}
           {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
+          {!subagent && composerTop}
           <Composer
             ref={composerRef}
             paneId={paneId}
@@ -1140,6 +1175,9 @@ export function AgentChat({
 
       {/* Swipe-up quick switcher — just the panes (agents + shells), reached by the thumb gesture.
           Switch-only: pane closing lives in the pane pill's long-press sheet, not here. */}
+      <BottomSheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
+        {activityOpen && <PaneActivity paneId={paneId} session={session} className="pb-4" />}
+      </BottomSheet>
       <BottomSheet open={drawer === "switcher"} onClose={closeDrawer} title="Switch pane">
         <ThreadSidebar
           agents={agents}
