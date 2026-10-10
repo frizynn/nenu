@@ -1,4 +1,6 @@
-import { QuestionReplyContext } from "./transcript-question";
+import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
+import { QuestionCard } from "@/components/question-card";
+import { useInteractions } from "@/hooks/use-interactions";
 import { hasCodexInterruptCue } from "@/lib/harness/codex/interrupt";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation } from "@/components/subagent-conversation";
@@ -356,6 +358,14 @@ export function AgentChat({
       agent?.status === "working"
     );
   const showConversation = conversationCapable && !prefs.rawTerminal;
+  // The bridge's reading of this pane's dialog (ADR 0057). It replaces the popover drawn from the
+  // client's own parse for every dialog the card can answer; a preview (its side panel and notes)
+  // and a generic menu (its arrows) keep the full controls, and the terminal keeps everything.
+  const interactions = useInteractions(session, showConversation && !gone);
+  const interaction = interactions.interactions.find((i) => i.paneId === paneId);
+  const receipt = interactions.receipts.find((r) => r.paneId === paneId);
+  const cardCovers = interaction !== undefined && interaction.kind !== "menu" && !liveBlocks.some((b) => b.kind === "preview-select");
+  const showCard = !subagent && showConversation && !modelPresent && (cardCovers || (!interaction && receipt !== undefined));
   // The mirror's poll may relax only while neither the mirror nor a dialog drawn from it is on screen
   // (lib/live-events.ts). Leaving the pane restores the default.
   useEffect(() => {
@@ -916,12 +926,12 @@ export function AgentChat({
             (a tab holding a single pane), which is the common one. */}
         {subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent} onMain={() => setSubagent(null)} /> : showConversation ? (
           <div className="min-h-0 min-w-0 flex-1 border-t border-border/40">
-            <QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agent?.status}
+            <QuestionLiveContext.Provider value={interaction !== undefined}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agent?.status}
               history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}
-              onMatchCount={findOpen ? handleMatchCount : undefined} /></QuestionReplyContext.Provider>
+              onMatchCount={findOpen ? handleMatchCount : undefined} /></QuestionReplyContext.Provider></QuestionLiveContext.Provider>
           </div>
         ) : <div className="min-h-0 min-w-0 flex-1 border-t border-border/40" onClick={focusFromMirror}>
           <ChatMessageList
@@ -1002,7 +1012,22 @@ export function AgentChat({
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
-          {!subagent && showConversation && dialogPresent && !modelPresent && !unknownInteraction && (
+          {showCard && (
+            <div className="mx-3 mb-2 max-h-[min(36rem,60dvh)] overflow-y-auto">
+              <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
+                readOnly={readOnly || gone || connecting} onOpen={() => setRawTerminal(true)}
+                onAnswer={async (option, extra) => {
+                  const outcome = await interactions.answer(interaction!, option, extra);
+                  if (outcome.ok) {
+                    setFollowing(true);
+                    revalidator.revalidate();
+                    conversation.refresh();
+                  }
+                  return outcome;
+                }} />
+            </div>
+          )}
+          {!subagent && showConversation && dialogPresent && !modelPresent && !unknownInteraction && !showCard && !receipt && (
             <section aria-label="Agent interaction" className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(32rem,60dvh)] overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-xl sm:left-2 sm:right-auto sm:w-[min(28rem,calc(100vw-3rem))]">
               <AnsiOutput text={modelSource.text} nativeOnly agent={agent?.agent}
                 onPromptAction={handlePromptAction} onWizardAction={handleWizardAction}

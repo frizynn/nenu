@@ -989,3 +989,37 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(screen.queryByRole("status", { name: "Terminal waiting" })).not.toBeInTheDocument();
   });
 });
+
+describe("AgentChat — bridge-detected dialog", () => {
+  const PERMISSION = readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8");
+
+  it("shows the bridge's card inline instead of the popover, and a tap is one POST", async () => {
+    const user = userEvent.setup();
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    const posts: unknown[] = [];
+    server.use(
+      http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+        paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+        context: "Bash command\nmkfifo fixture-fifo", signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: false,
+        options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+      }] })),
+      http.post(/\/api\/interactions\/[^/]+\/answer$/, async ({ request }) => {
+        posts.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Waiting on you")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Agent interaction" })).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
+    expect(await screen.findByText("Answered: Yes")).toBeVisible();
+  });
+
+  it("keeps the popover while the bridge has no card for the pane", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    renderChat({ agent, agents: [agent], text: PERMISSION });
+    expect(await screen.findByRole("region", { name: "Agent interaction" })).toBeInTheDocument();
+  });
+});
