@@ -1,0 +1,9 @@
+{
+  "name": "nenu-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Isolated e2e bench for Nenu: test bridge on a fake Herdr, WebKit screenshots and baselines",
+  "devDependencies": {
+    "playwright-core": "1.60.0"
+  }
+}
