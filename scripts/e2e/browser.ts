@@ -11,6 +11,7 @@ export interface Request { url(): string; method(): string }
 export interface Locator {
   click(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
+  selectOption(value: string): Promise<unknown>;
   waitFor(opts?: { state?: "visible" | "attached"; timeout?: number }): Promise<void>;
   first(): Locator;
 }
@@ -21,6 +22,7 @@ export interface Page {
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByPlaceholder(text: string | RegExp): Locator;
+  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   locator(selector: string): Locator;
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;

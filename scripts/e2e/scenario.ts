@@ -97,3 +97,48 @@ export function tickJournal(file: string, now: () => number, everyMs = 2000): ()
   }, everyMs);
   return () => clearInterval(timer);
 }
+
+/** What fake-org.ts starts from: Organizations' `overview --json` projects, plus the profile names. */
+export interface OrgSeed {
+  profiles: string[];
+  projects: Array<{ slug: string; name: string; goal: string; status: "active" | "paused"; threads: Array<Record<string, unknown> & { id: string }> }>;
+}
+
+/**
+ * One project whose coordinator is not running: a nested coordinator with three workers (one
+ * bound to the blocked demo pane, one to the working one, one with an approved PR), a worker of
+ * its own, and a resolved coordinator with its team. `at` is the bench clock's now.
+ */
+export function demoOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at: number): OrgSeed {
+  const ago = (minutes: number) => new Date(at - minutes * 60_000).toISOString();
+  const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0], tab_id: tabId, pane_id: paneId });
+  const thread = (id: string, title: string, parent: string, role: "worker" | "coordinator", status: string, group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
+    id, title, parent_id: parent, role, status, group, group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "",
+    updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null, ...extra,
+  });
+  return {
+    profiles: ["claude", "codex"],
+    projects: [{
+      slug: "awam",
+      name: "AWAM Comercio SaaS",
+      goal: "Coordinar iniciativas de AWAM que requieran varios threads o PRs",
+      status: "active",
+      threads: [
+        thread("t-0001", "Cierre Mi Cúcula", "root", "coordinator", "resolved", "resolved", 3000),
+        thread("t-0002", "Extraer requisitos", "t-0001", "worker", "resolved", "resolved", 3100),
+        thread("t-0003", "Auditar código y PRs", "t-0001", "worker", "resolved", "resolved", 3050),
+        thread("t-0004", "Revisar grupos", "root", "worker", "resolved", "resolved", 2800),
+        thread("t-0010", "Rediseño mobile", "root", "coordinator", "open", "working", 1, bound(herd.idle, "w1:t2")),
+        thread("t-0011", "Panel depósito", "t-0010", "worker", "open", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
+        thread("t-0012", "Landing a 390 px", "t-0010", "worker", "open", "working", 0, bound(herd.working, "w1:t1")),
+        thread("t-0013", "Panel mercadería", "t-0010", "worker", "open", "ready-for-review", 12, {
+          pr: {
+            url: "https://github.com/awam/comercio/pull/1342", state: "OPEN", review: "APPROVED", checks: { passed: 6, pending: 0, failed: 0 },
+            additions: 182, deletions: 40, failing: [], comment_count: 1, draft: false, mergeable: "MERGEABLE", merge_blocker: null,
+          },
+        }),
+        thread("t-0014", "Hotfix login", "root", "worker", "open", "idle", 35),
+      ],
+    }],
+  };
+}
