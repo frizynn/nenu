@@ -1,28 +1,31 @@
-// What Home says about the herd, derived only from the snapshot. There is no stored history: the
-// bridge keeps one timestamp per pane (its latest status change), so every figure here is a reading
-// of the present, never a reconstructed series.
+// What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
+// figure is a reading of the present, never a reconstructed series.
+import type { ActivityResponse, ActivityTask, ActivityWorkflow } from "./activity";
 import { chatMatches, chatRecency, isOpenThread, looseChats, projectMatches } from "./projects";
-import { bucketOf, type TriageKey } from "./triage";
-import { paneDisplayName, type AgentStatus, type AgentView, type ProjectView } from "./types";
-
-export type HerdCounts = Record<TriageKey, number> & { total: number };
-
-/** Agents per triage bucket, so Home's numbers and the lists below them share one classifier. */
-export function herdCounts(agents: readonly AgentView[]): HerdCounts {
-  const counts: HerdCounts = { needs: 0, ready: 0, working: 0, recent: 0, total: agents.length };
-  for (const agent of agents) counts[bucketOf(agent)]++;
-  return counts;
-}
+import { paneDisplayName, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView } from "./types";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The one sentence at the top of Home: the most urgent fact, not a list of them. */
-export function herdHeadline(counts: HerdCounts): string {
-  if (counts.needs) return `${plural(counts.needs, "agent")} ${counts.needs === 1 ? "needs" : "need"} you`;
-  if (counts.ready) return `${plural(counts.ready, "result")} ready to review`;
-  if (counts.working) return `${plural(counts.working, "agent")} at work`;
-  if (counts.total) return "All quiet";
-  return "What should we work on?";
+export interface HomeCounts {
+  /** Panes with a dialog waiting, or blocked without one the bridge could read. */
+  needs: number;
+  /** Pull requests and finished background work waiting to be looked at. */
+  review: number;
+  working: number;
+}
+
+/** The one sentence at the top of Home. The short form is the phone's, which has room for two facts. */
+export function homeHeadline(counts: HomeCounts, total: number, short = false): string {
+  const { needs, review, working } = counts;
+  if (short) {
+    const parts = [needs && `${needs} need${needs === 1 ? "s" : ""} you`, review && `${review} to review`, working && `${working} working`].filter(Boolean);
+    return parts.length ? parts.slice(0, 2).join(" · ") : total ? "All quiet" : "What should we work on?";
+  }
+  if (needs && review) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you, ${review} ${review === 1 ? "is" : "are"} ready to review`;
+  if (needs) return `${plural(needs, "thread")} ${needs === 1 ? "needs" : "need"} you`;
+  if (review) return `${plural(review, "result")} ready to review`;
+  if (working) return `${plural(working, "agent")} at work`;
+  return total ? "All quiet" : "What should we work on?";
 }
 
 export function greeting(now: number): string {
@@ -33,29 +36,58 @@ export function greeting(now: number): string {
   return "Good evening";
 }
 
-export interface ActivityBucket {
-  /** Epoch ms where this hour starts. */
-  start: number;
-  count: number;
+/** A pane Home asks you about: its detected dialog, or none when it is blocked on something unread. */
+export interface NeedsYouItem<I> {
+  paneId: string;
+  interaction?: I;
 }
 
-const HOUR = 3_600_000;
+/**
+ * What needs you, oldest first: every detected dialog, then blocked panes the bridge read no dialog
+ * on (still yours to look at, in the thread).
+ */
+export function needsYouItems<I extends { paneId: string; detectedAt: number }>(agents: readonly AgentView[], interactions: readonly I[]): NeedsYouItem<I>[] {
+  const asked = [...interactions].sort((a, b) => a.detectedAt - b.detectedAt);
+  const covered = new Set(asked.map((i) => i.paneId));
+  const blocked = agents.filter((agent) => agent.status === "blocked" && !covered.has(agent.paneId))
+    .sort((a, b) => (a.lastActiveAt ?? 0) - (b.lastActiveAt ?? 0));
+  return [...asked.map((interaction) => ({ paneId: interaction.paneId, interaction })), ...blocked.map((agent) => ({ paneId: agent.paneId }))];
+}
+
+/** What a thread's dot says: Organizations' ready-for-review group reads as its own state. */
+export type ThreadState = AgentStatus | "review";
+export function threadState(thread: ProjectThreadView): ThreadState {
+  const live = thread.paneId ? thread.liveStatus ?? "unknown" : "unknown";
+  return thread.group === "ready-for-review" && live !== "blocked" ? "review" : live;
+}
+
+export interface ReviewItem {
+  project: ProjectView;
+  thread: ProjectThreadView;
+}
 
 /**
- * Agents bucketed by the hour of their latest status change, oldest hour first, ending with the
- * current (partial) hour. Each agent counts once, so this is "when things last moved", which is
- * all the snapshot can honestly say. Agents without a timestamp (older bridge) are left out.
+ * Open threads waiting on a review. Organizations' `ready-for-review` group decides; a files-only
+ * project carries no group, so there an open pull request on an agent that stopped counts instead.
  */
-export function activityByHour(agents: readonly AgentView[], now: number, hours = 12): ActivityBucket[] {
-  const current = Math.floor(now / HOUR) * HOUR;
-  const first = current - (hours - 1) * HOUR;
-  const buckets = Array.from({ length: hours }, (_, index) => ({ start: first + index * HOUR, count: 0 }));
-  for (const agent of agents) {
-    const at = agent.lastActiveAt;
-    if (!at || at < first || at > now) continue;
-    buckets[Math.floor((at - first) / HOUR)]!.count++;
-  }
-  return buckets;
+export function reviewItems(projects: readonly ProjectView[] | undefined): ReviewItem[] {
+  return (projects ?? []).flatMap((project) => project.threads
+    .filter((thread) => isOpenThread(thread) && (thread.group
+      ? threadState(thread) === "review"
+      : thread.pr?.state === "open" && thread.liveStatus !== "working" && thread.liveStatus !== "blocked"))
+    .map((thread) => ({ project, thread })));
+}
+
+export type ProjectStateCounts = Record<"blocked" | "working" | "review" | "idle", number>;
+
+/** A project's open threads (and its coordinator) by what their dot says, for its status bar. */
+export function projectStateCounts(project: ProjectView): ProjectStateCounts {
+  const counts: ProjectStateCounts = { blocked: 0, working: 0, review: 0, idle: 0 };
+  const states: ThreadState[] = project.threads.filter(isOpenThread).map(threadState);
+  const coordinated = project.threads.some((thread) => thread.paneId && thread.paneId === project.coordinator?.paneId);
+  if (project.coordinator && !coordinated) states.push(project.coordinator.liveStatus);
+  for (const state of states) counts[state === "blocked" || state === "working" || state === "review" ? state : "idle"]++;
+  return counts;
 }
 
 export interface ProjectProgress {
@@ -119,4 +151,48 @@ export function jumpTargets(agents: readonly AgentView[], projects: readonly Pro
     }));
   // Stable sort: equal (or unknown) times keep projects first, then the bridge's own pane order.
   return [...projectTargets, ...chatTargets].sort((a, b) => b.ts - a.ts);
+}
+
+/** Background work that ended since you last opened its thread: a workflow, or a command that failed. */
+export interface FinishedNotice {
+  paneId: string;
+  kind: "workflow" | "task";
+  id: string;
+  title: string;
+  failed: boolean;
+  /** Epoch ms it ended. */
+  at: number;
+  workflow?: ActivityWorkflow;
+  task?: ActivityTask;
+}
+
+const NOTICE_WINDOW_MS = 24 * 3_600_000;
+
+/**
+ * Finished workflows and failed background commands per pane, newest first. Opening the thread
+ * retires them the way it retires an unseen result: the bridge's `lastSeenAt` passes their end.
+ */
+export function finishedNotices(activity: ReadonlyMap<string, ActivityResponse>, agents: readonly AgentView[], now: number): FinishedNotice[] {
+  const seen = new Map(agents.map((agent) => [agent.paneId, agent.lastSeenAt ?? 0]));
+  const notices: FinishedNotice[] = [];
+  for (const [paneId, res] of activity) {
+    if (!res.available || !seen.has(paneId)) continue;
+    const fresh = (at: number | undefined): at is number => at !== undefined && at > seen.get(paneId)! && now - at < NOTICE_WINDOW_MS;
+    for (const workflow of res.workflows) {
+      if (workflow.status !== "completed" && workflow.status !== "failed") continue;
+      const at = workflow.updatedAt ?? (workflow.startedAt !== undefined && workflow.durationMs !== undefined ? workflow.startedAt + workflow.durationMs : undefined);
+      if (fresh(at)) notices.push({ paneId, kind: "workflow", id: workflow.runId, title: workflow.name, failed: workflow.status === "failed", at, workflow });
+    }
+    for (const task of res.tasks) {
+      if (task.status === "failed" && fresh(task.at)) notices.push({ paneId, kind: "task", id: task.id, title: task.title, failed: true, at: task.at, task });
+    }
+  }
+  return notices.sort((a, b) => b.at - a.at);
+}
+
+/** Workflows still running, with the pane that launched them. */
+export function runningWorkflows(activity: ReadonlyMap<string, ActivityResponse>): Array<{ paneId: string; workflow: ActivityWorkflow }> {
+  return [...activity].flatMap(([paneId, res]) => res.available
+    ? res.workflows.filter((workflow) => workflow.status === "running").map((workflow) => ({ paneId, workflow }))
+    : []);
 }
