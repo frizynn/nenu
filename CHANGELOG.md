@@ -8,6 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-10-10
+
+### Fixed
+- Home's Ready to review shows one failed command per thread and skips commands stopped by a signal, so cut gate waits no longer flood it. (96d5bb5b)
+
 ## [0.54.0] - 2026-10-10
 
 ### Added
