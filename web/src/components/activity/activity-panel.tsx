@@ -115,7 +115,7 @@ function FinishedWorkflowRow({ workflow, onOpen }: { workflow: ActivityWorkflow;
 function taskResult(task: ActivityTask, now: number): ReactNode {
   if (task.status === "running") return task.at !== undefined ? `running · output ${formatDuration(now - task.at)} ago` : "running";
   if (task.status === "unknown") return task.at !== undefined ? `no news since ${formatClock(task.at)}` : "no news";
-  const exit = task.exitCode !== undefined ? `exit ${task.exitCode}` : task.event ? task.event.slice(0, 60) : task.status;
+  const exit = task.exitCode !== undefined ? `exit ${task.exitCode}` : task.event || task.status;
   return task.status === "failed" ? <span className="text-destructive">failed · {exit}</span> : exit;
 }
 

@@ -8,7 +8,7 @@ import { ActivityPanel } from "./activity-panel";
 import { ArtifactList } from "./artifact-list";
 import { RunningWorkflows } from "./running-workflows";
 import { WorkflowCard } from "./workflow-card";
-import { WorkflowDetail } from "./workflow-detail";
+import { WorkflowAgentList, WorkflowDetail } from "./workflow-detail";
 
 // The fixture is what the bridge reader answers for this repo's own (redacted) Claude session:
 // bridge/test-support/claude-activity run through bridge/claude-activity.ts.
@@ -132,6 +132,18 @@ describe("WorkflowDetail", () => {
     render(<WorkflowDetail workflow={wf} now={now} selectedAgentId="a2755e6a129ea042e" />);
     expect(screen.getByText("Still working · Bash · Keep waiting for gate.")).toBeInTheDocument();
     expect(screen.getByText("Now " + new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }))).toBeInTheDocument();
+  });
+});
+
+describe("WorkflowAgentList", () => {
+  test("lists each agent with what it is doing and its duration, and selects on tap", () => {
+    const onSelectAgent = vi.fn();
+    render(<WorkflowAgentList workflow={running} now={now} onSelectAgent={onSelectAgent} />);
+    const rows = screen.getAllByRole("button");
+    expect(rows).toHaveLength(running.phases.flatMap((p) => p.agents).length);
+    expect(screen.getAllByText("Bash · Keep waiting for gate").length).toBeGreaterThan(0);
+    fireEvent.click(rows[0]!);
+    expect(onSelectAgent).toHaveBeenCalledWith(running.phases[0]!.agents[0]!.id);
   });
 });
 

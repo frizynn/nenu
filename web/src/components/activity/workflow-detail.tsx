@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, MessageSquare, Workflow, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import {
   agentElapsed,
@@ -88,6 +89,49 @@ export function WorkflowTimeline({ workflow, now, selectedAgentId, onSelectAgent
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The phone's form of the timeline: per phase, each agent with what it is doing or returned and how
+ * long it took. A shared clock needs more width than a phone has, so the bars give way to this list.
+ */
+export function WorkflowAgentList({ workflow, now, selectedAgentId, onSelectAgent }: { workflow: ActivityWorkflow; now: number; selectedAgentId?: string | null; onSelectAgent?: (id: string) => void }) {
+  if (!allAgents(workflow).length) return <p className="text-xs text-muted-foreground">No agents recorded yet.</p>;
+  return (
+    <div className="flex flex-col gap-3">
+      {workflow.phases.map((phase) => (
+        <div key={phase.title} className="flex flex-col">
+          <div className="flex h-7 items-center gap-2 text-xs font-medium">
+            {phaseRunning(phase) ? <StateDot state="running" /> : <Check aria-hidden="true" className="size-3 text-status-done" />}
+            <span>{phase.title || "Agents"}</span>
+            <span className="font-normal text-muted-foreground">{phaseDone(phase)}/{phase.agents.length} done</span>
+          </div>
+          {phase.agents.map((agent) => {
+            const on = agent.id === selectedAgentId;
+            const doing = agent.state === "running" ? agent.lastTool : agent.resultPreview ?? agent.lastTool;
+            return (
+              <button
+                key={agent.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onSelectAgent?.(agent.id)}
+                className={cn("flex min-h-11 items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-muted/40", on && "bg-muted")}
+              >
+                <StateDot state={agent.state} />
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="truncate font-medium">{agent.label}</span>
+                  {doing && <span className="truncate text-xs text-muted-foreground">{doing}</span>}
+                </span>
+                <span className={cn("shrink-0 text-xs tabular-nums", agent.state === "running" ? "text-status-working" : "text-muted-foreground")}>
+                  {formatDuration(agentElapsed(agent, now))}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -192,6 +236,8 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
   className?: string;
 }) {
   const selected = selectedAgentId ? allAgents(workflow).find((a) => a.id === selectedAgentId) : undefined;
+  const phone = useMediaQuery("(max-width: 639px)");
+  const Agents = phone ? WorkflowAgentList : WorkflowTimeline;
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden", className)}>
       <div className="flex min-w-0 flex-col gap-5 px-4 pb-6 pt-5 lg:flex-1 lg:overflow-y-auto lg:px-7 lg:pt-6">
@@ -229,11 +275,11 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
         )}
         <section className="flex flex-col gap-2.5">
           <div className="flex items-center">
-            <h2 className="text-[13px] font-medium">Timeline</h2>
+            <h2 className="text-[13px] font-medium">{phone ? "Agents" : "Timeline"}</h2>
             <span className="flex-1" />
             {workflow.status === "running" && <span className="text-xs text-muted-foreground">Now {formatClock(now)}</span>}
           </div>
-          <WorkflowTimeline workflow={workflow} now={now} selectedAgentId={selectedAgentId} onSelectAgent={(id) => onSelectAgent?.(id === selectedAgentId ? null : id)} />
+          <Agents workflow={workflow} now={now} selectedAgentId={selectedAgentId} onSelectAgent={(id) => onSelectAgent?.(id === selectedAgentId ? null : id)} />
         </section>
       </div>
       {selected && <AgentPanel agent={selected} result={results[selected.id]} now={now} onClose={onSelectAgent && (() => onSelectAgent(null))} onOpenTranscript={onOpenTranscript} />}
