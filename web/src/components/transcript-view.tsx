@@ -56,7 +56,7 @@ function ThinkingPart({ part, query, focused = false }: { part: Extract<Transcri
   </div>;
 }
 
-function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true }: {
+function Part({ part, entryId, query, focused = false, active = false, compactMedia = false, uploads = true, delivers = true }: {
   part: TranscriptPart;
   entryId: string;
   query: string;
@@ -65,6 +65,8 @@ function Part({ part, entryId, query, focused = false, active = false, compactMe
   compactMedia?: boolean;
   /** False when the entry's journal already holds its images, so upload paths don't show them twice. */
   uploads?: boolean;
+  /** False for text that names files without handing them over: no cards, no thumbnails. */
+  delivers?: boolean;
 }) {
   const media = useContext(FileMediaContext);
   // Inline journal images render as one strip per entry (EntryImages), not part by part.
@@ -80,7 +82,7 @@ function Part({ part, entryId, query, focused = false, active = false, compactMe
         text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
       />
-      <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />
+      {delivers && <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />}
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
     </div>
   );
@@ -108,7 +110,8 @@ function Turn({
   const inline = journalImages(entry).length > 0;
 
   // Neither of these is speech, so both render dashed-and-muted — visibly set apart from the
-  // conversation rather than attributed to the user or the agent.
+  // conversation rather than attributed to the user or the agent. Their file names stay text: a
+  // recap or an injected note names files relative to folders of its own, it does not deliver them.
   if (entry.role === "summary" || entry.role === "note") {
     return (
       <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2">
@@ -118,7 +121,7 @@ function Turn({
           {time && ` · ${time}`}
         </div>
         {entry.parts.map((part, i) => (
-          <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
+          <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} delivers={false} />
         ))}
         <EntryImages entry={entry} />
       </div>

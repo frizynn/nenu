@@ -842,7 +842,15 @@ export function changeMessageQueue(paneId:string, body:{scope:string;action:"add
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/queue`,session),{method:"POST",body:JSON.stringify(body)});
 }
 
-export interface ArtifactMetadata { path: string; kind: "designboard"; title: string }
+/**
+ * Where a file name in the chat leads (bridge/artifact-metadata.ts): `preview` opens in the viewer,
+ * `outside` only through the confirmed Open, `missing` reaches nothing. `resolved` is the absolute
+ * file when the name alone would not find it.
+ */
+export type ArtifactMetadata = { path: string } & (
+  | { state: "preview"; resolved?: string; designboard?: string }
+  | { state: "outside"; resolved?: string }
+  | { state: "missing" });
 export function fetchArtifactMetadata(paneId: string, paths: string[], session?: string, signal?: AbortSignal): Promise<ArtifactMetadata[]> {
   const query = new URLSearchParams();
   paths.forEach(path => query.append("inspect", path));
