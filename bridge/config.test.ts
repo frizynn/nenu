@@ -15,6 +15,7 @@ const KEYS = [
   "COLLIE_NOTIFY_DELAY_MS",
   "COLLIE_READ_LINES",
   "COLLIE_TRANSCRIPT",
+  "COLLIE_HTML_INLINE_ASSETS",
   "COLLIE_TRANSCRIPT_ROOT",
   "COLLIE_CODEX_ROOT",
   "COLLIE_PI_ROOT",
@@ -149,6 +150,16 @@ describe("loadConfig", () => {
     // Claude pane has.
     process.env.COLLIE_TRANSCRIPT = "banana";
     expect(loadConfig().transcript).toBe(true);
+  });
+
+  test("parses COLLIE_HTML_INLINE_ASSETS as a boolean toggle (default ON)", () => {
+    expect(loadConfig().htmlInlineAssets).toBe(true);
+    for (const off of ["off", "0", "false", "no"]) {
+      process.env.COLLIE_HTML_INLINE_ASSETS = off;
+      expect(loadConfig().htmlInlineAssets).toBe(false);
+    }
+    process.env.COLLIE_HTML_INLINE_ASSETS = "1";
+    expect(loadConfig().htmlInlineAssets).toBe(true);
   });
 
   // COLLIE_TRANSCRIPT_ROOT predates the per-harness split and meant Claude's root — it keeps meaning

@@ -14,8 +14,7 @@ const MAX_HOOK_BYTES = 256 * 1024;
  */
 function fromLocalClaude(r: RouteRequest): boolean {
   const { headers } = r.req;
-  const peer = (r.server as Partial<{ requestIP(req: Request): { address: string } | null }>).requestIP?.(r.req)?.address;
-  if (peer !== undefined && !isLoopbackPeer(peer)) return false;
+  if (r.peer !== undefined && !isLoopbackPeer(r.peer)) return false;
   if (!LOOPBACK_HOST.test(headers.get("host") ?? "")) return false;
   return !["origin", "tailscale-user-login", "x-forwarded-for", "forwarded"].some((name) => headers.has(name));
 }

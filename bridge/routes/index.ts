@@ -127,7 +127,7 @@ export function matchRoute(method: string, pathname: string): { route: Route; ma
  * routes accept an optional `?session=<name>`; absent → the primary session. The name is only ever a
  * registry Map lookup — it never builds a path. An unknown name is a 404. Global routes ignore it.
  */
-export async function dispatch(ctx: Services, req: Request, server: RequestTimeouts): Promise<Response> {
+export async function dispatch(ctx: Services, req: Request, server: RequestTimeouts, peer?: string): Promise<Response> {
   const url = new URL(req.url);
   const { pathname } = url;
   const found = matchRoute(req.method, pathname);
@@ -138,7 +138,7 @@ export async function dispatch(ctx: Services, req: Request, server: RequestTimeo
       const denied = guard(req, ctx.cfg, level);
       if (denied) return denied;
     }
-    const base = { req, url, match, server };
+    const base = { req, url, match, server, peer };
     if (!route.session) return route.handle(ctx, base);
     const sessionName = url.searchParams.get("session") ?? undefined;
     const rt = ctx.registry.get(sessionName);

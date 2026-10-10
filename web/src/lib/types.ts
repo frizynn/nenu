@@ -169,6 +169,16 @@ export interface ProjectThreadView {
   branch?: string;
   /** The thread's pull request. Numbers appear only when Organizations reported them. */
   pr?: ThreadPullRequest;
+  /** 1 for a direct child of the project, computed from `parentId`. */
+  depth?: number;
+  /** A report the person has not acknowledged yet. */
+  reportUnacked?: boolean;
+  groupLabel?: string;
+  /** Organizations' bracketed note: live agent state, `pane closed`, `failed: …`. `--json` only. */
+  note?: string;
+  /** The PR automation flags. Present only when Organizations has PR actions. */
+  autoFixCi?: boolean;
+  autoMerge?: boolean;
 }
 
 /** Mirrors ThreadPullRequest in bridge/types.ts. */
@@ -179,6 +189,10 @@ export interface ThreadPullRequest {
   review?: "approved" | "changes_requested" | "review_required" | "commented";
   checks?: { passed: number; failed: number; pending: number; failing?: string[] };
   diff?: { additions: number; deletions: number };
+  /** Why `thread merge` would refuse, as of the ticker's last read; `null` when it would merge. `--json` only. */
+  mergeBlocker?: string | null;
+  commentCount?: number;
+  mergeable?: string;
 }
 
 export interface ProjectView {
@@ -188,6 +202,12 @@ export interface ProjectView {
   status: "active" | "paused";
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
+  /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */
+  source?: "json" | "files";
+  /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
+  prActions?: boolean;
+  /** Workspaces holding a live pane bound to this project, in this session. */
+  workspaceIds?: string[];
 }
 
 export interface TemplateView {

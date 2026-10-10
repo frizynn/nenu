@@ -87,6 +87,9 @@ const GET_TIMEOUT_MS = 10_000;
 const MUTATION_TIMEOUT_MS = 20_000;
 const ORG_LIST_TIMEOUT_MS = 15_000;
 const ORG_MUTATION_TIMEOUT_MS = 35_000;
+//   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
+//     its 120 s idle timeout, so the client outlasts the CLI.
+const ORG_MERGE_TIMEOUT_MS = 100_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -588,6 +591,38 @@ export function resolveOrgNode(
   session?: string,
 ): Promise<{ ok: true }> {
   return req(withSession("/api/org/node/resolve", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
+export function createOrgProject(
+  input: { name: string; goal?: string; repo?: string },
+  session?: string,
+): Promise<{ ok: true; project: { slug: string; name: string } }> {
+  return req(withSession("/api/org/project/create", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
+/** Merge a thread's PR through Organizations, which refuses unless checks pass and it is approved. */
+export function mergeOrgThread(
+  input: { project: string; id: string; method?: "squash" | "merge" | "rebase" },
+  session?: string,
+): Promise<{ ok: true; merged: { id: string; pr: string } }> {
+  return req(withSession("/api/org/thread/merge", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MERGE_TIMEOUT_MS);
+}
+
+/** Toggle a thread's PR automation; an omitted flag stays as it is. */
+export function setOrgThreadFlags(
+  input: { project: string; id: string; autoFixCi?: boolean; autoMerge?: boolean },
+  session?: string,
+): Promise<{ ok: true; flags: { id: string; autoFixCi: boolean; autoMerge: boolean } }> {
+  return req(withSession("/api/org/thread/set", session), {
     method: "POST",
     body: JSON.stringify(input),
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
