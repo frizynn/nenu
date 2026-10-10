@@ -482,3 +482,34 @@ describe("Push — superseding, metadata and forget", () => {
     expect(await fileEndpoints(cfg.stateDir)).toEqual([]);
   });
 });
+
+describe("agent alerts carry the pane's dialog", () => {
+  test("an alert for a pane with a detected dialog is rewritten around it; others pass through", async () => {
+    const cfg = await tempCfg();
+    const payloads: unknown[] = [];
+    const push = new Push(cfg, async (_s, payload) => void payloads.push(JSON.parse(payload)));
+    enable(push, [sub("live")]);
+    const lookups: Array<[string | undefined, string]> = [];
+    push.useInteractions((session, paneId) => {
+      lookups.push([session, paneId]);
+      return paneId !== "p1" ? null : {
+        paneId: "p1", agent: "claude", kind: "question", family: "select", question: "Which fruit?", signature: "sig",
+        revision: 0, detectedAt: 0, detailComplete: false,
+        options: [{ index: 0, label: "Apple", role: "neutral" }, { index: 1, label: "Pear", role: "neutral" }],
+      };
+    });
+
+    await push.send({ title: "claude needs you", body: "demo", tag: "collie:herd", paneId: "p1", session: "s2" });
+    await push.send({ title: "claude needs you", body: "demo", tag: "collie:herd", paneId: "p2" });
+    await push.send({ type: "clear", tag: "collie:herd" });
+
+    expect(lookups).toEqual([["s2", "p1"], [undefined, "p2"]]);
+    expect(payloads[0]).toMatchObject({
+      body: "Which fruit?",
+      interaction: { signature: "sig", actions: [{ optionIndex: 0, title: "Apple" }, { optionIndex: 1, title: "Pear" }] },
+      data: { paneId: "p1", session: "s2" },
+    });
+    expect(payloads[1]).toMatchObject({ body: "demo" });
+    expect((payloads[1] as { interaction?: unknown }).interaction).toBeUndefined();
+  });
+});
