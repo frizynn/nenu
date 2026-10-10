@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-10-11
+
+### Changed
+- Every project view (project page, coordinator panel, phone Threads tab, sidebar, cards, Home) reads one organization model, as Herdr Organizations' popup does: only open work in the tree, coordinators first then needs you, review, working, idle; everything resolved lives in one grey History tree where each resolved coordinator holds the threads it ran. (#54)
+- Tapping a node opens its chat, or its detail at `/project/:slug/node/:id` when it has no live pane; nothing redirects on its own. (#54)
+
+### Added
+- Replace coordinator on the project coordinator row: pick the agent, Organizations' `coordinator replace` stops the running one and starts the new one. (#54)
+
+### Fixed
+- Closing a coordinator that still has open work is refused with "Close its work first", in the client and the bridge. (#54)
+
 ## [0.59.0] - 2026-10-11
 
 ### Fixed

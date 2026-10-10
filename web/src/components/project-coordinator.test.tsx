@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { ProjectOrganization } from "./project-organization";
+import { ProjectTasks } from "./project-tasks";
 
 const thread = (id: string, title: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
   ({ id, title, parentId, role: "worker", status: "open", ...extra });
@@ -29,30 +29,10 @@ const project: ProjectView = {
 function setup(overrides: Partial<ProjectView> = {}, props: { readOnly?: boolean } = {}) {
   const onChanged = vi.fn(async () => {});
   const onOpenPane = vi.fn();
-  render(<ProjectOrganization project={{ ...project, ...overrides }} panes={[]} session="work" readOnly={props.readOnly ?? false}
-    onOpenPane={onOpenPane} onChanged={onChanged} now={Date.parse("2026-10-10T14:00:00Z")} />);
+  render(<ProjectTasks project={{ ...project, ...overrides }} panes={[]} session="work" readOnly={props.readOnly ?? false}
+    onOpenPane={onOpenPane} onOpenNode={vi.fn()} onChanged={onChanged} now={Date.parse("2026-10-10T14:00:00Z")} />);
   return { onChanged, onOpenPane, user: userEvent.setup() };
 }
-
-/** The titles of a list's own items, not of the teams nested inside them. */
-const titles = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-row .font-medium")?.textContent);
-
-it("nests open threads under their coordinator, most urgent first, and folds the resolved away", () => {
-  setup();
-  const open = screen.getByRole("list", { name: "Open threads" });
-  // Mobile has a thread that needs you, so it ranks above the working Hotfix.
-  expect(titles(open)).toEqual(["Mobile", "Hotfix"]);
-  const team = within(open).getByRole("list", { name: "Mobile threads" });
-  expect(titles(team)).toEqual(["Depot", "Landing"]);
-  // The team sits inside its coordinator's item, so the coordinator and its threads read as one entry.
-  expect(team.parentElement).toBe(within(open).getByRole("button", { name: /^Mobile/ }).closest("li"));
-  expect(within(open).getByRole("button", { name: /^Mobile/ })).toHaveTextContent("Coordinator · idle");
-
-  const resolved = document.querySelector("details")!;
-  expect(resolved.querySelector("summary")).toHaveTextContent("Resolved 2");
-  expect(resolved).not.toHaveAttribute("open");
-  expect(within(resolved).queryByRole("button", { name: /^Close/ })).not.toBeInTheDocument();
-});
 
 it("starts the project coordinator and refreshes, so the route can open its chat", async () => {
   let posted: unknown;
@@ -89,13 +69,13 @@ it("offers no start, close or new on a read-only device", () => {
 });
 
 it("keeps Start but drops New in a paused project, and New coordinator under upstream herdr-projects", () => {
-  const { unmount } = render(<ProjectOrganization project={{ ...project, status: "paused" }} panes={[]} readOnly={false} onOpenPane={() => {}} onChanged={() => {}} />);
+  const { unmount } = render(<ProjectTasks project={{ ...project, status: "paused" }} panes={[]} readOnly={false} onOpenPane={() => {}} onOpenNode={() => {}} onChanged={() => {}} />);
   expect(screen.getByText("Paused")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Start coordinator" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "New thread" })).not.toBeInTheDocument();
   unmount();
 
-  render(<ProjectOrganization project={{ ...project, nodeActions: false }} panes={[]} readOnly={false} onOpenPane={() => {}} onChanged={() => {}} />);
+  render(<ProjectTasks project={{ ...project, nodeActions: false }} panes={[]} readOnly={false} onOpenPane={() => {}} onOpenNode={() => {}} onChanged={() => {}} />);
   expect(screen.getByRole("button", { name: "New thread" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "New coordinator" })).not.toBeInTheDocument();
 });

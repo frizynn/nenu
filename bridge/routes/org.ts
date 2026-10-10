@@ -1,4 +1,4 @@
-import { createProject, mergeThread, openProject, OrgValidationError, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { createProject, mergeThread, openProject, OrgValidationError, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
@@ -28,7 +28,10 @@ export const orgRoutes: Route[] = [
     // The audit records what ran, as validated; the task stays out of it.
     return { response: { node: { id: started.id } }, detail: started };
   }),
-  orgWrite("/api/org/node/resolve", "org.node.resolve", "Could not close node.", async ({ orgRun }, body, rt) => {
+  orgWrite("/api/org/node/resolve", "org.node.resolve", "Could not close node.", async ({ orgRun, projects }, body, rt) => {
+    // Organizations' CLI would close a coordinator under its running threads; its popup refuses, and so does Nenu.
+    const refusal = projects.closeRefusal(String(body.project), String(body.id));
+    if (refusal) throw new OrgValidationError(refusal);
     await resolveNode(orgRun, rt.socketPath, { project: body.project, id: body.id });
     return { response: {}, detail: { project: body.project, id: body.id } };
   }),
@@ -36,6 +39,11 @@ export const orgRoutes: Route[] = [
   orgWrite("/api/org/project/open", "org.project.open", "Could not start the coordinator.", async ({ orgRun }, body, rt) => {
     const { message } = await openProject(orgRun, rt.socketPath, { project: body.project });
     return { response: { message }, detail: { project: body.project } };
+  }, { settle: true }),
+  // The old coordinator's chat ends with its pane, so the reply waits for the re-read that shows the new one.
+  orgWrite("/api/org/coordinator/replace", "org.coordinator.replace", "Could not replace the coordinator.", async ({ orgRun }, body, rt) => {
+    const { message } = await replaceCoordinator(orgRun, rt.socketPath, { project: body.project, profile: body.profile });
+    return { response: { message }, detail: { project: body.project, profile: body.profile } };
   }, { settle: true }),
   orgWrite("/api/org/project/create", "org.project.create", "Could not create the project.", async ({ orgRun }, body) => {
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });

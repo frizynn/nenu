@@ -384,6 +384,17 @@ export class ProjectRegistry {
       });
   }
 
+  /**
+   * Why closing node `id` would be refused: a coordinator still running open nodes, as last read.
+   * Undefined when it may close, or when the registry does not know it (Organizations decides then).
+   */
+  closeRefusal(slug: string, id: string): string | undefined {
+    const threads = this.records.find((record) => record.slug === slug)?.threads.map(({ view }) => view) ?? [];
+    const node = threads.find((thread) => thread.id === id);
+    const open = threads.filter((thread) => thread.parentId === id && thread.status !== "resolved").length;
+    return node && open ? `${node.title} still has ${open} open under it; close those first.` : undefined;
+  }
+
   /** Re-read now, ignoring the spawn throttle: after a write the person is waiting for the result. */
   invalidate(): Promise<void> {
     return this.schedule(true);

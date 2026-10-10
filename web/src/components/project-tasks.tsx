@@ -1,42 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 
+import { TaskRow } from "@/components/node-row";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
-import { StatusDot } from "@/components/status-badge";
-import { ConfirmDialog } from "@/components/ui/dialog";
+import { ProjectCoordinator } from "@/components/project-coordinator";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-/** Where a thread sits in the project's lists, most urgent first. */
-export type ThreadBucket = "needs" | "ready" | "working" | "resolved";
-export const BUCKET_LABEL: Record<ThreadBucket, string> = { needs: "Needs you", ready: "Ready to review", working: "Working", resolved: "Resolved" };
-export const BUCKETS: readonly ThreadBucket[] = ["needs", "ready", "working", "resolved"];
-
-export function threadBucket(thread: ProjectThreadView): ThreadBucket {
-  if (thread.status === "resolved") return "resolved";
-  if (thread.status === "failed" || thread.group === "waiting-on-you" || (thread.paneId && thread.liveStatus === "blocked")) return "needs";
-  const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
-  if (thread.group === "ready-for-review" || approved || (thread.paneId && thread.liveStatus === "done")) return "ready";
-  return "working";
-}
-
-/** The dot a thread wears: its live status, or "review" (blue) once it is ready for review. */
-export type ThreadDot = AgentStatus | "review";
-export function threadDot(thread: ProjectThreadView): ThreadDot {
-  const bucket = threadBucket(thread);
-  if (bucket === "ready") return "review";
-  if (bucket === "resolved") return "done";
-  if (thread.status === "failed") return "blocked";
-  return thread.paneId ? thread.liveStatus ?? "unknown" : "unknown";
-}
-
-export function ThreadStateDot({ state, className = "size-2" }: { state: ThreadDot; className?: string }) {
-  return state === "review"
-    ? <span aria-hidden className={cn("inline-flex shrink-0 rounded-full bg-primary", className)} />
-    : <StatusDot status={state} surface="bg-transparent" className={className} />;
-}
+import { closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
+import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
 export function prSummary(pr: ThreadPullRequest): string {
@@ -63,14 +36,24 @@ export function canMerge(project: ProjectView, thread: ProjectThreadView): boole
 
 /** What a thread is doing, for its row: the question, the PR, the agent's own title, or its state. */
 export function threadDetail(thread: ProjectThreadView, panes: readonly AgentView[]): string {
-  const bucket = threadBucket(thread);
+  const state = nodeState(thread);
   const title = thread.paneId ? panes.find((pane) => pane.paneId === thread.paneId)?.terminalTitle : undefined;
-  if (bucket === "resolved") return ["Resolved", thread.pr && prSummary(thread.pr)].filter(Boolean).join(" · ");
   if (thread.status === "failed") return thread.note ?? "Failed to start";
-  if (bucket === "needs") return title ?? thread.note ?? "Asked you a question";
-  if (bucket === "ready" && thread.pr) return prSummary(thread.pr);
-  if (!thread.paneId) return thread.status === "open" ? "not running" : thread.status;
+  if (state === "needs") return title ?? thread.note ?? "Asked you a question";
+  if (state === "review" && thread.pr) return prSummary(thread.pr);
+  // Organizations' own note (pane closed, session unreachable, a remote agent's state) says more than Nenu can.
+  if (!thread.paneId) return thread.note || (thread.status !== "open" ? thread.status : state === "working" ? "working" : "not running");
   return title ?? thread.note ?? STATUS_LABEL[thread.liveStatus ?? "unknown"];
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** A tree row's second line: what an open node is doing, or what a resolved one was. */
+function nodeDetail(node: OrgNode, panes: readonly AgentView[]): string {
+  const { thread } = node;
+  if (node.state !== "resolved") return thread.role === "coordinator" ? `Coordinator · ${threadDetail(thread, panes)}` : threadDetail(thread, panes);
+  const kind = thread.role !== "coordinator" ? "Thread" : node.children.length ? `Coordinator · ${plural(node.children.length, "thread")}` : "Coordinator";
+  return [kind, thread.pr && prSummary(thread.pr)].filter(Boolean).join(" · ");
 }
 
 export function threadAge(thread: ProjectThreadView, now: number): string | undefined {
@@ -105,72 +88,91 @@ export function threadTree(project: ProjectView, coordinatorId?: string): Projec
   return tree;
 }
 
-/** Threads grouped by bucket, in display order, empty groups dropped. */
-export function bucketed(threads: readonly ProjectThreadView[]): Array<[ThreadBucket, ProjectThreadView[]]> {
-  return BUCKETS.map((bucket) => [bucket, threads.filter((thread) => threadBucket(thread) === bucket)] as [ThreadBucket, ProjectThreadView[]])
-    .filter(([, list]) => list.length > 0);
-}
-
-interface ProjectTasksProps {
+interface OrgTreeProps {
   project: ProjectView;
-  /** The threads to list; the whole project when omitted. */
-  threads?: ProjectThreadView[];
-  /** Heading and its second line; the project's name and goal by default. */
-  title?: string;
-  subtitle?: ReactNode;
+  /** The nodes to draw: the whole project, or the work under one coordinator. */
+  threads: readonly ProjectThreadView[];
   /** Live panes, so a running thread can say what it is doing right now. */
   panes: readonly AgentView[];
   session?: string;
   currentPaneId?: string;
   readOnly: boolean;
-  /** List the project coordinator as the first row. */
-  showCoordinator?: boolean;
+  /** Opens a node that runs in a live pane: its chat. */
   onOpenPane: (paneId: string) => void;
-  onChanged: () => void;
-  /** Extra header control, e.g. the panel's collapse button. */
-  action?: ReactNode;
+  /** Opens any other node: its detail. */
+  onOpenNode: (id: string) => void;
+  onChanged: () => Promise<void> | void;
   now?: number;
 }
 
-/** The project's threads grouped as Needs you, Ready to review, Working and Resolved. */
-export function ProjectTasks({ project, threads = project.threads, title = project.name, subtitle = project.goal, panes, session, currentPaneId, readOnly,
-  showCoordinator = true, onOpenPane, onChanged, action, now = Date.now() }: ProjectTasksProps) {
-  const [closing, setClosing] = useState<ProjectThreadView | null>(null);
-  const groups = bucketed(threads);
-  const coordinator = showCoordinator ? project.coordinator : undefined;
+interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
+  /** The nodes to list; the whole project when omitted. */
+  threads?: readonly ProjectThreadView[];
+  /** Heading and its second line; the project's name and goal by default. */
+  title?: string;
+  subtitle?: ReactNode;
+  /** Extra header control, e.g. the panel's collapse button. */
+  action?: ReactNode;
+}
 
+/**
+ * A project's organization: its coordinator, the open work as a tree (coordinators first, the most
+ * urgent first) and one grey History of everything resolved. Every node opens its chat or its
+ * detail; an open one can be closed and the coordinator replaced.
+ */
+export function ProjectTasks({ threads, title, subtitle, action, ...tree }: ProjectTasksProps) {
+  const { project, panes, session, currentPaneId, readOnly, onOpenPane, onChanged } = tree;
   return (
     <div className="project-tasks">
-      <TasksHeader title={title} subtitle={subtitle} paused={project.status === "paused"} action={action} />
-
-      {coordinator && (
-        <ul className="task-list mb-2">
-          <TaskRow dot={coordinator.liveStatus} title="Coordinator" detail={`${coordinator.agent} · ${panes.find((pane) => pane.paneId === coordinator.paneId)?.terminalTitle ?? STATUS_LABEL[coordinator.liveStatus]}`}
-            current={currentPaneId === coordinator.paneId} onOpen={() => onOpenPane(coordinator.paneId)} />
-        </ul>
-      )}
-
-      {groups.map(([bucket, list]) => (
-        <TaskGroup key={bucket} label={BUCKET_LABEL[bucket]} count={list.length}
-          open={bucket !== "resolved" || list.some((thread) => thread.paneId !== undefined && thread.paneId === currentPaneId)}>
-          {bucket === "needs" && <p className="px-2.5 pt-1.5 text-xs text-muted-foreground">Decisions, reviews and permission requests.</p>}
-          <ul className="task-list mt-1">
-            {list.map((thread) => (
-              <TaskRow key={thread.id} dot={threadDot(thread)} title={thread.title} detail={threadDetail(thread, panes)} age={threadAge(thread, now)}
-                current={currentPaneId !== undefined && thread.paneId === currentPaneId}
-                onOpen={thread.paneId ? () => onOpenPane(thread.paneId!) : undefined}
-                onClose={bucket !== "resolved" && !readOnly ? () => setClosing(thread) : undefined} />
-            ))}
-          </ul>
-        </TaskGroup>
-      ))}
-      {groups.length === 0 && <p className="py-3 text-sm text-muted-foreground">No threads yet.</p>}
-      {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={onChanged} /></div>}
-
-      <CloseThreadDialog project={project} thread={closing} session={session} onCancel={() => setClosing(null)}
-        onClosed={() => { setClosing(null); onChanged(); }} />
+      <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"} action={action} />
+      <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />
+      <OrgTreeList {...tree} threads={threads ?? project.threads} />
+      {!readOnly && <div className="mt-3"><NewNodeActions project={project} session={session} onStarted={() => void onChanged()} /></div>}
     </div>
   );
+}
+
+/**
+ * The open tree and History of a set of nodes, the body of every organization view. History is
+ * grey behind one row that starts closed, each resolved coordinator folded over the threads it ran;
+ * what holds the pane on screen opens by itself.
+ */
+export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: OrgTreeProps) {
+  const tree = orgTree(threads);
+  const onScreen = (node: OrgNode) => currentPaneId !== undefined && node.thread.paneId === currentPaneId;
+  const [closing, setClosing] = useState<OrgNode | null>(null);
+  const [historyShown, setHistoryShown] = useState(() => tree.history.some((node) => holds(node, onScreen)));
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
+
+  const branch = (node: OrgNode): ReactNode => {
+    const { thread, state } = node;
+    const resolved = state === "resolved";
+    // Open coordinators always show their work; a resolved one folds until opened.
+    const open = !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
+    const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
+    return (
+      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
+        onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)}
+        fold={resolved && node.children.length > 0 ? { open, onToggle: toggle } : undefined}
+        action={!resolved && !readOnly && <button type="button" className="task-close" aria-label={`Close ${thread.title}`}
+          title={thread.role === "coordinator" ? "Close coordinator" : "Close thread"} onClick={() => setClosing(node)}><Check aria-hidden className="size-4" /></button>}>
+        {open && node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>}
+      </TaskRow>
+    );
+  };
+
+  return <>
+    {tree.open.length > 0 && <ul className="task-list mb-2" aria-label="Open threads">{tree.open.map(branch)}</ul>}
+    {tree.history.length > 0 && <>
+      <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
+        <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
+      </button>
+      {historyShown && <ul className="task-list mb-2" aria-label="History">{tree.history.map(branch)}</ul>}
+    </>}
+    {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No threads yet.</p>}
+    <CloseNodeDialog project={project} node={closing} session={session} onCancel={() => setClosing(null)}
+      onClosed={() => { setClosing(null); void onChanged(); }} />
+  </>;
 }
 
 /** A task list's heading: the project or coordinator, a Paused badge, and its second line. */
@@ -187,35 +189,28 @@ export function TasksHeader({ title, subtitle, paused, action }: { title: string
   );
 }
 
-/** A foldable group of task rows with its count. */
-export function TaskGroup({ label, count, open, children }: { label: string; count: number; open: boolean; children: ReactNode }) {
-  return (
-    <details className="task-history mb-2" open={open}>
-      <summary className="flex min-h-9 items-center gap-2 rounded-md bg-muted/40 px-2.5 text-[13px] font-medium">
-        <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />{label} <span className="tabular-nums font-normal text-muted-foreground">{count}</span>
-      </summary>
-      {children}
-    </details>
-  );
-}
-
-/** Confirm closing a thread (Organizations' resolve); on failure it stays open with the cause. */
-export function CloseThreadDialog({ project, thread, session, onClosed, onCancel }: {
+/**
+ * Confirm closing a node (Organizations' resolve); on failure it stays open with the cause. A
+ * coordinator still running open work is refused here, as Organizations' popup refuses it.
+ */
+export function CloseNodeDialog({ project, node, session, onClosed, onCancel }: {
   project: ProjectView;
-  thread: ProjectThreadView | null;
+  node: OrgNode | null;
   session?: string;
   onClosed: () => void;
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const refusal = node ? closeRefusal(node) : undefined;
+  const noun = node?.thread.role === "coordinator" ? "coordinator" : "thread";
 
   async function close() {
-    if (!thread) return;
+    if (!node) return;
     setBusy(true);
     setError(null);
     try {
-      await resolveOrgNode({ project: project.slug, id: thread.id }, session);
+      await resolveOrgNode({ project: project.slug, id: node.thread.id }, session);
       onClosed();
     } catch (failure) {
       setError(errorMessage(failure));
@@ -224,39 +219,16 @@ export function CloseThreadDialog({ project, thread, session, onClosed, onCancel
     }
   }
 
+  if (refusal) {
+    return (
+      <Dialog open onClose={onCancel} title="Close its work first" description={`${refusal} Close those first.`}>
+        <div className="mt-5 flex justify-end"><Button type="button" size="lg" onClick={onCancel}>OK</Button></div>
+      </Dialog>
+    );
+  }
   return (
-    <ConfirmDialog open={thread !== null} title="Close this thread?" confirmLabel="Close thread" busy={busy} error={error}
-      description={<><span className="font-medium text-foreground">{thread?.title}</span> stops. Its branch, worktree and report are kept.</>}
+    <ConfirmDialog open={node !== null} title={`Close this ${noun}?`} confirmLabel={`Close ${noun}`} busy={busy} error={error}
+      description={<><span className="font-medium text-foreground">{node?.thread.title}</span> stops. Its branch, worktree and report are kept.</>}
       onConfirm={() => void close()} onCancel={() => { if (!busy) { setError(null); onCancel(); } }} />
-  );
-}
-
-/** One thread's row; `children` hangs the threads a coordinator runs inside the same list item. */
-export function TaskRow({ dot, title, detail, age, current, onOpen, onClose, children }: {
-  dot: ThreadDot;
-  title: string;
-  detail: string;
-  age?: string;
-  current: boolean;
-  onOpen?: () => void;
-  onClose?: () => void;
-  children?: ReactNode;
-}) {
-  const body = <>
-    <ThreadStateDot state={dot} className="mt-1.5 size-2" />
-    <span className="min-w-0 flex-1">
-      <span className="block break-words text-sm font-medium">{title}</span>
-      <span className="block truncate text-xs text-muted-foreground">{detail}</span>
-    </span>
-    {age && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
-  </>;
-  return (
-    <li aria-current={current ? "true" : undefined}>
-      <div className="task-row">
-        {onOpen ? <button type="button" className="task-main" onClick={onOpen}>{body}</button> : <div className="task-main opacity-75">{body}</div>}
-        {onClose && <button type="button" className="task-close" aria-label={`Close ${title}`} title="Close thread" onClick={onClose}><Check aria-hidden className="size-4" /></button>}
-      </div>
-      {children}
-    </li>
   );
 }

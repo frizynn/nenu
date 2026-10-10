@@ -94,6 +94,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0060](./0060-codex-panes-stay-off-the-daemon.md) | Codex panes stay off the daemon (launching Codex daemon-backed was rejected) | Rejected |
 | [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Accepted |
 | [0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md) | A refused file opens only through a confirmed, single-use link (amends 0021, 0059) | Accepted |
+| [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

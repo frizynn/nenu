@@ -8,6 +8,7 @@ import {
   openProject,
   orgEnv,
   readOverview,
+  replaceCoordinator,
   resolveNode,
   setThreadFlags,
   startNode,
@@ -164,6 +165,23 @@ describe("herdr-organizations CLI adapter", () => {
       argv: ["node", "resolve", "nenu", "t-1234", "--close-view"],
       opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
     }]);
+  });
+
+  it("replaces the project coordinator on the chosen profile and passes on what Organizations says", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "stopped 1 coordinator agent(s) and started a new one on codex\n", stderr: "" });
+
+    expect(await replaceCoordinator(run, "/tmp/herdr.sock", { project: "awam", profile: "codex" }))
+      .toEqual({ message: "stopped 1 coordinator agent(s) and started a new one on codex" });
+    expect(calls).toEqual([{
+      argv: ["coordinator", "replace", "awam", "--profile=codex"],
+      opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 },
+    }]);
+    await expect(replaceCoordinator(run, "/s", { project: "awam", profile: "" })).rejects.toThrow("Choose the agent the new coordinator runs on.");
+    await expect(replaceCoordinator(run, "/s", { project: "awam", profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
+    await expect(replaceCoordinator(run, "/s", { project: "../awam", profile: "codex" })).rejects.toThrow("Project must use lowercase");
+    expect(calls).toHaveLength(1);
+    await expect(replaceCoordinator(fakeRun({ code: 1, stdout: "", stderr: "error: no Herdr session to start the coordinator in" }).run, "/s", { project: "awam", profile: "codex" }))
+      .rejects.toThrow("no Herdr session");
   });
 
   it("closes a thread through upstream herdr-projects, keeping its worktree", async () => {

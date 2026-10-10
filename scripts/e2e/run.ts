@@ -2,15 +2,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
+import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { demoOrg, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { demoOrg, orgTreeSeed, tickJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
 //
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
 //   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
+//   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
@@ -191,6 +192,120 @@ async function project(): Promise<void> {
   await writeFile(join(outDir, "project.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (result.flowError || result.unexpectedWrites.length) process.exit(1);
+}
+
+/**
+ * Every place Nenu draws a project's organization, on a project shaped like a long-running one
+ * (scenario.ts `orgTreeSeed`): the project page with its coordinator stopped, then with it running
+ * the desk's side panel and the sidebar, and the phone's Threads tab. Each with History closed, then
+ * open.
+ */
+async function org(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const shoot = async (page: Page, name: string) => {
+    const path = join(outDir, `${name}.png`);
+    await page.screenshot({ path, animations: "disabled" });
+    shots.push(path);
+  };
+  const TALL_PHONE = { ...PHONE, viewport: { width: 390, height: 1800 } };
+  const open = async (browser: Browser, bridge: TestBridge, device: typeof PHONE | typeof TALL_PHONE | typeof DESKTOP, path: string, ready: string) => {
+    const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
+    const page = await context.newPage();
+    await page.clock.install({ time: bridge.now() });
+    await page.goto(bridge.url + path);
+    await page.locator(ready).first().waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    return { page, close: () => context.close() };
+  };
+  const history = (scope: Locator) => scope.getByText(/^(History|Resolved)\b/).first();
+
+  await withBench(async (bridge, browser) => {
+    for (const [name, device] of [["phone", TALL_PHONE], ["desktop", DESKTOP]] as const) {
+      const { page, close } = await open(browser, bridge, device, "/project/awam", 'main >> text="Panel depósito"');
+      await shoot(page, `page-${name}`);
+      await history(page.locator("main")).click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shoot(page, `page-history-${name}`);
+      if (name === "desktop") {
+        await history(page.locator('nav[aria-label="Projects and chats"]')).click({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        await shoot(page, "sidebar-history-desktop");
+      }
+      await close();
+    }
+  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
+
+  let flowError: string | null = null;
+  let orgCalls: string[][] = [];
+  await withBench(async (bridge, browser) => {
+    const coordinator = `/pane/${encodeURIComponent(bridge.herd!.codex)}`;
+    const calledWith = async (...argv: string[]) => {
+      for (let i = 0; i < 100; i++) {
+        if ((await bridge.orgCalls()).some((call) => argv.every((arg, index) => call[index] === arg))) return;
+        await sleep(100);
+      }
+      throw new Error(`Organizations was never asked to ${argv.join(" ")}`);
+    };
+    {
+      const { page, close } = await open(browser, bridge, DESKTOP, coordinator, 'aside[aria-label="Project"] >> text="Panel depósito"');
+      const panel = page.locator('aside[aria-label="Project"]');
+      await shoot(page, "panel-desktop");
+      await history(panel).click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shoot(page, "panel-history-desktop");
+      // Each node's actions: a coordinator with open work refuses to close, a thread closes, the coordinator is replaced.
+      try {
+        await panel.getByRole("button", { name: "Close Rediseño mobile" }).click({ timeout: 5000 });
+        await page.getByRole("dialog", { name: "Close its work first" }).waitFor({ timeout: 5000 });
+        await shoot(page, "close-refused-desktop");
+        await page.getByRole("button", { name: "OK" }).click();
+        await panel.getByRole("button", { name: "Close Hotfix login" }).click({ timeout: 5000 });
+        await page.getByRole("dialog", { name: "Close this thread?" }).getByRole("button", { name: "Close thread" }).click({ timeout: 5000 });
+        await calledWith("node", "resolve", "awam", "t-0108", "--close-view");
+        await panel.getByRole("button", { name: "Replace coordinator" }).click({ timeout: 5000 });
+        const dialog = page.getByRole("dialog", { name: "Replace the coordinator?" });
+        await dialog.getByLabel("New one runs on").selectOption("claude");
+        await shoot(page, "replace-desktop");
+        await dialog.getByRole("button", { name: "Replace" }).click();
+        await calledWith("coordinator", "replace", "awam", "--profile=claude");
+        await page.waitForTimeout(500);
+        await shoot(page, "after-actions-desktop");
+      } catch (error) {
+        flowError ??= `desktop: ${(error as Error).message.split("\n")[0]}`;
+        await shoot(page, "failed-desktop");
+      }
+      await close();
+    }
+    {
+      const { page, close } = await open(browser, bridge, TALL_PHONE, coordinator, 'role=tab[name=/Threads/]');
+      await page.getByRole("tab", { name: /Threads/ }).click();
+      await page.locator('.project-overlay >> text="Panel depósito"').first().waitFor({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shoot(page, "threads-phone");
+      await history(page.locator(".project-overlay")).click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shoot(page, "threads-history-phone");
+      // A resolved node opens its detail inside Nenu, not its coordinator's chat.
+      try {
+        await page.locator(".project-overlay").getByRole("button", { name: /^Mergear PRs restantes Coordinator/ }).click({ timeout: 5000 });
+        await page.locator('main >> text="Coordinator under"').first().waitFor({ timeout: 5000 });
+        await page.waitForTimeout(300);
+        await shoot(page, "node-detail-phone");
+      } catch (error) {
+        flowError ??= `phone: ${(error as Error).message.split("\n")[0]}`;
+        await shoot(page, "failed-phone");
+      }
+      await close();
+    }
+    orgCalls = await bridge.orgCalls();
+  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
+
+  const writes = orgCalls.filter((argv) => argv[0] !== "overview" && argv[1] !== "list");
+  const result = { shots, flowError, orgWrites: writes };
+  await writeFile(join(outDir, "org.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (flowError) process.exit(1);
 }
 
 /**
@@ -425,10 +540,11 @@ async function compare(a: string, b: string): Promise<void> {
 const command = positionals[0];
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
+else if (command === "org") await org();
 else if (command === "tabs") await tabs();
 else if (command === "baseline") await baseline();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|tabs|baseline [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|tabs|baseline [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

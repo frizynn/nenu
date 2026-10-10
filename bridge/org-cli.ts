@@ -216,6 +216,20 @@ export async function openProject(run: OrgRun, socketPath: string, input: { proj
   return { message: first.slice(0, 300) };
 }
 
+/**
+ * `coordinator replace`: stop the project's running coordinator and start a new one on `profile`, in
+ * the session its record names or this Herdr session. Returns the CLI's line saying what it did.
+ */
+export async function replaceCoordinator(run: OrgRun, socketPath: string, input: { project: unknown; profile: unknown }): Promise<{ message: string }> {
+  const project = validateProjectSlug(input.project);
+  const profile = validateProfile(input.profile);
+  if (!profile) throw new OrgValidationError("Choose the agent the new coordinator runs on.");
+  const result = await run(["coordinator", "replace", project, `--profile=${profile}`], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
+  if (result.code !== 0) throw commandError(result);
+  const first = result.stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return { message: first.slice(0, 300) };
+}
+
 export async function resolveNode(
   run: OrgRun,
   socketPath: string,
