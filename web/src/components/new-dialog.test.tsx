@@ -65,6 +65,7 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", request = {} }:
     children: [
       { path: "pane/:paneId", element: <p>Pane page</p> },
       { path: "project/:projectSlug", element: <p>Project page</p> },
+      { path: "space/:spaceId", element: <p>Space page</p> },
     ],
   }], { initialEntries: [entry] });
   render(<RouterProvider router={router} />);
@@ -122,12 +123,14 @@ it("starts a thread in the project on screen, straight away on a desk", async ()
   expect(posts["/api/org/node/start"]).toEqual([{ project: "awam", template: "worker", title: "Filters", parent: "t-1", task: "Add a depot filter." }]);
 });
 
-it("makes the scratch workspace on ~ for the first quick chat, then reuses it", async () => {
+it("makes the scratch workspace on the bridge's home for the first quick chat, then reuses it", async () => {
+  localStorage.setItem("collie.spawn.dirs", JSON.stringify([`${HOME}/code/awam`]));
   const first = setup({ request: { kind: "chat" } });
   await first.user.type(await screen.findByLabelText("Message"), "what is 2+2");
-  await waitFor(() => expect(screen.getByRole("button", { name: "Start chat" })).toBeEnabled());
   await first.user.click(screen.getByRole("button", { name: "Start chat" }));
-  await waitFor(() => expect(posts["/api/workspace"]).toEqual([{ label: "scratch", cwd: HOME }]));
+  // No cwd: the bridge puts a new workspace on its home, and ~ never becomes the last folder picked.
+  await waitFor(() => expect(posts["/api/workspace"]).toEqual([{ label: "scratch" }]));
+  expect(JSON.parse(localStorage.getItem("collie.spawn.dirs")!)).toEqual([`${HOME}/code/awam`]);
   first.router.dispose();
   document.body.innerHTML = "";
 
@@ -135,7 +138,15 @@ it("makes the scratch workspace on ~ for the first quick chat, then reuses it", 
   const second = setup({ data: { ...base, workspaces: [...base.workspaces, scratch] }, request: { kind: "chat" } });
   expect(await screen.findByText(/Opens in the/)).toHaveTextContent("Opens in the scratch workspace on ~.");
   await second.user.click(screen.getByRole("button", { name: "Start chat" }));
-  await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w:5", cwd: HOME }]));
+  await waitFor(() => expect(posts["/api/tab"]).toEqual([{ workspaceId: "w:5" }]));
+});
+
+it("opens on Tab on a desk when nothing on screen belongs to a project, and shows the project a thread would use", async () => {
+  desktop();
+  const { user } = setup({ entry: "/space/w%3A1?s=work" });
+  expect(await screen.findByRole("heading", { name: "New tab" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^Thread/ }));
+  expect(await screen.findByLabelText("Project")).toHaveValue("awam");
 });
 
 it("points a thread at a new project when there is none", async () => {
@@ -160,7 +171,8 @@ describe("projectCommand", () => {
 describe("newContext", () => {
   it("takes the workspace and project of the pane, space or project on screen", () => {
     expect(newContext(base, { paneId: "w:2:p1" })).toEqual({ workspaceId: "w:2", project: "awam" });
-    expect(newContext(base, { spaceId: "w:1" })).toEqual({ workspaceId: "w:1", project: "awam" });
+    expect(newContext(base, { spaceId: "w:1" })).toEqual({ workspaceId: "w:1", project: undefined });
+    expect(newContext(base, {})).toEqual({ workspaceId: "w:1", project: undefined });
     expect(newContext(base, { projectSlug: "awam" })).toEqual({ workspaceId: "w:2", project: "awam" });
   });
 });

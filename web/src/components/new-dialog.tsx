@@ -57,7 +57,7 @@ export function newContext(data: HomeData | undefined, params: { paneId?: string
     project?.workspaceIds?.find((id) => workspaces.some((w) => w.workspaceId === id)) ??
     workspaces.find((w) => w.focused)?.workspaceId ??
     workspaces[0]?.workspaceId;
-  return { workspaceId, project: project?.slug ?? projects[0]?.slug };
+  return { workspaceId, project: project?.slug };
 }
 
 /** A shell-quoted word, so the preview line pastes into a terminal as the same argv. */
@@ -77,7 +77,7 @@ export default function NewDialog({ request, onClose }: { request: NewRequest; o
   const params = useParams();
   const [context] = useState(() => newContext(data, params));
   const [workspaceId, setWorkspaceId] = useState(context.workspaceId);
-  const [project, setProject] = useState(context.project);
+  const [project, setProject] = useState(context.project ?? data?.projects?.[0]?.slug);
   const [kind, setKind] = useState<NewKind | null>(() => {
     if (request.kind) return request.kind;
     const desktop = typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
@@ -139,7 +139,7 @@ export default function NewDialog({ request, onClose }: { request: NewRequest; o
             </button>
           ))}
           <p className="mt-auto hidden p-2.5 text-xs leading-relaxed text-muted-foreground lg:block">
-            Nenu only asks Herdr for this. Projects, threads and memory live in <code className="text-[11px]">~/.herdr-projects</code>.
+            Nenu only asks Herdr for this. Projects, threads and memory live in Herdr Organizations.
           </p>
         </nav>
 
@@ -231,13 +231,11 @@ function ThreadPane({ projects, project, onProject, readOnly, session, onDone, o
   }
   return (
     <div className="flex flex-col">
-      {projects.length > 1 && (
-        <Field label="Project">
-          <select className={selectField} value={current.slug} onChange={(e) => onProject(e.currentTarget.value)}>
-            {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
-          </select>
-        </Field>
-      )}
+      <Field label="Project">
+        <select className={selectField} value={current.slug} onChange={(e) => onProject(e.currentTarget.value)}>
+          {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+        </select>
+      </Field>
       {load.kind === "loading" && <p className="py-3 text-sm text-muted-foreground">Loading templates…</p>}
       {load.kind === "error" && <p role="alert" className="py-3 text-sm text-destructive">{load.message}</p>}
       {load.kind === "ready" && load.templates.length === 0 && <NoTemplates />}
@@ -406,7 +404,6 @@ function QuickChatPane({ data, readOnly, onDone }: { data: HomeData | undefined;
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const home = useHome();
   const spawnInto = useSpawnInto(onDone);
   const scratch = data?.workspaces.find((w) => w.label.toLowerCase() === SCRATCH);
 
@@ -414,9 +411,11 @@ function QuickChatPane({ data, readOnly, onDone }: { data: HomeData | undefined;
     if (busy || readOnly) return;
     setBusy(true);
     setError(null);
-    // The scratch workspace is made once, on ~, and every later quick chat is a tab in it.
+    // The scratch workspace is made once, and every later quick chat is a tab in it. No cwd: the
+    // bridge creates a workspace on the home folder and a tab inherits its workspace's folder, and
+    // spawn() would otherwise record ~ as the last folder picked.
     const target: SpawnTarget = scratch ? { kind: "tab", workspaceId: scratch.workspaceId } : { kind: "workspace" };
-    const failure = await spawnInto(target, { agent, cwd: home, name: scratch ? "" : SCRATCH, message, permission: loadPermission(agent) });
+    const failure = await spawnInto(target, { agent, cwd: "", name: scratch ? "" : SCRATCH, message, permission: loadPermission(agent) });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
