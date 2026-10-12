@@ -39,8 +39,7 @@ it("lets a finger reach the PR number's link at 44 px", () => {
 
 // The checkbox is 16px; its label is the row a finger hits, and on a touch screen that row is 44px.
 it("lets a finger reach each automation toggle at 44 px", async () => {
-  render(<PrBar project={project(true)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
-  await userEvent.click(screen.getByRole("button", { name: "CI 4/6, checks" }));
+  render(<PrChecks project={project(true)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
   for (const name of ["Auto-fix CI & address comments", "Auto-merge when ready"]) {
     expect(screen.getByRole("checkbox", { name }).closest("label")).toHaveClass("coarse:min-h-11");
   }
