@@ -20,6 +20,7 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, STATE_LABEL, awaits, coordinatorState, flatten, orgTree, type OrgNode } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
@@ -93,8 +94,8 @@ function NodePage() {
     </>;
   } else if (!node) {
     body = <EmptyState icon={ChatCircleSlash} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
-      <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open project</Link>
-      <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
+      <Link to={projectPath(project.slug, data.session)} className={cn(buttonVariants({ size: "lg" }))}>Open project</Link>
+      <Link to={homePath(data.session)} className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>Go to Home</Link>
     </div>}>{project.name} no longer lists it.</EmptyState>;
   } else {
     const { thread, state } = node;

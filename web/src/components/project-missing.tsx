@@ -5,6 +5,7 @@ import { FolderX, Pending } from "@/components/ui/icon";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { homePath } from "@/lib/nav";
+import { cn } from "@/lib/utils";
 
 /** How long Check again shows its work at least: a read that answers within a frame looked like a dead button. */
 const CHECK_SHOWN_MS = 400;
@@ -24,7 +25,7 @@ export function ProjectMissing({ session }: { session?: string }) {
   }
   return (
     <EmptyState icon={FolderX} title="Project not found" action={<div className="flex flex-wrap justify-center gap-3">
-      <Link to={homePath(session)} className={buttonVariants({ size: "lg" })}>Go to Home</Link>
+      <Link to={homePath(session)} className={cn(buttonVariants({ size: "lg" }))}>Go to Home</Link>
       <Button type="button" variant="outline" size="lg" disabled={checking} aria-busy={checking || undefined} onClick={() => void check()}>
         {checking && <Pending aria-hidden className="size-4" />}{checking ? "Checking…" : "Check again"}
       </Button>
