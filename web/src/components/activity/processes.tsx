@@ -55,10 +55,10 @@ function taskSummary(task: ActivityTask, now: number): string {
 function rowSummary(item: ProcessItem, now: number): ReactNode {
   if (item.kind === "workflow") {
     const wf = item.workflow;
-    return <Meta className="text-caption" items={[`${wf.doneCount}/${wf.agentCount}`, workflowElapsed(wf, now)]} />;
+    return <Meta className="text-footnote" items={[`${wf.doneCount}/${wf.agentCount}`, workflowElapsed(wf, now)]} />;
   }
-  if (item.kind === "task") return <Meta className="text-caption" items={[taskSummary(item.task, now)]} />;
-  return <Meta className="text-caption" items={[STATE_LABEL[item.state], item.at !== undefined ? formatClock(item.at) : ""]} />;
+  if (item.kind === "task") return <Meta className="text-footnote" items={[taskSummary(item.task, now)]} />;
+  return <Meta className="text-footnote" items={[STATE_LABEL[item.state], item.at !== undefined ? formatClock(item.at) : ""]} />;
 }
 
 function ProcessRow({ item, now, onDetail, onOpenSubagent }: {

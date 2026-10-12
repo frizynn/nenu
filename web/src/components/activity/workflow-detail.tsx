@@ -19,7 +19,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-lg font-semibold tabular-nums tracking-tight">{value}</span>
-      <span className="text-caption text-muted-foreground">{label}</span>
+      <span className="text-footnote text-muted-foreground">{label}</span>
     </div>
   );
 }

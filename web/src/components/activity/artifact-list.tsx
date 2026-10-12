@@ -20,7 +20,7 @@ export function ArtifactRow({ artifact, className }: { artifact: ActivityArtifac
       </span>
       <span className="flex min-w-0 flex-1 flex-col leading-snug">
         <span className="truncate text-footnote text-foreground">{artifact.title}</span>
-        <span className="truncate text-caption text-muted-foreground">
+        <span className="truncate text-footnote text-muted-foreground">
           claude.ai artifact · opens in claude.ai{artifact.at !== undefined ? ` · ${formatClock(artifact.at)}` : ""}
         </span>
       </span>

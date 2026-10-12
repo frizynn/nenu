@@ -18,7 +18,7 @@ export function TaskOutput({ paneId, session, taskId }: { paneId: string; sessio
   if (!output) return <p role="status" className="text-xs text-muted-foreground">Loading output…</p>;
   return (
     <div className="flex flex-col gap-1.5">
-      {output.truncated && <span className="text-caption text-muted-foreground">Showing the newest output only.</span>}
+      {output.truncated && <span className="text-footnote text-muted-foreground">Showing the newest output only.</span>}
       <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-xs leading-relaxed">
         {output.text || "(no output)"}
       </pre>

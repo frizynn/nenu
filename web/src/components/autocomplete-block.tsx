@@ -38,7 +38,7 @@ export function AutocompleteBlock({ autocomplete }: AutocompleteBlockProps) {
           >
             <span className="font-mono text-code font-medium text-foreground">{entry.name}</span>
             {entry.description !== "" && (
-              <span className="font-content line-clamp-2 text-caption text-muted-foreground">
+              <span className="font-content line-clamp-2 text-footnote text-muted-foreground">
                 {entry.description}
               </span>
             )}

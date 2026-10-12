@@ -95,8 +95,8 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
           {flag("autoFixCi", "Auto-fix CI & address comments")}
           {flag("autoMerge", "Auto-merge when ready")}
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-          <p className="mt-1 text-caption leading-snug text-muted-foreground">The Herdr Organizations ticker does this even while Nenu is closed.</p>
-        </div> : pr.state === "open" && <p className="mt-2 text-caption text-muted-foreground">This Organizations build has no PR actions, so the checks are read-only.</p>}
+          <p className="mt-1 text-footnote leading-snug text-muted-foreground">The Herdr Organizations ticker does this even while Nenu is closed.</p>
+        </div> : pr.state === "open" && <p className="mt-2 text-footnote text-muted-foreground">This Organizations build has no PR actions, so the checks are read-only.</p>}
       </div>
     </section>
   );
