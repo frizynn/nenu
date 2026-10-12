@@ -199,5 +199,5 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-pane { min-height: 52px; padding-block: 6px; }
   .nav-ws-body .nav-pane { min-height: 44px; }
   .nav-pane-title { font-size: var(--text-body); }
-  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-row-word { font-size: var(--text-footnote); }
+  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-row-word, .nav-host-meta { font-size: var(--text-footnote); }
 }
