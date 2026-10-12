@@ -1383,6 +1383,47 @@ describe("AgentChat — why the composer is locked", () => {
     expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 
+  // Before the banner, a draft hides the box's reason and Send sits disabled: one quiet line above
+  // the box names the outage instead, and only one surface names it at a time.
+  it("names Herdr's outage once, above a typed draft, until the banner takes it over", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
+      expect(screen.queryByText(/Herdr isn.t responding/)).not.toBeInTheDocument();
+      const box = screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.");
+      fireEvent.change(box, { target: { value: "keep this for later" } });
+      expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding. Drafts are kept.")).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+      fireEvent.change(box, { target: { value: "" } });
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A read-only device's box and card say read-only, which is the lock that holds, so the outage
+  // needs its own line there until the banner names it.
+  it("names Herdr's outage once on a device that cannot write, until the banner takes it over", () => {
+    vi.useFakeTimers();
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } }, undefined, { banner: true });
+      expect(screen.getByPlaceholderText("Read-only — device not authorised")).toBeDisabled();
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the pane's place under the title on a device that cannot write, too", () => {
     renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
     expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();

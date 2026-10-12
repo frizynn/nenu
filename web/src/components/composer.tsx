@@ -130,6 +130,9 @@ interface ComposerProps {
   /** A question card on screen already says why answers are paused, so the box only says what it
    *  keeps: an outage is named once, by the banner once it is up, else by the card, else here. */
   lockOnCard?: boolean;
+  /** Herdr itself isn't answering, whatever lock holds: a read-only device has an outage too. Until
+   *  the banner or the card names it, the box does, in its placeholder or in one line above it. */
+  herdrDown?: boolean;
   modelControl?: ReactNode;
   /** Where the session runs (branch, machine), beside the model in the row under the draft. */
   place?: ReactNode;
@@ -326,7 +329,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -342,10 +345,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // or funnelled through `pressKeys`, which is synchronous with its own check.
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
-  // Whether the connection banner is on screen (one shared store, as the card reads it): while it is
-  // up, it is the one surface that names the outage.
-  const herdrDown = disconnected && lockReason === "herdr";
-  const outageNamed = useOutageNoticeShown() || lockOnCard;
+  // Herdr's outage is named by one surface at a time: the banner while it is on screen (one shared
+  // store, as the card reads it), else a card whose lock is the outage, else this box.
+  const bannerUp = useOutageNoticeShown();
+  const herdrLock = disconnected && lockReason === "herdr";
+  const outageUnnamed = herdrDown && !bannerUp && !(lockOnCard && herdrLock);
 
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
@@ -1409,6 +1413,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Derived at render rather than pushed through setStatus, because this is a CONDITION that
             lasts as long as the text does, and a status auto-clears in 2.5s and would re-fire on
             every keystroke. Self-clearing: trim the draft or send it and the row is simply gone. */}
+        {/* The box names the outage in its placeholder until a draft hides it, and a read-only lock
+            names itself there instead; either way, while nothing else names the outage, it gets this
+            line, or Send sits disabled with nothing saying why. */}
+        {outageUnnamed && (lockedOut || !herdrLock || input !== "") && (
+          <p className="px-1 pb-1 text-footnote text-muted-foreground">
+            {lockedOut || !herdrLock ? "Herdr isn't responding." : "Herdr isn't responding. Drafts are kept."}
+          </p>
+        )}
         {!direct.active && !fitsDraftStore(input) && (
           <p className="px-1 pb-1 text-footnote text-muted-foreground">
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
@@ -1531,7 +1543,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   : readOnly
                     ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? !herdrDown ? "Write a draft while reconnecting…" : outageNamed ? "Drafts are kept." : "Herdr isn't responding. Drafts are kept."
+                      ? !herdrLock ? "Write a draft while reconnecting…" : outageUnnamed ? "Herdr isn't responding. Drafts are kept." : "Drafts are kept."
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell
