@@ -59,7 +59,7 @@ export function LocalModelPicker({ rows, currentModel, currentLabel, disabled, o
 
   return (
     <div className="local-model-picker min-w-0 text-popover-foreground" aria-busy={applying !== null}>
-      <div role="menu" aria-label="Available models" className="p-1.5">
+      <div role="menu" aria-label="Available models" className="p-1.5 max-lg:px-1">
         {rows.map((row, index) => {
           const detail = row.name === current && currentLabel && currentLabel !== row.name ? currentLabel : row.description;
           return (

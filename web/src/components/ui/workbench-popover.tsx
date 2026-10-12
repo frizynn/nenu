@@ -15,10 +15,26 @@ interface WorkbenchPopoverProps {
   className?: string;
   /** On a touch screen, Back closes it (a sheet a phone expects to leave that way). */
   phoneBack?: boolean;
+  /** Below the desk, draw it as a bottom sheet (see PHONE_SHEET). */
+  sheetBelowDesk?: boolean;
 }
 
+// Below the desk breakpoint a `sheetBelowDesk` popover is a bottom sheet rather than a card floating
+// over the thread and the composer: full width, pinned to the bottom edge above the home indicator,
+// rising from it on the drawer curve a phone's own sheets use. It stays the same nonmodal popover
+// underneath (outside tap, Escape, ✕ and, with `phoneBack`, a phone's Back dismiss it, and opening it
+// never takes the composer's focus), so only the placement changes, with a sheet's title.
+// The popover positions itself with inline left/top/bottom from its anchor; the important utilities
+// are what lets a class win over that inline placement on a phone. The body there is full bleed: its
+// rows own the 16px gutter, so they start where the sheet's title does.
+const PHONE_SHEET = [
+  "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
+  "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
+  "max-lg:duration-300 max-lg:ease-[cubic-bezier(0.32,0.72,0,1)] max-lg:animate-in max-lg:slide-in-from-bottom motion-reduce:animate-none",
+].join(" ");
+
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
-export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false }: WorkbenchPopoverProps) {
+export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false, sheetBelowDesk = false }: WorkbenchPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
   const dismissRef = useRef(onDismiss);
@@ -112,9 +128,9 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
 
   if (!open) return null;
   return (
-    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", className)}>
-      <PanelHeader title={label} onClose={() => dismiss("close")} />
-      <div className="max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4" style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
+    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET, className)}>
+      <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} />
+      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
     </div>
   );
 }
