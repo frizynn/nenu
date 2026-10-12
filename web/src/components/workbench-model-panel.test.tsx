@@ -34,7 +34,7 @@ it("applies with one tap, marks the model that runs with its version, and keeps 
   expect(handlers.onApply).toHaveBeenCalledExactlyOnceWith("Sonnet");
   expect(handlers.onApplyError).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("alert")).toHaveTextContent("The picker changed");
-  expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Model" })).toBeInTheDocument();
   await userEvent.click(screen.getByRole("menuitemradio", { name: "Sonnet" }));
   expect(handlers.onApply).toHaveBeenCalledTimes(2);
   expect(handlers.onDismiss).not.toHaveBeenCalled();

@@ -80,9 +80,21 @@ it("lets the parent own model toggling and one active inspection panel", async (
   expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
 });
 
+// A bare "Model" read as a caption for nothing: with no model known the chip says what a tap does, and
+// where a tap can do nothing either (no picker) there is no chip until the agent reports one.
+it("says Choose model while no model is known, and draws no chip where there is nothing to choose", () => {
+  const { rerender } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent(/^Choose model$/);
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable disabled onChooseModel={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent(/^Choose model$/);
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "gpt-5.5" }} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
+});
+
 it("names the model and effort as quiet labels in one picker button", () => {
   const { rerender } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} />);
-  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent("Model");
   rerender(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "claude-opus-4-1", effort: "high" }} />);
   const chip = screen.getByRole("button", { name: "Choose model" });
   expect(chip).toHaveTextContent(/Opus.*high/);

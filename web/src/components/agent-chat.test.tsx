@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
-import { __resetConnectionHealth } from "@/lib/connection-health";
+import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
 
 // Mock the race guard at AgentChat's seam so the frozen-revision tests can observe exactly what
 // `detectedRevision` the tap handler passes (the guard's own behaviour is covered in
@@ -173,9 +173,14 @@ describe("AgentChat — header title block", () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it("says under the title that Herdr isn't responding as soon as Herdr reports disconnected", () => {
+  // The outage is named by the banner, or before it by the card or the composer; the header keeps
+  // saying where the pane lives, so the screen never names the same outage twice.
+  it("keeps the pane's place under the title while Herdr isn't responding", () => {
     renderChat({ agent: named, agents: [named], bridge: "disconnected" });
-    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("webapp")).toBeInTheDocument();
+    expect(within(header).getByText("review")).toBeInTheDocument();
+    expect(within(header).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 
   it("keeps the folder one tap away in the ⋯ menu", async () => {
@@ -892,7 +897,7 @@ describe("AgentChat — native workbench interactions", () => {
     const menu = readFileSync("src/lib/harness/codex/fixtures/model-picker.txt", "utf8");
     renderChat({ paneId: agent.paneId, agent, agents: [agent], text: `Old terminal output that must not become the conversation\n${menu}` });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Model picker" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Model" })).toBeVisible();
     // The chip stays in the input row as the picker's anchor.
     expect(screen.getByRole("button", { name: "Choose model" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeVisible();
@@ -902,7 +907,7 @@ describe("AgentChat — native workbench interactions", () => {
     const input = screen.getByRole("textbox");
     await userEvent.type(input, "My next message");
     expect(input).toHaveValue("My next message");
-    expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
     expect(dismissModelPicker).toHaveBeenCalledWith(expect.objectContaining({ paneId: agent.paneId, agent: "codex" }));
   });
 });
@@ -928,8 +933,8 @@ it("preloads once and opens and closes models without terminal requests", async 
   const option = await screen.findByRole("menuitemradio", { name: "gpt-5.6-sol" });
   expect(option).toBeEnabled();
   expect(writes).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Close model picker" }));
-  expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close Model" }));
+  expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeEnabled();
   expect(catalogs).toBe(1);
@@ -966,7 +971,7 @@ it("waits for reasoning selection and confirmation repaints before enabling the 
   expect(screen.queryByText("Model settings applied")).not.toBeInTheDocument();
   text = idle;
   await screen.findByText("Model settings applied");
-  expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
   expect(dismissModelPicker).not.toHaveBeenCalled();
   expect(writes).toEqual([["Down", "Down"], ["Enter"]]);
 });
@@ -1326,9 +1331,39 @@ describe("AgentChat — why the composer is locked", () => {
     expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
   });
 
-  it("says under the title that Herdr isn't responding on a device that cannot write, too", () => {
+  // Once the outage is sustained the connection banner names it, so the box only says what it keeps.
+  it("leaves naming a sustained Herdr outage to the banner", () => {
+    vi.useFakeTimers();
+    try {
+      renderChat({ bridge: "disconnected" });
+      expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Before the banner, a question card on screen is the one place that says why answers stopped.
+  it("leaves naming Herdr's outage to the question card when one is on screen", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8"), bridge: "disconnected" });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    expect(screen.getByPlaceholderText("Drafts are kept.")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the pane's place under the title on a device that cannot write, too", () => {
     renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
-    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 });
 

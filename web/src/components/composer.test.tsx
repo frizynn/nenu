@@ -1936,7 +1936,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     await user.click(control("Quick replies"));
     expect(screen.getByRole("button", { name: "yes" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close Quick" }));
+    await user.click(screen.getByRole("button", { name: "Close Quick replies" }));
     expect(screen.queryByRole("button", { name: "yes" })).not.toBeInTheDocument();
   });
 
@@ -2674,6 +2674,8 @@ describe("Composer — placeholder", () => {
     ["access was refused", { readOnly: true, lockReason: "refused" }, "Sign in again to reply", true],
     ["the device is read-only", { readOnly: true, lockReason: "read-only" }, "Read-only — device not authorised", true],
     ["Herdr isn't responding", { disconnected: true, lockReason: "herdr" }, "Herdr isn't responding. Drafts are kept.", false],
+    // A question card on screen already says it; the screen names the outage once.
+    ["Herdr isn't responding and the card says so", { disconnected: true, lockReason: "herdr", lockOnCard: true }, "Drafts are kept.", false],
     ["Nenu is reconnecting", { disconnected: true, lockReason: "offline" }, "Write a draft while reconnecting…", false],
     ["the pane is gone", { gone: true, lockReason: "herdr" }, "Pane is gone", true],
   ] as const)("names the real reason when %s", (_name, props, placeholder, disabled) => {
