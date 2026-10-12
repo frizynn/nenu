@@ -25,7 +25,7 @@ import { DisplayPrefsContent } from "@/components/display-prefs";
 import { ListRow, ListSection } from "@/components/ui/list-group";
 import { Switch } from "@/components/ui/switch";
 import { PanelHeader } from "@/components/ui/panel-header";
-import { DIALOG_CARD, OptionButton, OptionList, QuestionHeading, SECONDARY_ACTION, SecondaryActions } from "@/components/option-button";
+import { OptionButton, OptionList, SECONDARY_ACTION } from "@/components/option-button";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -222,26 +222,23 @@ function ComposerDock({
 }
 
 /**
- * The send-time choice for a busy agent, drawn as every card is: who is working and the question,
- * the shared option list, and Cancel as the quiet escape. It sits on the cards' column, the page
- * gutter, rather than the box's bleed. The wording is the CLI's own measured behaviour, so "now"
- * never promises more than the CLI does (ADR 0056: asked at every send, never remembered).
+ * The send-time choice for a busy agent: the question, then the cards' own option list and Cancel as
+ * their quiet escape, as Home's sheet draws the same choice. No card around it: with the keyboard up
+ * a frame and a headline cost the thread its last lines. It sits on the page gutter, where the
+ * cards' lists do, rather than the box's bleed. The wording is the CLI's own measured behaviour, so
+ * "now" never promises more than the CLI does (ADR 0056: asked at every send, never remembered).
  */
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
   return (
-    <div role="group" aria-label={`${choice.name} is working`} className={cn(DIALOG_CARD, "mb-2 max-lg:mx-2")}>
-      <p className="flex items-center gap-2 text-footnote font-medium text-foreground">
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-working" />
-        {choice.name} is working
-      </p>
-      <QuestionHeading>When should it read this?</QuestionHeading>
-      <OptionList>
+    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 flex flex-col gap-2 max-lg:mx-2">
+      <p className="text-footnote text-pretty text-muted-foreground">{choice.name} is working. When should it read this?</p>
+      <OptionList className="bg-card">
         <OptionButton label="Send now" description={choice.nowHint} onClick={() => onPick(choice.now)} />
         <OptionButton label="Queue for later" description={choice.laterHint} onClick={() => onPick("afterTurn")} />
       </OptionList>
-      <SecondaryActions>
+      <div className="-mx-2 flex">
         <button type="button" className={SECONDARY_ACTION} onClick={onCancel}>Cancel</button>
-      </SecondaryActions>
+      </div>
     </div>
   );
 }
