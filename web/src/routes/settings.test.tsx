@@ -45,6 +45,8 @@ describe("push on a device whose browser has no Push API", () => {
   it.each([
     ["an iPhone's Safari tab", { ua: IPHONE, platform: "iPhone", touch: 5, standalone: false }, "Add Nenu to your Home Screen to get notifications."],
     ["an iPad's Safari tab, which asks for the desktop site", { ua: MAC, platform: "MacIntel", touch: 5, standalone: false }, "Add Nenu to your Home Screen to get notifications."],
+    // The UA names an iPhone outright; touch only tells an iPad's desktop UA from a Mac's.
+    ["an iPhone tab that reports no touch points, as an emulator does", { ua: IPHONE, platform: "MacIntel", touch: 0, standalone: false }, "Add Nenu to your Home Screen to get notifications."],
     ["Nenu opened from an iPhone's Home Screen on an iOS without Web Push", { ua: IPHONE, platform: "iPhone", touch: 5, standalone: true }, "This browser doesn't support push notifications."],
     ["a desktop browser", { ua: MAC, platform: "MacIntel", touch: 0, standalone: false }, "This browser doesn't support push notifications."],
   ] as const)("says what to do on %s", async (_name, props, note) => {
