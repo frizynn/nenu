@@ -21,10 +21,9 @@ interface TerminalDraftPreviewProps {
 // glitch the phone's field because nothing here feeds back into it. There is no dismiss: the preview is
 // honest state — a draft really is stranded on the host's line — so it persists until the user takes it
 // over, sends a message (which sweeps the host line), or the host line clears on its own. Same muted
-// chip as the composer's "You sent:" strip, in its footnote step; the draft body reads in that step too,
-// so a short command stays on one line under its label, and clamps to a few readable lines. Take over is
-// withdrawn (not disabled-looking, just absent) when the line is only the harness's own paste
-// placeholder — see `onTakeOver`.
+// chip as the composer's "You sent:" strip, in its footnote step; the draft body reads in that step too
+// and clamps to a few readable lines. Take over is withdrawn (not disabled-looking, just absent) when the
+// line is only the harness's own paste placeholder — see `onTakeOver`.
 export function TerminalDraftPreview({ text, onTakeOver }: TerminalDraftPreviewProps) {
   return (
     <div className="mb-2 flex items-start gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-footnote text-muted-foreground">
