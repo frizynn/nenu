@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
-import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
+import { __resetConnectionHealth, CONNECTION_LOST_MS, markLive } from "@/lib/connection-health";
 
 // Mock the race guard at AgentChat's seam so the frozen-revision tests can observe exactly what
 // `detectedRevision` the tap handler passes (the guard's own behaviour is covered in
@@ -27,6 +27,7 @@ import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
 import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
 import { AgentChat } from "./agent-chat";
+import { ConnectionBanner } from "./connection-banner";
 import { StatusArea } from "./status-area";
 
 it.each(["codex", "claude"])("recovers %s history without a SessionStart hook", async (kind) => {
@@ -70,7 +71,7 @@ async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name }));
 }
 
-function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation) {
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation, { banner = false } = {}) {
   const agent = fixtureAgents[0]!; // a blocked claude agent
   const props: ComponentProps<typeof AgentChat> = {
     paneId: agent.paneId,
@@ -83,8 +84,10 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, n
     onSelect: vi.fn(),
     ...overrides,
   };
-  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar.
-  const element = <><AgentChat {...props} /><StatusArea /></>;
+  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar. The
+  // outage notice sits above it, as RootLayout mounts it, where a case is about who names an outage.
+  const notice = banner && <ConnectionBanner bridge={props.bridge ?? "connected"} error={props.error ?? false} authError={props.authError ?? false} />;
+  const element = <>{notice}<AgentChat {...props} /><StatusArea /></>;
   const router = createMemoryRouter([{ path: "/pane/:paneId", element: navigation ? <WorkbenchNavigationContext value={navigation}>{element}</WorkbenchNavigationContext> : element }],
     { initialEntries: [`/pane/${encodeURIComponent(props.paneId)}`] });
   render(<RouterProvider router={router} />);
@@ -1335,9 +1338,28 @@ describe("AgentChat — why the composer is locked", () => {
   it("leaves naming a sustained Herdr outage to the banner", () => {
     vi.useFakeTimers();
     try {
-      renderChat({ bridge: "disconnected" });
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
       expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
       act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+      expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A pane read that answers stamps the connection live while the snapshot still says Herdr is down.
+  // The banner stays up until the snapshot recovers, so the box must keep leaving the outage to it.
+  it("keeps leaving the outage to the banner while a live pane read leaves the banner up", () => {
+    vi.useFakeTimers();
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      act(() => { markLive(); vi.advanceTimersByTime(1_000); });
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
       expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
       expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
     } finally {

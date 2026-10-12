@@ -8,7 +8,7 @@ import {
   SecondaryActions, WaitingOnYou,
 } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
-import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useOutageNoticeShown } from "@/lib/connection-health";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
@@ -66,9 +66,9 @@ export function lockReasonOf(s: { readOnly: boolean; error: boolean; authError: 
 
 /** Why answers are paused, in the card's words; null when they are not. Home's row says the same. */
 export function useLockLine(lockReason: LockReason | undefined, readOnly = false): string | null {
-  // The banner's own reading of the same outage (one shared store), so the card and the banner agree.
+  // Whether the banner is on screen (one shared store), so the card and the banner agree.
   const outage = lockReason === "offline" || lockReason === "herdr";
-  const bannerUp = useConnectionLost(outage);
+  const bannerUp = useOutageNoticeShown();
   if (lockReason) return outage && bannerUp ? PAUSED_UNDER_BANNER : LOCK_COPY[lockReason];
   return readOnly ? "Answers are paused right now." : null;
 }

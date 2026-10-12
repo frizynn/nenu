@@ -1,6 +1,6 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
-import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useOutageNoticeShown } from "@/lib/connection-health";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
@@ -342,10 +342,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // or funnelled through `pressKeys`, which is synchronous with its own check.
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
-  // The connection banner's own reading of a Herdr outage (one shared store, as the card reads it):
-  // once it is up, it is the one surface that names the outage.
+  // Whether the connection banner is on screen (one shared store, as the card reads it): while it is
+  // up, it is the one surface that names the outage.
   const herdrDown = disconnected && lockReason === "herdr";
-  const outageNamed = useConnectionLost(herdrDown) || lockOnCard;
+  const outageNamed = useOutageNoticeShown() || lockOnCard;
 
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
