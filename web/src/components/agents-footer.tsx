@@ -46,9 +46,9 @@ export function AgentsFooter({ rows }: { rows: StyledLine[] }) {
   return (
     <div
       className={cn(
-        "border-t border-border/40 px-3 py-1 font-mono text-[11px] leading-tight",
+        "border-t border-border/40 px-3 py-1 font-mono text-code leading-tight",
         // Terminal colour, so the mirror's dark space and its light-theme inversion (ADR 0002), as the
-        // statusline strip does.
+        // statusline strip does. Its rows are the terminal's own text, so they take the code step.
         MIRROR_SPACE,
         MIRROR_INVERT,
       )}
