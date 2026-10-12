@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { X } from "@/components/ui/icon";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { cn } from "@/lib/utils";
 
 export type WorkbenchDismissReason = "outside" | "escape" | "close" | "back";
@@ -113,12 +113,7 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
   if (!open) return null;
   return (
     <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", className)}>
-      <div className="flex items-center gap-3 border-b border-border py-1 pl-4 pr-1">
-        <h3 className="min-w-0 flex-1 text-sm font-medium">{label}</h3>
-        <button type="button" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring" aria-label={`Close ${label.toLocaleLowerCase()}`} onClick={() => dismiss("close")}>
-          <X aria-hidden="true" className="size-4" />
-        </button>
-      </div>
+      <PanelHeader title={label} onClose={() => dismiss("close")} />
       <div className="max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4" style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
     </div>
   );

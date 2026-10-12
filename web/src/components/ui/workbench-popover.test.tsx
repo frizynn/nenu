@@ -52,7 +52,7 @@ it("closes on Escape and X and restores the trigger only from inside the panel",
   expect(dismiss).toHaveBeenCalledExactlyOnceWith("escape");
   expect(trigger).toHaveFocus();
   await userEvent.click(trigger);
-  await userEvent.click(screen.getByRole("button", { name: "Close inspector" }));
+  await userEvent.click(screen.getByRole("button", { name: "Close Inspector" }));
   expect(dismiss).toHaveBeenLastCalledWith("close");
   expect(dismiss).toHaveBeenCalledTimes(2);
   expect(trigger).toHaveFocus();

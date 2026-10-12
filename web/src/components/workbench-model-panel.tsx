@@ -83,7 +83,7 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
     });
   }
 
-  return <WorkbenchPopover open={open} anchorRef={anchorRef} label="Model picker" onDismiss={onDismiss} phoneBack
+  return <WorkbenchPopover open={open} anchorRef={anchorRef} label="Model" onDismiss={onDismiss} phoneBack
     className={`w-[min(28rem,calc(100vw-2rem))] ${PHONE_SHEET}`}>
     {parsed?.kind === "reasoning" || (advanced && modelPresent)
       ? <AnsiOutput text={text} nativeOnly agent={agent} onMenuAction={onMenuAction} promptDisabled={locked} />
