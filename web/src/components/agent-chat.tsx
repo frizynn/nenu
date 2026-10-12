@@ -1289,7 +1289,7 @@ export function AgentChat({
                     onClick={loadOlder}
                     disabled={loadingOlder}
                     aria-busy={loadingOlder || undefined}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-footnote font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:not-aria-busy:text-disabled-foreground coarse:min-h-11"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-footnote font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
                   >
                     {loadingOlder ? (
                       <Pending className="size-3.5" />
@@ -1489,7 +1489,7 @@ function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?
             <span className="mt-1.5 flex">{dot}</span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p role="status" className="text-subhead font-medium text-foreground">{agentName(agent)} is showing a screen Nenu can't answer</p>
-              <p className="truncate font-mono text-footnote text-muted-foreground">{hint}</p>
+              <p className="truncate font-mono text-code text-muted-foreground">{hint}</p>
             </div>
             <button type="button" aria-label="Collapse" aria-expanded onClick={() => setCollapsed(true)}
               className="-mt-3 -mr-3 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted">

@@ -38,6 +38,7 @@ const ON_SCALE = [
   "components/conversation-actions.tsx",
   "components/command-palette.tsx",
   "components/ui/workbench-popover.tsx",
+  "components/ui/panel-header.tsx",
   "components/workbench-model-panel.tsx",
   "components/local-model-picker.tsx",
   "components/workbench-telemetry.tsx",
