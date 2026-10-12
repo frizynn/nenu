@@ -38,7 +38,7 @@ export function TerminalDraftPreview({ text, onTakeOver }: TerminalDraftPreviewP
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 shrink-0 self-center px-2 text-xs font-medium"
+          className="hit-area h-6 shrink-0 self-center px-2 text-xs font-medium"
           onClick={onTakeOver}
         >
           Take over

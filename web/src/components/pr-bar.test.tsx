@@ -32,7 +32,7 @@ it("shows the PR and its checks, and toggles Organizations' automation", async (
 });
 
 it("lets a finger reach the PR number's link at 44 px", () => {
-  render(<PrBar project={project(true)} thread={{ ...thread, pr: { ...thread.pr!, url: "https://github.com/awam/hub/pull/1345" } }} readOnly={false} onChanged={vi.fn()} />);
+  render(<PrChecks project={project(true)} thread={{ ...thread, pr: { ...thread.pr!, url: "https://github.com/awam/hub/pull/1345" } }} readOnly={false} onChanged={vi.fn()} />);
   // A 38 px wide "#n" on the bench; the shared .hit-area gives it the touch floor.
   expect(screen.getByRole("link", { name: /^#\d+$/ })).toHaveClass("hit-area");
 });
