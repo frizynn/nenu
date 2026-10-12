@@ -110,6 +110,8 @@ function devicePush(state: PushState, on: boolean): DevicePush {
   return on ? "on" : "off";
 }
 
+const HOME_SCREEN = "Add Nenu to your Home Screen to get notifications.";
+
 function reasonText(reason: PushAvailability | undefined): string {
   switch (reason) {
     case "insecure":
@@ -120,6 +122,8 @@ function reasonText(reason: PushAvailability | undefined): string {
       return "Notifications are blocked. Allow them in your browser settings.";
     case "unsupported":
       return "This browser doesn't support push notifications.";
+    case "home-screen":
+      return HOME_SCREEN;
     default:
       return "Couldn't enable push notifications.";
   }
@@ -135,6 +139,8 @@ function availabilityNote(a: PushAvailability): string {
       return "Blocked. Allow notifications in your browser settings.";
     case "unsupported":
       return "This browser doesn't support push notifications.";
+    case "home-screen":
+      return HOME_SCREEN;
     case "ready":
       return "";
   }

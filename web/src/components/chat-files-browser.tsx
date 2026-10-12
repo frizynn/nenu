@@ -5,6 +5,7 @@ import { FileText, Image, Loader2, Paperclip, RefreshCw } from "lucide-react";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { SelectField } from "@/components/ui/select-field";
 import { SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
 import { fetchHistory, paneFileUrl } from "@/lib/api";
 import { chatFileReferences, fileExtension, artifactKind, type ChatFileKind } from "@/lib/chat-files";
@@ -252,15 +253,17 @@ export function ChatFilesBrowser({
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
         <div className="mb-3 flex flex-wrap gap-2">
           <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
-          {filter === "artifacts" && <select aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+          {/* At least 9rem each, so the longest default ("Recent first") clears the chevron: three
+              share a desk's row, and a phone's wraps the third. */}
+          {filter === "artifacts" && <SelectField aria-label="Artifact type" value={artifactType} onChange={event => { setArtifactType(event.target.value); setExtension("all"); }} className="flex-[1_1_9rem]">
             <option value="all">All types</option><option value="designboard">Designboards</option><option value="document">Documents</option><option value="media">Media</option>
-          </select>}
-          <select aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+          </SelectField>}
+          <SelectField aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="flex-[1_1_9rem]">
             <option value="all">Any format</option>{extensions.map(ext => <option key={ext} value={ext}>.{ext}</option>)}
-          </select>
-          <select aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+          </SelectField>
+          <SelectField aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="flex-[1_1_9rem]">
             <option value="recent">Recent first</option><option value="extension">Extension</option><option value="name">Name</option>
-          </select>
+          </SelectField>
         </div>
         {filter === "artifacts" && <p className="mb-3 text-xs text-muted-foreground">Designboards and documents shared by the agent. Source files stay in Files and Project.</p>}
         {filter === "artifacts" && metadata.loading && <p role="status" className="mb-2 text-xs text-muted-foreground">Checking designboards…</p>}

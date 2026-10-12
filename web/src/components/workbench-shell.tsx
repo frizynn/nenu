@@ -163,7 +163,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
       </BottomSheet>
 
       <SideSheet open={drawer} onClose={closeDrawer} title="Navigation"
-        heading={<Link to={homePath(data.session)} className="workbench-brand" onClick={closeDrawer} aria-label="Nenu home">
+        heading={<Link to={homePath(data.session)} className="workbench-brand hit-area" onClick={closeDrawer} aria-label="Nenu home">
           <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" /><span>Nenu</span>
         </Link>}
         headerAction={<>

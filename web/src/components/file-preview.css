@@ -17,8 +17,9 @@
 .file-preview-action:active { scale: 0.97; }
 @media (pointer: coarse) { .file-preview-action { width: 44px; height: 44px; } }
 
-/* Done leaves on a phone, the ✕ on a desk: one of the two is on screen at a time. */
-.preview-done { display: none; align-items: center; min-height: 44px; padding: 0 12px 0 2px; border-radius: var(--radius-md); font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; -webkit-user-select: none; user-select: none; transition: opacity 120ms ease-out; }
+/* Done leaves on a phone, the ✕ on a desk: one of the two is on screen at a time. Its 12px start
+   padding plus the bar's 4px sets the word on the 16px gutter, and the target runs to the edge. */
+.preview-done { display: none; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--radius-md); font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; -webkit-user-select: none; user-select: none; transition: opacity 120ms ease-out; }
 .preview-done:active { opacity: 0.6; }
 
 .file-preview-tabs { display: flex; flex-shrink: 0; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--muted) 35%, transparent); }

@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useRevalidator } from "react-router";
 
-import { Field, Segmented, inputField, openNewDialog, selectField, textField, useOnScreen } from "@/components/new-agent-sheet";
+import { Field, Segmented, openNewDialog, useOnScreen } from "@/components/new-agent-sheet";
 import { Button } from "@/components/ui/button";
+import { inputField, textField } from "@/components/ui/field";
+import { SelectField } from "@/components/ui/select-field";
 import { fetchOrgStartOptions, startOrgNode } from "@/lib/api";
 import type { NodeRole, ProjectView, TemplateView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -17,7 +19,6 @@ type StartForm = { title: string; parent: string; task: string; profile: string;
 
 const ROLE_NOUN: Record<NodeRole, string> = { worker: "thread", coordinator: "coordinator" };
 const ROLES: ReadonlyArray<{ id: NodeRole; label: string }> = [{ id: "worker", label: "Thread" }, { id: "coordinator", label: "Coordinator" }];
-export const FIELD = "mt-1 min-h-11 w-full rounded-md border bg-background px-3 text-sm font-normal";
 
 /**
  * The roles a project can start: none while it is paused (Organizations refuses), and no
@@ -126,23 +127,23 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
         <input className={inputField} value={form.title} required onChange={set("title")} data-autofocus />
       </Field>
       {parents.length > 0 && <Field label="Parent">
-        <select className={selectField} value={form.parent} onChange={set("parent")}>
+        <SelectField value={form.parent} onChange={set("parent")}>
           <option value="root">Project root</option>
           {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.title}</option>)}
-        </select>
+        </SelectField>
       </Field>}
       {/* On screen while the names load, so the form does not jump under the person's typing. */}
       {!template && <Field label="Profile">
-        <select className={selectField} value={form.profile} disabled={options.kind === "loading"} onChange={set("profile")}>
+        <SelectField value={form.profile} disabled={options.kind === "loading"} onChange={set("profile")}>
           <option value="">Project default</option>
           {profiles.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
-        </select>
+        </SelectField>
       </Field>}
       {templates.length > 0 && <Field label="Template">
-        <select className={selectField} value={template} onChange={set("template")}>
+        <SelectField value={template} onChange={set("template")}>
           <option value="">None</option>
           {templates.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.name} · {candidate.scope}</option>)}
-        </select>
+        </SelectField>
       </Field>}
       <Field label="Task">
         <textarea className={cn(textField, "min-h-32 resize-y")} value={form.task} required onChange={set("task")} />

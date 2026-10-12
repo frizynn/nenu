@@ -49,6 +49,22 @@ it("starts the project coordinator and refreshes, so the route can open its chat
   expect(coordinator.getByRole("status")).toHaveTextContent(message);
 });
 
+it("offers Start as the page's large primary, and says it is busy while the coordinator starts", async () => {
+  let release: (() => void) | undefined;
+  server.use(http.post("/api/org/project/open", () => new Promise<Response>((resolve) => { release = () => resolve(HttpResponse.json({ ok: true, message: "" })); })));
+  const { onChanged, user } = setup();
+
+  const start = within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: "Start coordinator" });
+  // The shared Button at the page tier (44 high, 16 px, auto width), the 404's Go to Home's size.
+  expect(start).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+  await user.click(start);
+  const starting = await screen.findByRole("button", { name: "Starting…" });
+  expect(starting).toHaveAttribute("aria-busy", "true");
+  expect(starting).toBeDisabled();
+  release!();
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+});
+
 it("shows why the coordinator did not start and lets the person try again", async () => {
   server.use(http.post("/api/org/project/open", () => HttpResponse.json({ ok: false, error: "the herdr session at /tmp/s is not reachable" }, { status: 502 })));
   const { onChanged, user } = setup();

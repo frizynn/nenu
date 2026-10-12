@@ -19,8 +19,8 @@ import { AgentBar, Meta, StateDot, StatusTag } from "./activity-parts";
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-lg font-semibold tabular-nums tracking-tight">{value}</span>
-      <span className="text-[11.5px] text-muted-foreground">{label}</span>
+      <span className="text-headline tabular-nums">{value}</span>
+      <span className="text-footnote text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function WorkflowAgentList({ workflow, now, selectedAgentId, onSelectAgen
                 type="button"
                 aria-pressed={on}
                 onClick={() => onSelectAgent?.(agent.id)}
-                className={cn("flex min-h-11 items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-muted/40", on && "bg-muted")}
+                className={cn("flex min-h-11 items-center gap-2 rounded-md px-2 text-left text-footnote hover:bg-muted/40", on && "bg-muted")}
               >
                 <StateDot state={agent.state} />
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
@@ -80,7 +80,7 @@ function ResultList({ label, items }: { label: string; items: unknown[] }) {
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">{label} <span className="font-normal text-muted-foreground/70">{items.length}</span></span>
       {shown.map((item, i) => (
-        <div key={i} className="flex gap-2 text-[12.5px] leading-relaxed"><span aria-hidden="true" className="text-muted-foreground">·</span><span className="min-w-0 break-words">{brief(item)}</span></div>
+        <div key={i} className="flex gap-2 text-footnote leading-relaxed"><span aria-hidden="true" className="text-muted-foreground">·</span><span className="min-w-0 break-words">{brief(item)}</span></div>
       ))}
       {items.length > 2 && (
         <button type="button" onClick={() => setAll(!all)} className="self-start pl-3.5 text-xs text-muted-foreground hover:text-foreground">
@@ -93,8 +93,8 @@ function ResultList({ label, items }: { label: string; items: unknown[] }) {
 
 /** Whatever an agent returned, laid out generically: short fields as rows, long text and lists below. */
 export function AgentResult({ value }: { value: unknown }) {
-  if (typeof value === "string") return <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{value}</p>;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return <pre className="whitespace-pre-wrap break-words font-mono text-xs">{brief(value)}</pre>;
+  if (typeof value === "string") return <p className="whitespace-pre-wrap break-words text-footnote leading-relaxed">{value}</p>;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return <pre className="whitespace-pre-wrap break-words font-mono text-code">{brief(value)}</pre>;
   const entries = Object.entries(value as Record<string, unknown>);
   const short = entries.filter(([, v]) => (typeof v === "string" && v.length <= 80 && !v.includes("\n")) || typeof v === "number" || typeof v === "boolean");
   const rest = entries.filter((e) => !short.includes(e));
@@ -103,7 +103,7 @@ export function AgentResult({ value }: { value: unknown }) {
       {short.length > 0 && (
         <dl className="flex flex-col gap-2">
           {short.map(([k, v]) => (
-            <div key={k} className="flex gap-3 text-[12.5px] leading-snug">
+            <div key={k} className="flex gap-3 text-footnote leading-snug">
               <dt className="w-[84px] shrink-0 text-muted-foreground">{humanize(k)}</dt>
               <dd className={cn("min-w-0 break-words", typeof v === "string" && looksLikeCode(v) && "font-mono")}>{String(v)}</dd>
             </div>
@@ -115,7 +115,7 @@ export function AgentResult({ value }: { value: unknown }) {
         : (
           <div key={k} className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">{humanize(k)}</span>
-            <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{brief(v)}</p>
+            <p className="whitespace-pre-wrap break-words text-footnote leading-relaxed">{brief(v)}</p>
           </div>
         ))}
     </div>
@@ -132,7 +132,7 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
       <div className="flex flex-col gap-2.5 border-b border-border px-[18px] pb-3 pt-4">
         <div className="flex items-center gap-2">
           <StateDot state={agent.state} className="size-2" />
-          <span className="truncate text-[15px] font-semibold">{agent.label}</span>
+          <span className="truncate text-subhead font-semibold">{agent.label}</span>
           <StatusTag status={agent.state === "running" ? "running" : agent.state === "failed" ? "failed" : "completed"} />
           <span className="flex-1" />
           {onClose && <Button variant="ghost" size="icon" aria-label="Close agent" onClick={onClose}><X aria-hidden="true" /></Button>}
@@ -141,8 +141,8 @@ function AgentPanel({ agent, result, now, onClose, onOpenTranscript }: { agent: 
       </div>
       <div className="px-[18px] py-4">
         {result !== undefined ? <AgentResult value={result} />
-          : agent.state === "running" ? <p className="text-[13px] text-muted-foreground">Still working{agent.lastTool ? ` · ${agent.lastTool}` : ""}.</p>
-            : <p className="text-[13px] text-muted-foreground">{agent.resultPreview ?? "No result recorded."}</p>}
+          : agent.state === "running" ? <p className="text-footnote text-muted-foreground">Still working{agent.lastTool ? ` · ${agent.lastTool}` : ""}.</p>
+            : <p className="text-footnote text-muted-foreground">{agent.resultPreview ?? "No result recorded."}</p>}
       </div>
       {(result !== undefined || onOpenTranscript) && (
         <div className="flex gap-2 border-t border-border px-[18px] py-3">
@@ -182,12 +182,12 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex h-5 items-center gap-1 rounded-md bg-muted px-1.5 text-[11.5px] font-medium text-muted-foreground"><Workflow aria-hidden="true" className="size-3" />Workflow</span>
+              <span className="inline-flex h-5 items-center gap-1 rounded-md bg-muted px-1.5 text-caption font-medium text-muted-foreground"><Workflow aria-hidden="true" className="size-3" />Workflow</span>
               <StatusTag status={workflow.status} />
               {workflow.startedAt !== undefined && <span className="text-xs text-muted-foreground">started {formatClock(workflow.startedAt)} by Claude</span>}
             </div>
-            {!namedAbove && <h2 className="truncate text-lg font-semibold tracking-tight">{workflow.name}</h2>}
-            {workflow.summary && <p className="max-w-[560px] text-[13.5px] leading-relaxed text-muted-foreground">{workflow.summary}</p>}
+            {!namedAbove && <h2 className="truncate text-headline">{workflow.name}</h2>}
+            {workflow.summary && <p className="max-w-[560px] text-footnote leading-relaxed text-muted-foreground">{workflow.summary}</p>}
           </div>
           <div className="flex gap-6">
             <Stat value={`${workflow.doneCount}/${workflow.agentCount}`} label="agents done" />
@@ -200,7 +200,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
           <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
             {workflow.phases.map((phase) => (
               <div key={phase.title} className={cn("flex flex-col gap-2 rounded-lg bg-card px-3 py-2.5 ring-1", phaseRunning(phase) ? "ring-status-working/30" : "ring-border")}>
-                <div className="flex items-center gap-1.5 text-[12.5px]">
+                <div className="flex items-center gap-1.5 text-footnote">
                   {phaseRunning(phase) ? <StateDot state="running" /> : <Check aria-hidden="true" className="size-3 text-status-done" />}
                   <span className="font-medium">{phase.title || "Agents"}</span>
                   <span className="flex-1" />
@@ -213,7 +213,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
         )}
         <section className="flex flex-col gap-2.5">
           <div className="flex items-center">
-            <h3 className="text-[13px] font-medium">Agents</h3>
+            <h3 className="text-footnote font-medium">Agents</h3>
             <span className="flex-1" />
             {workflow.status === "running" && <span className="text-xs text-muted-foreground">Now {formatClock(now)}</span>}
           </div>

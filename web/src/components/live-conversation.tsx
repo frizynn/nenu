@@ -1,4 +1,4 @@
-import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type TouchEvent as ReactTouchEvent, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Loader2, MessageSquare } from "lucide-react";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
@@ -13,6 +13,7 @@ import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { RecoveryLeads } from "@/components/connect-conversation";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 interface LiveConversationProps {
@@ -157,7 +158,6 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
   const editShift = useEditShift(scrollRef);
-  const cardTitle = useId();
   const shown = frozen ?? history;
   const entries = shown?.available ? shown.entries : [];
   const latest = history?.available ? history.entries.at(-1) : undefined;
@@ -454,8 +454,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const empty = entries.length === 0 && localSends.length === 0;
   // The skeleton and the turns sit at the list's foot, where the tail will land.
   const skeleton = empty && loading;
-  // A conversation the operator can link: one card, centred, instead of a sentence over a form. While a
-  // question waits in the thread the card folds to one line at the foot, so the question is the one card.
+  // A conversation the operator can link: the shared empty state, centred, with the ways to link it as
+  // its action. While a question waits in the thread it folds to one line at the foot, so the question
+  // is the one card.
   const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
@@ -493,13 +494,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             </> : linkable ? <>
               {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
                 <MessageSquare aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />No conversation linked
-              </p> : <section aria-labelledby={cardTitle} className="mx-auto flex w-full max-w-sm flex-col items-center rounded-xl border bg-card px-4 pt-6 pb-4 text-center">
-                <MessageSquare aria-hidden="true" className="mb-3 size-7 text-muted-foreground" strokeWidth={1.75} />
-                <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
-                <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
-                <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
-                {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
-              </section>}
+              </p> : <EmptyState icon={MessageSquare} title="No conversation linked" action={
+                // The form's column: 384 px, or the empty state's width where that is narrower. A grid
+                // track, because the empty state shrink-wraps its action: a w-sm box would hold it at
+                // 384 px and push the form past a phone's gutter, while minmax(0, 24rem) asks for 384
+                // and gives way.
+                <div className="grid grid-cols-[minmax(0,24rem)]">
+                  <RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider>
+                  {!error && activityStatus === "working" && <div className="mt-3 flex justify-center"><WorkActivityLabel /></div>}
+                </div>
+              }>Send a message to start, or link the one already running.</EmptyState>}
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <MessageSquare className="size-5" />

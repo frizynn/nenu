@@ -202,7 +202,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
         </button>}
       </>}
     </>}
-    {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No threads yet.</p>}
+    {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-subhead text-muted-foreground">No threads yet.</p>}
     <CloseNodeDialog project={project} node={closing} session={session} onCancel={() => setClosing(null)}
       onClosed={() => { setClosing(null); void onChanged(); }} />
   </>;
@@ -213,10 +213,10 @@ export function TasksHeader({ title, subtitle, paused = false }: { title: string
   return (
     <header className="mb-4">
       <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
-        {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
+        <h2 className="min-w-0 flex-1 break-words text-title">{title}</h2>
+        {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">Paused</span>}
       </div>
-      {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-subhead text-muted-foreground">{subtitle}</p>}
     </header>
   );
 }

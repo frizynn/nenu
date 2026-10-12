@@ -43,7 +43,7 @@
 @media (hover: hover) { .task-row:hover .task-actions { opacity: 1; } }
 .task-row:has(:focus-visible) .task-actions { opacity: 1; }
 .task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
-.task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); }
+@media (hover: hover) { .task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); } }
 /* The ⋯ of a screen that cannot hover, always there: there is no hover to find it by. */
 .task-more { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-md); color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
 .task-more:active { background: var(--workbench-row-selected); }

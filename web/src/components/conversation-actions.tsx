@@ -1,5 +1,6 @@
 import { Check, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState, type ReactNode } from "react";
+import { SectionLabel } from "@/components/ui/section-label";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { cn } from "@/lib/utils";
 
@@ -39,10 +40,10 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
       <ActionGroups groups={groups} onRun={run} />
       {recovery && <details className="mt-1 border-t border-border/60 pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-sm lg:min-h-8 lg:text-[13px]">Change connected conversation</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-body lg:min-h-8 lg:text-footnote">Change connected conversation</summary>
         {recovery}
       </details>}
-      {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 pt-2 pb-1 font-mono text-caption text-muted-foreground" title={folder}>{folder}</p>}
+      {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 pt-2 pb-1 font-mono text-footnote text-muted-foreground" title={folder}>{folder}</p>}
     </WorkbenchPopover>
   </>;
 });
@@ -53,12 +54,12 @@ export function ActionGroups({ groups, onRun }: { groups: ConversationActionGrou
   // A lone group needs no heading; the menu's own name says what it holds.
   return shown.map((group, index) => (
     <section key={group.label} aria-label={group.label} className={cn(index > 0 && "mt-1 border-t border-border/60 pt-1")}>
-      {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium text-muted-foreground">{group.label}</h4>}
+      {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5"><SectionLabel>{group.label}</SectionLabel></h4>}
       {group.actions.map(({ id, label, icon: Icon, run, disabled, on }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
           onClick={() => onRun(run)}
-          className="workbench-menu-item flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm hover:bg-accent active:bg-muted disabled:opacity-50 disabled:hover:bg-transparent lg:min-h-8 lg:text-[13px]">
-          <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-accent active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
+          <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {on && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
         </button>

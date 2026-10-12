@@ -26,18 +26,6 @@ interface Props {
   onMenuAction: ComponentProps<typeof AnsiOutput>["onMenuAction"];
 }
 
-// Below the desk breakpoint the picker is a bottom sheet rather than a card floating over the thread
-// and the composer: full width, pinned to the bottom edge above the home indicator, sliding up. It
-// stays the same nonmodal popover underneath (outside tap, Escape and ✕ dismiss it, and opening it
-// never takes the composer's focus), so only the placement changes. The popover positions itself with
-// inline left/top/bottom from its anchor; the important utilities are what lets a class win over
-// that inline placement on a phone.
-const PHONE_SHEET = [
-  "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
-  "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
-  "max-lg:duration-200 max-lg:animate-in max-lg:slide-in-from-bottom-4 motion-reduce:animate-none",
-].join(" ");
-
 /** Owns model-picker presentation; the caller retains terminal ownership and freshness guards. */
 export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu, modelPresent,
   reportedModel, catalog, disabled, closing, onDismiss, onApply, onApplyError, onLoad, onMenuAction }: Props) {
@@ -59,17 +47,19 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
     });
   }
 
-  return <WorkbenchPopover open={open} anchorRef={anchorRef} label="Model picker" onDismiss={onDismiss}
-    className={`w-[min(28rem,calc(100vw-2rem))] ${PHONE_SHEET}`}>
+  // Below the desk the picker is a bottom sheet with a full-bleed body, so what is not the list keeps
+  // the sheet's 16px gutter itself.
+  return <WorkbenchPopover open={open} anchorRef={anchorRef} label="Model" onDismiss={onDismiss} sheetBelowDesk
+    className="w-[min(28rem,calc(100vw-2rem))]">
     {parsed?.kind === "reasoning" || (advanced && modelPresent)
-      ? <AnsiOutput text={text} nativeOnly agent={agent} onMenuAction={onMenuAction} promptDisabled={locked} />
-      : advanced ? <p role="status" className="p-3 text-footnote text-muted-foreground">Loading model settings…</p>
+      ? <div className="max-lg:px-4"><AnsiOutput text={text} nativeOnly agent={agent} onMenuAction={onMenuAction} promptDisabled={locked} /></div>
+      : advanced ? <p role="status" className="p-3 text-footnote text-muted-foreground max-lg:px-4">Loading model settings…</p>
       : catalog.rows.length ?
         <LocalModelPicker rows={catalog.rows} currentModel={parsed?.rows.find((row) => row.current)?.name ?? reportedModel}
           disabled={locked} onApply={apply} onCancel={onDismiss}
           more={<button type="button" disabled={locked} className="mb-1 min-h-11 w-full rounded-lg text-footnote text-muted-foreground hover:bg-accent"
             onClick={loadAdvanced}>Reasoning and default settings</button>} />
-      : <div className="p-3 text-footnote text-muted-foreground">
+      : <div className="p-3 text-footnote text-muted-foreground max-lg:px-4">
         <p role="status">{catalog.loading ? "Loading model catalogue…" : "Model catalogue unavailable."}</p>
         {!catalog.loading && <button type="button" disabled={disabled} className="mt-3 min-h-11 rounded-md border border-border px-3 text-foreground"
           onClick={() => { void onLoad().catch((error: unknown) => setStatus(error instanceof Error ? error.message : "Could not load models", "error")); }}>Load from agent</button>}

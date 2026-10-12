@@ -69,10 +69,10 @@ function taskSummary(task: ActivityTask, now: number): string {
 function rowSummary(item: ProcessItem, now: number): ReactNode {
   if (item.kind === "workflow") {
     const wf = item.workflow;
-    return <Meta className="text-[11.5px]" items={[`${wf.doneCount}/${wf.agentCount}`, formatDuration(workflowElapsed(wf, now))]} />;
+    return <Meta className="text-footnote" items={[`${wf.doneCount}/${wf.agentCount}`, formatDuration(workflowElapsed(wf, now))]} />;
   }
-  if (item.kind === "task") return <Meta className="text-[11.5px]" items={[taskSummary(item.task, now)]} />;
-  return <Meta className="text-[11.5px]" items={[STATE_LABEL[item.state], item.at !== undefined ? formatClock(item.at) : ""]} />;
+  if (item.kind === "task") return <Meta className="text-footnote" items={[taskSummary(item.task, now)]} />;
+  return <Meta className="text-footnote" items={[STATE_LABEL[item.state], item.at !== undefined ? formatClock(item.at) : ""]} />;
 }
 
 function ProcessRow({ item, now, onDetail, onOpenSubagent }: {
@@ -88,7 +88,7 @@ function ProcessRow({ item, now, onDetail, onOpenSubagent }: {
       <button type="button" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} ${name}`} onClick={() => setOpen(!open)}
         className="flex min-h-11 w-full items-center gap-2.5 rounded-md px-2 text-left hover:bg-muted/40 lg:min-h-9">
         <KindIcon item={item} />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{name}</span>
+        <span className="min-w-0 flex-1 truncate text-footnote font-medium">{name}</span>
         {item.kind === "workflow" && !open && <AgentBar states={allAgents(item.workflow).map((a) => a.state)} className="h-1 w-12 shrink-0" />}
         <span className="max-w-[45%] shrink-0">{rowSummary(item, now)}</span>
         {open ? <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
@@ -136,7 +136,7 @@ function Fold({ title, count, extra, children }: { title: string; count: number;
     <section className="mt-1 border-t border-border/60 pt-1">
       <div className="flex items-center">
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
-          className="flex min-h-11 flex-1 items-center gap-2 rounded-md px-2 text-left text-[12.5px] text-muted-foreground hover:text-foreground lg:min-h-8">
+          className="flex min-h-11 flex-1 items-center gap-2 rounded-md px-2 text-left text-footnote text-muted-foreground hover:text-foreground lg:min-h-8">
           {open ? <ChevronDown aria-hidden="true" className="size-3.5" /> : <ChevronRight aria-hidden="true" className="size-3.5" />}
           {title} ({count})
         </button>

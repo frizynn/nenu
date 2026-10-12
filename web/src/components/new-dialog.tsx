@@ -8,15 +8,14 @@ import {
   NewAgentForm,
   Segmented,
   defaultCwdFor,
-  inputField,
   liveDirsOf,
-  selectField,
-  textField,
   useOnScreen,
   useSpawnInto,
 } from "@/components/new-agent-sheet";
 import { NodeStartForm, errorMessage, startableRoles } from "@/components/node-start";
 import { Button } from "@/components/ui/button";
+import { inputField, textField } from "@/components/ui/field";
+import { SelectField } from "@/components/ui/select-field";
 import { BottomSheet } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { createOrgProject, fetchHomeDirs } from "@/lib/api";
@@ -260,9 +259,9 @@ function ThreadPane({ projects, current, onProject, role, onRole, readOnly, sess
   return (
     <div className="flex flex-col gap-3">
       <Field label="Project">
-        <select className={selectField} value={current.slug} onChange={(e) => onProject(e.currentTarget.value)}>
+        <SelectField value={current.slug} onChange={(e) => onProject(e.currentTarget.value)}>
           {projects.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
-        </select>
+        </SelectField>
       </Field>
       {roles.length === 0 && <p className="text-subhead text-muted-foreground">{current.name} is paused, so it starts no threads.</p>}
       {roles.length > 0 && <NodeStartForm key={current.slug} project={current} session={session} readOnly={readOnly}
@@ -297,9 +296,9 @@ function TabPane({ workspaces, workspaceId, onWorkspace, ...pane }: AgentPanePro
     <div className="flex flex-1 flex-col gap-3">
       {!pane.browsing && (
         <Field label="Workspace">
-          <select className={selectField} value={workspaceId} onChange={(e) => onWorkspace(e.currentTarget.value)}>
+          <SelectField value={workspaceId} onChange={(e) => onWorkspace(e.currentTarget.value)}>
             {workspaces.map((w) => <option key={w.workspaceId} value={w.workspaceId}>{workspaceName(w)}</option>)}
-          </select>
+          </SelectField>
         </Field>
       )}
       <AgentPane key={workspaceId} target={{ kind: "tab", workspaceId }} {...pane} />

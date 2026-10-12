@@ -206,7 +206,9 @@ it("opens one menu from the +, grouped Attach, Replies, Terminal and Session, an
   expect(within(menu).queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
   await user.click(within(menu).getByRole("button", { name: "Quick replies" }));
   expect(screen.queryByRole("dialog", { name: "Message actions" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
+  // The dock is titled with the row that opened it.
+  expect(screen.getByRole("heading", { name: "Quick replies" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Close Quick replies" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
   expect(sendMessage).not.toHaveBeenCalled();
 });
@@ -324,10 +326,10 @@ it("opens quick replies from the menu without changing or sending the draft", as
   const input = screen.getByRole("textbox");
   await user.type(input, "Keep writing here");
   run("quick");
-  expect(screen.getByRole("button", { name: "Close Quick" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Close Quick replies" })).toBeVisible();
   expect(input).toHaveValue("Keep writing here");
   expect(sendMessage).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Close Quick" }));
+  await user.click(screen.getByRole("button", { name: "Close Quick replies" }));
   expect(input).toBeEnabled();
 });
 

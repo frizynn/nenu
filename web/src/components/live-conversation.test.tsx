@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -9,8 +9,10 @@ import { LiveConversation } from "./live-conversation";
 import { fetchHistory } from "@/lib/api";
 import { TranscriptView } from "./transcript-view";
 import { addLocalSend, localSendScope, updateLocalSend } from "@/lib/local-sends";
+import { ConnectConversation } from "./connect-conversation";
 
 vi.mock("@/lib/api", () => ({ fetchHistory: vi.fn() }));
+vi.mock("react-router", async (original) => ({ ...await original<typeof import("react-router")>(), useRevalidator: () => ({ revalidate: async () => {}, state: "idle" }) }));
 vi.mock("@/components/transcript-view", async (original) => {
   const actual = await original<typeof import("./transcript-view")>();
   return { ...actual, TranscriptView: vi.fn(actual.TranscriptView) };
@@ -290,22 +292,29 @@ describe("LiveConversation", () => {
     expect(screen.getByText("what changed today?")).toBeInTheDocument();
   });
 
-  // T18: two paragraphs said different things above the recovery form. One card, one line.
-  it("offers one card for a pane with no conversation linked and a way to link one", () => {
+  // T18: two paragraphs said different things above the recovery form; then a bordered card stood
+  // where every other empty page draws the shared empty state. One empty state, every way to link.
+  it("offers the shared empty state for a pane with no conversation linked, with every way to link one", () => {
     render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session" }} loading={false} error={false}
-      recovery={<button type="button">Find Codex conversations</button>} /></MemoryRouter>);
-    const card = screen.getByRole("region", { name: "No conversation linked" });
-    expect(card).toHaveTextContent("Send a message to start, or link the one already running.");
-    expect(screen.getByRole("button", { name: "Find Codex conversations" })).toBeInTheDocument();
+      recovery={<ConnectConversation paneId="w2:codex" disabled={false} onConnected={vi.fn()} />} /></MemoryRouter>);
+    const empty = screen.getByRole("heading", { level: 2, name: "No conversation linked" }).closest<HTMLElement>("[data-slot=empty-state]");
+    expect(empty).not.toBeNull();
+    expect(empty).toHaveTextContent("Send a message to start, or link the one already running.");
+    // Find is the large action every empty state offers; the typed ID and its full-width Connect wait
+    // behind their disclosure, inside the same empty state.
+    expect(within(empty!).getByRole("button", { name: "Find Codex conversations" })).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+    fireEvent.click(within(empty!).getByRole("button", { name: "Enter a session ID" }));
+    expect(within(empty!).getByRole("textbox", { name: "Session ID" })).toBeVisible();
+    expect(within(empty!).getByRole("button", { name: "Connect history" })).toHaveClass("w-full", "rounded-lg", "text-body");
     expect(screen.queryByText(/connect an existing session/)).not.toBeInTheDocument();
   });
 
   // QA 14: the link card's ink button sat stacked above the question card. While a question waits in
-  // the thread, the card is one quiet line and the question is the only card.
-  it("folds the link card to one line while a question waits under it", () => {
+  // the thread, the empty state is one quiet line and the question is the only card.
+  it("folds the empty state to one line while a question waits under it", () => {
     render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session" }} loading={false} error={false}
       recovery={<button type="button">Find Codex conversations</button>} waiting footer={<section aria-label="Agent question">Pick a fruit?</section>} /></MemoryRouter>);
-    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No conversation linked" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Find Codex conversations" })).not.toBeInTheDocument();
     expect(screen.getByText("No conversation linked")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
@@ -314,7 +323,7 @@ describe("LiveConversation", () => {
   it("does not offer to connect a session where nothing can be connected", () => {
     render(<MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: false, reason: "no-session" }} loading={false} error={false} /></MemoryRouter>);
     expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No conversation linked" })).not.toBeInTheDocument();
   });
 
   // iOS keeps the keyboard up over a tap on plain text; Messages and herdr-web-ui close it when the

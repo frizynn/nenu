@@ -26,11 +26,11 @@ export function StartAgent({ paneId, session, disabled, ready }: { paneId: strin
   }
   return <section className="border-t border-border/40 px-3 py-3" aria-label="Start a conversation">
     <div className="flex flex-wrap gap-2">
-      <Button className="h-11" disabled={disabled || starting || !ready} onClick={() => void start("codex")}>Start Codex</Button>
-      <Button className="h-11" variant="outline" disabled={disabled || starting || !ready} onClick={() => void start("claude")}>Start Claude Code</Button>
+      <Button size="lg" disabled={disabled || starting || !ready} onClick={() => void start("codex")}>Start Codex</Button>
+      <Button size="lg" variant="outline" disabled={disabled || starting || !ready} onClick={() => void start("claude")}>Start Claude Code</Button>
     </div>
-    {starting && <p role="status" className="mt-2 text-sm text-muted-foreground">Starting the agent…</p>}
-    {!ready && <p role="status" className="mt-2 text-sm text-muted-foreground">Preparing the terminal…</p>}
-    {error && <p role="alert" className="mt-2 text-sm text-destructive">{error} Check the terminal before retrying.</p>}
+    {starting && <p role="status" className="mt-2 text-subhead text-muted-foreground">Starting the agent…</p>}
+    {!ready && <p role="status" className="mt-2 text-subhead text-muted-foreground">Preparing the terminal…</p>}
+    {error && <p role="alert" className="mt-2 text-subhead text-destructive">{error} Check the terminal before retrying.</p>}
   </section>;
 }

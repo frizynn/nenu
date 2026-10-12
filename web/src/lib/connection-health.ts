@@ -57,6 +57,13 @@ let provenLiveAt: number | undefined;
 // effectiveAnchor() drops the wake grace, so backgrounding + returning MID-OUTAGE can no longer
 // downgrade red → amber. Module-scoped so every consumer agrees on one escalated/not answer.
 let lostLatched = false;
+// Whether the outage notice (components/connection-banner.tsx) is on screen. The notice keeps its own
+// rule, up once an outage is sustained and down only after reads have stayed live for a quiet
+// interval, and publishes the result here. The question card and the composer, which leave naming an
+// outage to the notice while it is up, read what is drawn rather than the escalation anchor: a pane
+// read that answers stamps markLive and resets the anchor while the snapshot, and so the notice, still
+// says Herdr is down.
+let noticeShown = false;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -129,6 +136,22 @@ export function effectiveAnchor(): number {
   return lostLatched ? liveAnchorAt : lastHealthyAt();
 }
 
+/** The notice says it is on screen, or gone. Only the notice calls this; a repeat is a no-op. */
+export function setOutageNoticeShown(shown: boolean): void {
+  if (noticeShown === shown) return;
+  noticeShown = shown;
+  emit();
+}
+
+export function isOutageNoticeShown(): boolean {
+  return noticeShown;
+}
+
+/** Reactive read of whether the outage notice is on screen, for the surfaces that defer to it. */
+export function useOutageNoticeShown(): boolean {
+  return useSyncExternalStore(subscribeHealth, isOutageNoticeShown, isOutageNoticeShown);
+}
+
 export function subscribeHealth(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
@@ -152,10 +175,11 @@ if (typeof document !== "undefined") {
   });
 }
 
-/** Test helper — reset both anchors (defaults to now), forget the last live read and clear the sticky latch. */
+/** Test helper — reset both anchors (defaults to now), forget the last live read, clear the sticky latch and the notice. */
 export function __resetConnectionHealth(now = Date.now()): void {
   liveAnchorAt = now;
   lastWakeAt = now;
   provenLiveAt = undefined;
   lostLatched = false;
+  noticeShown = false;
 }

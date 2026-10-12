@@ -1,10 +1,11 @@
 /* The tab and pane strips above a chat, and the project's panel toggle beside them. */
 @layer components {
-/* 30px to the eye; the ::after band gives a coarse pointer its 44px without a taller header. */
+/* 30px to the eye; the ::after band gives a coarse pointer its 44px without a taller header. It hangs
+   from inside the 1px border, so 28px plus 8px each way. */
 .project-toggle { position: relative; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9999px; color: var(--foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; }
 .project-toggle > svg { color: var(--muted-foreground); }
 @media (hover: hover) { .project-toggle:hover { background: var(--workbench-row-hover); } }
-.project-toggle::after { content: ""; position: absolute; inset: -7px -2px; }
+.project-toggle::after { content: ""; position: absolute; inset: -8px -2px; }
 
 /* A strip (components/ui/chip): one row of chips that scrolls sideways, on the header's chrome.
    --reach is how far a chip's touch target hangs below the row (set on a coarse pointer, below). */

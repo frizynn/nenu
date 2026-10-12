@@ -97,9 +97,13 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
     onPanelChange?.(next);
   };
   if (mode === "metrics") return <UsageDetails telemetry={telemetry} stale={stale} />;
+  // With no model reported the chip names what a tap does, and where there is no picker to open
+  // either it waits for the agent to report one: a bare "Model" read as a caption for nothing. An open
+  // model panel keeps it either way: a native menu on screen opens the panel, and the chip anchors it.
+  const model = telemetry?.model ? modelDisplayName(telemetry.model) : null;
   return (
-    <div className="workbench-telemetry flex min-w-0 flex-1 flex-nowrap items-center gap-1 text-xs text-muted-foreground">
-      <button
+    <div className="workbench-telemetry flex min-w-0 flex-1 flex-nowrap items-center gap-1 text-footnote text-muted-foreground">
+      {(model || modelAvailable || modelOpen) && <button
         ref={modelTriggerRef}
         type="button"
         className="composer-quiet hit-area flex min-w-0 max-w-[13rem] items-center gap-2.5 md:max-w-[18rem]"
@@ -113,9 +117,9 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         aria-haspopup="dialog"
         title={modelAvailable ? [telemetry?.model, telemetry?.effort].filter(Boolean).join(" · ") || "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
-        <span className="truncate">{telemetry?.model ? modelDisplayName(telemetry.model) : "Model"}</span>
+        <span className="truncate">{model ?? "Choose model"}</span>
         {telemetry?.effort && <span className="shrink-0 capitalize">{telemetry.effort}</span>}
-      </button>
+      </button>}
       {/* The composer row carries the context ring and its number (and its Compact action). */}
       <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
         onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}

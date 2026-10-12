@@ -61,6 +61,19 @@ describe("text colour", () => {
   });
 });
 
+describe("the drawer's selected row", () => {
+  // A chat's age took the tertiary tone, which clears 4.5:1 on the page but measured 4.43:1 on the
+  // light selected row's fill.
+  it("keeps a chat's age at 4.5:1 on its fill in both themes", () => {
+    const nav = read("styles/nav.css");
+    const layer = ["@layer components"];
+    const tone = declarations(nav, '.nav-pane[aria-current="page"] .nav-chat-time', layer).color ?? declarations(nav, ".nav-chat-time", layer).color;
+    const ink = themed(/^var\(--([\w-]+)\)$/.exec(tone ?? "")![1]!);
+    const row = themed("workbench-row-selected");
+    ink.forEach((colour, i) => expect(contrast(colour, row[i]!), i ? "dark" : "light").toBeGreaterThanOrEqual(4.5));
+  });
+});
+
 describe("radii", () => {
   it("takes every radius in the app's own stylesheets from the scale, or a pill or circle, or none edge to edge", () => {
     const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), resolve(src, "components/file-preview.css"), ...stylesheets(resolve(src, "styles"))];
@@ -124,6 +137,37 @@ describe("chrome", () => {
         .filter((classes) => /\boutline-none\b/.test(classes) && /\bfocus-visible:(?!outline)/.test(classes) && !/\bfocus-visible:ring/.test(classes))
         .map((classes) => `${relative(src, file)}: ${classes}`),
     );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("hover", () => {
+  it("fills a control on hover only where a pointer hovers, so a tap on a phone leaves nothing lit", () => {
+    // A touch browser keeps :hover on whatever a finger tapped until the next tap: the drawer's Search
+    // opened with its button still filled. Tailwind's hover: variant already sits behind
+    // @media (hover: hover); the app's own stylesheets put theirs there too. `:not(:hover)` only takes
+    // a fill away, so it needs no guard.
+    const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), resolve(src, "components/file-preview.css"), ...stylesheets(resolve(src, "styles"))];
+    const offenders = files.flatMap((file) =>
+      cssRules(readFileSync(file, "utf8"))
+        .filter((rule) => rule.selectors.some((s) => s.replace(/:not\(:hover\)/g, "").includes(":hover")))
+        .filter((rule) => !rule.atRules.some((at) => /\(hover: hover\)/.test(at)))
+        .map((rule) => `${relative(src, file)}: ${rule.selectors.join(", ")}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("fields", () => {
+  it("draws every visible native select as the shared field, so WebKit draws no control of its own", () => {
+    // A bare <select> took WebKit's own menulist: a double arrow, no padding, 26px tall in a 44px row.
+    // The shared field (components/ui/select-field.tsx) keeps the native picker and draws one look; a
+    // select laid invisibly over a row of its own (opacity-0) draws nothing at all.
+    const offenders = filesEndingIn(src, ".tsx")
+      .filter((file) => !file.endsWith(join("components", "ui", "select-field.tsx")))
+      .flatMap((file) => [...readFileSync(file, "utf8").matchAll(/<select\b[\s\S]*?<\/select>/g)]
+        .filter((m) => !/\bopacity-0\b/.test(m[0]))
+        .map((m) => `${relative(src, file)}: ${m[0].split("\n")[0]!.trim().slice(0, 80)}`));
     expect(offenders).toEqual([]);
   });
 });

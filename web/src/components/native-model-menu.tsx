@@ -45,7 +45,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
         <AgentIcon agent={agent} className="size-5" />
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">{parsed.kind === "reasoning" ? menu.title.replace(/^Select Reasoning Level for /i, "") : "Choose a model, then apply your selection."}</p>
+          <p className="mt-0.5 text-footnote text-muted-foreground">{parsed.kind === "reasoning" ? menu.title.replace(/^Select Reasoning Level for /i, "") : "Choose a model, then apply your selection."}</p>
         </div>
       </div>
 
@@ -73,7 +73,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-xs font-medium leading-snug">{row.name}</span>
-                {row.current && <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">Current</span>}
+                {row.current && <span className="shrink-0 rounded border border-border px-1 text-micro text-muted-foreground">Current</span>}
               </span>
               {row.description && <span id={`${id}-description-${index}`} className="mt-1 block text-xs leading-snug text-muted-foreground">{row.description}</span>}
             </span>

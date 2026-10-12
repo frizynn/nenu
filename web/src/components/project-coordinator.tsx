@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
-import { FIELD, errorMessage, useStartOptions } from "@/components/node-start";
+import { errorMessage, useStartOptions } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { SelectField } from "@/components/ui/select-field";
 import { openOrgProject, replaceOrgCoordinator } from "@/lib/api";
 import { liveState } from "@/lib/org-tree";
 import { setStatus } from "@/lib/status";
@@ -72,14 +73,14 @@ function ReplaceCoordinatorDialog({ project, agent, session, onReplaced, onCance
     <Dialog open onClose={() => { if (!busy) onCancel(); }} title="Replace the coordinator?"
       description="The running coordinator stops and its conversation ends. A new one starts in the same Herdr session.">
       <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)}>
-        {options.kind === "loading" && <p className="text-sm text-muted-foreground">Reading the agents this host can run…</p>}
-        {options.kind === "error" && <p role="alert" className="text-sm text-destructive">The agents are unavailable: {options.message}</p>}
-        {profiles.length > 0 && <label className="block text-sm font-medium">New one runs on
-          <select className={FIELD} value={profile} onChange={(event) => setChoice(event.currentTarget.value)}>
+        {options.kind === "loading" && <p className="text-subhead text-muted-foreground">Reading the agents this host can run…</p>}
+        {options.kind === "error" && <p role="alert" className="text-subhead text-destructive">The agents are unavailable: {options.message}</p>}
+        {profiles.length > 0 && <label className="block text-subhead font-medium">New one runs on
+          <SelectField className="mt-1" value={profile} onChange={(event) => setChoice(event.currentTarget.value)}>
             {profiles.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
+          </SelectField>
         </label>}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-subhead text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" size="lg" disabled={busy} onClick={onCancel}>Cancel</Button>
           <Button type="submit" variant="destructive" size="lg" disabled={busy || !profile} aria-busy={busy || undefined}>{busy ? "Replacing…" : "Replace"}</Button>
@@ -121,18 +122,18 @@ function CoordinatorStart({ project, session, readOnly, onStarted }: {
       <div className="flex min-h-9 items-center gap-2.5">
         <NodeDot state="idle" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">Coordinator</span>
-          <span className="block text-xs text-muted-foreground">Not running</span>
+          <span className="block text-body font-medium">Coordinator</span>
+          <span className="block text-footnote text-muted-foreground">Not running</span>
         </span>
+        {/* The page's one action while no coordinator runs, so the page tier (the 404's Go to Home), not a row's compact button. */}
         {!readOnly && (
-          <button type="button" disabled={starting} onClick={() => void start()}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-medium text-background disabled:opacity-60 lg:h-8">
-            <Play aria-hidden className="size-3.5" />{starting ? "Starting…" : "Start coordinator"}
-          </button>
+          <Button type="button" size="lg" disabled={starting} aria-busy={starting || undefined} onClick={() => void start()}>
+            <Play aria-hidden />{starting ? "Starting…" : "Start coordinator"}
+          </Button>
         )}
       </div>
-      {outcome?.error && <p role="alert" className="mt-2 text-sm text-destructive">{outcome.text}</p>}
-      {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-xs text-muted-foreground">{outcome.text}</p>}
+      {outcome?.error && <p role="alert" className="mt-2 text-subhead text-destructive">{outcome.text}</p>}
+      {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-footnote text-muted-foreground">{outcome.text}</p>}
     </section>
   );
 }

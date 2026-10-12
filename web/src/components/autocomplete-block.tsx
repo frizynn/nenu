@@ -36,9 +36,9 @@ export function AutocompleteBlock({ autocomplete }: AutocompleteBlockProps) {
             key={i}
             className="flex flex-col gap-0.5 rounded-lg border border-border bg-secondary/50 px-2 py-1.5"
           >
-            <span className="font-mono text-[12px] font-medium text-foreground">{entry.name}</span>
+            <span className="font-mono text-code font-medium text-foreground">{entry.name}</span>
             {entry.description !== "" && (
-              <span className="font-content line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+              <span className="font-content line-clamp-2 text-footnote text-muted-foreground">
                 {entry.description}
               </span>
             )}

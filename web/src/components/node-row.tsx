@@ -54,12 +54,13 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
     <li aria-current={current ? "true" : undefined}>
       <div className="task-row">
         <button type="button" className="task-main" onClick={onOpen}>
-          <NodeDot state={state} className="mt-1.5 size-2" />
+          {/* The mark centres on the title's first line, whichever mark it is (a dot or the check). */}
+          <span className="flex h-6 shrink-0 items-center"><NodeDot state={state} className="size-2" /></span>
           <span className="min-w-0 flex-1">
-            <span className={cn("block break-words text-sm font-medium", state === "resolved" && "text-muted-foreground")}>{title}</span>
-            <span className="block truncate text-xs text-muted-foreground">{detail}</span>
+            <span className={cn("block break-words text-body font-medium", state === "resolved" && "text-muted-foreground")}>{title}</span>
+            <span className="block truncate text-footnote text-muted-foreground">{detail}</span>
           </span>
-          {age && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
+          {age && <span className="shrink-0 text-footnote leading-6 tabular-nums text-muted-foreground">{age}</span>}
         </button>
         {fold && <button type="button" className="task-fold" aria-label={`${title} threads`} aria-expanded={fold.open} onClick={fold.onToggle}>
           <ChevronRight aria-hidden className="size-4" />

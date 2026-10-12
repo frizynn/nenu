@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { useAutosize } from "@/hooks/use-autosize";
 import { cn } from "@/lib/utils";
 
 // Auto-growing message composer. It's just a styled textarea, so the phone's native keyboard —
@@ -7,9 +8,16 @@ import { cn } from "@/lib/utils";
 // drives a terminal (shell commands, slash-commands, agent replies) where a forced leading capital
 // is usually wrong. (Callers can still override via props.)
 function ChatInput({ className, ref, ...props }: React.ComponentProps<"textarea">) {
+  const field = React.useRef<HTMLTextAreaElement | null>(null);
+  useAutosize(field, props.value);
+  const setRef = React.useCallback((node: HTMLTextAreaElement | null) => {
+    field.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) ref.current = node;
+  }, [ref]);
   return (
     <textarea
-      ref={ref}
+      ref={setRef}
       data-slot="chat-input"
       autoComplete="off"
       autoCapitalize="none"

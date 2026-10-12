@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { __resetConnectionHealth, markLive, CONNECTION_LOST_MS } from "@/lib/connection-health";
+import { __resetConnectionHealth, isOutageNoticeShown, markLive, CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { linkPhrase } from "@/lib/connection";
 import { ConnectionBanner, RECOVERY_QUIET_MS } from "./connection-banner";
 
@@ -59,6 +59,26 @@ it("keeps the notice stable until successful reads remain stable, without a Conn
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
   h.close();
+});
+
+// The card and the composer leave naming an outage to this notice while it is up, so what they read
+// is the notice on screen: a live pane read resets the escalation clock while Herdr is still down.
+it("tells the shared store exactly when it is on screen", () => {
+  const h = renderBanner({ bridge: "disconnected" });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  expect(isOutageNoticeShown()).toBe(true);
+  act(() => { markLive(); vi.advanceTimersByTime(RECOVERY_QUIET_MS); });
+  expect(screen.getByRole("status")).toBeInTheDocument();
+  expect(isOutageNoticeShown()).toBe(true);
+  act(() => { markLive(); h.update({ bridge: "connected" }); });
+  act(() => vi.advanceTimersByTime(RECOVERY_QUIET_MS));
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(isOutageNoticeShown()).toBe(false);
+  act(() => h.update({ bridge: "disconnected" }));
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  expect(isOutageNoticeShown()).toBe(true);
+  h.close();
+  expect(isOutageNoticeShown()).toBe(false);
 });
 
 it("stops saying it cannot reach Nenu once reads answer again, while it waits out the quiet interval", () => {

@@ -301,6 +301,18 @@ it("closes on Done and keeps Reload and Copy path behind More actions", async ()
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
 });
 
+// QA 20: the preview is a full-screen modal, so it leaves the way a modal does, with a Done text
+// button; a back chevron in front of it read as a pushed screen.
+it("leaves on Done as a modal does, with no back chevron, and keeps Download", async () => {
+  fetchFile.mockImplementation(async () => new Response("# Guide", { headers: { "content-type": "text/markdown" } }));
+  render(<FilePreview paneId="w1:p1" path="/repo/docs/guide.md" panes={[{ paneId: "w1:p1", cwd: "/repo", label: "coordinator" }]} onClose={() => {}} />);
+  expect(await screen.findByText("Guide")).toBeInTheDocument();
+  const done = screen.getByRole("button", { name: "Done" });
+  expect(done).toHaveTextContent(/^Done$/);
+  expect(done.querySelector("svg")).toBeNull();
+  expect(screen.getByRole("link", { name: "Download file" })).toBeInTheDocument();
+});
+
 describe("image viewer", () => {
   const gallery = [
     { kind: "journal" as const, entry: "e1", index: 0, label: "Image 1" },
@@ -336,6 +348,7 @@ describe("image viewer", () => {
     expect(screen.getAllByRole("img")).toHaveLength(1);
     expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Done" }).querySelector("svg")).toBeNull();
     expect(screen.getByRole("link", { name: "Download image" })).toHaveAttribute("href", "/api/pane/w1%3Ap1/journal-image?entry=e1&n=0");
     expect(screen.queryByRole("button", { name: /Refresh|Reload|More actions/ })).not.toBeInTheDocument();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();

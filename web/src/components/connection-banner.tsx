@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { setOutageNoticeShown, useOutageNoticeShown } from "@/lib/connection-health";
 import { isConnecting, linkPhrase, linkProblemOf } from "@/lib/connection";
 import { clockTime } from "@/lib/format";
 import type { BridgeStatus } from "@/lib/types";
@@ -83,18 +84,21 @@ function AuthErrorBanner({ lastSeenAt }: { lastSeenAt?: number }) {
 function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBannerProps, "authError">) {
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
-  const [visible, setVisible] = useState(false);
+  // Kept in the shared store, so the card and the composer defer to what is on screen.
+  const visible = useOutageNoticeShown();
   const [retrying, setRetrying] = useState(false);
   const revalidator = useRevalidator();
 
   useEffect(() => {
-    if (lost) { setVisible(true); return; }
+    if (lost) { setOutageNoticeShown(true); return; }
     if (connecting) return;
     // One good response between failures is not stable recovery. Keep the notice until a quiet
     // interval has elapsed so weak signal cannot repeatedly open and close the row.
-    const timer = setTimeout(() => setVisible(false), RECOVERY_QUIET_MS);
+    const timer = setTimeout(() => setOutageNoticeShown(false), RECOVERY_QUIET_MS);
     return () => clearTimeout(timer);
   }, [lost, connecting]);
+  // A notice that leaves the screen (a refusal takes its place, the layout unmounts) shows nothing.
+  useEffect(() => () => setOutageNoticeShown(false), []);
 
   if (!visible) return null;
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,

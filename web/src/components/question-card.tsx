@@ -8,7 +8,7 @@ import {
   SecondaryActions, WaitingOnYou,
 } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
-import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useOutageNoticeShown } from "@/lib/connection-health";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
@@ -130,9 +130,9 @@ export function QuestionCard({
   const [answerList, setAnswerList] = useState<HTMLElement | null>(null);
   // Kept only so a resize renders the card again and the measure below runs.
   const [, setFrameWidth] = useState(0);
-  // The banner's own reading of the same outage (one shared store), so the card and the banner agree.
+  // Whether the banner is on screen (one shared store), so the card and the banner agree.
   const outage = lockReason === "offline" || lockReason === "herdr";
-  const bannerUp = useConnectionLost(outage);
+  const bannerUp = useOutageNoticeShown();
   const textId = useId();
   const form = useRef<HTMLFormElement>(null);
   const noticeLine = useRef<HTMLParagraphElement>(null);

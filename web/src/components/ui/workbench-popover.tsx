@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { X } from "lucide-react";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { cn } from "@/lib/utils";
 
 export type WorkbenchDismissReason = "outside" | "escape" | "close";
@@ -11,10 +11,25 @@ interface WorkbenchPopoverProps {
   label: string;
   children: ReactNode;
   className?: string;
+  /** Below the desk, draw it as a bottom sheet (see PHONE_SHEET). */
+  sheetBelowDesk?: boolean;
 }
 
+// Below the desk breakpoint a `sheetBelowDesk` popover is a bottom sheet rather than a card floating
+// over the thread and the composer: full width, pinned to the bottom edge above the home indicator,
+// sliding up. It stays the same nonmodal popover underneath (outside tap, Escape and ✕ dismiss it, and
+// opening it never takes the composer's focus), so only the placement changes, with a sheet's title.
+// The popover positions itself with inline left/top/bottom from its anchor; the important utilities
+// are what lets a class win over that inline placement on a phone. The body there is full bleed: its
+// rows own the 16px gutter, so they start where the sheet's title does.
+const PHONE_SHEET = [
+  "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
+  "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
+  "max-lg:duration-200 max-lg:animate-in max-lg:slide-in-from-bottom-4 motion-reduce:animate-none",
+].join(" ");
+
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
-export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className }: WorkbenchPopoverProps) {
+export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, sheetBelowDesk = false }: WorkbenchPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
   const dismissRef = useRef(onDismiss);
@@ -96,14 +111,9 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
 
   if (!open) return null;
   return (
-    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", className)}>
-      <div className="flex items-center gap-3 border-b border-border py-1 pl-4 pr-1">
-        <h3 className="min-w-0 flex-1 text-sm font-medium">{label}</h3>
-        <button type="button" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring" aria-label={`Close ${label.toLocaleLowerCase()}`} onClick={() => dismiss("close")}>
-          <X aria-hidden="true" className="size-4" />
-        </button>
-      </div>
-      <div className="max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4" style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
+    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET, className)}>
+      <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} />
+      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
     </div>
   );
 }

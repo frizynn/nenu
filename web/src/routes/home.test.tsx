@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
@@ -61,14 +61,18 @@ const projectData: HomeData = {
   projects: [hub],
 };
 
-function Shell() {
+/** The app's frame; `banner` also draws the connection banner above it, as RootLayout does. */
+function Shell({ banner = false }: { banner?: boolean }) {
   const value = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
-  return <WorkbenchShell data={value}><Outlet /></WorkbenchShell>;
+  return <>
+    {banner && <ConnectionBanner bridge={value.bridge} error={value.error} authError={value.authError} lastSeenAt={value.lastSeenAt} />}
+    <WorkbenchShell data={value}><Outlet /></WorkbenchShell>
+  </>;
 }
 
-async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<unknown> } = {}) {
+async function setup(value = data, { paneLoader, banner = false }: { paneLoader?: () => Promise<unknown>; banner?: boolean } = {}) {
   let current: HomeData | Promise<HomeData> = value;
-  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
+  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell banner={banner} />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
     { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
@@ -186,6 +190,24 @@ it("sends with the thread composer's own button: one 32px circle with a 44px rea
   expect(main.getByRole("button", { name: "Start" })).toHaveClass("composer-action", "composer-send", "hit-area");
   const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
   expect(declarations(css, ".composer-action")).toMatchObject({ width: "32px", height: "32px", "border-radius": "9999px" });
+});
+
+// Safari before 26.2 has no `field-sizing: content`: the box stayed one line over a four-line task.
+it("grows the box with a multi-line task where the browser has no field-sizing", async () => {
+  vi.stubGlobal("CSS", { supports: () => false });
+  // jsdom lays nothing out: a row is 24px of scrollHeight here, plus 20px of padding.
+  Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", { configurable: true, get(this: HTMLTextAreaElement) { return this.value.split("\n").length * 24 + 20; } });
+  try {
+    const { main } = await setup();
+    const box = main.getByRole("textbox", { name: "Task for a new agent" });
+    fireEvent.change(box, { target: { value: "Audit the auth flow\nthen the session store\nthen the cookies\nand report back" } });
+    expect(box.style.height).toBe(`${4 * 24 + 20}px`);
+    fireEvent.change(box, { target: { value: "" } });
+    expect(box.style.height).toBe("");
+  } finally {
+    delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+    vi.unstubAllGlobals();
+  }
 });
 
 it("starts a thread in a chosen workspace", async () => {
@@ -563,11 +585,12 @@ describe("an outage", () => {
   // Home keeps saying what the work is, greyed, and its composer says what it is waiting for.
   it("keeps its work headline through a sustained Herdr outage, and leaves naming it to the banner", async () => {
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
-    const { update, main } = await setup();
+    const { update, main } = await setup(data, { banner: true });
     const needs = within(main.getByRole("region", { name: /^Needs you/ }));
     await needs.findByRole("button", { name: "Yes" });
     sustained();
     await update({ ...data, bridge: "disconnected" });
+    expect(await screen.findByText("Herdr isn’t responding.")).toBeVisible();
     expect(headline()).toBe("1 thread needs you");
     expect(main.queryByText(/Can.t reach|Last synced|Showing the last herd|Nenu keeps trying/)).not.toBeInTheDocument();
     // The herd stays to look at and open; what it cannot vouch for is paused.
@@ -614,7 +637,18 @@ describe("an outage", () => {
     const { main } = await setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
     const box = main.getByRole("textbox", { name: "Task for a new agent" });
     expect(box).toBeDisabled();
-    expect(box).toHaveAttribute("placeholder", "Use an authorised device to start an agent");
+    expect(box).toHaveAttribute("placeholder", "Read-only — device not authorised");
+  });
+
+  // Safari sizes the box by its value, not its placeholder, so a placeholder that wraps at 375 px is
+  // cut in half. The Send to chip already names the project, so the box only says what to do.
+  it("keeps the coordinator's placeholder short, whatever the project is called, locked or not", async () => {
+    const long = { ...projectData, projects: projectData.projects!.map((p) => ({ ...p, name: "AWAM Comercio SaaS: plataforma mayorista multi-sucursal" })) };
+    const { update, main } = await setup(long);
+    const box = main.getByRole("textbox", { name: /^Message for AWAM/ });
+    expect(box).toHaveAttribute("placeholder", "Ask the coordinator…");
+    await update({ ...long, bridge: "disconnected" });
+    expect(box).toHaveAttribute("placeholder", "Reconnect to ask the coordinator");
   });
 
   it("tells each Needs you card the real reason answers are paused", async () => {

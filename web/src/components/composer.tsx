@@ -1,10 +1,11 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
+import { useOutageNoticeShown } from "@/lib/connection-health";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, X, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, CircleAlert, Gauge, ImagePlus, Keyboard, Loader2, Plus, Settings2, Slash, Terminal, Zap, type LucideIcon } from "lucide-react";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -19,7 +20,8 @@ import { NavTray } from "@/components/nav-tray";
 import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
 import { DisplayPrefsContent } from "@/components/display-prefs";
-import { SectionLabel } from "@/components/ui/section-label";
+import { PanelHeader } from "@/components/ui/panel-header";
+import { OptionButton, OptionList, SECONDARY_ACTION } from "@/components/option-button";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -112,6 +114,12 @@ interface ComposerProps {
    *  generic one (a refused sign-in is not an unauthorised device, Herdr down is not a reconnect).
    *  It only changes the words; `readOnly`, `gone` and `disconnected` still decide what is locked. */
   lockReason?: LockReason;
+  /** A question card on screen already says why answers are paused, so the box only says what it
+   *  keeps: an outage is named once, by the banner once it is up, else by the card, else here. */
+  lockOnCard?: boolean;
+  /** Herdr itself isn't answering, whatever lock holds: a read-only device has an outage too. Until
+   *  the banner or the card names it, one line above the box does. */
+  herdrDown?: boolean;
   modelControl?: ReactNode;
   /** The background-work chip, beside the model in the row under the draft. */
   processesControl?: ReactNode;
@@ -178,9 +186,10 @@ const KEY_REVALIDATE_MS = 300;
 // Shared in-flow dock chrome for Keys/Quick — an IN-FLOW panel (never an overlay), so the terminal
 // mirror's flex-1 box shrinks and its tail stays visible while the dock is open (a covering sheet
 // hid exactly the prompt you were driving). Full-bleed top border + capped height keep the mirror
-// usable on a phone. The header (title + Close X) is a NON-scrolling child of a flex column; only the
-// body below it scrolls (max-h + overflow), so the Close X can never scroll out of reach on a short
-// viewport with a tall tray. One wrapper so Keys and Quick can't drift apart.
+// usable on a phone. The header is the popovers' PanelHeader, titled with the + row that opened the
+// dock, and a NON-scrolling child of a flex column; only the body below it scrolls (max-h +
+// overflow), so the Close X can never scroll out of reach on a short viewport with a tall tray. One
+// wrapper so Keys and Quick replies can't drift apart.
 function ComposerDock({
   title,
   onClose,
@@ -192,43 +201,30 @@ function ComposerDock({
 }) {
   return (
     <div className="mb-2 flex flex-col overflow-hidden rounded-xl border border-border/65 bg-card">
-      <div className="flex items-center justify-between px-3">
-        <SectionLabel>{title}</SectionLabel>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 text-muted-foreground"
-          onClick={onClose}
-          aria-label={`Close ${title}`}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-      <div className="max-h-[45dvh] min-h-0 overflow-y-auto">{children}</div>
+      <PanelHeader title={title} onClose={onClose} className="pl-3" />
+      <div className="max-h-[45dvh] min-h-0 overflow-y-auto pt-2">{children}</div>
     </div>
   );
 }
 
 /**
- * The send-time choice for a busy agent. Both rows are 48 px targets; the wording is the CLI's own
- * measured behaviour, so "now" never promises more than the CLI does.
+ * The send-time choice for a busy agent: the question, then the cards' own option list and Cancel as
+ * their quiet escape, as Home's sheet draws the same choice. No card around it: with the keyboard up
+ * a frame and a headline cost the thread its last lines. It sits on the page gutter, where the
+ * cards' lists do, rather than the box's bleed. The wording is the CLI's own measured behaviour, so
+ * "now" never promises more than the CLI does (ADR 0056: asked at every send, never remembered).
  */
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
-  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted";
   return (
-    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-xl border border-border/65 bg-card p-1">
-      <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
-      <button type="button" className={row} onClick={() => onPick(choice.now)}>
-        <span className="text-sm font-medium">Send now</span>
-        <span className="text-xs text-muted-foreground">{choice.nowHint}</span>
-      </button>
-      <button type="button" className={row} onClick={() => onPick("afterTurn")}>
-        <span className="text-sm font-medium">Queue for later</span>
-        <span className="text-xs text-muted-foreground">{choice.laterHint}</span>
-      </button>
-      <button type="button" className="min-h-11 w-full rounded-md text-xs text-muted-foreground hover:bg-muted" onClick={onCancel}>
-        Cancel
-      </button>
+    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 flex flex-col gap-2 max-lg:mx-2">
+      <p className="text-footnote text-pretty text-muted-foreground">{choice.name} is working. When should it read this?</p>
+      <OptionList className="bg-card">
+        <OptionButton label="Send now" description={choice.nowHint} onClick={() => onPick(choice.now)} />
+        <OptionButton label="Queue for later" description={choice.laterHint} onClick={() => onPick("afterTurn")} />
+      </OptionList>
+      <div className="-mx-2 flex">
+        <button type="button" className={SECONDARY_ACTION} onClick={onCancel}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -287,7 +283,7 @@ function sentPreview(message: string): string {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
+  { paneId, session, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, processesControl, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -303,6 +299,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // or funnelled through `pressKeys`, which is synchronous with its own check.
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
+  // Herdr's outage is named by one surface at a time: the banner while it is on screen (one shared
+  // store, as the card reads it), else a card whose lock is the outage, else this box.
+  const bannerUp = useOutageNoticeShown();
+  const herdrLock = disconnected && lockReason === "herdr";
+  const outageUnnamed = herdrDown && !bannerUp && !(lockOnCard && herdrLock);
 
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
@@ -1211,7 +1212,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       <div {...dropHandlers} className={cn("composer-surface", dragging && "composer-dragging")}>
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {delivering && !lastSent && !nativeWorkbench && (
-          <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
+          <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-footnote text-muted-foreground" role="status" aria-live="polite">
             <Loader2 className="size-3 shrink-0 animate-spin" />
             <span>Sending…</span>
           </div>
@@ -1219,7 +1220,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
             user what landed so they don't double-tap while waiting for the terminal to update. */}
         {lastSent && (
-          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-footnote text-muted-foreground">
             <Loader2 className="size-3 shrink-0 animate-spin" />
             <span className="truncate">
               <span className="font-medium">You sent:</span> {lastSent}
@@ -1251,7 +1252,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </ComposerDock>
         )}
         {drawer === "quick" && (
-          <ComposerDock title="Quick" onClose={closeDrawer}>
+          <ComposerDock title="Quick replies" onClose={closeDrawer}>
             <QuickActionsContent
               onSend={(t) => send(t, false)}
               onClose={closeDrawer}
@@ -1277,7 +1278,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             the draft stabilises (never a blip/self-echo), then its text tracks the live line — host
             typing streams straight in. It NEVER writes into the phone-owned input; only the explicit
             Take over copies the text here. No dismiss — it's honest state and persists until the user
-            takes over, sends, or the host line clears. Same zinc/text-xs chrome as the "You sent:"
+            takes over, sends, or the host line clears. Same quiet chrome as the "You sent:"
             strip above. */}
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
@@ -1323,12 +1324,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Derived at render rather than pushed through setStatus, because this is a CONDITION that
             lasts as long as the text does, and a status auto-clears in 2.5s and would re-fire on
             every keystroke. Self-clearing: trim the draft or send it and the row is simply gone. */}
+        {/* While nothing else names the outage, this line does, or Send sits disabled with nothing
+            saying why. Never the placeholder: with "Drafts are kept." it took two lines at 375 px,
+            and Safari cuts a placeholder at the box's one-line height. A draft hides the placeholder,
+            so the line then says what the box keeps too. */}
+        {outageUnnamed && (
+          <p className="px-1 pb-1 text-footnote text-muted-foreground">
+            {herdrLock && !lockedOut && input !== "" ? "Herdr isn't responding. Drafts are kept." : "Herdr isn't responding."}
+          </p>
+        )}
         {!direct.active && !fitsDraftStore(input) && (
-          <p className="px-1 pb-1 text-xs leading-snug text-muted-foreground">
+          <p className="px-1 pb-1 text-footnote text-muted-foreground">
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        {busyPick && busyChoice && <BusyChoicePanel choice={busyChoice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}
+        <Fold value={busyPick && busyChoice}>{(choice) => <BusyChoicePanel choice={choice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}</Fold>
         {nativeWorkbench && (
           <MessageQueueStrip
             agent={agent}
@@ -1375,7 +1385,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
-            <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
+            <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-footnote text-muted-foreground shadow-lg" role="status">
               {skills.loading ? "Loading skills…" : <span>Couldn't load skills. <button type="button" className="min-h-11 px-2 underline" onMouseDown={(e) => e.preventDefault()} onClick={skills.retry}>Retry</button></span>}
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
@@ -1439,7 +1449,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   : readOnly
                     ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? lockReason === "herdr" ? "Herdr isn't responding. Drafts are kept." : "Write a draft while reconnecting…"
+                      ? !herdrLock ? "Write a draft while reconnecting…" : "Drafts are kept."
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell
@@ -1455,7 +1465,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               // While a password prompt is recognised the draft is a secret the pane never took: it is
               // masked on screen as well as kept out of the store (noticeNoEcho). A box nothing can be
               // written into keeps its reason at full strength: the well already says it is off.
-              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 text-body md:min-h-10 md:py-2", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
@@ -1468,7 +1478,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               // notice it stays put but steps back to outline: that notice's Use Type is the primary.
               <Button
                 variant={noEcho !== null ? "outline" : "destructive"}
-                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-footnote font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}
                 aria-label="Type anyway?"
@@ -1478,7 +1488,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ) : !direct.active && confirmingSend ? (
               <Button
                 variant="destructive"
-                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-footnote font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}
                 aria-label="Really send?"

@@ -373,6 +373,8 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
   expect(drawer.querySelector(".side-sheet-panel")).not.toBeNull();
   const nav = within(drawer);
   expect(nav.getByRole("link", { name: "Nenu home" })).toHaveAttribute("href", "/?s=work");
+  // 65 by 23 to the eye; the shared .hit-area gives a touch screen its 44 px reach (N1).
+  expect(nav.getByRole("link", { name: "Nenu home" })).toHaveClass("hit-area");
 
   const sections = nav.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
   expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Recent", "Projects", "Workspaces"]);

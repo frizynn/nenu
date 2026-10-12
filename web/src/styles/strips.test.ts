@@ -78,3 +78,13 @@ describe("strips on a touch screen", () => {
     expect(Number(band("panes")["z-index"])).toBeGreaterThan(Number(band("tabs")["z-index"]));
   });
 });
+
+describe("the project's panel toggle", () => {
+  // 30px to the eye. Its ::after hangs from inside the 1px border, so -7px each way reached 42px.
+  it("reaches 44px tall for a finger without growing the header", () => {
+    const toggle = declarations(css, ".project-toggle", [LAYER]);
+    const block = declarations(css, ".project-toggle::after", [LAYER]).inset?.split(" ")[0];
+    const border = px(toggle.border?.split(" ")[0]);
+    expect(px(toggle.height) - 2 * border - 2 * px(block)).toBeGreaterThanOrEqual(44);
+  });
+});

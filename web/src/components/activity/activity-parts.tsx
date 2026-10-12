@@ -68,7 +68,7 @@ const TAG: Record<ActivityWorkflowStatus, [string, string]> = {
 
 export function StatusTag({ status }: { status: ActivityWorkflowStatus }) {
   const [label, tone] = TAG[status];
-  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-medium", tone)}>{label}</span>;
+  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-caption font-medium", tone)}>{label}</span>;
 }
 
 /** "a · b · c", skipping empties. */

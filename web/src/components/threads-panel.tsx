@@ -33,7 +33,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
 }) {
   const [merging, setMerging] = useState<ProjectThreadView | null>(null);
   const list = prThreads(threads);
-  if (list.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
+  if (list.length === 0) return <p className="py-3 text-subhead text-muted-foreground">No pull requests yet.</p>;
   return <>
     <ul className="task-list">
       {list.map((thread) => {
@@ -73,7 +73,7 @@ export function PaneActivity({ paneId, session, className }: { paneId: string; s
   if (detail) {
     return (
       <div className={cn("flex flex-col gap-3", className)}>
-        <button type="button" onClick={() => setDetail(null)} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 self-start rounded-md px-2 text-sm text-muted-foreground hover:text-foreground lg:min-h-8">
+        <button type="button" onClick={() => setDetail(null)} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 self-start rounded-md px-2 text-subhead text-muted-foreground hover:text-foreground lg:min-h-8">
           <ArrowLeft aria-hidden="true" className="size-4" />Back
         </button>
         <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={detail} now={now} onChange={setDetail} />
@@ -134,7 +134,7 @@ export function ThreadsPanel({ project, threads, coordinator, title, subtitle, a
         {tab === "prs" && <PrList project={project} threads={threads} session={session} readOnly={readOnly} onOpenPane={onOpenPane} onOpenNode={onOpenNode} onChanged={onChanged} />}
         {tab === "activity" && (activityPaneId
           ? <PaneActivity paneId={activityPaneId} session={session} />
-          : <p className="text-sm text-muted-foreground">The coordinator is not running, so there is no activity to show.</p>)}
+          : <p className="text-subhead text-muted-foreground">The coordinator is not running, so there is no activity to show.</p>)}
         {tab === "memory" && <ProjectMemory project={project} threads={threads} />}
       </div>
     </div>
@@ -145,17 +145,17 @@ export function ThreadsPanel({ project, threads, coordinator, title, subtitle, a
 function ProjectMemory({ project, threads }: { project: ProjectView; threads: readonly ProjectThreadView[] }) {
   const branches = threads.filter((thread) => thread.branch && thread.status !== "resolved");
   return (
-    <div className="flex flex-col gap-4 text-sm">
+    <div className="flex flex-col gap-4 text-subhead">
       <section className="rounded-xl border border-border p-3.5">
-        <h3 className="text-[13px] font-medium">Shared with every thread</h3>
+        <h3 className="text-footnote font-medium">Shared with every thread</h3>
         <p className="mt-1.5 leading-relaxed text-muted-foreground">{project.goal || "This project has no goal written down yet."}</p>
       </section>
       {branches.length > 0 && <section>
-        <h3 className="mb-1.5 text-[13px] font-medium">Branches</h3>
+        <h3 className="mb-1.5 text-footnote font-medium">Branches</h3>
         <ul className="flex flex-col gap-1">
           {branches.map((thread) => <li key={thread.id} className="flex items-baseline gap-2">
             <span className="shrink-0">{thread.title}</span>
-            <span className="truncate font-mono text-xs text-muted-foreground">{thread.branch}</span>
+            <span className="truncate font-mono text-code text-muted-foreground">{thread.branch}</span>
           </li>)}
         </ul>
       </section>}

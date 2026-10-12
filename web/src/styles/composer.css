@@ -50,7 +50,7 @@
 .composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
 .composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 @media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
-.composer-quiet:disabled { opacity: 0.5; cursor: default; }
+.composer-quiet:disabled { color: var(--disabled-foreground); cursor: default; }
 /* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
    + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
    where the lead's padding is 4px. */

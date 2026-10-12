@@ -987,9 +987,6 @@ export function AgentChat({
   // pane is a tap away; a desk keeps that in the sidebar. A project's title opens its page instead.
   const navigation = useContext(WorkbenchNavigationContext);
   const opensNavigation = !desktop && navigation !== undefined;
-  // Herdr answering nothing blocks the composer at once, so the header says so at once too, in the
-  // place line, before the outage notice's grace runs out. It is news on a device that cannot write too.
-  const herdrSilent = bridge === "disconnected" && !error;
   const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
     <span className="flex min-w-0 items-center gap-1">
       <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
@@ -997,18 +994,14 @@ export function AgentChat({
       {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
     </span>
     {/* The place, never the folder: the folder sits in the ⋯ menu and in this line's tooltip. The
-        place gives up width first, so the tab that tells two chats apart survives. */}
+        place gives up width first, so the tab that tells two chats apart survives. An outage is the
+        banner's, the card's or the box's to name, never this line's: the screen names it once. */}
     <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
-      {herdrSilent ? <>
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-destructive" />
-        <span className="truncate">Herdr isn't responding</span>
-      </> : <>
-        {isShell
-          ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" />
-          : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
-        <span className="min-w-0 truncate">{place?.place}</span>
-        {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
-      </>}
+      {isShell
+        ? <TerminalSquare aria-hidden="true" className="size-3.5 shrink-0" />
+        : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+      <span className="min-w-0 truncate">{place?.place}</span>
+      {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
     </span>
   </span>;
 
@@ -1194,7 +1187,7 @@ export function AgentChat({
                   <button
                     type="button"
                     onClick={() => navigate(historyPath(paneId, session))}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-footnote font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
                   >
                     <ScrollText className="size-3.5" />
                     Show entire history
@@ -1207,7 +1200,7 @@ export function AgentChat({
                     onClick={loadOlder}
                     disabled={loadingOlder}
                     aria-busy={loadingOlder || undefined}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-muted-foreground transition-colors active:bg-muted/50 disabled:opacity-60 coarse:min-h-11"
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-footnote font-medium text-muted-foreground transition-colors active:bg-muted/50 coarse:min-h-11"
                   >
                     {loadingOlder ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -1238,7 +1231,7 @@ export function AgentChat({
                 <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />Reading the terminal…
               </div>
             ) : (
-              <div className="py-16 text-center text-sm text-muted-foreground">(no recent output)</div>
+              <div className="py-16 text-center text-subhead text-muted-foreground">(no recent output)</div>
             )}
           </ChatMessageList>
         </div>}
@@ -1259,7 +1252,7 @@ export function AgentChat({
               onKeys={() => { setRawTerminal(true); composerRef.current?.openDock("keys"); }} />
           )}
           {!subagent && showConversation && waitNotice !== null && (
-            <p data-terminal-notice className="flex min-w-0 items-center gap-2 px-4 pb-1 text-xs text-muted-foreground">
+            <p data-terminal-notice className="flex min-w-0 items-center gap-2 px-4 pb-1 text-footnote text-muted-foreground">
               <Hourglass aria-hidden className="size-3.5 shrink-0" />
               <span className="truncate">{waitNotice}</span>
             </p>
@@ -1270,8 +1263,8 @@ export function AgentChat({
               as it did in the TUI. Verbatim text — React text nodes, so no XSS surface.
 
               STACKED, one row per line, each truncated — deliberately, over the two alternatives:
-              joining the rows with a separator would put ~150 chars on a strip that fits ~55 at this
-              size on a phone, truncating away exactly the fields (branch, permission mode) this
+              joining the rows with a separator would put ~150 chars on a strip that fits ~50 at the
+              mirror's default size on a phone, truncating away exactly the fields (branch, permission mode) this
               exists to surface; wrapping makes the strip's height depend on the pane width and turns
               a column-aligned statusline into ragged prose. Stacking also preserves the shape the
               user themselves configured in the TUI, so it reads as the same thing they know.
@@ -1280,7 +1273,7 @@ export function AgentChat({
           {!showConversation && statusLines.length > 0 && (
             <div
               className={cn(
-                "border-t border-border/40 px-3 py-1 font-mono text-[11px] leading-tight",
+                "border-t border-border/40 px-3 py-1 font-mono leading-tight",
                 // The strip carries the agent's OWN terminal colour, so it renders in the mirror's
                 // dark space and inverts in light with it (ADR 0002) — a bright statusline colour is
                 // chosen against a near-black background and is illegible re-themed onto app chrome.
@@ -1289,6 +1282,11 @@ export function AgentChat({
                 MIRROR_SPACE,
                 MIRROR_INVERT,
               )}
+              // The mirror's own size, which the operator sets: these are the pane's last rows, so
+              // they keep the terminal grid's exemption from the 13px floor. Floored, they would sit
+              // larger than the rows above them and cut the statusline sooner than the mirror cuts
+              // its own lines.
+              style={{ fontSize: `${prefs.fontSize}px` }}
             >
               {statusLines.map((row, i) => (
                 // Index key: these rows are a positional snapshot of the pane tail, re-derived on
@@ -1312,7 +1310,7 @@ export function AgentChat({
 
           {!subagent && composerTop}
           {!subagent && turnNote(agent) && (
-            <p role="status" className="px-3 pt-1 text-[11px] leading-tight text-muted-foreground">{turnNote(agent)}</p>
+            <p role="status" className="px-3 pt-1 text-footnote text-muted-foreground">{turnNote(agent)}</p>
           )}
           <Composer
             ref={composerRef}
@@ -1326,6 +1324,8 @@ export function AgentChat({
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
             lockReason={lock}
+            lockOnCard={showCard && cardCovers}
+            herdrDown={bridge === "disconnected" && !error}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             processesControl={processesControl}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
@@ -1383,7 +1383,7 @@ function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?
     <section aria-label="Terminal waiting" className="mb-2">
       {collapsed ? (
         <button type="button" aria-expanded={false} onClick={() => setCollapsed(false)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-foreground transition-colors active:bg-muted">
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-footnote font-medium text-foreground transition-colors active:bg-muted">
           {dot}
           Terminal waiting on a key
           <ChevronUp aria-hidden className="size-4 text-muted-foreground" />
@@ -1393,8 +1393,8 @@ function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?
           <div className="flex items-start gap-3">
             <span className="mt-1.5 flex">{dot}</span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p role="status" className="text-[15px] leading-5 font-medium text-foreground">{agentName(agent)} is showing a screen Nenu can't answer</p>
-              <p className="truncate font-mono text-[13px] leading-[18px] text-muted-foreground">{hint}</p>
+              <p role="status" className="text-subhead font-medium text-foreground">{agentName(agent)} is showing a screen Nenu can't answer</p>
+              <p className="truncate font-mono text-code text-muted-foreground">{hint}</p>
             </div>
             <button type="button" aria-label="Collapse" aria-expanded onClick={() => setCollapsed(true)}
               className="-mt-3 -mr-3 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted">

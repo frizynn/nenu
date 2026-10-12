@@ -153,4 +153,16 @@ describe("NewAgentForm", () => {
     renderSheet({ readOnly: true });
     expect(screen.getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
   });
+
+  // The sheet's one commit is the block tier: full width, the option rows' radius, 16 px (measured
+  // 358 by 44, r8, 14 px on the bench, redesign-shots/polish-pages/fix).
+  it("commits with the sheet's full-width block button", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    const start = screen.getByRole("button", { name: "Start Claude Code" });
+    expect(start).toHaveAttribute("type", "submit");
+    expect(start).toHaveClass("w-full", "rounded-lg", "text-body", "bg-foreground");
+    await user.click(screen.getByRole("radio", { name: "Shell" }));
+    expect(screen.getByRole("button", { name: "Open shell" })).toHaveClass("w-full", "rounded-lg", "text-body");
+  });
 });

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { WorkbenchTelemetry } from "./workbench-telemetry";
 import type { WorkbenchPanel } from "./workbench-telemetry";
@@ -80,9 +80,32 @@ it("lets the parent own model toggling and one active inspection panel", async (
   expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
 });
 
+// A bare "Model" read as a caption for nothing: with no model known the chip says what a tap does, and
+// where a tap can do nothing either (no picker) there is no chip until the agent reports one.
+it("says Choose model while no model is known, and draws no chip where there is nothing to choose", () => {
+  const { rerender } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent(/^Choose model$/);
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable disabled onChooseModel={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent(/^Choose model$/);
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
+  rerender(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "gpt-5.5" }} />);
+  expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
+});
+
+// A native model menu on screen opens the model panel on its own (use-workbench-panels), and the chip
+// is the panel's anchor: while the panel is open the chip stays, even where nothing could be chosen
+// from Nenu, or the popover lands wherever the page puts it.
+it("keeps the chip while the model panel is open, as its anchor, where nothing could be chosen", () => {
+  const anchor = createRef<HTMLButtonElement>();
+  render(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} modelOpen modelTriggerRef={anchor} />);
+  const chip = screen.getByRole("button", { name: "Choose model" });
+  expect(chip).toHaveAttribute("aria-expanded", "true");
+  expect(anchor.current).toBe(chip);
+});
+
 it("names the model and effort as quiet labels in one picker button", () => {
   const { rerender } = render(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} />);
-  expect(screen.getByRole("button", { name: "Choose model" })).toHaveTextContent("Model");
   rerender(<WorkbenchTelemetry mode="model" modelAvailable disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "claude-opus-4-1", effort: "high" }} />);
   const chip = screen.getByRole("button", { name: "Choose model" });
   expect(chip).toHaveTextContent(/Opus.*high/);

@@ -4,6 +4,7 @@ import { Eye, GitPullRequest } from "lucide-react";
 import { errorMessage } from "@/components/node-start";
 import { NodeDot } from "@/components/node-row";
 import { canMerge, threadDetail, threadTree } from "@/components/project-tasks";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { mergeOrgThread } from "@/lib/api";
 import { orgTree } from "@/lib/org-tree";
@@ -37,7 +38,7 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
         const open = () => onOpen(thread);
         const actions = state === "needs" || mergeable;
         const pr = thread.pr?.number !== undefined && (
-          <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-status-done/10 px-1.5 text-xs font-medium tabular-nums text-status-done">
+          <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-status-done/10 px-1.5 text-caption font-medium tabular-nums text-status-done">
             <GitPullRequest aria-hidden className="size-3" />#{thread.pr.number}
           </span>
         );
@@ -48,12 +49,12 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
               {state === "review" ? <Eye aria-hidden className="size-3.5 shrink-0 text-primary" /> : <NodeDot state={state} />}
               {!actions
                 ? <button type="button" onClick={open} className="flex min-w-0 flex-1 items-baseline gap-2.5 text-left after:absolute after:inset-0 after:rounded-xl after:content-['']">
-                  <span className="shrink-0 text-sm font-medium">{thread.title}</span>
-                  <span className="truncate text-[13px] text-muted-foreground">{threadDetail(thread, panes)}</span>
+                  <span className="shrink-0 text-subhead font-medium">{thread.title}</span>
+                  <span className="truncate text-footnote text-muted-foreground">{threadDetail(thread, panes)}</span>
                 </button>
                 : <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
-                  <span className="shrink-0 text-sm font-medium">{thread.title}</span>
-                  <span className={cn("truncate text-[13px]", state === "needs" ? "text-status-blocked" : "text-muted-foreground")}>
+                  <span className="shrink-0 text-subhead font-medium">{thread.title}</span>
+                  <span className={cn("truncate text-footnote", state === "needs" ? "text-status-blocked" : "text-muted-foreground")}>
                     {state === "needs" && thread.status !== "failed" ? "Asked you a question" : threadDetail(thread, panes)}
                   </span>
                 </span>}
@@ -61,10 +62,9 @@ export function ThreadCards({ project, coordinatorId, panes, session, readOnly, 
             </div>
             {actions && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {mergeable && <button type="button" className="h-11 rounded-md bg-foreground px-3 text-[13px] font-medium text-background lg:h-8"
-                  aria-label={`Merge ${thread.title}`} onClick={() => setMerging(thread)}>Merge</button>}
-                {state === "needs" && thread.paneId && <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>Answer</button>}
-                <button type="button" className="h-11 rounded-md border border-border px-3 text-[13px] lg:h-8" onClick={open}>View thread</button>
+                {mergeable && <Button type="button" size="lg" aria-label={`Merge ${thread.title}`} onClick={() => setMerging(thread)}>Merge</Button>}
+                {state === "needs" && thread.paneId && <Button type="button" variant="outline" size="lg" className="bg-transparent" onClick={open}>Answer</Button>}
+                <Button type="button" variant="outline" size="lg" className="bg-transparent" onClick={open}>View thread</Button>
               </div>
             )}
           </article>
