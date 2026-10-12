@@ -1,5 +1,6 @@
 import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
+import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
@@ -125,6 +126,9 @@ interface ComposerProps {
    *  generic one (a refused sign-in is not an unauthorised device, Herdr down is not a reconnect).
    *  It only changes the words; `readOnly`, `gone` and `disconnected` still decide what is locked. */
   lockReason?: LockReason;
+  /** A question card on screen already says why answers are paused, so the box only says what it
+   *  keeps: an outage is named once, by the banner once it is up, else by the card, else here. */
+  lockOnCard?: boolean;
   modelControl?: ReactNode;
   /** Where the session runs (branch, machine), beside the model in the row under the draft. */
   place?: ReactNode;
@@ -333,7 +337,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -349,6 +353,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // or funnelled through `pressKeys`, which is synchronous with its own check.
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
+  // The connection banner's own reading of a Herdr outage (one shared store, as the card reads it):
+  // once it is up, it is the one surface that names the outage.
+  const herdrDown = disconnected && lockReason === "herdr";
+  const outageNamed = useConnectionLost(herdrDown) || lockOnCard;
 
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
@@ -1534,7 +1542,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   : readOnly
                     ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? lockReason === "herdr" ? "Herdr isn't responding. Drafts are kept." : "Write a draft while reconnecting…"
+                      ? !herdrDown ? "Write a draft while reconnecting…" : outageNamed ? "Drafts are kept." : "Herdr isn't responding. Drafts are kept."
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell

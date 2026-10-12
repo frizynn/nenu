@@ -1073,9 +1073,6 @@ export function AgentChat({
   // pane is a tap away; a desk keeps that in the sidebar. A project's title opens its page instead.
   const navigation = useContext(WorkbenchNavigationContext);
   const opensNavigation = !desktop && navigation !== undefined;
-  // Herdr answering nothing blocks the composer at once, so the header says so at once too, in the
-  // place line, before the outage notice's grace runs out. It is news on a device that cannot write too.
-  const herdrSilent = bridge === "disconnected" && !error;
   const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
     <span className="flex min-w-0 items-center gap-1">
       <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
@@ -1083,18 +1080,14 @@ export function AgentChat({
       {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
     </span>
     {/* The place, never the folder: the folder sits in the ⋯ menu and in this line's tooltip. The
-        place gives up width first, so the tab that tells two chats apart survives. */}
+        place gives up width first, so the tab that tells two chats apart survives. An outage is the
+        banner's, the card's or the box's to name, never this line's: the screen names it once. */}
     <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
-      {herdrSilent ? <>
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-destructive" />
-        <span className="truncate">Herdr isn't responding</span>
-      </> : <>
-        {isShell
-          ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
-          : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
-        <span className="min-w-0 truncate">{place?.place}</span>
-        {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
-      </>}
+      {isShell
+        ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
+        : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+      <span className="min-w-0 truncate">{place?.place}</span>
+      {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
     </span>
   </span>;
 
@@ -1411,6 +1404,7 @@ export function AgentChat({
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
             lockReason={lock}
+            lockOnCard={showCard && cardCovers}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
