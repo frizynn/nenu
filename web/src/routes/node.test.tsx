@@ -100,7 +100,9 @@ it("says a project is not in this Herdr session and offers Home or another look"
     const { router, user } = setup(path);
     const main = within(await screen.findByRole("main"));
     expect(main.getByRole("heading", { name: "Project not found" })).toBeInTheDocument();
-    expect(main.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    // The one action size every empty and error page shares (not-found.tsx, history.tsx).
+    expect(main.getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+    expect(main.getByRole("button", { name: "Check again" })).toHaveClass("ui-button-lg", "text-base");
     await user.click(main.getByRole("link", { name: "Go to Home" }));
     expect(router.state.location.pathname).toBe("/");
     cleanup();

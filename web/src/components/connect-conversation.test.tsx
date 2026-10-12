@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { connectConversation, fetchConversations } from "@/lib/api";
-import { ConnectConversation } from "./connect-conversation";
+import { ConnectConversation, RecoveryLeads } from "./connect-conversation";
 
 vi.mock("@/lib/api", () => ({ fetchConversations: vi.fn(), connectConversation: vi.fn() }));
 vi.mock("react-router", async (original) => ({ ...await original<typeof import("react-router")>(), useRevalidator: () => ({ revalidate: async () => {}, state: "idle" }) }));
@@ -35,6 +35,17 @@ describe("ConnectConversation", () => {
 
     expect(connectConversation).toHaveBeenCalledWith("w2:codex", ID, "work");
     await waitFor(() => expect(connected).toHaveBeenCalledOnce());
+  });
+
+  it("leads with Find as the large action every empty state offers, and commits with a full-width Connect", async () => {
+    const user = userEvent.setup();
+    render(<RecoveryLeads.Provider value><ConnectConversation paneId="w2:codex" disabled={false} onConnected={vi.fn()} /></RecoveryLeads.Provider>);
+    const find = screen.getByRole("button", { name: "Find Codex conversations" });
+    expect(find).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+    expect(find).not.toHaveClass("w-full");
+    await user.click(screen.getByRole("button", { name: "Enter a session ID" }));
+    // The block tier: a card's one commit, full width, the option rows' radius and type.
+    expect(screen.getByRole("button", { name: "Connect history" })).toHaveClass("w-full", "rounded-lg", "text-body");
   });
 
   it("lists the conversations running here and connects the chosen one", async () => {
