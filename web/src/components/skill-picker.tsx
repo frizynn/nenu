@@ -49,7 +49,7 @@ export function SkillPicker({ id, skills, total, activeIndex, onSelect, label = 
           >
             {skill.kind === "command" ? <Terminal aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : <BookOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium">{skill.invocation}</div>
+              <div className="truncate text-subhead font-medium">{skill.invocation}</div>
               <div className="truncate text-footnote text-muted-foreground">{skill.description || skill.invocation}</div>
             </div>
           </div>
