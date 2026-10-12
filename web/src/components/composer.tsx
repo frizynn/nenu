@@ -131,7 +131,7 @@ interface ComposerProps {
    *  keeps: an outage is named once, by the banner once it is up, else by the card, else here. */
   lockOnCard?: boolean;
   /** Herdr itself isn't answering, whatever lock holds: a read-only device has an outage too. Until
-   *  the banner or the card names it, the box does, in its placeholder or in one line above it. */
+   *  the banner or the card names it, one line above the box does. */
   herdrDown?: boolean;
   modelControl?: ReactNode;
   /** Where the session runs (branch, machine), beside the model in the row under the draft. */
@@ -1413,12 +1413,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Derived at render rather than pushed through setStatus, because this is a CONDITION that
             lasts as long as the text does, and a status auto-clears in 2.5s and would re-fire on
             every keystroke. Self-clearing: trim the draft or send it and the row is simply gone. */}
-        {/* The box names the outage in its placeholder until a draft hides it, and a read-only lock
-            names itself there instead; either way, while nothing else names the outage, it gets this
-            line, or Send sits disabled with nothing saying why. */}
-        {outageUnnamed && (lockedOut || !herdrLock || input !== "") && (
+        {/* While nothing else names the outage, this line does, or Send sits disabled with nothing
+            saying why. Never the placeholder: with "Drafts are kept." it took two lines at 375 px,
+            and Safari cuts a placeholder at the box's one-line height. A draft hides the placeholder,
+            so the line then says what the box keeps too. */}
+        {outageUnnamed && (
           <p className="px-1 pb-1 text-footnote text-muted-foreground">
-            {lockedOut || !herdrLock ? "Herdr isn't responding." : "Herdr isn't responding. Drafts are kept."}
+            {herdrLock && !lockedOut && input !== "" ? "Herdr isn't responding. Drafts are kept." : "Herdr isn't responding."}
           </p>
         )}
         {!direct.active && !fitsDraftStore(input) && (
@@ -1543,7 +1544,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   : readOnly
                     ? lockReason === "refused" ? "Sign in again to reply" : "Read-only — device not authorised"
                     : disconnected
-                      ? !herdrLock ? "Write a draft while reconnecting…" : outageUnnamed ? "Herdr isn't responding. Drafts are kept." : "Drafts are kept."
+                      ? !herdrLock ? "Write a draft while reconnecting…" : "Drafts are kept."
                     : direct.active
                       ? "Type into the terminal…"
                       : isShell
