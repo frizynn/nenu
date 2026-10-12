@@ -34,7 +34,7 @@ export function SkillPicker({ id, skills, total, activeIndex, onSelect, label = 
     <div className="absolute inset-x-0 bottom-full z-30 mb-2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
       <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-xs text-muted-foreground">
         <span className="font-medium">{label} · {skills.length === total ? total : `${skills.length} / ${total}`}{truncated ? "+" : ""}</span>
-        <span className="hidden text-[10px] sm:inline">↑↓ navigate · Tab to insert</span>
+        <span className="hidden text-caption sm:inline">↑↓ navigate · Tab to insert</span>
       </div>
       <div ref={listRef} id={id} role="listbox" aria-label={label} className="relative max-h-[min(18rem,40dvh)] overflow-y-auto overscroll-contain p-1">
         {skills.map((skill, index) => (
@@ -50,7 +50,7 @@ export function SkillPicker({ id, skills, total, activeIndex, onSelect, label = 
             {skill.kind === "command" ? <Terminal aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : <BookOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-medium">{skill.invocation}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{skill.description || skill.invocation}</div>
+              <div className="truncate text-caption text-muted-foreground">{skill.description || skill.invocation}</div>
             </div>
           </div>
         ))}
