@@ -20,17 +20,18 @@ interface TerminalDraftPreviewProps {
 // TEXT tracks the live line, so watching the host type streams straight into this block; that can't
 // glitch the phone's field because nothing here feeds back into it. There is no dismiss: the preview is
 // honest state — a draft really is stranded on the host's line — so it persists until the user takes it
-// over, sends a message (which sweeps the host line), or the host line clears on its own. Same
-// zinc/text-xs chip chrome as the composer's "You sent:" strip; the draft body clamps to a few readable
-// lines. Take over is withdrawn (not disabled-looking, just absent) when the line is only the harness's
-// own paste placeholder — see `onTakeOver`.
+// over, sends a message (which sweeps the host line), or the host line clears on its own. Same muted
+// chip as the composer's "You sent:" strip, in its footnote step; the draft body reads in that step too,
+// so a short command stays on one line under its label, and clamps to a few readable lines. Take over is
+// withdrawn (not disabled-looking, just absent) when the line is only the harness's own paste
+// placeholder — see `onTakeOver`.
 export function TerminalDraftPreview({ text, onTakeOver }: TerminalDraftPreviewProps) {
   return (
-    <div className="mb-2 flex items-start gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+    <div className="mb-2 flex items-start gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-footnote text-muted-foreground">
       <Terminal className="mt-0.5 size-3 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="font-medium">Draft in terminal</div>
-        <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-caption text-muted-foreground">
+        <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-footnote text-muted-foreground">
           {text}
         </div>
       </div>
@@ -38,7 +39,7 @@ export function TerminalDraftPreview({ text, onTakeOver }: TerminalDraftPreviewP
         <Button
           variant="ghost"
           size="sm"
-          className="hit-area h-6 shrink-0 self-center px-2 text-xs font-medium"
+          className="hit-area h-6 shrink-0 self-center px-2 text-footnote font-medium"
           onClick={onTakeOver}
         >
           Take over
