@@ -1325,7 +1325,8 @@ describe("AgentChat — why the composer is locked", () => {
 
   it("says Herdr isn't responding as soon as Herdr reports disconnected", () => {
     renderChat({ bridge: "disconnected" });
-    expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+    expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+    expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
   });
 
   // DetailRoute passes the pane's own refusal as authError while the snapshot may still answer.
@@ -1340,8 +1341,9 @@ describe("AgentChat — why the composer is locked", () => {
     try {
       __resetConnectionHealth();
       renderChat({ bridge: "disconnected" }, undefined, { banner: true });
-      expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
       act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
       expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
       expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
       expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
@@ -1383,15 +1385,17 @@ describe("AgentChat — why the composer is locked", () => {
     expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 
-  // Before the banner, a draft hides the box's reason and Send sits disabled: one quiet line above
-  // the box names the outage instead, and only one surface names it at a time.
-  it("names Herdr's outage once, above a typed draft, until the banner takes it over", async () => {
+  // Before the banner, one quiet line above the box names the outage, empty or with a draft, and
+  // only one surface names it at a time. The placeholder only says what the box keeps: the outage in
+  // it took two lines at 375 px, which Safari cuts at the box's one-line height.
+  it("names Herdr's outage once, above the box, until the banner takes it over", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       __resetConnectionHealth();
       renderChat({ bridge: "disconnected" }, undefined, { banner: true });
-      expect(screen.queryByText(/Herdr isn.t responding/)).not.toBeInTheDocument();
-      const box = screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.");
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+      const box = screen.getByPlaceholderText("Drafts are kept.");
       fireEvent.change(box, { target: { value: "keep this for later" } });
       expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
       expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);

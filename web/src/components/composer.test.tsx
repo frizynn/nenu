@@ -2674,7 +2674,8 @@ describe("Composer — placeholder", () => {
   it.each([
     ["access was refused", { readOnly: true, lockReason: "refused" }, "Sign in again to reply", true],
     ["the device is read-only", { readOnly: true, lockReason: "read-only" }, "Read-only — device not authorised", true],
-    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr", herdrDown: true }, "Herdr isn't responding. Drafts are kept.", false],
+    // The outage itself is named in the line above (below); the box keeps to what a 375 px phone fits.
+    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr", herdrDown: true }, "Drafts are kept.", false],
     // A question card on screen already says it; the screen names the outage once.
     ["Herdr isn't responding and the card says so", { disconnected: true, lockReason: "herdr", herdrDown: true, lockOnCard: true }, "Drafts are kept.", false],
     ["Nenu is reconnecting", { disconnected: true, lockReason: "offline" }, "Write a draft while reconnecting…", false],
@@ -2687,10 +2688,10 @@ describe("Composer — placeholder", () => {
   });
 
   // One surface names Herdr's outage: the banner while it is up, else a card whose lock is the outage,
-  // else the box, in its placeholder while that shows and in one line above it when a draft or a
-  // read-only lock hides the reason.
+  // else one line above the box. Never the placeholder: at 375 px the outage and "Drafts are kept."
+  // take two lines, and Safari cuts a placeholder at the box's one-line height.
   it.each([
-    ["an empty box", { disconnected: true, lockReason: "herdr" }, "", false, null],
+    ["an empty box", { disconnected: true, lockReason: "herdr" }, "", false, "Herdr isn't responding."],
     ["a typed draft", { disconnected: true, lockReason: "herdr" }, "keep this", false, "Herdr isn't responding. Drafts are kept."],
     ["a read-only device", { readOnly: true, disconnected: true, lockReason: "read-only" }, "", false, "Herdr isn't responding."],
     ["a read-only device under a card", { readOnly: true, disconnected: true, lockReason: "read-only", lockOnCard: true }, "", false, "Herdr isn't responding."],
