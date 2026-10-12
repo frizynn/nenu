@@ -216,7 +216,7 @@ function ComposerDock({
   return (
     <div className="mb-2 flex flex-col overflow-hidden rounded-xl border border-border/65 bg-card">
       <PanelHeader title={title} onClose={onClose} className="pl-3" />
-      <div className="max-h-[45dvh] min-h-0 overflow-y-auto">{children}</div>
+      <div className="max-h-[45dvh] min-h-0 overflow-y-auto pt-2">{children}</div>
     </div>
   );
 }
