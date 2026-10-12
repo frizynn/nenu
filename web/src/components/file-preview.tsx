@@ -239,9 +239,8 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
         onStep={step} onClose={close} onDismissed={onClose} onImageError={imageError} onImageLoad={(src) => failedImages.current.delete(src)} />
       : <>
         <header className="file-preview-header">
-          {/* A full-screen modal leaves on a Done text button, not a back chevron. Its start padding was the
-              chevron's room, so the margin sets the word on the 16px gutter. */}
-          <button type="button" className="preview-done ms-2.5" onClick={close}>Done</button>
+          {/* A full-screen modal leaves on a Done text button, not a back chevron. */}
+          <button type="button" className="preview-done" onClick={close}>Done</button>
           <Icon className="file-preview-kind size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div ref={heading} className="file-preview-heading">
             <h2 ref={titleRef} className="file-preview-title" aria-label={title === name ? undefined : name} title={title === name ? undefined : name}>{title}</h2>

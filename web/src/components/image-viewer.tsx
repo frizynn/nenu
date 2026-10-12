@@ -337,7 +337,7 @@ export function ImageViewer({ images, index, name, downloadUrl, error, onStep, o
     </div>}
     <header className="image-viewer-bar image-viewer-top">
       {/* A modal's Done, as in the document preview (file-preview.tsx). */}
-      <button type="button" className="preview-done ms-2.5" onClick={onClose}>Done</button>
+      <button type="button" className="preview-done" onClick={onClose}>Done</button>
       <h2 ref={titleRef} className="image-viewer-title" aria-label={title === name ? undefined : name} title={title === name ? undefined : name}>{title}</h2>
       <div className="image-viewer-actions">
         {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download image" className="image-viewer-action"><Download className="size-5" aria-hidden="true" /></a>}
