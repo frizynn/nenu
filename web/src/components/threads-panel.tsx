@@ -86,7 +86,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
   const [merging, setMerging] = useState<ProjectThreadView | null>(null);
   const [historyShown, setHistoryShown] = useState(false);
   const { open, history } = prLists(threads);
-  if (open.length === 0 && history.length === 0) return <p className="py-3 text-sm text-muted-foreground">No pull requests yet.</p>;
+  if (open.length === 0 && history.length === 0) return <p className="py-3 text-subhead text-muted-foreground">No pull requests yet.</p>;
   const openThread = (thread: ProjectThreadView) => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id);
   const row = (thread: ProjectThreadView, past: boolean) => {
     const pr = thread.pr;
