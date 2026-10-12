@@ -30,7 +30,7 @@ export function TerminalDraftPreview({ text, onTakeOver }: TerminalDraftPreviewP
       <Terminal className="mt-0.5 size-3 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="font-medium">Draft in terminal</div>
-        <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-code text-muted-foreground">
+        <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words font-mono text-caption text-muted-foreground">
           {text}
         </div>
       </div>
