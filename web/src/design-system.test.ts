@@ -208,3 +208,17 @@ describe("hover", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("fields", () => {
+  it("draws every visible native select as the shared field, so WebKit draws no control of its own", () => {
+    // A bare <select> took WebKit's own menulist: a double arrow, no padding, 26px tall in a 44px row.
+    // The shared field (components/ui/select-field.tsx) keeps the native picker and draws one look; a
+    // select laid invisibly over a row of its own (opacity-0) draws nothing at all.
+    const offenders = filesEndingIn(src, ".tsx")
+      .filter((file) => !file.endsWith(join("components", "ui", "select-field.tsx")))
+      .flatMap((file) => [...readFileSync(file, "utf8").matchAll(/<select\b[\s\S]*?<\/select>/g)]
+        .filter((m) => !/\bopacity-0\b/.test(m[0]))
+        .map((m) => `${relative(src, file)}: ${m[0].split("\n")[0]!.trim().slice(0, 80)}`));
+    expect(offenders).toEqual([]);
+  });
+});
