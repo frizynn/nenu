@@ -191,3 +191,20 @@ describe("chrome", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("hover", () => {
+  it("fills a control on hover only where a pointer hovers, so a tap on a phone leaves nothing lit", () => {
+    // A touch browser keeps :hover on whatever a finger tapped until the next tap: the drawer's Search
+    // opened with its button still filled. Tailwind's hover: variant already sits behind
+    // @media (hover: hover); the app's own stylesheets put theirs there too. `:not(:hover)` only takes
+    // a fill away, so it needs no guard.
+    const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), resolve(src, "components/file-preview.css"), ...stylesheets(resolve(src, "styles"))];
+    const offenders = files.flatMap((file) =>
+      cssRules(readFileSync(file, "utf8"))
+        .filter((rule) => rule.selectors.some((s) => s.replace(/:not\(:hover\)/g, "").includes(":hover")))
+        .filter((rule) => !rule.atRules.some((at) => /\(hover: hover\)/.test(at)))
+        .map((rule) => `${relative(src, file)}: ${rule.selectors.join(", ")}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
