@@ -1297,7 +1297,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       <div ref={surfaceRef} className="composer-surface">
         {/* The conversation view narrates delivery on the message's own bubble instead. */}
         {delivering && !lastSent && !nativeWorkbench && (
-          <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-xs text-muted-foreground" role="status" aria-live="polite">
+          <div className="mb-1 flex min-h-7 items-center gap-1.5 px-1 text-footnote text-muted-foreground" role="status" aria-live="polite">
             <Pending className="size-3 shrink-0" />
             <span>Sending…</span>
           </div>
@@ -1305,7 +1305,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {/* Pending-send preview: visible from send until the mirror echoes back (or 6s). Shows the
             user what landed so they don't double-tap while waiting for the terminal to update. */}
         {lastSent && (
-          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-footnote text-muted-foreground">
             <Pending className="size-3 shrink-0" />
             <span className="truncate">
               <span className="font-medium">You sent:</span> {lastSent}
@@ -1364,7 +1364,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             the draft stabilises (never a blip/self-echo), then its text tracks the live line — host
             typing streams straight in. It NEVER writes into the phone-owned input; only the explicit
             Take over copies the text here. No dismiss — it's honest state and persists until the user
-            takes over, sends, or the host line clears. Same zinc/text-xs chrome as the "You sent:"
+            takes over, sends, or the host line clears. Same quiet chrome as the "You sent:"
             strip above. */}
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
@@ -1413,7 +1413,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             lasts as long as the text does, and a status auto-clears in 2.5s and would re-fire on
             every keystroke. Self-clearing: trim the draft or send it and the row is simply gone. */}
         {!direct.active && !fitsDraftStore(input) && (
-          <p className="px-1 pb-1 text-xs leading-snug text-muted-foreground">
+          <p className="px-1 pb-1 text-footnote text-muted-foreground">
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
@@ -1470,7 +1470,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
-            <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg" role="status">
+            <div className="absolute inset-x-0 bottom-full z-30 mb-2 rounded-xl border border-border bg-popover px-3 py-3 text-footnote text-muted-foreground shadow-lg" role="status">
               {skills.loading ? "Loading skills…" : <span>Couldn't load skills. <button type="button" className="min-h-11 px-2 underline" onMouseDown={(e) => e.preventDefault()} onClick={skills.retry}>Retry</button></span>}
             </div>
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
@@ -1550,7 +1550,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               // While a password prompt is recognised the draft is a secret the pane never took: it is
               // masked on screen as well as kept out of the store (noticeNoEcho). A box nothing can be
               // written into keeps its reason at full strength: the well already says it is off.
-              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 md:min-h-10 md:py-2 md:text-sm", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
+              className={cn("composer-input block min-h-11 flex-1 rounded-none border-0 bg-transparent py-2.5 pl-2 pr-1 shadow-none focus-visible:ring-0 text-body md:min-h-10 md:py-2", lockedOut && "pl-3.5 disabled:opacity-100", noEcho !== null && !direct.active && "composer-input-secret")}
               disabled={gone || readOnly}
               rows={1}
             />
@@ -1563,7 +1563,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               // notice it stays put but steps back to outline: that notice's Use Type is the primary.
               <Button
                 variant={noEcho !== null ? "outline" : "destructive"}
-                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-footnote font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}
                 aria-label="Type anyway?"
@@ -1573,7 +1573,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ) : !direct.active && confirmingSend ? (
               <Button
                 variant="destructive"
-                className="hit-area h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+                className="hit-area h-8 shrink-0 rounded-full px-3 text-footnote font-semibold"
                 onClick={onSendClick}
                 disabled={locked || !hasDraft || sending}
                 aria-label="Really send?"

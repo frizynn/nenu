@@ -66,7 +66,7 @@ export function CommandPalette({
       {agent && (
         <div className="mb-3 flex items-center gap-2">
           <AgentIcon agent={agent} className="size-6" />
-          <span className="text-sm font-medium">{agent}</span>
+          <span className="text-subhead font-medium">{agent}</span>
         </div>
       )}
       <div className="relative mb-3">
@@ -82,7 +82,7 @@ export function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Search ${all.length} commands…`}
-          className="h-11 w-full rounded-md border border-input bg-transparent pl-9 pr-3 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+          className="h-11 w-full rounded-md border border-input bg-transparent pl-9 pr-3 text-body outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
 
@@ -92,7 +92,7 @@ export function CommandPalette({
 
       <div className="flex flex-col gap-1">
         {list.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">No commands match “{query}”.</p>
+          <p className="py-8 text-center text-subhead text-muted-foreground">No commands match “{query}”.</p>
         )}
         {list.map((c) => {
           const isPending = pending === c.command;
@@ -110,20 +110,20 @@ export function CommandPalette({
                 <div className="flex items-center gap-1.5">
                   <span
                     className={cn(
-                      "font-mono text-sm font-semibold",
+                      "font-mono text-code font-semibold",
                       c.dangerous ? "text-destructive" : "text-foreground",
                     )}
                   >
                     {c.command}
                   </span>
                   {c.takesArg && (
-                    <span className="font-mono text-caption text-muted-foreground">{c.argHint}</span>
+                    <span className="font-mono text-footnote text-muted-foreground">{c.argHint}</span>
                   )}
                 </div>
-                <p className="truncate text-xs text-muted-foreground">{c.description}</p>
+                <p className="truncate text-footnote text-muted-foreground">{c.description}</p>
               </div>
               {isPending ? (
-                <span className="shrink-0 text-xs font-medium text-destructive">Confirm?</span>
+                <span className="shrink-0 text-footnote font-medium text-destructive">Confirm?</span>
               ) : c.takesArg ? (
                 <Pencil className="size-4 shrink-0 text-muted-foreground" />
               ) : (
