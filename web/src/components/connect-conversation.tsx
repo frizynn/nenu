@@ -4,6 +4,7 @@ import { useRevalidator } from "react-router";
 import { ChevronDown } from "@/components/ui/icon";
 import { connectConversation, fetchConversations } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { SelectField } from "@/components/ui/select-field";
 import { cn } from "@/lib/utils";
 
 /**
@@ -79,10 +80,10 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
           <label htmlFor={listId} className="text-footnote text-muted-foreground">Running in this folder</label>
           <button type="button" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()} className={cn(quiet, "-mr-2 px-2 disabled:not-aria-busy:text-disabled-foreground")}>Search again</button>
         </div>
-        <select id={listId} aria-label="Conversation to connect" className={field} value={id} onChange={(event) => setId(event.target.value)}>
+        <SelectField id={listId} aria-label="Conversation to connect" value={id} onChange={(event) => setId(event.target.value)}>
           <option value="">Choose a conversation</option>
           {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.title} ({choice.id.slice(0, 8)})</option>)}
-        </select>
+        </SelectField>
       </div>
       : <Button variant={leads && !manual ? "default" : "outline"} size={leads ? "lg" : "default"} className={leads ? "self-center" : "w-full"}
         disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}

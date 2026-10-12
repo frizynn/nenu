@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 
-import { Field, Segmented, inputField, selectField } from "@/components/new-agent-sheet";
+import { Field, Segmented } from "@/components/new-agent-sheet";
+import { inputField } from "@/components/ui/field";
+import { SelectField } from "@/components/ui/select-field";
 import { errorMessage } from "@/components/node-start";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/sheet";
@@ -80,10 +82,10 @@ export function CoordinatorWindow({ project, session, mode, running, busy = fals
         </p>}
 
         {choices && form && !choices.available && <Field label="Runs on">
-          <select className={selectField} value={form.profile} onChange={(event) => setForm({ ...form, profile: event.currentTarget.value })}>
+          <SelectField value={form.profile} onChange={(event) => setForm({ ...form, profile: event.currentTarget.value })}>
             {mode === "start" && <option value="">The project's default</option>}
             {choices.profiles.map((profile) => <option key={profile.name} value={profile.name}>{profile.name}</option>)}
-          </select>
+          </SelectField>
         </Field>}
 
         {choices?.available && form && <>
@@ -112,10 +114,10 @@ export function CoordinatorWindow({ project, session, mode, running, busy = fals
           </Field>
           {badModel && <p className="-mt-2.5 text-footnote text-destructive">One model name, like opus or gpt-5.5.</p>}
           {own && own.efforts.length > 0 && <Field label="Effort">
-            <select className={selectField} value={form.effort} onChange={(event) => setForm({ ...form, effort: event.currentTarget.value })}>
+            <SelectField value={form.effort} onChange={(event) => setForm({ ...form, effort: event.currentTarget.value })}>
               <option value="">The {shortcut ? "profile's" : "harness's"} default</option>
               {own.efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
-            </select>
+            </SelectField>
           </Field>}
         </>}
 

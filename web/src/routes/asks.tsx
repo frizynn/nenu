@@ -4,7 +4,7 @@ import { ListChecks } from "@/components/ui/icon";
 
 import { AskSections } from "@/components/ask-list";
 import { ColumnPage } from "@/components/column-page";
-import { selectField } from "@/components/new-agent-sheet";
+import { SelectField } from "@/components/ui/select-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { asksAvailable, useAsks } from "@/hooks/use-asks";
 import { useDesk } from "@/hooks/use-desk";
@@ -102,18 +102,18 @@ function AskFilters({ list, projects, filter, onChange }: {
     <div className="mt-4 flex flex-wrap gap-2">
       <div className={field}>
         <label htmlFor={projectId} className={label}>Project</label>
-        <select id={projectId} className={selectField} value={filter.project ?? ""} onChange={(event) => onChange({ project: event.currentTarget.value || undefined })}>
+        <SelectField id={projectId} value={filter.project ?? ""} onChange={(event) => onChange({ project: event.currentTarget.value || undefined })}>
           <option value="">All projects</option>
           {asked.map((project) => <option key={project.slug} value={project.slug}>{project.name}</option>)}
-        </select>
+        </SelectField>
       </div>
       <div className={field}>
         <label htmlFor={coordinatorId} className={label}>Coordinator</label>
-        <select id={coordinatorId} className={selectField} value={filter.coordinator ?? ""} disabled={!filter.project}
+        <SelectField id={coordinatorId} value={filter.coordinator ?? ""} disabled={!filter.project}
           onChange={(event) => onChange({ project: filter.project, coordinator: event.currentTarget.value || undefined })}>
           <option value="">All coordinators</option>
           {coordinators.map((coordinator) => <option key={coordinator.id} value={coordinator.id}>{coordinatorName(coordinator)}</option>)}
-        </select>
+        </SelectField>
       </div>
     </div>
   );

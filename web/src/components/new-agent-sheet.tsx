@@ -4,6 +4,7 @@ import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 
 import type { NewPreset } from "@/components/new-dialog";
 import { Button } from "@/components/ui/button";
+import { inputField, textField } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import { fetchHomeDirs } from "@/lib/api";
 import { baseName, tildePath } from "@/lib/dir-picker";
@@ -39,13 +40,6 @@ export interface NewAgentValues {
   session?: string;
 }
 
-// Its own colour and weight: a Field's label is muted and medium, and a control inherits both.
-export const inputField =
-  "h-10 w-full rounded-lg border border-border bg-background px-3 text-body font-normal text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring coarse:h-11";
-
-export const selectField = cn(inputField, "appearance-auto");
-/** A text area grows from its rows, not the input's height. */
-export const textField = cn(inputField, "h-auto resize-none py-2 coarse:h-auto");
 
 /** A labelled field of the New flow: the label over its control. */
 export function Field({ label, children }: { label: string; children: ReactNode }) {

@@ -6,6 +6,7 @@ import { FileText, Pending, Paperclip, RefreshCw } from "@/components/ui/icon";
 
 import { BottomSheet, finePointer } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { SelectField } from "@/components/ui/select-field";
 import { SEGMENT_TRACK, segmentClass } from "@/components/dock-tile";
 import type { ActivityArtifact } from "@/lib/activity";
 import { fetchHistory } from "@/lib/api";
@@ -262,12 +263,13 @@ export function ChatFilesBrowser({
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
         {filter === "file" && <div className="mb-3 flex flex-wrap gap-2">
           <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
-          <select aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+          {/* At least 9rem each, so the longest default ("Recent first") clears the chevron. */}
+          <SelectField aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="flex-[1_1_9rem]">
             <option value="all">Any format</option>{extensions.map(ext => <option key={ext} value={ext}>.{ext}</option>)}
-          </select>
-          <select aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs">
+          </SelectField>
+          <SelectField aria-label="Sort files" value={sort} onChange={event => setSort(event.target.value)} className="flex-[1_1_9rem]">
             <option value="recent">Recent first</option><option value="extension">Extension</option><option value="name">Name</option>
-          </select>
+          </SelectField>
         </div>}
         {scan.loading && (
           <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground">
