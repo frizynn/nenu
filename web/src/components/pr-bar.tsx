@@ -75,9 +75,9 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
         {pr.url
           ? <a href={pr.url} target="_blank" rel="noreferrer" className="hit-area inline-flex min-h-11 shrink-0 items-center font-medium tabular-nums hover:underline lg:min-h-0">{pr.number !== undefined ? `#${pr.number}` : "PR"}</a>
           : <span className="shrink-0 font-medium tabular-nums">{pr.number !== undefined ? `#${pr.number}` : "PR"}</span>}
-        {pr.state !== "open" && <span className="shrink-0 text-xs text-muted-foreground">{pr.state}</span>}
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{thread.branch}</span>
-        {pr.diff && <DiffStat diff={pr.diff} paneId={pr.state === "open" || pr.state === "draft" ? thread.paneId : undefined} pr={pr.number} session={session} url={pr.url} className="text-xs" />}
+        {pr.state !== "open" && <span className="shrink-0 text-footnote text-muted-foreground">{pr.state}</span>}
+        <span className="min-w-0 flex-1 truncate font-mono text-code text-muted-foreground">{thread.branch}</span>
+        {pr.diff && <DiffStat diff={pr.diff} paneId={pr.state === "open" || pr.state === "draft" ? thread.paneId : undefined} pr={pr.number} session={session} url={pr.url} className="text-code" />}
         {pr.url && <a href={pr.url} target="_blank" rel="noreferrer" aria-label="Open on GitHub" title="Open on GitHub"
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
           <ExternalLink aria-hidden className="size-3.5" />
@@ -88,13 +88,13 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
           <Row icon={<span aria-hidden className="size-2 rounded-full border border-muted-foreground" />} label="In progress" count={checks.pending} />
           <Row icon={<Check aria-hidden className="size-3.5 text-status-done" />} label="Passed" count={checks.passed} />
           <Row icon={<X aria-hidden className="size-3.5 text-status-blocked" />} label="Failed" count={checks.failed} />
-          {checks.failing?.map((name) => <p key={name} className="truncate pl-6 text-xs text-status-blocked">{name}</p>)}
+          {checks.failing?.map((name) => <p key={name} className="truncate pl-6 text-footnote text-status-blocked">{name}</p>)}
         </> : <p className="text-muted-foreground">Organizations has not reported checks for this PR yet.</p>}
-        {pr.mergeBlocker && <p className="mt-1 text-xs text-muted-foreground">Merge waits: {pr.mergeBlocker}</p>}
+        {pr.mergeBlocker && <p className="mt-1 text-footnote text-muted-foreground">Merge waits: {pr.mergeBlocker}</p>}
         {actions ? <div className="mt-2 border-t border-border pt-2">
           {flag("autoFixCi", "Auto-fix CI & address comments")}
           {flag("autoMerge", "Auto-merge when ready")}
-          {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-footnote text-destructive">{error}</p>}
           <p className="mt-1 text-footnote leading-snug text-muted-foreground">The Herdr Organizations ticker does this even while Nenu is closed.</p>
         </div> : pr.state === "open" && <p className="mt-2 text-footnote text-muted-foreground">This Organizations build has no PR actions, so the checks are read-only.</p>}
       </div>

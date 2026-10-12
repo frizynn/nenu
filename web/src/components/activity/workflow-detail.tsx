@@ -18,7 +18,7 @@ import { AgentBar, Meta, StateDot, StatusTag } from "./activity-parts";
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-lg font-semibold tabular-nums tracking-tight">{value}</span>
+      <span className="text-headline tabular-nums">{value}</span>
       <span className="text-footnote text-muted-foreground">{label}</span>
     </div>
   );
@@ -93,7 +93,7 @@ function ResultList({ label, items }: { label: string; items: unknown[] }) {
 /** Whatever an agent returned, laid out generically: short fields as rows, long text and lists below. */
 export function AgentResult({ value }: { value: unknown }) {
   if (typeof value === "string") return <p className="whitespace-pre-wrap break-words text-footnote leading-relaxed">{value}</p>;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return <pre className="whitespace-pre-wrap break-words font-mono text-xs">{brief(value)}</pre>;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return <pre className="whitespace-pre-wrap break-words font-mono text-code">{brief(value)}</pre>;
   const entries = Object.entries(value as Record<string, unknown>);
   const short = entries.filter(([, v]) => (typeof v === "string" && v.length <= 80 && !v.includes("\n")) || typeof v === "number" || typeof v === "boolean");
   const rest = entries.filter((e) => !short.includes(e));
@@ -185,7 +185,7 @@ export function WorkflowDetail({ workflow, results = {}, now, selectedAgentId = 
               <StatusTag status={workflow.status} />
               {workflow.startedAt !== undefined && <span className="text-xs text-muted-foreground">started {formatClock(workflow.startedAt)} by Claude</span>}
             </div>
-            {!namedAbove && <h2 className="truncate text-lg font-semibold tracking-tight">{workflow.name}</h2>}
+            {!namedAbove && <h2 className="truncate text-headline">{workflow.name}</h2>}
             {workflow.summary && <p className="max-w-[560px] text-footnote leading-relaxed text-muted-foreground">{workflow.summary}</p>}
           </div>
           <div className="flex gap-6">

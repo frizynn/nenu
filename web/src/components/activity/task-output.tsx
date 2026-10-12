@@ -14,12 +14,12 @@ export function TaskOutput({ paneId, session, taskId }: { paneId: string; sessio
     });
     return () => controller.abort();
   }, [paneId, session, taskId]);
-  if (failed) return <p role="status" className="text-xs text-muted-foreground">Output is no longer available.</p>;
-  if (!output) return <p role="status" className="text-xs text-muted-foreground">Loading output…</p>;
+  if (failed) return <p role="status" className="text-footnote text-muted-foreground">Output is no longer available.</p>;
+  if (!output) return <p role="status" className="text-footnote text-muted-foreground">Loading output…</p>;
   return (
     <div className="flex flex-col gap-1.5">
       {output.truncated && <span className="text-footnote text-muted-foreground">Showing the newest output only.</span>}
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-xs leading-relaxed">
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-code">
         {output.text || "(no output)"}
       </pre>
     </div>
