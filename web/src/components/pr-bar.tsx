@@ -60,7 +60,7 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
   const flag = (key: Flag, label: string) => {
     const on = Boolean(thread[key]);
     return (
-      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-[13px]">
+      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-footnote">
         <input type="checkbox" className="size-4 accent-primary" checked={on} disabled={readOnly || saving !== null}
           onChange={() => void toggle(key, !on)} />
         {label}
@@ -69,7 +69,7 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
   };
 
   return (
-    <section aria-label={`This thread's pull request`} className="flex flex-col gap-1 text-[13px]">
+    <section aria-label={`This thread's pull request`} className="flex flex-col gap-1 text-footnote">
       <div className="flex min-h-9 items-center gap-2.5">
         <GitPullRequest aria-hidden className={cn("size-4 shrink-0", pr.state === "merged" ? "text-violet-400" : "text-status-done")} />
         {pr.url
@@ -95,8 +95,8 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
           {flag("autoFixCi", "Auto-fix CI & address comments")}
           {flag("autoMerge", "Auto-merge when ready")}
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-          <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">The Herdr Organizations ticker does this even while Nenu is closed.</p>
-        </div> : pr.state === "open" && <p className="mt-2 text-[11.5px] text-muted-foreground">This Organizations build has no PR actions, so the checks are read-only.</p>}
+          <p className="mt-1 text-caption leading-snug text-muted-foreground">The Herdr Organizations ticker does this even while Nenu is closed.</p>
+        </div> : pr.state === "open" && <p className="mt-2 text-caption text-muted-foreground">This Organizations build has no PR actions, so the checks are read-only.</p>}
       </div>
     </section>
   );
