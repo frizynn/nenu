@@ -548,8 +548,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {waiting ? <p className="mb-4 flex items-center justify-center gap-2 text-footnote text-muted-foreground">
                 <ChatCircle aria-hidden="true" className="size-4 shrink-0" />No conversation linked
               </p> : <EmptyState icon={ChatCircle} title="No conversation linked" action={
-                // The form's column: 384 px, or the empty state's width where that is narrower.
-                <div className="w-sm max-w-full">
+                // The form's column: 384 px, or the empty state's width where that is narrower. A grid
+                // track, because the empty state shrink-wraps its action: a w-sm box would hold it at
+                // 384 px and push the form past a phone's gutter, while minmax(0, 24rem) asks for 384
+                // and gives way.
+                <div className="grid grid-cols-[minmax(0,24rem)]">
                   <RecoveryLeads.Provider value>{offer}</RecoveryLeads.Provider>
                   {!error && activityStatus === "working" && <div className="mt-3 flex justify-center"><WorkActivityLabel /></div>}
                 </div>
