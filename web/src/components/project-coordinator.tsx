@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { Play, RefreshCw } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
 
 import { errorMessage } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
@@ -132,8 +133,8 @@ function CoordinatorStart({ project, session, readOnly, onStarted, compact = fal
     <CoordinatorWindow project={project.slug} session={session} mode="start" onSubmit={(choice) => void start(choice)} onClose={() => setChoosing(false)} />
   </Suspense>;
   const said = <>
-    {outcome?.error && <p role="alert" className="mt-2 text-sm text-destructive">{outcome.text}</p>}
-    {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-xs text-muted-foreground">{outcome.text}</p>}
+    {outcome?.error && <p role="alert" className="mt-2 text-subhead text-destructive">{outcome.text}</p>}
+    {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-footnote text-muted-foreground">{outcome.text}</p>}
   </>;
   if (compact) return <>
     <button type="button" className="quiet-action" aria-haspopup="dialog" disabled={starting} onClick={() => setChoosing(true)}>
@@ -147,14 +148,14 @@ function CoordinatorStart({ project, session, readOnly, onStarted, compact = fal
       <div className="flex min-h-9 items-center gap-2.5">
         <NodeDot state="idle" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">Coordinator</span>
-          <span className="block text-xs text-muted-foreground">Not running</span>
+          <span className="block text-body font-medium">Coordinator</span>
+          <span className="block text-footnote text-muted-foreground">Not running</span>
         </span>
+        {/* The page's one action while no coordinator runs, so the page tier (the 404's Go to Home), not a row's compact button. */}
         {!readOnly && (
-          <button type="button" disabled={starting} onClick={() => setChoosing(true)}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-medium text-background disabled:opacity-60 lg:h-8">
-            {!starting && <Play aria-hidden className="size-3.5" />}{starting ? "Starting coordinator…" : "Start coordinator"}
-          </button>
+          <Button type="button" size="lg" disabled={starting} aria-busy={starting || undefined} onClick={() => setChoosing(true)}>
+            {!starting && <Play aria-hidden />}{starting ? "Starting coordinator…" : "Start coordinator"}
+          </Button>
         )}
       </div>
       {said}
