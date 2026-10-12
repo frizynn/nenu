@@ -1370,7 +1370,10 @@ export function AgentChat({
                 MIRROR_SPACE,
                 MIRROR_INVERT,
               )}
-              // The mirror's own size, which the operator sets: these are the pane's last rows.
+              // The mirror's own size, which the operator sets: these are the pane's last rows, so
+              // they keep the terminal grid's exemption from the 13px floor. Floored, they would sit
+              // larger than the rows above them and cut the statusline sooner than the mirror cuts
+              // its own lines.
               style={{ fontSize: `${prefs.fontSize}px` }}
             >
               {statusLines.map((row, i) => (
