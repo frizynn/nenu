@@ -125,6 +125,19 @@ describe("surfaces", () => {
   });
 });
 
+describe("the drawer's selected row", () => {
+  // A chat's age took the tertiary tone, which clears 4.5:1 on the page but measured 4.43:1 on the
+  // light selected row's fill.
+  it("keeps a chat's age at 4.5:1 on its fill in both themes", () => {
+    const nav = read("styles/nav.css");
+    const layer = ["@layer components"];
+    const tone = declarations(nav, '.nav-pane[aria-current="page"] .nav-chat-time', layer).color ?? declarations(nav, ".nav-chat-time", layer).color;
+    const ink = themed(/^var\(--([\w-]+)\)$/.exec(tone ?? "")![1]!);
+    const row = themed("workbench-row-selected");
+    ink.forEach((colour, i) => expect(contrast(colour, row[i]!), i ? "dark" : "light").toBeGreaterThanOrEqual(4.5));
+  });
+});
+
 describe("radii", () => {
   it("takes every radius in the app's own stylesheets from the scale, or a pill or circle, or none edge to edge", () => {
     const files = [resolve(src, "index.css"), resolve(src, "workbench.css"), resolve(src, "components/file-preview.css"), ...stylesheets(resolve(src, "styles"))];
