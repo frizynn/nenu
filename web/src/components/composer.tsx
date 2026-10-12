@@ -25,6 +25,7 @@ import { DisplayPrefsContent } from "@/components/display-prefs";
 import { ListRow, ListSection } from "@/components/ui/list-group";
 import { Switch } from "@/components/ui/switch";
 import { PanelHeader } from "@/components/ui/panel-header";
+import { DIALOG_CARD, OptionButton, OptionList, QuestionHeading, SECONDARY_ACTION, SecondaryActions } from "@/components/option-button";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -221,25 +222,26 @@ function ComposerDock({
 }
 
 /**
- * The send-time choice for a busy agent. Both rows are 48 px targets; the wording is the CLI's own
- * measured behaviour, so "now" never promises more than the CLI does.
+ * The send-time choice for a busy agent, drawn as every card is: who is working and the question,
+ * the shared option list, and Cancel as the quiet escape. It sits on the cards' column, the page
+ * gutter, rather than the box's bleed. The wording is the CLI's own measured behaviour, so "now"
+ * never promises more than the CLI does (ADR 0056: asked at every send, never remembered).
  */
 function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
-  const row = "flex min-h-12 w-full flex-col items-start justify-center rounded-md px-2.5 py-1.5 text-left hover:bg-muted focus-visible:bg-muted";
   return (
-    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 rounded-xl border border-border/65 bg-card p-1">
-      <p className="px-2.5 pb-0.5 pt-1 text-xs text-muted-foreground">{choice.name} is working. When should it read this?</p>
-      <button type="button" className={row} onClick={() => onPick(choice.now)}>
-        <span className="text-sm font-medium">Send now</span>
-        <span className="text-xs text-muted-foreground">{choice.nowHint}</span>
-      </button>
-      <button type="button" className={row} onClick={() => onPick("afterTurn")}>
-        <span className="text-sm font-medium">Queue for later</span>
-        <span className="text-xs text-muted-foreground">{choice.laterHint}</span>
-      </button>
-      <button type="button" className="min-h-11 w-full rounded-md text-xs text-muted-foreground hover:bg-muted" onClick={onCancel}>
-        Cancel
-      </button>
+    <div role="group" aria-label={`${choice.name} is working`} className={cn(DIALOG_CARD, "mb-2 max-lg:mx-2")}>
+      <p className="flex items-center gap-2 text-footnote font-medium text-foreground">
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-working" />
+        {choice.name} is working
+      </p>
+      <QuestionHeading>When should it read this?</QuestionHeading>
+      <OptionList>
+        <OptionButton label="Send now" description={choice.nowHint} onClick={() => onPick(choice.now)} />
+        <OptionButton label="Queue for later" description={choice.laterHint} onClick={() => onPick("afterTurn")} />
+      </OptionList>
+      <SecondaryActions>
+        <button type="button" className={SECONDARY_ACTION} onClick={onCancel}>Cancel</button>
+      </SecondaryActions>
     </div>
   );
 }
@@ -1415,7 +1417,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        {busyPick && busyChoice && <BusyChoicePanel choice={busyChoice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}
+        <Fold value={busyPick && busyChoice}>{(choice) => <BusyChoicePanel choice={choice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}</Fold>
         {nativeWorkbench && (
           <MessageQueueStrip
             agent={agent}
