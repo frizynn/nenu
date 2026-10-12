@@ -187,7 +187,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
           {error}
         </p>
       )}
-      <Button type="submit" disabled={busy || readOnly} aria-busy={busy || undefined} className="h-11">
+      <Button type="submit" size="block" disabled={busy || readOnly} aria-busy={busy || undefined}>
         {busy ? "Creating…" : shell ? "Open shell" : `Start ${agentLabel(agent)}`}
       </Button>
     </form>
