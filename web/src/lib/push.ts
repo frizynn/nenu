@@ -21,6 +21,7 @@ const ENDPOINT_KEY = "collie:push-endpoint";
 
 export type PushAvailability =
   | "unsupported" // browser lacks service worker / Push API
+  | "home-screen" // an iOS browser tab: Web Push only reaches a Home Screen web app there
   | "insecure" // not a secure context (plain HTTP) — Push can't run
   | "server-off" // the bridge has no VAPID keys configured
   | "denied" // notifications blocked at the OS/browser level
@@ -94,6 +95,15 @@ export function pushSupported(): boolean {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+/** Why push can't run where the browser has no Push API. iOS (16.4+) gives Web Push only to a web app
+ *  opened from the Home Screen, so a Safari tab can get it by being added there: an iPhone or iPod by
+ *  its platform or UA, an iPad asking for the desktop site by a Mac UA with touch. */
+function missingPush(): "unsupported" | "home-screen" {
+  const ios = navigator.maxTouchPoints > 0 && /iPhone|iPad|iPod|Mac/.test(`${navigator.platform} ${navigator.userAgent}`);
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
+  return ios && !standalone ? "home-screen" : "unsupported";
+}
+
 function urlB64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -118,7 +128,7 @@ export function keysMatch(existing: ArrayBuffer | null | undefined, serverKey: U
 // Subscribe this device to push and register it with the bridge; clears the user's "disabled"
 // preference on success. Returns whether a live subscription now exists (with a reason if not).
 export async function enablePush(): Promise<EnableResult> {
-  if (!pushSupported()) return { ok: false, reason: "unsupported" };
+  if (!pushSupported()) return { ok: false, reason: missingPush() };
   if (!window.isSecureContext) return { ok: false, reason: "insecure" };
 
   const reg = await navigator.serviceWorker.register("/sw.js");
@@ -177,7 +187,7 @@ export async function disablePush(): Promise<void> {
 // Snapshot the current push state for the settings UI.
 export async function getPushState(): Promise<PushState> {
   const userDisabled = isPushDisabledByUser();
-  if (!pushSupported()) return { availability: "unsupported", subscribed: false, userDisabled };
+  if (!pushSupported()) return { availability: missingPush(), subscribed: false, userDisabled };
   if (!window.isSecureContext) return { availability: "insecure", subscribed: false, userDisabled };
 
   let subscribed = false;
