@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { WorkbenchTelemetry } from "./workbench-telemetry";
 import type { WorkbenchPanel } from "./workbench-telemetry";
@@ -91,6 +91,17 @@ it("says Choose model while no model is known, and draws no chip where there is 
   expect(screen.queryByRole("button", { name: "Choose model" })).not.toBeInTheDocument();
   rerender(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} telemetry={{ source: "statusline", fileTruncated: false, model: "gpt-5.5" }} />);
   expect(screen.getByRole("button", { name: "Choose model" })).toBeDisabled();
+});
+
+// A native model menu on screen opens the model panel on its own (use-workbench-panels), and the chip
+// is the panel's anchor: while the panel is open the chip stays, even where nothing could be chosen
+// from Nenu, or the popover lands wherever the page puts it.
+it("keeps the chip while the model panel is open, as its anchor, where nothing could be chosen", () => {
+  const anchor = createRef<HTMLButtonElement>();
+  render(<WorkbenchTelemetry mode="model" modelAvailable={false} disabled={false} onChooseModel={vi.fn()} modelOpen modelTriggerRef={anchor} />);
+  const chip = screen.getByRole("button", { name: "Choose model" });
+  expect(chip).toHaveAttribute("aria-expanded", "true");
+  expect(anchor.current).toBe(chip);
 });
 
 it("names the model and effort as quiet labels in one picker button", () => {

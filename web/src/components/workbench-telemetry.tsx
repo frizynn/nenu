@@ -98,11 +98,12 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
   };
   if (mode === "metrics") return <UsageDetails telemetry={telemetry} stale={stale} />;
   // With no model reported the chip names what a tap does, and where there is no picker to open
-  // either it waits for the agent to report one: a bare "Model" read as a caption for nothing.
+  // either it waits for the agent to report one: a bare "Model" read as a caption for nothing. An open
+  // model panel keeps it either way: a native menu on screen opens the panel, and the chip anchors it.
   const model = telemetry?.model ? modelDisplayName(telemetry.model) : null;
   return (
     <div className="workbench-telemetry flex min-w-0 flex-nowrap items-center gap-1 text-footnote text-muted-foreground">
-      {(model || modelAvailable) && <button
+      {(model || modelAvailable || modelOpen) && <button
         ref={modelTriggerRef}
         type="button"
         className="composer-quiet hit-area flex min-w-0 max-w-[13rem] items-center gap-2.5 md:max-w-[18rem]"
