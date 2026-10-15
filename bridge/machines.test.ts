@@ -315,6 +315,29 @@ describe("the machine list", () => {
     expect(saved).toEqual([true, false]);
   });
 
+  test("a forwarded request keeps a video's byte range; identity, cookies and proxy headers stay here", async () => {
+    let sent = new Headers();
+    const link = {
+      start() {},
+      stop() {},
+      view: () => ({ session: "@build-box", label: "build-box", state: "connected" as const }),
+      async fetch(_path: string, init?: RequestInit) {
+        sent = new Headers(init?.headers);
+        return new Response("pa", { status: 206 });
+      },
+    };
+    const machines = new Machines({ list: async () => parseMachineList(LIST), hostLabel: "studio", link: () => link, on: true, persist: async () => {} });
+    await machines.reload();
+    const url = new URL("http://h/api/pane/w1%3Ap1/file?path=demo.mp4&session=%40build-box");
+    const req = new Request(url, {
+      headers: { range: "bytes=0-1", cookie: "a=b", "tailscale-user-login": "operator@example.com", "x-device": "phone", "x-forwarded-for": "100.64.0.1" },
+    });
+    expect((await machines.forward("@build-box", req, url)).status).toBe(206);
+    // Safari plays a <video> only when its first ranged read comes back as one.
+    expect(sent.get("range")).toBe("bytes=0-1");
+    expect(["cookie", "tailscale-user-login", "x-device", "x-forwarded-for"].filter((name) => sent.has(name))).toEqual([]);
+  });
+
   test("no saved machines: no list at all, so one machine looks as it always did", async () => {
     const machines = new Machines({ list: async () => [], hostLabel: "studio", link: () => { throw new Error("no link"); }, on: true, persist: async () => {} });
     await machines.reload();
