@@ -23,6 +23,8 @@ import { json, jsonError, secure, text } from "./http.ts";
 // little over MAX_UPLOAD_BYTES on the wire. Allow a small slack for the Content-Length pre-check.
 const MAX_UPLOAD_OVERHEAD = 64 * 1024; // 64 KB
 
+const folderCache = new WeakMap<readonly TranscriptEntry[], readonly string[]>();
+
 /**
  * The pane a file request reads from and its journal, resolved one way for both /file and
  * /html-preview so a file the agent delivered from outside the cwd opens in either.
@@ -51,7 +53,14 @@ async function paneFileScope(
     cwd: pane?.cwd,
     journalEntries,
     delivered: () => delivered ??= journalEntries().then((entries) => deliveredFilePaths(entries)),
-    folders: () => folders ??= journalEntries().then((entries) => mentionedFolders(entries)),
+    folders: () => folders ??= journalEntries().then((entries) => {
+      let named = folderCache.get(entries);
+      if (!named) {
+        named = mentionedFolders(entries);
+        folderCache.set(entries, named);
+      }
+      return named;
+    }),
   };
 }
 
@@ -61,21 +70,21 @@ export const filePaneActions: Record<string, PaneAction> = {
     marksSeen: false,
     async handle(services, request) {
       const { req, url } = request;
-      const { cwd, journalEntries, delivered } = await paneFileScope(services, request);
+      const { cwd, journalEntries, delivered, folders } = await paneFileScope(services, request);
       const requestedPath = url.searchParams.get("path");
       const ifNoneMatch = req.headers.get("if-none-match");
       if (isChatUploadPath(services.cfg.stateDir, requestedPath))
         return secure(await chatUploadPreviewResponse(services.cfg.stateDir, requestedPath, await journalEntries(), ifNoneMatch));
-      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, stateDir: services.cfg.stateDir }));
+      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, folders, stateDir: services.cfg.stateDir }));
     },
   },
   "html-preview": {
     level: "read",
     marksSeen: false,
     async handle(services, request) {
-      const { cwd, delivered } = await paneFileScope(services, request);
+      const { cwd, delivered, folders } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
+        { delivered, folders, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
     },
   },
   files: {

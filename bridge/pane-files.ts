@@ -73,6 +73,25 @@ export interface PaneFile {
   etag: string;
 }
 
+/** Follow a relative name through the conversation's folders, supplied newest first. */
+export async function openPaneFile(
+  cwd: string | undefined,
+  requestedPath: string | null,
+  delivered: () => Promise<readonly string[]> = async () => [],
+  stateDir?: string,
+  folders?: () => Promise<readonly string[]>,
+): Promise<PaneFile | Response> {
+  const file = await openNamedFile(cwd, requestedPath, delivered, stateDir);
+  if (!folders || !(file instanceof Response) || file.status !== 404 || !requestedPath || isAbsolute(requestedPath)) return file;
+  for (const folder of await folders().catch(() => [])) {
+    const candidate = resolve(folder, requestedPath);
+    if (!candidate.startsWith(folder + sep)) continue;
+    const found = await openNamedFile(cwd, candidate, undefined, stateDir);
+    if (!(found instanceof Response)) return found;
+  }
+  return file;
+}
+
 /**
  * Project previews are an explicit exception to journal-only reads: the client may name a file,
  * but the live pane supplies its root. Resolve both names, refuse escapes and sensitive paths,
@@ -81,7 +100,7 @@ export interface PaneFile {
  * (`delivered`, loaded lazily), named by its exact path or by a trailing part of it; the
  * private-path policy and bounded read still apply.
  */
-export async function openPaneFile(
+async function openNamedFile(
   cwd: string | undefined,
   requestedPath: string | null,
   delivered: () => Promise<readonly string[]> = async () => [],
@@ -169,11 +188,13 @@ export async function paneFileResponse(
     range?: string | null;
     ifNoneMatch?: string | null;
     delivered?: () => Promise<readonly string[]>;
+    /** Folders the conversation names, where a relative name the pane's folder lacks may live. */
+    folders?: () => Promise<readonly string[]>;
     /** Nenu's own state, uploads included: never served, even from a folder that holds it (ADR 0074). */
     stateDir?: string;
   } = {},
 ): Promise<Response> {
-  const file = await openPaneFile(cwd, requestedPath, options.delivered, options.stateDir);
+  const file = await openPaneFile(cwd, requestedPath, options.delivered, options.stateDir, options.folders);
   if (file instanceof Response) return file;
   let streaming = false;
   try {

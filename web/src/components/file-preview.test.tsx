@@ -78,6 +78,31 @@ it("follows a name the pane's folder lacks to the file the bridge finds, and say
   expect(inspect).toHaveBeenCalledWith("w1:p1", ["gone.md"], undefined);
 });
 
+// A video plays from its own URL, so its failure is a bare media error: the viewer still asks the
+// bridge why, and follows a name the pane's folder lacks to where the bridge finds it.
+it("follows a video named outside the pane's folder to the file the bridge finds", async () => {
+  fetchFile.mockRejectedValue(new PaneFileError("Could not open file (404): File unavailable in this workspace.", 404, false));
+  inspect.mockResolvedValue([{ path: "out/film.mp4", state: "preview", resolved: "/repo/app/out/film.mp4" }]);
+  render(<FilePreview paneId="w1:p1" path="out/film.mp4" onClose={() => {}} />);
+  const video = () => document.querySelector("video")!;
+  expect(video()).toHaveAttribute("src", "/api/pane/w1%3Ap1/file?path=out%2Ffilm.mp4");
+  fireEvent.error(video());
+  await waitFor(() => expect(video()).toHaveAttribute("src", "/api/pane/w1%3Ap1/file?path=%2Frepo%2Fapp%2Fout%2Ffilm.mp4"));
+  expect(inspect).toHaveBeenCalledWith("w1:p1", ["out/film.mp4"], undefined);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("reports a video the browser cannot play after one successful bridge probe without retrying", async () => {
+  fetchFile.mockResolvedValue(new Response("video bytes", { status: 206, headers: { "content-type": "video/mp4" } }));
+  render(<FilePreview paneId="w1:p1" path="out/film.mp4" onClose={() => {}} />);
+
+  fireEvent.error(document.querySelector("video")!);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not play this video. Download it to open in another player.");
+  expect(fetchFile).toHaveBeenCalledExactlyOnceWith("w1:p1", "out/film.mp4", undefined, expect.any(AbortSignal));
+  expect(inspect).not.toHaveBeenCalled();
+});
+
 it("surfaces unavailable files and retries without leaving the chat", async () => {
   fetchFile.mockRejectedValueOnce(new Error("File unavailable in this workspace."));
   fetchFile.mockResolvedValueOnce(new Response("hello", { headers: { "content-type": "text/plain" } }));

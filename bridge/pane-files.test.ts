@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as fsPromises from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rename, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TranscriptEntry } from "./journal/types.ts";
 import { deliveredFilePaths } from "./journal/delivered.ts";
+import { artifactMetadata, mentionedFolders } from "./artifact-metadata.ts";
+import { checkOpenable } from "./file-open.ts";
+import { renderedHtmlResponse } from "./html-preview.ts";
 import { FILE_STATE_HEADER, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse } from "./pane-files.ts";
 
 describe("pane project files", () => {
@@ -104,6 +108,54 @@ describe("pane project files", () => {
     expect((await paneFileResponse(root, "huge.pdf")).status).toBe(413);
     expect((await paneFileResponse(root, "binary.txt")).status).toBe(415);
     expect((await paneFileResponse(root, "binary.zip")).status).toBe(415);
+  });
+
+  // An agent that cd'd into a repo below the pane's folder names its files relative to that repo.
+  describe("a relative name under a folder the conversation names", () => {
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from("ftypisom"), Buffer.alloc(52)]);
+    let repo: string;
+    beforeEach(async () => {
+      repo = join(root, "code", "film");
+      await mkdir(join(repo, "out"), { recursive: true });
+      await writeFile(join(repo, "out", "cut.mp4"), mp4);
+      await writeFile(join(repo, "notes.md"), "# Notes\n");
+    });
+
+    test("is served from the one folder that holds it, any kind", async () => {
+      const folders = async () => [join(dir, "elsewhere"), repo];
+      const video = await paneFileResponse(root, "out/cut.mp4", { folders, range: "bytes=0-15" });
+      expect(video.status).toBe(206);
+      expect(video.headers.get("content-type")).toBe("video/mp4");
+      const notes = await paneFileResponse(root, "notes.md", { folders });
+      expect(await notes.text()).toBe("# Notes\n");
+      // The pane's own folder still answers first.
+      await writeFile(join(root, "notes.md"), "# Root\n");
+      expect(await (await paneFileResponse(root, "notes.md", { folders })).text()).toBe("# Root\n");
+    });
+
+    test("uses the newest named folder when more than one holds the name", async () => {
+      const other = join(root, "code", "other");
+      await mkdir(other, { recursive: true });
+      expect((await paneFileResponse(root, "notes.md", { folders: async () => [repo, other] })).status).toBe(200);
+      await writeFile(join(other, "notes.md"), "# Other\n");
+      const newest = await paneFileResponse(root, "notes.md", { folders: async () => [other, repo] });
+      expect(await newest.text()).toBe("# Other\n");
+    });
+
+    test("never reaches past the pane's folder, by a named folder, traversal or a symlink", async () => {
+      const outside = join(dir, "outside");
+      await mkdir(outside);
+      await writeFile(join(outside, "secret.md"), "secret");
+      await symlink(join(outside, "secret.md"), join(repo, "linked.md"));
+      const folders = async () => [outside, repo];
+      // The same lookup finds a contained file, so the refusals below are the gate and not a miss.
+      expect((await paneFileResponse(root, "notes.md", { folders })).status).toBe(200);
+      for (const name of ["secret.md", "linked.md", "../../../outside/secret.md"]) {
+        const denied = await paneFileResponse(root, name, { folders });
+        expect(denied.status).toBe(404);
+        expect(await denied.text()).not.toContain("secret");
+      }
+    });
   });
 
   test("previews a file the agent delivered from outside the workspace, and nothing else outside it", async () => {
@@ -239,4 +291,167 @@ test("video previews validate content and honor seek ranges", async () => {
     await writeFile(join(root,"bad.mp4"),"<script>bad</script>");
     expect((await paneFileResponse(root,"bad.mp4")).status).toBe(415);
   } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+function prose(...texts: string[]): TranscriptEntry[] {
+  return texts.map((text, index) => ({
+    uuid: String(index),
+    ts: String(index),
+    role: "assistant",
+    parts: [{ kind: "text", text }],
+  }));
+}
+
+describe("relative files in folders named by the conversation", () => {
+  let dir: string;
+  let root: string;
+  let state: string;
+
+  beforeEach(async () => {
+    dir = await realpath(await mkdtemp(join(tmpdir(), "nenu-pane-file-named-")));
+    root = join(dir, "project");
+    state = join(root, ".nenu-state");
+    await mkdir(root);
+    await mkdir(state);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("rechecks containment after a named folder is swapped for an outside symlink", async () => {
+    const named = join(root, "repos", "film");
+    const outside = join(dir, "outside");
+    await mkdir(named, { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(named, "notes.md"), "inside");
+    await writeFile(join(outside, "notes.md"), "outside");
+
+    const originalOpen = fsPromises.open;
+    let swapped = false;
+    const openSpy = spyOn(fsPromises, "open").mockImplementation(async (path, ...args) => {
+      if (!swapped && String(path) === join(named, "notes.md")) {
+        swapped = true;
+        await rename(named, `${named}-before-swap`);
+        await symlink(outside, named, "dir");
+      }
+      return originalOpen(path, ...args);
+    });
+    try {
+      const response = await paneFileResponse(root, "notes.md", { folders: async () => [named] });
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain("outside");
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test("the same swap under the pane folder is already caught", async () => {
+    const named = join(root, "local");
+    const outside = join(dir, "outside-local");
+    await mkdir(named);
+    await mkdir(outside);
+    await writeFile(join(named, "notes.md"), "inside");
+    await writeFile(join(outside, "notes.md"), "outside");
+
+    const originalOpen = fsPromises.open;
+    let swapped = false;
+    const openSpy = spyOn(fsPromises, "open").mockImplementation(async (path, ...args) => {
+      if (!swapped && String(path) === join(named, "notes.md")) {
+        swapped = true;
+        await rename(named, `${named}-before-swap`);
+        await symlink(outside, named, "dir");
+      }
+      return originalOpen(path, ...args);
+    });
+    try {
+      expect((await paneFileResponse(root, "local/notes.md")).status).toBe(404);
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test.each([
+    ["audio.wav", "RIFF", 4],
+    ["large.pdf", "%PDF-1.7\n", MAX_PREVIEW_FILE_BYTES + 1],
+  ] as const)("named %s stays a 404 and can be inspected then opened", async (name, content, size) => {
+    const repo = join(root, "repo");
+    await mkdir(repo);
+    await writeFile(join(repo, name), content);
+    if (size > content.length) await truncate(join(repo, name), size);
+    const folders = async () => [repo];
+
+    expect((await paneFileResponse(root, name, { folders })).status).toBe(404);
+    const metadata = await artifactMetadata(root, [name], {
+      folders,
+      openable: async (path) => {
+        const file = await checkOpenable(path, state);
+        return "status" in file ? null : file.path;
+      },
+    });
+    expect(metadata).toEqual([{ path: name, state: "preview", resolved: join(repo, name) }]);
+    const inspected = metadata[0]!;
+    if (!("resolved" in inspected)) throw new Error("inspection did not resolve the named file");
+    expect(await checkOpenable(inspected.resolved, state)).toMatchObject({ path: join(repo, name) });
+  });
+
+  test("uses the same newest-first named-folder order as artifact inspection", async () => {
+    const older = join(root, "older");
+    const newer = join(root, "newer");
+    await mkdir(older);
+    await mkdir(newer);
+    await writeFile(join(older, "notes.md"), "older");
+    await writeFile(join(newer, "notes.md"), "newer");
+    const entries = prose(`Worked in ${older}/notes.md`, `Finished in ${newer}/notes.md`);
+    const folders = async () => mentionedFolders(entries);
+
+    expect(await folders()).toEqual([newer, older]);
+    expect(await (await paneFileResponse(root, "notes.md", { folders })).text()).toBe("newer");
+    expect(await artifactMetadata(root, ["notes.md"], { folders })).toEqual([
+      { path: "notes.md", state: "preview", resolved: join(newer, "notes.md") },
+    ]);
+  });
+
+  test("skips a private newest folder and uses the next named folder", async () => {
+    const older = join(root, "older");
+    const privateFolder = join(root, ".ssh");
+    await mkdir(older);
+    await mkdir(privateFolder);
+    await writeFile(join(older, "notes.md"), "public");
+    await writeFile(join(privateFolder, "notes.md"), "private");
+    const entries = prose(`Worked in ${older}/notes.md`, `Latest copy is ${privateFolder}/notes.md`);
+    const folders = async () => mentionedFolders(entries);
+
+    expect(await folders()).toEqual([privateFolder, older]);
+    expect(await (await paneFileResponse(root, "notes.md", { folders })).text()).toBe("public");
+    expect(await artifactMetadata(root, ["notes.md"], { folders })).toEqual([
+      { path: "notes.md", state: "preview", resolved: join(older, "notes.md") },
+    ]);
+  });
+
+  test("refuses an uploads folder even when the conversation names it", async () => {
+    const uploads = join(state, "uploads");
+    const name = "w1_p1-mv8g-0a1b2c3d-notes.txt";
+    await mkdir(uploads);
+    await writeFile(join(uploads, name), "uploaded");
+    const folders = async () => mentionedFolders(prose(`The file is ${uploads}/${name}`));
+
+    const response = await paneFileResponse(root, name, { folders, stateDir: state });
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("uploaded");
+  });
+
+  test("HTML preview follows the named folder and inlines its sibling image", async () => {
+    const site = join(root, "repo", "site");
+    await mkdir(site, { recursive: true });
+    await writeFile(join(site, "index.html"), '<h1>Page</h1><img src="sibling.png">');
+    await writeFile(join(site, "sibling.png"), PNG);
+    const folders = async () => mentionedFolders(prose(`Rendered ${site}/index.html`));
+
+    const response = await renderedHtmlResponse(root, "index.html", { folders, inlineAssets: true });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain(`src="data:image/png;base64,${PNG.toString("base64")}"`);
+  });
 });

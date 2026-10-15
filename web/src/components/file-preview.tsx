@@ -160,17 +160,21 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
     exit.current = window.setTimeout(onClose, ms);
   };
 
-  /** An <img> that will not load says nothing of why: the file read answers that. */
-  const imageFailed = () => {
-    if (item?.kind !== "file") return setError({ message: "Could not load this image.", outside: false });
+  /**
+   * An <img> or <video> that will not load says nothing of why: the file read answers that, and a
+   * 404 for a name the pane's folder lacks follows it to where the bridge finds it.
+   */
+  const mediaFailed = (message: string) => {
+    if (item?.kind !== "file") return setError({ message, outside: false });
     const key = itemKey;
     probe.current?.abort();
     probe.current = new AbortController();
     fetchPaneFile(source, filePath, session, probe.current.signal).then((response) => {
       void response.body?.cancel();
-      if (shown.current === key) setError({ message: "Could not load this image.", outside: false });
+      if (shown.current === key) setError({ message, outside: false });
     }, (cause: unknown) => { if (shown.current === key && !probe.current?.signal.aborted) fail(cause); });
   };
+  const imageFailed = () => mediaFailed("Could not load this image.");
 
   const copyPath = async () => {
     try { await navigator.clipboard.writeText(filePath); setCopied(true); } catch { setCopied(false); }
@@ -250,7 +254,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
         {error ? <div className="file-preview-content">{failure}</div>
           : html ? <HtmlViewer paneId={source} session={session} path={filePath} name={name} reload={attempt} onError={fail} />
           : <div className="file-preview-content">
-            <DocumentContent data={data} name={name} openRelated={openRelated} onError={(message) => setError({ message, outside: false })} />
+            <DocumentContent data={data} name={name} openRelated={openRelated} onError={mediaFailed} />
           </div>}
       </>}
     </div>

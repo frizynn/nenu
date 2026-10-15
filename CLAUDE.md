@@ -292,7 +292,8 @@ grammar, the probe catches on-disk format drift.
 
 Project file previews (`bridge/pane-files.ts`) separately accept a client path under the live pane's
 cwd, or an exact path Claude Code's own SendUserFile result in the current pane's contained journal
-reports as delivered (never a path the model merely mentions). Every read is bounded and contained after realpath resolution; private paths are refused.
+reports as delivered (never a path the model merely mentions). A relative name may also be followed
+into a folder the conversation names, newest first, still inside the pane's folder. Every read is bounded and contained after realpath resolution; private paths are refused.
 Source renders as text, and so does SVG for now. SVG may render only as an `<img>` from an
 `image/svg+xml` blob, never as a document. HTML may execute only in the opaque-origin `allow-scripts` iframe
 defined by `web/src/lib/html-preview.ts`: its injected CSP has no network, and the sandbox grants no
