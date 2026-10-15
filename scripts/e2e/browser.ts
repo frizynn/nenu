@@ -22,6 +22,7 @@ export interface Locator {
   last(): Locator;
   innerText(): Promise<string>;
   getAttribute(name: string): Promise<string | null>;
+  screenshot(opts: { path?: string; animations?: "disabled" }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
@@ -29,7 +30,7 @@ export interface Locator {
 export interface Page {
   goto(url: string, opts?: { waitUntil?: "load" | "domcontentloaded" }): Promise<unknown>;
   on(event: "request", fn: (req: Request) => void): void;
-  screenshot(opts: { path?: string; fullPage?: boolean; animations?: "disabled" }): Promise<Uint8Array>;
+  screenshot(opts: { path?: string; fullPage?: boolean; animations?: "disabled"; clip?: { x: number; y: number; width: number; height: number } }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByPlaceholder(text: string | RegExp): Locator;
@@ -41,7 +42,7 @@ export interface Page {
   clock: { install(opts: { time: number }): Promise<void> };
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
   keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void> };
-  mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void> };
+  mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
   setViewportSize(size: { width: number; height: number }): Promise<void>;
   goBack(): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;

@@ -219,14 +219,18 @@ describe("Recents and Workspaces", () => {
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
   });
 
-  it("lists each Herdr workspace once, with its state and how many sessions it holds, and opens it on its sessions", async () => {
+  it("lists each Herdr workspace once, with its state and how many sessions it holds, and opens one of two tabs on its sessions", async () => {
     const tabbed: HomeData = {
       ...recentData,
       tabs: [
-        { tabId: "t1", workspaceId: "w1", number: 1, label: "docs", focused: true, paneCount: 3 },
-        { tabId: "t2", workspaceId: "w2", number: 1, label: "lead", focused: false, paneCount: 3 },
+        { tabId: "t1", workspaceId: "w1", number: 1, label: "docs", focused: true, paneCount: 1 },
+        { tabId: "t1b", workspaceId: "w1", number: 2, label: "review", focused: false, paneCount: 2 },
+        { tabId: "t2", workspaceId: "w2", number: 1, label: "lead", focused: false, paneCount: 1 },
+        { tabId: "t3", workspaceId: "w2", number: 2, label: "panels", focused: false, paneCount: 2 },
       ],
-      agents: recentData.agents.map((agent) => agent.workspaceId === "w2" ? { ...agent, tabId: "t2" } : agent),
+      shellPanes: recentData.shellPanes.map((pane) => ({ ...pane, tabId: "t1b" })),
+      agents: recentData.agents.map((agent) => agent.paneId === "w1:p2" ? { ...agent, tabId: "t1b" }
+        : agent.workspaceId === "w2" ? { ...agent, tabId: agent.paneId === "c1" ? "t2" : "t3" } : agent),
     };
     const { user, router, main } = await setup(tabbed);
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
@@ -248,6 +252,28 @@ describe("Recents and Workspaces", () => {
     expect(panel.getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/^Earlier thread,\s*Idle,\s*docs,\s*3h ago$/);
     await user.click(panel.getByRole("link", { name: /^Earlier thread,/ }));
     expect(router.state.location.pathname).toBe("/pane/w1%3Ap1");
+  });
+
+  it("opens a workspace of one tab on its pane in one tap, split or not, with nothing to unfold", async () => {
+    const oneTab: HomeData = {
+      ...recentData,
+      tabs: [
+        { tabId: "t1", workspaceId: "w1", number: 1, label: "docs", focused: true, paneCount: 3 },
+        { tabId: "t2", workspaceId: "w2", number: 1, label: "lead", focused: false, paneCount: 3 },
+      ],
+      agents: recentData.agents.map((agent) => agent.workspaceId === "w2" ? { ...agent, tabId: "t2" } : agent),
+    };
+    const { user, router, main } = await setup(oneTab);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+    expect(panel.queryByRole("button")).toBeNull();
+    // Each row opens the pane its workspace opens on everywhere: the agent asking for you, else the one seen last.
+    const rows = panel.getAllByRole("link");
+    expect(rows.map((row) => row.getAttribute("href"))).toEqual(["/pane/w1%3Ap2?s=work", "/pane/w2%3Ap2?s=work"]);
+    expect(rows[0]).toHaveAccessibleName(/^Nenu,\s*Needs you,\s*3 sessions/);
+    expect(rows[1]).toHaveAccessibleName(/^hub,\s*Working,\s*3 sessions/);
+    await user.click(rows[0]!);
+    expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
   });
 
   it("asks for your reply in Needs you, with Reply, and counts it in the headline", async () => {
@@ -299,11 +325,22 @@ describe("Recents and Workspaces", () => {
     expect(within(main.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href")))
       .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work"]);
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    const workspaceRows = () => within(main.getByRole("tabpanel", { name: "Workspaces" })).getAllByRole("button").map((row) => row.getAttribute("aria-label")?.split(",")[0]);
+    const workspaceRows = () => within(main.getByRole("tabpanel", { name: "Workspaces" })).getAllByRole("listitem").map((row) => row.firstElementChild?.getAttribute("aria-label")?.split(",")[0]);
     expect(workspaceRows()).toEqual(["hub"]);
     await user.selectOptions(filter, "");
     expect(workspaceRows()).toEqual(["Nenu", "hub"]);
     expect(reads).toBe(0);
+  });
+
+  it("unfolds a one-tab workspace under a project filter that leaves out the pane it opens on", async () => {
+    const scratch = { ...data.agents[0]!, paneId: "w2:scratch", workspaceId: "w2", workspaceLabel: "hub", paneLabel: "Scratch", lastSeenAt: now };
+    const { user, main } = await setup({ ...recentData, agents: [...recentData.agents, scratch] });
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+    expect(panel.getByRole("link", { name: /^hub,/ })).toHaveAttribute("href", "/pane/w2%3Ascratch?s=work");
+    await user.selectOptions(main.getByRole("combobox", { name: "Project" }), "hub");
+    await user.click(panel.getByRole("button", { name: /^hub,/ }));
+    expect(panel.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/c1?s=work", "/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work"]);
   });
 
   it("offers no project filter where there are no projects", async () => {

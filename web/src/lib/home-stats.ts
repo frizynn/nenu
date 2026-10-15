@@ -6,8 +6,8 @@ import { displayName, displayPlace, type DisplayPlace } from "./display-name";
 import { byRecency, chatRecency, isOpenThread, projectForPane } from "./projects";
 import { isUnseen } from "./triage";
 import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
-import { workspaceTree } from "./workspace-tree";
-import type { Herd } from "./spaces";
+import { opensDirectly, workspaceTree } from "./workspace-tree";
+import { workspaceEntry, type Herd } from "./spaces";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -252,15 +252,21 @@ export interface WorkspaceChats {
   workspaceId: string;
   name: string;
   chats: RecentChat[];
+  /** The pane its row opens when it holds one tab (opensDirectly); otherwise the row unfolds its sessions. */
+  entry?: string;
 }
 
 /** Home's "Workspaces": every session under its workspace, in the order the workspace tree keeps them. */
 export function workspaceChats(herd: Herd, projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): WorkspaceChats[] {
-  return workspaceTree(herd).map((branch) => ({
-    workspaceId: branch.workspace.workspaceId,
-    name: branch.name,
-    chats: sessionChats(branch.tabs.flatMap((tab) => tab.panes), projects, reviews),
-  }));
+  return workspaceTree(herd).map((branch) => {
+    const entry = opensDirectly(branch) ? workspaceEntry(branch.workspace.workspaceId, herd)?.paneId : undefined;
+    return {
+      workspaceId: branch.workspace.workspaceId,
+      name: branch.name,
+      chats: sessionChats(branch.tabs.flatMap((tab) => tab.panes), projects, reviews),
+      ...(entry ? { entry } : {}),
+    };
+  });
 }
 
 /** Workflows still running, with the pane that launched them. */

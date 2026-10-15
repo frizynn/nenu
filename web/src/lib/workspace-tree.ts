@@ -53,6 +53,14 @@ export function workspaceTree(source: Herd, currentPaneId?: string): WorkspaceBr
       || a.workspace.number - b.workspace.number);
 }
 
+/**
+ * A workspace of one tab, split or not, has nothing to unfold: its row opens that tab, whose panes are
+ * the strip above its chat (ADR 0065).
+ */
+export function opensDirectly(branch: Pick<WorkspaceBranch, "tabs">): boolean {
+  return branch.tabs.length === 1;
+}
+
 /** An untouched workspace opens when it holds the pane on screen, something that needs you, or is the only one. */
 export function defaultOpen(branch: WorkspaceBranch, workspaces: number): boolean {
   return branch.current || branch.counts.blocked > 0 || workspaces === 1;

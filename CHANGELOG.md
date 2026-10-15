@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-10-15
+
+### Fixed
+
+- On an iPhone, tapping the chat's draft opens the keyboard without sliding the header and the thread off screen: the tap focuses the draft with `preventScroll`, so Safari no longer scrolls the whole app up while the keyboard rises (351b8e8c, 6b9a436b).
+- A workspace with one tab opens that tab from its row in Home's Workspaces, the drawer and Search, with no fold in between (8cf928b0).
+
 ## [1.12.0] - 2026-10-15
 
 ### Added
