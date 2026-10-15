@@ -69,8 +69,6 @@ function model(size: { width: number; height: number }): void {
   }, true);
 }
 
-type Sample = { header: number; composer: number; last: number; anchor: number | null };
-
 /** Where the chat's pieces sit in the page (layout coordinates), and the line that was at `anchorY`. */
 const measure = (page: Page, anchorY: number | null) => page.evaluate((y: number | null) => {
   const top = (selector: string, edge: "top" | "bottom") => document.querySelector(selector)?.getBoundingClientRect()[edge] ?? Number.NaN;
