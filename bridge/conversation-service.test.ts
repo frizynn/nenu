@@ -86,6 +86,18 @@ describe("identity recovery", () => {
     } });
     expect((await service.resolve({ ...pane, terminalTitle: "Fix parser | tmp" }, { processInfo: async () => info(["codex"], pid) })).agentSession).toBeUndefined();
   });
+  test("a Codex just opened says its conversation has not started, and a saved choice still wins", async () => {
+    const service = new ConversationService({ request: async (method, params) => {
+      if (method === "thread/loaded/list") return { data: [id], nextCursor: null };
+      if (method === "thread/read") return { thread: { id: params?.threadId, cwd: "/tmp", name: null, preview: "", status: { type: "idle" }, parentThreadId: null } };
+      throw new Error(`Unexpected request: ${method}`);
+    } }, undefined, undefined, async () => []);
+    const fresh = { ...pane, terminalTitle: "tmp" };
+    expect(await service.describe(fresh, herdr)).toEqual({ pane: fresh, notStarted: true });
+    expect(await service.resolve(fresh, herdr)).toEqual(fresh);
+    await service.attach(fresh, id, herdr);
+    expect(await service.describe(fresh, herdr)).toEqual({ pane: { ...fresh, agentSession: { kind: "id", value: id } }, notStarted: false });
+  });
   test("Claude attach follows the authoritative process or short id", () => {
     const sessions = [{ id: "abc123", sessionId: id, cwd: "/tmp", pid: 100 }];
     expect(matchClaudeSession(info(["claude", "attach", "abc123"]), sessions)).toBe(id);
