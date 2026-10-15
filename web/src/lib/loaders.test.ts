@@ -142,6 +142,14 @@ describe("paneLoader", () => {
     expect(data.text).toBe(paneTextWithDraft());
   });
 
+  it("carries whether a shell sits at its prompt, and drops it on a stale read", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+$/, () => HttpResponse.json({ paneId: "w1:p1", text: "$ vpn", truncated: false, revision: 4, atPrompt: false })));
+    const { paneLoader } = await import("./loaders");
+    expect((await paneLoader({ params: { paneId: "w1:p1" } })).atPrompt).toBe(false);
+    failPane();
+    expect((await paneLoader({ params: { paneId: "w1:p1" } })).atPrompt).toBeUndefined();
+  });
+
   it.each([401, 403] as const)("marks a %i response as an auth error", async (status) => {
     rejectPane(status);
     const { paneLoader } = await import("./loaders");

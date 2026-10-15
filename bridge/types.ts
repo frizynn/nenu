@@ -409,6 +409,9 @@ export interface PaneReadResponse {
   truncated: boolean;
   /** Herdr's monotonic pane revision — passed through for the client's prompt-select race guard. */
   revision: number;
+  /** A shell pane only: true while the shell waits at its prompt, false while a command holds the
+   *  terminal. Absent when unknown. */
+  atPrompt?: boolean;
 }
 
 /**

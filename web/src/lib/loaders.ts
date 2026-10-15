@@ -123,6 +123,8 @@ export interface PaneData {
   /** Herdr's monotonic revision for `text` — the prompt-select race guard checks against it. 0 on
    * the degraded (stale-text) path, where the guard's fresh fetch will reject a mismatch anyway. */
   revision: number;
+  /** A shell at its prompt (true) or running a command (false); absent when unknown, a stale read included. */
+  atPrompt?: boolean;
   error: boolean;
   /** True when the failed refresh was rejected with HTTP 401 or 403. */
   authError: boolean;
@@ -528,6 +530,7 @@ async function loadPane(paneId: string, session: string | undefined, lines: numb
       truncated: read.truncated,
       requestedLines: lines,
       revision: read.revision,
+      atPrompt: read.atPrompt,
       nativeTelemetry: read.nativeTelemetry,
       error: false,
       authError: false,

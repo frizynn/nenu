@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-10-15
+
+### Fixed
+
+- A shell's agent launcher is one folded row (Start Claude Code · Ask, its options a tap away), giving a phone's terminal 156px back, and it leaves while the shell runs a command, where Herdr can only refuse a start (f859e63d).
+
 ## [1.14.0] - 2026-10-15
 
 ### Added
