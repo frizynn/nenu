@@ -7,7 +7,7 @@ import { checkAccess, deviceAuth, guard, isHostAllowed, isLoopbackPeer } from ".
 import { historyParams } from "./routes/history.ts";
 import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
 import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
-import { paneReadResponse } from "./routes/pane.ts";
+import { atShellPrompt, paneReadResponse } from "./routes/pane.ts";
 import { keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
 import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
 import { normalizeTabLabel, tabInsertIndex } from "./routes/structure.ts";
@@ -749,6 +749,33 @@ describe("paneReadResponse — pane read → REST body", () => {
       truncated: false,
       revision: 0,
     });
+  });
+
+  test("says whether a shell sits at its prompt, and says nothing when that is unknown", () => {
+    const read: PaneRead = { pane_id: "w1:p1", text: "$ ", truncated: false, revision: 3 };
+    expect(paneReadResponse("w1:p1", read, false)).toEqual({ paneId: "w1:p1", text: "$ ", truncated: false, revision: 3, atPrompt: false });
+    expect(paneReadResponse("w1:p1", read, true)).toEqual({ paneId: "w1:p1", text: "$ ", truncated: false, revision: 3, atPrompt: true });
+    expect(paneReadResponse("w1:p1", read)).not.toHaveProperty("atPrompt");
+  });
+});
+
+// Measured on Herdr 0.9.3: `pane.process_info` names the shell and the process group holding the
+// terminal. They are the same group only while the shell waits at its prompt, which is also the only
+// state in which `agent.start` launches (anything else answers `agent_pane_busy`).
+describe("atShellPrompt — pane.process_info → is the shell at its prompt", () => {
+  test("the shell's own group holds the terminal: at its prompt", () => {
+    expect(atShellPrompt({ pane_id: "w1:p1", shell_pid: 26728, foreground_process_group_id: 26728, foreground_processes: [{ pid: 26728, name: "zsh" }] })).toBe(true);
+  });
+
+  test("a command's group holds it: running something", () => {
+    expect(atShellPrompt({ pane_id: "w1:p1", shell_pid: 26728, foreground_process_group_id: 26905, foreground_processes: [{ pid: 26905, name: "sleep" }] })).toBe(false);
+  });
+
+  test("an answer without both ids is unknown, never a guess", () => {
+    expect(atShellPrompt({ pane_id: "w1:p1", foreground_processes: [] })).toBeUndefined();
+    expect(atShellPrompt({ shell_pid: 0, foreground_process_group_id: 0 })).toBeUndefined();
+    expect(atShellPrompt({ shell_pid: "26728", foreground_process_group_id: 26728 })).toBeUndefined();
+    expect(atShellPrompt(null)).toBeUndefined();
   });
 });
 
