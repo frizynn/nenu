@@ -12,30 +12,30 @@ function sessions(threads: object[], nextCursor: string | null = null) {
   return new CodexSessions({ request: async (method, params) => {
     if (method === "thread/loaded/list") return { data: threads.map(row => "id" in row ? row.id : null), nextCursor };
     return { thread: threads.find(row => "id" in row && row.id === params?.threadId) };
-  } });
+  } }, async () => []);
 }
 
 describe("Codex terminal identity", () => {
   test("matches the full live title and real directory, including the working spinner", async () => {
-    expect(await sessions([thread]).match({ ...pane, terminalTitle: "⠸ Fix parser | tmp" }, info)).toBe(id);
-    expect(await sessions([thread]).match({ ...pane, terminalTitle: "Fix pars | tmp" }, info)).toBeNull();
-    expect(await sessions([{ ...thread, cwd: "/" }]).match(pane, info)).toBeNull();
+    expect(await sessions([thread]).identify({ ...pane, terminalTitle: "⠸ Fix parser | tmp" }, info)).toEqual({ id });
+    expect(await sessions([thread]).identify({ ...pane, terminalTitle: "Fix pars | tmp" }, info)).toBeNull();
+    expect(await sessions([{ ...thread, cwd: "/" }]).identify(pane, info)).toBeNull();
   });
   test("rejects duplicate names and incomplete loaded lists", async () => {
-    expect(await sessions([thread, { ...thread, id: other }]).match(pane, info)).toBeNull();
-    expect(await sessions([thread], "next").match(pane, info)).toBeNull();
+    expect(await sessions([thread, { ...thread, id: other }]).identify(pane, info)).toBeNull();
+    expect(await sessions([thread], "next").identify(pane, info)).toBeNull();
   });
   test("does not use a subagent, shell title, missing process or invalid ID", async () => {
-    expect(await sessions([{ ...thread, parentThreadId: other }]).match(pane, info)).toBeNull();
-    expect(await sessions([{ ...thread, id: "invalid" }]).match(pane, info)).toBeNull();
-    expect(await sessions([thread]).match(pane, { foreground_processes: [{ pid: 123, argv: ["echo", "codex"] }] })).toBeNull();
-    expect(await sessions([thread]).match({ ...pane, terminalTitle: undefined }, info)).toBeNull();
+    expect(await sessions([{ ...thread, parentThreadId: other }]).identify(pane, info)).toBeNull();
+    expect(await sessions([{ ...thread, id: "invalid" }]).identify(pane, info)).toBeNull();
+    expect(await sessions([thread]).identify(pane, { foreground_processes: [{ pid: 123, argv: ["echo", "codex"] }] })).toBeNull();
+    expect(await sessions([thread]).identify({ ...pane, terminalTitle: undefined }, info)).toBeNull();
   });
   test("rechecks loaded conversations and follows a switch inside the same process", async () => {
     const resolver = sessions([thread, { ...thread, id: other, name: "Other task" }]);
-    expect(await resolver.match(pane, info)).toBe(id);
-    expect(await resolver.match({ ...pane, terminalTitle: "Other task | tmp" }, info)).toBe(other);
-    expect(await resolver.match({ ...pane, terminalTitle: "Codex | tmp" }, info)).toBeNull();
+    expect(await resolver.identify(pane, info)).toEqual({ id });
+    expect(await resolver.identify({ ...pane, terminalTitle: "Other task | tmp" }, info)).toEqual({ id: other });
+    expect(await resolver.identify({ ...pane, terminalTitle: "Codex | tmp" }, info)).toBeNull();
   });
 });
 
@@ -44,10 +44,10 @@ test("shares concurrent identity reads but reloads the inventory on the next pol
   const resolver = new CodexSessions({ request: async (method) => {
     if (method === "thread/loaded/list") { lists++; await Bun.sleep(10); return { data: [id], nextCursor: null }; }
     return { thread };
-  } });
-  expect(await Promise.all([resolver.match(pane, info), resolver.match(pane, info), resolver.match(pane, info)])).toEqual([id, id, id]);
+  } }, async () => []);
+  expect(await Promise.all([resolver.identify(pane, info), resolver.identify(pane, info), resolver.identify(pane, info)])).toEqual([{ id }, { id }, { id }]);
   expect(lists).toBe(1);
-  expect(await resolver.match(pane, info)).toBe(id);
+  expect(await resolver.identify(pane, info)).toEqual({ id });
   expect(lists).toBe(2);
 });
 
