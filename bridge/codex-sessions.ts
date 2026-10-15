@@ -11,7 +11,7 @@ interface CodexProcess { pid: number; argv: string[] }
 /** The pane's Codex conversation, that it has provably not started one, or null when Nenu cannot tell. */
 export type CodexIdentity = { id: string } | { notStarted: true } | null;
 
-const ROLLOUT = /^rollout-.+-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+const ROLLOUT = /^rollout-.+-(.{36})\.jsonl$/;
 
 /**
  * Read-only identity for Codex terminals whose SessionStart hook names no session: it fires only at
@@ -26,7 +26,7 @@ export class CodexSessions {
   async identify(pane: AgentView, info: unknown): Promise<CodexIdentity> {
     const codex = codexProcesses(info);
     if (!codex.length || codex.some(({ argv }) => argv.some(arg => arg === "--remote" || arg.startsWith("--remote=")))) return null;
-    const title = pane.terminalTitle?.replace(/^[⠀-⣿]\s+/u, "").trim();
+    const title = pane.terminalTitle?.replace(/^[\u2800-\u28ff]\s+/u, "").trim();
     // Codex titles a conversation with the folder alone until it names it, after the first turn.
     const unnamed = title === basename(pane.cwd);
     if (codex.some(({ argv }) => argv.includes("--no-daemon"))) {
@@ -49,7 +49,10 @@ export class CodexSessions {
   /** Session ids of the rollouts the processes hold open, or null when their files are unreadable. */
   private async held(codex: CodexProcess[]): Promise<string[] | null> {
     const files = await this.openFiles(codex.map(({ pid }) => pid)).catch(() => null);
-    return files && [...new Set(files.flatMap(path => ROLLOUT.exec(basename(path))?.[1] ?? []))];
+    return files && [...new Set(files.flatMap(path => {
+      const id = ROLLOUT.exec(basename(path))?.[1];
+      return id && isCodexSessionId(id) ? [id] : [];
+    }))];
   }
 
   private read(): Promise<LoadedThread[] | null> {
