@@ -506,7 +506,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const skeleton = empty && loading;
   // A conversation the operator can link: one card, centred, instead of a sentence over a form. While a
   // question waits in the thread the card folds to one line at the foot, so the question is the one card.
-  const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(recovery);
+  // A Codex with no turn yet has nothing to link: its chat simply waits for the first message.
+  const offer = shown?.available === false && !shown.notStarted ? recovery : undefined;
+  const linkable = empty && !loading && shown?.available === false && shown.reason === "no-session" && Boolean(offer);
   const canLoadOlder = shown?.available && shown.hasMore && !olderStopped;
   const historyBoundary = olderStopped || (shown?.available && shown.fileTruncated && !shown.hasMore);
 
@@ -547,14 +549,14 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
                 <ChatCircle aria-hidden="true" className="mb-3 size-7 text-muted-foreground" />
                 <h2 id={cardTitle} className="text-headline text-balance">No conversation linked</h2>
                 <p className="mt-1 text-subhead text-muted-foreground text-pretty">Send a message to start, or link the one already running.</p>
-                <div className="mt-5 w-full"><RecoveryLeads.Provider value>{recovery}</RecoveryLeads.Provider></div>
+                <div className="mt-5 w-full"><RecoveryLeads.Provider value>{offer}</RecoveryLeads.Provider></div>
                 {!error && activityStatus === "working" && <div className="mt-3"><WorkActivityLabel /></div>}
               </section>}
               {footer}
             </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
               <ChatCircle className="size-5" />
               <p>{emptyCopy}</p>
-              {shown && !shown.available && shown.reason !== "disabled" && recovery && <div className="w-full max-w-sm">{recovery}</div>}
+              {shown && !shown.available && shown.reason !== "disabled" && offer && <div className="w-full max-w-sm">{offer}</div>}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
             </div>{footer}</>}
           </div>
