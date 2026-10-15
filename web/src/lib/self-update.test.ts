@@ -143,8 +143,20 @@ describe("coming back to the foreground", () => {
     leaveAndReturn();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/build-info.json", { cache: "no-store" });
-    setHidden(false); // visible → visible is not a return
+    setHidden(false); // iOS may fire "visible" twice on one resume: one return
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    leaveAndReturn();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts a resume that never said it was hidden", () => {
+    const reload = vi.fn();
+    __setReloadImpl(reload);
+    holdReload("open-agent-session", "view");
+    confirm();
+    setHidden(false); // suspended without a "hidden" event, resumed with "visible"
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it("applies a waiting update in an open chat with nothing unsent", async () => {
