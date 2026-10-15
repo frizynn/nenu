@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { statSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { loadConfig } from "../config.ts";
 import type { HerdrClient } from "../herdr-client.ts";
 import { LiveEvents } from "../live-events.ts";
 import type { MachineDirectory } from "../machines.ts";
-import { startServer } from "../server.ts";
+import { servePeer, startServer } from "../server.ts";
 import { StateEngine } from "../state-engine.ts";
 import type { MachineView } from "../types.ts";
 
@@ -144,6 +145,26 @@ describe("the other machines' door", () => {
 
   test("is a socket only this user can open", async () => {
     expect((await stat(peer())).mode & 0o777).toBe(0o600);
+  });
+
+  test("is never open to anyone else, not even for the instant after it is bound under umask 0", () => {
+    // connect() needs write on the socket (Linux, and macOS, measured), so a 0777 socket is anyone's
+    // until it is chmodded.
+    const real = Bun.serve;
+    let atBind = -1;
+    const spy = spyOn(Bun, "serve").mockImplementation(((options: { unix?: string }) => {
+      const server = real(options as Parameters<typeof Bun.serve>[0]);
+      if (options.unix) atBind = statSync(options.unix).mode & 0o777;
+      return server;
+    }) as unknown as typeof Bun.serve);
+    const umask = process.umask(0);
+    try {
+      servePeer(join(stateDir, "bind.sock"), () => new Response("ok"))?.stop(true);
+    } finally {
+      process.umask(umask);
+      spy.mockRestore();
+    }
+    expect(atBind).toBe(0o600);
   });
 
   test("answers as the operator: no identity header, Origin or device needed", async () => {

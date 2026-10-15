@@ -210,7 +210,7 @@ export function startServer(opts: ServerDeps) {
  * there by a killed bridge is this install's own and is replaced. 0600, inside a dir only this user
  * writes to: Bun creates it 0755, which already denies anyone else the write that connect() needs.
  */
-function servePeer(path: string, handle: (req: Request, server: RequestTimeouts) => Response | Promise<Response>): ReturnType<typeof Bun.serve> | null {
+export function servePeer(path: string, handle: (req: Request, server: RequestTimeouts) => Response | Promise<Response>): ReturnType<typeof Bun.serve> | null {
   try {
     mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
     rmSync(path, { force: true });
