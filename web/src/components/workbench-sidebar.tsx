@@ -306,7 +306,7 @@ function ChatRow({ pane, projects, current, now, session }: {
  */
 function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNewChat?: () => void; folded?: boolean }) {
   const { paneId, projectSlug } = useParams();
-  const { prefs, setExpanded, setWorkspaceOpen } = useSidebarPrefs({ persist: !folded });
+  const { prefs, setExpanded, setWorkspaceOpen, setTabOpen } = useSidebarPrefs({ persist: !folded });
   const projects = data.projects ?? [];
   const loose = { ...data, ...looseWorkspaces(data) };
   const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
@@ -327,7 +327,7 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
       <section aria-label="Workspaces" className="nav-group">
         <h3 className="nav-label">Workspaces</h3>
         <WorkspaceTree source={loose} session={data.session} currentPaneId={paneId}
-          expanded={prefs.workspaces} onExpand={setWorkspaceOpen} startFolded={folded} />
+          expanded={prefs.workspaces} onExpand={setWorkspaceOpen} tabs={prefs.tabs} onTab={setTabOpen} startFolded={folded} />
       </section>
     )}
     {projects.length === 0 && !hasWorkspaces && <Empty phone={folded} onNewChat={onNewChat} />}

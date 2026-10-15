@@ -21,7 +21,9 @@ export interface Locator {
   first(): Locator;
   last(): Locator;
   innerText(): Promise<string>;
-  getAttribute(name: string): Promise<string | null>;
+  getAttribute(name: string, opts?: { timeout?: number }): Promise<string | null>;
+  scrollIntoViewIfNeeded(): Promise<void>;
+  evaluateAll<T>(fn: (elements: Element[]) => T): Promise<T>;
   screenshot(opts: { path?: string; animations?: "disabled" }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;

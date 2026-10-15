@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
+import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, LayoutTemplate, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
@@ -9,12 +9,13 @@ import { PaneMark } from "@/components/nav-rows";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
-import type { RecentChat, ReviewEntry, WorkspaceChats } from "@/lib/home-stats";
+import { workspaceSessions, type RecentChat, type ReviewEntry, type TabChats, type WorkspaceChats } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
 import { ASK } from "@/lib/org-tree";
 import { projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { tabFolds, tabStartsOpen } from "@/lib/workspace-tree";
 
 /** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
 export const OPENING_MS = 120;
@@ -116,11 +117,13 @@ function stateOf(chat: RecentChat): { word: string; tone?: string } {
 /**
  * Title, then state, place and what tells it apart (its PR, its role or its tab); the place gives up
  * width first. A desk adds the PR's size and the agent. `group` is the name the row sits under, which
- * it then leaves out.
+ * it then leaves out; under its tab's row (`inTab`) it leaves the tab out too, and a phone takes that
+ * row's deeper indent back from its gaps, so the title keeps the width it has one level up.
  */
-function SessionRow({ chat, session, now, opening, group }: { chat: RecentChat; session?: string; now: number; opening: string | null; group?: string }) {
-  const { agent, title, detail, diff, at, unseen } = chat;
+function SessionRow({ chat, session, now, opening, group, inTab = false }: { chat: RecentChat; session?: string; now: number; opening: string | null; group?: string; inTab?: boolean }) {
+  const { agent, title, diff, at, unseen } = chat;
   const place = chat.place === group ? null : chat.place;
+  const detail = inTab && chat.detail === chat.tab ? null : chat.detail;
   const state = stateOf(chat);
   const to = panePath(agent.paneId, session);
   const busy = isOpening(opening, to);
@@ -128,7 +131,7 @@ function SessionRow({ chat, session, now, opening, group }: { chat: RecentChat; 
     <li>
       <Link to={to} aria-busy={busy || undefined}
         className={cn("relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
-          busy && "bg-[var(--workbench-row-hover)]")}>
+          inTab && "max-sm:gap-x-1.5", busy && "bg-[var(--workbench-row-hover)]")}>
         <span className="row-span-2 flex justify-center text-muted-foreground"><PaneMark pane={agent} /></span>
         <span className="col-start-2 flex min-w-0 items-center gap-1.5">
           <span className={cn("truncate text-body sm:text-subhead", unseen && "font-semibold")}>{title}</span>
@@ -185,32 +188,41 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
   return states.find((state) => state.word === word) ?? { word: "Empty" };
 }
 
+/** What a row that folds rows stands for: its mark, what it counts, and how far in its rows sit. */
+const FOLDS = {
+  // A tab's rows sit 12px further in on a phone, and take those 12px back from their gaps (SessionRow).
+  workspace: { icon: LayoutGrid, one: "session", many: "sessions", rows: "pl-4" },
+  tab: { icon: LayoutTemplate, one: "pane", many: "panes", rows: "pl-3 sm:pl-4" },
+} as const;
+
 /**
- * A Herdr workspace as one row: its name, how it is and how many sessions it holds. A tap opens it in
- * place on its sessions, each the row Recents draws; its tabs are what tells those rows apart, never
- * rows of their own. A workspace of one tab or one session has nothing to unfold: the tap opens its `entry` pane.
+ * A row that folds the rows under it, a Herdr workspace or a tab of several panes: its name, how it
+ * is, how many it holds and when the latest moved. A tap unfolds its rows in place, or opens `to`
+ * when there is nothing to unfold.
  */
-function WorkspaceRow({ group, now, open, onToggle, session, opening, children }: {
-  group: WorkspaceChats;
+function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, children }: {
+  kind: keyof typeof FOLDS;
+  id: string;
+  name: string;
+  chats: readonly RecentChat[];
   now: number;
   open: boolean;
   onToggle: () => void;
-  session?: string;
-  opening: string | null;
-  children: (chat: RecentChat) => ReactNode;
+  to?: string;
+  busy?: boolean;
+  children: ReactNode;
 }) {
-  const state = workspaceState(group.chats);
-  const count = `${group.chats.length} ${group.chats.length === 1 ? "session" : "sessions"}`;
-  const at = Math.max(0, ...group.chats.map((chat) => chat.at));
-  const listId = `home-workspace-${group.workspaceId}`;
-  const to = group.entry && panePath(group.entry, session);
-  const busy = !!to && isOpening(opening, to);
-  const label = `${group.name}, ${state.word}, ${count}`;
+  const { icon: Icon, one, many, rows } = FOLDS[kind];
+  const state = workspaceState(chats);
+  const count = `${chats.length} ${chats.length === 1 ? one : many}`;
+  const at = Math.max(0, ...chats.map((chat) => chat.at));
+  const listId = `home-${kind}-${id}`;
+  const label = `${name}, ${state.word}, ${count}`;
   const className = cn("grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
     busy && "bg-[var(--workbench-row-hover)]");
   const body = <>
-    <LayoutGrid aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
-    <span className="col-start-2 truncate text-body sm:text-subhead">{group.name}</span>
+    <Icon aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
+    <span className="col-start-2 truncate text-body sm:text-subhead">{name}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
       <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
     </span>
@@ -224,8 +236,38 @@ function WorkspaceRow({ group, now, open, onToggle, session, opening, children }
       {to
         ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={className}>{body}</Link>
         : <button type="button" aria-expanded={open} aria-controls={listId} aria-label={label} onClick={onToggle} className={className}>{body}</button>}
-      {!to && open && <ul id={listId} className="flex flex-col pl-4 max-sm:divide-y max-sm:divide-border">{group.chats.map(children)}</ul>}
+      {!to && open && <ul id={listId} aria-label={name} className={cn("flex flex-col max-sm:divide-y max-sm:divide-border", rows)}>{children}</ul>}
     </li>
+  );
+}
+
+/**
+ * A Herdr workspace as one row: its name, how it is and how many sessions it holds. A tap opens it in
+ * place on its tabs: a one-pane tab is that pane's row, the row Recents draws, and a tab of several
+ * panes is a row of its own that folds them (lib/workspace-tree.ts). A workspace of one tab or one
+ * session has nothing to unfold: the tap opens its `entry` pane.
+ */
+function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row }: {
+  group: WorkspaceChats;
+  now: number;
+  open: boolean;
+  onToggle: () => void;
+  tabOpen: (tab: TabChats) => boolean;
+  onTab: (tab: TabChats) => void;
+  session?: string;
+  opening: string | null;
+  row: (chat: RecentChat, inTab: boolean) => ReactNode;
+}) {
+  const to = group.entry && panePath(group.entry, session);
+  return (
+    <FoldRow kind="workspace" id={group.workspaceId} name={group.name} chats={workspaceSessions(group)} now={now} open={open} onToggle={onToggle}
+      to={to} busy={!!to && isOpening(opening, to)}>
+      {group.tabs.map((tab) => tabFolds(tab.chats.length, group.tabs.length)
+        ? <FoldRow key={tab.tabId} kind="tab" id={tab.tabId} name={tab.label} chats={tab.chats} now={now} open={tabOpen(tab)} onToggle={() => onTab(tab)}>
+          {tab.chats.map((chat) => row(chat, true))}
+        </FoldRow>
+        : tab.chats.map((chat) => row(chat, false)))}
+    </FoldRow>
   );
 }
 
@@ -253,6 +295,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [only, setOnly] = useState("");
   // The workspaces opened in place; none until a tap opens one.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
+  const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
   // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
   if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
@@ -261,13 +305,14 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
   const recent = everyRecent.filter(kept);
   const workspaces = everyWorkspace.map((group) => {
-    const chats = group.chats.filter(kept);
+    const tabs = group.tabs.map((tab) => ({ ...tab, chats: tab.chats.filter(kept) })).filter((tab) => tab.chats.length > 0);
     // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
-    return { ...group, chats, entry: chats.some((chat) => chat.agent.paneId === group.entry) ? group.entry : undefined };
-  }).filter((group) => group.chats.length > 0);
+    return { ...group, tabs, entry: workspaceSessions({ tabs }).some((chat) => chat.agent.paneId === group.entry) ? group.entry : undefined };
+  }).filter((group) => group.tabs.length > 0);
+  const tabOpen = (tab: TabChats) => tabsOpen[tab.tabId] ?? tabStartsOpen(tab.chats.map((chat) => chat.agent));
   // A pull request belongs to a project through the session or the thread it opens.
   const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
-  const row = (chat: RecentChat, group?: string) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} />;
+  const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
     <section aria-label="Sessions" className="flex flex-col gap-2">
       <div className="flex items-center gap-2.5">
@@ -302,9 +347,9 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
           : <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
             {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
-              onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}>
-              {(chat) => row(chat, group.name)}
-            </WorkspaceRow>)}
+              onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}
+              tabOpen={tabOpen} onTab={(tab) => setTabsOpen((prev) => ({ ...prev, [tab.tabId]: !tabOpen(tab) }))}
+              row={(chat, inTab) => row(chat, group.name, inTab)} />)}
           </ul>}
       </div>
     </section>

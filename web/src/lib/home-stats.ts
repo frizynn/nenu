@@ -247,23 +247,33 @@ export function recentChats(panes: readonly AgentView[], projects: readonly Proj
   return sessionChats(byRecency(panes.filter((pane) => !shown.has(pane.paneId))), projects, reviews);
 }
 
-/** A Herdr workspace in Home's "Workspaces" list, with its sessions in tab order. */
+/** A tab in Home's "Workspaces" list, with its sessions in pane order. */
+export interface TabChats {
+  tabId: string;
+  label: string;
+  chats: RecentChat[];
+}
+
+/** A Herdr workspace in Home's "Workspaces" list, with its tabs that hold a session, in tab order. */
 export interface WorkspaceChats {
   workspaceId: string;
   name: string;
-  chats: RecentChat[];
-  /** The pane its row opens when it holds one tab or one session (opensDirectly); otherwise the row unfolds its sessions. */
+  tabs: TabChats[];
+  /** The pane its row opens when it holds one tab or one session (opensDirectly); otherwise the row unfolds its tabs. */
   entry?: string;
 }
 
-/** Home's "Workspaces": every session under its workspace, in the order the workspace tree keeps them. */
+/** Every session a workspace in Home's list holds, in tab order. */
+export const workspaceSessions = (group: Pick<WorkspaceChats, "tabs">): RecentChat[] => group.tabs.flatMap((tab) => tab.chats);
+
+/** Home's "Workspaces": every session under its workspace and tab, in the order the workspace tree keeps them. */
 export function workspaceChats(herd: Herd, projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): WorkspaceChats[] {
   return workspaceTree(herd).map((branch) => {
     const entry = opensDirectly(branch) ? workspaceEntry(branch.workspace.workspaceId, herd)?.paneId : undefined;
     return {
       workspaceId: branch.workspace.workspaceId,
       name: branch.name,
-      chats: sessionChats(branch.tabs.flatMap((tab) => tab.panes), projects, reviews),
+      tabs: branch.tabs.map((tab) => ({ tabId: tab.tabId, label: tab.label, chats: sessionChats(tab.panes, projects, reviews) })),
       ...(entry ? { entry } : {}),
     };
   });
