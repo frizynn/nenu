@@ -3,6 +3,7 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 
 import { MachineLink, Machines, parseMachineList, type HerdrMachine, type SpawnedProcess } from "./machines.ts";
+import { PrefsFile } from "./prefs-file.ts";
 
 // The process side of machines.ts: the real `herdr` and `ssh`, the state dir's sockets, timers.
 
@@ -37,11 +38,20 @@ function spawn(argv: string[]): SpawnedProcess {
   return { stdout: child.stdout, stderr: child.stderr, exited: child.exited, kill: () => child.kill() };
 }
 
-export function startMachines(stateDir: string, onChange: () => void): Machines {
+/** Settings → "Show other machines". Off unless the file says otherwise. */
+export const coerceMachinePrefs = (raw: unknown): { show: boolean } =>
+  ({ show: typeof raw === "object" && raw !== null && (raw as { show?: unknown }).show === true });
+
+export async function startMachines(stateDir: string, onChange: () => void): Promise<Machines> {
+  // Made even while off: it is also how another machine's probe tells this Nenu apart from an older one.
   const socketDir = join(stateDir, "machines");
   mkdirSync(socketDir, { recursive: true, mode: 0o700 });
+  const prefs = new PrefsFile(join(stateDir, "machine-prefs.json"), coerceMachinePrefs);
+  await prefs.load();
   const binary = herdrBinary();
   const machines = new Machines({
+    on: prefs.current().show,
+    persist: async (show) => { await prefs.set({ show }); },
     list: () => listMachines(binary),
     // Herdr names the other machines, not this one: the host name, or COLLIE_MACHINE_LABEL when set.
     hostLabel: process.env.COLLIE_MACHINE_LABEL || hostname().split(".")[0] || "this machine",

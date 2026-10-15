@@ -230,7 +230,7 @@ const sweepTimer = setInterval(() => {
 sweepTimer.unref();
 
 // Herdr's saved machines: a change in another machine's herd re-reads every local session's snapshot.
-const machines = startMachines(cfg.stateDir, () => {
+const machines = await startMachines(cfg.stateDir, () => {
   for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
 });
 

@@ -1,7 +1,7 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
 import type { AlertDetail } from "./alert-detail.ts";
+import { PrefsFile } from "./prefs-file.ts";
 import type { AgentStatus } from "./types.ts";
 
 // Which agent lifecycle events are worth a push. A companion to Snooze (the do-not-disturb deadline):
@@ -56,24 +56,23 @@ export function coerceNotifyPrefs(raw: unknown): NotifyPrefs {
 }
 
 export class NotifyPrefsStore {
-  private prefs: NotifyPrefs = { ...DEFAULT_NOTIFY_PREFS };
-  private readonly file: string;
+  private readonly file: PrefsFile<NotifyPrefs>;
 
-  constructor(private readonly cfg: Config) {
-    this.file = join(cfg.stateDir, "notify-prefs.json");
+  constructor(cfg: Config) {
+    this.file = new PrefsFile(join(cfg.stateDir, "notify-prefs.json"), coerceNotifyPrefs);
   }
 
-  async load(): Promise<void> {
-    try {
-      this.prefs = coerceNotifyPrefs(await Bun.file(this.file).json());
-    } catch {
-      /* none saved yet — keep defaults */
-    }
+  private get prefs(): NotifyPrefs {
+    return this.file.current();
+  }
+
+  load(): Promise<void> {
+    return this.file.load();
   }
 
   /** A copy of the current prefs (never the internal object, so callers can't mutate our state). */
   current(): NotifyPrefs {
-    return { ...this.prefs };
+    return this.file.current();
   }
 
   /** Whether a transition into `status` could notify at all: the coordinator debounces only these. */
@@ -96,17 +95,9 @@ export class NotifyPrefsStore {
   }
 
   /** Merge a partial patch (only booleans are applied), persist, and return the updated prefs. */
-  async set(patch: Partial<NotifyPrefs>): Promise<NotifyPrefs> {
-    for (const key of NOTIFY_PREF_KEYS) if (typeof patch[key] === "boolean") this.prefs[key] = patch[key];
-    await this.save();
-    return this.current();
-  }
-
-  /** Atomic, owner-only write: fresh temp file (mode 0600) then rename over the target. */
-  private async save(): Promise<void> {
-    await mkdir(this.cfg.stateDir, { recursive: true, mode: 0o700 });
-    const tmp = `${this.file}.tmp`;
-    await writeFile(tmp, JSON.stringify(this.prefs, null, 2), { mode: 0o600 });
-    await rename(tmp, this.file);
+  set(patch: Partial<NotifyPrefs>): Promise<NotifyPrefs> {
+    const next = this.file.current();
+    for (const key of NOTIFY_PREF_KEYS) if (typeof patch[key] === "boolean") next[key] = patch[key];
+    return this.file.set(next);
   }
 }

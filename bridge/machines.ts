@@ -4,6 +4,10 @@ import type { MachineHerd, MachineState, MachineView } from "./types.ts";
 
 // The machines Herdr has saved (`herdr machine list`), reached through each one's own Nenu.
 //
+// Off until the operator turns on "Show other machines" in Settings (a bridge-wide setting, since the
+// bridge is what dials): until then Herdr's list is read only when Settings asks, and nothing is
+// dialled. This Nenu's own `peer.sock` answers either way; the setting is about showing others.
+//
 // Herdr's list is the only list: nothing here adds, renames or forgets a machine. Each enabled machine
 // gets one long-lived `ssh` that forwards a socket in this bridge's state directory to the other
 // Nenu's `peer.sock` (server.ts), so every request the browser makes for a pane there runs, unchanged,
@@ -351,15 +355,24 @@ export class MachineLink {
 
 /** What the routes use: the lists, and the one way a request reaches another machine. */
 export interface MachineDirectory {
-  /** Every machine for a snapshot about `current` (undefined = this one), or undefined with none saved. */
+  /** Every machine for a snapshot about `current` (undefined = this one), or undefined when off or none is saved. */
   views(current: string | undefined, localHerd: MachineHerd | null): MachineView[] | undefined;
   has(session: string): boolean;
   forward(session: string, req: Request, url: URL): Promise<Response>;
   /** The other machine's snapshot body, or null when it is not connected. */
   snapshot(session: string): Promise<Record<string, unknown> | null>;
-  /** Re-read Herdr's list if it is older than a minute; never waits. */
+  /** Re-read Herdr's list if it is older than a minute; never waits. Nothing while off. */
   refresh(): void;
+  /** Settings: whether this Nenu shows other machines, and Herdr's machines as they stand now. */
+  settings(): Promise<MachineSettings>;
+  /** Turn showing other machines on or off, and keep the choice. */
+  setOn(on: boolean): Promise<void>;
   stop(): void;
+}
+
+export interface MachineSettings {
+  on: boolean;
+  machines: MachineView[];
 }
 
 /** The part of a link the directory needs; a test hands in its own. */
@@ -375,6 +388,9 @@ export interface MachinesDeps {
   /** This machine's name in the list. */
   hostLabel: string;
   link(machine: HerdrMachine): LinkHandle;
+  /** The saved setting; off unless the operator turned it on. */
+  on?: boolean;
+  persist(on: boolean): Promise<void>;
 }
 
 const LIST_TTL_MS = 60_000;
@@ -389,20 +405,50 @@ export class Machines implements MachineDirectory {
   private order: string[] = [];
   private listedAt = 0;
   private listing: Promise<void> | null = null;
+  private on: boolean;
 
-  constructor(private readonly deps: MachinesDeps) {}
+  constructor(private readonly deps: MachinesDeps) {
+    this.on = deps.on ?? false;
+  }
 
   refresh(): void {
-    if (Date.now() - this.listedAt < LIST_TTL_MS) return;
+    if (!this.on || Date.now() - this.listedAt < LIST_TTL_MS) return;
     void this.reload();
+  }
+
+  async settings(): Promise<MachineSettings> {
+    if (this.on) {
+      await this.reload();
+      return { on: true, machines: this.order.map((session) => this.links.get(session)!.link.view()) };
+    }
+    const machines = await this.deps.list().catch(() => []);
+    return {
+      on: false,
+      machines: machines.map((m) => ({
+        session: machineSession(m.label),
+        label: m.label,
+        ...(m.enabled ? { state: "off" as const } : { state: "disabled" as const, detail: "Disabled in Herdr" }),
+      })),
+    };
+  }
+
+  async setOn(on: boolean): Promise<void> {
+    if (on !== this.on) {
+      this.on = on;
+      if (!on) this.stop();
+    }
+    await this.deps.persist(on);
+    if (on) await this.reload();
   }
 
   /** Read Herdr's list now: start a link for a new machine, stop one for a machine no longer there. */
   reload(): Promise<void> {
+    if (!this.on) return Promise.resolve();
     this.listing ??= (async () => {
       const machines = await this.deps.list().catch(() => null);
       this.listedAt = Date.now();
-      if (!machines) return;
+      // Turned off while the list was read: nothing to start.
+      if (!machines || !this.on) return;
       const key = (m: HerdrMachine) => `${m.id}\u0000${m.label}\u0000${m.target}\u0000${m.session}\u0000${m.enabled}`;
       const next = new Map<string, HerdrMachine>(machines.map((m) => [machineSession(m.label), m]));
       for (const [session, entry] of this.links) {
@@ -423,7 +469,7 @@ export class Machines implements MachineDirectory {
   }
 
   views(current: string | undefined, localHerd: MachineHerd | null): MachineView[] | undefined {
-    if (this.order.length === 0) return undefined;
+    if (!this.on || this.order.length === 0) return undefined;
     const here: MachineView = { label: this.deps.hostLabel, state: "connected", ...(current !== undefined && localHerd ? { herd: localHerd } : {}) };
     const others = this.order.map((session) => {
       const view = this.links.get(session)!.link.view();
@@ -490,6 +536,8 @@ export class Machines implements MachineDirectory {
   stop(): void {
     for (const { link } of this.links.values()) link.stop();
     this.links.clear();
+    this.order = [];
+    this.listedAt = 0;
   }
 }
 
@@ -500,5 +548,7 @@ export const NO_MACHINES: MachineDirectory = {
   forward: async () => Response.json({ error: "no machines" }, { status: 404 }),
   snapshot: async () => null,
   refresh: () => {},
+  settings: async () => ({ on: false, machines: [] }),
+  setOn: async () => {},
   stop: () => {},
 };

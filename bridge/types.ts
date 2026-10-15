@@ -378,8 +378,9 @@ export interface SnapshotResponse {
 /**
  * Why a saved machine is or is not usable from here. `old-nenu` and `no-nenu` mean SSH got there and
  * found Nenu too old to accept other machines, or not there at all; `offline` means SSH did not get there.
+ * `off` is every machine while this Nenu's "Show other machines" is off: nothing was dialled.
  */
-export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled";
+export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled" | "off";
 
 /** What a machine's lists need: its panes and where they sit, as its own snapshot gives them. */
 export interface MachineHerd {

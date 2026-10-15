@@ -119,6 +119,29 @@ export const settingsRoutes: Route[] = [
     },
   },
   { method: "*", path: "/api/notifications/prefs", access: "none", session: false, handle: () => text("method not allowed", 405) },
+  // Settings → other machines (machines.ts). Reading it lists Herdr's machines then and only then.
+  {
+    method: "GET",
+    path: "/api/machines",
+    access: "read",
+    session: false,
+    handle: async ({ machines }, { req }) => json(await machines.settings(), req.headers.get("accept-encoding")),
+  },
+  {
+    method: "POST",
+    path: "/api/machines",
+    // Write-level: turning it on makes this bridge open SSH connections to every machine Herdr saved.
+    access: "write",
+    session: false,
+    async handle({ machines, live, registry }, { req }) {
+      const on = (await req.json().catch(() => null) as { on?: unknown } | null)?.on;
+      if (typeof on !== "boolean") return text("bad request", 400);
+      await machines.setOn(on);
+      // Every snapshot gains or loses its machines.
+      for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
+      return json(await machines.settings(), req.headers.get("accept-encoding"));
+    },
+  },
   {
     method: "POST",
     path: "/api/update/check",

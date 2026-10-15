@@ -65,6 +65,8 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/notifications/prefs", level: "read", session: false },
   { method: "PUT", path: "/api/notifications/prefs", level: "none", session: false },
   { method: "POST", path: "/api/update/check", level: "read", session: false },
+  { method: "GET", path: "/api/machines", level: "read", session: false },
+  { method: "POST", path: "/api/machines", level: "write", session: false },
   { method: "GET", path: "/api/interactions", level: "read", session: true },
   { method: "POST", path: "/api/interactions/w%3Ap/answer", level: "write", session: true },
   { method: "POST", path: "/api/files/grant", level: "write", session: true },
