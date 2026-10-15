@@ -11,7 +11,8 @@ import type { AgentStatus } from "../types.ts";
 // It counts every call by method and logs each write, which is how a test proves "no unexpected
 // writes" and how baselines count socket calls per poll. Panes render a Claude-shaped screen (the
 // rule / `❯ draft` / rule composer the guarded reply verifies) that ticks while `working`, echoes
-// typed text after `echoMs`, and can show a dialog that swallows text and is answered by keys.
+// typed text after `echoMs`, and can show a dialog that swallows text and is answered by keys. A pane
+// with no agent is a shell instead: its prompt, or nothing while a command holds the terminal.
 
 export type FakeAgent = "claude" | "codex" | "pi" | null;
 
@@ -35,6 +36,8 @@ interface FakePane extends Required<Omit<FakePaneInit, "label" | "sessionId">> {
   draft: string;
   /** Dialog text shown instead of the composer; keys answer it, text is swallowed. */
   dialog: string | null;
+  /** A shell's foreground command; null while the shell sits at its prompt. */
+  foreground: string | null;
   revision: number;
   workingSince: number;
 }
@@ -59,6 +62,7 @@ export interface FakeHerdrOptions {
 
 const READ_METHODS = new Set(["session.snapshot", "workspace.list", "tab.list", "pane.list", "pane.read", "pane.get", "pane.process_info", "pane.wait_for_output", "events.subscribe", "ping"]);
 const RULE = "─".repeat(72);
+const SHELL_PROMPT = "user@host:~/demo$ ";
 const SPINNER = ["✻", "✶", "✳", "✢", "·"];
 
 export class FakeHerdr {
@@ -95,6 +99,11 @@ export class FakeHerdr {
   readonly customStatusline = new Set<string>();
   /** `pane.process_info` foreground processes per pane; none by default. */
   readonly processes = new Map<string, Array<{ pid: number; argv: string[] }>>();
+  /** `agent.start` calls Herdr accepted, with the argv the agent got. */
+  readonly started: Array<{ paneId: string; kind: string; args: string[]; at: number }> = [];
+  /** Fails the next `agent.start` and leaves the shell at its prompt, as an agent that never comes up
+   *  does (Herdr 0.9.3: `timeout`, "timed out waiting for agent startup"). */
+  failNextStart: { code: string; message: string } | null = null;
   /** How long every one-shot reply waits, like a Herdr on a loaded host. The subscribe ack does not. */
   replyDelayMs = 0;
   /** Subscriptions dropped because their socket would not take a whole event. */
@@ -124,7 +133,7 @@ export class FakeHerdr {
     this.noteTab(init.tabId);
     this.panes.set(init.paneId, {
       status: "idle", cwd: "/tmp", lines: [], ...init,
-      draft: "", dialog: null, revision: 1, workingSince: Date.now(),
+      draft: "", dialog: null, foreground: null, revision: 1, workingSince: Date.now(),
     });
     return this;
   }
@@ -232,6 +241,14 @@ export class FakeHerdr {
     this.broadcast("pane.closed", "pane_closed", { pane_id: paneId, workspace_id: pane.workspaceId });
   }
 
+  /**
+   * Put a command in a shell's foreground, or null to return it to its prompt. Only the process
+   * changes: the screen moves with `appendLines`, as a command's own output would move it.
+   */
+  setForeground(paneId: string, command: string | null): void {
+    this.pane(paneId).foreground = command;
+  }
+
   appendLines(paneId: string, ...lines: string[]): void {
     const pane = this.pane(paneId);
     pane.lines.push(...lines);
@@ -240,6 +257,7 @@ export class FakeHerdr {
 
   screen(paneId: string): string {
     const pane = this.pane(paneId);
+    if (pane.agent === null) return [...pane.lines, ...(pane.foreground ? [] : [`${SHELL_PROMPT}${pane.draft}`])].join("\n");
     const body = [...pane.lines, ""];
     if (pane.dialog) return [...body, RULE, pane.dialog].join("\n");
     const working = pane.status === "working";
@@ -316,7 +334,9 @@ export class FakeHerdr {
       case "pane.read":
         return { type: "pane_read", read: this.read(paneId, String(params.source), Number(params.lines) || this.viewportRows) };
       case "pane.process_info":
-        return { type: "process_info", process_info: { pane_id: paneId, foreground_processes: this.processes.get(paneId) ?? [] } };
+        return { type: "process_info", process_info: this.processInfo(paneId) };
+      case "agent.start":
+        return this.startAgent(paneId, String(params.kind ?? ""), Array.isArray(params.args) ? params.args.map(String) : []);
       case "pane.send_text":
         this.typeText(paneId, String(params.text ?? ""));
         return { type: "ok" };
@@ -405,7 +425,7 @@ export class FakeHerdr {
     if (key === "Enter") {
       if (!pane.draft) return;
       this.submitted.push({ paneId, text: pane.draft, at: now });
-      pane.lines.push(`❯ ${pane.draft}`);
+      pane.lines.push(pane.agent === null ? `${SHELL_PROMPT}${pane.draft}` : `❯ ${pane.draft}`);
       pane.draft = "";
       pane.revision++;
     } else if (key === "Backspace") {
@@ -466,6 +486,39 @@ export class FakeHerdr {
     this.droppedStreams++;
     for (const s of this.subscribers) if (s.socket === sub.socket) this.subscribers.delete(s);
     sub.socket.end();
+  }
+
+  /**
+   * A shell's process group holds the terminal at its prompt, and a command's group takes it while it
+   * runs (measured on Herdr 0.9.3: `shell_pid` equals `foreground_process_group_id` only at the prompt).
+   * An agent pane reports what `processes` lists for it.
+   */
+  private processInfo(paneId: string): Record<string, unknown> {
+    const pane = this.pane(paneId);
+    const listed = this.processes.get(paneId);
+    if (pane.agent !== null || listed) return { pane_id: paneId, foreground_processes: listed ?? [] };
+    const shellPid = 4000 + [...this.panes.keys()].indexOf(paneId) * 10;
+    const group = pane.foreground ? shellPid + 1 : shellPid;
+    return {
+      pane_id: paneId, shell_pid: shellPid, foreground_process_group_id: group,
+      foreground_processes: [{ pid: group, name: pane.foreground ?? "zsh" }],
+    };
+  }
+
+  /** Herdr launches only into a shell at its prompt, and answers anything else with its own refusal. */
+  private startAgent(paneId: string, kind: string, args: string[]): Record<string, unknown> {
+    const pane = this.pane(paneId);
+    if (pane.agent !== null || pane.foreground) throw new FakeError("agent_pane_busy", `agent target pane ${paneId} is not an available shell`);
+    if (kind !== "claude" && kind !== "codex") throw new FakeError("invalid_request", `unsupported agent kind ${kind}`);
+    const failure = this.failNextStart;
+    this.failNextStart = null;
+    if (failure) throw new FakeError(failure.code, failure.message);
+    this.started.push({ paneId, kind, args, at: Date.now() });
+    pane.agent = kind;
+    pane.lines = [];
+    pane.revision++;
+    this.setStatus(paneId, "idle");
+    return { type: "ok" };
   }
 
   private wirePane(pane: FakePane) {
