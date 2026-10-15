@@ -355,3 +355,9 @@ the mapping in `tailscale-managed-handler`, and only ever tears down a mapping m
 Every other tunnel (NetBird, ZeroTier, Cloudflare Tunnel) is `COLLIE_SKIP_SERVE=1` + DEPLOYMENT.md
 Variant E: the operator owns the ingress, Nenu publishes nothing. **Don't add a second managed front
 door** — [ADR 0001](./.adr/0001-one-managed-front-door.md).
+
+**Other machines come through their own Nenu, never a new door.** "Show other machines" (off by
+default) reads `herdr machine list` and runs one `ssh -L` per machine to that Nenu's
+`<stateDir>/peer.sock`, which is bound 0600, answers as the operator and never forwards again; the
+local gate runs at the route's own level before a request is handed over, so a read-only device stays
+read-only there ([ADR 0084](./.adr/0084-machines-are-herdrs-reached-through-their-own-nenu.md)).

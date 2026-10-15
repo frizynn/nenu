@@ -43,7 +43,7 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
 - **One `ssh` per machine, as Herdr dials it:** the operator's own `~/.ssh/config` and default keys,
   `BatchMode=yes`, `StrictHostKeyChecking=yes`, the target exactly as Herdr saved it. A short probe
   finds the other Nenu's `peer.sock` and tells apart "SSH did not get there", "Nenu is not running",
-  "Nenu is too old" and "no Nenu". Then one `ssh -L <stateDir>/machines/m-<id>.sock:<peer.sock>`
+  "Nenu is too old" and "no Nenu". Then one `ssh -L <stateDir>/machines/m-<digest of the id>.sock:<peer.sock>`
   whose remote command waits on stdin, so the tunnel dies with the bridge, SIGKILL included. Retries
   wait 5 s, 15 s, 1 min, then 5 min.
 - **Every Nenu listens on `<stateDir>/peer.sock`** (0600) beside its port, and answers a request there
@@ -59,7 +59,9 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
 
 - `peer.sock` stays on with the switch off. Making it opt-in too would add a second switch per machine
   and buy nothing: whoever can reach it can already reach Herdr's own socket beside it.
-- Opening `peer.sock` to the operator opens nothing new: only the same user (or root) can connect, and
+- Opening `peer.sock` to the operator opens nothing new: only the same user (or root) can connect
+  (connect() needs write on the socket on Linux and on macOS, measured; it is bound under a 0177 umask,
+  so it is never wider than 0600, not even before a chmod), and
   either can already write to Herdr's own socket, read the journals and run anything. Reaching it from
   another machine takes SSH as that user, which is that machine already. The port's gates are as they
   were, and a read-only device here is read-only on every machine.
