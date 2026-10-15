@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
-import { workspaceTree } from "./workspace-tree";
+import { opensDirectly, workspaceTree } from "./workspace-tree";
 
 function workspace(workspaceId: string, number: number): WorkspaceView {
   return { workspaceId, number, label: workspaceId, focused: false, activeTabId: `${workspaceId}:t`, tabCount: 1, paneCount: 1 };
@@ -55,5 +55,25 @@ describe("workspaceTree", () => {
       shellPanes: [],
     };
     expect(workspaceTree(herd).map((branch) => branch.workspace.workspaceId)).toEqual(["a", "b"]);
+  });
+});
+
+describe("opensDirectly", () => {
+  const shell = (paneId: string, workspaceId: string, tabId: string): AgentView => ({ ...pane(paneId, workspaceId), tabId, agent: "shell", kind: "shell" });
+  const tabs = (workspaceId: string, ...ids: string[]): TabView[] => ids.map((tabId, i) => ({ ...tab(workspaceId), tabId, number: i + 1 }));
+  const opens = (agents: AgentView[], shellPanes: AgentView[], tabIds: string[]) =>
+    opensDirectly(workspaceTree({ workspaces: [workspace("w", 1)], tabs: tabs("w", ...tabIds), agents, shellPanes })[0]!);
+
+  it("opens a workspace holding one session, whatever else its tabs hold but shells", () => {
+    expect(opens([pane("a", "w")], [], ["w:t"])).toBe(true);
+    // Tabs of shells alone add nothing to unfold.
+    expect(opens([pane("a", "w")], [shell("s1", "w", "w:shells"), shell("s2", "w", "w:more")], ["w:t", "w:shells", "w:more"])).toBe(true);
+    // One tab stays one tap, split into several sessions or not.
+    expect(opens([pane("a", "w"), pane("b", "w")], [shell("s", "w", "w:t")], ["w:t"])).toBe(true);
+  });
+
+  it("unfolds two sessions in two tabs, and shells alone in two tabs", () => {
+    expect(opens([pane("a", "w"), { ...pane("b", "w"), tabId: "w:u", status: "done" }], [], ["w:t", "w:u"])).toBe(false);
+    expect(opens([], [shell("s1", "w", "w:t"), shell("s2", "w", "w:u")], ["w:t", "w:u"])).toBe(false);
   });
 });

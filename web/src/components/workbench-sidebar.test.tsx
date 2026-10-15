@@ -120,6 +120,37 @@ describe("the sidebar's workspaces, with no projects", () => {
     }
   });
 
+  it("opens a workspace of one session from its row though shells sit in other tabs, on a desk and a phone", async () => {
+    const withShells = {
+      ...herd,
+      shellPanes: [
+        { ...pane("s1", "vpn"), workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t-vpn", agent: "shell", kind: "shell" },
+        { ...pane("s2", "logs"), workspaceId: "w1", workspaceLabel: "Nenu", tabId: "t-logs", agent: "shell", kind: "shell" },
+      ],
+      workspaces: herd.workspaces.map((ws) => ws.workspaceId === "w1" ? { ...ws, tabCount: 3, paneCount: 3 } : ws),
+      tabs: [...herd.tabs,
+        { tabId: "t-vpn", workspaceId: "w1", number: 2, label: "vpn", focused: false, paneCount: 1 },
+        { tabId: "t-logs", workspaceId: "w1", number: 3, label: "logs", focused: false, paneCount: 1 }],
+    } as unknown as HomeData;
+    for (const variant of ["sidebar", "drawer"] as const) {
+      cleanupRender();
+      router = createMemoryRouter([
+        { path: "/", element: <WorkbenchSidebar data={withShells} variant={variant} /> },
+        { path: "/pane/:paneId", element: <WorkbenchSidebar data={withShells} variant={variant} /> },
+      ], { initialEntries: ["/"] });
+      render(<RouterProvider router={router} />);
+      const user = userEvent.setup();
+      if (variant === "sidebar") await user.click(screen.getByRole("button", { name: /^Search/ }));
+      const nenu = within(workspaces().getByRole("region", { name: "Nenu" }));
+      expect(nenu.queryByRole("button")).toBeNull();
+      expect(nenu.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/n1"]);
+      // Two sessions in two tabs keep their fold.
+      expect(workspaces().getByRole("button", { name: "Design panes" })).toBeInTheDocument();
+      await user.click(nenu.getByRole("link", { name: /^Nenu/ }));
+      expect(router.state.location.pathname).toBe("/pane/n1");
+    }
+  });
+
   it("searches agents by name: the matches in a list, the first picked, arrows move the pick and Enter opens it", async () => {
     const user = open("/");
     await user.click(screen.getByRole("button", { name: /^Search/ }));

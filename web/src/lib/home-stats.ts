@@ -252,7 +252,7 @@ export interface WorkspaceChats {
   workspaceId: string;
   name: string;
   chats: RecentChat[];
-  /** The pane its row opens when it holds one tab (opensDirectly); otherwise the row unfolds its sessions. */
+  /** The pane its row opens when it holds one tab or one session (opensDirectly); otherwise the row unfolds its sessions. */
   entry?: string;
 }
 
