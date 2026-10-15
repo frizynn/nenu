@@ -71,18 +71,53 @@ describe("the sidebar's workspaces, with no projects", () => {
     const panels = within(design).getByRole("group", { name: "panels" });
     expect(within(panels).getAllByRole("link").map((link) => link.textContent)).toEqual(["Panel prodworking", "Panel ventasneeds you"]);
 
-    // Elsewhere, a workspace with nothing waiting on you starts folded.
-    expect(screen.getByRole("button", { name: "Nenu panes" })).toHaveAttribute("aria-expanded", "false");
+    // A workspace of one tab is that tab's row: nothing to unfold, the pane listed nowhere under it.
+    const nenu = within(screen.getByRole("region", { name: "Nenu" }));
+    expect(nenu.queryByRole("button")).toBeNull();
+    expect(nenu.getByRole("link", { name: /^Nenu/ })).toHaveAttribute("href", "/pane/n1");
     expect(screen.queryByText("Workspaces brief")).not.toBeInTheDocument();
   });
 
   it("remembers a fold", async () => {
     const user = await openTree("/");
-    // On Home nothing is on screen: the workspace holding a blocked agent opens, the rest wait.
+    // On Home nothing is on screen: the workspace holding a blocked agent opens.
     expect(screen.getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
-    await user.click(screen.getByRole("button", { name: "Nenu panes" }));
-    expect(screen.getByText("Workspaces brief")).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w1: true } });
+    await user.click(screen.getByRole("button", { name: "Design panes" }));
+    expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: false } });
+  });
+
+  it("opens a workspace of one tab from its row, split or not, with nothing to unfold, on a desk and a phone", async () => {
+    const ops = [
+      { ...pane("o1", "Deploy", 20), workspaceId: "w3", workspaceLabel: "Ops", tabId: "t-ops" },
+      { ...pane("o2", "Rollback", 10), workspaceId: "w3", workspaceLabel: "Ops", tabId: "t-ops", status: "blocked" },
+    ];
+    const three = {
+      ...herd,
+      agents: [...herd.agents, ...ops],
+      workspaces: [...herd.workspaces, { workspaceId: "w3", number: 3, label: "Ops", focused: false, activeTabId: "t-ops", tabCount: 1, paneCount: 2 }],
+      tabs: [...herd.tabs, { tabId: "t-ops", workspaceId: "w3", number: 1, label: "deploys", focused: false, paneCount: 2 }],
+    } as unknown as HomeData;
+    for (const variant of ["sidebar", "drawer"] as const) {
+      cleanupRender();
+      router = createMemoryRouter([
+        { path: "/", element: <WorkbenchSidebar data={three} variant={variant} /> },
+        { path: "/pane/:paneId", element: <WorkbenchSidebar data={three} variant={variant} /> },
+      ], { initialEntries: ["/"] });
+      render(<RouterProvider router={router} />);
+      const user = userEvent.setup();
+      if (variant === "sidebar") await user.click(screen.getByRole("button", { name: /^Search/ }));
+      // Its row opens the pane the workspace opens on everywhere: in a split tab, the agent asking for you.
+      for (const [name, href] of [["Nenu", "/pane/n1"], ["Ops", "/pane/o2"]] as const) {
+        const section = within(workspaces().getByRole("region", { name }));
+        expect(section.queryByRole("button")).toBeNull();
+        expect(section.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([href]);
+      }
+      // Two tabs keep their fold.
+      expect(workspaces().getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", variant === "drawer" ? "false" : "true");
+      await user.click(within(workspaces().getByRole("region", { name: "Ops" })).getByRole("link", { name: /^Ops/ }));
+      expect(router.state.location.pathname).toBe("/pane/o2");
+    }
   });
 
   it("searches agents by name: the matches in a list, the first picked, arrows move the pick and Enter opens it", async () => {

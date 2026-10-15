@@ -188,34 +188,43 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
 /**
  * A Herdr workspace as one row: its name, how it is and how many sessions it holds. A tap opens it in
  * place on its sessions, each the row Recents draws; its tabs are what tells those rows apart, never
- * rows of their own.
+ * rows of their own. A workspace of one tab has nothing to unfold: the tap opens its `entry` pane.
  */
-function WorkspaceRow({ group, now, open, onToggle, children }: {
+function WorkspaceRow({ group, now, open, onToggle, session, opening, children }: {
   group: WorkspaceChats;
   now: number;
   open: boolean;
   onToggle: () => void;
+  session?: string;
+  opening: string | null;
   children: (chat: RecentChat) => ReactNode;
 }) {
   const state = workspaceState(group.chats);
   const count = `${group.chats.length} ${group.chats.length === 1 ? "session" : "sessions"}`;
   const at = Math.max(0, ...group.chats.map((chat) => chat.at));
   const listId = `home-workspace-${group.workspaceId}`;
+  const to = group.entry && panePath(group.entry, session);
+  const busy = !!to && isOpening(opening, to);
+  const label = `${group.name}, ${state.word}, ${count}`;
+  const className = cn("grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
+    busy && "bg-[var(--workbench-row-hover)]");
+  const body = <>
+    <LayoutGrid aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
+    <span className="col-start-2 truncate text-body sm:text-subhead">{group.name}</span>
+    <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
+      <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
+    </span>
+    <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+      {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
+      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />}
+    </span>
+  </>;
   return (
     <li className="flex flex-col">
-      <button type="button" aria-expanded={open} aria-controls={listId} aria-label={`${group.name}, ${state.word}, ${count}`} onClick={onToggle}
-        className="grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5">
-        <LayoutGrid aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
-        <span className="col-start-2 truncate text-body sm:text-subhead">{group.name}</span>
-        <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
-          <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
-        </span>
-        <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
-          {at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
-          <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
-        </span>
-      </button>
-      {open && <ul id={listId} className="flex flex-col pl-4 max-sm:divide-y max-sm:divide-border">{group.chats.map(children)}</ul>}
+      {to
+        ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={className}>{body}</Link>
+        : <button type="button" aria-expanded={open} aria-controls={listId} aria-label={label} onClick={onToggle} className={className}>{body}</button>}
+      {!to && open && <ul id={listId} className="flex flex-col pl-4 max-sm:divide-y max-sm:divide-border">{group.chats.map(children)}</ul>}
     </li>
   );
 }
@@ -251,7 +260,11 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
   const recent = everyRecent.filter(kept);
-  const workspaces = everyWorkspace.map((group) => ({ ...group, chats: group.chats.filter(kept) })).filter((group) => group.chats.length > 0);
+  const workspaces = everyWorkspace.map((group) => {
+    const chats = group.chats.filter(kept);
+    // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
+    return { ...group, chats, entry: chats.some((chat) => chat.agent.paneId === group.entry) ? group.entry : undefined };
+  }).filter((group) => group.chats.length > 0);
   // A pull request belongs to a project through the session or the thread it opens.
   const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
   const row = (chat: RecentChat, group?: string) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} />;
@@ -288,7 +301,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
           : <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
-            {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} open={opened.has(group.workspaceId)}
+            {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}>
               {(chat) => row(chat, group.name)}
             </WorkspaceRow>)}

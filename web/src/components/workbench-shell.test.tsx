@@ -414,15 +414,18 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
   expect(nav.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
   const workspaces = within(nav.getByRole("region", { name: "Workspaces" }));
   expect(workspaces.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Developer", "Acme producto", "docs"]);
-  for (const name of ["Developer", "Acme producto", "docs"]) expect(workspaces.getByRole("button", { name: `${name} panes` })).toHaveAttribute("aria-expanded", "false");
+  // Each holds one tab, split in Developer's case: its row opens that tab, with nothing to unfold.
+  expect(workspaces.queryByRole("button")).toBeNull();
+  expect(workspaces.getAllByRole("link").map((link) => link.getAttribute("href")))
+    .toEqual(["/pane/dev%3Asend?s=work", "/pane/acme%3Abench?s=work", "/pane/docs%3At76?s=work"]);
   expect(workspaces.getByRole("link", { name: /^Developer/ })).toHaveAttribute("aria-current", "true");
 
-  // Opening one lasts while the drawer is open; the next open is compact again.
-  await user.click(workspaces.getByRole("button", { name: "Developer panes" }));
-  expect(workspaces.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "true");
+  // Opening a fold lasts while the drawer is open; the next open is compact again.
+  await user.click(nav.getByRole("button", { name: "Acme Shop tasks" }));
+  expect(nav.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "true");
   await user.click(nav.getByRole("button", { name: "Close" }));
   await user.click(screen.getByRole("button", { name: "Chat title" }));
-  expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+  expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("searches and starts something new from the drawer's header", async () => {
@@ -449,7 +452,7 @@ it("holds in the tab bar's Search what Browse did before you type: folded projec
   const sheet = within(screen.getByRole("dialog", { name: "Search" }));
   expect(sheet.getByRole("searchbox")).toHaveFocus();
   expect(sheet.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
-  expect(sheet.getByRole("button", { name: "Developer panes" })).toHaveAttribute("aria-expanded", "false");
+  expect(within(sheet.getByRole("region", { name: "Developer" })).queryByRole("button")).toBeNull();
   expect(sheet.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   expect(sheet.getByText(/^herdr ·/)).toBeInTheDocument();
   expect(sheet.getByRole("button", { name: /work/ })).toBeInTheDocument();

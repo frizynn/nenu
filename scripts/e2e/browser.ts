@@ -22,6 +22,7 @@ export interface Locator {
   last(): Locator;
   innerText(): Promise<string>;
   getAttribute(name: string): Promise<string | null>;
+  screenshot(opts: { path?: string; animations?: "disabled" }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;

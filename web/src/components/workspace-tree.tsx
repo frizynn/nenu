@@ -8,7 +8,7 @@ import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
-import { defaultOpen, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
+import { defaultOpen, opensDirectly, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 
 /** Only states worth reading at a glance get a word; a resting pane keeps its hollow dot. */
@@ -17,7 +17,8 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-statu
 
 /**
  * The herd as Herdr holds it, drawn like the projects above it: a row per workspace whose name opens
- * its pane and whose chevron folds its tabs' panes, the panes one level in.
+ * its pane and whose chevron folds its tabs' panes, the panes one level in. A workspace of one tab has
+ * no chevron: its row is that tab's.
  */
 export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, startFolded = false }: {
   /** With the projects, so a pane is called what every other view calls it (lib/display-name.ts). */
@@ -52,6 +53,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
   const bodyId = useId();
   const { name, counts } = branch;
   const status = workspaceStatus(counts);
+  const fold = !opensDirectly(branch);
   return (
     <section aria-label={name} className="nav-ws">
       <div className="nav-project">
@@ -62,12 +64,12 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
           {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
           <span className="nav-count">{branch.tabs.length} {branch.tabs.length === 1 ? "tab" : "tabs"}</span>
         </Link>
-        <button type="button" className="nav-disclosure nav-disclosure-end" aria-label={`${name} panes`} aria-expanded={open}
+        {fold && <button type="button" className="nav-disclosure nav-disclosure-end" aria-label={`${name} panes`} aria-expanded={open}
           aria-controls={open ? bodyId : undefined} onClick={() => onToggle(!open)}>
           <ChevronRight aria-hidden size={14} />
-        </button>
+        </button>}
       </div>
-      {open && (
+      {fold && open && (
         <div id={bodyId} className="nav-ws-body">
           {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} projects={projects} session={session} currentPaneId={currentPaneId} />)}
           {branch.tabs.length === 0 && <p className="nav-empty">No panes yet</p>}
