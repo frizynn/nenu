@@ -55,7 +55,8 @@ export function MachinesControl({ readOnly = false }: { readOnly?: boolean }) {
       {settings && settings.machines.length > 0 && (
         <ul aria-label="Machines in Herdr" className="contents">
           {settings.machines.map((machine) => (
-            <li key={machine.label} className={listRowClass}>
+            // The first row's hairline too: it follows the switch's row, not its own list's start.
+            <li key={machine.label} className={`${listRowClass} first:before:absolute first:before:top-0 first:before:right-0 first:before:left-4 first:before:h-px first:before:bg-border`}>
               {/* The name always shows: a long reason (ssh's own words) wraps under it, never over it. */}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body">{machine.label}</span>

@@ -127,7 +127,7 @@ const nothing = async () => {};
 const toMachines = async (page: Page) => {
   const list = page.getByRole("list", { name: "Machines in Herdr" });
   await list.waitFor({ timeout: 10_000 });
-  await list.scrollIntoViewIfNeeded();
+  await list.getByRole("listitem").last().scrollIntoViewIfNeeded();
 };
 
 /** Settings → Show other machines, as the page sends it. */
