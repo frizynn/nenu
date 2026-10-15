@@ -56,11 +56,12 @@ export function MachinesControl({ readOnly = false }: { readOnly?: boolean }) {
         <ul aria-label="Machines in Herdr" className="contents">
           {settings.machines.map((machine) => (
             <li key={machine.label} className={listRowClass}>
-              <span className="min-w-0 flex-1 truncate text-body">{machine.label}</span>
-              <span className="min-w-0 shrink text-right text-footnote text-muted-foreground">
-                {MACHINE_STATE_WORD[machine.state]}
-                {machine.detail && machine.detail !== MACHINE_STATE_WORD[machine.state] && <span className="block truncate">{machine.detail}</span>}
+              {/* The name always shows: a long reason (ssh's own words) wraps under it, never over it. */}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-body">{machine.label}</span>
+                {machine.detail && machine.detail !== MACHINE_STATE_WORD[machine.state] && <span className="block text-footnote text-pretty text-muted-foreground">{machine.detail}</span>}
               </span>
+              <span className="shrink-0 text-footnote text-muted-foreground">{MACHINE_STATE_WORD[machine.state]}</span>
             </li>
           ))}
         </ul>
