@@ -98,6 +98,16 @@ describe("identity recovery", () => {
     await service.attach(fresh, id, herdr);
     expect(await service.describe(fresh, herdr)).toEqual({ pane: { ...fresh, agentSession: { kind: "id", value: id } }, notStarted: false });
   });
+  test("reads a pane's open files once per burst of reads, not once per route", async () => {
+    let reads = 0;
+    const service = new ConversationService({ request: async (method) => {
+      if (method === "thread/loaded/list") return { data: [], nextCursor: null };
+      throw new Error(`Unexpected request: ${method}`);
+    } }, undefined, undefined, async () => { reads++; return []; });
+    const fresh = { ...pane, terminalTitle: "tmp" };
+    expect((await Promise.all([service.describe(fresh, herdr), service.describe(fresh, herdr), service.describe(fresh, herdr)])).map(r => r.notStarted)).toEqual([true, true, true]);
+    expect(reads).toBe(1);
+  });
   test("Claude attach follows the authoritative process or short id", () => {
     const sessions = [{ id: "abc123", sessionId: id, cwd: "/tmp", pid: 100 }];
     expect(matchClaudeSession(info(["claude", "attach", "abc123"]), sessions)).toBe(id);

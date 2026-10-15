@@ -3,7 +3,6 @@ import { realpath } from "node:fs/promises";
 import { record, type CodexRpc } from "./codex-rpc.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import { meaningfulTerminalTitle } from "./activity.ts";
-import { processOpenFiles } from "./agent-state.ts";
 import type { AgentView } from "./types.ts";
 
 interface LoadedThread { id: string; cwd: string; name: string; started: boolean }
@@ -22,7 +21,7 @@ const ROLLOUT = /^rollout-.+-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
  */
 export class CodexSessions {
   private inventory: Promise<LoadedThread[] | null> | null = null;
-  constructor(private readonly rpc: Pick<CodexRpc, "request">, private readonly openFiles: (pids: number[]) => Promise<string[]> = processOpenFiles) {}
+  constructor(private readonly rpc: Pick<CodexRpc, "request">, private readonly openFiles: (pids: number[]) => Promise<string[]>) {}
 
   async identify(pane: AgentView, info: unknown): Promise<CodexIdentity> {
     const codex = codexProcesses(info);

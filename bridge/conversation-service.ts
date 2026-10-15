@@ -5,6 +5,7 @@ import { codexRpc, record, type CodexRpc } from "./codex-rpc.ts";
 import { CodexHistory } from "./codex-history.ts";
 import { ClaudeSessions, matchClaudeSession } from "./claude-sessions.ts";
 import { CodexSessions } from "./codex-sessions.ts";
+import { processOpenFiles } from "./agent-state.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import type { AgentView } from "./types.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -32,12 +33,15 @@ export class ConversationService {
   private readonly pages: Cached<Omit<TranscriptPage, "paneId">> = new Map();
   private readonly threads: Cached<Record<string, unknown>> = new Map();
   private readonly lists: Cached<ConversationChoice[]> = new Map();
+  private readonly held: Cached<string[]> = new Map();
   private readonly bindings: ConversationBindings;
   private readonly codexSessions: CodexSessions;
   private readonly history: CodexHistory;
-  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string, openFiles?: (pids: number[]) => Promise<string[]>) {
+  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string, openFiles = processOpenFiles) {
     this.bindings = new ConversationBindings(stateFile);
-    this.codexSessions = new CodexSessions(codex, openFiles);
+    // An open Codex chat resolves its pane about 44 times a minute (measured); lsof costs 60 to 100 ms.
+    // A process opens its rollout once, at its first turn, so five seconds of reuse only delays that.
+    this.codexSessions = new CodexSessions(codex, pids => cached(this.held, pids.join(","), 5_000, () => openFiles(pids)));
     this.history = new CodexHistory(codex);
   }
 
