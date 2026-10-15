@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { dirname } from "node:path";
 
 import {
   forwardTarget,
@@ -208,7 +209,7 @@ describe("a machine's link", () => {
     await tick();
     expect(h.procs).toHaveLength(2);
     const tunnel = h.procs[1]!;
-    expect(tunnel.argv[tunnel.argv.indexOf("-L") + 1]).toBe("/state/machines/m-a1b2c3d4e5f6.sock:/home/u/.local/state/collie/peer.sock");
+    expect(tunnel.argv[tunnel.argv.indexOf("-L") + 1]).toBe(`${h.link.socket}:/home/u/.local/state/collie/peer.sock`);
     tunnel.out("nenu-tunnel-ready\n");
     await tick();
     await tick();
@@ -255,6 +256,15 @@ describe("a machine's link", () => {
     await tick();
     live.link.stop();
     expect(live.procs[1]!.killed).toBe(true);
+  });
+
+  test("a machine's socket stays in the tunnels' folder whatever its id holds, and no two ids share one", () => {
+    const h = harness();
+    const socket = (id: string) => new MachineLink({ id, label: id, target: "t", session: "default", enabled: true }, h.deps).socket;
+    // An id is Herdr's 32 hex, but the list is a file: one that walks up must not land on this Nenu's
+    // own peer.sock, which the tunnel's StreamLocalBindUnlink would replace.
+    for (const id of ["/../../peer", "../..", "a/b", "a1b2c3d4e5f60718293a4b5c6d7e8f90"]) expect(dirname(socket(id))).toBe("/state/machines");
+    expect(socket("a1b2c3d4e5f6aaaa")).not.toBe(socket("a1b2c3d4e5f6bbbb"));
   });
 
   test("a machine Herdr has disabled is listed and never dialled", () => {
