@@ -2,6 +2,8 @@
 
 Status: Accepted
 
+Amended by: [ADR 0083](./0083-an-update-applies-when-the-app-returns.md) — an open chat stops holding for a moment after the app returns to the foreground; only unsent work holds then.
+
 ## Context
 
 An open 0.45.1 client requests file-preview-DKl8QUfT.js after the bridge switches
