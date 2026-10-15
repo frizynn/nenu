@@ -9,13 +9,15 @@ export interface SidebarPrefs {
   expanded: Record<string, boolean>;
   /** Explicit expand/collapse per workspace id; an untouched one follows `defaultOpen`. */
   workspaces: Record<string, boolean>;
+  /** Explicit expand/collapse per id of a tab that folds its panes; an untouched one follows `tabStartsOpen`. */
+  tabs: Record<string, boolean>;
 }
 
 const STORAGE_KEY = "collie:sidebar:v1";
 
 export function coerceSidebarPrefs(raw: unknown): SidebarPrefs {
   const p = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-  return { expanded: folds(p.expanded), workspaces: folds(p.workspaces) };
+  return { expanded: folds(p.expanded), workspaces: folds(p.workspaces), tabs: folds(p.tabs) };
 }
 
 function folds(raw: unknown): Record<string, boolean> {
@@ -57,5 +59,8 @@ export function useSidebarPrefs({ persist = true } = {}) {
   const setWorkspaceOpen = useCallback((workspaceId: string, open: boolean) =>
     update((latest) => ({ ...latest, workspaces: { ...latest.workspaces, [workspaceId]: open } })), [update]);
 
-  return { prefs, setExpanded, setWorkspaceOpen };
+  const setTabOpen = useCallback((tabId: string, open: boolean) =>
+    update((latest) => ({ ...latest, tabs: { ...latest.tabs, [tabId]: open } })), [update]);
+
+  return { prefs, setExpanded, setWorkspaceOpen, setTabOpen };
 }

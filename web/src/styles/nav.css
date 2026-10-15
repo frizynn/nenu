@@ -68,12 +68,14 @@
 .nav-history > .nav-count { margin-left: 6px; }
 .nav-history-all { color: var(--muted-foreground); font-size: var(--text-caption); }
 
-/* A workspace's panes, one level in; a split tab's label at depth 1 and its panes at depth 2. */
+/* A workspace's panes, one level in; a tab that folds at depth 1, its chevron in the fold column, and its panes at depth 2. */
 .nav-ws > .nav-project { margin-top: 0; }
 .nav-ws-body { padding-bottom: 4px; }
 .nav-ws-body .nav-pane { --nav-depth: 1; min-height: 28px; padding-block: 3px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth) - 1) * var(--nav-indent, 16px)); }
 .nav-ws-body .nav-pane-nested { --nav-depth: 2; }
-.nav-tab-label { display: flex; align-items: center; gap: 8px; padding: 4px var(--nav-pad, 10px) 2px calc(var(--nav-pad, 10px) + var(--nav-fold, 20px)); color: var(--muted-foreground); font-size: var(--text-caption); }
+.nav-tab { position: relative; }
+.nav-tab-fold { position: absolute; top: calc(50% - 6.5px); left: calc(var(--nav-pad, 10px) + (var(--nav-fold, 20px) - 13px) / 2); color: var(--muted-foreground); transition: transform 150ms ease-out; }
+.nav-tab[aria-expanded="true"] > .nav-tab-fold { transform: rotate(90deg); }
 
 /* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
 .nav-group { padding-top: 14px; }
@@ -167,7 +169,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-enter, .nav-desk [data-revealed] { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg { transition: none; }
+  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg, .nav-tab-fold { transition: none; }
   .nav-enter, .nav-desk [data-revealed] { animation: none; }
   .nav-kbd { transition: none; }
 }
@@ -193,7 +195,6 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-history-all { font-size: var(--text-footnote); }
   .nav-pane { min-height: 52px; padding-block: 6px; }
   .nav-ws-body .nav-pane { min-height: 44px; }
-  .nav-tab-label { font-size: var(--text-footnote); }
   .nav-pane-title { font-size: var(--text-body); }
   .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-row-word { font-size: var(--text-footnote); }
 }

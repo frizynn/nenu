@@ -190,7 +190,7 @@ describe("the sidebar's workspaces, with no projects", () => {
       await user.click(workers);
       expect(workers).toHaveAttribute("aria-expanded", "true");
       const panes = within(section.getByRole("group", { name: "workers" }));
-      expect(panes.getAllByRole("link").map((link) => link.textContent)).toEqual(["Checkout flowworking", "Payment retriesdone", "Search index"]);
+      expect(panes.getAllByRole("link").map((link) => link.textContent)).toEqual(["Checkout flowworking", "Payment retriesdone", "Search index, idle"]);
       expect(panes.getByRole("link", { name: /^Search index/ }).closest(".nav-pane")).toHaveClass("nav-pane-nested");
       // A split tab with an agent asking for you starts open.
       if (variant === "drawer") await user.click(workspaces().getByRole("button", { name: "Design panes" }));

@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { Link } from "react-router";
-import { ChevronRight, LayoutGrid } from "@/components/ui/icon";
+import { ChevronRight, LayoutGrid, LayoutTemplate } from "@/components/ui/icon";
 
 import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";
@@ -8,7 +8,7 @@ import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
-import { defaultOpen, opensDirectly, workspaceTree, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
+import { defaultOpen, opensDirectly, tabFolds, tabStartsOpen, workspaceTree, type AgentCounts, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 
 /** Only states worth reading at a glance get a word; a resting pane keeps its hollow dot. */
@@ -17,10 +17,10 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-statu
 
 /**
  * The herd as Herdr holds it, drawn like the projects above it: a row per workspace whose name opens
- * its pane and whose chevron folds its tabs' panes, the panes one level in. A workspace of one tab has
- * no chevron: its row is that tab's.
+ * its pane and whose chevron folds its tabs, one level in. A workspace of one tab has no chevron: its
+ * row is that tab's.
  */
-export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, startFolded = false }: {
+export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, tabs, onTab, startFolded = false }: {
   /** With the projects, so a pane is called what every other view calls it (lib/display-name.ts). */
   source: Herd & { projects?: readonly ProjectView[] };
   session?: string;
@@ -28,6 +28,9 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   /** Explicit fold per workspace id; an untouched one follows {@link defaultOpen}. */
   expanded: Record<string, boolean>;
   onExpand: (workspaceId: string, open: boolean) => void;
+  /** Explicit fold per id of a tab that folds; an untouched one follows {@link tabStartsOpen}. */
+  tabs: Record<string, boolean>;
+  onTab: (tabId: string, open: boolean) => void;
   /** An untouched workspace starts folded instead of following {@link defaultOpen}. */
   startFolded?: boolean;
 }) {
@@ -36,11 +39,11 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId} projects={source.projects}
       open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
-      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} />
+      onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} tabs={tabs} onTab={onTab} />
   ));
 }
 
-function WorkspaceSection({ branch, href, session, currentPaneId, projects, open, onToggle }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, projects, open, onToggle, tabs, onTab }: {
   branch: WorkspaceBranch;
   projects?: readonly ProjectView[];
   /** Where the workspace's name opens (see workspacePath). */
@@ -49,6 +52,8 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
   currentPaneId?: string;
   open: boolean;
   onToggle: (open: boolean) => void;
+  tabs: Record<string, boolean>;
+  onTab: (tabId: string, open: boolean) => void;
 }) {
   const bodyId = useId();
   const { name, counts } = branch;
@@ -71,7 +76,8 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
       </div>
       {fold && open && (
         <div id={bodyId} className="nav-ws-body">
-          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} projects={projects} session={session} currentPaneId={currentPaneId} />)}
+          {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} folds={tabFolds(tab.panes.length, branch.tabs.length)} projects={projects} session={session}
+            currentPaneId={currentPaneId} open={tabs[tab.tabId] ?? tabStartsOpen(tab.panes, currentPaneId)} onToggle={(next) => onTab(tab.tabId, next)} />)}
           {branch.tabs.length === 0 && <p className="nav-empty">No panes yet</p>}
         </div>
       )}
@@ -79,8 +85,8 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
   );
 }
 
-/** The one dot a folded workspace shows: its most urgent agent, none for a workspace of shells. */
-function workspaceStatus(counts: WorkspaceBranch["counts"]): AgentStatus | undefined {
+/** The one dot a folded workspace or tab shows: its most urgent agent, none for shells alone. */
+function workspaceStatus(counts: AgentCounts): AgentStatus | undefined {
   if (counts.blocked) return "blocked";
   if (counts.working) return "working";
   if (counts.done) return "done";
@@ -89,29 +95,47 @@ function workspaceStatus(counts: WorkspaceBranch["counts"]): AgentStatus | undef
 
 /**
  * A tab's panes, each named after its agent as the chat it opens is. A one-pane tab is that pane's
- * row, the tab named at its end while nothing more urgent sits there; a split tab heads its rows.
+ * row, the tab named at its end while nothing more urgent sits there. A tab that folds (tabFolds) is a
+ * row of its own, its chevron in the fold column, saying its most urgent agent and how many panes it
+ * holds; its panes sit one level in.
  */
-function TabRows({ tab, projects, session, currentPaneId }: {
+function TabRows({ tab, folds, projects, session, currentPaneId, open, onToggle }: {
   tab: TabBranch;
+  folds: boolean;
   projects?: readonly ProjectView[];
   session?: string;
   currentPaneId?: string;
+  open: boolean;
+  onToggle: (open: boolean) => void;
 }) {
-  if (tab.panes.length === 1) {
-    const pane = tab.panes[0]!;
-    const name = displayName(pane, projects);
-    return <PaneRow pane={pane} title={name} note={tab.label === name ? undefined : tab.label} session={session}
-      current={pane.paneId === currentPaneId} />;
+  const bodyId = useId();
+  if (!folds) {
+    return tab.panes.map((pane) => {
+      const name = displayName(pane, projects);
+      return <PaneRow key={pane.paneId} pane={pane} title={name} note={tab.panes.length > 1 || tab.label === name ? undefined : tab.label} session={session}
+        current={pane.paneId === currentPaneId} />;
+    });
   }
-  return (
-    <div role="group" aria-label={tab.label}>
-      <div className="nav-tab-label"><span className="nav-row-text">{tab.label}</span><span className="nav-count">{tab.panes.length} panes</span></div>
-      {tab.panes.map((pane) => (
-        <PaneRow key={pane.paneId} nested pane={pane} title={displayName(pane, projects)} session={session}
-          current={pane.paneId === currentPaneId} />
-      ))}
-    </div>
-  );
+  const status = workspaceStatus(tab.counts);
+  const count = `${tab.panes.length} panes`;
+  return <>
+    <button type="button" className="nav-pane nav-tab" aria-expanded={open} aria-controls={open ? bodyId : undefined}
+      aria-label={[tab.label, status && STATUS_LABEL[status], count].filter(Boolean).join(", ")} onClick={() => onToggle(!open)}>
+      <ChevronRight aria-hidden size={13} className="nav-tab-fold" />
+      <RowBody mark={<LayoutTemplate aria-hidden size={14} />} title={tab.label} end={<>
+        {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
+        <span className="nav-count">{count}</span>
+      </>} />
+    </button>
+    {open && (
+      <div id={bodyId} role="group" aria-label={tab.label}>
+        {tab.panes.map((pane) => (
+          <PaneRow key={pane.paneId} nested pane={pane} title={displayName(pane, projects)} session={session}
+            current={pane.paneId === currentPaneId} />
+        ))}
+      </div>
+    )}
+  </>;
 }
 
 function PaneRow({ pane, title, note, session, current, nested }: {
