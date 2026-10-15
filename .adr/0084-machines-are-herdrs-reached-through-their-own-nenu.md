@@ -34,9 +34,12 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
 
 ## Decision
 
-- **Herdr's list is the only list.** The bridge reads `herdr machine list --json` at start and at most
-  once a minute when a snapshot is asked for. Nenu adds, renames and forgets no machine; a disabled one
-  is shown as such and never dialled.
+- **Opt-in, off by default.** Settings → Machines → "Show other machines", one bridge-wide switch
+  saved in the state dir (the bridge is what dials). Off, the bridge runs no `herdr` in the background,
+  opens no `ssh`, and the snapshot is what it was; Herdr's list is read only when Settings asks.
+- **Herdr's list is the only list.** While on, the bridge reads `herdr machine list --json` when it is
+  turned on, at start, and at most once a minute when a snapshot is asked for. Nenu adds, renames and
+  forgets no machine; a disabled one is shown as such and never dialled.
 - **One `ssh` per machine, as Herdr dials it:** the operator's own `~/.ssh/config` and default keys,
   `BatchMode=yes`, `StrictHostKeyChecking=yes`, the target exactly as Herdr saved it. A short probe
   finds the other Nenu's `peer.sock` and tells apart "SSH did not get there", "Nenu is not running",
@@ -44,7 +47,8 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
   whose remote command waits on stdin, so the tunnel dies with the bridge, SIGKILL included. Retries
   wait 5 s, 15 s, 1 min, then 5 min.
 - **Every Nenu listens on `<stateDir>/peer.sock`** (0600) beside its port, and answers a request there
-  as the operator. It never forwards one again.
+  as the operator, whatever its own switch says: the switch decides whether this Nenu shows other
+  machines, not whether it can be reached. It never forwards a request again.
 - **A machine is a session to the browser:** `?s=@<label>` (Herdr refuses `@` in a session name).
   The dispatcher applies its own gate at the route's own level, then hands the request, unchanged, to
   that machine's Nenu. Organizations, settings and push stay on the machine serving the page.
@@ -53,6 +57,8 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
 
 ## Consequences
 
+- `peer.sock` stays on with the switch off. Making it opt-in too would add a second switch per machine
+  and buy nothing: whoever can reach it can already reach Herdr's own socket beside it.
 - Opening `peer.sock` to the operator opens nothing new: only the same user (or root) can connect, and
   either can already write to Herdr's own socket, read the journals and run anything. Reaching it from
   another machine takes SSH as that user, which is that machine already. The port's gates are as they
