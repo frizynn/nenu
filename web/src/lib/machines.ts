@@ -1,5 +1,5 @@
 import { navSearch, type SearchGroup } from "@/lib/nav-search";
-import type { MachineView } from "@/lib/types";
+import type { MachineState, MachineView } from "@/lib/types";
 
 // Herdr's saved machines as the snapshot lists them (bridge/machines.ts). A machine is a session to
 // the browser: `?s=@<label>` reaches its Nenu, so a pane there opens, reads and writes like one here.
@@ -36,3 +36,14 @@ export function machineSearch(data: WithMachines, query: string, opts: { order?:
     }));
   });
 }
+
+/** A machine's state in words, where the lists and Settings show it. */
+export const MACHINE_STATE_WORD: Record<MachineState, string> = {
+  connected: "Connected",
+  connecting: "Connecting…",
+  offline: "Not connected",
+  "old-nenu": "Update Nenu there",
+  "no-nenu": "No Nenu there",
+  disabled: "Disabled in Herdr",
+  off: "Off",
+};

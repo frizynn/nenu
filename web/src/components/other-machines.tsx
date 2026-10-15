@@ -3,25 +3,16 @@ import { StatusDot } from "@/components/status-badge";
 import { ChatRow } from "@/components/nav-rows";
 import { recentChats } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { otherMachines } from "@/lib/machines";
+import { MACHINE_STATE_WORD as STATE_WORD, otherMachines } from "@/lib/machines";
 import type { AgentStatus, MachineState, MachineView } from "@/lib/types";
 
 // The other machines Herdr has saved, each under its own name with its chats, newest first. A row
 // opens the chat on its machine (`?s=@<label>`); a machine that is not connected says why instead.
 // Loaded only when there is more than one machine (machines-slot.tsx).
 
-const STATE_WORD: Record<MachineState, string> = {
-  connected: "",
-  connecting: "Connecting…",
-  offline: "Not connected",
-  "old-nenu": "Update Nenu there",
-  "no-nenu": "No Nenu there",
-  disabled: "Disabled in Herdr",
-};
-
 // The machine's dot: blocked's red for one that cannot be reached, a grey one while it connects.
 const DOT: Record<MachineState, AgentStatus> = {
-  connected: "done", connecting: "unknown", offline: "blocked", "old-nenu": "blocked", "no-nenu": "unknown", disabled: "unknown",
+  connected: "done", connecting: "unknown", offline: "blocked", "old-nenu": "blocked", "no-nenu": "unknown", disabled: "unknown", off: "unknown",
 };
 
 const chatsOf = (machine: MachineView) => (machine.herd ? recentChats([...machine.herd.agents, ...machine.herd.shellPanes], undefined, new Set()) : []);

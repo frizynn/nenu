@@ -424,7 +424,7 @@ export interface SnapshotResponse {
 }
 
 /** Mirrors MachineState in bridge/types.ts. */
-export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled";
+export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled" | "off";
 
 /** Mirrors MachineHerd in bridge/types.ts. */
 export interface MachineHerd {

@@ -15,6 +15,7 @@ import type {
   DeliveryMode,
   Interaction,
   InterruptResponse,
+  MachineView,
   NativeQueueState,
   NodeRole,
   NotifyPrefs,
@@ -852,6 +853,21 @@ export function setSnooze(snoozedUntil: number | null): Promise<{ snoozedUntil: 
 }
 
 /** Fetch the bridge-wide notification-type preferences (which agent statuses push). */
+/** Settings → other machines: whether this Nenu shows them, and Herdr's saved machines with their state. */
+export interface MachineSettings {
+  on: boolean;
+  machines: MachineView[];
+}
+
+export function getMachineSettings(): Promise<MachineSettings> {
+  return req<MachineSettings>("/api/machines");
+}
+
+/** Bridge-wide: on, the bridge dials every machine Herdr saved; off, it dials none. */
+export function setMachinesOn(on: boolean): Promise<MachineSettings> {
+  return req<MachineSettings>("/api/machines", { method: "POST", body: JSON.stringify({ on }) });
+}
+
 export function getNotifyPrefs(): Promise<NotifyPrefs> {
   return req<NotifyPrefs>("/api/notifications/prefs");
 }
