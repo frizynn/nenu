@@ -641,15 +641,20 @@ async function addCrew(bridge: TestBridge): Promise<void> {
   pane("w6:payments", "w6:t3", "codex", "Payment retries after a declined card");
   pane("w6:invoice", "w6:t3", "claude", "Invoice export");
   pane("w6:search", "w6:t3", "claude", "Search index");
+  const reported = async (paneId: string, status: string) => {
+    for (let i = 0; i < 150; i++) {
+      const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string; status: string }> }>);
+      if (snap.agents.some((p) => p.paneId === paneId && p.status === status)) return;
+      await sleep(100);
+    }
+    throw new Error(`the bridge never reported ${paneId} ${status}`);
+  };
+  // The bridge reports done only for a finish it saw after it first saw the pane (ADR 0071).
+  await reported("w6:search", "idle");
   fake.setStatus("w6:checkout", "working");
   fake.setStatus("w6:payments", "done");
   fake.setStatus("w6:invoice", "blocked");
-  for (let i = 0; i < 150; i++) {
-    const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string }> }>);
-    if (snap.agents.some((p) => p.paneId === "w6:search")) return;
-    await sleep(100);
-  }
-  throw new Error("the bridge never listed crew");
+  await reported("w6:payments", "done");
 }
 
 /**
