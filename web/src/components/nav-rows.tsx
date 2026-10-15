@@ -1,12 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useNavigation } from "react-router";
+import { Link, useNavigation } from "react-router";
 import { Pending, Terminal } from "@/components/ui/icon";
 
 import { StatusDot } from "@/components/status-badge";
-import type { DisplayPlace } from "@/lib/display-name";
+import { displayName, displayPlace, type DisplayPlace } from "@/lib/display-name";
+import { timeAgoShort } from "@/lib/format";
+import { panePath } from "@/lib/nav";
+import { chatRecency } from "@/lib/projects";
 import { matchRange } from "@/lib/nav-search";
 import { TITLE_SEP } from "@/lib/pane-name";
-import type { AgentView } from "@/lib/types";
+import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
 
 // The parts every list of chats in the navigation shares (the tree, search, Needs you, Recent and
 // the pane switcher), so a pane reads the same wherever it is listed: a mark, its name, where it lives.
@@ -71,3 +74,24 @@ export function OpeningMark({ to, children }: { to: string; children: ReactNode 
   if (!useOpening(to)) return children;
   return <span data-pending className="nav-opening"><Pending aria-hidden size={14} /><span className="sr-only">Opening</span></span>;
 }
+
+/** A chat: its state, its one name, where it lives and how long ago it last moved. */
+export function ChatRow({ pane, projects, current, now, session }: {
+  pane: AgentView;
+  projects?: readonly ProjectView[];
+  current: boolean;
+  now: number;
+  session?: string;
+}) {
+  const at = chatRecency(pane);
+  const to = panePath(pane.paneId, session);
+  return (
+    <Link className="nav-pane nav-chat" to={to} aria-current={current ? "page" : undefined}>
+      <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={displayName(pane, projects)} detail={<PlaceText place={displayPlace(pane, projects)} />} end={<>
+        {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
+        {at > 0 && <span className="nav-chat-time">{timeAgoShort(at, now)}</span>}
+      </>} />
+    </Link>
+  );
+}
+

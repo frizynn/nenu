@@ -10,24 +10,23 @@ import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/status-badge";
-import { Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
+import { ChatRow, Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { MachinesSlot } from "@/components/machines-slot";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { workspaceTree } from "@/lib/workspace-tree";
-import { displayName, displayPlace } from "@/lib/display-name";
+import { displayName } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { needsYouCount, needYou } from "@/lib/home-stats";
-import { timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { chatRecency, isOpenThread, projectForPane } from "@/lib/projects";
+import { isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 export interface SidebarRequest {
@@ -287,26 +286,6 @@ function DrawerSections({ data }: { data: HomeData }) {
       </section>
     )}
   </>;
-}
-
-/** A chat: its state, its one name, where it lives and how long ago it last moved. */
-export function ChatRow({ pane, projects, current, now, session }: {
-  pane: AgentView;
-  projects?: readonly ProjectView[];
-  current: boolean;
-  now: number;
-  session?: string;
-}) {
-  const at = chatRecency(pane);
-  const to = panePath(pane.paneId, session);
-  return (
-    <Link className="nav-pane nav-chat" to={to} aria-current={current ? "page" : undefined}>
-      <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={displayName(pane, projects)} detail={<PlaceText place={displayPlace(pane, projects)} />} end={<>
-        {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
-        {at > 0 && <span className="nav-chat-time">{timeAgoShort(at, now)}</span>}
-      </>} />
-    </Link>
-  );
 }
 
 /**

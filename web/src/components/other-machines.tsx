@@ -1,6 +1,6 @@
 import { HomeHeading, SessionRow, useOpeningPath } from "@/components/home-panels";
 import { StatusDot } from "@/components/status-badge";
-import { ChatRow } from "@/components/workbench-sidebar";
+import { ChatRow } from "@/components/nav-rows";
 import { recentChats } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { otherMachines } from "@/lib/machines";
