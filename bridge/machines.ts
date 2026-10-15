@@ -222,10 +222,6 @@ export class MachineLink {
     this.tunnel?.kill();
   }
 
-  get connected(): boolean {
-    return this.state === "connected";
-  }
-
   view(): MachineView {
     return {
       session: this.session,
@@ -236,7 +232,7 @@ export class MachineLink {
     };
   }
 
-  /** The other Nenu's snapshot, as it answers it now. */
+  /** One request to the other Nenu, over the tunnel. */
   fetch(path: string, init?: RequestInit): Promise<Response> {
     return this.deps.fetchPeer(this.socket, path, init);
   }
@@ -294,14 +290,15 @@ export class MachineLink {
     const events = new AbortController();
     this.events = events;
     try {
-      const stream = await this.fetch("/api/events", { signal: events.signal });
+      const stream = await this.fetch(forwardTarget(new URL("http://peer/api/events"), this.machine.session), { signal: events.signal });
       if (!stream.ok || !stream.body) throw new Error(`events: ${stream.status}`);
       await this.reread();
       this.set("connected");
       await eachLine(stream.body, (line) => {
         if (!line.startsWith("data:")) return;
         try {
-          if ((JSON.parse(line.slice(5)) as { topic?: string }).topic === "snapshot") void this.reread();
+          // A failed read keeps the herd it had; the next change, or the stream ending, says more.
+          if ((JSON.parse(line.slice(5)) as { topic?: string }).topic === "snapshot") void this.reread().catch(() => {});
         } catch {
           // Not an event this side understands.
         }
@@ -370,7 +367,6 @@ export interface LinkHandle {
   start(): void;
   stop(): void;
   view(): MachineView;
-  readonly connected?: boolean;
   fetch?(path: string, init?: RequestInit): Promise<Response>;
 }
 
