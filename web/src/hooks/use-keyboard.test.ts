@@ -122,6 +122,8 @@ describe("useFocusInPlace", () => {
     const scroll = mount("iPhone");
     press(scroll.input, "pointerdown");
     press(scroll.input, "pointercancel");
+    expect(document.activeElement).toBe(document.body);
+    expect(scroll.anchor.hasAttribute("tabindex")).toBe(false);
     tapFocus(scroll.input);
     expect(scrollFree(scroll.focus)).toBe(0);
     scroll.input.blur();
