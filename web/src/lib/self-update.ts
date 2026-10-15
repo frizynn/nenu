@@ -2,15 +2,15 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { BUILD, isStaleBuild } from "@/lib/build";
 import { getServerBuild, observeServerBuild, subscribeServerBuild } from "@/lib/server-build";
-import { isReloadHeld, subscribeReloadHeld, waiveViewHolds } from "@/lib/reload-guard";
+import { isReloadHeld, isWorkHeld, subscribeReloadHeld, waiveViewHolds } from "@/lib/reload-guard";
 import { checkForUpdate } from "@/lib/pwa";
 
 // Discover builds from API responses, and from one read of build-info.json each time the app comes
 // back to the foreground: an installed phone app is frozen in the background and resumes without a
 // load, so a return is the moment to look. Two matching observations confirm an update. It applies on
 // its own once nothing holds the reload; an open chat stops holding for a moment after a return
-// (lib/reload-guard). A failed attempt is retried, a bounded number of times. While an update has to
-// wait, or cannot finish, the update banner offers it (ADR 0083).
+// (lib/reload-guard). A failed attempt is retried, a bounded number of times. Only when unsent work
+// holds the update, or the retries are spent, does the update banner offer it (ADR 0083).
 
 // Attempts per build survive a reload, so a page that comes back still stale cannot loop.
 const ATTEMPTS_KEY = "collie:update-attempts";
@@ -38,7 +38,6 @@ export function __setReloadImpl(fn: UpdateImpl): void {
 let pendingStale: string | undefined;
 let confirmedStale: string | undefined;
 let applying = false;
-let failed = false;
 let returnedAt = 0;
 const listeners = new Set<() => void>();
 
@@ -75,8 +74,9 @@ function act(id: string): void {
   recordAttempt(id, at);
   applying = true;
   notify();
+  // A failed attempt resolves false and leaves the page as it was; the next observation retries.
   void Promise.resolve(reloadImpl())
-    .then((ok) => { failed = ok === false; }, () => { failed = true; })
+    .catch(() => {})
     .finally(() => {
       applying = false;
       notify();
@@ -90,14 +90,12 @@ function onServerBuild(): void {
     // Current (or unknown) — clear any pending/confirmed staleness.
     pendingStale = undefined;
     confirmedStale = undefined;
-    failed = false;
   } else if (server === confirmedStale) {
     act(server); // already confirmed — re-evaluate (a hold or the SW state may have changed)
   } else if (server === pendingStale) {
     // Second consecutive sighting of the same stale id → confirm and act.
     confirmedStale = server;
     pendingStale = undefined;
-    failed = false;
     act(server);
   } else {
     // First sighting of this stale id (or the id changed since the last poll) → hold one more poll.
@@ -174,10 +172,11 @@ export function useSelfUpdate(): void {
   useEffect(() => startSelfUpdate(), []);
 }
 
-/** A confirmed update that is not applying on its own: held by the page, failed, or out of tries. */
+/** A confirmed update that cannot apply on its own: unsent work holds it, or the retries are spent.
+ *  An open chat alone stays quiet: the next return applies the update. */
 function noticeShown(): boolean {
   if (confirmedStale === undefined || applying) return false;
-  return failed || isReloadHeld() || attemptsFor(confirmedStale).length >= MAX_ATTEMPTS;
+  return isWorkHeld() || attemptsFor(confirmedStale).length >= MAX_ATTEMPTS;
 }
 
 function subscribeNotice(cb: () => void): () => void {
@@ -195,7 +194,6 @@ export function __resetSelfUpdate(): void {
   pendingStale = undefined;
   confirmedStale = undefined;
   applying = false;
-  failed = false;
   returnedAt = 0;
   reloadImpl = DEFAULT_UPDATE;
 }

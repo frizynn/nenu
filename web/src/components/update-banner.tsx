@@ -7,10 +7,10 @@ import { checkForUpdate } from "@/lib/pwa";
 import { useUpdateNotice } from "@/lib/self-update";
 
 // The one place outside Settings an update speaks, and only while it cannot apply on its own: unsent
-// work holds it, an open chat holds it until the next return to the app, or it failed (ADR 0083). A
-// row in the flow like the connection notice, never over the conversation, with nothing to dismiss:
-// it goes when the update applies. The tap is Settings' "Reload interface": it waits for the new
-// worker before navigating, and a draft is restored from its store after the reload.
+// work holds it, or the automatic retries are spent (ADR 0083). A row in the flow like the connection
+// notice, never over the conversation, with nothing to dismiss: it goes when the update applies. The
+// tap is Settings' "Reload interface": it waits for the new worker before navigating, and a draft is
+// restored from its store after the reload.
 export function UpdateBanner() {
   const shown = useUpdateNotice();
   const [run, setRun] = useState<"idle" | "busy" | "failed">("idle");
