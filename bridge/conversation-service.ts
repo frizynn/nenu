@@ -5,6 +5,7 @@ import { codexRpc, record, type CodexRpc } from "./codex-rpc.ts";
 import { CodexHistory } from "./codex-history.ts";
 import { ClaudeSessions, matchClaudeSession } from "./claude-sessions.ts";
 import { CodexSessions } from "./codex-sessions.ts";
+import { processOpenFiles } from "./agent-state.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
 import type { AgentView } from "./types.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -32,36 +33,48 @@ export class ConversationService {
   private readonly pages: Cached<Omit<TranscriptPage, "paneId">> = new Map();
   private readonly threads: Cached<Record<string, unknown>> = new Map();
   private readonly lists: Cached<ConversationChoice[]> = new Map();
+  private readonly held: Cached<string[]> = new Map();
   private readonly bindings: ConversationBindings;
   private readonly codexSessions: CodexSessions;
   private readonly history: CodexHistory;
-  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string) {
+  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string, openFiles = processOpenFiles) {
     this.bindings = new ConversationBindings(stateFile);
-    this.codexSessions = new CodexSessions(codex);
+    // An open Codex chat resolves its pane about 44 times a minute (measured); lsof costs 60 to 100 ms.
+    // A process opens its rollout once, at its first turn, so five seconds of reuse only delays that.
+    this.codexSessions = new CodexSessions(codex, pids => cached(this.held, pids.join(","), 5_000, () => openFiles(pids)));
     this.history = new CodexHistory(codex);
   }
 
   async resolve(pane: AgentView, herdr: SessionClient, session = "default"): Promise<AgentView> {
-    if (pane.agent !== "claude" && pane.agent !== "codex") return pane;
+    return (await this.describe(pane, herdr, session)).pane;
+  }
+
+  /** The pane with its session when one is known, and whether its Codex provably has not started one yet. */
+  async describe(pane: AgentView, herdr: SessionClient, session = "default"): Promise<{ pane: AgentView; notStarted: boolean }> {
+    const known = (value: string) => ({ pane: { ...pane, agentSession: { kind: "id" as const, value } }, notStarted: false });
+    if (pane.agent !== "claude" && pane.agent !== "codex") return { pane, notStarted: false };
     const key = JSON.stringify([session, pane.paneId]);
-    if (pane.agentSession && !this.bindings.has(key)) return pane;
+    if (pane.agentSession && !this.bindings.has(key)) return { pane, notStarted: false };
+    let notStarted = false;
     try {
       const info = await herdr.processInfo(pane.paneId);
       if (!pane.agentSession && pane.agent === "codex") {
-        const id = await this.codexSessions.match(pane, info).catch(() => null) ?? explicitSession(info, "codex");
+        const identity = await this.codexSessions.identify(pane, info).catch(() => null);
+        const id = identity && "id" in identity ? identity.id : explicitSession(info, "codex");
         if (id) {
-          if (JSON.stringify(info) !== JSON.stringify(await herdr.processInfo(pane.paneId))) return pane;
-          return { ...pane, agentSession: { kind: "id", value: id } };
+          if (JSON.stringify(info) !== JSON.stringify(await herdr.processInfo(pane.paneId))) return { pane, notStarted: false };
+          return known(id);
         }
+        notStarted = Boolean(identity && "notStarted" in identity);
       }
       const connected = this.bindings.get(key, computeEtag(JSON.stringify(info)), JSON.stringify(pane.agentSession ?? null));
-      if (connected) return { ...pane, agentSession: { kind: "id", value: connected } };
-      if (pane.agentSession) return pane;
+      if (connected) return known(connected);
+      if (pane.agentSession) return { pane, notStarted: false };
       const explicit = explicitSession(info, pane.agent);
       const id = explicit ?? (pane.agent === "claude" ? matchClaudeSession(info, await this.claude.list()) : null);
-      if (id) return { ...pane, agentSession: { kind: "id", value: id } };
+      if (id) return known(id);
     } catch { /* Older installations still work through their SessionStart hook. */ }
-    return pane;
+    return { pane, notStarted };
   }
 
   /** thread/list scans the rollout folder (about 0.2 to 3 s measured), so the picker reuses it briefly. */

@@ -140,17 +140,18 @@ async function paneHistory(
   session: string,
 ): Promise<Response> {
   const accept = req.headers.get("accept-encoding");
-  const unavailable = (reason: "disabled" | "no-session" | "no-log") =>
-    json({ paneId, available: false, reason } satisfies PaneHistoryResponse, accept);
+  const unavailable = (reason: "disabled" | "no-session" | "no-log", notStarted = false) =>
+    json({ paneId, available: false, reason, ...(notStarted && { notStarted }) } satisfies PaneHistoryResponse, accept);
 
   if (!cfg.transcript || transcripts === null || journals === null) return unavailable("disabled");
 
   const { agents, shellPanes } = engine.current();
   const original = [...agents, ...shellPanes].find((a) => a.paneId === paneId);
-  const pane = original ? await conversations.resolve(original, herdr, session) : undefined;
+  const described = original ? await conversations.describe(original, herdr, session) : undefined;
+  const pane = described?.pane;
   // No pane, or an agent that named no session (a shell, or a harness whose integration isn't
   // installed): nothing to read, and that's an ordinary answer rather than an error.
-  if (!pane?.agentSession) return unavailable("no-session");
+  if (!pane?.agentSession) return unavailable("no-session", described?.notStarted);
   // An agent with no adapter has no journal. Same answer — the UI shouldn't distinguish "this
   // harness isn't supported" from "this pane never started one"; both mean there's nothing to show.
   const adapter = adapterFor(journals, pane.agent);

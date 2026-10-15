@@ -523,7 +523,13 @@ export interface SessionTelemetry {
 }
 
 export type PaneHistoryResponse =
-  | { paneId: string; available: false; reason: "disabled" | "no-session" | "no-log" }
+  | {
+      paneId: string;
+      available: false;
+      reason: "disabled" | "no-session" | "no-log";
+      /** A Codex that has had no turn yet: there is no conversation to link, only a first message to send. */
+      notStarted?: true;
+    }
   | {
       paneId: string;
       available: true;

@@ -316,6 +316,12 @@ The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, cont
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and
 only to write-level devices.
 Don't widen it to `/`, other roots or files ([ADR 0055](./.adr/0055-the-folder-picker-lists-names-under-home-only.md)).
+
+A Codex pane with no hook session is identified by the one rollout its process holds open, else by
+its title (ADR 0028); one with no turn yet answers `notStarted` and its chat offers no link. Never bind
+the only unnamed conversation in a folder to close the gap before Codex names it
+([ADR 0082](./.adr/0082-a-codex-with-no-turn-has-nothing-to-link.md)).
+
 Agent permission flags come only from the allowlist in `bridge/agent-start.ts`; the client names a
 choice and never sends argv.
 
