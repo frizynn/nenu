@@ -31,7 +31,7 @@ including a project coordinator opened a minute earlier. Measured on Codex 0.162
 2. A process that holds exactly one rollout is that conversation. This is exact, so it wins over
    the title match, and a `--no-daemon` process never consults the daemon's titles: its
    conversation cannot be there, and a same-named one would be someone else's.
-3. Between a daemon client's first message and the moment Codex names the thread (about 8 s
+3. Between a daemon client's first message and the moment Codex names the thread (5 to 8 s
    measured), the card shows. Nenu does not bind the only unnamed conversation in the folder to
    close that gap: a second Codex in the same folder, or one outside Herdr on the same daemon,
    makes that the wrong conversation, and nothing on the daemon tells them apart.
@@ -43,7 +43,7 @@ including a project coordinator opened a minute earlier. Measured on Codex 0.162
   3 s after Codex names the thread and before it repaints the title, the pane can read as not
   started: it shows the empty chat, never another conversation.
 - Starting Codex with `--no-daemon`, as Nenu's own launcher does (ADR 0022), removes the gap: the
-  hook reports the right pane and the held rollout names the session at the first turn (about 1 s
+  hook reports the right pane and the held rollout names the session at the first turn (under 1 s
   measured). Launchers that start Codex on the shared daemon keep the gap.
 - Reading a process's open files costs one `lsof` (60 to 100 ms on macOS) or a `/proc` walk; the
   service reuses it for five seconds, since a process opens its rollout once.
