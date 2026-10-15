@@ -34,8 +34,12 @@ await mkdir(outDir, { recursive: true });
 const CAPTURE_EPOCH = Date.parse("2026-10-10T14:00:00Z");
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** Where the remote machine's panes sit, for the files a case puts there. */
+let remoteCwd = "";
+
 /** The remote machine's herd: two Claudes in `infra` (one working) and a shell, with their journals. */
 async function seedBuildBox(fake: FakeHerdr, ctx: { claudeRoot: string; cwd: string; shift: number }): Promise<DemoHerd> {
+  remoteCwd = ctx.cwd;
   const sessions = { release: "44444444-4444-4444-8444-444444444444", flaky: "55555555-5555-4555-8555-555555555555" };
   const dir = join(ctx.claudeRoot, "-srv-infra");
   await mkdir(dir, { recursive: true });
@@ -199,6 +203,9 @@ try {
     report.paneReadMs = { here, there };
     const herd = await (await fetch(`${bridge.url}/api/snapshot`)).json() as { machines?: Array<{ label: string; herd?: { workspaces: Array<{ label: string }>; agents: unknown[] } }> };
     report.listed = herd.machines?.map((m) => ({ label: m.label, workspaces: m.herd?.workspaces.map((w) => w.label), agents: m.herd?.agents.length }));
+    // What the lists cost a snapshot: this machine's with the others' herds, against the remote's own.
+    const bytes = async (url: string) => (await (await fetch(url, { headers: { "accept-encoding": "identity" } })).arrayBuffer()).byteLength;
+    report.snapshotBytes = { local: await bytes(`${bridge.url}/api/snapshot`), remoteOwn: await bytes(`${remote.url}/api/snapshot`), remoteViaLocal: await bytes(`${bridge.url}/api/snapshot?session=${R}`) };
 
     await capture(bridge, "two-home", "/", nothing);
     await capture(bridge, "two-nav", "/", openDrawer);
@@ -253,6 +260,15 @@ try {
       for (let i = 0; i < 100 && fakeB.started.length === 0; i++) await sleep(50);
       report.start = { shown, remote: fakeB.started.map(({ paneId, kind, args }) => ({ paneId, kind, args })), local: local.bridge.fake!.started.length };
       await context.close();
+    }
+
+    // A video in the remote pane's folder, read the way Safari's <video> starts: one ranged read.
+    {
+      const clip = new Uint8Array(64);
+      clip.set([0, 0, 0, 0x20, ...new TextEncoder().encode("ftypisom")]);
+      await writeFile(join(remoteCwd, "clip.mp4"), clip);
+      const res = await fetch(`${bridge.url}/api/pane/${encodeURIComponent("w1:flaky")}/file?path=clip.mp4&session=${R}`, { headers: { range: "bytes=0-1" } });
+      report.remoteVideoRange = { status: res.status, contentRange: res.headers.get("content-range"), bytes: (await res.arrayBuffer()).byteLength };
     }
 
     // The remote goes down: its state says so, this machine keeps working.
