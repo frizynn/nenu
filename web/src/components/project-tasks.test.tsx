@@ -182,11 +182,10 @@ describe("closing is never a check", () => {
 
   it("replaces the project coordinator from its ⋯ on a touch screen", async () => {
     touchScreen();
-    server.use(http.get("/api/org/start-options", () => HttpResponse.json({ ok: true, templates: [], profiles: ["claude", "codex"] })));
     const { user } = setup({ project: { ...project, nodeActions: true } });
     await user.click(screen.getByRole("button", { name: "Coordinator actions" }));
     await user.click(within(screen.getByRole("dialog", { name: "Coordinator" })).getByRole("button", { name: "Replace coordinator…" }));
-    expect(screen.getByRole("dialog", { name: "Replace the coordinator?" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Replace the coordinator?" })).toBeInTheDocument();
   });
 });
 
@@ -300,7 +299,6 @@ describe("one organization, the way Herdr Organizations draws it", () => {
   it("keeps the project coordinator listed in its own chat, where it can be replaced with another agent", async () => {
     let posted: unknown;
     server.use(
-      http.get("/api/org/start-options", () => HttpResponse.json({ ok: true, templates: [], profiles: ["claude", "codex"] })),
       http.post("/api/org/coordinator/replace", async ({ request }) => {
         posted = await request.json();
         return HttpResponse.json({ ok: true, message: "stopped 1 coordinator agent(s) and started a new one on codex" });
@@ -312,12 +310,12 @@ describe("one organization, the way Herdr Organizations draws it", () => {
     expect(screen.queryByRole("button", { name: "Close Coordinator" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Replace coordinator" }));
-    const dialog = screen.getByRole("dialog", { name: "Replace the coordinator?" });
-    const agent = await within(dialog).findByLabelText("New one runs on");
-    expect(agent).toHaveValue("claude");
-    await user.selectOptions(agent, "codex");
+    const dialog = await screen.findByRole("dialog", { name: "Replace the coordinator?" });
+    // The running coordinator's harness is the one preselected.
+    expect(await within(dialog).findByRole("radio", { name: "Claude Code" })).toBeChecked();
+    await user.click(within(dialog).getByRole("radio", { name: "Codex" }));
     await user.click(within(dialog).getByRole("button", { name: "Replace" }));
-    await waitFor(() => expect(posted).toEqual({ project: "acme", profile: "codex" }));
+    await waitFor(() => expect(posted).toEqual({ project: "acme", harness: "codex" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  coordinatorChoices,
   createProject,
   listProfiles,
   listRoutines,
@@ -41,6 +42,51 @@ const templateRecord = {
   dir: "/private/templates/review-worker",
 };
 const globalTemplateRecord = { ...templateRecord, name: "shared-review", scope: "global", project: null };
+
+/** Organizations' `profile list --project <slug> --json` (docs/json.md, Profile choices). */
+const CHOICES = {
+  schema_version: 1,
+  project: "acme",
+  coordinator: {
+    default_profile: "codex",
+    last: { profile: "claude", harness: "claude", model: "claude-opus-5-5[1m]", reasoning_effort: "xhigh" },
+    harnesses: [
+      { harness: "claude", profile: "claude", default_model: "", efforts: ["low", "medium", "high", "xhigh", "max"] },
+      { harness: "codex", profile: "codex", default_model: "gpt-5.5", efforts: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] },
+      { harness: "--yolo", profile: "x", default_model: "", efforts: [] },
+    ],
+    profiles: [
+      { name: "claude", harness: "claude", model: "", reasoning_effort: "", description: "", builtin: true },
+      { name: "codex", harness: "codex", model: "", reasoning_effort: "", description: "", builtin: true },
+      { name: "deep", harness: "codex", model: "gpt-5.5", reasoning_effort: "high", description: "Hard debugging", builtin: false },
+      { name: "-bad", harness: "codex", model: "", reasoning_effort: "", description: "", builtin: false },
+    ],
+  },
+  thread: { default_profile: "claude", last: null, harnesses: [], profiles: [] },
+};
+
+/** Organizations that answers the choices document first and then `result` for the write. */
+function choicesRun(result: { code: number; stdout: string; stderr: string } = { code: 0, stdout: "started claude as hp-acme\n", stderr: "" }) {
+  const calls: Array<{ argv: string[]; opts: Parameters<OrgRun>[1] }> = [];
+  const run: OrgRun = async (argv, opts) => {
+    calls.push({ argv, opts });
+    if (argv[0] === "profile") return { code: 0, stdout: JSON.stringify(CHOICES), stderr: "" };
+    return result;
+  };
+  return { run, calls };
+}
+
+/** An Organizations that predates the choices document: `--json` is refused, the names still list. */
+function olderRun() {
+  const calls: string[][] = [];
+  const run: OrgRun = async (argv) => {
+    calls.push(argv);
+    if (argv.includes("--json")) return { code: 2, stdout: "", stderr: "error: unexpected argument '--json' found" };
+    if (argv[0] === "profile") return { code: 0, stdout: "claude\ncodex\n", stderr: "" };
+    return { code: 0, stdout: "started codex as hp-acme\n", stderr: "" };
+  };
+  return { run, calls };
+}
 
 function fakeRun(result: { code: number; stdout: string; stderr: string }) {
   const calls: Array<{ argv: string[]; opts: Parameters<OrgRun>[1] }> = [];
@@ -144,6 +190,95 @@ describe("herdr-organizations CLI adapter", () => {
     expect(await openProject(run, "/tmp/herdr.sock", { project: "acme" })).toEqual({ message: "started codex as hp-acme" });
     expect(calls).toEqual([{ argv: ["open", "acme"], opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 } }]);
     await expect(openProject(fakeRun({ code: 1, stdout: "", stderr: "error: `acme` is archived" }).run, "/s", { project: "acme" })).rejects.toThrow("is archived");
+  });
+
+  it("reads what a coordinator can start on, dropping what is not a name", async () => {
+    const { run, calls } = choicesRun();
+
+    expect(await coordinatorChoices(run, "acme")).toEqual({
+      available: true,
+      defaultProfile: "codex",
+      last: { profile: "claude", harness: "claude", model: "claude-opus-5-5[1m]", reasoningEffort: "xhigh" },
+      harnesses: [
+        { harness: "claude", profile: "claude", defaultModel: "", efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { harness: "codex", profile: "codex", defaultModel: "gpt-5.5", efforts: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] },
+      ],
+      profiles: [
+        { name: "claude", harness: "claude", model: "", reasoningEffort: "", description: "", builtin: true },
+        { name: "codex", harness: "codex", model: "", reasoningEffort: "", description: "", builtin: true },
+        { name: "deep", harness: "codex", model: "gpt-5.5", reasoningEffort: "high", description: "Hard debugging", builtin: false },
+      ],
+    });
+    expect(calls).toEqual([{ argv: ["profile", "list", "--project", "acme", "--json"], opts: { timeoutMs: 10_000 } }]);
+    await expect(coordinatorChoices(run, "../acme")).rejects.toThrow("Project must use lowercase");
+  });
+
+  it("offers only the profile names when Organizations predates the choices document", async () => {
+    const { run, calls } = olderRun();
+
+    expect(await coordinatorChoices(run, "acme")).toEqual({
+      available: false,
+      defaultProfile: "",
+      last: null,
+      harnesses: [],
+      profiles: ["claude", "codex"].map((name) => ({ name, harness: "", model: "", reasoningEffort: "", description: "", builtin: false })),
+    });
+    expect(calls).toEqual([["profile", "list", "--project", "acme", "--json"], ["profile", "list", "--names"]]);
+  });
+
+  it("opens the coordinator on the harness, model and effort the person chose", async () => {
+    const { run, calls } = choicesRun();
+
+    expect(await openProject(run, "/tmp/herdr.sock", { project: "acme", harness: "claude", model: "claude-opus-5-5[1m]", effort: "xhigh" }))
+      .toEqual({ message: "started claude as hp-acme" });
+    expect(calls.map((call) => call.argv)).toEqual([
+      ["profile", "list", "--project", "acme", "--json"],
+      ["open", "acme", "--harness=claude", "--model=claude-opus-5-5[1m]", "--reasoning-effort=xhigh"],
+    ]);
+    expect(calls[1]!.opts).toEqual({ env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 60_000 });
+  });
+
+  it("opens on a profile, with the effort the person changed", async () => {
+    const { run, calls } = choicesRun();
+
+    await openProject(run, "/s", { project: "acme", profile: "deep", model: "", effort: "max" });
+    expect(calls[1]!.argv).toEqual(["open", "acme", "--profile=deep", "--reasoning-effort=max"]);
+  });
+
+  it("refuses a choice Organizations does not offer before anything starts", async () => {
+    const { run, calls } = choicesRun();
+    const open = (input: Record<string, unknown>) => openProject(run, "/s", { project: "acme", ...input });
+
+    await expect(open({ harness: "gemini" })).rejects.toThrow("gemini is not a harness this project's coordinator can run.");
+    await expect(open({ harness: "--yolo" })).rejects.toThrow("is not a harness this project's coordinator can run.");
+    for (const model of ["a;b", "-x", "a b", "$(id)", "x".repeat(129)]) {
+      await expect(open({ harness: "claude", model })).rejects.toThrow("Model must be one model name");
+    }
+    await expect(open({ harness: "claude", effort: "ultra" })).rejects.toThrow("Effort must be one of low, medium, high, xhigh, max for claude.");
+    await expect(open({ harness: "claude", effort: 3 })).rejects.toThrow("Effort must be one of");
+    await expect(open({ profile: "deep", harness: "codex" })).rejects.toThrow("Choose a profile or a harness, not both.");
+    await expect(open({ profile: "nope" })).rejects.toThrow("nope is not a profile this project's coordinator can run.");
+    await expect(open({ profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
+    expect(calls.filter((call) => call.argv[0] !== "profile")).toEqual([]);
+  });
+
+  it("keeps the plain open when nothing was chosen, and says when Organizations cannot choose", async () => {
+    const { run, calls } = olderRun();
+
+    await openProject(run, "/s", { project: "acme" });
+    await openProject(run, "/s", { project: "acme", profile: "codex" });
+    expect(calls.filter((argv) => argv[0] === "open")).toEqual([["open", "acme"], ["open", "acme", "--profile=codex"]]);
+    await expect(openProject(run, "/s", { project: "acme", harness: "claude" })).rejects.toThrow("This Herdr Organizations cannot choose the harness, model or effort");
+    await expect(openProject(run, "/s", { project: "acme", profile: "claude", model: "opus" })).rejects.toThrow("This Herdr Organizations cannot choose the harness, model or effort");
+    expect(calls.filter((argv) => argv[0] === "open")).toHaveLength(2);
+  });
+
+  it("replaces the coordinator on a harness, model and effort", async () => {
+    const { run, calls } = choicesRun({ code: 0, stdout: "stopped 1 coordinator agent(s) and started a new one on claude\n", stderr: "" });
+
+    await replaceCoordinator(run, "/s", { project: "acme", harness: "codex", model: "gpt-5.5", effort: "high" });
+    expect(calls[1]!.argv).toEqual(["coordinator", "replace", "acme", "--harness=codex", "--model=gpt-5.5", "--reasoning-effort=high"]);
+    await expect(replaceCoordinator(run, "/s", { project: "acme", model: "opus" })).rejects.toThrow("Choose the agent the new coordinator runs on.");
   });
 
   it("rejects invalid input before running the CLI", async () => {

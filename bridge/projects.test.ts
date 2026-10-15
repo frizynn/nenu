@@ -320,6 +320,34 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(settled).toBe(true);
   });
 
+  test("while a write the person waits on runs, the record it writes is read at once, past the spawn throttle", async () => {
+    const root = fixture();
+    const live: LiveEvent[] = [];
+    const registry = registryFor(root, { now: () => Date.now(), watch: true, run: overviewRun([overviewThread({})]), live: { publish: (event) => live.push(event) } });
+    registry.list("default", true, []);
+    await registry.invalidate();
+    live.length = 0;
+    // `open` records the coordinator's new pane before its agent is up; the person is on the page.
+    await registry.urgently(async () => {
+      writeFileSync(join(root, "demo", ".state", "coordinator.json"), JSON.stringify({ session: "", workspace_id: "w1", tab_id: "t9", pane_id: "p9", cwd: "/work/demo" }));
+      for (let i = 0; i < 40 && live.length === 0; i++) await Bun.sleep(50);
+    });
+    expect(live).toEqual([{ session: "default", topic: "org" }]);
+    expect(registry.list("default", true, [pane({ paneId: "p9", tabId: "t9" })])[0]?.coordinator?.paneId).toBe("p9");
+  });
+
+  test("outside such a write, a watched change waits out the spawn throttle", async () => {
+    const root = fixture();
+    const live: LiveEvent[] = [];
+    const registry = registryFor(root, { now: () => Date.now(), watch: true, run: overviewRun([overviewThread({})]), live: { publish: (event) => live.push(event) } });
+    registry.list("default", true, []);
+    await registry.invalidate();
+    live.length = 0;
+    writeFileSync(join(root, "demo", ".state", "coordinator.json"), JSON.stringify({ session: "", workspace_id: "w1", tab_id: "t9", pane_id: "p9", cwd: "/work/demo" }));
+    await Bun.sleep(800);
+    expect(live).toEqual([]);
+  });
+
   test("fs.watch announces an org change without a snapshot read", async () => {
     const root = fixture();
     const live: LiveEvent[] = [];
