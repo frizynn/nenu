@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-Amended by: [ADR 0083](./0083-an-update-applies-when-the-app-returns.md) — an update that cannot apply on its own is offered by one in-flow row, outside Settings too.
+Amended by: [ADR 0083](./0083-an-update-applies-when-the-app-returns.md) — an update held by unsent work, or out of automatic retries, is offered by one in-flow row, outside Settings too.
 
 ## Context
 

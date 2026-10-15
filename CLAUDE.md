@@ -107,9 +107,9 @@ the unit name; the Herdr action runs from anywhere.
 - A return to the app reads `build-info.json` once and applies a waiting update unless unsent work
   holds it: an open chat or preview is a `"view"` hold, waived for 15 s after a return; a draft,
   upload, form or a message without its answer is `"work"` and never waived. Automatic attempts
-  retry, three per build in ten minutes. An update that has to wait shows one in-flow row ("New
-  version of Nenu", Update), never a dismissable or animated notice
-  ([ADR 0083](.adr/0083-an-update-applies-when-the-app-returns.md)).
+  retry, three per build in ten minutes. Only an update held by unsent work, or out of retries,
+  shows one in-flow row ("New version of Nenu", Update), never a floating, dismissable or animated
+  notice ([ADR 0083](.adr/0083-an-update-applies-when-the-app-returns.md)).
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
