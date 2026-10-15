@@ -43,7 +43,8 @@ export function startMachines(stateDir: string, onChange: () => void): Machines 
   const binary = herdrBinary();
   const machines = new Machines({
     list: () => listMachines(binary),
-    hostLabel: hostname().split(".")[0] || "this machine",
+    // Herdr names the other machines, not this one: the host name, or COLLIE_MACHINE_LABEL when set.
+    hostLabel: process.env.COLLIE_MACHINE_LABEL || hostname().split(".")[0] || "this machine",
     link: (machine) => new MachineLink(machine, {
       spawn,
       socketDir,

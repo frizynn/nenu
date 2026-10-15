@@ -191,7 +191,13 @@ async function portIsFree(port: number): Promise<boolean> {
  * `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS) and before
  * the projects are seeded, so a seed can carry numbers the repo produced.
  */
-export async function startTestBridge(opts: { port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; orgBin?: string; repo?: (dir: string) => void }): Promise<TestBridge> {
+export async function startTestBridge(opts: {
+  port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; orgBin?: string; repo?: (dir: string) => void;
+  /** The herd the FakeHerdr starts with (default: the demo herd). */
+  seed?: (fake: FakeHerdr, ctx: { claudeRoot: string; cwd: string; shift: number }) => Promise<DemoHerd>;
+  /** Extra variables for the bridge process (machines.ts reads NENU_E2E_MACHINES and NENU_E2E_SSH_HOSTS through the stubs). */
+  env?: Record<string, string>;
+}): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.herdr && !opts.socketPath) throw new Error("pass --fake, --herdr or --socket <disposable herdr socket>");
   if (!(await portIsFree(opts.port))) throw new Error(`port ${opts.port} is busy`);
@@ -229,6 +235,11 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; herd
       : "echo 'error: unrecognized subcommand' >&2\nexit 2",
     claude: "exit 1",
     gh: `[ -n "$NENU_E2E_GH_PRS" ] && exec cat "$NENU_E2E_GH_PRS"\necho 'gh stub: no pull requests' >&2\nexit 1`,
+    // Herdr's saved machines are the bench's ($NENU_E2E_MACHINES, a `machine list --json`), never the
+    // operator's; nothing else of Herdr's CLI is the bridge's to run.
+    herdr: `[ "$1 $2" = "machine list" ] || { echo 'herdr stub: only machine list' >&2; exit 2; }\n[ -n "$NENU_E2E_MACHINES" ] && exec cat "$NENU_E2E_MACHINES"\necho '[]'`,
+    // No bench run reaches a real machine: ssh is fake-ssh.ts over $NENU_E2E_SSH_HOSTS, or refuses.
+    ssh: `[ -n "$NENU_E2E_SSH_HOSTS" ] && exec "${process.execPath}" "${join(import.meta.dir, "fake-ssh.ts")}" "$@"\necho 'ssh stub: the bench has no network' >&2\nexit 255`,
   };
   for (const [name, body] of Object.entries(stubs)) {
     await writeFile(join(paths.bin, name), `#!/bin/sh\n${body}\n`);
@@ -255,7 +266,7 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; herd
   let herd: DemoHerd | null = null;
   if (opts.fake) {
     fake = new FakeHerdr({ socketPath });
-    herd = await seedDemoHerd(fake, { claudeRoot: paths.claude, cwd: dir, shift });
+    herd = await (opts.seed ?? seedDemoHerd)(fake, { claudeRoot: paths.claude, cwd: dir, shift });
     // With fake pull requests the demo panes sit in a repo on branch `e2e-demo`, so a PR on that
     // branch opens its agent and the rest open on GitHub.
     if (process.env.NENU_E2E_GH_PRS) {
@@ -314,7 +325,9 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; herd
     COLLIE_OPENCODE_ROOT: paths.other,
     COLLIE_GROK_ROOT: paths.other,
     COLLIE_HERDR_ORGANIZATIONS_BIN: join(paths.bin, "herdr-organizations"),
+    COLLIE_HERDR_BIN: join(paths.bin, "herdr"),
     NENU_E2E_ORG: orgState,
+    ...opts.env,
   });
 
   const orgCalls = async () => (await Bun.file(`${orgState}.calls`).text().catch(() => ""))
