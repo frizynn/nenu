@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { HerdrClient } from "../../bridge/herdr-client.ts";
 import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
+import { demoOrg } from "./scenario.ts";
 
 // Start coordinator against a real Herdr and a real Organizations: the bench's disposable Herdr
 // (`--herdr`), the Organizations binary named by --org-bin over the bench's empty registry, and a
@@ -16,7 +17,10 @@ import { startTestBridge, type TestBridge } from "./bridge.ts";
 // the "Starting" feedback went away, when a coordinator row without a chat showed, and when the page
 // reached the coordinator's chat. The bridge's `open` request is timed beside it.
 //
-//   bun scripts/e2e/coordinator-start.ts --org-bin <path> [--harness claude|codex] [--runs 3] [--label before] [--port 8851] [--out DIR]
+//   bun scripts/e2e/coordinator-start.ts --org-bin <path> [--harness claude|codex] [--runs 3] [--label before] [--light] [--port 8851] [--out DIR]
+//
+// With --fake instead, the FakeHerdr and fake-org.ts: the window, with a saved profile beside the two
+// built-ins, and a Start that Organizations refuses, on a phone and a desk, dark and light.
 
 const { values } = parseArgs({
   options: {
@@ -27,10 +31,11 @@ const { values } = parseArgs({
     harness: { type: "string", default: "claude" },
     "org-bin": { type: "string" },
     light: { type: "boolean", default: false },
+    fake: { type: "boolean", default: false },
   },
 });
 const orgBin = values["org-bin"];
-if (!orgBin || !existsSync(orgBin)) throw new Error("pass --org-bin <a herdr-organizations binary>");
+if (!values.fake && (!orgBin || !existsSync(orgBin))) throw new Error("pass --org-bin <a herdr-organizations binary>, or --fake");
 const harness = values.harness === "codex" ? "codex" : "claude";
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `coordinator-start-${Date.now()}`);
 
@@ -224,7 +229,50 @@ async function run(bridge: TestBridge, device: typeof PHONE | typeof DESKTOP, sl
   };
 }
 
+/** The window and a refused Start, against fake-org.ts, in every size and theme. */
+async function fakeShots(): Promise<void> {
+  const bridge = await startTestBridge({ port: Number(values.port), fake: true, org: (herd, now) => {
+    const seed = demoOrg(herd, now);
+    seed.savedProfiles = [{ name: "deep", harness: "codex", model: "gpt-5.5", reasoning_effort: "high", description: "Hard debugging" }];
+    Object.assign(seed.projects[0]!, {
+      coordinator_profile: "codex",
+      last: { profile: "claude", harness: "claude", model: "claude-opus-5-5", reasoning_effort: "xhigh" },
+      open_error: "`acme` belongs to the herdr session at /tmp/other/herdr.sock; open it there, not at /tmp/bench/herdr.sock",
+    });
+    return seed;
+  } });
+  const browser = await launchWebkit();
+  try {
+    for (const [name, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+      for (const scheme of ["dark", "light"] as const) {
+        const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+        const page = await context.newPage();
+        await page.goto(`${bridge.url}/project/acme`);
+        await page.getByRole("button", { name: "Start coordinator" }).first().click({ timeout: 20_000 });
+        const dialog = page.getByRole("dialog", { name: "Start the coordinator" });
+        await dialog.getByRole("radio", { name: "Claude Code" }).waitFor({ timeout: 5000 });
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: join(outDir, `after-window-${name}-${scheme}.png`), animations: "disabled" });
+        await dialog.getByRole("button", { name: "Start" }).click();
+        await page.getByRole("region", { name: "Project coordinator" }).getByRole("alert").waitFor({ timeout: 10_000 });
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: join(outDir, `after-error-${name}-${scheme}.png`), animations: "disabled" });
+        await context.close();
+      }
+    }
+    console.log(JSON.stringify({ orgCalls: (await bridge.orgCalls()).filter((argv) => argv[0] === "open" || argv[0] === "profile") }));
+  } finally {
+    await browser.close();
+    await bridge.stop();
+  }
+}
+
 await mkdir(outDir, { recursive: true });
+if (values.fake) {
+  await fakeShots();
+  console.log(`[e2e] ${outDir}`);
+  process.exit(0);
+}
 const bridge = await startTestBridge({ port: Number(values.port), herdr: true, orgBin });
 const results: unknown[] = [];
 try {
