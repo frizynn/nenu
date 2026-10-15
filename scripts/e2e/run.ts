@@ -2810,9 +2810,11 @@ async function chipLine(): Promise<void> {
       { name: "stop", paneId: "w1:stop", status: "working", activity: none },
       { name: "chips", paneId: "w1:rest", status: "done", activity: background },
       { name: "many", paneId: herd.working, status: "working", activity: everything },
+      // The terminal view, where Stop's group also says how long the turn has run.
+      { name: "terminal", paneId: "w1:line", status: "working", activity: background, raw: true },
     ] as const;
     for (const [i, moment] of moments.entries()) {
-      if (moment.paneId === herd.working) continue;
+      if (moment.paneId === herd.working || "raw" in moment) continue;
       const session = `7777777${i}-7777-4777-8777-777777777777`;
       await writeChatJournal(join(folder, `${session}.jsonl`), now, 3, moment.status === "working" ? "running" : "finished");
       fake.addPane({ paneId: moment.paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude", label: "Checkout flow", sessionId: session, cwd: bridge.dir,
@@ -2832,6 +2834,11 @@ async function chipLine(): Promise<void> {
           const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
           const page = await context.newPage();
           await page.clock.install({ time: now });
+          if ("raw" in moment) {
+            await page.addInitScript((scope: string) => {
+              localStorage.setItem("collie:raw-terminal-scopes:v1", JSON.stringify({ [scope]: true }));
+            }, JSON.stringify(["default", moment.paneId]));
+          }
           await page.route("**/api/pane/*/activity*", (route) => {
             const url = route.request().url();
             if (new URL(url).searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: "b0001", text: "building…", truncated: false, updatedAt: now } });
@@ -2854,14 +2861,24 @@ async function chipLine(): Promise<void> {
             await page.screenshot({ path: typing, animations: "disabled" });
             shots.push(typing);
             seen[`${key}-keyboard`] = await page.evaluate(measureAboveBox, null);
+            await page.evaluate(() => document.querySelector(".workbench-chat")?.removeAttribute("data-keyboard-open"), null);
+            // What Working counts beside the turn's own Working row: the session's background command.
+            await page.getByRole("group", { name: "Status" }).getByRole("button", { name: /^Working/ }).click();
+            await page.waitForTimeout(500);
+            const panel = join(outDir, `${key}-working-panel.png`);
+            await page.screenshot({ path: panel, animations: "disabled" });
+            shots.push(panel);
+            seen[`${key}-working-panel`] = await page.locator("#composer-chip-panel").innerText().catch(() => null);
           }
           await context.close();
         }
       }
     }
-    // Chips beside Stop share its line (their centres within 2px); nothing pushes the page sideways.
+    // Chips beside Stop share its line (their centres within 2px), Stop stays on screen whatever the
+    // chips need, and nothing pushes the page sideways.
     type Seen = ReturnType<typeof measureAboveBox>;
-    const failed = Object.entries(seen as Record<string, Seen>).filter(([, m]) => !m || m.pageScrollsSideways
+    const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel")).filter(([, m]) => !m || m.pageScrollsSideways
+      || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
       || (m.chips && m.stop && Math.abs((m.chips.top + m.chips.bottom) / 2 - (m.stop.top + m.stop.bottom) / 2) > 2)).map(([key]) => key);
     return { shots, seen, failed, unexpectedWrites: fake.writes() };
   }, CAPTURE_EPOCH, (herd, now) => {
@@ -2889,10 +2906,11 @@ async function chipLine(): Promise<void> {
  */
 function measureAboveBox() {
   const box = document.querySelector(".composer-box")?.getBoundingClientRect();
+  if (!box) return null;
+  // The terminal view has no thread: only the line itself is measured there.
   const thread = document.querySelector(".chat-thread")?.getBoundingClientRect();
-  if (!box || !thread) return null;
   const messages = Array.from(document.querySelectorAll<HTMLElement>(".chat-thread [data-speaker], .chat-thread [data-work-log] > li"))
-    .map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0 && r.bottom <= thread.bottom);
+    .map((el) => el.getBoundingClientRect()).filter((r) => thread && r.height > 0 && r.bottom <= thread.bottom);
   const last = messages.length ? Math.max(...messages.map((r) => r.bottom)) : null;
   const rect = (el: Element | null | undefined) => {
     if (!el) return null;
@@ -2906,7 +2924,7 @@ function measureAboveBox() {
   const chipsRect = rect(chipRow);
   return {
     gap: last === null ? null : Math.round(box.top - last),
-    aboveBox: Math.round(box.top - thread.bottom),
+    aboveBox: thread ? Math.round(box.top - thread.bottom) : null,
     boxTop: Math.round(box.top),
     chips: chipsRect,
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
@@ -2914,6 +2932,7 @@ function measureAboveBox() {
     stop: rect(stop),
     stopReach: reach,
     pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    viewportWidth: document.documentElement.clientWidth,
   };
 }
 
