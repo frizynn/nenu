@@ -84,7 +84,12 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(screen.getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Design panes" }));
     expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: false } });
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: false }, tabs: {} });
+    // A tab's fold is remembered beside its workspace's.
+    await user.click(screen.getByRole("button", { name: "Design panes" }));
+    await user.click(screen.getByRole("button", { name: /^panels,/ }));
+    expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: true }, tabs: { "t-panels": false } });
   });
 
   it("opens a workspace of one tab from its row, split or not, with nothing to unfold, on a desk and a phone", async () => {
@@ -148,6 +153,51 @@ describe("the sidebar's workspaces, with no projects", () => {
       expect(workspaces().getByRole("button", { name: "Design panes" })).toBeInTheDocument();
       await user.click(nenu.getByRole("link", { name: /^Nenu/ }));
       expect(router.state.location.pathname).toBe("/pane/n1");
+    }
+  });
+
+  it("draws a tab of several panes as a row that folds them, its panes one level in, on a desk and a phone", async () => {
+    const member = (paneId: string, tabId: string, title: string, status: AgentView["status"], kind?: "shell"): AgentView =>
+      ({ ...pane(paneId, title, 5), workspaceId: "w4", workspaceLabel: "crew", tabId, status, ...(kind ? { agent: "shell", kind } : {}) });
+    const crew = {
+      ...herd,
+      agents: [...herd.agents, member("c1", "t-lead", "Crew lead", "idle"),
+        member("c2", "t-workers", "Checkout flow", "working"), member("c3", "t-workers", "Payment retries", "done"), member("c4", "t-workers", "Search index", "idle")],
+      shellPanes: [member("c5", "t-server", "Dev server", "unknown", "shell")],
+      workspaces: [...herd.workspaces, { workspaceId: "w4", number: 4, label: "crew", focused: false, activeTabId: "t-lead", tabCount: 3, paneCount: 5 }],
+      tabs: [...herd.tabs,
+        { tabId: "t-lead", workspaceId: "w4", number: 1, label: "lead", focused: false, paneCount: 1 },
+        { tabId: "t-server", workspaceId: "w4", number: 2, label: "server", focused: false, paneCount: 1 },
+        { tabId: "t-workers", workspaceId: "w4", number: 3, label: "workers", focused: false, paneCount: 3 }],
+    } as unknown as HomeData;
+    for (const variant of ["sidebar", "drawer"] as const) {
+      cleanupRender();
+      router = createMemoryRouter([
+        { path: "/", element: <WorkbenchSidebar data={crew} variant={variant} /> },
+        { path: "/pane/:paneId", element: <WorkbenchSidebar data={crew} variant={variant} /> },
+      ], { initialEntries: ["/"] });
+      render(<RouterProvider router={router} />);
+      const user = userEvent.setup();
+      if (variant === "sidebar") await user.click(screen.getByRole("button", { name: /^Search/ }));
+      await user.click(workspaces().getByRole("button", { name: "crew panes" }));
+      const section = within(workspaces().getByRole("region", { name: "crew" }));
+      // One-pane tabs stay their pane's row; the split tab is one row, folded while nothing in it needs you.
+      expect(section.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/c1", "/pane/c1", "/pane/c5"]);
+      const workers = section.getByRole("button", { name: /^workers,/ });
+      expect(workers).toHaveAccessibleName("workers, working, 3 panes");
+      expect(workers).toHaveAttribute("aria-expanded", "false");
+      expect(workers).toHaveTextContent("3 panes");
+      await user.click(workers);
+      expect(workers).toHaveAttribute("aria-expanded", "true");
+      const panes = within(section.getByRole("group", { name: "workers" }));
+      expect(panes.getAllByRole("link").map((link) => link.textContent)).toEqual(["Checkout flowworking", "Payment retriesdone", "Search index"]);
+      expect(panes.getByRole("link", { name: /^Search index/ }).closest(".nav-pane")).toHaveClass("nav-pane-nested");
+      // A split tab with an agent asking for you starts open.
+      if (variant === "drawer") await user.click(workspaces().getByRole("button", { name: "Design panes" }));
+      expect(workspaces().getByRole("button", { name: /^panels,/ })).toHaveAccessibleName("panels, needs you, 2 panes");
+      expect(workspaces().getByRole("button", { name: /^panels,/ })).toHaveAttribute("aria-expanded", "true");
+      await user.click(panes.getByRole("link", { name: /^Payment retries/ }));
+      expect(router.state.location.pathname).toBe("/pane/c3");
     }
   });
 

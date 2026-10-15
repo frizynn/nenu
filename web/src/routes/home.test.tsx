@@ -8,7 +8,7 @@ import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
 import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { Interaction, ProjectView, PullRequestView } from "@/lib/types";
+import type { AgentView, Interaction, ProjectView, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
 
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
@@ -297,6 +297,69 @@ describe("Recents and Workspaces", () => {
     expect(panel.queryByRole("button", { name: /^ops,/ })).toBeNull();
     await user.click(ops);
     expect(router.state.location.pathname).toBe("/pane/w3%3Aa");
+  });
+
+  describe("a tab of several panes", () => {
+    const member = (paneId: string, tabId: string, paneLabel: string, status: AgentView["status"], minutes: number): AgentView =>
+      ({ ...data.agents[0]!, paneId, workspaceId: "w3", workspaceLabel: "crew", tabId, tabLabel: tabId.slice(2), agent: "claude", paneLabel, status, lastActiveAt: now - minutes * 60_000 });
+    const crew = (workers: AgentView["status"][]): HomeData => ({
+      ...recentData,
+      workspaces: [...recentData.workspaces, { workspaceId: "w3", number: 3, label: "crew", focused: false, activeTabId: "t-lead", tabCount: 3, paneCount: 2 + workers.length }],
+      tabs: [
+        { tabId: "t-lead", workspaceId: "w3", number: 1, label: "lead", focused: true, paneCount: 1 },
+        { tabId: "t-server", workspaceId: "w3", number: 2, label: "server", focused: false, paneCount: 1 },
+        { tabId: "t-workers", workspaceId: "w3", number: 3, label: "workers", focused: false, paneCount: workers.length },
+      ],
+      agents: [...recentData.agents, member("w3:lead", "t-lead", "Crew lead", "idle", 30),
+        ...workers.map((status, i) => member(`w3:worker${i}`, "t-workers", ["Checkout flow", "Payment retries", "Search index", "Invoice export"][i]!, status, i + 1))],
+      shellPanes: [...recentData.shellPanes, { ...shell, paneId: "w3:server", workspaceId: "w3", workspaceLabel: "crew", tabId: "t-server", paneLabel: "Dev server" }],
+    });
+    async function openCrew(herd: HomeData) {
+      const { user, router, main } = await setup(herd);
+      await user.click(main.getByRole("tab", { name: "Workspaces" }));
+      const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+      await user.click(panel.getByRole("button", { name: /^crew,/ }));
+      return { user, router, main, panel };
+    }
+
+    it("is a row of its own under its workspace, folded, with its state, how many panes and when the latest moved", async () => {
+      const { user, router, panel } = await openCrew(crew(["working", "done", "idle"]));
+      const workspace = within(panel.getByRole("list", { name: "crew" }));
+      // One-pane tabs stay their pane's row; the split tab is one row that folds its panes.
+      expect(workspace.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/w3%3Alead?s=work", "/pane/w3%3Aserver?s=work"]);
+      const workers = workspace.getByRole("button", { name: /^workers,/ });
+      expect(workers).toHaveAccessibleName(/^workers,\s*Working,\s*3 panes/);
+      expect(workers).toHaveAttribute("aria-expanded", "false");
+      expect(workers).toHaveTextContent("1m");
+      expect(panel.queryByRole("link", { name: /^Checkout flow,/ })).not.toBeInTheDocument();
+
+      await user.click(workers);
+      expect(workers).toHaveAttribute("aria-expanded", "true");
+      const panes = within(panel.getByRole("list", { name: "workers" }));
+      expect(panes.getAllByRole("link").map((link) => link.getAttribute("href")))
+        .toEqual(["/pane/w3%3Aworker0?s=work", "/pane/w3%3Aworker1?s=work", "/pane/w3%3Aworker2?s=work"]);
+      // Under its tab a session leaves the tab's name out, as it leaves out its workspace's.
+      expect(panes.getByRole("link", { name: /^Checkout flow,/ })).toHaveAccessibleName(/^Checkout flow,\s*Working,\s*1m ago$/);
+      await user.click(panes.getByRole("link", { name: /^Payment retries,/ }));
+      expect(router.state.location.pathname).toBe("/pane/w3%3Aworker1");
+    });
+
+    it("starts open when one of its panes needs you", async () => {
+      const { panel } = await openCrew(crew(["working", "done", "blocked", "idle"]));
+      const workers = panel.getByRole("button", { name: /^workers,/ });
+      expect(workers).toHaveAccessibleName(/^workers,\s*Needs you,\s*4 panes/);
+      expect(workers).toHaveAttribute("aria-expanded", "true");
+      expect(within(panel.getByRole("list", { name: "workers" })).getAllByRole("link")).toHaveLength(4);
+    });
+
+    it("keeps its fold while Home stays, as its workspace keeps its own", async () => {
+      const { user, panel } = await openCrew(crew(["working", "done", "idle"]));
+      await user.click(panel.getByRole("button", { name: /^workers,/ }));
+      await user.click(panel.getByRole("button", { name: /^crew,/ }));
+      expect(panel.queryByRole("button", { name: /^workers,/ })).not.toBeInTheDocument();
+      await user.click(panel.getByRole("button", { name: /^crew,/ }));
+      expect(panel.getByRole("button", { name: /^workers,/ })).toHaveAttribute("aria-expanded", "true");
+    });
   });
 
   it("asks for your reply in Needs you, with Reply, and counts it in the headline", async () => {
