@@ -68,6 +68,7 @@ describe("the SSH commands", () => {
 
   test("the probe tells a Nenu that takes other machines from an older one and from none", () => {
     expect(parseProbe("Welcome!\nnenu-peer /home/u/.local/state/collie/peer.sock\n")).toEqual({ kind: "peer", path: "/home/u/.local/state/collie/peer.sock" });
+    expect(parseProbe("nenu-stopped\n")).toEqual({ kind: "stopped" });
     expect(parseProbe("nenu-old\n")).toEqual({ kind: "old" });
     expect(parseProbe("nenu-none\n")).toEqual({ kind: "none" });
     expect(parseProbe("")).toEqual({ kind: "none" });
@@ -167,6 +168,36 @@ describe("a machine's link", () => {
     none.procs[0]!.exit(0);
     await tick();
     expect(none.link.view().state).toBe("no-nenu");
+  });
+
+  test("a Nenu that is installed but not running says so, not to update it", async () => {
+    const h = harness();
+    h.link.start();
+    h.procs[0]!.out("nenu-stopped\n");
+    h.procs[0]!.exit(0);
+    await tick();
+    expect(h.link.view()).toMatchObject({ state: "offline", detail: "Nenu is not running on build-box." });
+  });
+
+  test("the probe, run by a real shell, tells the four cases apart", async () => {
+    const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const home = await mkdtemp(join(tmpdir(), "nenu-probe-"));
+    const run = async () => {
+      const command = probeArgv("x").at(-1)!;
+      const child = Bun.spawn(["/bin/sh", "-c", command], { env: { HOME: home, PATH: process.env.PATH ?? "" }, stdout: "pipe" });
+      return parseProbe(await new Response(child.stdout).text());
+    };
+    expect(await run()).toEqual({ kind: "none" });
+    await mkdir(join(home, ".local/state/herdr/plugins/herdr.nenu"), { recursive: true });
+    expect(await run()).toEqual({ kind: "old" });
+    await mkdir(join(home, ".local/state/collie/machines"), { recursive: true });
+    expect(await run()).toEqual({ kind: "stopped" });
+    const server = Bun.serve({ unix: join(home, ".local/state/collie/peer.sock"), fetch: () => new Response("") });
+    expect(await run()).toEqual({ kind: "peer", path: join(home, ".local/state/collie/peer.sock") });
+    server.stop(true);
+    await rm(home, { recursive: true, force: true });
   });
 
   test("a found Nenu gets one tunnel; once it is up the herd is read, and only what the lists need is kept", async () => {
