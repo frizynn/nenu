@@ -348,6 +348,8 @@ export class ProjectRegistry {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private debounce: ReturnType<typeof setTimeout> | undefined;
   private readonly sessions = new Set<string>();
+  /** Writes the person waits on, running now (`urgently`). */
+  private urgent = 0;
   private watchers = new Map<string, FSWatcher>();
   private closed = false;
 
@@ -446,6 +448,20 @@ export class ProjectRegistry {
     return this.schedule(true);
   }
 
+  /**
+   * Run `write`, which the person waits on. Meanwhile a change the watcher sees is read at once
+   * instead of after the spawn throttle: `open` records the coordinator's pane within half a second
+   * and returns only once its agent is ready, seconds later, and the page opens the chat on the record.
+   */
+  async urgently<T>(write: () => Promise<T>): Promise<T> {
+    this.urgent++;
+    try {
+      return await write();
+    } finally {
+      this.urgent--;
+    }
+  }
+
   /** Re-read the files and `overview --json`, and announce `org` if anything visible changed. */
   async refresh(): Promise<void> {
     this.lastRefresh = this.now();
@@ -472,7 +488,7 @@ export class ProjectRegistry {
 
   private check(): void {
     this.nextStat = this.now() + STAT_MS;
-    if (this.fingerprint() !== this.stamp) void this.schedule(false);
+    if (this.fingerprint() !== this.stamp) void this.schedule(this.urgent > 0);
   }
 
   /**

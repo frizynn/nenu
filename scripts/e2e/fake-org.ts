@@ -16,7 +16,23 @@ interface FakeProject {
   slug: string; threads: FakeThread[]; tasks?: unknown[]; detail?: Record<string, unknown>; routines?: unknown[]; projectStatus?: Record<string, unknown>;
   [key: string]: unknown;
 }
-interface FakeState { profiles: string[]; projects: FakeProject[] }
+/**
+ * `savedProfiles` are the operator's own, beside the built-ins `profiles` names; `choices: false` is an
+ * Organizations without `profile list --json`. A project may name its `coordinator_profile`, the `last`
+ * launch, an `open_error` that `open` fails with, and the `open_pane` binding `open` records as
+ * `.state/coordinator.json` under $HERDR_PROJECTS_ROOT, as the real one does.
+ */
+interface FakeState {
+  profiles: string[];
+  savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
+  choices?: boolean;
+  projects: FakeProject[];
+}
+/** Each harness's effort levels, as Organizations lists them. */
+const EFFORTS: Record<string, string[]> = {
+  claude: ["low", "medium", "high", "xhigh", "max"],
+  codex: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+};
 
 const file = process.env.NENU_E2E_ORG;
 if (!file) {
@@ -87,6 +103,16 @@ if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
   console.log(state.profiles.join("\n"));
+} else if (command === "profile" && sub === "list" && "json" in flags) {
+  if (state.choices === false) fail("unexpected argument '--json' found");
+  const project = state.projects.find((candidate) => candidate.slug === flags.project) ?? fail(`no project ${flags.project}`);
+  const harnesses = state.profiles.filter((name) => name in EFFORTS).map((harness) => ({ harness, profile: harness, default_model: "", efforts: EFFORTS[harness] }));
+  const profiles = [
+    ...state.profiles.map((name) => ({ name, harness: name, model: "", reasoning_effort: "", description: "", builtin: true })),
+    ...(state.savedProfiles ?? []).map((profile) => ({ ...profile, builtin: false })),
+  ];
+  const role = { default_profile: project.coordinator_profile ?? state.profiles[0], last: project.last ?? null, harnesses, profiles };
+  console.log(JSON.stringify({ schema_version: 1, project: project.slug, coordinator: role, thread: { ...role, last: null } }));
 } else if (command === "node" && sub === "start") {
   start(positionals[0]!, flags, flags.role === "coordinator" ? "coordinator" : "worker", flags.parent || "root");
 } else if (command === "node" && sub === "resolve") {
@@ -94,8 +120,9 @@ if (command === "overview") {
 } else if (command === "coordinator" && sub === "replace") {
   // The FakeHerdr has no pane to start, so the coordinator keeps its pane; the run checks the argv.
   if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
-  if (!state.profiles.includes(flags.profile ?? "")) fail(`there is no profile \`${flags.profile}\`; \`profile list\` shows them`);
-  console.log(`stopped 1 coordinator agent(s) and started a new one on ${flags.profile}`);
+  const chosen = flags.profile ?? flags.harness ?? "";
+  if (!state.profiles.includes(chosen) && !state.savedProfiles?.some((profile) => profile.name === chosen)) fail(`there is no profile \`${chosen}\`; \`profile list\` shows them`);
+  console.log(`stopped 1 coordinator agent(s) and started a new one on ${chosen}`);
 } else if (command === "task" && sub === "list" && "json" in flags) {
   const project = newer(positionals[0], "tasks");
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, tasks: project.tasks }));
@@ -110,8 +137,14 @@ if (command === "overview") {
   const project = newer(positionals[0], "routines");
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, routine_commands: false, routines: project.routines, broken: [] }));
 } else if (command === "open") {
-  if (!state.projects.some((project) => project.slug === positionals[0])) fail(`no project ${positionals[0]}`);
-  console.log(`started claude as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);
+  const project = state.projects.find((candidate) => candidate.slug === positionals[0]) ?? fail(`no project ${positionals[0]}`);
+  if (typeof project.open_error === "string") fail(project.open_error);
+  const saved = state.savedProfiles?.find((profile) => profile.name === flags.profile);
+  const kind = flags.harness ?? saved?.harness ?? flags.profile ?? (typeof project.coordinator_profile === "string" ? project.coordinator_profile : state.profiles[0]);
+  if (!state.profiles.includes(kind ?? "")) fail(`there is no profile \`${kind}\`; \`profile list\` shows them`);
+  const root = process.env.HERDR_PROJECTS_ROOT;
+  if (project.open_pane && root) writeFileSync(`${root}/${project.slug}/.state/coordinator.json`, JSON.stringify({ session: "", ...project.open_pane as object }));
+  console.log(`started ${kind} as hp-${positionals[0]}; it reads AGENTS.md and primes itself`);
 } else if (command === "thread" && (sub === "pr-action" || sub === "pr-create") && "json" in flags) {
   prAction(sub, positionals[0], positionals[1], positionals[2]);
 } else {

@@ -61,6 +61,21 @@ export function validateProfile(value: unknown): string {
   return value;
 }
 
+/**
+ * One model name, never a flag: `opus`, `gpt-5.5`, `anthropic/claude-sonnet-5`, `claude-opus-5-5[1m]`.
+ * Narrower than Organizations' own check (it must start with a letter or digit), which runs after it.
+ */
+export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+[\]-]{0,127}$/;
+/** A reasoning-effort level as Organizations lists them (`low`, `xhigh`, `off`). */
+const EFFORT_RE = /^[a-z][a-z0-9-]{0,19}$/;
+
+/** A model name, or "" for the harness's default. */
+export function validateModel(value: unknown): string {
+  if (value === undefined || value === "") return "";
+  if (typeof value !== "string" || !MODEL_RE.test(value)) throw new OrgValidationError("Model must be one model name, like opus or gpt-5.5.");
+  return value;
+}
+
 export function validateTitle(value: unknown): string {
   if (typeof value !== "string") throw new OrgValidationError("Title must be text.");
   const title = value.trim();
@@ -183,6 +198,103 @@ export async function listProfiles(run: OrgRun): Promise<string[]> {
   return result.stdout.split("\n").map((line) => line.trim()).filter((name) => PROFILE_RE.test(name));
 }
 
+/** A harness, model, effort and the profile they start from, as a coordinator was or will be launched. */
+export interface CoordinatorLaunch { profile: string; harness: string; model: string; reasoningEffort: string }
+export interface HarnessChoice { harness: string; profile: string; defaultModel: string; efforts: string[] }
+export interface ProfileChoice { name: string; harness: string; model: string; reasoningEffort: string; description: string; builtin: boolean }
+
+/**
+ * What a project's coordinator can start on (`profile list --project <slug> --json`): the harnesses
+ * installed, signed in and allowed, each with its effort levels and default model; the allowed
+ * profiles; the project's default; the last launch. An Organizations that predates the document
+ * offers its profile names only, `available: false`: it takes no harness, model or effort.
+ */
+export interface CoordinatorChoices {
+  available: boolean;
+  defaultProfile: string;
+  last: CoordinatorLaunch | null;
+  harnesses: HarnessChoice[];
+  profiles: ProfileChoice[];
+}
+
+export async function coordinatorChoices(run: OrgRun, project: unknown): Promise<CoordinatorChoices> {
+  const slug = validateProjectSlug(project);
+  const result = await run(["profile", "list", "--project", slug, "--json"], { timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    if (!/unexpected argument|unrecognized/i.test(result.stderr)) throw commandError(result);
+    const names = await listProfiles(run);
+    return {
+      available: false, defaultProfile: "", last: null, harnesses: [],
+      profiles: names.map((name) => ({ name, harness: "", model: "", reasoningEffort: "", description: "", builtin: false })),
+    };
+  }
+  const value = parseJson(result.stdout, "profile list");
+  const role = isRecord(value) && value.schema_version === SCHEMA_VERSION && isRecord(value.coordinator) ? value.coordinator : null;
+  if (!role) throw new OrgCliError("herdr-organizations returned an invalid profile list.");
+  const name = (field: unknown) => typeof field === "string" && PROFILE_RE.test(field) ? field : "";
+  const model = (field: unknown) => typeof field === "string" && MODEL_RE.test(field) ? field : "";
+  const effort = (field: unknown) => typeof field === "string" && EFFORT_RE.test(field) ? field : "";
+  const last = isRecord(role.last) && name(role.last.harness)
+    ? { profile: name(role.last.profile), harness: name(role.last.harness), model: model(role.last.model), reasoningEffort: effort(role.last.reasoning_effort) }
+    : null;
+  return {
+    available: true,
+    defaultProfile: name(role.default_profile),
+    last,
+    harnesses: (Array.isArray(role.harnesses) ? role.harnesses : []).flatMap((item) => {
+      if (!isRecord(item) || !name(item.harness) || !name(item.profile)) return [];
+      const efforts = Array.isArray(item.efforts) ? item.efforts.map(effort).filter(Boolean) : [];
+      return [{ harness: name(item.harness), profile: name(item.profile), defaultModel: model(item.default_model), efforts }];
+    }),
+    profiles: (Array.isArray(role.profiles) ? role.profiles : []).flatMap((item) => {
+      if (!isRecord(item) || !name(item.name)) return [];
+      return [{
+        name: name(item.name), harness: name(item.harness), model: model(item.model), reasoningEffort: effort(item.reasoning_effort),
+        description: text(item.description).replace(/\s+/g, " ").trim().slice(0, 200), builtin: item.builtin === true,
+      }];
+    }),
+  };
+}
+
+/** What a client may ask a coordinator to start on: a profile or a harness, a model and an effort. */
+export interface LaunchInput { profile?: unknown; harness?: unknown; model?: unknown; effort?: unknown }
+
+/**
+ * The coordinator a person chose, as `open`'s and `coordinator replace`'s flags. The client names
+ * a choice and never sends argv: each part is checked against what Organizations offers this
+ * project, which checks it again. Nothing chosen is no flag, the project's default, and reads nothing.
+ */
+async function launchFlags(run: OrgRun, project: string, input: LaunchInput): Promise<string[]> {
+  const profile = validateProfile(input.profile);
+  if (input.harness !== undefined && (typeof input.harness !== "string" || input.harness.length > 40)) throw new OrgValidationError("Harness must be a harness name.");
+  const harness = input.harness ?? "";
+  const model = validateModel(input.model);
+  const effort = input.effort ?? "";
+  if (profile && harness) throw new OrgValidationError("Choose a profile or a harness, not both.");
+  // A profile alone is what `open` always took; Organizations checks it against its allow-list.
+  if (!harness && !model && !effort) return profile ? [`--profile=${profile}`] : [];
+
+  const choices = await coordinatorChoices(run, project);
+  const notOffered = (what: string, kind: string) => new OrgValidationError(`${what} is not a ${kind} this project's coordinator can run.`);
+  if (!choices.available) throw new OrgValidationError("This Herdr Organizations cannot choose the harness, model or effort; update it, or choose a profile.");
+  if (harness && !choices.harnesses.some((choice) => choice.harness === harness)) throw notOffered(harness, "harness");
+  const chosen = profile || choices.defaultProfile;
+  const kind = harness || (choices.profiles.find((choice) => choice.name === chosen)?.harness ?? "");
+  if (profile && !choices.profiles.some((choice) => choice.name === profile)) throw notOffered(profile, "profile");
+  if (effort) {
+    // A saved profile may be allowed when its harness is not: its levels are not listed, so it keeps its own.
+    const listed = choices.harnesses.find((choice) => choice.harness === kind);
+    if (!listed) throw new OrgValidationError("Effort can be chosen only for a harness this project's coordinator can run.");
+    if (listed.efforts.length === 0) throw new OrgValidationError(`${kind} takes no effort level.`);
+    if (typeof effort !== "string" || !listed.efforts.includes(effort)) throw new OrgValidationError(`Effort must be one of ${listed.efforts.join(", ")} for ${kind}.`);
+  }
+  return [
+    ...(profile ? [`--profile=${profile}`] : harness ? [`--harness=${harness}`] : []),
+    ...(model ? [`--model=${model}`] : []),
+    ...(effort ? [`--reasoning-effort=${String(effort)}`] : []),
+  ];
+}
+
 /** What the start form offers for a project: its templates and the profiles a node can run. */
 export async function startOptions(run: OrgRun, project: string): Promise<{ templates: TemplateView[]; profiles: string[] }> {
   const [templates, profiles] = await Promise.all([listTemplates(run, project), listProfiles(run)]);
@@ -228,28 +340,33 @@ export async function startNode(
 }
 
 /**
- * `open`: start the project's coordinator in the project's workspace of this Herdr session, or focus
- * it when one already runs. The bridge has no terminal, so it never starts in the bridge's own pane.
- * Returns the CLI's first line, which says what happened ("started …", or "… is not ready yet …"
- * when the agent waits on a dialog); `open` exits 0 in both cases.
+ * `open`: start the project's coordinator in the project's workspace of this Herdr session, on the
+ * chosen harness, model and effort or the project's default, or focus it when one already runs. The
+ * bridge has no terminal, so it never starts in the bridge's own pane. Returns the CLI's first line,
+ * which says what happened ("started …", or "… is not ready yet …" when the agent waits on a
+ * dialog); `open` exits 0 in both cases.
  */
-export async function openProject(run: OrgRun, socketPath: string, input: { project: unknown }): Promise<{ message: string }> {
+export async function openProject(run: OrgRun, socketPath: string, input: { project: unknown } & LaunchInput): Promise<{ message: string }> {
   const project = validateProjectSlug(input.project);
-  const result = await run(["open", project], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
+  const flags = await launchFlags(run, project, input);
+  const result = await run(["open", project, ...flags], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
   if (result.code !== 0) throw commandError(result);
   const first = result.stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
   return { message: first.slice(0, 300) };
 }
 
 /**
- * `coordinator replace`: stop the project's running coordinator and start a new one on `profile`, in
- * the session its record names or this Herdr session. Returns the CLI's line saying what it did.
+ * `coordinator replace`: stop the project's running coordinator and start a new one on the chosen
+ * profile or harness, model and effort, in the session its record names or this Herdr session.
+ * Returns the CLI's line saying what it did.
  */
-export async function replaceCoordinator(run: OrgRun, socketPath: string, input: { project: unknown; profile: unknown }): Promise<{ message: string }> {
+export async function replaceCoordinator(run: OrgRun, socketPath: string, input: { project: unknown } & LaunchInput): Promise<{ message: string }> {
   const project = validateProjectSlug(input.project);
-  const profile = validateProfile(input.profile);
-  if (!profile) throw new OrgValidationError("Choose the agent the new coordinator runs on.");
-  const result = await run(["coordinator", "replace", project, `--profile=${profile}`], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
+  if (!validateProfile(input.profile) && (input.harness === undefined || input.harness === "")) {
+    throw new OrgValidationError("Choose the agent the new coordinator runs on.");
+  }
+  const flags = await launchFlags(run, project, input);
+  const result = await run(["coordinator", "replace", project, ...flags], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 60_000 });
   if (result.code !== 0) throw commandError(result);
   const first = result.stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
   return { message: first.slice(0, 300) };

@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-15
+
+### Added
+
+- Start and Replace coordinator ask for the harness, model and effort, with the last launch preselected; it needs Herdr Organizations with `open --harness/--model/--reasoning-effort`, and an older one still offers its profiles (f659522a, b742fe29, 921f835e).
+
+### Fixed
+
+- Start coordinator says it is starting until the chat opens, which now takes about a second instead of up to six, and a coordinator pane back at its shell can be started again (066c56d1, b742fe29).
+- A Codex just started opens as an empty chat instead of the "No conversation linked" card, and one running without the shared daemon is recognised by the rollout it holds (8116d0c8).
+
 ## [1.12.1] - 2026-10-15
 
 ### Fixed

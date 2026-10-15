@@ -191,7 +191,7 @@ async function portIsFree(port: number): Promise<boolean> {
  * `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS) and before
  * the projects are seeded, so a seed can carry numbers the repo produced.
  */
-export async function startTestBridge(opts: { port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; repo?: (dir: string) => void }): Promise<TestBridge> {
+export async function startTestBridge(opts: { port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; orgBin?: string; repo?: (dir: string) => void }): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.herdr && !opts.socketPath) throw new Error("pass --fake, --herdr or --socket <disposable herdr socket>");
   if (!(await portIsFree(opts.port))) throw new Error(`port ${opts.port} is busy`);
@@ -216,12 +216,15 @@ export async function startTestBridge(opts: { port: number; fake?: boolean; herd
   };
   for (const p of Object.values(paths)) await mkdir(p, { recursive: true });
   // The bridge shells out to these. Organizations answers "no templates", or with `org` is
-  // fake-org.ts over the seeded projects; `claude agents` fails, so session discovery never lists
+  // fake-org.ts over the seeded projects, or with `orgBin` is that real binary over the empty
+  // registry under this temporary HOME; `claude agents` fails, so session discovery never lists
   // the operator's real Claude processes; `gh` never reaches GitHub: it prints the pull requests in
   // $NENU_E2E_GH_PRS (a JSON file), or fails.
   const orgState = join(dir, "org.json");
   const stubs = {
-    "herdr-organizations": opts.org
+    "herdr-organizations": opts.orgBin
+      ? `exec "${opts.orgBin}" "$@"`
+      : opts.org
       ? `exec "${process.execPath}" "${join(import.meta.dir, "fake-org.ts")}" "$@"`
       : "echo 'error: unrecognized subcommand' >&2\nexit 2",
     claude: "exit 1",

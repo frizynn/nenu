@@ -319,6 +319,15 @@ describe("LiveConversation", () => {
     expect(screen.getByRole("region", { name: "Agent question" })).toBeInTheDocument();
   });
 
+  it("shows a Codex that has not started as a chat waiting for its first message, with nothing to link", () => {
+    render(<MemoryRouter><LiveConversation paneId="w2:codex" history={{ paneId: "w2:codex", available: false, reason: "no-session", notStarted: true }} loading={false} error={false}
+      recovery={<button type="button">Find Codex conversations</button>} activityStatus="working" /></MemoryRouter>);
+    expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "No conversation linked" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No conversation linked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find Codex conversations" })).not.toBeInTheDocument();
+  });
+
   it("does not offer to connect a session where nothing can be connected", () => {
     render(<MemoryRouter><LiveConversation paneId="w1:p1" history={{ paneId: "w1:p1", available: false, reason: "no-session" }} loading={false} error={false} /></MemoryRouter>);
     expect(screen.getByText("Send the first message to start the conversation.")).toBeInTheDocument();
