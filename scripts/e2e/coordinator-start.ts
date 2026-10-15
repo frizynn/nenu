@@ -19,6 +19,9 @@ import { demoOrg } from "./scenario.ts";
 //
 //   bun scripts/e2e/coordinator-start.ts --org-bin <path> [--harness claude|codex] [--runs 3] [--label before] [--light] [--port 8851] [--out DIR]
 //
+// --choose <harness label>:<model>:<effort> fills the window before Start, and the run then reports the
+// agent's own command line from the disposable Herdr's processes.
+//
 // With --fake instead, the FakeHerdr and fake-org.ts: the window, with a saved profile beside the two
 // built-ins, and a Start that Organizations refuses, on a phone and a desk, dark and light.
 
@@ -32,6 +35,7 @@ const { values } = parseArgs({
     "org-bin": { type: "string" },
     light: { type: "boolean", default: false },
     fake: { type: "boolean", default: false },
+    choose: { type: "string" },
   },
 });
 const orgBin = values["org-bin"];
@@ -186,6 +190,12 @@ async function run(bridge: TestBridge, device: typeof PHONE | typeof DESKTOP, sl
   const dialog = page.getByRole("dialog");
   const asked = await dialog.waitFor({ timeout: 1000 }).then(() => true, () => false);
   if (asked) {
+    if (values.choose) {
+      const [label = "", model = "", effort = ""] = values.choose.split(":");
+      await dialog.getByRole("radio", { name: label }).click({ timeout: 5000 });
+      await dialog.getByLabel("Model").fill(model);
+      if (effort) await dialog.getByLabel("Effort").selectOption(effort);
+    }
     if (shotPrefix) await page.screenshot({ path: join(outDir, `${shotPrefix}-1-window.png`), animations: "disabled" });
     await page.evaluate(() => { (window as unknown as { __marks: unknown[] }).__marks = []; }, undefined);
     await startClock();
@@ -216,12 +226,18 @@ async function run(bridge: TestBridge, device: typeof PHONE | typeof DESKTOP, sl
       .map((entry) => `${new URL(entry.name).pathname.replace(/^\/api\//, "").slice(0, 24)} ${Math.round(entry.startTime - t0)}-${Math.round(entry.responseEnd - t0)}`);
   }, undefined);
   for (let i = 0; i < 300 && !openEnd; i++) await page.waitForTimeout(100);
+  // The agent the pane runs, as the operating system started it (its HOME is the bench's).
+  const agentArgv = values.choose
+    ? Bun.spawnSync(["ps", "-wwE", "-axo", "command="]).stdout.toString().split("\n")
+      .filter((line) => line.includes(`HOME=${bridge.home}`) && /(^|\/)(claude|codex)\s/.test(line))
+      .map((line) => line.split(/\s[A-Z_]+=/)[0]!.trim())
+    : [];
   await context.close();
   await browser.close();
   await watch.done();
   const since = (at: number) => at ? at - tapped : null;
   return {
-    slug, asked, arrived, marks, snaps, reads,
+    slug, asked, arrived, marks, snaps, reads, agentArgv,
     recordedMs: since(watch.seen.recorded), paneListedMs: since(watch.seen.pane), agentSeenMs: since(watch.seen.agent),
     openRequestMs: openStart && openEnd ? openEnd - openStart : null,
     openStartAfterTapMs: openStart ? openStart - tapped : null,
