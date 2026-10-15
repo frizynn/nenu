@@ -7,6 +7,7 @@ import { AuditLog, fileAuditAppender } from "./audit.ts";
 import { loadConfig, type Config } from "./config.ts";
 import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
+import { startMachines } from "./machines-runtime.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
 import { AlertDescriber, NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
@@ -228,13 +229,19 @@ const sweepTimer = setInterval(() => {
 }, SWEEP_INTERVAL_MS);
 sweepTimer.unref();
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live });
+// Herdr's saved machines: a change in another machine's herd re-reads every local session's snapshot.
+const machines = startMachines(cfg.stateDir, () => {
+  for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
+});
+
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");
   // Stop accepting new connections and let in-flight requests drain briefly (non-forced stop)
   // before we tear down the poll loops and exit.
   await server.stop();
+  machines.stop();
   clearInterval(refreshTimer);
   registry.disposeAll();
   // Writes are debounced, so the last few seconds of "you looked at this" live only in memory —

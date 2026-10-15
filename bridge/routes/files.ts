@@ -200,6 +200,8 @@ export const fileOpenRoutes: Route[] = [
     path: "/api/files/open",
     access: "read",
     session: false,
+    // The folder or file is on the machine the request names.
+    machine: true,
     async handle({ cfg, audit, fileGrants }, { req, url }) {
       const device = deviceAuth(req, cfg).device;
       const path = fileGrants.consume(url.searchParams.get("t"), device);

@@ -238,7 +238,7 @@ describe("a machine's link", () => {
 describe("the machine list", () => {
   test("no saved machines: no list at all, so one machine looks as it always did", async () => {
     const machines = new Machines({ list: async () => [], hostLabel: "studio", link: () => { throw new Error("no link"); } });
-    await machines.refresh();
+    await machines.reload();
     expect(machines.views(undefined, null)).toBeUndefined();
   });
 
@@ -249,7 +249,7 @@ describe("the machine list", () => {
       hostLabel: "studio",
       link: (m) => ({ start() {}, stop() {}, view: () => ({ session: machineSession(m.label), label: m.label, state: "connected" as const, herd: herd(m.label) }) }),
     });
-    await machines.refresh();
+    await machines.reload();
     const local = herd("here");
     expect(machines.views(undefined, local)!.map((v) => [v.label, v.session, v.herd?.workspaces[0]?.label])).toEqual([
       ["studio", undefined, undefined],

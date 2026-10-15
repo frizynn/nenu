@@ -11,6 +11,7 @@ import type { JournalWatch } from "../journal-watch.ts";
 import type { TranscriptStore } from "../journal/store.ts";
 import type { JournalAdapter } from "../journal/types.ts";
 import type { LiveEvents } from "../live-events.ts";
+import type { MachineDirectory } from "../machines.ts";
 import type { NotifyPrefsStore } from "../notify-prefs.ts";
 import type { AlertDescriber } from "../notifications.ts";
 import type { AwaitingReplies } from "../awaiting-replies.ts";
@@ -43,6 +44,8 @@ export interface ServerDeps {
   audit: AuditLog;
   activity: ActivityLedger;
   live: LiveEvents;
+  /** Herdr's saved machines (machines.ts). Absent in-process: no machines. */
+  machines?: MachineDirectory;
 }
 
 /** Everything a route handler may use, built once per server by startServer. */
@@ -74,6 +77,7 @@ export interface Services extends ServerDeps {
   agentStates: AgentStates;
   /** Single-use links to files the operator confirmed opening outside the preview (ADR 0063). */
   fileGrants: FileGrants;
+  machines: MachineDirectory;
 }
 
 export type AccessLevel = "read" | "write";
@@ -106,6 +110,11 @@ interface RouteBase {
    * answers that sit outside every gate on purpose (a 405, the /auth placeholder).
    */
   access: AccessLevel | "none" | ((req: Request, match: RegExpMatchArray | null) => AccessLevel);
+  /**
+   * Whether `?session=@<machine>` sends the request to that machine's Nenu (machines.ts). Defaults
+   * to `session`: what a session answers, a machine answers.
+   */
+  machine?: boolean;
 }
 
 /**

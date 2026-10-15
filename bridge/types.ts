@@ -366,7 +366,39 @@ export interface SnapshotResponse {
   /** Update-availability signal. Optional — a stale bridge that predates the field simply omits it,
    *  which the client reads as "no info" (see bridge/update.ts). */
   update?: UpdateStatus;
+  /**
+   * The machines Herdr has saved (`herdr machine list`), this one first. Absent while Herdr has none,
+   * so a single machine's snapshot is what it always was. Each machine other than the one this
+   * snapshot is about carries its herd, so every list can show them all.
+   */
+  machines?: MachineView[];
   ts: number;
+}
+
+/**
+ * Why a saved machine is or is not usable from here. `old-nenu` and `no-nenu` mean SSH got there and
+ * found Nenu too old to accept other machines, or not there at all; `offline` means SSH did not get there.
+ */
+export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled";
+
+/** What a machine's lists need: its panes and where they sit, as its own snapshot gives them. */
+export interface MachineHerd {
+  bridge: BridgeStatus;
+  agents: PaneWire[];
+  shellPanes: PaneWire[];
+  workspaces: WorkspaceView[];
+  tabs: TabView[];
+}
+
+export interface MachineView {
+  /** What the browser passes as `?s=` to reach it (`@<label>`); absent for this bridge's own machine. */
+  session?: string;
+  label: string;
+  state: MachineState;
+  /** Why it is not connected, in words. */
+  detail?: string;
+  /** Present for every machine except the one the snapshot is about, once it was read. */
+  herd?: MachineHerd;
 }
 
 /**

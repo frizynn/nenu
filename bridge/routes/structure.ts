@@ -20,6 +20,8 @@ export const structureRoutes: Route[] = [
     path: "/api/dirs",
     access: "write",
     session: false,
+    // The folder or file is on the machine the request names.
+    machine: true,
     async handle(_ctx, { url }) {
       try {
         return json(await listHomeDirs(url.searchParams.get("path"), { hidden: url.searchParams.get("hidden") === "1" }), null);

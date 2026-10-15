@@ -1,3 +1,4 @@
+import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AgentStates } from "./agent-state.ts";
 import { ClaudeHooks } from "./claude-hooks.ts";
@@ -7,6 +8,7 @@ import { FileGrants } from "./file-open.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
 import { JournalWatch } from "./journal-watch.ts";
+import { NO_MACHINES } from "./machines.ts";
 import { describeAlert } from "./alert-detail.ts";
 import { AwaitingReplies } from "./awaiting-replies.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
@@ -21,7 +23,7 @@ import { ProjectRegistry } from "./projects.ts";
 import { PullRequestRegistry } from "./pull-requests.ts";
 import { freshAgentView, QueueService } from "./queue-service.ts";
 import { isLoopbackPeer } from "./routes/access.ts";
-import type { ServerDeps, Services } from "./routes/context.ts";
+import type { RequestTimeouts, ServerDeps, Services } from "./routes/context.ts";
 import { WEB_DIR, text } from "./routes/http.ts";
 import { dispatch } from "./routes/index.ts";
 import { interactionHints } from "./routes/interactions.ts";
@@ -139,6 +141,7 @@ export function startServer(opts: ServerDeps) {
     claudeHooks: new ClaudeHooks(live, (session, paneId) => agentStates.poke(session, paneId)),
     agentStates,
     fileGrants: new FileGrants(),
+    machines: opts.machines ?? NO_MACHINES,
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
   services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));
@@ -192,7 +195,40 @@ export function startServer(opts: ServerDeps) {
   }
   for (const w of startupWarnings(cfg)) console.warn(w);
 
+  // The other machines' door: a Nenu on another machine reaches this one through SSH to this socket
+  // (machines.ts) and is answered as the operator, because only this user (or root) can open it, and
+  // either can already drive Herdr's own socket. The TCP port's gates are untouched.
+  const peer = servePeer(join(cfg.stateDir, "peer.sock"), (req, srv) => dispatch(services, req, srv, undefined, "peer"));
+  const stop = server.stop.bind(server);
+  Object.defineProperty(server, "stop", { value: (force?: boolean) => { peer?.stop(force); return stop(force); } });
+
   return server;
+}
+
+/**
+ * Listen on `path` for other machines' Nenus. The state dir belongs to this install, so a socket left
+ * there by a killed bridge is this install's own and is replaced. 0600, inside a dir only this user
+ * writes to: Bun creates it 0755, which already denies anyone else the write that connect() needs.
+ */
+function servePeer(path: string, handle: (req: Request, server: RequestTimeouts) => Response | Promise<Response>): ReturnType<typeof Bun.serve> | null {
+  try {
+    mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
+    rmSync(path, { force: true });
+    const server: ReturnType<typeof Bun.serve> = Bun.serve({
+      unix: path,
+      maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+      // A socket listener takes no idleTimeout option; each request gets the TCP port's instead.
+      fetch: (req): Response | Promise<Response> => {
+        server.timeout(req, SERVER_IDLE_TIMEOUT_S);
+        return handle(req, server);
+      },
+    });
+    chmodSync(path, 0o600);
+    return server;
+  } catch (err) {
+    console.warn(`[bridge] WARNING: other machines cannot reach this one: ${path}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /**
