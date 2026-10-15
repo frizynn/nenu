@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-15
+
+### Added
+
+- A tab of several panes is a row of its own in Home's Workspaces, the drawer and Search that folds its panes one level in, open when it holds the open chat or one needs you (b37539b9).
+
 ## [1.13.2] - 2026-10-15
 
 ### Fixed
