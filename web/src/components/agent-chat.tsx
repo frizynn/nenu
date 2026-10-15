@@ -151,6 +151,8 @@ interface AgentChatProps {
   /** Beside a desk's session panel, whose Terminal tab shows this pane's mirror, Keys and Type. */
   sessionPanel?: SessionPanelLink;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
+  /** A shell at its prompt (true) or running a command (false); undefined when the bridge can't tell. */
+  atPrompt?: boolean;
   /** Pane output from the route loader (refreshed by polling/revalidation). */
   text: string;
   /** The pane's first read is still on its way; `text` is what the page had before it. */
@@ -216,6 +218,7 @@ export function AgentChat({
   text,
   pending = false,
   nativeTelemetry,
+  atPrompt,
   requestedLines = 0,
   revision = 0,
   device,
@@ -1195,7 +1198,8 @@ export function AgentChat({
         )}
 
         <SpawnStatus paneId={paneId} />
-        {isShell && !spawning && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
+        {/* Only a shell at its prompt can take an agent; while a command runs, the terminal keeps the room. */}
+        {isShell && !spawning && atPrompt !== false && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
         </>}
       </div>
       {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}

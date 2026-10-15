@@ -32,6 +32,7 @@ revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 | `bun scripts/e2e/run.ts chat [--seconds 60]` | A finished Claude conversation (tool calls, `turn_duration`, pull request links) on phone and desk, dark and light, folded and open; a third turn while it runs and once it ends; then a long one's DOM elements, idle CPU and memory in a WebKit of its own (private `PLAYWRIGHT_BROWSERS_PATH`, as for `surface`) |
 | `bun scripts/e2e/run.ts scroll` | A long chat on a phone whose turn keeps running, read at the tail, up the thread, typed into, with the keyboard open and closed, paging older messages, through a sheet and back from Home: every write to the list's scroll position with its stack, and each move of the line being read that the reader's own drag does not explain |
 | `bun scripts/e2e/diff-comments.ts [--before]` | Comments on a diff's lines, phone and desk, dark and light: the "+" on hover, the box, the line marked, the chips over the thread's composer, the diff of another thread opening its chat, and the one message the FakeHerdr received |
+| `bun scripts/e2e/start-agent.ts [--before] [--seconds 60]` | A shell's start block, phone and desk, dark and light: at the prompt folded and unfolded, a tap on the terminal folding it, a long command that takes the terminal (the block leaves and the mirror keeps its tail), back at the prompt; Claude Code started on Ask and Codex on Auto with the argv the FakeHerdr received, and a start that times out. The block's height and the terminal's visible height at each step, then the Herdr calls one phone makes for the open shell while idle. `--before` takes the shell views only |
 | `bun scripts/e2e/keyboard.ts [--runs 3] [--label NAME]` | The chat's draft tapped on a phone with the keyboard rising as Safari on iOS does it: a stand-in `visualViewport`, the page scrolled as WebKit reveals a focus without `preventScroll`, the viewport's events only once the keyboard is up. Per frame, where the header and the composer stand on screen, then after it settles and once it closes, for an empty draft and a four-line one; the focus, the caret and the layout are WebKit's own, the keyboard and the scroll are the model's. Captures the region above the keyboard, and the desk's chat to compare across builds |
 | `bun scripts/e2e/coordinator-start.ts --org-bin <herdr-organizations> [--harness claude\|codex] [--runs 3] [--choose "Claude Code:sonnet:low"] [--light]` | Start coordinator against the `--herdr` server and that real Organizations over the bench's empty registry, with a real agent signed in by links into the operator's credentials (below). Each run makes a fresh project, taps Start and the window's Start, and records in the page when it showed "Starting", what each snapshot said about the coordinator and when the chat opened; outside it, when Organizations recorded the pane and when Herdr saw the agent. `--choose` fills the window and reports the agent's own argv. `--fake` instead captures the window and a refused Start against fake-org.ts, phone and desk, dark and light |
 | `bun scripts/e2e/run.ts compare A.png B.png` | Share of differing pixels between two captures |
@@ -114,13 +115,17 @@ still move is the working pane's elapsed seconds, which depend on how long the p
 `bridge/test-support/fake-herdr.ts` is a real Unix socket server with Herdr's newline-delimited JSON:
 one request per connection, `events.subscribe` streaming. It answers `session.snapshot`,
 `workspace.list`, `tab.list`, `pane.list`, `pane.get`, `pane.read`, `pane.process_info`,
-`pane.wait_for_output`, `pane.send_text` and `pane.send_keys`. `pane.wait_for_output` re-reads the
+`pane.wait_for_output`, `pane.send_text`, `pane.send_keys` and `agent.start`. `pane.wait_for_output` re-reads the
 screen every 5 ms until a line matches (a leading `(?m)` becomes a JavaScript flag) or `timeout_ms`
 ends it with the code `timeout`, as Herdr 0.9.1 does, so the guarded send takes its trigger path
 here too. Anything else returns Herdr's `unknown variant` error, which
 also logs the call as a write. It reports version `0.9.1-fake`, protocol 22.
 
-Panes render a Claude-shaped screen (rule, `❯ draft`, rule, footer). Typed text appears after
+Panes render a Claude-shaped screen (rule, `❯ draft`, rule, footer); a pane with no agent renders a
+shell instead, its prompt or, while `setForeground` names a command, nothing below the output. Its
+`pane.process_info` reports the shell's own process group at the prompt and the command's otherwise,
+as Herdr 0.9.3 does. `agent.start` records the argv in `started` and turns the shell into that agent,
+refuses a busy shell with Herdr's `agent_pane_busy`, and fails once with `failNextStart`. Typed text appears after
 `echoMs`, Enter submits the draft, and a working pane repaints its spinner every `tickMs` (250 ms).
 `setDialog` shows a dialog that swallows text, and a digit, Enter or Escape answers it.
 `setStatus` emits `pane_agent_status_changed` to subscribers. A working pane names `esc to interrupt`

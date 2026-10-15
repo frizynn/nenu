@@ -428,6 +428,9 @@ export interface PaneReadResponse {
   truncated: boolean;
   /** Herdr's monotonic pane revision — the prompt-select race guard checks a tapped menu against it. */
   revision: number;
+  /** A shell pane only: true while the shell waits at its prompt, false while a command holds the
+   *  terminal. Absent when unknown. */
+  atPrompt?: boolean;
   /** Set to true by the client when the server returns 304 Not Modified. Never sent over the wire. */
   notModified?: boolean;
 }

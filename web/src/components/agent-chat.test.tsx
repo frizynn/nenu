@@ -978,8 +978,20 @@ describe("mobile session startup", () => {
   it("waits for shell output before enabling launch", () => {
     const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell" };
     renderChat({ agent: shell, agents: [], shellPanes: [shell], text: "" });
-    expect(screen.getByRole("button", { name: "Start Claude Code" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Claude Code · Ask" })).toBeDisabled();
     expect(screen.getByText("Preparing the terminal…")).toBeInTheDocument();
+  });
+  it("leaves the terminal to a shell running a command", () => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell" };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell], atPrompt: false });
+    expect(screen.queryByRole("region", { name: "Start a conversation" })).not.toBeInTheDocument();
+  });
+  it.each([true, undefined])("offers the start, folded, when the shell's prompt is %s", (atPrompt) => {
+    const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell" };
+    renderChat({ agent: shell, agents: [], shellPanes: [shell], atPrompt });
+    const start = screen.getByRole("region", { name: "Start a conversation" });
+    expect(within(start).getByRole("button", { name: "Start Claude Code · Ask" })).toBeEnabled();
+    expect(within(start).queryByRole("radiogroup")).not.toBeInTheDocument();
   });
   it.each(["Codex", "Claude Code"])("starts %s from a shell at the chosen level, without typing a command", async (label) => {
     const user = userEvent.setup();
@@ -990,8 +1002,9 @@ describe("mobile session startup", () => {
     }));
     const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", hasSession: false };
     renderChat({ agent: shell, agents: [], shellPanes: [shell] });
+    await user.click(screen.getByRole("button", { name: "Agent and permissions" }));
     await user.click(screen.getByRole("radio", { name: label }));
-    await user.click(screen.getByRole("button", { name: `Start ${label}` }));
+    await user.click(screen.getByRole("button", { name: `Start ${label} · Ask` }));
     await waitFor(() => expect(calls).toEqual([{ agent: label === "Codex" ? "codex" : "claude", permission: "ask" }]));
   });
 });
