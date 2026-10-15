@@ -81,7 +81,9 @@ function orgRead(path: string, failure: string, read: (ctx: Services, project: s
 /**
  * A POST that runs one Organizations write for the person's tap, audits it, and re-reads the
  * projects at once so the `org` event follows the change instead of the next stat. With `settle`
- * the reply waits for that re-read, so the client's next snapshot already shows the change.
+ * the person waits on the change: while the write runs, what it records is read as it lands (`open`
+ * records the coordinator's pane seconds before it returns), and the reply waits for the re-read,
+ * so the client's next snapshot already shows the change.
  */
 function orgWrite(
   path: string,
@@ -102,7 +104,8 @@ function orgWrite(
         return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
       }
       try {
-        const { response, detail } = await write(ctx, body as Record<string, unknown>, rt);
+        const run = () => write(ctx, body as Record<string, unknown>, rt);
+        const { response, detail } = settle ? await ctx.projects.urgently(run) : await run();
         ctx.audit.record({ action, session: rt.name, device: deviceAuth(req, ctx.cfg).device, detail });
         if (settle) await ctx.projects.invalidate();
         else void ctx.projects.invalidate();
