@@ -225,7 +225,7 @@ export function AgentChat({
   onBack,
   onSelect,
 }: AgentChatProps) {
-  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true);
+  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true, "view");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
@@ -1009,7 +1009,8 @@ export function AgentChat({
     </> }] : []),
     // Nothing runs: the chip says what finished instead, so done work stays one tap away.
     ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
-      label: workingCount > 0 ? "Working" : finished > 0 ? "Done" : "Published",
+      // The chat's own turn is never in this count: the session's work alone reads as Background.
+      label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Done" : "Published",
       count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined, content: <>
       {around && threadRows(around.working)}
       {sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) && processList({ running: processes.running, done: processes.done }, published)}

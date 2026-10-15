@@ -17,6 +17,7 @@ import { lastLiveAt } from "@/lib/connection-health";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { PageBody } from "@/components/column-page";
 import { ConnectionBanner } from "@/components/connection-banner";
+import { UpdateBanner } from "@/components/update-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NewAgentHost } from "@/components/new-agent-sheet";
@@ -102,6 +103,7 @@ export function RootLayout() {
         authError={data.authError}
         lastSeenAt={shownLastSeenAt(data, pane, lastLiveAt())}
       />
+      <UpdateBanner />
       <WorkbenchShell data={data}><FilePreviewProvider key={`${paneId}:${data.session}`} paneId={paneId} session={data.session} panes={paneRoots}><Outlet /></FilePreviewProvider></WorkbenchShell>
       <NewAgentHost />
       <StatusArea />

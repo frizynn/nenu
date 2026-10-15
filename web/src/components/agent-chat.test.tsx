@@ -1226,12 +1226,40 @@ it("shows a subagent's work step file relative to the pane's folder too", async 
   const user = userEvent.setup();
   const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
   renderChat({ agent, agents: [agent] });
-  await user.click(await screen.findByRole("button", { name: /^Working, / }));
+  await user.click(await screen.findByRole("button", { name: /^Background, / }));
   await user.click(screen.getByRole("button", { name: "Expand reviewer" }));
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   const work = await screen.findByRole("button", { name: /^(Worked|Work log|Working)/ });
   if (work.getAttribute("aria-expanded") === "false") await user.click(work);
   expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+});
+
+// The chip above the box counts the session's background work and the project's threads around the
+// chat, never this chat's own turn: while only the session's work runs it says Background, so it does
+// not read as a second "Working" beside the turn's.
+describe("AgentChat — the chip that counts other work", () => {
+  const subagent = () => server.use(http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({
+    available: true, sessionKey: "parent-key", truncated: false,
+    agents: [{ id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "running" }],
+  })));
+
+  it("says Background while only the session's own work runs", async () => {
+    subagent();
+    const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
+    renderChat({ agent, agents: [agent] });
+    expect(await screen.findByRole("button", { name: /^Background, / })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Working, / })).toBeNull();
+  });
+
+  it("says Working while a thread of the project works", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
+    const project = { slug: "shop", name: "Shop", status: "active" as const, threads: [] };
+    const busy = { id: "t-2", title: "Pagos", parentId: "root", role: "worker" as const, status: "open" as const, group: "working" as const };
+    renderChat({ agent, agents: [agent], projectChips: {
+      project, threads: [busy], readOnly: false, onOpenPane: vi.fn(), onOpenNode: vi.fn(), onChanged: vi.fn(),
+    } } as Partial<ComponentProps<typeof AgentChat>>);
+    expect(await screen.findByRole("button", { name: /^Working, / })).toBeInTheDocument();
+  });
 });
 
 // Find names what it searches, in the menu and in the bar (T31).
