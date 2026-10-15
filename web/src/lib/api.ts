@@ -852,7 +852,6 @@ export function setSnooze(snoozedUntil: number | null): Promise<{ snoozedUntil: 
   });
 }
 
-/** Fetch the bridge-wide notification-type preferences (which agent statuses push). */
 /** Settings → other machines: whether this Nenu shows them, and Herdr's saved machines with their state. */
 export interface MachineSettings {
   on: boolean;
@@ -868,6 +867,7 @@ export function setMachinesOn(on: boolean): Promise<MachineSettings> {
   return req<MachineSettings>("/api/machines", { method: "POST", body: JSON.stringify({ on }) });
 }
 
+/** Fetch the bridge-wide notification-type preferences (which agent statuses push). */
 export function getNotifyPrefs(): Promise<NotifyPrefs> {
   return req<NotifyPrefs>("/api/notifications/prefs");
 }
