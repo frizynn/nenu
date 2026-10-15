@@ -57,18 +57,28 @@ for (let i = 0; ; i++) {
 
 const block = (page: Page) => page.getByRole("region", { name: "Start a conversation" });
 
-/** The block's height with its margins, and the terminal's visible height: the mirror's scroller. */
-const measure = (page: Page) => page.evaluate(() => {
-  const section = document.querySelector('section[aria-label="Start a conversation"]');
-  const box = section?.getBoundingClientRect();
-  const style = section ? getComputedStyle(section) : null;
+/** The mirror's scroller, and the part of it no chrome covers: a phone's header floats over its top. */
+const terminalBox = (page: Page) => page.evaluate(() => {
   let scroller: Element | null = document.querySelector("pre");
   while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
-  return {
-    block: box && style ? Math.round(box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom)) : 0,
-    terminal: scroller ? Math.round(scroller.getBoundingClientRect().height) : null,
-  };
+  if (!scroller) return null;
+  const box = scroller.getBoundingClientRect();
+  const chrome = document.querySelector(".chat-chrome")?.getBoundingClientRect();
+  const top = Math.max(box.top, chrome && chrome.bottom > box.top && chrome.top < box.bottom ? chrome.bottom : box.top);
+  return { x: box.left + box.width / 2, top, bottom: box.bottom };
 }, null);
+
+/** The block's height with its margins, and the terminal's visible height. */
+async function measure(page: Page) {
+  const block = await page.evaluate(() => {
+    const section = document.querySelector('section[aria-label="Start a conversation"]');
+    const box = section?.getBoundingClientRect();
+    const style = section ? getComputedStyle(section) : null;
+    return box && style ? Math.round(box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom)) : 0;
+  }, null);
+  const terminal = await terminalBox(page);
+  return { block, terminal: terminal ? Math.round(terminal.bottom - terminal.top) : null };
+}
 
 async function shoot(page: Page, name: string): Promise<void> {
   await page.waitForTimeout(350);
@@ -115,14 +125,17 @@ async function shellViews(browser: Browser, device: typeof PHONE | typeof DESKTO
     await block(page).getByRole("button", { name: "Agent and permissions" }).click();
     seen[`${key} unfolded`] = await measure(page);
     await shoot(page, `${deviceName}-unfolded-${scheme}`);
-    // A tap outside folds it again.
-    await page.locator("pre").first().click();
+    // A tap on the terminal folds it again. Not a locator click: that scrolls the list to the element
+    // first, which reads as the operator scrolling up and stops the mirror following its tail.
+    const terminal = (await terminalBox(page))!;
+    await page.mouse.click(terminal.x, (terminal.top + terminal.bottom) / 2);
     seen[`${key} folded after a tap outside`] = !(await block(page).getByRole("radiogroup", { name: "Agent" }).count());
   }
   runCommand(view);
   if (before) await page.waitForTimeout(2500);
   else await until(page, async () => !(await block(page).count()), "the block to leave while a command runs");
-  seen[`${key} running a command`] = await measure(page);
+  // The mirror still follows its tail: no "Scroll to latest" offered.
+  seen[`${key} running a command`] = { ...(await measure(page)), following: !(await page.getByRole("button", { name: /^Scroll to latest/ }).count()) };
   await shoot(page, `${deviceName}-running-${scheme}`);
   backToPrompt(view);
   if (before) await page.waitForTimeout(2500);
