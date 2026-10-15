@@ -110,7 +110,7 @@ function record(): void {
   const w2 = window as unknown as { __snaps: string[] };
   w2.__snaps = [];
   const fetch0 = window.fetch.bind(window);
-  window.fetch = async (input, init) => {
+  window.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
     const res = await fetch0(input, init);
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (w.__t0 && url.includes("/api/snapshot") && res.ok) {
@@ -123,7 +123,7 @@ function record(): void {
       }, () => undefined);
     }
     return res;
-  };
+  }, { preconnect: window.fetch.preconnect });
 }
 
 /**

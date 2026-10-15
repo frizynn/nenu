@@ -257,7 +257,7 @@ describe("herdr-organizations CLI adapter", () => {
     await expect(open({ harness: "claude", effort: "ultra" })).rejects.toThrow("Effort must be one of low, medium, high, xhigh, max for claude.");
     await expect(open({ harness: "claude", effort: 3 })).rejects.toThrow("Effort must be one of");
     await expect(open({ profile: "deep", harness: "codex" })).rejects.toThrow("Choose a profile or a harness, not both.");
-    await expect(open({ profile: "nope" })).rejects.toThrow("nope is not a profile this project's coordinator can run.");
+    await expect(open({ profile: "nope", effort: "high" })).rejects.toThrow("nope is not a profile this project's coordinator can run.");
     await expect(open({ profile: "--yolo" })).rejects.toThrow("Profile must be a profile name");
     expect(calls.filter((call) => call.argv[0] !== "profile")).toEqual([]);
   });

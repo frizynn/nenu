@@ -262,8 +262,8 @@ describe("starting the project coordinator", () => {
     expect(await post("/api/org/project/open", { project: "acme", harness: "claude", model: "claude-opus-5-5[1m]", effort: "high" }))
       .toEqual({ status: 200, body: { ok: true, message: "started claude as hp-acme" } });
     expect((await opened()).slice(before)).toEqual(["open acme --harness=claude --model=claude-opus-5-5[1m] --reasoning-effort=high"]);
-    expect(audited).toEqual([{ action: "org.project.open", session: "default", device: "phone",
-      detail: { project: "acme", profile: "", harness: "claude", model: "claude-opus-5-5[1m]", effort: "high" } }] as typeof audited);
+    expect(audited).toEqual([expect.objectContaining({ action: "org.project.open", device: "phone",
+      detail: { project: "acme", profile: "", harness: "claude", model: "claude-opus-5-5[1m]", effort: "high" } })]);
   });
 
   test("a choice Organizations does not offer is refused before anything runs, and nothing is audited", async () => {

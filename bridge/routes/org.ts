@@ -1,4 +1,4 @@
-import { createProject, listRoutines, mergeThread, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { coordinatorChoices, createProject, listRoutines, mergeThread, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json } from "./http.ts";
@@ -10,6 +10,8 @@ export const orgRoutes: Route[] = [
   orgRead("/api/org/tasks", "Could not read the task list.", async ({ projects }, project) => ({ tasks: await projects.tasks(project) })),
   orgRead("/api/org/status", "Could not read the project's status.", async ({ projects }, project) => ({ status: await projects.status(project) })),
   orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
+  // Read when the window that starts or replaces the coordinator opens, never on a poll.
+  orgRead("/api/org/coordinator-options", "Could not read what the coordinator can run.", ({ orgRun }, project) => coordinatorChoices(orgRun, project)),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
     const started = await startNode(orgRun, rt.socketPath, {
       project: body.project, title: body.title, parent: body.parent, task: body.task, role: body.role, profile: body.profile, template: body.template,
@@ -26,13 +28,13 @@ export const orgRoutes: Route[] = [
   }),
   // The person waits on the redirect to the coordinator's chat, so the projects are re-read first.
   orgWrite("/api/org/project/open", "org.project.open", "Could not start the coordinator.", async ({ orgRun }, body, rt) => {
-    const { message } = await openProject(orgRun, rt.socketPath, { project: body.project });
-    return { response: { message }, detail: { project: body.project } };
+    const { message } = await openProject(orgRun, rt.socketPath, { project: body.project, ...launch(body) });
+    return { response: { message }, detail: { project: body.project, ...launchDetail(body) } };
   }, { settle: true }),
   // The old coordinator's chat ends with its pane, so the reply waits for the re-read that shows the new one.
   orgWrite("/api/org/coordinator/replace", "org.coordinator.replace", "Could not replace the coordinator.", async ({ orgRun }, body, rt) => {
-    const { message } = await replaceCoordinator(orgRun, rt.socketPath, { project: body.project, profile: body.profile });
-    return { response: { message }, detail: { project: body.project, profile: body.profile } };
+    const { message } = await replaceCoordinator(orgRun, rt.socketPath, { project: body.project, ...launch(body) });
+    return { response: { message }, detail: { project: body.project, ...launchDetail(body) } };
   }, { settle: true }),
   orgWrite("/api/org/project/create", "org.project.create", "Could not create the project.", async ({ orgRun }, body) => {
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });
@@ -56,6 +58,17 @@ export const orgRoutes: Route[] = [
     return { response: { created }, detail: { project: body.project, ...created } };
   }),
 ];
+
+/** The coordinator the person chose, by the names the client may send; org-cli.ts checks each one. */
+function launch(body: Record<string, unknown>) {
+  return { profile: body.profile, harness: body.harness, model: body.model, effort: body.effort };
+}
+
+/** That choice for the audit, once it passed the checks: each part a checked string or empty. */
+function launchDetail(body: Record<string, unknown>) {
+  const part = (value: unknown) => typeof value === "string" ? value : "";
+  return { profile: part(body.profile), harness: part(body.harness), model: part(body.model), effort: part(body.effort) };
+}
 
 /**
  * A GET of one project's document for the desk's Project panel. A document this Organizations does
