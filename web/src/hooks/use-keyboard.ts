@@ -80,7 +80,10 @@ export function useFocusInPlace(inputRef: RefObject<HTMLTextAreaElement | null>,
       anchor.tabIndex = -1;
       anchor.focus({ preventScroll: true });
     };
-    const onPointerCancel = () => { touch = null; };
+    const onPointerCancel = () => {
+      touch = null;
+      if (document.activeElement === anchor) anchor.blur();
+    };
     const onBlur = (event: FocusEvent) => {
       if (event.target === anchor) anchor.removeAttribute("tabindex");
       if (event.relatedTarget !== input || !touch) return;
