@@ -132,6 +132,14 @@ describe("the other machines' door", () => {
     expect(write.status).not.toBe(403);
   });
 
+  test("keeps a quiet event stream open past Bun's ten-second idle cut", async () => {
+    const res = await fetch("http://nenu-peer/api/events", { unix: peer() });
+    const reader = res.body!.getReader();
+    const closed = (async () => { for (;;) if ((await reader.read()).done) return true; })().catch(() => true);
+    expect(await Promise.race([closed, Bun.sleep(14_000).then(() => false)])).toBe(false);
+    await reader.cancel();
+  }, 20_000);
+
   test("never forwards to another machine: one hop only", async () => {
     const before = forwarded.length;
     const res = await fetch("http://nenu-peer/api/pane/w1%3Ap1?session=%40build-box", { unix: peer() });
