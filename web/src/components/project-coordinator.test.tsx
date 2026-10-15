@@ -134,6 +134,25 @@ it("starts on a saved profile as it is, sending only what the person changed", a
   await waitFor(() => expect(open.posted).toEqual([{ project: "acme", profile: "deep", effort: "high" }]));
 });
 
+it("offers a saved profile even when its harness is not allowed on its own, and starts it as it is", async () => {
+  const open = holdOpen();
+  // As Organizations prints it for an allow-list of `claude` and `deep`: Codex only through `deep`.
+  server.use(http.get("/api/org/coordinator-options", () => HttpResponse.json({
+    ...CHOICES, last: null, defaultProfile: "claude", harnesses: [CHOICES.harnesses[0]],
+    profiles: [CHOICES.profiles[0], CHOICES.profiles[2]],
+  })));
+  const { user } = setup();
+
+  const window = await openWindow(user);
+  await user.click(await window.findByRole("button", { name: /^deep/ }));
+  expect(window.getByRole("radio", { name: "Claude Code" })).not.toBeChecked();
+  expect(window.getByLabelText("Model")).toHaveValue("gpt-5.5");
+  // Codex's levels are not offered for this project, so the profile keeps its own.
+  expect(window.queryByLabelText("Effort")).not.toBeInTheDocument();
+  await user.click(window.getByRole("button", { name: "Start" }));
+  await waitFor(() => expect(open.posted).toEqual([{ project: "acme", profile: "deep" }]));
+});
+
 it("starts plainly on the project's default when that is what the window shows", async () => {
   const open = holdOpen();
   server.use(http.get("/api/org/coordinator-options", () => HttpResponse.json({ ...CHOICES, last: null })));

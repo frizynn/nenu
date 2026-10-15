@@ -262,6 +262,20 @@ describe("herdr-organizations CLI adapter", () => {
     expect(calls.filter((call) => call.argv[0] !== "profile")).toEqual([]);
   });
 
+  it("leaves the effort of a profile whose harness is not offered on its own to the profile", async () => {
+    const calls: string[][] = [];
+    const run: OrgRun = async (argv) => {
+      calls.push(argv);
+      const coordinator = { ...CHOICES.coordinator, harnesses: [CHOICES.coordinator.harnesses[0]] };
+      return argv[0] === "profile" ? { code: 0, stdout: JSON.stringify({ ...CHOICES, coordinator }), stderr: "" } : { code: 0, stdout: "started codex as hp-acme\n", stderr: "" };
+    };
+
+    await openProject(run, "/s", { project: "acme", profile: "deep", model: "gpt-5.5-mini" });
+    expect(calls.at(-1)).toEqual(["open", "acme", "--profile=deep", "--model=gpt-5.5-mini"]);
+    await expect(openProject(run, "/s", { project: "acme", profile: "deep", effort: "high" }))
+      .rejects.toThrow("Effort can be chosen only for a harness this project's coordinator can run.");
+  });
+
   it("keeps the plain open when nothing was chosen, and says when Organizations cannot choose", async () => {
     const { run, calls } = olderRun();
 
