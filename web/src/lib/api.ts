@@ -728,8 +728,33 @@ export function startOrgNode(
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
+/** A harness, model, effort and the profile they start from, as a coordinator was or will be launched. */
+export interface CoordinatorLaunch { profile: string; harness: string; model: string; reasoningEffort: string }
+
+/**
+ * What a project's coordinator can start on (Organizations' `profile list --project --json`): the
+ * harnesses it may run, each with its effort levels and default model; the allowed profiles; the
+ * project's default; the last launch. `available` is false on an Organizations that predates the
+ * document: it offers profile names only, and takes no harness, model or effort.
+ */
+export interface CoordinatorChoices {
+  available: boolean;
+  defaultProfile: string;
+  last: CoordinatorLaunch | null;
+  harnesses: Array<{ harness: string; profile: string; defaultModel: string; efforts: string[] }>;
+  profiles: Array<{ name: string; harness: string; model: string; reasoningEffort: string; description: string; builtin: boolean }>;
+}
+
+/** What the coordinator starts on: a profile or a harness, then a model and an effort. Unset is the project's default. */
+export interface CoordinatorChoice { profile?: string; harness?: string; model?: string; effort?: string }
+
+/** Read when the window that starts or replaces the coordinator opens; never polled. */
+export function fetchCoordinatorChoices(project: string, session?: string): Promise<{ ok: true } & CoordinatorChoices> {
+  return req(withSession(`/api/org/coordinator-options?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
 /** Start the project's coordinator (Organizations' `open`); it focuses one that already runs. */
-export function openOrgProject(input: { project: string }, session?: string): Promise<{ ok: true; message: string }> {
+export function openOrgProject(input: { project: string } & CoordinatorChoice, session?: string): Promise<{ ok: true; message: string }> {
   return req(withSession("/api/org/project/open", session), {
     method: "POST",
     body: JSON.stringify(input),
@@ -737,7 +762,7 @@ export function openOrgProject(input: { project: string }, session?: string): Pr
 }
 
 /** Stop the project's coordinator and start a new one on `profile` (Organizations' `coordinator replace`). */
-export function replaceOrgCoordinator(input: { project: string; profile: string }, session?: string): Promise<{ ok: true; message: string }> {
+export function replaceOrgCoordinator(input: { project: string } & CoordinatorChoice, session?: string): Promise<{ ok: true; message: string }> {
   return req(withSession("/api/org/coordinator/replace", session), {
     method: "POST",
     body: JSON.stringify(input),
