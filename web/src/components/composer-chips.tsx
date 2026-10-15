@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 
 // The row above the composer (issue: Cursor-style chips): what needs you, what works, the open pull
 // requests and the routines around this chat, one chip each, and the chip's panel over the row. It
-// takes the place of the PR bar and of the Background chip that sat under the box. Every mark is
-// still: a working state is a dot, never a spinner, so an idle page draws nothing.
+// takes the place of the PR bar and of the Background chip that sat under the box, and shares its line
+// with the composer's Stop. Every mark is still: a working state is a dot, never a spinner, so an idle
+// page draws nothing.
 
 export type ChipId = "needs" | "working" | "prs" | "routines";
 
@@ -123,19 +124,23 @@ export function RoutineRows({ routines, now }: { routines: readonly RoutineView[
   );
 }
 
-/**
- * The chips and, over them, the open chip's panel. One panel at a time; the chip toggles it, and ✕
- * or Escape closes it and gives focus back to the chip. On a phone a process's details take the
- * panel's place, named by its header, with Back.
- */
-export function ComposerChips({ chips, open, onOpenChange, detail }: {
+/** The chips a chat hands its composer, which one is open, and on a phone a process's details. */
+export interface ChipLine {
   chips: readonly ChipView[];
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
-}) {
+}
+
+/**
+ * The line above the box: the chips at its start and `trailing` (the composer's Stop) at its end, and
+ * over them the open chip's panel. One panel at a time; the chip toggles it, and ✕ or Escape closes it
+ * and gives focus back to the chip. On a phone a process's details take the panel's place, named by
+ * its header, with Back.
+ */
+export function ComposerChips({ chips, open, onOpenChange, detail, trailing }: ChipLine & { trailing?: ReactNode }) {
   const buttons = useRef(new Map<ChipId, HTMLButtonElement>());
-  if (chips.length === 0) return null;
+  if (chips.length === 0 && !trailing) return null;
   const shown = chips.find((chip) => chip.id === open);
   const close = () => {
     onOpenChange(null);
@@ -155,17 +160,20 @@ export function ComposerChips({ chips, open, onOpenChange, detail }: {
           <div className="composer-chip-panel-body">{detail ? detail.content : shown.content}</div>
         </section>
       )}
-      <div role="group" aria-label="Status" className="composer-chip-row">
-        {chips.map((chip) => (
-          <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
-            type="button" className="composer-chip" aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
-            aria-expanded={chip.id === open} aria-controls={chip.id === open ? "composer-chip-panel" : undefined}
-            onClick={() => onOpenChange(chip.id === open ? null : chip.id)}>
-            {chip.mark}
-            <span>{chip.label}</span>
-            {chip.count > 0 && <span className="composer-chip-count">{chip.count}</span>}
-          </button>
-        ))}
+      <div className="composer-line">
+        {chips.length > 0 && <div role="group" aria-label="Status" className="composer-chip-row">
+          {chips.map((chip) => (
+            <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
+              type="button" className="composer-chip" aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
+              aria-expanded={chip.id === open} aria-controls={chip.id === open ? "composer-chip-panel" : undefined}
+              onClick={() => onOpenChange(chip.id === open ? null : chip.id)}>
+              {chip.mark}
+              <span>{chip.label}</span>
+              {chip.count > 0 && <span className="composer-chip-count">{chip.count}</span>}
+            </button>
+          ))}
+        </div>}
+        {trailing}
       </div>
     </div>
   );

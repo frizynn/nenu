@@ -8,7 +8,7 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { ComposerChips, ComposerPlace, NEEDS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
+import { ComposerPlace, NEEDS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
 import { PrChecks } from "@/components/pr-bar";
 import { PrList, prLists } from "@/components/threads-panel";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
@@ -1372,8 +1372,6 @@ export function AgentChat({
               off the mirror, so this is its one surface. One row until tapped (agents-footer.tsx). */}
           {!showConversation && agentsFooter.length > 0 && <AgentsFooter rows={agentsFooter} />}
 
-          {!subagent && <ComposerChips chips={chips} open={chip} detail={chipDetail}
-            onOpenChange={(next) => { setChip(next); if (!desktop) setProcessDetail(null); }} />}
           <Composer
             ref={composerRef}
             dropZoneRef={dropZoneRef}
@@ -1391,6 +1389,8 @@ export function AgentChat({
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
+            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
+              onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
             prepareSend={showConversation ? panels.prepareSend : undefined}

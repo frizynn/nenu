@@ -51,6 +51,7 @@ import { DiffCommentChips } from "@/components/diff-comment-chips";
 import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
+import { ComposerChips, type ChipLine } from "@/components/composer-chips";
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { MAX_ATTACHMENTS, readyPaths, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
@@ -132,6 +133,8 @@ interface ComposerProps {
   onEscape?: () => void;
   /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
   workingSince?: string;
+  /** The chat's chips, on Stop's line above the box: the chips at its start, Stop at its end. */
+  chips?: ChipLine;
   usageControls?: ReactNode;
   /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
    *  offers the chat's own settings. */
@@ -247,6 +250,8 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
   );
 }
 
+const NO_CHIPS: ChipLine = { chips: [], open: null, onOpenChange: () => {} };
+
 // How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
 const FOLD_OPEN_MS = 220;
 const FOLD_SHUT_MS = 150;
@@ -312,7 +317,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, place, onEscape, workingSince, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1420,14 +1425,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
         )}</Fold>
-        {/* Stop lives on the row above the box for the whole turn, and never in the Send slot: a draft
-            appearing or clearing must not move the target under the thumb. The conversation's live
-            turn already says "Working for …" just above, so only the terminal view repeats it here. */}
-        <Fold value={stop.offered}>{() => (
-          <div role="group" aria-label="Agent working" className="composer-working">
-            {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
-            <StopControl stop={stop} disabled={locked} />
-          </div>
+        {/* Stop lives on the line above the box for the whole turn, and never in the Send slot: a draft
+            appearing or clearing must not move the target under the thumb. The chips share that line,
+            at its start, so it folds open and shut only when both come or go; beside chips, Stop just
+            leaves. The conversation's live turn already says "Working for …" just above, so only the
+            terminal view repeats it here. */}
+        <Fold value={(chips.chips.length > 0 || stop.offered) && { stop: stop.offered }}>{(line) => (
+          <ComposerChips {...chips} trailing={line.stop && (
+            <div role="group" aria-label="Agent working" className="composer-working">
+              {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
+              <StopControl stop={stop} disabled={locked} />
+            </div>
+          )} />
         )}</Fold>
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
