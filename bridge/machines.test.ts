@@ -267,19 +267,63 @@ describe("a machine's link", () => {
 });
 
 describe("the machine list", () => {
+  const links = () => {
+    const made: string[] = [];
+    const stopped: string[] = [];
+    const link = (m: ReturnType<typeof parseMachineList>[number]) => {
+      made.push(m.label);
+      return { start() {}, stop() { stopped.push(m.label); }, view: () => ({ session: machineSession(m.label), label: m.label, state: "connected" as const, herd: { ...HERD, workspaces: [{ ...HERD.workspaces[0]!, label: m.label }] } }) };
+    };
+    return { made, stopped, link };
+  };
+
+  test("off by default: Herdr's list is never read and nothing is dialled", async () => {
+    let listed = 0;
+    const { made, link } = links();
+    const machines = new Machines({ list: async () => { listed++; return parseMachineList(LIST); }, hostLabel: "studio", link, persist: async () => {} });
+    machines.refresh();
+    await machines.reload();
+    expect(machines.views(undefined, null)).toBeUndefined();
+    expect(machines.has("@build-box")).toBe(false);
+    expect([listed, made.length]).toEqual([0, 0]);
+  });
+
+  test("Settings reads Herdr's list when it opens, and dials nothing while the setting is off", async () => {
+    let listed = 0;
+    const { made, link } = links();
+    const machines = new Machines({ list: async () => { listed++; return parseMachineList(LIST); }, hostLabel: "studio", link, persist: async () => {} });
+    expect(await machines.settings()).toEqual({
+      on: false,
+      machines: [
+        { session: "@build-box", label: "build-box", state: "off" },
+        { session: "@studio", label: "studio", state: "disabled", detail: "Disabled in Herdr" },
+      ],
+    });
+    expect([listed, made.length]).toEqual([1, 0]);
+  });
+
+  test("turning it on saves the choice and dials Herdr's machines; off stops them and the lists go", async () => {
+    const saved: boolean[] = [];
+    const { made, stopped, link } = links();
+    const machines = new Machines({ list: async () => parseMachineList(LIST), hostLabel: "studio", link, persist: async (on) => { saved.push(on); } });
+    await machines.setOn(true);
+    expect(made).toEqual(["build-box", "studio"]);
+    expect(machines.views(undefined, null)?.map((v) => v.label)).toEqual(["studio", "build-box", "studio"]);
+    await machines.setOn(false);
+    expect(stopped).toEqual(["build-box", "studio"]);
+    expect(machines.views(undefined, null)).toBeUndefined();
+    expect(saved).toEqual([true, false]);
+  });
+
   test("no saved machines: no list at all, so one machine looks as it always did", async () => {
-    const machines = new Machines({ list: async () => [], hostLabel: "studio", link: () => { throw new Error("no link"); } });
+    const machines = new Machines({ list: async () => [], hostLabel: "studio", link: () => { throw new Error("no link"); }, on: true, persist: async () => {} });
     await machines.reload();
     expect(machines.views(undefined, null)).toBeUndefined();
   });
 
   test("this machine first; the one the snapshot is about carries no herd", async () => {
     const herd = (label: string) => ({ ...HERD, workspaces: [{ ...HERD.workspaces[0]!, label }] });
-    const machines = new Machines({
-      list: async () => parseMachineList(LIST),
-      hostLabel: "studio",
-      link: (m) => ({ start() {}, stop() {}, view: () => ({ session: machineSession(m.label), label: m.label, state: "connected" as const, herd: herd(m.label) }) }),
-    });
+    const machines = new Machines({ list: async () => parseMachineList(LIST), hostLabel: "studio", link: links().link, on: true, persist: async () => {} });
     await machines.reload();
     const local = herd("here");
     expect(machines.views(undefined, local)!.map((v) => [v.label, v.session, v.herd?.workspaces[0]?.label])).toEqual([

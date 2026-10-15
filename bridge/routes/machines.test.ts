@@ -18,6 +18,7 @@ let url = "";
 let stateDir = "";
 let dispose = async () => {};
 const forwarded: Array<{ session: string; path: string; method: string }> = [];
+const switched: boolean[] = [];
 
 const BUILD_BOX: MachineView = { session: "@build-box", label: "build-box", state: "connected", herd: { bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [] } };
 
@@ -29,6 +30,8 @@ const machines: MachineDirectory = {
     return Response.json({ forwarded: true });
   },
   async snapshot() { return null; },
+  async settings() { return { on: switched.at(-1) ?? false, machines: [{ session: "@build-box", label: "build-box", state: "off" }] }; },
+  async setOn(on) { switched.push(on); },
   refresh() {},
   stop() {},
 };
@@ -115,6 +118,24 @@ describe("a request for another machine", () => {
   test("this machine's snapshot lists every machine, and the others' herds", async () => {
     const snap = await (await fetch(`${url}/api/snapshot`, { headers: ME })).json() as { machines?: MachineView[] };
     expect(snap.machines?.map((m) => [m.label, m.session, m.herd !== undefined])).toEqual([["studio", undefined, false], ["build-box", "@build-box", true]]);
+  });
+});
+
+describe("the setting", () => {
+  test("any device reads it, with Herdr's machines", async () => {
+    const res = await fetch(`${url}/api/machines`, { headers: { ...ME, "x-device": "tablet" } });
+    expect(await res.json()).toEqual({ on: false, machines: [{ session: "@build-box", label: "build-box", state: "off" }] });
+  });
+
+  test("turning it on opens SSH connections, so a read-only device cannot", async () => {
+    const refused = await fetch(`${url}/api/machines`, { method: "POST", headers: { ...ME, origin: url, "x-device": "tablet" }, body: JSON.stringify({ on: true }) });
+    expect(refused.status).toBe(403);
+    expect(switched).toEqual([]);
+    const res = await fetch(`${url}/api/machines`, { method: "POST", headers: { ...ME, origin: url, "x-device": "phone" }, body: JSON.stringify({ on: true }) });
+    expect((await res.json() as { on: boolean }).on).toBe(true);
+    expect(switched).toEqual([true]);
+    const bad = await fetch(`${url}/api/machines`, { method: "POST", headers: { ...ME, origin: url, "x-device": "phone" }, body: JSON.stringify({ on: "yes" }) });
+    expect(bad.status).toBe(400);
   });
 });
 
