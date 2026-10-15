@@ -5,6 +5,7 @@ import { AgentChat } from "@/components/agent-chat";
 import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
+import { currentMachine } from "@/lib/machines";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { displayName } from "@/lib/display-name";
@@ -84,6 +85,7 @@ export function DetailRoute() {
       {...slots}
       paneId={paneId}
       session={session}
+      machine={currentMachine(root)?.label}
       agent={agent}
       closed={last?.pane}
       next={next}

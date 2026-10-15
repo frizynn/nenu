@@ -184,12 +184,12 @@ export function machineName(hostname = window.location.hostname): string {
   return /^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local";
 }
 
-/** Under the box: the branch the chat works on, when known, and the machine it runs on. */
-export function ComposerPlace({ branch }: { branch?: string }) {
+/** Under the box: the branch the chat works on, when known, and the machine it runs on (Herdr's name for it, with more than one). */
+export function ComposerPlace({ branch, machine }: { branch?: string; machine?: string }) {
   return (
     <span className="composer-place">
       {branch && <span className="composer-place-item" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>}
-      <span className="composer-place-item"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{machineName()}</span></span>
+      <span className="composer-place-item"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{machine ?? machineName()}</span></span>
     </span>
   );
 }

@@ -418,7 +418,30 @@ export interface SnapshotResponse {
   sessions?: SessionSummary[];
   /** Version / upgrade status. Absent on an older bridge that doesn't report it. */
   update?: UpdateInfo;
+  /** Herdr's saved machines, this one first (bridge/types.ts MachineView); absent with only one. */
+  machines?: MachineView[];
   ts: number;
+}
+
+/** Mirrors MachineState in bridge/types.ts. */
+export type MachineState = "connected" | "connecting" | "offline" | "old-nenu" | "no-nenu" | "disabled";
+
+/** Mirrors MachineHerd in bridge/types.ts. */
+export interface MachineHerd {
+  bridge: BridgeStatus;
+  agents: AgentView[];
+  shellPanes: AgentView[];
+  workspaces: WorkspaceView[];
+  tabs: TabView[];
+}
+
+/** Mirrors MachineView in bridge/types.ts: `session` is absent for the bridge's own machine. */
+export interface MachineView {
+  session?: string;
+  label: string;
+  state: MachineState;
+  detail?: string;
+  herd?: MachineHerd;
 }
 
 export interface PaneReadResponse {

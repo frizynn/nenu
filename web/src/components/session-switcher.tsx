@@ -6,6 +6,7 @@ import { Layers } from "@/components/ui/icon";
 import { RowBody } from "@/components/nav-rows";
 import { StatusDot } from "@/components/status-badge";
 import { BottomSheet } from "@/components/ui/sheet";
+import { isMachineSession } from "@/lib/machines";
 import { homePath } from "@/lib/nav";
 import { TITLE_SEP } from "@/lib/pane-name";
 import type { AgentStatus, SessionSummary } from "@/lib/types";
@@ -26,6 +27,8 @@ export function SessionSwitcher({ sessions, current }: SessionSwitcherProps) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
+  // Another machine is a session to the browser, not one of this Herdr's: the machine lists name it.
+  if (isMachineSession(current)) return null;
   const reachableCount = sessions.filter((s) => s.reachable).length;
   const onNonPrimary = current !== undefined;
   if (reachableCount <= 1 && !onNonPrimary) return null;

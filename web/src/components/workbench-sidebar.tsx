@@ -12,11 +12,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/status-badge";
 import { Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
+import { MachinesSlot } from "@/components/machines-slot";
 import { cn } from "@/lib/utils";
 import { isAttention } from "@/lib/triage";
 import { workspaceTree } from "@/lib/workspace-tree";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
+import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { needsYouCount, needYou } from "@/lib/home-stats";
@@ -70,7 +72,8 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   const { pathname, key } = useLocation();
   const attention = needsYouCount(data);
   const phone = variant !== "sidebar";
-  const results = searching ? navSearch(data, query, { order: answered?.query === query ? answered.order : undefined }) : [];
+  const order = answered?.query === query ? answered.order : undefined;
+  const results: Array<SearchGroup | MachineSearchGroup> = searching ? [...navSearch(data, query, { order }), ...machineSearch(data, query, { order })] : [];
   const hits = results.flatMap((group) => group.hits);
   // A query's first answer fixes its order; the list only reorders when the query changes.
   if (searching && answered?.query !== query) setAnswered({ query, order: new Map(hits.map((hit, index) => [hit.key, index])) });
@@ -122,7 +125,8 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
     const hit = hits[selected];
     if (!hit) return;
     picking.current = true;
-    navigate(hitPath(hit, data, data.session));
+    const group = results.find((g) => g.hits.includes(hit));
+    navigate(group && "machine" in group ? hitPath(hit, group.machine.herd!, group.machine.session) : hitPath(hit, data, data.session));
   }
 
   function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
@@ -176,11 +180,15 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             ? <>
               {variant === "drawer" && <DrawerSections data={data} />}
               <SidebarTree data={data} folded onNewChat={onNewChat} />
+              <MachinesSlot data={data} place="nav" />
             </>
-            : searching ? <div className="nav-enter"><SidebarTree data={data} /></div>
-            : (data.projects?.length || data.agents.length)
-              ? <DeskLists data={data} onNewProject={onNewChat && (() => openNewDialog({ kind: "project" }))} />
-              : <Empty phone={false} />}
+            : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
+            : <>
+              {(data.projects?.length || data.agents.length)
+                ? <DeskLists data={data} onNewProject={onNewChat && (() => openNewDialog({ kind: "project" }))} />
+                : <Empty phone={false} />}
+              <MachinesSlot data={data} place="nav" />
+            </>}
       </div>
 
       {/* The host belongs to browsing: on a phone's Search sheet, until something is typed. */}
@@ -204,7 +212,7 @@ function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
 
 /** The search's matches as one list (Projects, Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
 function SearchResults({ groups, query, listId, selected, herd, session, onPick, onOpen }: {
-  groups: SearchGroup[];
+  groups: Array<SearchGroup | MachineSearchGroup>;
   query: string;
   listId: string;
   selected: number;
@@ -221,13 +229,15 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick,
   return (
     <div role="listbox" id={listId} aria-label="Search results">
       {groups.map((group) => (
-        <div key={group.label} role="group" aria-label={group.label} className="nav-group">
+        <div key={"machine" in group ? `${group.label}@${group.machine.label}` : group.label} role="group"
+          aria-label={"machine" in group ? `${group.label} on ${group.machine.label}` : group.label} className="nav-group">
           <div className="nav-label" aria-hidden>
-            {group.label}{group.more > 0 && <span className="nav-label-end">{group.hits.length} of {group.hits.length + group.more}</span>}
+            {group.label}{"machine" in group && <> · {group.machine.label}</>}
+            {group.more > 0 && <span className="nav-label-end">{group.hits.length} of {group.hits.length + group.more}</span>}
           </div>
           {group.hits.map((hit) => {
             const at = index++;
-            const to = hitPath(hit, herd, session);
+            const to = "machine" in group ? hitPath(hit, group.machine.herd!, group.machine.session) : hitPath(hit, herd, session);
             return (
               <Link key={hit.key} id={optionId(listId, at)} role="option" aria-selected={at === selected} className="nav-pane nav-result"
                 to={to} onClick={onOpen} onMouseMove={() => { if (at !== selected) onPick(hit.key); }}>
@@ -280,7 +290,7 @@ function DrawerSections({ data }: { data: HomeData }) {
 }
 
 /** A chat: its state, its one name, where it lives and how long ago it last moved. */
-function ChatRow({ pane, projects, current, now, session }: {
+export function ChatRow({ pane, projects, current, now, session }: {
   pane: AgentView;
   projects?: readonly ProjectView[];
   current: boolean;
@@ -372,7 +382,8 @@ function useRevealProject(currentProject: string | undefined, setExpanded: (slug
 function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
   const { hostname } = window.location;
-  const host = /^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local";
+  // With more than one machine, the one on screen by Herdr's name for it; else as the browser names it.
+  const host = currentMachine(data)?.label ?? (/^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local");
   const agents = data.agents.length;
   const meta = !connected ? "Not connected"
     : !desk && `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}`;

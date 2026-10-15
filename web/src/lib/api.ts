@@ -820,8 +820,8 @@ export function startAgent(paneId: string, agent: "codex" | "claude", session?: 
 
 /** Folder names under the bridge host's home directory, for the new-chat picker. */
 export interface HomeDirs { path: string; home: string; entries: string[]; truncated: boolean }
-export function fetchHomeDirs(path: string, hidden: boolean, signal?: AbortSignal): Promise<HomeDirs> {
-  return doReq(`/api/dirs?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`, { signal });
+export function fetchHomeDirs(path: string, hidden: boolean, signal?: AbortSignal, session?: string): Promise<HomeDirs> {
+  return doReq(withSession(`/api/dirs?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`, session), { signal });
 }
 
 /** Create a new space (workspace) with a fresh shell pane. `cwd` omitted = the host's home dir. */
