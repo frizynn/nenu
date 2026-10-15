@@ -188,7 +188,7 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
 /**
  * A Herdr workspace as one row: its name, how it is and how many sessions it holds. A tap opens it in
  * place on its sessions, each the row Recents draws; its tabs are what tells those rows apart, never
- * rows of their own. A workspace of one tab has nothing to unfold: the tap opens its `entry` pane.
+ * rows of their own. A workspace of one tab or one session has nothing to unfold: the tap opens its `entry` pane.
  */
 function WorkspaceRow({ group, now, open, onToggle, session, opening, children }: {
   group: WorkspaceChats;
