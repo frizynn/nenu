@@ -314,7 +314,8 @@ try {
 } finally {
   await writeFile(join(outDir, `${values.label}.json`), JSON.stringify({ harness, orgBin, results }, null, 2));
   await bridge.stop();
-  // `open` starts Organizations' ticker over the bench's registry; it outlives the bridge.
-  Bun.spawnSync(["pkill", "-f", join(bridge.dir, "projects")]);
+  // What the run started outlives the bridge: Organizations' ticker over the bench's registry, and
+  // Codex's app-server daemon under the bench's HOME. Both name the bench's folder.
+  Bun.spawnSync(["pkill", "-f", bridge.dir]);
 }
 console.log(`[e2e] ${outDir}`);
