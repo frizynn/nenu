@@ -42,6 +42,16 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
 | `pane.send_text` | `{pane_id, text}` | (ack) |
 | `pane.send_keys` | `{pane_id, keys}` | (ack) |
 | `agent.send` | `{target, text}` | (ack) — writes **literal** text, no Enter |
+| `pane.process_info` | `{pane_id}` | `process_info` → `{pane_id, shell_pid, foreground_process_group_id, foreground_processes[{pid, name, argv0, argv, cmdline, cwd}]}` |
+| `agent.start` | `{pane_id, kind, name, timeout_ms, args}` | (ack) once the agent is detected ready; `agent_pane_busy` unless the shell is at its prompt, `timeout` ("timed out waiting for agent startup") when it never comes up |
+
+- **A shell is at its prompt exactly when `foreground_process_group_id == shell_pid`** (live-probed
+  2026-10-15 on 0.9.3, disposable server): at the prompt both were the zsh's pid and the foreground
+  list held only `zsh`; with `sleep` running the group was `sleep`'s and `agent.start` answered
+  `agent_pane_busy` ("agent target pane … is not an available shell"); after Ctrl-C the two matched
+  again. The pane read carries this for shell panes as `atPrompt` (`bridge/routes/pane.ts`), and the
+  start block hides while it is false. A command that prints nothing after Enter can leave the mirror's
+  read answering `true` until the next poll (measured 11 s), and a Start tapped then gets the refusal.
 
 - `pane.read` `source` ∈ `visible | recent | recent_unwrapped | detection` — **snake_case on the
   wire**: `recent-unwrapped` gets `invalid_request: unknown variant` (live-probed 2026-08-03,
