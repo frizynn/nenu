@@ -4,6 +4,7 @@ import type { HerdrClient, PaneRead } from "../herdr-client.ts";
 import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http-cache.ts";
 import { discoverPaneModels } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
+import { object as record } from "../subagent-files.ts";
 import type { PaneReadResponse } from "../types.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { buildId, json, jsonError, secure, text, withBuildHeader } from "./http.ts";
@@ -26,7 +27,10 @@ export const panePaneActions: Record<string, PaneAction> = {
         const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
         return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : undefined;
       };
-      return readPane(rt.herdr, cfg, paneId, url, req, native, rt.name);
+      // A shell's start block waits for its prompt: `agent.start` launches nowhere else.
+      const shell = rt.engine.current().shellPanes.some(entry => entry.paneId === paneId);
+      const prompt = async () => shell ? rt.herdr.processInfo(paneId).then(atShellPrompt, () => undefined) : undefined;
+      return readPane(rt.herdr, cfg, paneId, url, req, native, prompt, rt.name);
     },
   },
   start: {
@@ -133,6 +137,7 @@ async function readPane(
   url: URL,
   req: Request,
   native: () => Promise<PaneReadResponse["nativeTelemetry"]>,
+  prompt: () => Promise<boolean | undefined>,
   session: string,
 ): Promise<Response> {
   const linesParam = Number.parseInt(url.searchParams.get("lines") ?? "", 10);
@@ -148,8 +153,8 @@ async function readPane(
       // an alt-screen pane — scrolling it up and back — in `text` format. `lines` here is whatever the
       // web app asked for (600 for the history view), well past any pane's height, so switching this
       // to "text" would move someone's screen on every revalidate. See HERDR_API.md → `pane.read`.
-      const [read, nativeTelemetry] = await Promise.all([herdr.readPane(paneId, "recent", lines, "ansi"), native()]);
-      const data = paneReadResponse(paneId, read);
+      const [read, nativeTelemetry, atPrompt] = await Promise.all([herdr.readPane(paneId, "recent", lines, "ansi"), native(), prompt()]);
+      const data = paneReadResponse(paneId, read, atPrompt);
       if (nativeTelemetry) data.nativeTelemetry = nativeTelemetry;
       return new JsonBody(data);
     });
@@ -174,6 +179,17 @@ async function readPane(
  * (the client's prompt-select race guard depends on it) is covered by the bridge unit tests without
  * standing up Bun.serve / the socket client.
  */
-export function paneReadResponse(paneId: string, read: PaneRead): PaneReadResponse {
-  return { paneId, text: read.text, truncated: read.truncated, revision: read.revision };
+export function paneReadResponse(paneId: string, read: PaneRead, atPrompt?: boolean): PaneReadResponse {
+  return { paneId, text: read.text, truncated: read.truncated, revision: read.revision, ...(atPrompt === undefined ? {} : { atPrompt }) };
+}
+
+/**
+ * Whether a shell waits at its prompt, from Herdr's `pane.process_info`: the shell's own process group
+ * holds the terminal only then (measured on Herdr 0.9.3; a running command's group takes it). Undefined
+ * when Herdr names neither, so an older server leaves the start block as it was.
+ */
+export function atShellPrompt(info: unknown): boolean | undefined {
+  const { shell_pid: shell, foreground_process_group_id: group } = record(info);
+  const pid = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  return pid(shell) && pid(group) ? shell === group : undefined;
 }

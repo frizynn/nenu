@@ -95,6 +95,7 @@ export function DetailRoute() {
       text={pane.text}
       pending={pane.pending}
       nativeTelemetry={pane.nativeTelemetry}
+      atPrompt={pane.atPrompt}
       requestedLines={pane.requestedLines}
       revision={pane.revision}
       device={root.device}

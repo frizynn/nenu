@@ -27,7 +27,7 @@ async function readDocked(paneId: string, session: string | undefined, previous:
   try {
     const read = await fetchPane(paneId, lines, session);
     return { paneId, session, text: read.text, truncated: read.truncated, requestedLines: lines, revision: read.revision,
-      nativeTelemetry: read.nativeTelemetry, error: false, authError: false };
+      atPrompt: read.atPrompt, nativeTelemetry: read.nativeTelemetry, error: false, authError: false };
   } catch {
     return { ...(previous ?? { paneId, session, text: "", truncated: false, requestedLines: lines, revision: 0, authError: false }), error: true };
   }
@@ -191,6 +191,7 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
         title={thread.title}
         text={pane?.text ?? ""}
         nativeTelemetry={pane?.nativeTelemetry}
+        atPrompt={pane?.atPrompt}
         requestedLines={pane?.requestedLines}
         revision={pane?.revision}
         device={data.device}
