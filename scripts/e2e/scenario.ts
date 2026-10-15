@@ -256,7 +256,12 @@ export function tickWorkingTurn(file: string, parent: string, now: () => number,
  */
 export interface OrgSeed {
   profiles: string[];
+  /** The operator's own profiles beside the built-ins (fake-org.ts). */
+  savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   projects: Array<{
+    /** What fake-org.ts's `open` does: fail with `open_error`, or record `open_pane` as the coordinator's pane. */
+    open_error?: string;
+    open_pane?: { pane_id: string; workspace_id: string; tab_id: string };
     slug: string; name: string; goal: string; status: "active" | "paused";
     /** The glyph and colour picked with `set <slug> icon|tone`, empty when none was picked. */
     icon?: string; tone?: string;

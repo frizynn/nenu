@@ -191,6 +191,7 @@ async function project(): Promise<void> {
           await page.waitForTimeout(500);
           await shoot(page, "project-created-desktop");
           await page.getByRole("button", { name: "Start coordinator" }).click();
+          await page.getByRole("dialog", { name: "Start the coordinator" }).getByRole("button", { name: "Start" }).click({ timeout: 5000 });
           await calledWith("open");
         } else {
           await page.getByRole("button", { name: "New thread" }).click({ timeout: 5000 });
@@ -288,10 +289,10 @@ async function org(): Promise<void> {
         await calledWith("node", "resolve", "acme", "t-0108", "--close-view");
         await panel.getByRole("button", { name: "Replace coordinator" }).click({ timeout: 5000 });
         const dialog = page.getByRole("dialog", { name: "Replace the coordinator?" });
-        await dialog.getByLabel("New one runs on").selectOption("claude");
+        await dialog.getByRole("radio", { name: "Claude Code" }).click({ timeout: 5000 });
         await shoot(page, "replace-desktop");
         await dialog.getByRole("button", { name: "Replace" }).click();
-        await calledWith("coordinator", "replace", "acme", "--profile=claude");
+        await calledWith("coordinator", "replace", "acme", "--harness=claude");
         await page.waitForTimeout(500);
         await shoot(page, "after-actions-desktop");
       } catch (error) {

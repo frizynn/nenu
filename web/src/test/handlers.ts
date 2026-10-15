@@ -173,6 +173,15 @@ export const handlers = [
   }),
   http.get("/api/interactions", () => HttpResponse.json({ interactions: [] })),
   http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: true })),
+  // What a project's coordinator can start on: Claude Code and Codex, the project's default Codex.
+  http.get("/api/org/coordinator-options", () => HttpResponse.json({
+    ok: true, available: true, defaultProfile: "codex", last: null,
+    harnesses: [
+      { harness: "claude", profile: "claude", defaultModel: "", efforts: ["low", "medium", "high", "xhigh", "max"] },
+      { harness: "codex", profile: "codex", defaultModel: "", efforts: ["low", "medium", "high", "xhigh"] },
+    ],
+    profiles: ["claude", "codex"].map((name) => ({ name, harness: name, model: "", reasoningEffort: "", description: "", builtin: true })),
+  })),
   http.post("/api/org/project/create", async ({ request }) => {
     const body = await request.json() as { name: string };
     return HttpResponse.json({ ok: true, project: { slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: body.name } });

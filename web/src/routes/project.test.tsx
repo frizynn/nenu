@@ -298,7 +298,11 @@ it("opens the coordinator's chat once Start has brought it up", async () => {
     ],
   }], { initialEntries: ["/project/hub"] });
   render(<RouterProvider router={router} />);
-  await userEvent.setup().click(await screen.findByRole("button", { name: "Start coordinator" }));
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Start coordinator" }));
+  const window = within(await screen.findByRole("dialog", { name: "Start the coordinator" }));
+  await window.findByRole("radio", { name: "Codex" });
+  await user.click(window.getByRole("button", { name: "Start" }));
   await waitFor(() => expect(router.state.location.pathname).toBe("/pane/coord"));
 });
 
