@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { messageMatchKey } from "./message-images";
+import { holdReload, releaseReload } from "./reload-guard";
 import type { DeliveryMode, NativeQueueState, QueueWaitReason, TranscriptEntry } from "./types";
 
 // What this client has sent but the agent's journal does not show yet.
@@ -72,7 +73,17 @@ function emit() {
 function write(scope: string, next: LocalSend[]) {
   if (next.length) sends.set(scope, next);
   else sends.delete(scope);
+  holdWhileUnsent();
   emit();
+}
+
+// A message on its way, or one that failed with its text only on its bubble, is unsent work: the
+// conversation view clears the composer as it sends, so this is the only place that text lives.
+function holdWhileUnsent() {
+  const unsent = [...sends.values()].some((list) =>
+    list.some((send) => send.state === "sending" || (send.state === "failed" && !send.textDelivered)));
+  if (unsent) holdReload("local-sends");
+  else releaseReload("local-sends");
 }
 
 export function listLocalSends(scope: string): LocalSend[] {
@@ -165,6 +176,7 @@ export function resetLocalSends() {
   expiry.clear();
   sends.clear();
   actions.clear();
+  holdWhileUnsent();
   emit();
 }
 

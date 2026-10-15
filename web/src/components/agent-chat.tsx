@@ -225,7 +225,7 @@ export function AgentChat({
   onBack,
   onSelect,
 }: AgentChatProps) {
-  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true);
+  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true, "view");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive

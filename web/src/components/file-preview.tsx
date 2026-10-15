@@ -57,7 +57,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   path?: string;
   onClose: () => void;
 }) {
-  useHoldReload("document-preview", true);
+  useHoldReload("document-preview", true, "view");
   const list: readonly PreviewItem[] = items ?? (path ? [{ kind: "file", path }] : []);
   const [index, setIndex] = useState(start);
   const at = Math.min(index, list.length - 1);
