@@ -397,7 +397,7 @@ const LIST_TTL_MS = 60_000;
 
 // Headers a forwarded request keeps. Identity, cookies and proxy headers stay here: the other side
 // trusts the socket, not what a header says.
-const FORWARD_REQUEST_HEADERS = ["accept", "accept-encoding", "content-type", "if-none-match", "last-event-id", "x-collie-seen"];
+const FORWARD_REQUEST_HEADERS = ["accept", "accept-encoding", "content-type", "if-none-match", "last-event-id", "range", "x-collie-seen"];
 const DROP_RESPONSE_HEADERS = new Set(["connection", "keep-alive", "transfer-encoding", "x-collie-build"]);
 
 export class Machines implements MachineDirectory {
