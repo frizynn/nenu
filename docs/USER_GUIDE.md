@@ -471,6 +471,49 @@ harness that wants `approve` the word it wants. `scope = "shell"` reaches a plai
 otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, open **⋯ → Quick replies**, your
 groups are there. Rejected row? `journalctl --user -u nenu -n 20` names it and why.
 
+### Several machines
+
+Nenu can show the chats of every machine your Herdr has saved, under one URL: their chats in Home, the
+sidebar and Search, New chat on any of them, and each chat read, sent to, stopped and started as one on
+this machine is. It is off until you turn it on.
+
+1. **Run Nenu on every machine**, this version or later. Each machine's Nenu reads its own agents' logs,
+   files and git; the one you open reaches the others through them.
+2. **Save the other machines in Herdr**, on the machine whose Nenu you open:
+   `herdr machine add <ssh-target>` (for example `user@build-box`). `herdr machine list` shows them.
+   Nenu keeps no list of its own.
+3. **Make SSH work with no prompt** from that machine, as the Nenu service runs it: no terminal, and
+   usually no SSH agent. It uses your `~/.ssh/config` and default keys, so either a key without a
+   passphrase or Tailscale SSH works. An agent works only if its `SSH_AUTH_SOCK` is in Nenu's `.env`.
+   The other machine's host key must already be trusted: connect once by hand (`ssh <ssh-target> true`).
+4. **Check the network goes that way.** SSH has to reach each other machine from the one whose Nenu you
+   open. A tailnet policy can let your own devices reach a server and still keep a tagged server away
+   from a personal machine.
+5. **Turn it on:** Settings → Machines → **Show other machines**. It applies to every device. On, this
+   Nenu keeps one SSH connection to each machine Herdr saved; off, it opens none and reads Herdr's list
+   only while Settings is on screen.
+
+Each machine's state, in Settings and in the lists:
+
+| State | Meaning | What to do |
+|---|---|---|
+| Connected | Its chats are listed and usable. | |
+| Connecting… | SSH or its Nenu is being reached. | Wait a few seconds. |
+| Not connected | SSH did not get there (ssh's own reason is shown), or Nenu there is not running. Nenu retries after 5 s, 15 s, 1 min, then every 5 min. | Check step 3 and 4, or start Nenu there. |
+| Update Nenu there | That machine runs a Nenu older than this feature. | Update Nenu on that machine. |
+| No Nenu there | SSH got there and found no Nenu. | Install Nenu there (step 1). |
+| Disabled in Herdr | `herdr machine disable` was run for it. | `herdr machine enable <label>`. |
+| Off | Show other machines is off. | Turn it on (step 5). |
+
+- **Security.** A machine's Nenu answers other machines on a socket in its state dir that only its own
+  user can open, whether or not its own setting is on. That adds no way in that SSH as that user did
+  not already give, and a read-only device here stays read-only on every machine
+  ([ADR 0084](../.adr/0084-machines-are-herdrs-reached-through-their-own-nenu.md)).
+- If a machine's Nenu keeps its state somewhere else (`COLLIE_STATE_DIR`), export the same variable in
+  that machine's shell profile, so the SSH probe finds it.
+- `COLLIE_MACHINE_LABEL` names this machine in the lists (default: its host name).
+- Herdr Organizations projects stay on the machine that runs them.
+
 ### Multi-session
 
 `COLLIE_MULTI_SESSION=on` (the default) discovers and serves every named Herdr session under your
@@ -902,4 +945,4 @@ Herdr's plugin system itself is upstream's to document:
 - Ops, versioning & conventions — [`CLAUDE.md`](../CLAUDE.md)
 - Changes — [`CHANGELOG.md`](../CHANGELOG.md)
 
-In the works: more than one machine under a single URL — one Nenu leads, the others join it.
+Several machines under one URL: see [Several machines](#several-machines).

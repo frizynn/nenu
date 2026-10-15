@@ -15,6 +15,7 @@ import type {
   DeliveryMode,
   Interaction,
   InterruptResponse,
+  MachineView,
   NativeQueueState,
   NodeRole,
   NotifyPrefs,
@@ -190,7 +191,8 @@ export function grantFileOpen(paneId: string, path: string, session?: string): P
     } catch {
       return null;
     }
-  });
+  // The link is the minting Nenu's: on another machine it has to go back there.
+  }).then((answer) => ("url" in answer && session ? { ...answer, url: withSession(answer.url, session) } : answer));
 }
 
 export async function fetchPaneFile(paneId: string, path: string, session: string | undefined, signal: AbortSignal): Promise<Response> {
@@ -820,8 +822,8 @@ export function startAgent(paneId: string, agent: "codex" | "claude", session?: 
 
 /** Folder names under the bridge host's home directory, for the new-chat picker. */
 export interface HomeDirs { path: string; home: string; entries: string[]; truncated: boolean }
-export function fetchHomeDirs(path: string, hidden: boolean, signal?: AbortSignal): Promise<HomeDirs> {
-  return doReq(`/api/dirs?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`, { signal });
+export function fetchHomeDirs(path: string, hidden: boolean, signal?: AbortSignal, session?: string): Promise<HomeDirs> {
+  return doReq(withSession(`/api/dirs?path=${encodeURIComponent(path)}${hidden ? "&hidden=1" : ""}`, session), { signal });
 }
 
 /** Create a new space (workspace) with a fresh shell pane. `cwd` omitted = the host's home dir. */
@@ -848,6 +850,21 @@ export function setSnooze(snoozedUntil: number | null): Promise<{ snoozedUntil: 
     method: "POST",
     body: JSON.stringify({ snoozedUntil }),
   });
+}
+
+/** Settings → other machines: whether this Nenu shows them, and Herdr's saved machines with their state. */
+export interface MachineSettings {
+  on: boolean;
+  machines: MachineView[];
+}
+
+export function getMachineSettings(): Promise<MachineSettings> {
+  return req<MachineSettings>("/api/machines");
+}
+
+/** Bridge-wide: on, the bridge dials every machine Herdr saved; off, it dials none. */
+export function setMachinesOn(on: boolean): Promise<MachineSettings> {
+  return req<MachineSettings>("/api/machines", { method: "POST", body: JSON.stringify({ on }) });
 }
 
 /** Fetch the bridge-wide notification-type preferences (which agent statuses push). */

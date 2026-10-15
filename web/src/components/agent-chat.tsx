@@ -121,6 +121,8 @@ interface AgentChatProps {
   paneId: string;
   /** The session this pane lives in (undefined = primary) — scopes every read/write + the safety chip. */
   session?: string;
+  /** Herdr's name for the machine this pane runs on, when there is more than one. */
+  machine?: string;
   agent: AgentView | undefined;
   /** Once the pane is gone: the pane as it was last listed (it closed under this page), and the one
    *  beside it, which the closed view opens. */
@@ -199,6 +201,7 @@ export interface DockedChat {
 export function AgentChat({
   paneId,
   session,
+  machine,
   agent,
   closed,
   next,
@@ -1391,7 +1394,7 @@ export function AgentChat({
             disconnected={unavailable}
             lockReason={lock}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
-            place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} />}
+            place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
             chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,

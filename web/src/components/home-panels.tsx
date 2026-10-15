@@ -120,7 +120,7 @@ function stateOf(chat: RecentChat): { word: string; tone?: string } {
  * it then leaves out; under its tab's row (`inTab`) it leaves the tab out too, and a phone takes that
  * row's deeper indent back from its gaps, so the title keeps the width it has one level up.
  */
-function SessionRow({ chat, session, now, opening, group, inTab = false }: { chat: RecentChat; session?: string; now: number; opening: string | null; group?: string; inTab?: boolean }) {
+export function SessionRow({ chat, session, now, opening, group, inTab = false }: { chat: RecentChat; session?: string; now: number; opening: string | null; group?: string; inTab?: boolean }) {
   const { agent, title, diff, at, unseen } = chat;
   const place = chat.place === group ? null : chat.place;
   const detail = inTab && chat.detail === chat.tab ? null : chat.detail;

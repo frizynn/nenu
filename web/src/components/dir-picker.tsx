@@ -13,6 +13,8 @@ interface DirPickerProps {
   shortcuts: string[];
   onHome: (home: string) => void;
   onPick: (path: string) => void;
+  /** The machine whose folders these are (lib/machines.ts); undefined = this one. */
+  session?: string;
 }
 
 type Listing = { state: "loading" } | { state: "ready"; dirs: HomeDirs } | { state: "error" };
@@ -23,7 +25,7 @@ const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left t
  * Browse folders under home: tap to go in, type to filter or to give any path, "Use" to choose. The
  * host's header titles this step and steps back out of it.
  */
-export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
+export function DirPicker({ home, shortcuts, onHome, onPick, session }: DirPickerProps) {
   const [query, setQuery] = useState("~/");
   const [listing, setListing] = useState<Listing>({ state: "loading" });
   const input = useRef<HTMLInputElement>(null);
@@ -33,7 +35,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick }: DirPickerProps) {
   useEffect(() => {
     const abort = new AbortController();
     setListing({ state: "loading" });
-    fetchHomeDirs(dir || "~", hidden, abort.signal).then(
+    fetchHomeDirs(dir || "~", hidden, abort.signal, session).then(
       (dirs) => {
         setListing({ state: "ready", dirs });
         onHome(dirs.home);

@@ -282,9 +282,23 @@ interface AgentPaneProps {
 
 function AgentPane({ target, data, readOnly, message, browsing, onBrowsing, onDone }: AgentPaneProps & { target: SpawnTarget }) {
   const spawnInto = useSpawnInto(onDone);
-  return (
-    <NewAgentForm defaultCwd={defaultCwdFor(target, data)} defaultMessage={message} liveDirs={liveDirsOf(data)} readOnly={readOnly}
+  // A new folder can be on any machine that is connected; a tab is in its workspace's.
+  const machines = target.kind === "workspace" ? (data?.machines ?? []).filter((m) => m.state === "connected") : [];
+  const [session, setSession] = useState(data?.session);
+  const picked = machines.find((m) => m.session === session);
+  const form = (
+    <NewAgentForm key={session ?? ""} machine={machines.length > 1 ? { session } : undefined}
+      defaultCwd={picked && session !== data?.session ? "" : defaultCwdFor(target, data)} defaultMessage={message}
+      liveDirs={picked?.herd ? liveDirsOf(picked.herd) : liveDirsOf(data)} readOnly={readOnly}
       browsing={browsing} onBrowsing={onBrowsing} onSubmit={(values) => spawnInto(target, values)} />
+  );
+  if (machines.length < 2) return form;
+  return (
+    <div className="flex flex-col gap-3">
+      {!browsing && <Segmented label="Machine" options={machines.map((m) => ({ id: m.session ?? "", label: m.label }))}
+        value={session ?? ""} onChange={(id) => setSession(id || undefined)} />}
+      {form}
+    </div>
   );
 }
 

@@ -7,6 +7,7 @@ import { BuildStamp } from "@/components/build-stamp";
 import { PageBody } from "@/components/column-page";
 import { ConnectionInfo } from "@/components/connection-info";
 import { HapticsControl } from "@/components/haptics-control";
+import { MachinesControl } from "@/components/machines-control";
 import { NotifyPrefsControl, type DevicePush } from "@/components/notify-prefs-control";
 import { SnoozeControl } from "@/components/snooze-control";
 import { ThemeControl } from "@/components/theme-control";
@@ -19,6 +20,7 @@ import { homePath } from "@/lib/nav";
 import type { PushAvailability, PushState } from "@/lib/push";
 import { useServerBuild } from "@/lib/server-build";
 import { useSession } from "@/lib/session";
+import { isReadOnly } from "@/lib/types";
 
 // Settings, as a grouped list: This device, Notify when, Updates, About. Reachable from
 // the home header gear. Lives under the root route, so the snapshot polling/push-setup in RootLayout
@@ -95,6 +97,8 @@ export function SettingsRoute() {
         )}
 
         <UpdateCheckControl />
+
+        <MachinesControl readOnly={isReadOnly(root?.device)} />
 
         <ListSection title="About" footer={<BuildStamp />}>
           <ConnectionInfo bridge={root?.bridge} device={root?.device} build={serverBuild} />

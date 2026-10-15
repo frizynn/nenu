@@ -35,6 +35,8 @@ export interface NewAgentValues {
   name: string;
   message: string;
   permission: string;
+  /** Where it starts when the person picked a machine: that machine's session (undefined = this one). */
+  session?: string;
 }
 
 // Its own colour and weight: a Field's label is muted and medium, and a control inherits both.
@@ -87,7 +89,9 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
  * The agent form of the New flow. Mounting it starts a fresh form. The folder picker takes the form's
  * place while `browsing`, and the host owns that switch, so its header can title the step and step back.
  */
-export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing }: {
+export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOnly, onSubmit, browsing, onBrowsing, machine }: {
+  /** The machine picked for it, when there is more than one: its folders, and where it starts. */
+  machine?: { session: string | undefined };
   defaultCwd: string;
   defaultMessage?: string;
   liveDirs: string[];
@@ -114,16 +118,16 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
   useEffect(() => {
     if (home) return;
     const abort = new AbortController();
-    fetchHomeDirs("~", false, abort.signal).then((d) => setHome(d.home), () => undefined);
+    fetchHomeDirs("~", false, abort.signal, machine?.session).then((d) => setHome(d.home), () => undefined);
     return () => abort.abort();
-  }, [home]);
+  }, [home, machine?.session]);
 
   async function submit() {
     if (busy || readOnly) return;
     setBusy(true);
     setError(null);
     const permission = agent === "shell" ? "ask" : permissions[agent];
-    const failure = await onSubmit({ agent, cwd, name, message, permission });
+    const failure = await onSubmit({ agent, cwd, name, message, permission, ...(machine ? { session: machine.session } : {}) });
     if (failure !== null) {
       setError(failure);
       setBusy(false);
@@ -140,6 +144,7 @@ export function NewAgentForm({ defaultCwd, defaultMessage = "", liveDirs, readOn
           home={home}
           shortcuts={suggestDirs([cwd], liveDirs, recent)}
           onHome={setHome}
+          session={machine?.session}
           onPick={(path) => {
             setCwd(path);
             onBrowsing(false);
@@ -227,7 +232,7 @@ export function FolderButton({ shown, parent, onClick, label = "Directory" }: { 
 const uniqueDirs = (panes: AgentView[]) => [...new Set(panes.map((p) => p.cwd).filter(Boolean))];
 
 /** Folders worth offering: where agents run now. */
-export const liveDirsOf = (data: HomeData | undefined) => uniqueDirs([...(data?.agents ?? []), ...(data?.shellPanes ?? [])]);
+export const liveDirsOf = (data: Pick<HomeData, "agents" | "shellPanes"> | undefined) => uniqueDirs([...(data?.agents ?? []), ...(data?.shellPanes ?? [])]);
 
 /** Where a new agent starts: a tab inherits its workspace's focused folder, a workspace the last pick. */
 export function defaultCwdFor(target: SpawnTarget, data: HomeData | undefined): string {
@@ -260,7 +265,8 @@ export function useSpawnInto(onDone: () => void) {
   const onScreen = useOnScreen();
   return async (target: SpawnTarget, values: NewAgentValues): Promise<string | null> => {
     try {
-      const created = await spawn({ ...values, target, session: data?.session });
+      const session = "session" in values ? values.session : data?.session;
+      const created = await spawn({ ...values, target, session });
       if (!created.ok) return created.error;
       void revalidator.revalidate();
       if (!onScreen.current) return null;
@@ -278,7 +284,7 @@ export function useSpawnInto(onDone: () => void) {
         focused: false,
         kind: "shell",
       };
-      navigate(panePath(p.paneId, data?.session), { state: { freshPane: fresh } });
+      navigate(panePath(p.paneId, session), { state: { freshPane: fresh } });
       onDone();
       return null;
     } catch (cause) {

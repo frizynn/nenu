@@ -31,6 +31,7 @@ import type {
   AgentView,
   BridgeStatus,
   DeviceAuth,
+  MachineView,
   PaneHistoryResponse,
   PaneReadResponse,
   ProjectView,
@@ -101,6 +102,8 @@ export interface HomeData {
   error: boolean;
   /** True when the failed refresh was rejected with HTTP 401 or 403. */
   authError: boolean;
+  /** Herdr's saved machines, this one first; absent with only one (lib/machines.ts). */
+  machines?: MachineView[];
   /**
    * When this herd was actually fetched — set ONLY on a stale render, and only when the write-through
    * cache can date it (lib/last-seen.ts). It is what lets the UI say "last seen 14:32" instead of
@@ -197,6 +200,7 @@ function toHomeData(
     update: snap.update,
     error,
     authError: error && hasAuthError(session),
+    ...(snap.machines ? { machines: snap.machines } : {}),
   };
 }
 

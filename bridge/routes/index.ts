@@ -1,3 +1,4 @@
+import { isMachineSession } from "../machines.ts";
 import { deviceAuth, guard } from "./access.ts";
 import { activityPaneActions } from "./activity.ts";
 import type { PaneAction, RequestTimeouts, Route, Services } from "./context.ts";
@@ -13,7 +14,7 @@ import { panePaneActions } from "./pane.ts";
 import { queuePaneActions } from "./queue.ts";
 import { replyPaneActions } from "./reply.ts";
 import { settingsRoutes } from "./settings.ts";
-import { snapshotRoutes } from "./snapshot.ts";
+import { machineSnapshot, snapshotRoutes } from "./snapshot.ts";
 import { isReservedAuthPath, reservedAuthPlaceholder, serveStatic } from "./static.ts";
 import { structurePaneActions, structureRoutes } from "./structure.ts";
 
@@ -102,7 +103,8 @@ const paneRoute: Route = {
 
 /** The API, in match order: the first route whose method and path match handles the request. */
 export const ROUTES: readonly Route[] = [
-  ...orgRoutes,
+  // Organizations runs on this machine only: a project spanning machines is not a thing yet.
+  ...orgRoutes.map((route): Route => ({ ...route, machine: false })),
   ...snapshotRoutes,
   ...eventRoutes,
   ...structureRoutes,
@@ -131,21 +133,32 @@ export function matchRoute(method: string, pathname: string): { route: Route; ma
  * Answer one request: the route's gate first, then the session lookup, then its handler. Session
  * routes accept an optional `?session=<name>`; absent → the primary session. The name is only ever a
  * registry Map lookup — it never builds a path. An unknown name is a 404. Global routes ignore it.
+ *
+ * A name that starts with `@` is one of Herdr's saved machines: once the gate here has passed at the
+ * route's own level, the request goes as it is to that machine's Nenu (machines.ts). `trust: "peer"`
+ * is a request that arrived on `peer.sock`, from another Nenu: it skips the gate (only this user can
+ * open that socket, server.ts) and is never forwarded again.
  */
-export async function dispatch(ctx: Services, req: Request, server: RequestTimeouts, peer?: string): Promise<Response> {
+export async function dispatch(ctx: Services, req: Request, server: RequestTimeouts, peer?: string, trust?: "peer"): Promise<Response> {
   const url = new URL(req.url);
   const { pathname } = url;
   const found = matchRoute(req.method, pathname);
   if (found) {
     const { route, match } = found;
-    if (route.access !== "none") {
+    if (route.access !== "none" && trust !== "peer") {
       const level = typeof route.access === "function" ? route.access(req, match) : route.access;
       const denied = guard(req, ctx.cfg, level);
       if (denied) return denied;
     }
     const base = { req, url, match, server, peer };
-    if (!route.session) return route.handle(ctx, base);
     const sessionName = url.searchParams.get("session") ?? undefined;
+    if (isMachineSession(sessionName) && (route.machine ?? route.session)) {
+      if (trust === "peer" || !ctx.machines.has(sessionName)) return jsonError(`unknown machine: ${sessionName}`, 404, req.headers.get("accept-encoding"));
+      // A stream to another machine lives as long as the browser keeps it, as the local one does.
+      if (pathname === "/api/events") server.timeout(req, 0);
+      return pathname === "/api/snapshot" ? machineSnapshot(ctx, req, sessionName) : ctx.machines.forward(sessionName, req, url);
+    }
+    if (!route.session) return route.handle(ctx, base);
     const rt = ctx.registry.get(sessionName);
     if (!rt) return jsonError(`unknown session: ${sessionName ?? ""}`, 404, req.headers.get("accept-encoding"));
     return route.handle(ctx, { ...base, rt });

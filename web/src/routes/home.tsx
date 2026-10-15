@@ -4,6 +4,7 @@ import { ChatsCircle, Wifi } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MachinesSlot } from "@/components/machines-slot";
 import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
@@ -85,6 +86,7 @@ export function HomeRoute() {
         <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} reviews={reviews}
           pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
           projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
+        <MachinesSlot data={data} place="home" />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">
             <HomeHeading id="home-running" label="Running in background" count={running.length} />

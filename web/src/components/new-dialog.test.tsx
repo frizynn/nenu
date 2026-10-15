@@ -334,3 +334,39 @@ describe("newContext", () => {
     expect(newContext(base, { projectSlug: "acme" })).toEqual({ workspaceId: "w:2", project: "acme" });
   });
 });
+
+it("with more than one machine, a chat in a new folder starts on the machine picked, its folders read there", async () => {
+  const dirSessions: string[] = [];
+  const createSessions: string[] = [];
+  const pane = { paneId: "w:9:p1", workspaceId: "w:9", workspaceLabel: "new", tabId: "t9", cwd: HOME };
+  server.use(
+    http.get("/api/dirs", ({ request }) => {
+      dirSessions.push(new URL(request.url).searchParams.get("session") ?? "");
+      return HttpResponse.json({ path: HOME, home: HOME, entries: ["code"], truncated: false });
+    }),
+    http.post("/api/workspace", ({ request }) => {
+      createSessions.push(new URL(request.url).searchParams.get("session") ?? "");
+      return HttpResponse.json({ ok: true, pane });
+    }),
+  );
+  const machines: HomeData["machines"] = [
+    { label: "studio", state: "connected" },
+    { session: "@build-box", label: "build-box", state: "connected", herd: { bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [] } },
+    { session: "@lab", label: "lab", state: "offline", detail: "ssh: connect to host lab port 22: Connection refused" },
+  ];
+  const { user, router } = setup({ data: { ...base, session: undefined, machines }, entry: "/" });
+  await user.click(await screen.findByRole("button", { name: /^In a new folder/ }));
+  const picker = within(screen.getByRole("radiogroup", { name: "Machine" }));
+  expect(picker.getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["studio", "build-box"]);
+  await user.click(picker.getByRole("radio", { name: "build-box" }));
+  await user.click(screen.getByRole("button", { name: /^Start/ }));
+  await waitFor(() => expect(router.state.location.search).toBe("?s=%40build-box"));
+  expect(createSessions).toEqual(["@build-box"]);
+  expect(dirSessions).toContain("@build-box");
+});
+
+it("with one machine there is nothing to pick", async () => {
+  const { user } = setup({ entry: "/" });
+  await user.click(await screen.findByRole("button", { name: /^In a new folder/ }));
+  expect(screen.queryByRole("radiogroup", { name: "Machine" })).toBeNull();
+});

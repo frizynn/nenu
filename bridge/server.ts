@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AgentStates } from "./agent-state.ts";
 import { ClaudeHooks } from "./claude-hooks.ts";
@@ -7,6 +8,7 @@ import { FileGrants } from "./file-open.ts";
 import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
 import { JournalWatch } from "./journal-watch.ts";
+import { NO_MACHINES } from "./machines.ts";
 import { describeAlert } from "./alert-detail.ts";
 import { AwaitingReplies } from "./awaiting-replies.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
@@ -21,7 +23,7 @@ import { ProjectRegistry } from "./projects.ts";
 import { PullRequestRegistry } from "./pull-requests.ts";
 import { freshAgentView, QueueService } from "./queue-service.ts";
 import { isLoopbackPeer } from "./routes/access.ts";
-import type { ServerDeps, Services } from "./routes/context.ts";
+import type { RequestTimeouts, ServerDeps, Services } from "./routes/context.ts";
 import { WEB_DIR, text } from "./routes/http.ts";
 import { dispatch } from "./routes/index.ts";
 import { interactionHints } from "./routes/interactions.ts";
@@ -139,6 +141,7 @@ export function startServer(opts: ServerDeps) {
     claudeHooks: new ClaudeHooks(live, (session, paneId) => agentStates.poke(session, paneId)),
     agentStates,
     fileGrants: new FileGrants(),
+    machines: opts.machines ?? NO_MACHINES,
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
   services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));
@@ -192,7 +195,48 @@ export function startServer(opts: ServerDeps) {
   }
   for (const w of startupWarnings(cfg)) console.warn(w);
 
+  // The other machines' door: a Nenu on another machine reaches this one through SSH to this socket
+  // (machines.ts) and is answered as the operator, because only this user (or root) can open it, and
+  // either can already drive Herdr's own socket. The TCP port's gates are untouched.
+  const peer = servePeer(join(cfg.stateDir, "peer.sock"), (req, srv) => dispatch(services, req, srv, undefined, "peer"));
+  const stop = server.stop.bind(server);
+  Object.defineProperty(server, "stop", { value: (force?: boolean) => { peer?.stop(force); return stop(force); } });
+
   return server;
+}
+
+/**
+ * Listen on `path` for other machines' Nenus. The state dir belongs to this install, so a socket left
+ * there by a killed bridge is this install's own and is replaced. It is bound 0600, not chmodded after:
+ * a socket takes the process umask, connect() needs write on it (Linux, and macOS, measured), and under
+ * umask 0 it would be anyone's until the chmod.
+ */
+export function servePeer(path: string, handle: (req: Request, server: RequestTimeouts) => Response | Promise<Response>): ReturnType<typeof Bun.serve> | null {
+  try {
+    mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
+    rmSync(path, { force: true });
+    const options = {
+      unix: path,
+      maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+      // No idle cut. On a socket listener Bun 1.4 ignores server.timeout(req, 0), so the 10 s default
+      // closed every quiet event stream (measured); only this option holds. The one client here is
+      // another Nenu, whose connections end with its tunnel.
+      idleTimeout: 0,
+      fetch: (req: Request): Response | Promise<Response> => handle(req, server),
+    };
+    const umask = process.umask(0o177);
+    let server: ReturnType<typeof Bun.serve>;
+    try {
+      // Bun's types leave idleTimeout out of a socket listener's options; the runtime honours it.
+      server = Bun.serve(options as unknown as Parameters<typeof Bun.serve>[0]);
+    } finally {
+      process.umask(umask);
+    }
+    return server;
+  } catch (err) {
+    console.warn(`[bridge] WARNING: other machines cannot reach this one: ${path}: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /**
