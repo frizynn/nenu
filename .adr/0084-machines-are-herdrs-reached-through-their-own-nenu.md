@@ -58,8 +58,9 @@ Measured from a laptop to a saved Linux machine (Tailscale SSH, ping 14 to 34 ms
   another machine takes SSH as that user, which is that machine already. The port's gates are as they
   were, and a read-only device here is read-only on every machine.
 - A Unix socket costs about 80 ms more per new channel than a loopback port on Tailscale SSH (table).
-  A port would be faster and visible to every local user; keep-alive connections over the tunnel
-  amortise the channel cost instead.
+  A port would be faster and visible to every local user. Keep-alive connections over the tunnel
+  should pay that cost once per connection rather than per request (assumed: no Nenu with
+  `peer.sock` was on the far side to measure it).
 - The service has no SSH agent unless its environment provides one: a key without a passphrase, or
   `SSH_AUTH_SOCK` in its `.env`. A host key not yet trusted leaves the machine offline with ssh's
   reason; Nenu never answers that prompt.
