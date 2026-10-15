@@ -2727,7 +2727,7 @@ async function chips(before: boolean): Promise<void> {
         if (await tap(page.getByRole("button", { name: /^Processes/ }).first(), "background")) { await shoot("background"); await page.keyboard.press("Escape"); }
       } else {
         const row = page.getByRole("group", { name: "Status" });
-        for (const chip of ["Needs you", "Working", "PRs", "Routines"]) {
+        for (const chip of ["Needs you", "Working", "Background", "PRs", "Routines"]) {
           if (!await tap(row.getByRole("button", { name: new RegExp(`^${chip}`) }).first(), chip)) continue;
           await shoot(chip.toLowerCase().replace(" ", "-"));
           if (chip === "PRs" && name.startsWith("worker-phone")) {
@@ -2879,8 +2879,8 @@ async function chipLine(): Promise<void> {
             shots.push(typing);
             seen[`${key}-keyboard`] = await page.evaluate(measureAboveBox, null);
             await page.evaluate(() => document.querySelector(".workbench-chat")?.removeAttribute("data-keyboard-open"), null);
-            // What Working counts beside the turn's own Working row: the session's background command.
-            await page.getByRole("group", { name: "Status" }).getByRole("button", { name: /^Working/ }).click();
+            // What the chip counts beside the turn's own Working row: the session's background command.
+            await page.getByRole("group", { name: "Status" }).getByRole("button", { name: /^Background/ }).click();
             await page.waitForTimeout(500);
             const panel = join(outDir, `${key}-working-panel.png`);
             await page.screenshot({ path: panel, animations: "disabled" });
