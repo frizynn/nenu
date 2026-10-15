@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AgentStates } from "./agent-state.ts";
 import { ClaudeHooks } from "./claude-hooks.ts";
@@ -207,8 +207,9 @@ export function startServer(opts: ServerDeps) {
 
 /**
  * Listen on `path` for other machines' Nenus. The state dir belongs to this install, so a socket left
- * there by a killed bridge is this install's own and is replaced. 0600, inside a dir only this user
- * writes to: Bun creates it 0755, which already denies anyone else the write that connect() needs.
+ * there by a killed bridge is this install's own and is replaced. It is bound 0600, not chmodded after:
+ * a socket takes the process umask, connect() needs write on it (Linux, and macOS, measured), and under
+ * umask 0 it would be anyone's until the chmod.
  */
 export function servePeer(path: string, handle: (req: Request, server: RequestTimeouts) => Response | Promise<Response>): ReturnType<typeof Bun.serve> | null {
   try {
@@ -223,8 +224,14 @@ export function servePeer(path: string, handle: (req: Request, server: RequestTi
       idleTimeout: 0,
       fetch: (req: Request): Response | Promise<Response> => handle(req, server),
     };
-    const server: ReturnType<typeof Bun.serve> = Bun.serve(options as unknown as Parameters<typeof Bun.serve>[0]);
-    chmodSync(path, 0o600);
+    const umask = process.umask(0o177);
+    let server: ReturnType<typeof Bun.serve>;
+    try {
+      // Bun's types leave idleTimeout out of a socket listener's options; the runtime honours it.
+      server = Bun.serve(options as unknown as Parameters<typeof Bun.serve>[0]);
+    } finally {
+      process.umask(umask);
+    }
     return server;
   } catch (err) {
     console.warn(`[bridge] WARNING: other machines cannot reach this one: ${path}: ${(err as Error).message}`);
