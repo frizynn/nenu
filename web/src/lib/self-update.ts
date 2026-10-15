@@ -18,6 +18,8 @@ const MAX_ATTEMPTS = 3;
 const ATTEMPT_WINDOW_MS = 10 * 60_000;
 /** A failed attempt waits this long for the next one, unless the app comes back in between. */
 const RETRY_AFTER_MS = 15_000;
+/** Visibility events closer than this are one return. */
+const RETURN_DEBOUNCE_MS = 2_000;
 
 // Injectable update trigger — the default is the path Settings' button uses (checkForUpdate, which
 // reloads onto the fresh bundle on both SW and no-SW origins). It resolves false when the update could
@@ -146,10 +148,11 @@ export function startSelfUpdate(): () => void {
   started = true;
   const unsubBuild = subscribeServerBuild(onServerBuild);
   const unsubHold = subscribeReloadHeld(onReloadGuard);
-  let wasHidden = document.hidden;
+  // Any visibilitychange that ends visible is a return. iOS may suspend a home-screen app before
+  // telling the page it is hidden, then fire "visible" on resume, sometimes twice (WebKit bug
+  // 207256): requiring a hidden first would miss the return, so the pair counts once.
   const onVisibility = () => {
-    if (wasHidden && !document.hidden) onReturn();
-    wasHidden = document.hidden;
+    if (!document.hidden && Date.now() - returnedAt >= RETURN_DEBOUNCE_MS) onReturn();
   };
   const onPageShow = (event: PageTransitionEvent) => {
     if (event.persisted) onReturn();
