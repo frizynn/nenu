@@ -629,12 +629,37 @@ async function addPair(bridge: TestBridge): Promise<void> {
   throw new Error("the bridge never listed pair");
 }
 
+/** A workspace of three tabs: one agent, one shell, and four agents split in one tab, each in another state. */
+async function addCrew(bridge: TestBridge): Promise<void> {
+  const fake = bridge.fake!;
+  const cwd = join(bridge.dir, "crew");
+  fake.addWorkspace("w6", "crew").addTab("w6:t1", "lead").addTab("w6:t2", "server").addTab("w6:t3", "workers");
+  const pane = (paneId: string, tabId: string, agent: "claude" | "codex" | null, label: string) => fake.addPane({ paneId, workspaceId: "w6", tabId, agent, label, cwd });
+  pane("w6:lead", "w6:t1", "claude", "Crew lead");
+  pane("w6:server", "w6:t2", null, "Dev server");
+  pane("w6:checkout", "w6:t3", "claude", "Checkout flow");
+  pane("w6:payments", "w6:t3", "codex", "Payment retries after a declined card");
+  pane("w6:invoice", "w6:t3", "claude", "Invoice export");
+  pane("w6:search", "w6:t3", "claude", "Search index");
+  fake.setStatus("w6:checkout", "working");
+  fake.setStatus("w6:payments", "done");
+  fake.setStatus("w6:invoice", "blocked");
+  for (let i = 0; i < 150; i++) {
+    const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string }> }>);
+    if (snap.agents.some((p) => p.paneId === "w6:search")) return;
+    await sleep(100);
+  }
+  throw new Error("the bridge never listed crew");
+}
+
 /**
  * A workspace's row in every list that draws one, against nenu (two tabs, two sessions), api (one tab
- * split in three), docs (one tab, one pane), ops (one session, a shell in a second tab) and pair (two
- * tabs, a session in each): the phone's drawer, its Search sheet and Home's Workspaces at 390, the
- * desk's Search and Home's Workspaces at 1440, dark and light, each whole and nenu's row alone. Then
- * which rows offer a fold, and where a tap on the rows that open directly lands.
+ * split in three), docs (one tab, one pane), ops (one session, a shell in a second tab), pair (two
+ * tabs, a session in each) and crew (an agent's tab, a shell's tab and a tab of four agents): the
+ * phone's drawer, its Search sheet and Home's Workspaces at 390, the desk's Search and Home's
+ * Workspaces at 1440, dark and light, each whole and nenu's and pair's rows alone, folded and open.
+ * crew is captured folded, open, and open with its tab of four open, each with how wide the titles
+ * under it are. Then which rows offer a fold, and where a tap on each kind of row lands.
  */
 async function workspaceRows(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -642,20 +667,34 @@ async function workspaceRows(): Promise<void> {
     await addDocs(bridge);
     await addOps(bridge);
     await addPair(bridge);
-    const names = ["nenu", "api", "docs", "ops", "pair"];
+    await addCrew(bridge);
+    const names = ["nenu", "api", "docs", "ops", "pair", "crew"];
     const shots: string[] = [];
     const folds: Array<{ view: string; workspace: string; fold: boolean }> = [];
     const landed: Array<{ view: string; workspace: string; landed: string }> = [];
+    const titles: Array<{ view: string; state: string; title: string; width: number; cut: boolean }> = [];
     const pathname = (page: Page) => page.evaluate(() => decodeURIComponent(location.pathname), null);
     const homeList = async (page: Page) => {
       await page.getByRole("tab", { name: "Workspaces" }).click();
       await page.locator("#home-list li").first().waitFor({ timeout: 15_000 });
     };
     // Each view: how to reach it from Home, where its rows sit, and a workspace's row in it.
-    const tree = (scope: string) => ({ row: (name: string) => `${scope} section[aria-label="${name}"]`, link: (name: string) => `${scope} section[aria-label="${name}"] a.nav-row` });
+    // `fold` is a workspace's own chevron; `cell` the box a session's title gets, its first child the title.
+    const tree = (scope: string) => ({
+      row: (name: string) => `${scope} section[aria-label="${name}"]`,
+      link: (name: string) => `${scope} section[aria-label="${name}"] a.nav-row`,
+      fold: (name: string) => `${scope} section[aria-label="${name}"] > .nav-project > [aria-expanded]`,
+      cell: "a.nav-pane .nav-pane-text",
+    });
     // A Home row is named "<workspace>, <state>, <count>", whether it folds or opens.
-    const home = { row: (name: string) => `#home-list > ul > li:has(> [aria-label^="${name},"])`, link: (name: string) => `#home-list > ul > li > [aria-label^="${name},"]` };
-    const views: Record<"phone" | "desktop", Array<[string, (page: Page) => Promise<void>, { row: (name: string) => string; link: (name: string) => string }]>> = {
+    const home = {
+      row: (name: string) => `#home-list > ul > li:has(> [aria-label^="${name},"])`,
+      link: (name: string) => `#home-list > ul > li > [aria-label^="${name},"]`,
+      fold: (name: string) => `#home-list > ul > li > button[aria-label^="${name},"]`,
+      cell: "a > span.col-start-2:not(.row-start-2)",
+    };
+    type View = { row: (name: string) => string; link: (name: string) => string; fold: (name: string) => string; cell: string };
+    const views: Record<"phone" | "desktop", Array<[string, (page: Page) => Promise<void>, View]>> = {
       phone: [
         ["drawer", (page) => page.getByRole("button", { name: "Open navigation" }).click(), tree("[role=dialog]")],
         ["search", (page) => page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click(), tree("[role=dialog]")],
@@ -686,6 +725,39 @@ async function workspaceRows(): Promise<void> {
           const nenu = join(outDir, `${view}-${deviceName}-${scheme}-nenu.png`);
           await page.locator(at.row("nenu")).first().screenshot({ path: nenu, animations: "disabled" });
           shots.push(shot, nenu);
+          // Set a fold open or shut, whatever the view started it as; a fold the build lacks is left alone.
+          const fold = async (selector: string, open: boolean) => {
+            const toggle = page.locator(selector).first();
+            if (await toggle.count() && await toggle.getAttribute("aria-expanded") !== String(open)) await toggle.click();
+            await page.waitForTimeout(300);
+          };
+          const workers = `${at.row("crew")} [aria-expanded][aria-label^="workers,"]`;
+          // Workspaces with no tab of several panes, open: these must not move.
+          for (const name of ["nenu", "pair"]) {
+            await fold(at.fold(name), true);
+            const open = join(outDir, `${view}-${deviceName}-${scheme}-${name}-open.png`);
+            await page.locator(at.row(name)).first().screenshot({ path: open, animations: "disabled" });
+            shots.push(open);
+            await fold(at.fold(name), false);
+          }
+          for (const [state, wsOpen, tabOpen] of [["folded", false, false], ["open", true, false], ["tab-open", true, true]] as const) {
+            await fold(at.fold("crew"), wsOpen);
+            if (wsOpen) await fold(workers, tabOpen);
+            await page.locator(at.row("crew")).first().scrollIntoViewIfNeeded();
+            const whole = join(outDir, `${view}-${deviceName}-${scheme}-crew-${state}.png`);
+            await page.screenshot({ path: whole, animations: "disabled" });
+            const row = join(outDir, `${view}-${deviceName}-${scheme}-crew-${state}-row.png`);
+            await page.locator(at.row("crew")).first().screenshot({ path: row, animations: "disabled" });
+            shots.push(whole, row);
+            if (scheme === "dark" && wsOpen) {
+              const cells = await page.locator(`${at.row("crew")} ${at.cell}`).evaluateAll((els) => els.map((el) => {
+                const title = el.firstElementChild as HTMLElement;
+                return { title: title.textContent ?? "", width: Math.round(el.getBoundingClientRect().width), cut: title.scrollWidth > title.clientWidth };
+              }));
+              titles.push(...cells.map((cell) => ({ view: `${deviceName}/${view}`, state, ...cell })));
+            }
+          }
+          await fold(at.fold("crew"), false);
           if (scheme === "light") continue;
           for (const name of names) folds.push({ view: `${deviceName}/${view}`, workspace: name, fold: await page.locator(`${at.row(name)} [aria-expanded]`).count() > 0 });
           for (const name of ["docs", "api", "ops"]) {
@@ -697,11 +769,34 @@ async function workspaceRows(): Promise<void> {
             await page.screenshot({ path: tapped, animations: "disabled" });
             shots.push(tapped);
           }
+          // Each kind of row under crew: an agent's tab, a shell's tab, the tab of four, a pane in that tab.
+          for (const [kind, title] of [["agent", "Crew lead"], ["shell", "Dev server"], ["tab", "workers"], ["in-tab", "Invoice export"]] as const) {
+            await enter();
+            await fold(at.fold("crew"), true);
+            if (kind === "in-tab") await fold(workers, true);
+            let landedAt = "";
+            try {
+              if (kind === "tab") {
+                const toggle = page.locator(workers).first();
+                const before = await toggle.getAttribute("aria-expanded", { timeout: 3000 });
+                await toggle.click();
+                await page.waitForTimeout(600);
+                landedAt = `${await pathname(page)} (expanded ${before} -> ${await toggle.getAttribute("aria-expanded")})`;
+              } else {
+                await page.locator(at.row("crew")).getByRole("link", { name: new RegExp(`^${title}`) }).first().click({ timeout: 3000 });
+                await page.waitForTimeout(1500);
+                landedAt = await pathname(page);
+              }
+            } catch (error) {
+              landedAt = `error: ${(error as Error).message.split("\n")[0]}`;
+            }
+            landed.push({ view: `${deviceName}/${view}`, workspace: `crew/${kind}`, landed: landedAt });
+          }
         }
         await context.close();
       }
     }
-    return { shots, folds, landed, unexpectedWrites: bridge.fake!.writes() };
+    return { shots, folds, landed, titles, unexpectedWrites: bridge.fake!.writes() };
   }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "workspace-rows.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ ...result, shots: result.shots.length }, null, 2));
