@@ -82,7 +82,8 @@ export function defaultOpen(branch: WorkspaceBranch, workspaces: number): boolea
 /**
  * How an unfolded workspace lists a tab of `panes` among its `tabs`: two or more panes beside another
  * tab make the tab a row of its own that folds them, one level in; otherwise each pane is its own row.
- * Home's Workspaces, the drawer and Search all list tabs by this.
+ * Listed flat, a split tab's panes read as siblings of the other tabs, which the operator asked to
+ * stop. Home's Workspaces, the drawer and Search all list tabs by this.
  */
 export function tabFolds(panes: number, tabs: number): boolean {
   return panes > 1 && tabs > 1;

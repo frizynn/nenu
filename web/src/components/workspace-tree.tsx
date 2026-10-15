@@ -112,7 +112,7 @@ function TabRows({ tab, folds, projects, session, currentPaneId, open, onToggle 
   if (!folds) {
     return tab.panes.map((pane) => {
       const name = displayName(pane, projects);
-      return <PaneRow key={pane.paneId} pane={pane} title={name} note={tab.panes.length > 1 || tab.label === name ? undefined : tab.label} session={session}
+      return <PaneRow key={pane.paneId} pane={pane} title={name} note={tab.label === name ? undefined : tab.label} session={session}
         current={pane.paneId === currentPaneId} />;
     });
   }
