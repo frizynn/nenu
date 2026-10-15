@@ -6,6 +6,8 @@
    bottom gap, as in a native chat; 8px only where there is none. */
 .workbench-composer { width: calc(100% - 2 * var(--page-gutter) + 16px); margin-bottom: max(env(safe-area-inset-bottom), 8px); max-width: var(--chat-column); align-self: center; flex-shrink: 0; }
 .workbench-telemetry { border-top: 0; }
+/* useFocusInPlace parks focus on the surface between a touch on the draft and its tap: no ring for that. */
+.composer-surface:focus { outline: none; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
 .composer-box { display: flex; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color 150ms ease-out; }
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }

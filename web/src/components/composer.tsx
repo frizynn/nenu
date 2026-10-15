@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { ChatInput } from "@/components/ui/chat/chat-input";
 import { SkillPicker } from "@/components/skill-picker";
 import { useSkillComposer } from "@/hooks/use-skill-composer";
+import { useFocusInPlace } from "@/hooks/use-keyboard";
 import { NavTray } from "@/components/nav-tray";
 import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
@@ -1257,6 +1258,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Files dragged over the chat (or, without one, over the composer) attach as if picked.
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dropOver = useFileDrop(dropZoneRef ?? surfaceRef, !(locked || direct.active), attachFiles);
+  // On iOS, tapping the draft opens the keyboard without scrolling the page (the surface holds focus
+  // for the moment between the touch and the tap).
+  useFocusInPlace(inputRef, surfaceRef);
 
   return (
     <>
