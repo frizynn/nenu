@@ -13,7 +13,7 @@ import { AgentChat } from "./agent-chat";
 import { SubagentConversation } from "./subagent-conversation";
 
 // Background work as the operator meets it in a working Claude's chat: what waits on you behind the
-// Needs you chip and what runs behind Working, both in the row above the composer, each a list whose
+// Needs you chip and what runs behind Background, both in the row above the composer, each a list whose
 // rows open in place in a panel over the row, and details that never cover the whole screen.
 
 const list = fixture.list as ActivityResponse & { available: true };
@@ -62,22 +62,22 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
 
 const row = () => screen.findByRole("group", { name: "Status" });
 const chip = async (name: RegExp) => within(await row()).getByRole("button", { name });
-const working = () => chip(/^(Working|Done|Published), \d+$/);
+const working = () => chip(/^(Background|Done|Published), \d+$/);
 const needs = () => chip(/^Needs you, \d+$/);
 
 it("names what waits on you and what runs in two chips, each listing only its own", async () => {
   const { user } = renderChat();
   const ask = await needs();
   expect(ask).toHaveAccessibleName("Needs you, 1");
-  expect(await working()).toHaveAccessibleName(/^Working, \d+$/);
+  expect(await working()).toHaveAccessibleName(/^Background, \d+$/);
   await user.click(ask);
   expect(ask).toHaveAttribute("aria-expanded", "true");
   const asking = screen.getByRole("region", { name: "Needs you" });
   expect(within(within(asking).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / }).map((r) => r.getAttribute("aria-label"))).toEqual(["Expand reviewer"]);
-  // One panel at a time: Working takes Needs you's place.
+  // One panel at a time: Background takes Needs you's place.
   await user.click(await working());
   expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
-  const sheet = screen.getByRole("region", { name: "Working" });
+  const sheet = screen.getByRole("region", { name: "Background" });
   const rows = within(within(sheet).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / });
   expect(rows.map((r) => r.getAttribute("aria-label"))).toContain(`Expand ${runningRun.name}`);
   expect(rows.map((r) => r.getAttribute("aria-label"))).not.toContain("Expand reviewer");
@@ -96,7 +96,7 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   subagentList = subagents([{ ...explorer, status: "completed" }]);
   const { user } = renderChat();
   const button = await working();
-  // Nothing runs, so the chip does not say Working: it says what finished.
+  // Nothing runs, so the chip does not say Background: it says what finished.
   expect(button).toHaveAccessibleName(/^Done, \d+$/);
   expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.click(button);
@@ -179,7 +179,7 @@ it("on a phone, details replace the panel's content: one panel, named once, with
   await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
-  expect(screen.queryByRole("region", { name: "Working" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Background" })).not.toBeInTheDocument();
   const sheet = screen.getByRole("region", { name: runningRun.name });
   // Once the details have drawn, the run is named once, by the panel's own title.
   expect(await within(sheet).findByText("agents done")).toBeVisible();
@@ -190,19 +190,19 @@ it("on a phone, details replace the panel's content: one panel, named once, with
   const title = within(sheet).getByRole("heading", { name: runningRun.name });
   expect(backs[0]!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await user.click(backs[0]!);
-  expect(screen.getByRole("region", { name: "Working" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "Background" })).toBeVisible();
 });
 
 it("on a desk, details open in a side panel and the chat stays usable", async () => {
   setDesktop(true);
   const { user } = renderChat();
   await user.click(await working());
-  expect(screen.getByRole("region", { name: "Working" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "Background" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   const panel = screen.getByRole("complementary", { name: `Details: ${runningRun.name}` });
   expect(await within(panel).findByRole("heading", { name: runningRun.name })).toBeVisible();
-  expect(screen.queryByRole("region", { name: "Working" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Background" })).not.toBeInTheDocument();
   const box = screen.getByRole("textbox");
   await user.type(box, "still typing");
   expect(box).toHaveValue("still typing");
