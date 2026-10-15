@@ -220,21 +220,25 @@ describe("the update notice", () => {
     expect(result.current).toBe(true);
   });
 
-  it("shows in an open chat, where the update would otherwise wait for the next return", () => {
+  it("stays quiet in an open chat with nothing unsent: the next return applies it", () => {
     __setReloadImpl(vi.fn());
     holdReload("open-agent-session", "view");
     const { result } = renderHook(() => useUpdateNotice());
     act(() => confirm());
-    expect(result.current).toBe(true);
+    expect(result.current).toBe(false);
   });
 
-  it("stays hidden while an automatic update runs, and shows when it fails", async () => {
-    let finish!: (ok: boolean) => void;
-    __setReloadImpl(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  it("stays quiet while automatic attempts remain, and shows once they are used up", async () => {
+    const reload = vi.fn().mockResolvedValue(false);
+    __setReloadImpl(reload);
     const { result } = renderHook(() => useUpdateNotice());
     act(() => confirm());
-    expect(result.current).toBe(false);
-    await act(async () => finish(false));
+    for (let i = 0; i < 2; i++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); observeServerBuild(STALE); });
+      expect(result.current).toBe(reload.mock.calls.length >= 3);
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(reload).toHaveBeenCalledTimes(3);
     expect(result.current).toBe(true);
   });
 
