@@ -158,6 +158,19 @@ it("a Stop the bridge answers after the pane went idle does not leave 'Stoppingâ
   expect(stopButton()).not.toBeInTheDocument();
 });
 
+// Beside the chips the line stays for them: when the turn ends only Stop leaves, at once, and nothing folds.
+it("shares the line with the chips, and when the turn ends only Stop leaves it", async () => {
+  const chips = { chips: [{ id: "working" as const, label: "Working", count: 1, content: <p>bun run build</p> }], open: null, onOpenChange: vi.fn() };
+  const { rerender } = setup({ nativeWorkbench: true, chips });
+  const status = screen.getByRole("group", { name: "Status" });
+  expect(screen.getByRole("group", { name: "Agent working" }).parentElement).toBe(status.parentElement);
+  rerender({ working: false });
+  expect(stopButton()).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Status" })).toBe(status);
+  expect(status.closest("[inert]")).toBeNull();
+});
+
 it("when stopping sent Claude's own queue, the new turn gets a Stop of its own", async () => {
   answers = [{ ok: true, pressed: true, queued: "sends", held: 0 }];
   const { user } = setup();

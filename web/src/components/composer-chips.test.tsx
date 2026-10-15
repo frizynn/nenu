@@ -136,6 +136,16 @@ it("keeps every chip still: nothing in the row animates on its own", async () =>
   expect(chips.querySelectorAll('[class*="animate-"]')).toHaveLength(0);
 });
 
+// They took two lines for two things that fit in one: the chips, then Stop alone on the row under them.
+it("puts the chips and Stop on one line above the box, Stop at its end", async () => {
+  renderChat();
+  const chips = await row();
+  const stop = screen.getByRole("group", { name: "Agent working" });
+  expect(within(stop).getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(stop.parentElement).toBe(chips.parentElement);
+  expect(chips.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 it("draws no row for a chat with nothing around it", async () => {
   renderChat({ threads: [{ ...own, pr: undefined }], thread: { ...own, pr: undefined } });
   await screen.findByRole("textbox");

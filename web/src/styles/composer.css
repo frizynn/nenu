@@ -28,7 +28,8 @@
 /* A row above the box (Stop's, a notice) folds open and shut, so the thread moves with it instead of
    jumping (Fold in composer.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
 .composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms ease-out, opacity 220ms ease-out; }
-.composer-fold > div { min-height: 0; }
+/* No min-width either: the chips' line scrolls inside the composer's width instead of widening it. */
+.composer-fold > div { min-height: 0; min-width: 0; }
 .composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
 .composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: 150ms; }
 @starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
@@ -44,8 +45,9 @@
 .composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
 .composer-send:disabled { background: var(--muted); color: var(--muted-foreground); }
 .composer-send[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
-/* Stop at the end of the row above the box, right edge on Send's, for the whole turn. */
-.composer-working { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 40px; padding: 0 7px 4px 12px; }
+/* Stop at the end of the line above the box, right edge on Send's, for the whole turn. It never
+   shrinks: beside more chips than fit, the chips scroll instead. */
+.composer-working { display: flex; flex: 1 0 auto; align-items: center; justify-content: flex-end; gap: 8px; min-height: 36px; padding: 0 7px 0 12px; }
 .composer-stop { height: 32px; padding: 0 12px; border-radius: 9999px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
 .composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }
 .composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
@@ -91,11 +93,13 @@
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
 }
-/* The row above the box: one chip per kind of work around the chat (composer-chips.tsx), and the open
-   chip's panel over it. Marks are still; only opening a panel moves, once, for 180ms. The row scrolls
-   sideways when a phone cannot fit it, so each chip keeps its 44px reach inside the row's own padding. */
-.composer-chips { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
-.composer-chip-row { display: flex; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
+/* The line above the box: one chip per kind of work around the chat (composer-chips.tsx) at its start,
+   Stop at its end, and the open chip's panel over it. Alone, either keeps the height and the place its
+   own line gave it. Marks are still; only opening a panel moves, once, for 180ms. The chips scroll
+   sideways when a phone cannot fit them, so each keeps its 44px reach inside the row's own padding. */
+.composer-chips { display: flex; flex-direction: column; gap: 6px; }
+.composer-line { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
+.composer-chip-row { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
 .composer-chip-row::-webkit-scrollbar { display: none; }
 .composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale 120ms ease-out; }
 .composer-chip[aria-expanded="true"] { background: var(--popover); border-color: color-mix(in oklab, var(--foreground) 14%, transparent); box-shadow: var(--shadow-float); }
