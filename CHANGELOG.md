@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-10-15
+
+### Fixed
+
+- An open page takes a new build when the app comes back to the foreground, even in a chat, and offers it in a row only when unsent work holds it; a failed attempt is retried. Read this if your phone kept an old Nenu: open Settings → Updates → Reload interface once, and later builds arrive on their own (0d495895, ed0c966b, c0e83001).
+- A video, picture or file the agent names relative to a repo below the pane's folder opens on the first request, from the newest folder the conversation names, inside the pane's folder only. Thanks @FacuVCanale (9d1a2c21, 69e6d88e, 6d5baa51).
+- The chip that counts only the session's own work says Background, so it no longer reads as a second Working beside the turn (31e85e9d).
+
 ## [1.13.1] - 2026-10-15
 
 ### Fixed
