@@ -34,6 +34,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
+//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips and Stop above the box: four moments, phone and desk, the height they take
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
@@ -2776,6 +2777,146 @@ async function chips(before: boolean): Promise<void> {
   if (result.unexpectedWrites.length) process.exit(1);
 }
 
+/**
+ * The chips and Stop above the box, on a phone and a desk, dark and light, in four moments: a working
+ * chat with one background command (Working 1 and Stop), the same with none (Stop alone), a chat at
+ * rest with a command still running (chips alone), and homeOrg's worker with everything around it
+ * (more chips than a phone fits, and Stop). Each capture measures what sits between the last message
+ * and the box's top edge; the phone's first moment is also read with the keyboard up.
+ */
+async function chipLine(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const fake = bridge.fake!;
+    const now = bridge.now();
+    const iso = (ago: number) => new Date(now - ago).toISOString();
+    const folder = dirname(herd.journals.get(herd.idle)!);
+    const running = (id: string, title: string) => ({ id, kind: "bash", title, status: "running", at: now - 8_000, hasOutput: true });
+    const background = { sessionKey: "bench", available: true, workflows: [], artifacts: [], tasks: [running("b0001", "bun run build && bun run deploy")] };
+    const everything = { ...background, tasks: [...background.tasks, running("b0002", "bun test --watch")] };
+    const none = { ...background, tasks: [] };
+    const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
+      { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
+      { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
+    ] };
+    // Panes outside the project, so only their own session's work makes chips.
+    fake.addTab("w1:t3", "line");
+    const moments = [
+      { name: "chips-stop", paneId: "w1:line", status: "working", activity: background },
+      { name: "stop", paneId: "w1:stop", status: "working", activity: none },
+      { name: "chips", paneId: "w1:rest", status: "done", activity: background },
+      { name: "many", paneId: herd.working, status: "working", activity: everything },
+    ] as const;
+    for (const [i, moment] of moments.entries()) {
+      if (moment.paneId === herd.working) continue;
+      const session = `7777777${i}-7777-4777-8777-777777777777`;
+      await writeChatJournal(join(folder, `${session}.jsonl`), now, 3, moment.status === "working" ? "running" : "finished");
+      fake.addPane({ paneId: moment.paneId, workspaceId: "w1", tabId: "w1:t3", agent: "claude", label: "Checkout flow", sessionId: session, cwd: bridge.dir,
+        status: moment.status, lines: ["● The empty cart now shows a single button."] });
+    }
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes("w1:rest"); tries++) {
+      if (tries > 60) throw new Error("the bridge never listed the chip-line panes");
+      await sleep(500);
+    }
+    const activityOf = (url: string) => moments.find((m) => url.includes(encodeURIComponent(m.paneId)))?.activity ?? none;
+    const shots: string[] = [];
+    const seen: Record<string, unknown> = {};
+    for (const moment of moments) {
+      for (const [deviceName, device] of [["phone", PHONE], ["desk", DESKTOP]] as const) {
+        for (const scheme of ["dark", "light"] as const) {
+          fake.setStatus(moment.paneId, moment.status);
+          const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+          const page = await context.newPage();
+          await page.clock.install({ time: now });
+          await page.route("**/api/pane/*/activity*", (route) => {
+            const url = route.request().url();
+            if (new URL(url).searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: "b0001", text: "building…", truncated: false, updatedAt: now } });
+            return route.fulfill({ json: activityOf(url) });
+          });
+          await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
+          await page.goto(`${bridge.url}/pane/${encodeURIComponent(moment.paneId)}`);
+          await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(2000);
+          const key = `${moment.name}-${deviceName}-${scheme}`;
+          const path = join(outDir, `${key}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+          seen[key] = await page.evaluate(measureAboveBox, null);
+          if (moment.name === "chips-stop" && deviceName === "phone" && scheme === "dark") {
+            // The keyboard up: the chips give their height back, and Stop stays where it was.
+            await page.evaluate(() => document.querySelector(".workbench-chat")?.setAttribute("data-keyboard-open", ""), null);
+            await page.waitForTimeout(400);
+            const typing = join(outDir, `${key}-keyboard.png`);
+            await page.screenshot({ path: typing, animations: "disabled" });
+            shots.push(typing);
+            seen[`${key}-keyboard`] = await page.evaluate(measureAboveBox, null);
+          }
+          await context.close();
+        }
+      }
+    }
+    // Chips beside Stop share its line (their centres within 2px); nothing pushes the page sideways.
+    type Seen = ReturnType<typeof measureAboveBox>;
+    const failed = Object.entries(seen as Record<string, Seen>).filter(([, m]) => !m || m.pageScrollsSideways
+      || (m.chips && m.stop && Math.abs((m.chips.top + m.chips.bottom) / 2 - (m.stop.top + m.stop.bottom) / 2) > 2)).map(([key]) => key);
+    return { shots, seen, failed, unexpectedWrites: fake.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => {
+    const seed = homeOrg(herd, now, size);
+    seed.projects[0]!.routines = [
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
+        last_run: new Date(now - 20 * 3_600_000).toISOString(), next_run: new Date(now + 4 * 3_600_000).toISOString() },
+    ];
+    return seed;
+  }, (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
+  });
+  await writeFile(join(outDir, "chip-line.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (result.failed.length || result.unexpectedWrites.length) process.exit(1);
+}
+
+/**
+ * In the page: the rows between the thread and the composer box. `gap` runs from the bottom of the
+ * last message on screen to the box's top edge; `aboveBox` from the thread's bottom edge to it. Stop's
+ * reach is probed 21px above and below its centre, inside the 44px a coarse pointer gets.
+ */
+function measureAboveBox() {
+  const box = document.querySelector(".composer-box")?.getBoundingClientRect();
+  const thread = document.querySelector(".chat-thread")?.getBoundingClientRect();
+  if (!box || !thread) return null;
+  const messages = Array.from(document.querySelectorAll<HTMLElement>(".chat-thread [data-speaker], .chat-thread [data-work-log] > li"))
+    .map((el) => el.getBoundingClientRect()).filter((r) => r.height > 0 && r.bottom <= thread.bottom);
+  const last = messages.length ? Math.max(...messages.map((r) => r.bottom)) : null;
+  const rect = (el: Element | null | undefined) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return r.height > 0 ? { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), height: Math.round(r.height) } : null;
+  };
+  const stop = document.querySelector<HTMLElement>('button[aria-label="Stop"]');
+  const chipRow = document.querySelector('[role="group"][aria-label="Status"]');
+  const sr = stop?.getBoundingClientRect();
+  const reach = sr && sr.height > 0 ? [-21, 21].map((dy) => document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2 + dy)?.closest("button") === stop) : null;
+  const chipsRect = rect(chipRow);
+  return {
+    gap: last === null ? null : Math.round(box.top - last),
+    aboveBox: Math.round(box.top - thread.bottom),
+    boxTop: Math.round(box.top),
+    chips: chipsRect,
+    chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
+    chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
+    stop: rect(stop),
+    stopReach: reach,
+    pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  };
+}
+
 
 /**
  * A finished conversation (scenario.ts `writeChatJournal`) on a phone and a desk, dark and light,
@@ -2926,6 +3067,7 @@ else if (command === "surface") await surface();
 else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
 else if (command === "chips") await chips(values.before === true);
+else if (command === "chip-line") await chipLine();
 else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
