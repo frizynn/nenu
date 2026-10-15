@@ -37,7 +37,7 @@ export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: Conne
 
 // A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what
 // is down, and since when) is never cut, and every control 44px on touch.
-const BANNER = "flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-muted py-1 pl-4 pr-2";
+export const BANNER = "flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-muted py-1 pl-4 pr-2";
 
 // A refusal is not an outage, so it gets its own surface ahead of the connection state machine: no
 // probe, no reconnect spinner, no escalation clock. The copy stays deliberately non-specific about

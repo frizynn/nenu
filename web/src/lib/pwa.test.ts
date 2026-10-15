@@ -218,3 +218,25 @@ it("skips automatic update checks while the app is hidden", async () => {
     expect(registration.update).toHaveBeenCalledTimes(1);
   } finally { Object.defineProperty(document, "hidden", { configurable: true, value: false }); }
 });
+
+it("applies a reload an open chat deferred as soon as the app comes back to the foreground", async () => {
+  await register();
+  guard.holdReload("open-agent-session", "view");
+  discoverWorker().activate();
+  serviceWorker.dispatchEvent(new Event("controllerchange"));
+  expect(reload).not.toHaveBeenCalled();
+  guard.waiveViewHolds();
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it("a click lets an automatic update already running reload over a draft", async () => {
+  await register();
+  registration.installing = new Worker();
+  const automatic = pwa.checkForUpdate({ automatic: true });
+  guard.holdReload("draft");
+  const clicked = pwa.checkForUpdate();
+  registration.installing.activate();
+  await automatic;
+  await clicked;
+  expect(reload).toHaveBeenCalledTimes(1);
+});

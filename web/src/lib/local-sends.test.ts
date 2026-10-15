@@ -1,8 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import {
   SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, reconcileLocalSends,
-  rememberLocalImage, updateLocalSend, useLocalSends,
+  rememberLocalImage, removeLocalSend, resetLocalSends, updateLocalSend, useLocalSends,
 } from "./local-sends";
+import { isWorkHeld } from "./reload-guard";
 import type { LocalSend } from "./local-sends";
 import type { TranscriptEntry } from "./types";
 import { pendingStatus } from "@/components/pending-turns";
@@ -85,4 +86,28 @@ it("a retried bubble forgets that its earlier try may have been typed", () => {
   updateLocalSend(scope, id, { state: "failed", textDelivered: true });
   addLocalSend(scope, "again");
   expect(listLocalSends(scope)).toEqual([expect.objectContaining({ id, state: "sending", textDelivered: undefined })]);
+});
+
+describe("a message without its answer is unsent work", () => {
+  beforeEach(() => resetLocalSends());
+  afterEach(() => resetLocalSends());
+
+  it("holds an update while it is on its way, and while a failure keeps its text only on the bubble", () => {
+    const id = addLocalSend(scope, "on its way");
+    expect(isWorkHeld()).toBe(true);
+    updateLocalSend(scope, id, { state: "sent" });
+    expect(isWorkHeld()).toBe(false);
+    const failed = addLocalSend(scope, "lost answer");
+    updateLocalSend(scope, failed, { state: "failed", error: "Not sent" });
+    expect(isWorkHeld()).toBe(true);
+    removeLocalSend(scope, failed);
+    expect(isWorkHeld()).toBe(false);
+  });
+
+  it("does not hold for a message queued on the bridge or one already in the terminal", () => {
+    addLocalSend(scope, "queued", "queued");
+    const typed = addLocalSend(scope, "typed");
+    updateLocalSend(scope, typed, { state: "failed", textDelivered: true });
+    expect(isWorkHeld()).toBe(false);
+  });
 });

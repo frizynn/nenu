@@ -10,7 +10,9 @@ import { isReloadHeld, subscribeReloadHeld } from "@/lib/reload-guard";
 // the worker lifecycle ourselves and reload once a new worker activates and unsent work is safe. Two entry
 // points share that watcher:
 //   1. a periodic update check, so a tab left open discovers and auto-applies a new build on its own;
-//   2. checkForUpdate(), so Settings' "Reload interface" can force the check on demand.
+//   2. checkForUpdate(), which lib/self-update runs when it sees a newer build (on a poll or when the
+//      app returns to the foreground) and Settings' "Reload interface" and the update banner run on
+//      demand.
 
 // How often an open tab re-checks for a newer service worker. Frequent enough to feel automatic,
 // cheap enough to ignore (a conditional GET of sw.js that 304s when nothing changed).
@@ -125,6 +127,8 @@ registerSW({
 
 /** One update attempt at a time. A failed download leaves the current page intact. */
 export function checkForUpdate({ automatic = false }: { automatic?: boolean } = {}): Promise<boolean> {
+  // A click joining an automatic attempt keeps the click's authority over holds.
+  if (!automatic) manualUpdate = true;
   if (updateInFlight) return updateInFlight;
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout>;
@@ -141,7 +145,6 @@ export function checkForUpdate({ automatic = false }: { automatic?: boolean } = 
 }
 
 async function applyUpdate(automatic: boolean, signal: AbortSignal): Promise<boolean> {
-  if (!automatic) manualUpdate = true;
   if (!("serviceWorker" in navigator) || !registration) {
     requestReload();
     return true;

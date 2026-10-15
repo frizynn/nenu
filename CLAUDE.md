@@ -101,9 +101,15 @@ the unit name; the Herdr action runs from anywhere.
 - Open chat/terminal views defer automatic page reloads. Hashed frontend assets are retained in
   the bridge state directory for up to seven days / 128 MiB so older clients can load deferred
   viewers after updates. See [ADR 0026](.adr/0026-open-clients-survive-frontend-updates.md).
-- Update discovery never shows a floating notice. Settings owns manual updating; downloads must
-  finish before navigation, and a failed update preserves the current page. See
+- Update discovery never shows a floating notice. Settings and the update row below own manual
+  updating; downloads must finish before navigation, and a failed update preserves the current page. See
   [ADR 0027](.adr/0027-quiet-recovery-on-intermittent-networks.md).
+- A return to the app reads `build-info.json` once and applies a waiting update unless unsent work
+  holds it: an open chat or preview is a `"view"` hold, waived for 15 s after a return; a draft,
+  upload, form or a message without its answer is `"work"` and never waived. Automatic attempts
+  retry, three per build in ten minutes. Only an update held by unsent work, or out of retries,
+  shows one in-flow row ("New version of Nenu", Update), never a floating, dismissable or animated
+  notice ([ADR 0083](.adr/0083-an-update-applies-when-the-app-returns.md)).
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
