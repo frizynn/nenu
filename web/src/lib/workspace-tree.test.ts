@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentView, TabView, WorkspaceView } from "@/lib/types";
-import { opensDirectly, workspaceTree } from "./workspace-tree";
+import { opensDirectly, tabFolds, tabStartsOpen, workspaceTree } from "./workspace-tree";
 
 function workspace(workspaceId: string, number: number): WorkspaceView {
   return { workspaceId, number, label: workspaceId, focused: false, activeTabId: `${workspaceId}:t`, tabCount: 1, paneCount: 1 };
@@ -75,5 +75,45 @@ describe("opensDirectly", () => {
   it("unfolds two sessions in two tabs, and shells alone in two tabs", () => {
     expect(opens([pane("a", "w"), { ...pane("b", "w"), tabId: "w:u", status: "done" }], [], ["w:t", "w:u"])).toBe(false);
     expect(opens([], [shell("s1", "w", "w:t"), shell("s2", "w", "w:u")], ["w:t", "w:u"])).toBe(false);
+  });
+});
+
+describe("a workspace's tabs", () => {
+  const at = (paneId: string, tabId: string, status: AgentView["status"] = "idle", kind?: "shell"): AgentView =>
+    ({ ...pane(paneId, "w"), tabId, status, ...(kind ? { agent: "shell", kind } : {}) });
+  const tabs = (...labels: string[]): TabView[] => labels.map((label, i) => ({ ...tab("w"), tabId: `w:${label}`, number: i + 1, label }));
+  const crew = (workers: AgentView["status"][]) => workspaceTree({
+    workspaces: [workspace("w", 1)],
+    tabs: tabs("lead", "server", "workers"),
+    agents: [at("lead", "w:lead"), ...workers.map((status, i) => at(`worker${i}`, "w:workers", status))],
+    shellPanes: [at("server", "w:server", "unknown", "shell")],
+  })[0]!;
+
+  it("makes a tab of two or more panes a row that folds them, and leaves a one-pane tab its pane's row", () => {
+    const branch = crew(["working", "done", "blocked", "idle"]);
+    expect(branch.tabs.map((tab) => [tab.label, tabFolds(tab.panes.length, branch.tabs.length)]))
+      .toEqual([["lead", false], ["server", false], ["workers", true]]);
+    // A lone tab has nothing beside it to tell its panes apart from: it never gets a row of its own.
+    expect(tabFolds(4, 1)).toBe(false);
+  });
+
+  it("counts a tab's agents as a workspace's, shells left out", () => {
+    const split = workspaceTree({
+      workspaces: [workspace("w", 1)], tabs: tabs("one", "mixed"),
+      agents: [at("a", "w:one"), at("b", "w:mixed", "working"), at("c", "w:mixed", "blocked")],
+      shellPanes: [at("s", "w:mixed", "unknown", "shell")],
+    })[0]!;
+    expect(split.tabs.map((tab) => tab.counts)).toEqual([
+      { agents: 1, blocked: 0, working: 0, done: 0 },
+      { agents: 2, blocked: 1, working: 1, done: 0 },
+    ]);
+  });
+
+  it("opens an untouched tab that folds when it holds the pane on screen or one that needs you, and folds it otherwise", () => {
+    const workers = (branch: ReturnType<typeof crew>) => branch.tabs.find((tab) => tab.label === "workers")!.panes;
+    expect(tabStartsOpen(workers(crew(["working", "done", "blocked", "idle"])))).toBe(true);
+    expect(tabStartsOpen(workers(crew(["working", "done", "idle"])))).toBe(false);
+    expect(tabStartsOpen(workers(crew(["working", "done", "idle"])), "worker2")).toBe(true);
+    expect(tabStartsOpen(workers(crew(["working", "done", "idle"])), "lead")).toBe(false);
   });
 });
