@@ -131,10 +131,12 @@ export function CoordinatorWindow({ project, session, mode, running, busy = fals
   );
 }
 
-/** The saved profiles that are more than a harness's own: a model, an effort or arguments of their own. */
+/**
+ * The saved profiles that are more than a harness's own: a model, an effort or arguments of their own.
+ * One may be allowed when its harness is not, so it is offered whether or not that harness is.
+ */
 function shortcuts(choices: CoordinatorChoices) {
-  return choices.profiles.filter((profile) =>
-    choices.harnesses.some((harness) => harness.harness === profile.harness && harness.profile !== profile.name));
+  return choices.profiles.filter((profile) => !choices.harnesses.some((harness) => harness.profile === profile.name));
 }
 
 function shortcutOf(choices: CoordinatorChoices | null, form: Form | null) {
@@ -148,10 +150,11 @@ function firstForm(choices: CoordinatorChoices, mode: "start" | "replace", runni
     return { profile: name, harness: "", model: "", effort: "" };
   }
   const own = (harness: string) => choices.harnesses.find((candidate) => candidate.harness === harness);
-  const last = choices.last && own(choices.last.harness) ? choices.last : null;
-  if (last) {
-    const saved = shortcuts(choices).find((profile) => profile.name === last.profile);
-    return { profile: saved?.name ?? own(last.harness)!.profile, harness: last.harness, model: last.model, effort: last.reasoningEffort };
+  const last = choices.last;
+  const lastSaved = shortcuts(choices).find((profile) => profile.name === last?.profile);
+  const lastOwn = last && own(last.harness);
+  if (last && (lastSaved || lastOwn)) {
+    return { profile: lastSaved?.name ?? lastOwn!.profile, harness: last.harness, model: last.model, effort: last.reasoningEffort };
   }
   const named = choices.profiles.find((profile) => profile.name === (mode === "replace" && running && own(running) ? own(running)!.profile : choices.defaultProfile));
   if (named && own(named.harness)) {

@@ -282,9 +282,11 @@ async function launchFlags(run: OrgRun, project: string, input: LaunchInput): Pr
   const kind = harness || (choices.profiles.find((choice) => choice.name === chosen)?.harness ?? "");
   if (profile && !choices.profiles.some((choice) => choice.name === profile)) throw notOffered(profile, "profile");
   if (effort) {
-    const efforts = choices.harnesses.find((choice) => choice.harness === kind)?.efforts ?? [];
-    if (efforts.length === 0) throw new OrgValidationError(`${kind || "This harness"} takes no effort level.`);
-    if (typeof effort !== "string" || !efforts.includes(effort)) throw new OrgValidationError(`Effort must be one of ${efforts.join(", ")} for ${kind}.`);
+    // A saved profile may be allowed when its harness is not: its levels are not listed, so it keeps its own.
+    const listed = choices.harnesses.find((choice) => choice.harness === kind);
+    if (!listed) throw new OrgValidationError("Effort can be chosen only for a harness this project's coordinator can run.");
+    if (listed.efforts.length === 0) throw new OrgValidationError(`${kind} takes no effort level.`);
+    if (typeof effort !== "string" || !listed.efforts.includes(effort)) throw new OrgValidationError(`Effort must be one of ${listed.efforts.join(", ")} for ${kind}.`);
   }
   return [
     ...(profile ? [`--profile=${profile}`] : harness ? [`--harness=${harness}`] : []),
