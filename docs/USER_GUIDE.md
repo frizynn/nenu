@@ -471,6 +471,26 @@ harness that wants `approve` the word it wants. `scope = "shell"` reaches a plai
 otherwise gets only `y`/`n`. No restart — edits are live. Verify: open a pane, open **⋯ → Quick replies**, your
 groups are there. Rejected row? `journalctl --user -u nenu -n 20` names it and why.
 
+### More than one machine
+
+Nenu shows every machine Herdr has saved (`herdr machine list`), so there is nothing to add in Nenu:
+save the machine with `herdr machine add` on the machine whose Nenu you open. Home, the sidebar, the
+drawer and Search list each other machine under its name, New chat picks where to start, and a chat
+there reads, sends, stops and starts agents as one here does. A machine that cannot be used says why:
+SSH did not get there, its Nenu is not running, or it needs updating.
+
+- **Each machine runs its own Nenu**, this version or later; it holds that machine's chats, files and
+  history. Nenu reaches it over SSH, the same way Herdr does.
+- **SSH must work without a prompt from the service.** It uses your `~/.ssh/config` and default keys:
+  a key without a passphrase works as is; an agent works if `SSH_AUTH_SOCK` is in Nenu's `.env`. The
+  host key must already be trusted (connect once by hand).
+- **If that machine's Nenu keeps its state somewhere else** (`COLLIE_STATE_DIR`), export the same
+  variable in that machine's shell profile so Nenu can find it.
+- `COLLIE_MACHINE_LABEL` names this machine in the lists (default: its host name).
+- Security: another machine's Nenu answers on a socket only its own user can open, so this adds no
+  way in that SSH as that user did not already give
+  ([ADR 0084](../.adr/0084-machines-are-herdrs-reached-through-their-own-nenu.md)).
+
 ### Multi-session
 
 `COLLIE_MULTI_SESSION=on` (the default) discovers and serves every named Herdr session under your
@@ -902,4 +922,4 @@ Herdr's plugin system itself is upstream's to document:
 - Ops, versioning & conventions — [`CLAUDE.md`](../CLAUDE.md)
 - Changes — [`CHANGELOG.md`](../CHANGELOG.md)
 
-In the works: more than one machine under a single URL — one Nenu leads, the others join it.
+More than one machine: every machine Herdr has saved, under one URL — see [More than one machine](#more-than-one-machine).
