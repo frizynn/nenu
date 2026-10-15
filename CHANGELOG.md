@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-10-15
+
+### Fixed
+
+- A workspace holding one session opens it from its row in Home's Workspaces, the drawer and Search, even with tabs of shells beside it (410b01a8).
+- On a working chat the chips and Stop share one line above the box, giving the thread 40px back on a phone (b2b463e6).
+
 ## [1.13.0] - 2026-10-15
 
 ### Added
