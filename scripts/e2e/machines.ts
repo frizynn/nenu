@@ -14,9 +14,10 @@ import { writeJournal, type DemoHerd } from "./scenario.ts";
 // is saved but unreachable. Cases: both listed on every screen, a remote chat read and sent to, Stop,
 // an agent started on the remote shell, the remote going down, and three restarts (one SIGKILL)
 // counting the ssh processes left. `--one` runs the local bridge alone for the one-machine captures,
-// which must match a build without machines.
+// which must match a build without machines; `--off` runs it with the machines saved in Herdr but
+// "Show other machines" off (the default), and must match them too, with no ssh and no Herdr call.
 //
-//   bun scripts/e2e/machines.ts [--port 8858] [--remote-port 8859] [--out DIR] [--one]
+//   bun scripts/e2e/machines.ts [--port 8858] [--remote-port 8859] [--out DIR] [--one | --off]
 
 const { values } = parseArgs({
   options: {
@@ -24,6 +25,7 @@ const { values } = parseArgs({
     "remote-port": { type: "string", default: "8859" },
     out: { type: "string" },
     one: { type: "boolean", default: false },
+    off: { type: "boolean", default: false },
   },
 });
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -122,8 +124,16 @@ const openSearch = (query: string) => async (page: Page) => {
   await page.keyboard.type(query);
 };
 const nothing = async () => {};
+const toMachines = async (page: Page) => {
+  const list = page.getByRole("list", { name: "Machines in Herdr" });
+  await list.waitFor({ timeout: 10_000 });
+  await list.scrollIntoViewIfNeeded();
+};
 
-const local = values.one ? null : await (async () => {
+/** Settings → Show other machines, as the page sends it. */
+const turnOn = (bridge: TestBridge) => fetch(`${bridge.url}/api/machines`, { method: "POST", body: JSON.stringify({ on: true }) });
+
+const local = values.one || values.off ? null : await (async () => {
   const remote = await launch({ port: Number(values["remote-port"]), fake: true, epoch: CAPTURE_EPOCH, seed: seedBuildBox });
   const machinesFile = join(outDir, "machines.json");
   const hostsFile = join(outDir, "ssh-hosts.json");
@@ -132,6 +142,7 @@ const local = values.one ? null : await (async () => {
   const env = { NENU_E2E_MACHINES: machinesFile, NENU_E2E_SSH_HOSTS: hostsFile, COLLIE_MACHINE_LABEL: "studio" };
   const t0 = Date.now();
   const bridge = await launch({ port: Number(values.port), fake: true, epoch: CAPTURE_EPOCH, env });
+  await turnOn(bridge);
   report.connectMs = (Date.now() - t0) + await waitState(bridge, "build-box", "connected");
   await waitState(bridge, "lab", "offline");
   report.lab = await machineState(bridge, "lab");
@@ -139,10 +150,34 @@ const local = values.one ? null : await (async () => {
 })();
 
 try {
-  if (!local) {
+  if (values.off) {
+    // Herdr has both machines saved; the setting is off. Nothing may dial, list or change.
+    const hostsFile = join(outDir, "ssh-hosts.json");
+    const machinesFile = join(outDir, "machines.json");
+    await writeFile(machinesFile, JSON.stringify(MACHINES));
+    await writeFile(hostsFile, JSON.stringify({ "build-box": null, lab: null }));
+    const herdrCalls = join(outDir, "herdr-calls.log");
+    const bridge = await launch({ port: Number(values.port), fake: true, epoch: CAPTURE_EPOCH, env: { NENU_E2E_MACHINES: machinesFile, NENU_E2E_SSH_HOSTS: hostsFile, NENU_E2E_HERDR_CALLS: herdrCalls } });
+    const snap = await (await fetch(`${bridge.url}/api/snapshot`)).json() as Snapshot;
+    report.machinesField = "machines" in snap;
+    await capture(bridge, "off-home", "/", nothing);
+    await capture(bridge, "off-nav", "/", openDrawer);
+    await capture(bridge, "off-search", "/", openSearch("claude"));
+    await capture(bridge, "off-chat", `/pane/${encodeURIComponent("w1:idle")}`, nothing);
+    report.sshProcesses = sshProcesses();
+    report.herdrCallsBeforeSettings = (await Bun.file(herdrCalls).text().catch(() => "")).split("\n").filter(Boolean).length;
+    report.settings = await (await fetch(`${bridge.url}/api/machines`)).json();
+    report.herdrCallsAfterSettings = (await Bun.file(herdrCalls).text().catch(() => "")).split("\n").filter(Boolean).length;
+    await capture(bridge, "off-settings", "/settings", toMachines);
+    report.sshAfterSettings = sshProcesses();
+    // Nothing running beside the bridge: no ssh, no herdr.
+    report.bridgeChildren = Bun.spawnSync(["pgrep", "-P", String(bridge.pid)]).stdout.toString().split("\n").filter(Boolean).length;
+    await bridge.stop();
+  } else if (!local) {
     const bridge = await launch({ port: Number(values.port), fake: true, epoch: CAPTURE_EPOCH });
     const snap = await (await fetch(`${bridge.url}/api/snapshot`)).json() as Snapshot;
     report.machinesField = "machines" in snap;
+    report.bridgeChildren = Bun.spawnSync(["pgrep", "-P", String(bridge.pid)]).stdout.toString().split("\n").filter(Boolean).length;
     await capture(bridge, "one-home", "/", nothing);
     await capture(bridge, "one-nav", "/", openDrawer);
     await capture(bridge, "one-search", "/", openSearch("claude"));
@@ -169,6 +204,7 @@ try {
     await capture(bridge, "two-nav", "/", openDrawer);
     await capture(bridge, "two-search", "/", openSearch("flaky"));
     await capture(bridge, "two-remote-chat", `/pane/${encodeURIComponent("w1:flaky")}?s=${R}`, nothing);
+    await capture(bridge, "two-settings", "/settings", toMachines);
     await capture(bridge, "two-new-chat", "/", async (page) => {
       if (await isPhone(page)) await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: /New/ }).first().click();
       else await page.getByRole("button", { name: "New chat" }).click();
@@ -238,6 +274,7 @@ try {
     const restarts: Array<{ how: string; sshUp: number; sshAfter: number }> = [];
     for (const how of ["SIGTERM", "SIGTERM", "SIGKILL"] as const) {
       const again = await launch({ port: Number(values.port), fake: true, epoch: CAPTURE_EPOCH, env: local.env });
+      await turnOn(again);
       await waitState(again, "build-box", "connected");
       const sshUp = sshProcesses();
       if (how === "SIGKILL") process.kill(again.pid, "SIGKILL");

@@ -237,7 +237,7 @@ export async function startTestBridge(opts: {
     gh: `[ -n "$NENU_E2E_GH_PRS" ] && exec cat "$NENU_E2E_GH_PRS"\necho 'gh stub: no pull requests' >&2\nexit 1`,
     // Herdr's saved machines are the bench's ($NENU_E2E_MACHINES, a `machine list --json`), never the
     // operator's; nothing else of Herdr's CLI is the bridge's to run.
-    herdr: `[ "$1 $2" = "machine list" ] || { echo 'herdr stub: only machine list' >&2; exit 2; }\n[ -n "$NENU_E2E_MACHINES" ] && exec cat "$NENU_E2E_MACHINES"\necho '[]'`,
+    herdr: `[ -n "$NENU_E2E_HERDR_CALLS" ] && echo "$*" >> "$NENU_E2E_HERDR_CALLS"\n[ "$1 $2" = "machine list" ] || { echo 'herdr stub: only machine list' >&2; exit 2; }\n[ -n "$NENU_E2E_MACHINES" ] && exec cat "$NENU_E2E_MACHINES"\necho '[]'`,
     // No bench run reaches a real machine: ssh is fake-ssh.ts over $NENU_E2E_SSH_HOSTS, or refuses.
     ssh: `[ -n "$NENU_E2E_SSH_HOSTS" ] && exec "${process.execPath}" "${join(import.meta.dir, "fake-ssh.ts")}" "$@"\necho 'ssh stub: the bench has no network' >&2\nexit 255`,
   };
