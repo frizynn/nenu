@@ -94,6 +94,7 @@ async function respond(req: Request, view: Omit<SnapshotResponse, "ts">): Promis
  * own business, so this page never reloads or nags over the other machine's version.
  */
 export async function machineSnapshot(ctx: Services, req: Request, session: string): Promise<Response> {
+  ctx.machines.refresh();
   const remote = await ctx.machines.snapshot(session);
   if (!remote) {
     const view = ctx.machines.views(session, null)?.find((m) => m.session === session);

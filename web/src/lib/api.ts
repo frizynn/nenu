@@ -190,7 +190,8 @@ export function grantFileOpen(paneId: string, path: string, session?: string): P
     } catch {
       return null;
     }
-  });
+  // The link is the minting Nenu's: on another machine it has to go back there.
+  }).then((answer) => ("url" in answer && session ? { ...answer, url: withSession(answer.url, session) } : answer));
 }
 
 export async function fetchPaneFile(paneId: string, path: string, session: string | undefined, signal: AbortSignal): Promise<Response> {
