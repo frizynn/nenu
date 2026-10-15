@@ -19,7 +19,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts needs-you [--port 8797] [--out DIR]  Two threads that need you: a dialog, and an agent waiting for a reply
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
-//   bun scripts/e2e/run.ts workspace-rows [--port 8797] [--out DIR]  A workspace's row in every list, phone and desk: folds, where a one-tab row lands
+//   bun scripts/e2e/run.ts workspace-rows [--port 8797] [--out DIR]  A workspace's row in every list, phone and desk: folds, where a row that opens directly lands
 //   bun scripts/e2e/run.ts layout   [--port 8797] [--out DIR]   Every page at 1280/1440/1920 (sidebar open, folded), 900 and 390
 //   bun scripts/e2e/run.ts stop     [--port 8797] [--out DIR]   Stop a working Claude, then what the queue holds
 //   bun scripts/e2e/run.ts processes [--port 8797] [--out DIR]  A working Claude's background work: chip, list, details, ⋯
@@ -614,17 +614,34 @@ async function addDocs(bridge: TestBridge): Promise<void> {
   throw new Error("the bridge never listed docs");
 }
 
+/** A workspace of two tabs with a session in each, one of them finished: two sessions, so its row unfolds. */
+async function addPair(bridge: TestBridge): Promise<void> {
+  bridge.fake!.addWorkspace("w5", "pair").addTab("w5:t1", "1").addTab("w5:t2", "2")
+    .addPane({ paneId: "w5:lead", workspaceId: "w5", tabId: "w5:t1", agent: "claude", label: "Pair lead", cwd: join(bridge.dir, "pair") })
+    .addPane({ paneId: "w5:done", workspaceId: "w5", tabId: "w5:t2", agent: "claude", label: "Pair review", cwd: join(bridge.dir, "pair") });
+  bridge.fake!.setStatus("w5:done", "done");
+  for (let i = 0; i < 150; i++) {
+    const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ paneId: string }> }>);
+    if (snap.agents.some((p) => p.paneId === "w5:done")) return;
+    await sleep(100);
+  }
+  throw new Error("the bridge never listed pair");
+}
+
 /**
- * A workspace's row in every list that draws one, against nenu (two tabs), api (one tab split in
- * three) and docs (one tab, one pane): the phone's drawer, its Search sheet and Home's Workspaces at
- * 390, the desk's Search and Home's Workspaces at 1440, dark and light, each whole and nenu's row
- * alone. Then which rows offer a fold, and where a tap on the one-tab rows lands.
+ * A workspace's row in every list that draws one, against nenu (two tabs, two sessions), api (one tab
+ * split in three), docs (one tab, one pane), ops (one session, a shell in a second tab) and pair (two
+ * tabs, a session in each): the phone's drawer, its Search sheet and Home's Workspaces at 390, the
+ * desk's Search and Home's Workspaces at 1440, dark and light, each whole and nenu's row alone. Then
+ * which rows offer a fold, and where a tap on the rows that open directly lands.
  */
 async function workspaceRows(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench(async (bridge, browser) => {
     await addDocs(bridge);
-    const names = ["nenu", "api", "docs"];
+    await addOps(bridge);
+    await addPair(bridge);
+    const names = ["nenu", "api", "docs", "ops", "pair"];
     const shots: string[] = [];
     const folds: Array<{ view: string; workspace: string; fold: boolean }> = [];
     const landed: Array<{ view: string; workspace: string; landed: string }> = [];
@@ -670,7 +687,7 @@ async function workspaceRows(): Promise<void> {
           shots.push(shot, nenu);
           if (scheme === "light") continue;
           for (const name of names) folds.push({ view: `${deviceName}/${view}`, workspace: name, fold: await page.locator(`${at.row(name)} [aria-expanded]`).count() > 0 });
-          for (const name of ["docs", "api"]) {
+          for (const name of ["docs", "api", "ops"]) {
             if (name !== "docs") await enter();
             await page.locator(at.link(name)).first().click();
             await page.waitForTimeout(1500);
