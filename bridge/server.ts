@@ -214,15 +214,16 @@ function servePeer(path: string, handle: (req: Request, server: RequestTimeouts)
   try {
     mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
     rmSync(path, { force: true });
-    const server: ReturnType<typeof Bun.serve> = Bun.serve({
+    const options = {
       unix: path,
       maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-      // A socket listener takes no idleTimeout option; each request gets the TCP port's instead.
-      fetch: (req): Response | Promise<Response> => {
-        server.timeout(req, SERVER_IDLE_TIMEOUT_S);
-        return handle(req, server);
-      },
-    });
+      // No idle cut. On a socket listener Bun 1.4 ignores server.timeout(req, 0), so the 10 s default
+      // closed every quiet event stream (measured); only this option holds. The one client here is
+      // another Nenu, whose connections end with its tunnel.
+      idleTimeout: 0,
+      fetch: (req: Request): Response | Promise<Response> => handle(req, server),
+    };
+    const server: ReturnType<typeof Bun.serve> = Bun.serve(options as unknown as Parameters<typeof Bun.serve>[0]);
     chmodSync(path, 0o600);
     return server;
   } catch (err) {
