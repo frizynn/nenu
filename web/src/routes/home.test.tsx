@@ -276,6 +276,29 @@ describe("Recents and Workspaces", () => {
     expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
   });
 
+  it("opens a workspace of one session on it in one tap, though shells sit in other tabs", async () => {
+    const solo = { ...data.agents[0]!, paneId: "w3:a", workspaceId: "w3", workspaceLabel: "ops", tabId: "t-agent", paneLabel: "Search metrics", lastActiveAt: now };
+    const vpn = { ...shell, paneId: "w3:vpn", workspaceId: "w3", workspaceLabel: "ops", tabId: "t-vpn", paneLabel: "vpn" };
+    const withOps: HomeData = {
+      ...recentData,
+      workspaces: [...recentData.workspaces, { workspaceId: "w3", number: 3, label: "ops", focused: false, activeTabId: "t-agent", tabCount: 2, paneCount: 2 }],
+      tabs: [
+        { tabId: "t-agent", workspaceId: "w3", number: 1, label: "1", focused: true, paneCount: 1 },
+        { tabId: "t-vpn", workspaceId: "w3", number: 2, label: "vpn", focused: false, paneCount: 1 },
+      ],
+      agents: [...recentData.agents, solo],
+      shellPanes: [...recentData.shellPanes, vpn],
+    };
+    const { user, router, main } = await setup(withOps);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
+    const ops = panel.getByRole("link", { name: /^ops,/ });
+    expect(ops).toHaveAttribute("href", "/pane/w3%3Aa?s=work");
+    expect(panel.queryByRole("button", { name: /^ops,/ })).toBeNull();
+    await user.click(ops);
+    expect(router.state.location.pathname).toBe("/pane/w3%3Aa");
+  });
+
   it("asks for your reply in Needs you, with Reply, and counts it in the headline", async () => {
     const waiting: ProjectView = { ...hub, threads: hub.threads.map((thread) => thread.id === "t3" ? { ...thread, liveStatus: "idle", group: "waiting-on-you", selfWaiting: true } : thread) };
     const { user, router, main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
