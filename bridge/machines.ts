@@ -66,12 +66,13 @@ const SSH_OPTIONS = [
 
 // Where the other Nenu keeps `peer.sock`: COLLIE_STATE_DIR when the login shell exports it, the
 // supervised service's default, then the state dir Herdr hands an unsupervised one. A state dir with
-// no socket is a Nenu from before machines; none at all, no Nenu. No single quotes: it travels inside one.
+// `machines/` (machines-runtime.ts makes it) but no socket is a Nenu that is not running; one without,
+// a Nenu from before machines; none at all, no Nenu. No single quotes: it travels inside one.
+const STATE_DIRS = 'for d in "${COLLIE_STATE_DIR:-}" "$HOME/.local/state/collie" "$HOME/.local/state/herdr/plugins/herdr.nenu"; do [ -n "$d" ] &&';
 const PROBE = [
-  'for d in "${COLLIE_STATE_DIR:-}" "$HOME/.local/state/collie" "$HOME/.local/state/herdr/plugins/herdr.nenu"; do',
-  '[ -n "$d" ] && [ -S "$d/peer.sock" ] && { printf "nenu-peer %s\\n" "$d/peer.sock"; exit 0; }; done;',
-  'for d in "${COLLIE_STATE_DIR:-}" "$HOME/.local/state/collie" "$HOME/.local/state/herdr/plugins/herdr.nenu"; do',
-  '[ -n "$d" ] && [ -d "$d" ] && { echo nenu-old; exit 0; }; done; echo nenu-none',
+  `${STATE_DIRS} [ -S "$d/peer.sock" ] && { printf "nenu-peer %s\\n" "$d/peer.sock"; exit 0; }; done;`,
+  `${STATE_DIRS} [ -d "$d/machines" ] && { echo nenu-stopped; exit 0; }; done;`,
+  `${STATE_DIRS} [ -d "$d" ] && { echo nenu-old; exit 0; }; done; echo nenu-none`,
 ].join(" ");
 
 export function probeArgv(target: string): string[] {
@@ -95,13 +96,14 @@ export function tunnelArgv(target: string, localSocket: string, remoteSocket: st
 
 const TUNNEL_READY = "nenu-tunnel-ready";
 
-export type Probe = { kind: "peer"; path: string } | { kind: "old" } | { kind: "none" };
+export type Probe = { kind: "peer"; path: string } | { kind: "stopped" } | { kind: "old" } | { kind: "none" };
 
 /** The probe's answer; a login banner or noise before it is skipped. */
 export function parseProbe(stdout: string): Probe {
   for (const line of stdout.split("\n").reverse()) {
     const text = line.trim();
     if (text.startsWith("nenu-peer ")) return { kind: "peer", path: text.slice("nenu-peer ".length) };
+    if (text === "nenu-stopped") return { kind: "stopped" };
     if (text === "nenu-old") return { kind: "old" };
     if (text === "nenu-none") return { kind: "none" };
   }
@@ -193,6 +195,8 @@ export class MachineLink {
   private stopped = false;
   private reading: Promise<void> | null = null;
   private rereadAfter = false;
+  /** Why the tunnel is being closed from this side, when it is. */
+  private why: string | null = null;
   readonly socket: string;
   readonly session: string;
 
@@ -237,6 +241,10 @@ export class MachineLink {
     return this.deps.fetchPeer(this.socket, path, init);
   }
 
+  private notRunning(): string {
+    return `Nenu is not running on ${this.machine.label}.`;
+  }
+
   private set(state: MachineState, detail?: string): void {
     if (this.state === state && this.detail === detail) return;
     this.state = state;
@@ -252,6 +260,7 @@ export class MachineLink {
     if (this.stopped) return;
     if (code !== 0) return this.fail(lastLine(stderr) || `ssh exited with ${code}`);
     const found = parseProbe(stdout);
+    if (found.kind === "stopped") return this.fail(this.notRunning());
     if (found.kind === "old") return this.fail(`Nenu on ${this.machine.label} is too old to be reached from here. Update it there.`, "old-nenu");
     if (found.kind === "none") return this.fail(`Nenu is not installed on ${this.machine.label}.`, "no-nenu");
     this.open(found.path);
@@ -274,7 +283,9 @@ export class MachineLink {
       if (this.stopped) return;
       if (this.upSince && Date.now() - this.upSince >= STABLE_MS) this.attempt = 0;
       this.upSince = 0;
-      this.fail(lastLine(await stderr) || `ssh exited with ${code}`);
+      const why = this.why;
+      this.why = null;
+      this.fail(why ?? (lastLine(await stderr) || `ssh exited with ${code}`));
     });
   }
 
@@ -298,8 +309,10 @@ export class MachineLink {
     } catch {
       if (events.signal.aborted) return;
     }
-    // The stream ended with the tunnel still up: the other Nenu restarted or stopped. Start over.
+    // The stream ended, or never opened, with the tunnel still up: the other Nenu restarted or stopped.
+    // Start over, saying so rather than reporting ssh's exit.
     if (!events.signal.aborted && !this.stopped) {
+      this.why = this.notRunning();
       this.tunnel?.kill();
     }
   }
