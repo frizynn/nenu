@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import type { MachineHerd, MachineState, MachineView } from "./types.ts";
@@ -205,8 +206,10 @@ export class MachineLink {
   readonly session: string;
 
   constructor(readonly machine: HerdrMachine, private readonly deps: LinkDeps) {
-    // The id, not the label: a label may hold anything, and a socket path must stay short (sun_path).
-    this.socket = join(deps.socketDir, `m-${machine.id.slice(0, 12)}.sock`);
+    // A digest of the id: neither it nor the label is ours, a path built from either could leave the
+    // folder (or land on this Nenu's own peer.sock, which StreamLocalBindUnlink would take), and a
+    // socket path must stay short (sun_path).
+    this.socket = join(deps.socketDir, `m-${createHash("sha256").update(machine.id).digest("hex").slice(0, 16)}.sock`);
     this.session = machineSession(machine.label);
   }
 
