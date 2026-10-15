@@ -79,7 +79,7 @@ describe("useFocusInPlace", () => {
     el.dispatchEvent(Object.assign(new Event(type, { bubbles: true }), { pointerType, clientX: 12, clientY: 8 }));
   /** The focus a tap gives the field: the browser's own, not a script's focus() call. */
   const tapFocus = (input: HTMLTextAreaElement) => HTMLElement.prototype.focus.call(input);
-  const scrollFree = (focus: ReturnType<typeof vi.spyOn>) => focus.mock.calls.filter(([options]) => (options as FocusOptions | undefined)?.preventScroll === true).length;
+  const scrollFree = (focus: { mock: { calls: unknown[][] } }) => focus.mock.calls.filter(([options]) => (options as FocusOptions | undefined)?.preventScroll === true).length;
 
   it("on iOS, a touch on the idle draft parks focus beside it, and the tap's focus arrives without scrolling the page", () => {
     const { anchor, input, focus } = mount("iPhone");

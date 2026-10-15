@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 // Detect whether the on-screen keyboard is open by watching the visual viewport height.
 //
-// The viewport meta uses `interactive-widget=resizes-content`, so when the soft keyboard opens BOTH
-// the layout and visual viewport shrink together — which means the usual trick of comparing
+// The viewport meta uses `interactive-widget=resizes-content`, so where it is honoured (Chromium; not
+// Safari on iOS, which shrinks only the visual viewport) BOTH the layout and visual viewport shrink
+// together when the soft keyboard opens — which means the usual trick of comparing
 // `window.innerHeight` to `visualViewport.height` reads ~0 and can't see the keyboard. What DOES
 // still change is the absolute height: it drops by the keyboard's height. So we remember the tallest
 // height seen while closed (the baseline) and call the keyboard "open" once the current height falls
@@ -52,4 +53,52 @@ export function useKeyboardOpen(): boolean {
     return () => vv.removeEventListener("resize", update);
   }, []);
   return open;
+}
+
+// Safari on iOS answers a tap that focuses a text field by scrolling the page until the field is centred
+// in what the keyboard leaves, and that scroll carries every fixed layer, the whole app, up with the
+// keyboard; useAppViewport can only bring it back once visualViewport reports, after the keyboard has
+// risen. WebKit skips the scroll for a focus that carries `preventScroll` (WKContentView
+// _zoomToRevealFocusedElement), and a focus made while the tap blurs the element it leaves replaces the
+// tap's own. So a touch on the idle draft parks focus on `anchor` when nothing holds it, and the tap's
+// blur focuses the draft without the scroll: the app is sized to the visual viewport, so the draft rises
+// by layout once the keyboard is up. WebKit then drops the tap's press, so the caret is put where the
+// finger landed. Apple's touch platforms only: Chromium resizes the layout for the keyboard instead.
+const SCROLLS_TO_REVEAL = /iPhone|iPad|iPod|Mac/;
+
+export function useFocusInPlace(inputRef: RefObject<HTMLTextAreaElement | null>, anchorRef: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const input = inputRef.current;
+    const anchor = anchorRef.current;
+    if (!input || !anchor || !SCROLLS_TO_REVEAL.test(navigator.platform)) return;
+    // Where the finger landed, while that touch may still become the tap; a scroll cancels it.
+    let touch: { x: number; y: number } | null = null;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" || input.disabled || document.activeElement === input) return;
+      touch = { x: event.clientX, y: event.clientY };
+      if (document.activeElement && document.activeElement !== document.body) return;
+      anchor.tabIndex = -1;
+      anchor.focus({ preventScroll: true });
+    };
+    const onPointerCancel = () => { touch = null; };
+    const onBlur = (event: FocusEvent) => {
+      if (event.target === anchor) anchor.removeAttribute("tabindex");
+      if (event.relatedTarget !== input || !touch) return;
+      const { x, y } = touch;
+      touch = null;
+      input.focus({ preventScroll: true });
+      const caret = document.caretPositionFromPoint?.(x, y);
+      const offset = caret?.offsetNode === input ? caret.offset : input.value.length;
+      input.setSelectionRange(offset, offset);
+    };
+    input.addEventListener("pointerdown", onPointerDown);
+    input.addEventListener("pointercancel", onPointerCancel);
+    document.addEventListener("blur", onBlur, true);
+    return () => {
+      input.removeEventListener("pointerdown", onPointerDown);
+      input.removeEventListener("pointercancel", onPointerCancel);
+      document.removeEventListener("blur", onBlur, true);
+      anchor.removeAttribute("tabindex");
+    };
+  }, [inputRef, anchorRef]);
 }
