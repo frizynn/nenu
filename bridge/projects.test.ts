@@ -327,6 +327,8 @@ describe("ProjectRegistry: Organizations fields", () => {
     registry.list("default", true, []);
     await registry.invalidate();
     live.length = 0;
+    // The watcher misses a change made the instant it is set up (FSEvents on macOS).
+    await Bun.sleep(200);
     // `open` records the coordinator's new pane before its agent is up; the person is on the page.
     await registry.urgently(async () => {
       writeFileSync(join(root, "demo", ".state", "coordinator.json"), JSON.stringify({ session: "", workspace_id: "w1", tab_id: "t9", pane_id: "p9", cwd: "/work/demo" }));
