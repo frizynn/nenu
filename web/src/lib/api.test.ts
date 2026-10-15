@@ -500,3 +500,12 @@ describe("api client — identity proxy refusals", () => {
     await expect(fetchSnapshot()).rejects.toMatchObject({ status: 401, message: "Your sign-in expired. Sign in again." });
   });
 });
+
+describe("a file on another machine", () => {
+  it("opens through that machine: its single-use link carries the machine's session", async () => {
+    server.use(http.post("/api/files/grant", () => HttpResponse.json({ url: "/api/files/open?t=abc", name: "a.txt", size: 1, type: "text/plain" })));
+    const { grantFileOpen } = await import("./api");
+    expect(await grantFileOpen("w1:p1", "a.txt", "@build-box")).toMatchObject({ url: "/api/files/open?t=abc&session=%40build-box" });
+    expect(await grantFileOpen("w1:p1", "a.txt")).toMatchObject({ url: "/api/files/open?t=abc" });
+  });
+});
