@@ -4,9 +4,9 @@ import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
   SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
+  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgStatusFile, type OrgTask,
 } from "./org-cli.ts";
-import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
+import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -291,15 +291,19 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(pr ? { pr } : {}),
     ...(prAction ? { prAction } : {}),
     ...(record.verdict ? { verdict: record.verdict } : {}),
+    ...(record.status_file ? { statusUpdated: record.status_file.updated } : {}),
   };
 }
 
 /** What the thread's report says and shows, or undefined when it says none of it. */
 function threadSummary(record: OrgOverviewThread): ThreadSummary | undefined {
-  const { summary, captures, deliverables } = record;
-  if (!summary && !captures.length && !deliverables.length) return undefined;
-  return { id: record.id, ...(summary ? { summary } : {}), captures, deliverables };
+  const { summary, captures, deliverables, status_file: status } = record;
+  if (!summary && !captures.length && !deliverables.length && !status) return undefined;
+  return { id: record.id, ...(summary ? { summary } : {}), captures, deliverables, ...(status ? { status: statusText(status) } : {}) };
 }
+
+/** What a client is given of a STATUS.md: its text and when it changed, never where it lives. */
+const statusText = ({ text, updated }: OrgStatusFile): StatusFile => ({ text, updated });
 
 /** Depth from the parent chain; an unknown parent or a cycle stops at the project root. */
 function withDepth(threads: Array<{ view: OrgThreadView; binding: Binding }>): void {
@@ -336,6 +340,9 @@ interface FileProject extends Picks {
 interface ProjectRecord extends FileProject {
   source: "json" | "files";
   prActions: boolean;
+  /** The project coordinator's STATUS.md, and where every STATUS.md in the project lives; `--json` only. */
+  statusFile?: OrgStatusFile;
+  statusPaths?: string[];
 }
 
 export class ProjectRegistry {
@@ -396,6 +403,7 @@ export class ProjectRegistry {
           ...(record.goal ? { goal: record.goal } : {}),
           status: record.status,
           ...picks(record.icon, record.tone),
+          ...(record.statusFile ? { statusUpdated: record.statusFile.updated } : {}),
           coordinator: coordinatorPane ? {
             paneId: coordinatorPane.paneId,
             agent: coordinatorPane.agent,
@@ -429,12 +437,12 @@ export class ProjectRegistry {
    * What each thread's report says and shows, for the threads whose report says any of it. Null
    * when Organizations is read from its files, which carry none of it, or the project is not listed.
    */
-  summaries(project: string): ThreadSummary[] | null {
+  summaries(project: string): { threads: ThreadSummary[]; status: StatusFile | null } | null {
     const slug = validateProjectSlug(project);
     this.read();
     const record = this.records.find((candidate) => candidate.slug === slug);
     if (!record || record.source !== "json") return null;
-    return record.threads.flatMap(({ summary }) => summary ? [summary] : []);
+    return { threads: record.threads.flatMap(({ summary }) => summary ? [summary] : []), status: record.statusFile ? statusText(record.statusFile) : null };
   }
 
   /** The folder Organizations copies each thread's files into, for a project this registry lists; undefined otherwise. */
@@ -628,6 +636,8 @@ export class ProjectRegistry {
       for (const name of this.threadFiles(dir)) add(join(dir, "threads", name));
       for (const name of STATE_FILES) add(join(dir, ".state", name));
     }
+    // A coordinator edits its STATUS.md outside Organizations' own files, and only a new overview carries the edit.
+    for (const record of this.records) for (const path of record.statusPaths ?? []) add(path);
     return parts.join("\n");
   }
 
@@ -684,6 +694,8 @@ export class ProjectRegistry {
         threads,
         source: "json" as const,
         prActions,
+        ...(project.status_file ? { statusFile: project.status_file } : {}),
+        statusPaths: [project.status_file, ...project.threads.map((thread) => thread.status_file)].flatMap((file) => file ? [file.path] : []),
       }];
     });
   }
