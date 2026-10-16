@@ -266,6 +266,8 @@ export interface OrgSeed {
     /** The glyph and colour picked with `set <slug> icon|tone`, empty when none was picked. */
     icon?: string; tone?: string;
     coordinator?: { pane_id: string; workspace_id: string; tab_id: string };
+    /** The project coordinator's STATUS.md, as Organizations prints it. */
+    status_file?: { path: string; text: string; updated: string } | null;
     threads: Array<Record<string, unknown> & { id: string }>;
     /** `routine list --json`'s routines, as Organizations prints them. */
     routines?: Array<Record<string, unknown>>;

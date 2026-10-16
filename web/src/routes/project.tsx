@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } 
 import { ColumnPage } from "@/components/column-page";
 import { ProjectMissing } from "@/components/project-missing";
 import { ProjectTasks } from "@/components/project-tasks";
+import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
 import { isReadOnly } from "@/lib/types";
@@ -18,11 +19,12 @@ export function ProjectRoute() {
   const revalidator = useRevalidator();
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
   const coordinator = liveCoordinator(project, data.agents);
+  const { status } = useThreadSummaries(coordinator ? undefined : project, []);
   if (coordinator) return <Navigate to={panePath(coordinator, data.session)} replace />;
 
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
     {!project ? <ProjectMissing session={data.session} />
-      : <ProjectTasks project={project} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
+      : <ProjectTasks project={project} status={status ?? undefined} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
         onChanged={() => revalidator.revalidate()} />}
   </ColumnPage>;

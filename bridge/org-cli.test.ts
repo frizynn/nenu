@@ -434,6 +434,28 @@ describe("herdr-organizations --json contract", () => {
     for (const empty of [malformed!, before!]) expect(empty).toMatchObject({ verdict: null, summary: null, captures: [], deliverables: [] });
   });
 
+  it("reads a coordinator's STATUS.md for the project and each thread, bounded, and none from an older Organizations or a malformed one", async () => {
+    const status = (text: string) => ({ path: "/work/demo/STATUS.md", text, updated: "2026-10-16T12:00:00Z" });
+    const coordinator = { ...overviewThread, id: "t-0005", role: "coordinator", status_file: status("# Status\n## Asked\n- [open] Login") };
+    const worker = { ...overviewThread, id: "t-0006", status_file: null };
+    const malformed = [
+      { ...overviewThread, id: "t-0007", status_file: { path: "relative/STATUS.md", text: "x", updated: "2026-10-16T12:00:00Z" } },
+      { ...overviewThread, id: "t-0008", status_file: { path: "/w/STATUS.md", text: "   ", updated: "2026-10-16T12:00:00Z" } },
+      { ...overviewThread, id: "t-0009", status_file: { path: "/w/STATUS.md", text: 7, updated: "2026-10-16T12:00:00Z" } },
+      { ...overviewThread, id: "t-0010", status_file: "STATUS.md" },
+    ];
+    const project = { slug: "demo", name: "Demo", goal: "", status: "active", status_file: status("y".repeat(9_000)), threads: [coordinator, worker, ...malformed, overviewThread] };
+    const older = { slug: "old", name: "Old", goal: "", status: "active", threads: [] };
+    const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [project, older] }), stderr: "" });
+
+    const [demo, before] = (await readOverview(run, "/root"))!;
+    expect(demo!.status_file).toEqual({ path: "/work/demo/STATUS.md", text: "y".repeat(8_000), updated: "2026-10-16T12:00:00Z" });
+    expect(demo!.threads.map((thread) => thread.status_file)).toEqual([status("# Status\n## Asked\n- [open] Login"), null, null, null, null, null, null]);
+    // The lifecycle stays where it was: the file has a field of its own.
+    expect(demo!.threads[0]!.status).toBe("open");
+    expect(before!.status_file).toBeNull();
+  });
+
   it("keeps an unread pull request's unknown numbers as null, never zero", async () => {
     const unread = { ...overviewThread, pr: { url: overviewThread.pr.url, state: "", review: "", checks: null, additions: null, deletions: null, failing: [], comment_count: null, draft: null, mergeable: null, merge_blocker: "the ticker has not read this pull request yet" } };
     const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo", goal: "", status: "active", threads: [unread] }] }), stderr: "" });

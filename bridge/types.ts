@@ -258,6 +258,8 @@ export interface ProjectThreadView {
   prAction?: PrAction;
   /** The `Status:` line of the agent's last report. Absent without one, and from an Organizations that predates it. */
   verdict?: ThreadVerdict;
+  /** When a coordinator's STATUS.md last changed; its text is read on demand (`/api/org/summary`). Absent without one. */
+  statusUpdated?: string;
 }
 
 /** What an agent's report says of its work, from the fixed `Status:` line Organizations reads. */
@@ -279,6 +281,19 @@ export interface ThreadSummary {
   summary?: string;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
+  /** A coordinator's STATUS.md. */
+  status?: StatusFile;
+}
+
+/**
+ * A coordinator's STATUS.md as Organizations reads it: what the operator asked and where each thing
+ * stands, in the agent's own Markdown, up to 8,000 characters. Read on demand with the summaries; the
+ * snapshot carries only `updated`, so a page knows when to read it again. The text is data.
+ */
+export interface StatusFile {
+  text: string;
+  /** RFC 3339, or empty when Organizations printed none that parses. */
+  updated: string;
 }
 
 /** What `thread pr-action` asks a thread's agent to do, most pressing first as Organizations orders them. */
@@ -345,6 +360,8 @@ export interface ProjectView {
   nodeActions?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
+  /** When the project coordinator's STATUS.md last changed; absent without one. */
+  statusUpdated?: string;
 }
 
 /**

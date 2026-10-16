@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 
 import { servicePath } from "./claude-sessions.ts";
-import { PR_ASKS, THREAD_VERDICTS, type PrAsk, type RoutineList, type RoutineView, type TemplateView, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
+import { PR_ASKS, THREAD_VERDICTS, type PrAsk, type RoutineList, type RoutineView, type StatusFile, type TemplateView, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -443,6 +443,16 @@ export interface OrgOverviewThread {
   summary: string | null;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
+  /** A coordinator's STATUS.md; null for a worker, without one and from an Organizations that predates it. */
+  status_file: OrgStatusFile | null;
+}
+
+/**
+ * A coordinator's STATUS.md as Organizations prints it. Organizations names the field `status_file`,
+ * since `status` is already the project's and the thread's lifecycle.
+ */
+export interface OrgStatusFile extends StatusFile {
+  path: string;
 }
 
 export interface OrgOverviewProject {
@@ -453,6 +463,8 @@ export interface OrgOverviewProject {
   /** The glyph and colour names picked with `set <slug> icon|tone`; empty when none was, or the name is malformed. */
   icon: string;
   tone: string;
+  /** The project coordinator's STATUS.md, as a thread's. */
+  status_file: OrgStatusFile | null;
   threads: OrgOverviewThread[];
 }
 
@@ -496,6 +508,7 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     status: value.status,
     icon: pickName(value.icon),
     tone: pickName(value.tone),
+    status_file: statusFile(value.status_file),
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];
@@ -536,6 +549,7 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
       const kind = DELIVERABLE_KINDS.find((candidate) => candidate === item.kind);
       return kind && { kind };
     }),
+    status_file: statusFile(value.status_file),
   };
 }
 
@@ -543,16 +557,27 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
 const MAX_SUMMARY_CHARS = 600;
 const MAX_CAPTURES = 24;
 const MAX_DELIVERABLES = 10;
+const MAX_STATUS_CHARS = 8_000;
 const DELIVERABLE_KINDS: ReadonlyArray<ThreadDeliverable["kind"]> = ["html", "pdf", "md"];
+
+const absolutePath = (value: unknown): value is string =>
+  typeof value === "string" && isAbsolute(value) && value.length <= 4096 && !/[\x00-\x1f]/.test(value);
 
 /** The files of a report's list that name an absolute path, each with the rest `extra` reads; a malformed entry is skipped. */
 function libraryFiles<T extends object>(value: unknown, max: number, extra: (item: Record<string, unknown>) => T | undefined): Array<{ path: string } & T> {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
-    if (!isRecord(item) || typeof item.path !== "string" || !isAbsolute(item.path) || item.path.length > 4096 || /[\x00-\x1f]/.test(item.path)) return [];
+    if (!isRecord(item) || !absolutePath(item.path)) return [];
     const rest = extra(item);
     return rest ? [{ path: item.path, ...rest }] : [];
   }).slice(0, max);
+}
+
+/** A STATUS.md with an absolute path and some text; anything else reads as none. */
+function statusFile(value: unknown): OrgStatusFile | null {
+  if (!isRecord(value) || !absolutePath(value.path) || typeof value.text !== "string" || !value.text.trim()) return null;
+  const updated = typeof value.updated === "string" && Number.isFinite(Date.parse(value.updated)) ? value.updated : "";
+  return { path: value.path, text: value.text.slice(0, MAX_STATUS_CHARS), updated };
 }
 
 function parseActions(value: unknown): { actions?: string[] } {

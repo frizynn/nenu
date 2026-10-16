@@ -165,6 +165,9 @@ the unit name; the Herdr action runs from anywhere.
   The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
   by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
   only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
+  A coordinator's STATUS.md (`status_file`) heads its page and the project page, drawn as written through
+  `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
+  ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
