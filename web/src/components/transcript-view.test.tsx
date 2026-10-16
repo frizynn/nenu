@@ -563,6 +563,14 @@ describe("journal media", () => {
     expect(screen.getByRole("button", { name: "assets/canvas.template.html" })).toBeEnabled();
   });
 
+  // The phone drew this link as plain text over a "resumen-del-dia.html · 8443/ · Not found" card.
+  it("opens a web URL in prose as a link, with no file card for the page it names", async () => {
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: `Resumen al día: ${href}` }] })]} />));
+    expect(screen.getByRole("link", { name: href })).toHaveAttribute("href", href);
+    expect(screen.queryByRole("button", { name: /resumen-del-dia\.html/ })).not.toBeInTheDocument();
+  });
+
   it("opens a card at the file the bridge finds and says so when nothing is there", async () => {
     let written = false;
     server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(

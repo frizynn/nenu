@@ -13,6 +13,15 @@ describe("chat file references", () => {
     expect(filePathsInText("https://example.com/public.pdf javascript:bad.png")).toEqual([]);
   });
 
+  it("finds no file inside a web URL, after its port or in its query", () => {
+    // The phone showed this link as a "resumen-del-dia.html · 8443/ · Not found" card.
+    expect(filePathsInText("Resumen al día: https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html")).toEqual([]);
+    expect(filePathsInText("https://ci.example.com/view?file=docs/report.pdf;mode=raw,next=out/log.txt")).toEqual([]);
+    expect(filePathsInText("(http://localhost:5173/README)")).toEqual([]);
+    // The prose around the URL still names its files.
+    expect(filePathsInText("Ver https://example.com:8443/a.html y docs/plan.md")).toEqual(["docs/plan.md"]);
+  });
+
   it("reads a file:// link by its target and never offers its label as a second, relative file", () => {
     // The shape that 404'd on the phone: the label resolved against the pane's folder.
     const target = "/Users/demo/Obsidian/acme/Research/artifacts/board-20261009/board-summary.html";

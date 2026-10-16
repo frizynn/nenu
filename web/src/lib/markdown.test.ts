@@ -155,8 +155,22 @@ describe("bare file URLs", () => {
     ]);
   });
 
-  it("leaves a file URL for another host, a web URL and a bare path as text", () => {
-    for (const text of ["file://server/share/report.html", "https://example.com/report.html", `see ${path}`]) {
+  it("reads a bare web URL as a link to itself, leaving trailing punctuation as text", () => {
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    expect(parseInline(`Resumen al día: ${href}.`)).toEqual([
+      { kind: "text", text: "Resumen al día: " },
+      { kind: "link", href, spans: [{ kind: "text", text: href }] },
+      { kind: "text", text: "." },
+    ]);
+    expect(parseInline("(http://localhost:5173/?tab=usage)")).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "link", href: "http://localhost:5173/?tab=usage", spans: [{ kind: "text", text: "http://localhost:5173/?tab=usage" }] },
+      { kind: "text", text: ")" },
+    ]);
+  });
+
+  it("leaves a file URL for another host, a URL inside a word and a bare path as text", () => {
+    for (const text of ["file://server/share/report.html", "xhttps://example.com/report.html", `see ${path}`]) {
       expect(parseInline(text)).toEqual([{ kind: "text", text }]);
     }
   });
