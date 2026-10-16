@@ -17,6 +17,7 @@ import { settingsRoutes } from "./settings.ts";
 import { machineSnapshot, snapshotRoutes } from "./snapshot.ts";
 import { isReservedAuthPath, reservedAuthPlaceholder, serveStatic } from "./static.ts";
 import { structurePaneActions, structureRoutes } from "./structure.ts";
+import { usageRoutes } from "./usage.ts";
 
 /** Every `/api/pane/:id/<action>`, keyed by action; `""` is the bare pane read. */
 export const PANE_ACTIONS: Readonly<Record<string, PaneAction>> = {
@@ -113,6 +114,7 @@ export const ROUTES: readonly Route[] = [
   ...fileOpenRoutes,
   ...interactionRoutes,
   ...hookRoutes,
+  ...usageRoutes,
 ];
 
 /** The route a request reaches, with its path match; undefined falls through to static. */

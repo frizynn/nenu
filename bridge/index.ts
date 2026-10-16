@@ -29,6 +29,7 @@ import {
 } from "./update.ts";
 import { createBridgeStampReader } from "./bridge-stamp.ts";
 import { SWEEP_INTERVAL_MS, sweepUploads } from "./uploads.ts";
+import { Usage, usageRoots } from "./usage/runtime.ts";
 
 // How often the registry rescans the filesystem for sessions that appeared/disappeared after boot.
 const SESSION_REFRESH_MS = 15_000;
@@ -129,6 +130,14 @@ updateTimer?.unref();
 // every session publishes into it and each stream filters to its own session.
 const live = new LiveEvents();
 
+// Settings → Usage. Off unless turned on; then a scan runs in its own process now and then.
+const usage = new Usage({
+  stateDir: cfg.stateDir,
+  roots: usageRoots(cfg.journalRoots),
+  onScanned: () => { for (const session of registry.list()) live.publish({ session: session.name, topic: "usage" }); },
+});
+await usage.load();
+
 // ── Per-session runtime factory ──────────────────────────────────────────────
 // One HerdrClient + StateEngine + EventPoker + NotificationCoordinator per herdr session. The
 // registry calls this for the primary at construction and for each session discovered later. Push,
@@ -171,6 +180,8 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
   const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name),
     (paneId) => activity.get(name, paneId)?.seenAt);
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
+  // A finished turn is when new usage exists: a stale usage total catches up then (usage/runtime.ts).
+  engine.onTransition((_agent, _from, to) => { if (to === "idle" || to === "done") usage.turnEnded(); });
   engine.onRemove((paneId) => notifications.onRemove(paneId));
 
   engine.start();
@@ -234,7 +245,7 @@ const machines = await startMachines(cfg.stateDir, () => {
   for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
 });
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines });
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines, usage });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");
@@ -242,6 +253,7 @@ const shutdown = async () => {
   // before we tear down the poll loops and exit.
   await server.stop();
   machines.stop();
+  usage.stop();
   clearInterval(refreshTimer);
   registry.disposeAll();
   // Writes are debounced, so the last few seconds of "you looked at this" live only in memory —
