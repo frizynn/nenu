@@ -8,6 +8,7 @@ import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
 import { GitPullRequest } from "@/components/ui/icon";
 import { CodeBlock } from "./code-block";
+import { FileLink } from "./file-link";
 import { CopyButton, QUIET_ACTION } from "./copy-button";
 import { TexMath } from "./math";
 import { IMAGE_EDGE } from "./message-images";
@@ -77,7 +78,7 @@ function Span({ span }: { span: MdSpan }) {
     case "math":
       return <TexMath tex={span.text} display={span.display} />;
     case "file":
-      return openFile ? <button type="button" className="text-left text-primary underline underline-offset-2 [overflow-wrap:anywhere]" onClick={() => openFile(span.path)}><LinkLabel spans={span.spans} /></button> : <Spans spans={span.spans} />;
+      return <FileLink path={span.path} className="text-left text-primary underline underline-offset-2 [overflow-wrap:anywhere]"><LinkLabel spans={span.spans} /></FileLink>;
     case "bold":
       return (
         <strong className="font-semibold">
@@ -91,11 +92,10 @@ function Span({ span }: { span: MdSpan }) {
         </em>
       );
     case "code": {
-      const path = localFilePath(span.text);
-      const open = path && openFile ? () => openFile(path) : null;
-      const code = <code className={cn(INLINE_CODE, open && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
-      // A button is an inline box already, whatever its length.
-      if (open) return <button type="button" className={cn(WHOLE, "text-left")} onClick={open}>{code}</button>;
+      const path = openFile ? localFilePath(span.text) : null;
+      const code = <code className={cn(INLINE_CODE, path && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
+      // A file's link is an inline box whatever its length.
+      if (path) return <FileLink path={path} className={cn(WHOLE, "text-left")}>{code}</FileLink>;
       return span.text.length <= WHOLE_CODE_CHARS ? <span className={WHOLE}>{code}</span> : code;
     }
     case "link": {
@@ -129,13 +129,12 @@ function Span({ span }: { span: MdSpan }) {
  */
 function InlineImage({ path, alt }: { path: string; alt: string }) {
   const url = useContext(FileMediaContext);
-  const openFile = useContext(FilePreviewContext);
   const [failed, setFailed] = useState(false);
   const name = alt || (path.split("/").at(-1) ?? path);
   if (!url || failed) return <Span span={{ kind: "file", path, spans: [{ kind: "text", text: name }] }} />;
   const image = <img src={url(path)} alt={name} loading="lazy" decoding="async" onError={() => setFailed(true)}
     className={cn("my-1 inline-block max-h-80 max-w-full rounded-lg object-contain align-top", IMAGE_EDGE)} />;
-  return openFile ? <button type="button" aria-label={`Open ${name}`} className="inline-block max-w-full text-left" onClick={() => openFile(path)}>{image}</button> : image;
+  return <FileLink path={path} label={`Open ${name}`} className="inline-block max-w-full text-left">{image}</FileLink>;
 }
 
 // A code-formatted filename or a pull request URL inside a link is its label, never another nested

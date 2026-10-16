@@ -1,14 +1,40 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { mkdtemp, mkdir, realpath, rename, rm, symlink, truncate, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TranscriptEntry } from "./journal/types.ts";
 import { deliveredFilePaths } from "./journal/delivered.ts";
 import { artifactMetadata, mentionedFolders } from "./artifact-metadata.ts";
 import { checkOpenable } from "./file-open.ts";
 import { renderedHtmlResponse } from "./html-preview.ts";
-import { FILE_STATE_HEADER, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse } from "./pane-files.ts";
+import {
+  FILE_STATE_HEADER, isPrivateProjectPath, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse,
+} from "./pane-files.ts";
+
+describe("the private-path policy", () => {
+  test("covers the credential files, secret stores and histories an agent's host holds", () => {
+    for (const path of [
+      ".claude.json", ".claude.json.backup", "app/.mcp.json", ".docker/config.json", ".yarnrc", ".yarnrc.yml",
+      ".git-credentials", ".pgpass", ".vault-token", ".terraformrc", ".envrc", ".boto", ".s3cfg", "site/.htpasswd",
+      ".password-store/bank.gpg", ".local/share/keyrings/login.keyring", ".mozilla/firefox/profiles.ini",
+      ".zsh_history", ".bash_history", ".python_history", ".psql_history", ".mysql_history", ".node_repl_history",
+      ".zsh_sessions/A1B2.history", ".local/share/fish/fish_history",
+      "release.jks", "vault.kdbx", "server.ppk", "server.pem", "cert.p12", ".env", ".env.example",
+      "/Users/me/Library/Keychains/login.keychain-db", "Library/Cookies/Cookies.binarycookies",
+      "Library/Application Support/Google/Chrome/Default/Login Data", "/Users/me/Library/Safari/History.db",
+      "/Users/me/Library/Containers/com.apple.Safari/Data/x.plist", "backup/login.keychain",
+    ]) expect([path, isPrivateProjectPath(path)]).toEqual([path, true]);
+  });
+
+  test("leaves ordinary project files public", () => {
+    for (const path of [
+      "CLAUDE.md", "README.md", "docker-compose.yml", "Dockerfile", "docs/history.md", "src/history/index.ts",
+      "yarn.lock", ".yarn/releases/yarn.cjs", "src/keyring.ts", "mcp.json", ".github/workflows/ci.yml", ".gitignore",
+      "Library/Preferences/notes.txt", "ios/Library/README.md", "env.ts",
+    ]) expect([path, isPrivateProjectPath(path)]).toEqual([path, false]);
+  });
+});
 
 describe("pane project files", () => {
   let dir: string;
@@ -72,6 +98,20 @@ describe("pane project files", () => {
     await mkdir(join(root, ".ssh"));
     await writeFile(join(root, ".ssh", "notes.txt"), "private");
     expect((await paneFileResponse(join(root, ".ssh"), "notes.txt")).status).toBe(404);
+  });
+
+  test("refuses the credential files a home folder holds, Mac secret stores included", async () => {
+    // A pane opened in the home folder: each of these is text the preview would otherwise show.
+    const names = [".claude.json", ".mcp.json", ".docker/config.json", ".yarnrc.yml",
+      "Library/Application Support/Google/Chrome/Default/Preferences.json", "Library/Keychains/notes.txt"];
+    for (const name of names) {
+      await mkdir(dirname(join(root, name)), { recursive: true });
+      await writeFile(join(root, name), "secret");
+      for (const path of [name, join(root, name)]) expect([path, (await paneFileResponse(root, path)).status]).toEqual([path, 404]);
+    }
+    // An innocent name that lands in a Mac secret store is refused by where it lands.
+    await symlink(join(root, "Library", "Keychains", "notes.txt"), join(root, "notes.txt"));
+    expect((await paneFileResponse(root, "notes.txt")).status).toBe(404);
   });
 
   test("does not serve project HTML or SVG as active documents", async () => {

@@ -43,6 +43,18 @@ describe("routes", () => {
     router.dispose();
   });
 
+  // A file's link opened in a new tab lands on its own page: the viewer, the whole screen.
+  it("opens a file's own page in the viewer, and an address with no file as Page not found", async () => {
+    const leaf = (path: string) => matchRoutes(routes, path)?.at(-1)?.route;
+    expect(leaf("/pane/w1%3Ap2/file?path=docs%2Fa.md")?.path).toBe("pane/:paneId/file");
+    let router = open("/pane/w1%3Ap2/file?path=docs%2Freadme.md&s=qa");
+    expect(await screen.findByRole("dialog", { name: "readme.md" })).toBeInTheDocument();
+    router.dispose();
+    router = open("/pane/w1%3Ap2/file");
+    expect(await screen.findByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
+    router.dispose();
+  });
+
   it("answers an unknown URL with Page not found inside the app, not the crash screen", () => {
     const router = open("/this/does/not/exist?s=qa");
     expect(screen.getByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();

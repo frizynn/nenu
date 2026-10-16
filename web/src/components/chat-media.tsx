@@ -6,6 +6,7 @@ import {
 import { filePathsInText, markdownImagePaths } from "@/lib/chat-files";
 import { IMAGE_EXTENSION, splitMessageImages } from "@/lib/message-images";
 import { FoundFileCards, useFoundFiles } from "./artifact-card";
+import { FileLink } from "./file-link";
 import { MediaViewerContext } from "./file-preview-provider";
 import { MessageImages } from "./message-images";
 
@@ -72,13 +73,9 @@ function Media({
   const name = path.split("/").at(-1) ?? path;
   if (failed)
     return (
-      <button
-        type="button"
-        onClick={open}
-        className="min-h-11 text-xs text-primary underline"
-      >
+      <FileLink path={path} onOpen={open} className="inline-flex min-h-11 items-center text-xs text-primary underline">
         Open {name}
-      </button>
+      </FileLink>
     );
   return (
     <figure className={`my-2 overflow-hidden rounded-lg border border-border/50 ${compact ? "max-w-40" : "max-w-lg"}`}>
@@ -93,12 +90,7 @@ function Media({
           onError={() => setFailed(true)}
         />
       ) : (
-        <button
-          type="button"
-          onClick={open}
-          aria-label={`Open ${name}`}
-          className="block w-full"
-        >
+        <FileLink path={path} onOpen={open} label={`Open ${name}`} className="block w-full">
           <img
             src={url}
             alt={name}
@@ -107,7 +99,7 @@ function Media({
             className={`${compact ? "max-h-32" : "max-h-80"} w-full object-contain`}
             onError={() => setFailed(true)}
           />
-        </button>
+        </FileLink>
       )}
       <figcaption className="truncate px-2 py-1 text-xs text-muted-foreground">
         {name}
