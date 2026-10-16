@@ -13,6 +13,7 @@ import { chatFileReferences, fileExtension } from "@/lib/chat-files";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import type { PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { FileLink } from "./file-link";
 
 type AvailableHistory = Extract<PaneHistoryResponse, { available: true }>;
 type ScanState = {
@@ -289,7 +290,7 @@ export function ChatFilesBrowser({
           <ul className="divide-y rounded-xl border">
             {shown.map((reference) => (
               <li key={reference.path}>
-                <button type="button" aria-label={`Open ${reference.name}`} onClick={() => openReference(reference.path)}
+                <FileLink path={reference.path} onOpen={() => openReference(reference.path)} label={`Open ${reference.name}`}
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileIcon name={reference.name} /></span>
                   <span className="min-w-0 flex-1">
@@ -300,7 +301,7 @@ export function ChatFilesBrowser({
                     <span className="block">{fileExtension(reference).toUpperCase()}</span>
                     {reference.lastSeen.timestamp && <time className="block" dateTime={reference.lastSeen.timestamp}>{new Date(reference.lastSeen.timestamp).toLocaleDateString([], { month: "short", day: "numeric" })}</time>}
                   </span>
-                </button>
+                </FileLink>
               </li>
             ))}
           </ul>

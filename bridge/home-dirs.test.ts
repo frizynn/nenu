@@ -61,6 +61,21 @@ describe("listHomeDirs", () => {
     await expect(listHomeDirs("~", { home: "/" })).rejects.toThrow("unavailable");
   });
 
+  test("never lists the Mac's secret stores or the credential folders, even when dot-dirs are asked for", async () => {
+    const mac = join(base, "mac");
+    for (const dir of ["Library/Keychains", "Library/Cookies", "Library/Safari", "Library/Fonts", "Library/Application Support/Google/Chrome",
+      "Library/Application Support/Firefox", "Library/Application Support/Notes", ".docker", ".mozilla", ".password-store", ".local/share/keyrings", ".local/share/fonts"])
+      mkdirSync(join(mac, dir), { recursive: true });
+    const at = (path: string) => listHomeDirs(path, { home: mac, hidden: true });
+    expect((await at("~")).entries).toEqual([".local", "Library"]);
+    expect((await at("~/Library")).entries).toEqual(["Application Support", "Fonts"]);
+    expect((await at("~/Library/Application Support")).entries).toEqual(["Google", "Notes"]);
+    expect((await at("~/Library/Application Support/Google")).entries).toEqual([]);
+    expect((await at("~/.local/share")).entries).toEqual(["fonts"]);
+    for (const path of ["~/Library/Keychains", "Library/Cookies", join(mac, "Library", "Safari"), "~/Library/Application Support/Google/Chrome", "~/.docker", "~/.local/share/keyrings"])
+      await expect(at(path)).rejects.toThrow("unavailable");
+  });
+
   test("caps a huge directory and says so", async () => {
     const big = join(home, "big");
     for (let i = 0; i < 520; i++) mkdirSync(join(big, `d${i}`), { recursive: true });
