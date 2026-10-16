@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { http, HttpResponse } from "msw";
@@ -77,7 +77,7 @@ it("opens a coordinator whose threads reported on its Summary: decisions, work i
 
   expect(progress!.getByRole("article", { name: "Landing" })).toBeInTheDocument();
   expect(done!.getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(["Coupons", "Login fix"]);
-  expect(done!.getByRole("link", { name: /PR #7 approved/ })).toHaveAttribute("href", "https://github.com/acme/hub/pull/7");
+  expect(done!.getByRole("link", { name: /PR #7 · approved/ })).toHaveAttribute("href", "https://github.com/acme/hub/pull/7");
   expect(done!.getByText(/PR #5 merged/)).toBeInTheDocument();
   // Only Checkout's subtree, read once for the project.
   expect(main.queryByText("Elsewhere")).not.toBeInTheDocument();
@@ -121,6 +121,7 @@ it("opens a capture large, its caption as its name, and steps to the next", asyn
   expect(within(viewer).getAllByRole("img").some((img) => img.getAttribute("src") === `/api/org/library?project=hub&path=${encodeURIComponent(`${LIB}/t-11/a.png`)}`)).toBe(true);
   await user.keyboard("{ArrowRight}");
   expect(await screen.findByRole("dialog", { name: "Option B: cards" })).toBeInTheDocument();
+  // It fades out as the file preview does, then leaves.
   await user.keyboard("{Escape}");
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });

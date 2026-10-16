@@ -33,6 +33,7 @@ import type {
   OrgProjectDetail,
   OrgRoutine,
   OrgTask,
+  ThreadSummary,
   UpdateInfo,
   UploadResponse,
 } from "./types";
@@ -717,6 +718,16 @@ export function fetchOrgStatus(project: string, signal?: AbortSignal): Promise<{
 /** What the project's threads receive and its routines; each null when this Organizations has none. */
 export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
   return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** What each thread's report says and shows; `threads` is null while Organizations is read from its files. */
+export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{ ok: true; threads: ThreadSummary[] | null }> {
+  return req(`/api/org/summary?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** A picture, HTML page or PDF in the project's library; anything else answers 404. */
+export function orgLibraryUrl(project: string, path: string): string {
+  return `/api/org/library?project=${encodeURIComponent(project)}&path=${encodeURIComponent(path)}`;
 }
 
 /** Start a worker or coordinator; a template carries its own role and profile. */
