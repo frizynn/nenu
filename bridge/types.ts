@@ -296,9 +296,12 @@ export interface StatusFile {
   text: string;
   /** RFC 3339, or empty when Organizations printed none that parses. */
   updated: string;
-  /** What Organizations reads out of the text (ADR 0091). Each is absent from an Organizations that predates it, and when the file has none. */
+  /**
+   * What Organizations reads out of the text (ADR 0091): its `Objective:` line and the lines under
+   * `## Needs your decision`. Each is absent from an Organizations that predates it, and when the file
+   * has none. Its asks come with every other coordinator's, from `/api/org/asks`.
+   */
   objective?: string;
-  asks?: Ask[];
   needsDecision?: string[];
 }
 

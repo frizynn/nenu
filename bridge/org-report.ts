@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-import { parseAsk, parseDecisions } from "./org-asks.ts";
+import { parseDecisions } from "./org-asks.ts";
 import { THREAD_VERDICTS, type StatusFile, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict, type TokenUsage } from "./types.ts";
 
 // What `overview --json` says of a thread's last report, and of a coordinator's STATUS.md, read
@@ -48,18 +48,16 @@ export function parseReport(thread: Record<string, unknown>): OrgReport {
 
 /**
  * A STATUS.md with an absolute path and some text; anything else reads as none. What Organizations
- * reads out of the text (its objective, asks and decisions) comes only when it printed them.
+ * reads out of the text (its objective and decisions) comes only when it printed them.
  */
 export function parseStatusFile(value: unknown): OrgStatusFile | null {
   if (!isRecord(value) || !absolutePath(value.path) || typeof value.text !== "string" || !value.text.trim()) return null;
   const updated = typeof value.updated === "string" && Number.isFinite(Date.parse(value.updated)) ? value.updated : "";
   const objective = typeof value.objective === "string" ? value.objective.trim().slice(0, MAX_SUMMARY_CHARS) : "";
-  const asks = Array.isArray(value.asks) ? value.asks.flatMap((item) => parseAsk(item) ?? []) : [];
   const needsDecision = parseDecisions(value.needs_decision);
   return {
     path: value.path, text: value.text.slice(0, MAX_STATUS_CHARS), updated,
     ...(objective ? { objective } : {}),
-    ...(asks.length ? { asks } : {}),
     ...(needsDecision.length ? { needsDecision } : {}),
   };
 }

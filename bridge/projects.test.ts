@@ -540,23 +540,24 @@ describe("ProjectRegistry: asks", () => {
     expect(registry.asks()).toBeNull();
   });
 
-  test("a STATUS.md's objective, asks and decisions, the coordinators' token use and the project coordinator's agent come with the summaries", async () => {
+  test("a STATUS.md's objective and decisions, the coordinators' token use and the project coordinator's agent come with the summaries", async () => {
     const root = fixture();
     const usage = { input: 10, output: 20, cache_read: 30, cache_write: 40, context: 412_000, peak_context: 967_000, compactions: 3, updated: "2026-10-16T11:00:00Z", over_cap: ["context_warn"] };
     const registry = registryFor(root, { run: overviewRun([
       overviewThread({}),
       overviewThread({ id: "t-0002", role: "coordinator", usage: { ...usage, over_cap: [] }, status_file: status(root, {
-        objective: "Checkout", asks: [askRow(ROOT, "working", "Copy fix", { project: undefined, coordinator: undefined })], needs_decision: ["Stock"],
+        objective: "Checkout", asks: [{ line: 4, state: "working", text: "Copy fix" }], needs_decision: ["Stock"],
       }) }),
       overviewThread({ id: "t-0003", usage: { ...usage, context: "full" } }),
-    ], [], { usage, coordinator: { pane_id: "w1:p1", agent: "claude", model: "opus", state: "idle" }, status_file: status(root, { objective: "  Ship it  ", asks: "none" }) }) });
+    ], [], { usage, coordinator: { pane_id: "w1:p1", agent: "claude", model: "opus", state: "idle" }, status_file: status(root, { objective: "  Ship it  " }) }) });
     await registry.refresh();
     const summaries = registry.summaries("demo")!;
     expect(summaries.status).toEqual({ text: "# Status", updated: "2026-10-16T12:00:00Z", objective: "Ship it" });
     expect(summaries.usage).toEqual({ input: 10, output: 20, cacheRead: 30, cacheWrite: 40, context: 412_000, peakContext: 967_000, compactions: 3, updated: "2026-10-16T11:00:00Z", overCap: ["context_warn"] });
     expect(summaries.coordinator).toEqual({ agent: "claude", model: "opus", state: "idle" });
     const checkout = summaries.threads.find((thread) => thread.id === "t-0002")!;
-    expect(checkout.status).toMatchObject({ objective: "Checkout", needsDecision: ["Stock"], asks: [{ state: "working", text: "Copy fix", links: [], confirmed: "", mismatch: "" }] });
+    // Its asks come from `asks --json`, with every other coordinator's.
+    expect(checkout.status).toEqual({ text: "# Status", updated: "2026-10-16T12:00:00Z", objective: "Checkout", needsDecision: ["Stock"] });
     expect(checkout.usage?.overCap).toEqual([]);
     // A count that is not one drops the whole reading rather than showing half of it.
     expect(summaries.threads.find((thread) => thread.id === "t-0003")).toBeUndefined();
