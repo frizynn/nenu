@@ -319,6 +319,12 @@ the pane's cwd, delivered files, then folders the pane's journal names. It serve
 outside the cwd it reports a file only to a device that could mint an Open link for it. Compaction
 summaries and notes name files without delivering them, so they draw no file cards.
 
+A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pictures, HTML and PDFs
+whose real path is inside `<projects root>/<slug>/library`, itself a folder and not a link; anything else
+is 404. Bytes go through the preview's readers and HTML through its sandbox. The summaries and their paths
+come from `/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
+([ADR 0085](./.adr/0085-a-projects-library-is-read-through-one-contained-route.md)).
+
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and
 only to write-level devices.
