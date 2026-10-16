@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, CircleX } from "@/components/ui/icon";
 
 import { TaskRow } from "@/components/node-row";
+import { CoordinatorStatus } from "@/components/coordinator-status";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
 import { ProjectCoordinator } from "@/components/project-coordinator";
 import { ProjectGlyph } from "@/components/project-glyph";
@@ -10,7 +11,7 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
 import { ASK, awaits, closeRefusal, historyCount, holds, nodeState, orgTree, type OrgNode } from "@/lib/org-tree";
-import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type ThreadPullRequest } from "@/lib/types";
+import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
 export function prSummary(pr: ThreadPullRequest): string {
@@ -118,6 +119,8 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
   subtitle?: ReactNode;
   /** Leave the heading out, where the page around already names the project. */
   bare?: boolean;
+  /** The coordinator's STATUS.md, drawn under the heading. */
+  status?: StatusFile;
 }
 
 /**
@@ -126,12 +129,13 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
  * detail; an open one can be closed and the coordinator replaced. Under a coordinator below the
  * project, that coordinator heads the list instead of the project's own.
  */
-export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, ...tree }: ProjectTasksProps) {
+export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, status, ...tree }: ProjectTasksProps) {
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
   return (
     <div className="project-tasks">
       {!bare && <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
         mark={title === undefined ? <ProjectGlyph slug={project.slug} pick={project} size={20} className="mt-1" /> : undefined} />}
+      {status && <CoordinatorStatus status={status} project={project} onOpenNode={onOpenNode} />}
       {coordinator
         ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
         : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}

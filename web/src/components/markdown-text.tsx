@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useMemo, useState } from "react";
+import { createContext, memo, useContext, useMemo, useState, type ReactNode } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
@@ -66,11 +66,20 @@ const spanText = (spans: MdSpan[]): string => spans.map((span) => "spans" in spa
 // Inside a link's label, another link (a bare pull request URL used as the label) draws as its words.
 const InLinkContext = createContext(false);
 
+/**
+ * A view's own tokens in prose: given one run of plain text from a paragraph, heading or list item
+ * (never code, never a link's label), the elements to draw it with, built from that text and never
+ * from markup. A STATUS.md uses it for its state chips and thread ids. Without it, text is text; a
+ * view that sets it has no find to highlight.
+ */
+export const TextTokensContext = createContext<((text: string) => ReactNode) | null>(null);
+
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
   const openFile = useContext(FilePreviewContext);
   const inLink = useContext(InLinkContext);
+  const tokens = useContext(TextTokensContext);
   switch (span.kind) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
@@ -119,7 +128,7 @@ function Span({ span }: { span: MdSpan }) {
       );
     }
     default:
-      return <Hit text={span.text} />;
+      return tokens && !inLink ? tokens(span.text) : <Hit text={span.text} />;
   }
 }
 

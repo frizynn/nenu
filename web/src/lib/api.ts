@@ -33,6 +33,7 @@ import type {
   OrgProjectDetail,
   OrgRoutine,
   OrgTask,
+  StatusFile,
   ThreadSummary,
   UpdateInfo,
   UploadResponse,
@@ -720,8 +721,11 @@ export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<
   return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
-/** What each thread's report says and shows; `threads` is null while Organizations is read from its files. */
-export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{ ok: true; threads: ThreadSummary[] | null }> {
+/**
+ * What each thread's report says and shows, and the project coordinator's STATUS.md; `threads` is
+ * null while Organizations is read from its files. A bridge before STATUS.md sends no `status`.
+ */
+export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{ ok: true; threads: ThreadSummary[] | null; status?: StatusFile | null }> {
   return req(`/api/org/summary?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 

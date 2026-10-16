@@ -4,6 +4,7 @@ import { ExternalLink, ChatCircle, ChatCircleSlash } from "@/components/ui/icon"
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
+import { CoordinatorStatus } from "@/components/coordinator-status";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
 import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
@@ -51,11 +52,13 @@ export function NodeRoute() {
     const age = threadAge(thread, Date.now());
     const ask = awaits(thread);
     const note = ask ? ASK[ask].label : thread.note;
+    const status = summaries.get(thread.id)?.status;
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
+      {status && <CoordinatorStatus status={status} project={project} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
           {age && <span className="text-muted-foreground">· {age}</span>}</p>

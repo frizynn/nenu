@@ -204,9 +204,11 @@ export interface ProjectThreadView {
   prAction?: PrAction;
   /** The `Status:` line of the agent's last report; absent without one. */
   verdict?: ThreadVerdict;
+  /** When a coordinator's STATUS.md last changed; its text comes with the summaries. */
+  statusUpdated?: string;
 }
 
-/** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable and ThreadSummary in bridge/types.ts. */
+/** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable, ThreadSummary and StatusFile in bridge/types.ts. */
 export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
 export interface ThreadCapture { path: string; caption: string }
 export interface ThreadDeliverable { path: string; kind: "html" | "pdf" | "md" }
@@ -216,7 +218,10 @@ export interface ThreadSummary {
   summary?: string;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
+  status?: StatusFile;
 }
+/** A coordinator's STATUS.md: the agent's Markdown, drawn as text. `updated` is RFC 3339 or empty. */
+export interface StatusFile { text: string; updated: string }
 
 /** Mirror PrAsk and PrAction in bridge/types.ts. */
 export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
@@ -316,6 +321,8 @@ export interface ProjectView {
   nodeActions?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
+  /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */
+  statusUpdated?: string;
 }
 
 export type NodeRole = "worker" | "coordinator";
