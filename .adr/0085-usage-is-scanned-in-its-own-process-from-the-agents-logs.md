@@ -15,8 +15,8 @@ The numbers have to come from somewhere every operator has. Measured and read on
 large history (3,550 logs, 13.7 GB, the longest line 13.6 MB):
 
 - **The logs themselves.** Claude Code writes one row per content block of a response, all with the
-  same `message.id` + `requestId` (238 thousand repeats of 267 thousand messages), and copies some
-  messages into subagent or resumed transcripts (1,421). Codex writes cumulative totals per session,
+  same `message.id` + `requestId` (close to half the rows are repeats), and copies some messages
+  into subagent or resumed transcripts (about one in two hundred). Codex writes cumulative totals per session,
   names the account (`creator_account_id`) and the plan limits in every `token_count`, and moves old
   rollouts to `archived_sessions/`. Claude Code deletes transcripts after 30 days (`cleanupPeriodDays`).
 - **OpenTelemetry** from either CLI carries tokens, cost and the account, but only after the operator
