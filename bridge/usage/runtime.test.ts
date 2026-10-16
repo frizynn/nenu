@@ -85,6 +85,17 @@ describe("usage runtime", () => {
     expect(scans.firstPass).toEqual([true, false]);
   });
 
+  test("turning Split by account on rescans at once, so inactive accounts' limits appear", async () => {
+    const scans = fakeScans();
+    const usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => {}, spawn: scans.spawn });
+    await usage.load();
+    await usage.set({ on: true });
+    scans.started[0]!();
+    await Bun.sleep(5);
+    await usage.set({ splitByAccount: true });
+    expect(scans.started).toHaveLength(2);
+  });
+
   test("the scan runs at background priority", () => {
     expect(backgroundPrefix("darwin", () => null, () => true)).toEqual(["/usr/sbin/taskpolicy", "-b"]);
     expect(backgroundPrefix("linux", () => "/usr/bin/nice")).toEqual(["/usr/bin/nice", "-n", "19"]);
