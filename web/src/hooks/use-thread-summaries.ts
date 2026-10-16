@@ -2,11 +2,19 @@ import { useEffect, useState } from "react";
 
 import { errorMessage } from "@/components/node-start";
 import { fetchOrgSummary } from "@/lib/api";
-import type { ProjectThreadView, ProjectView, StatusFile, ThreadSummary } from "@/lib/types";
+import type { CoordinatorAgent, ProjectThreadView, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
 
 const NONE: ReadonlyMap<string, ThreadSummary> = new Map();
 
-interface Read { summaries: ReadonlyMap<string, ThreadSummary>; status: StatusFile | null; failed: string | null }
+interface Read {
+  summaries: ReadonlyMap<string, ThreadSummary>;
+  /** The project coordinator's STATUS.md, token use and agent. */
+  status: StatusFile | null;
+  usage: TokenUsage | null;
+  coordinator: CoordinatorAgent | null;
+  failed: string | null;
+}
+const EMPTY = { summaries: NONE, status: null, usage: null, coordinator: null };
 
 /**
  * What the reports of `threads` say and show, and the project coordinator's STATUS.md, read while a
@@ -24,12 +32,15 @@ export function useThreadSummaries(project: ProjectView | undefined, threads: re
     if (!slug) return;
     const controller = new AbortController();
     fetchOrgSummary(slug, controller.signal).then(
-      (reply) => setRead({ slug, summaries: new Map((reply.threads ?? []).map((summary) => [summary.id, summary])), status: reply.status ?? null, failed: null }),
+      (reply) => setRead({
+        slug, summaries: new Map((reply.threads ?? []).map((summary) => [summary.id, summary])),
+        status: reply.status ?? null, usage: reply.usage ?? null, coordinator: reply.coordinator ?? null, failed: null,
+      }),
       (failure: unknown) => {
-        if (!controller.signal.aborted) setRead((current) => current?.slug === slug ? { ...current, failed: errorMessage(failure) } : { slug, summaries: NONE, status: null, failed: errorMessage(failure) });
+        if (!controller.signal.aborted) setRead((current) => current?.slug === slug ? { ...current, failed: errorMessage(failure) } : { slug, ...EMPTY, failed: errorMessage(failure) });
       },
     );
     return () => controller.abort();
   }, [slug, moved]);
-  return read && read.slug === slug ? read : { summaries: NONE, status: null, failed: null };
+  return read && read.slug === slug ? read : { ...EMPTY, failed: null };
 }

@@ -51,6 +51,8 @@ export const routes: RouteObject[] = [
       { path: "settings/usage", handle: depth(2), lazy: async () => ({ Component: (await import("@/routes/usage")).UsageRoute }) },
       // Read only, and opened from the desk's bar: its code loads when it is opened.
       { path: "routines", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/routines")).RoutinesRoute }) },
+      // Every coordinator's asks, opened from the projects' lists: its code loads when it is opened.
+      { path: "asks", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/asks")).AsksRoute }) },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
       { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, element: <DetailRoute /> },

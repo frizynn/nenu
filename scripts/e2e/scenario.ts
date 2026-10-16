@@ -256,6 +256,8 @@ export function tickWorkingTurn(file: string, parent: string, now: () => number,
  */
 export interface OrgSeed {
   profiles: string[];
+  /** `asks --json`'s rows, as Organizations prints them; without it the fake has no `asks` (fake-org.ts). */
+  asks?: Array<Record<string, unknown>>;
   /** The operator's own profiles beside the built-ins (fake-org.ts). */
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   projects: Array<{
@@ -265,9 +267,11 @@ export interface OrgSeed {
     slug: string; name: string; goal: string; status: "active" | "paused";
     /** The glyph and colour picked with `set <slug> icon|tone`, empty when none was picked. */
     icon?: string; tone?: string;
-    coordinator?: { pane_id: string; workspace_id: string; tab_id: string };
-    /** The project coordinator's STATUS.md, as Organizations prints it. */
-    status_file?: { path: string; text: string; updated: string } | null;
+    /** Also what `overview --json` prints of it: the agent, model and state the ticker last saw. */
+    coordinator?: { pane_id: string; workspace_id: string; tab_id: string; agent?: string; model?: string; state?: string };
+    /** The project coordinator's STATUS.md and token use, as Organizations prints them. */
+    status_file?: ({ path: string; text: string; updated: string } & Record<string, unknown>) | null;
+    usage?: Record<string, unknown> | null;
     threads: Array<Record<string, unknown> & { id: string }>;
     /** `routine list --json`'s routines, as Organizations prints them. */
     routines?: Array<Record<string, unknown>>;

@@ -9,6 +9,8 @@ import { observeServerBuild, SERVER_BUILD_HEADER } from "./server-build";
 import type {
   ActionResponse,
   AnswerOutcome,
+  AsksList,
+  CoordinatorAgent,
   AnswerRequest,
   BridgeConfig,
   CreateResponse,
@@ -35,6 +37,7 @@ import type {
   OrgTask,
   StatusFile,
   ThreadSummary,
+  TokenUsage,
   UpdateInfo,
   UploadResponse,
   UsageResponse,
@@ -726,8 +729,15 @@ export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<
  * What each thread's report says and shows, and the project coordinator's STATUS.md; `threads` is
  * null while Organizations is read from its files. A bridge before STATUS.md sends no `status`.
  */
-export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{ ok: true; threads: ThreadSummary[] | null; status?: StatusFile | null }> {
+export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{
+  ok: true; threads: ThreadSummary[] | null; status?: StatusFile | null; usage?: TokenUsage | null; coordinator?: CoordinatorAgent | null;
+}> {
   return req(`/api/org/summary?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** Every coordinator's asks and open decisions, as the bridge last read them; `asks` is null when Organizations cannot list them. */
+export function fetchOrgAsks(signal?: AbortSignal): Promise<{ ok: true } & AsksList> {
+  return req("/api/org/asks", { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
 /** A picture, HTML page or PDF in the project's library; anything else answers 404. */

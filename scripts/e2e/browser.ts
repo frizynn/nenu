@@ -98,6 +98,18 @@ export function browsersCache(): string {
   return process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(userCacheDir(), "ms-playwright");
 }
 
+/**
+ * The installed Google Chrome, headless (`--headless=new --no-sandbox`), driven through
+ * playwright-core: for captures meant to match what Chrome draws. $NENU_E2E_CHROME names another binary.
+ */
+export async function launchChrome(): Promise<Browser> {
+  const executablePath = process.env.NENU_E2E_CHROME ?? "/usr/bin/google-chrome";
+  if (!existsSync(executablePath)) throw new Error(`no Chrome at ${executablePath}; set NENU_E2E_CHROME`);
+  const specifier = "playwright-core";
+  const mod = await import(specifier) as { chromium: { launch(opts: Record<string, unknown>): Promise<Browser> } };
+  return mod.chromium.launch({ executablePath, headless: true, args: ["--headless=new", "--no-sandbox"] });
+}
+
 // NENU_E2E_BROWSER=chromium runs the same flows when the cached WebKit misbehaves on a host. It is a
 // fallback for a broken machine, not a substitute: Safari-only bugs only show up under WebKit.
 export async function launchWebkit(): Promise<Browser> {

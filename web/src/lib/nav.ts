@@ -55,6 +55,11 @@ export function routinesPath(session?: string): string {
   return `/routines${sessionSearch(session)}`;
 }
 
+/** Your asks: what you asked every coordinator, and where each one stands. */
+export function asksPath(session?: string): string {
+  return `/asks${sessionSearch(session)}`;
+}
+
 /** The settings route, carrying the current session like the other path helpers. */
 export function settingsPath(session?: string): string {
   return `/settings${sessionSearch(session)}`;

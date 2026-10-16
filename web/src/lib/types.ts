@@ -219,9 +219,32 @@ export interface ThreadSummary {
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
   status?: StatusFile;
+  usage?: TokenUsage;
 }
-/** A coordinator's STATUS.md: the agent's Markdown, drawn as text. `updated` is RFC 3339 or empty. */
-export interface StatusFile { text: string; updated: string }
+/**
+ * A coordinator's STATUS.md: the agent's Markdown, drawn as text. `updated` is RFC 3339 or empty.
+ * The objective and decisions are what Organizations read out of it, absent from one that predates them.
+ */
+export interface StatusFile { text: string; updated: string; objective?: string; needsDecision?: string[] }
+
+/** Mirror AskState, AskConfirmed, AskLink, Ask, AskGroup, AskCoordinator, AskRow, AskDecision, AsksList and TokenUsage in bridge/types.ts. */
+export type AskState = "open" | "working" | "needs-decision" | "answered" | "done" | "unknown";
+export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
+export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
+/** One line under a coordinator's `## Asked`. Its text and answer are the operator's and the coordinator's words: draw them as text. */
+export interface OrgAsk { line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string }
+export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
+export interface AskCoordinator { id: string; title: string }
+export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
+export interface AskDecision { project: string; coordinator: AskCoordinator; text: string }
+/** `asks` is null when this Organizations cannot list asks. */
+export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[] }
+export interface TokenUsage {
+  input: number; output: number; cacheRead: number; cacheWrite: number;
+  context: number; peakContext: number; compactions: number; updated: string; overCap: string[];
+}
+/** The project coordinator as the ticker last saw it (`/api/org/summary`); `state` is empty before it looked. */
+export interface CoordinatorAgent { agent: string; model: string; state: string }
 
 /** Mirror PrAsk and PrAction in bridge/types.ts. */
 export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
@@ -323,6 +346,8 @@ export interface ProjectView {
   workspaceIds?: string[];
   /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */
   statusUpdated?: string;
+  /** How many of its coordinators' asks and decisions wait on you; absent when this Organizations cannot list asks. */
+  waitingAsks?: number;
 }
 
 export type NodeRole = "worker" | "coordinator";
