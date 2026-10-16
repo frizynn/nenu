@@ -2,7 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ACCOUNTS, day, TODAY, usageOn } from "@/test/usage";
-import { ActivityCard, buildMap } from "./usage-map";
+import { buildMap } from "@/lib/usage-view";
+import { ActivityCard } from "./usage-map";
 
 const data = usageOn();
 

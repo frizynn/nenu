@@ -12,18 +12,20 @@ export const tokens = (n: number) => compact.format(n);
 export const usdShort = (n: number) => (n >= 10_000 ? `$${compact.format(n).replace("K", "k")}` : usd(n));
 
 export const AGENT_NAME: Record<UsageAgent, string> = { claude: "Claude Code", codex: "Codex" };
+/** Each agent's colour on the page (routes/usage.css): Claude Code orange, Codex teal. */
+export const AGENT_DOT: Record<UsageAgent, string> = { claude: "usage-claude", codex: "usage-codex" };
 
 // ── Days ───────────────────────────────────────────────────────────────────────────────────────
 // Days are the bridge's calendar dates (cut in its zone), so they are counted as UTC days here and
 // never shifted into the phone's zone.
 
 const DAY_MS = 86_400_000;
-const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / DAY_MS;
 const dateOf = (n: number) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 // Month and weekday names are spelled here: Intl's en-GB writes "Sept" in some engines and "Sep" in others.
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 const WEEKDAYS = "Sun Mon Tue Wed Thu Fri Sat".split(" ");
 const utc = (date: string) => new Date(`${date}T00:00:00Z`);
+const dayNumber = (date: string) => utc(date).getTime() / DAY_MS;
 /** "Wed 14 Oct". */
 export const dayName = (date: string, d = utc(date)) => `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 /** "1 Sep". */

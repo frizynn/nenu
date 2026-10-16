@@ -4,15 +4,12 @@ import { Info } from "@/components/ui/icon";
 import { Segmented } from "@/components/ui/segmented";
 import type { UsageAccount } from "@/lib/types";
 import { usd } from "@/lib/usage";
-import { buildMap, dayName, tokens, type MapCell, type MapModel } from "@/lib/usage-view";
+import { AGENT_DOT, dayName, tokens, WEEKS, type MapCell, type MapModel } from "@/lib/usage-view";
 import { cn } from "@/lib/utils";
-
-export { buildMap };
 
 type Metric = "cost" | "tokens";
 const METRICS = [{ value: "cost", label: "Cost" }, { value: "tokens", label: "Tokens" }] as const;
 const STEP: Partial<Record<string, number>> = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -7, ArrowRight: 7 };
-export const AGENT_DOT = { claude: "usage-claude", codex: "usage-codex" } as const;
 
 /**
  * The activity map: a day per square, cost by default and tokens a tap away. The squares are drawn
@@ -115,8 +112,8 @@ function DayDetail({ cell, busiest, accounts, shown, col }: { cell: MapCell; bus
   const day = cell.day;
   const label = new Map(accounts.map((a) => [a.id, a]));
   const split = (day?.accounts ?? []).filter((a) => a.cost >= 0.005).sort((a, b) => b.cost - a.cost).slice(0, 4);
-  // Beside the square, on the side with room: 26 weeks either way.
-  const side = col > 26 ? { right: `calc(${53 - col} * (var(--cell) + var(--gap)) + 0.75rem)` } : { left: `calc(${col + 1} * (var(--cell) + var(--gap)) + 2.25rem)` };
+  // Beside the square, on the side with room; 2.25rem clears the weekday labels and a gap.
+  const side = col >= WEEKS / 2 ? { right: `calc(${WEEKS - col} * (var(--cell) + var(--gap)) + 0.75rem)` } : { left: `calc(${col + 1} * (var(--cell) + var(--gap)) + 2.25rem)` };
   return (
     <div role="group" aria-label="Day detail" data-shown={shown || undefined} style={side}
       className="usage-detail flex flex-col gap-1.5 rounded-lg bg-muted px-2.5 py-2 text-footnote tabular-nums">

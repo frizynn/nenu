@@ -15,7 +15,7 @@ import { concerns, onLiveEvent } from "@/lib/live-events";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { settingsPath } from "@/lib/nav";
 import type { UsageOn, UsageResponse } from "@/lib/types";
-import { buildMap, limitBlocks, monthName } from "@/lib/usage-view";
+import { AGENT_DOT, buildMap, limitBlocks, monthName } from "@/lib/usage-view";
 import { cn } from "@/lib/utils";
 import "./usage.css";
 
@@ -154,7 +154,7 @@ function Usage({ data, desk, account, onAccount, refresh }: {
       {data.splitByAccount && (
         <button type="button" onClick={() => setPicking(desk ? !listed : !picking)} aria-expanded={desk ? listed : picking}
           className={cn("flex items-center gap-1.5 rounded-lg border bg-card pr-2.5 pl-3 text-footnote font-medium", desk ? "h-8" : "h-9")}>
-          {chosen ? <span aria-hidden="true" className={cn("size-2 rounded-full", chosen.agent === "codex" ? "usage-codex" : "usage-claude")} /> : <Layers aria-hidden="true" className="size-4 text-muted-foreground" />}
+          {chosen ? <span aria-hidden="true" className={cn("size-2 rounded-full", AGENT_DOT[chosen.agent])} /> : <Layers aria-hidden="true" className="size-4 text-muted-foreground" />}
           {chosen?.label ?? "All accounts"}
           <ChevronsUpDown aria-hidden="true" className="size-3.5 text-subtle-foreground" />
         </button>

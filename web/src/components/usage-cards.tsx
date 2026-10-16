@@ -1,13 +1,12 @@
 import { useState, type ReactNode } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { AGENT_DOT } from "@/components/usage-map";
 import { Check, ChevronRight, CircleDashed, Layers, TriangleAlert } from "@/components/ui/icon";
 import { ListSection } from "@/components/ui/list-group";
 import { Segmented } from "@/components/ui/segmented";
 import type { UsageAccount, UsageAgent, UsagePeriod, UsageRow, UsageWeek } from "@/lib/types";
 import { realAccounts, usd } from "@/lib/usage";
-import { AGENT_NAME, monthName, tokens, usdShort, weekName, type LimitBlock, type WindowView } from "@/lib/usage-view";
+import { AGENT_DOT, AGENT_NAME, monthName, tokens, usdShort, weekName, type LimitBlock, type WindowView } from "@/lib/usage-view";
 import { cn } from "@/lib/utils";
 
 // The usage page's cards (routes/usage.tsx): the totals, the plan limits, the weeks, the month's

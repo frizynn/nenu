@@ -44,7 +44,8 @@ export function UsageControl({ readOnly = false, session }: { readOnly?: boolean
 
   const busy = pending !== null;
   const on = usage?.on === true;
-  const footer = failed
+  // Said only while there is nothing to show: a later read that works takes its place.
+  const footer = failed && !usage
     ? <span className="text-destructive">Couldn&rsquo;t read the usage settings.</span>
     : on
       ? "Cost is the API list price of these tokens, not what your plans charge."
