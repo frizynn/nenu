@@ -131,7 +131,7 @@ it("splits by account: picks one from the list and reads only that account", asy
   const asked = serve((url) => url.searchParams.get("account") ? usageSplit({ account: url.searchParams.get("account")! }) : usageSplit());
   open();
   const limits = within(await screen.findByRole("region", { name: "Plan limits" }));
-  expect(limits.getByRole("button", { name: /1 more Claude Code account/ })).toHaveTextContent("Work weekly 9%");
+  expect(limits.getByRole("button", { name: /1 more Claude account/ })).toHaveTextContent("Work weekly 9%");
   await userEvent.click(main().getByRole("button", { name: "All accounts" }));
   const list = within(await screen.findByRole("listbox", { name: "Account" }));
   expect(list.getAllByRole("option").map((o) => o.textContent)).toEqual([

@@ -98,7 +98,7 @@ export function LimitsCard({ blocks, more, onMore }: {
       ))}
       {more.map((m) => (
         <button key={m.agent} type="button" onClick={onMore} className={cn(hairline, "flex min-h-10 items-center gap-2 px-4 text-left coarse:min-h-11 hover:bg-accent last:rounded-b-xl")}>
-          <span className="flex-1 text-body">{m.count} more {AGENT_NAME[m.agent]} {m.count === 1 ? "account" : "accounts"}</span>
+          <span className="min-w-0 flex-1 truncate text-body">{m.count} more {m.agent === "claude" ? "Claude" : "Codex"} {m.count === 1 ? "account" : "accounts"}</span>
           {m.best && <span className="text-footnote text-subtle-foreground tabular-nums">{m.best}</span>}
           <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-subtle-foreground" />
         </button>

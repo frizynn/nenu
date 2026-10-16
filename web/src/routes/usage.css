@@ -66,11 +66,15 @@
 }
 
 /* A phone shows the latest weeks and scrolls back; the oldest edge fades into the card. */
-.usage-scroll { overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 28px); }
+.usage-scroll { overflow-x: auto; padding: 3px 3px 3px 0; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 28px); }
 .usage-scroll::-webkit-scrollbar { display: none; }
-.usage-frame { display: grid; width: max-content; grid-template-columns: auto auto; gap: 4px; }
+/* The weekday labels and the corner above them are a desk's; a phone has the months and the squares. */
+.usage-frame { display: grid; width: max-content; gap: 4px; }
+.usage-corner { display: none; }
 @media (min-width: 1024px) {
-  .usage-scroll { overflow: visible; mask-image: none; }
+  .usage-scroll { overflow: visible; padding: 0; mask-image: none; }
+  .usage-frame { grid-template-columns: auto auto; }
+  .usage-corner { display: block; }
 }
 
 .usage-months, .usage-grid { display: grid; grid-auto-columns: var(--cell); column-gap: var(--gap); }

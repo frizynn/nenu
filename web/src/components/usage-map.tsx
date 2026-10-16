@@ -60,7 +60,7 @@ export function ActivityCard({ model, accounts, title = "Activity" }: { model: M
       </div>
       <div ref={scroller} className="usage-scroll">
         <div className="usage-frame text-micro font-normal text-subtle-foreground">
-          <span />
+          <span className="usage-corner" />
           <div aria-hidden="true" className="usage-months">
             {model.months.map((m) => <span key={m.col} style={{ gridColumnStart: m.col + 1 }}>{m.label}</span>)}
           </div>
@@ -80,7 +80,8 @@ export function ActivityCard({ model, accounts, title = "Activity" }: { model: M
             onKeyDown={key}
           >
             <Squares cells={model.cells} metric={metric} id={id} />
-            <span aria-hidden="true" className="usage-ring" style={{ gridColumn: col + 1, gridRow: (active % 7) + 1 }} />
+            {/* Both ends named: an absolute grid child's open end runs to the grid's edge. */}
+            <span aria-hidden="true" className="usage-ring" style={{ gridColumn: `${col + 1} / span 1`, gridRow: `${(active % 7) + 1} / span 1` }} />
           </div>
         </div>
       </div>
