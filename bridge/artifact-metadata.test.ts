@@ -136,6 +136,26 @@ describe("where a name in the conversation leads", () => {
     }
   });
 
+  it("finds nothing in Nenu's own state or a Mac secret store, even under the agent's folder", async () => {
+    const home = await realpath(await mkdtemp(join(tmpdir(), "nenu-home-")));
+    try {
+      const state = join(home, ".local", "state", "collie");
+      await mkdir(join(state, "uploads"), { recursive: true });
+      await writeFile(join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-board.html"), canvas);
+      await mkdir(join(home, "Library", "Cookies"), { recursive: true });
+      await writeFile(join(home, "Library", "Cookies", "notes.txt"), "cookie");
+      await writeFile(join(home, "plan.md"), "fine");
+      const upload = ".local/state/collie/uploads/w1_p1-mv8g-0a1b2c3d-board.html";
+      expect(await artifactMetadata(home, [upload, "Library/Cookies/notes.txt", "plan.md"], { stateDir: state })).toEqual([
+        { path: upload, state: "missing" },
+        { path: "Library/Cookies/notes.txt", state: "missing" },
+        { path: "plan.md", state: "preview" },
+      ]);
+    } finally {
+      await rm(home, { recursive: true });
+    }
+  });
+
   it("collects the folders the conversation names, newest first, without URLs or elided paths", () => {
     const text = (body: string) => ({ uuid: body, ts: "", role: "summary" as const, parts: [{ kind: "text" as const, text: body }] });
     expect(mentionedFolders([

@@ -11,6 +11,7 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 import { servicePath } from "./claude-sessions.ts";
+import { isPrivateProjectPath } from "./pane-files.ts";
 
 export interface DiffLimits {
   /** Files listed; the totals still count every file. */
@@ -56,8 +57,11 @@ export interface DiffFile {
   binary?: true;
   /** Absent when `omitted` says why the lines are not here. */
   hunks?: DiffHunk[];
-  /** `untracked`: a new file git does not track yet, so it has no lines to diff against. */
-  omitted?: "binary" | "large" | "budget" | "untracked";
+  /**
+   * `untracked`: a new file git does not track yet, so it has no lines to diff against. `private`: a
+   * path the file preview refuses (an `.env`, a credential file), named but never shown.
+   */
+  omitted?: "binary" | "large" | "budget" | "untracked" | "private";
 }
 
 /** What a session's Changes compares: its branch against where it started, or only what is not committed. */
@@ -320,6 +324,9 @@ async function readRange(git: Git, range: string[], limits: DiffLimits, untracke
     const section = index < complete ? sections[index] : undefined;
     const status = section?.status ?? (entry.from ? "renamed" : "modified");
     const file: DiffFile = { path: entry.path, ...(entry.from ? { from: entry.from } : {}), status, additions: entry.additions, deletions: entry.deletions };
+    // The path git names under the folder, not the folder's own: a checkout inside a private-named
+    // folder still shows its diff, and a renamed secret keeps its old name's privacy.
+    if (isPrivateProjectPath(entry.path) || (entry.from !== undefined && isPrivateProjectPath(entry.from))) return { ...file, omitted: "private" };
     if (entry.binary) return { ...file, binary: true, omitted: "binary" };
     if (!section) return { ...file, omitted: "budget" };
     if (section.lines > limits.fileLines) return { ...file, omitted: "large" };

@@ -542,7 +542,9 @@ describe("journal media", () => {
       turn({ uuid: "send", role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "SendUserFile", summary: "/tmp/out/report.html", result: { text: "sent", attachments: [{ kind: "file", path: "/tmp/out/report.html" }] } }] }),
       turn({ uuid: "done", role: "assistant", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "Here it is." }] }),
     ]} />));
-    const card = await screen.findByRole("button", { name: "Open report.html" });
+    const card = await screen.findByRole("link", { name: "Open report.html" });
+    // A real link to the file's own page, so a long-press or a modified click opens it in a new tab.
+    expect(card).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=%2Ftmp%2Fout%2Freport.html");
     expect(card).toHaveTextContent("HTML page · out/");
     expect(document.querySelector("iframe")).toBeNull();
     await userEvent.click(card);
@@ -559,10 +561,10 @@ describe("journal media", () => {
     ]} />));
     await userEvent.click(screen.getByRole("button", { name: /^Context compacted/ }));
     await userEvent.click(screen.getByRole("button", { name: /^Base directory for this skill/ }));
-    expect(screen.queryByRole("button", { name: /^Open / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Open / })).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     // The names stay in the text, and a code-formatted one still opens by name.
-    expect(screen.getByRole("button", { name: "assets/canvas.template.html" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "assets/canvas.template.html" })).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=assets%2Fcanvas.template.html");
   });
 
   // The phone drew this link as plain text over a "resumen-del-dia.html · 8443/ · Not found" card.
@@ -592,9 +594,10 @@ describe("journal media", () => {
     // Each step is a request and a render; a loaded machine (the pre-push hook beside other suites)
     // needs more than findBy's default second for them.
     const slow = { timeout: 5000 };
-    await userEvent.click(await screen.findByRole("button", { name: "Open canvas.template.html" }, slow));
+    await userEvent.click(await screen.findByRole("link", { name: "Open canvas.template.html" }, slow));
     // The line under the name is the folder; its tooltip is the whole path the preview opened.
-    expect(await screen.findByTitle("/repo/assets/canvas.template.html", undefined, slow)).toHaveTextContent("/repo/assets");
+    const viewer = await screen.findByRole("dialog", { name: "canvas.template.html" }, slow);
+    expect(within(viewer).getByTitle("/repo/assets/canvas.template.html")).toHaveTextContent("/repo/assets");
     expect(asked).toContain("later.html");
     expect(screen.queryByRole("button", { name: /later\.html: / })).not.toBeInTheDocument();
     expect(screen.queryByText("Not found")).not.toBeInTheDocument();

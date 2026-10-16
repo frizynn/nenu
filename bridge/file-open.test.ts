@@ -42,6 +42,15 @@ describe("file open grants", () => {
       expect(await checkOpenable(path, state)).toMatchObject({ status: 403 });
   });
 
+  test("refuses the credential files an agent's host holds, by name and by symlink target", async () => {
+    await mkdir(join(dir, ".docker"));
+    for (const name of [".claude.json", ".mcp.json", ".docker/config.json", ".yarnrc.yml", ".git-credentials", ".zsh_history", "vault.kdbx"])
+      await writeFile(join(dir, name), "secret");
+    await symlink(join(dir, ".git-credentials"), join(dir, "notes.txt"));
+    for (const name of [".claude.json", ".mcp.json", ".docker/config.json", ".yarnrc.yml", ".git-credentials", ".zsh_history", "vault.kdbx", "notes.txt"])
+      expect([name, await checkOpenable(join(dir, name), state)]).toMatchObject([name, { status: 403 }]);
+  });
+
   test("refuses a file over the cap", async () => {
     await writeFile(join(dir, "big.bin"), "");
     await truncate(join(dir, "big.bin"), MAX_OPEN_FILE_BYTES + 1);

@@ -3,7 +3,8 @@ import { vi } from "vitest";
 import FilePreview from "./file-preview";
 import { HTML_VERSION_POLL_MS } from "./html-viewer";
 import { MarkdownText } from "./markdown-text";
-import { FilePreviewContext } from "@/lib/file-preview-context";
+import { FileHrefContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { filePagePath } from "@/lib/nav";
 import { fetchArtifactMetadata, fetchPaneFile, PaneFileError } from "@/lib/api";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -37,6 +38,53 @@ it("keeps code-formatted link labels from becoming nested buttons", () => {
   expect(screen.getAllByRole("button")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "guide.md" }));
   expect(open).toHaveBeenCalledExactlyOnceWith("docs/guide.md");
+});
+
+// "Que se pueda abrir en una pestaña nueva": every way to open a file is a real link to the file's own
+// page, so a long-press, a middle click or a modified click opens it in a new tab; a tap stays in place.
+describe("a file in a new tab", () => {
+  const href = (path: string) => filePagePath("w1:p1", path, "qa");
+
+  it("is a link to the file's own page that a tap opens in place and a modified click leaves to the browser", () => {
+    const open = vi.fn();
+    render(<FilePreviewContext.Provider value={open}><FileHrefContext.Provider value={href}>
+      <MarkdownText text={"[Guide](docs/guide.md), `report.pdf` and [`notes.md`](docs/notes.md)"} />
+    </FileHrefContext.Provider></FilePreviewContext.Provider>);
+    const guide = screen.getByRole("link", { name: "Guide" });
+    expect(guide).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=docs%2Fguide.md&s=qa");
+    expect(screen.getByRole("link", { name: "report.pdf" })).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=report.pdf&s=qa");
+    expect(fireEvent.click(guide)).toBe(false);
+    expect(open).toHaveBeenCalledExactlyOnceWith("docs/guide.md");
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }]) expect(fireEvent.click(guide, modifier)).toBe(true);
+    expect(open).toHaveBeenCalledTimes(1);
+    // A code-formatted label stays the link's words: no link inside a link.
+    expect(document.querySelector("a a, a button, button a")).toBeNull();
+  });
+
+  it("is offered by the viewer, and not on the file's own page", async () => {
+    fetchFile.mockImplementation(async () => new Response("%PDF-test", { headers: { "content-type": "application/pdf" } }));
+    const { unmount } = render(<FileHrefContext.Provider value={href}><FilePreview paneId="w1:p1" session="qa" path="out/report.pdf" onClose={() => {}} /></FileHrefContext.Provider>);
+    const tab = await screen.findByRole("link", { name: "Open in new tab" });
+    expect(tab).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=out%2Freport.pdf&s=qa");
+    expect(tab).toHaveAttribute("target", "_blank");
+    expect(tab).toHaveAttribute("rel", "noopener");
+    unmount();
+    render(<FileHrefContext.Provider value={href}><FilePreview page paneId="w1:p1" session="qa" path="out/report.pdf" onClose={() => {}} /></FileHrefContext.Provider>);
+    await waitFor(() => expect(screen.getByText("PDF canvas")).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: "Open in new tab" })).not.toBeInTheDocument();
+  });
+
+  it("opens a document's own links from the document's folder, in place and in a new tab", async () => {
+    const open = vi.fn();
+    fetchFile.mockResolvedValue(new Response("[Next](next.md)", { headers: { "content-type": "text/markdown" } }));
+    render(<FilePreviewContext.Provider value={open}><FileHrefContext.Provider value={href}>
+      <FilePreview paneId="w1:p1" path="docs/guide.md" onClose={() => {}} />
+    </FileHrefContext.Provider></FilePreviewContext.Provider>);
+    const next = await screen.findByRole("link", { name: "Next" });
+    expect(next).toHaveAttribute("href", "/pane/w1%3Ap1/file?path=docs%2Fnext.md&s=qa");
+    fireEvent.click(next);
+    expect(open).toHaveBeenCalledWith("docs/next.md");
+  });
 });
 
 it("renders Markdown as safe text, resolves sibling documents, releases the URL and restores focus", async () => {

@@ -276,3 +276,41 @@ describe("a session's changes, with or without a pull request", () => {
     expect(await sessionDiff(undefined, "branch", { run: spy })).toMatchObject({ ok: false, reason: "no-folder" });
   });
 });
+
+describe("a private file in the diff", () => {
+  test("is listed as changed with its lines withheld, by its name or the name it was renamed from", async () => {
+    const secrets = realpathSync(mkdtempSync(join(tmpdir(), "nenu-diff-private-")));
+    try {
+      git(secrets, "init", "-q", "-b", "main");
+      mkdirSync(join(secrets, "src"));
+      mkdirSync(join(secrets, "config"));
+      writeFileSync(join(secrets, ".env"), "TOKEN=old-token\n");
+      writeFileSync(join(secrets, "config/.mcp.json"), '{"env":{"API_KEY":"old-key"}}\n');
+      writeFileSync(join(secrets, ".pgpass"), "db:5432:app:admin:old-pass\n" + lines(10, "replica"));
+      writeFileSync(join(secrets, "src/app.ts"), lines(3));
+      git(secrets, "add", "-A");
+      git(secrets, "commit", "-q", "-m", "base");
+      git(secrets, "update-ref", "refs/remotes/origin/main", "HEAD");
+      git(secrets, "checkout", "-q", "-b", "feat/s");
+      writeFileSync(join(secrets, ".env"), "TOKEN=new-token\n");
+      git(secrets, "mv", ".pgpass", "pgpass.txt");
+      writeFileSync(join(secrets, "pgpass.txt"), "db:5432:app:admin:new-pass\n" + lines(10, "replica"));
+      writeFileSync(join(secrets, "src/app.ts"), lines(3).replace("line 2", "line two"));
+      git(secrets, "add", "-A");
+      git(secrets, "commit", "-q", "-m", "s");
+      writeFileSync(join(secrets, "config/.mcp.json"), '{"env":{"API_KEY":"new-key"}}\n');
+
+      for (const diff of [await paneDiff(secrets, { number: 9, head: "feat/s", base: "main", checkedOut: "feat/s" }), await sessionDiff(secrets, "branch")]) {
+        if (!diff.ok) throw new Error(diff.message);
+        expect(JSON.stringify(diff)).not.toMatch(/(?:old|new)-(?:token|key|pass)/);
+        const byPath = Object.fromEntries(diff.files.map((file) => [file.path, file]));
+        expect(byPath[".env"]).toEqual({ path: ".env", status: "modified", additions: 1, deletions: 1, omitted: "private" });
+        expect(byPath["config/.mcp.json"]).toEqual({ path: "config/.mcp.json", status: "modified", additions: 1, deletions: 1, omitted: "private" });
+        expect(byPath["pgpass.txt"]).toEqual({ path: "pgpass.txt", from: ".pgpass", status: "renamed", additions: 1, deletions: 1, omitted: "private" });
+        expect(byPath["src/app.ts"]?.hunks?.[0]?.lines).toContain("+line two");
+      }
+    } finally {
+      rmSync(secrets, { recursive: true, force: true });
+    }
+  });
+});
