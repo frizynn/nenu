@@ -1,9 +1,18 @@
+/** The extensions a name in agent prose may end in to read as a local file. The bridge decides whether it exists. */
+export const FILE_EXTENSIONS = "md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp|mp4|m4v|mov|webm";
+/** Files known by their whole name, extension or not. */
+export const FILE_NAMES = String.raw`readme|licen[sc]e|dockerfile|makefile|\.gitignore|\.gitattributes|\.editorconfig`;
+/** A line, a line and column, or a GitHub line range after a file name: `app.ts:42:7`, `app.ts#L3-L9`. */
+export const FILE_LOCATION = String.raw`(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)`;
+const LOCATION_END = new RegExp(`${FILE_LOCATION}$`);
+const DOCUMENT = new RegExp(String.raw`\.(?:${FILE_EXTENSIONS})$|(?:^|/)(?:${FILE_NAMES})$`, "i");
+
 /** Local document references are actions, never browser navigation URLs. The bridge applies the
  * authoritative realpath/access checks; this only recognizes links in agent prose. */
 export function localFilePath(raw: string): string | null {
   let path = raw.trim();
   if (path.startsWith("<") && path.endsWith(">")) path = path.slice(1, -1);
-  path = path.replace(/(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)$/, "");
+  path = path.replace(LOCATION_END, "");
   // Agents link host files as `file:///abs/path`. Read it as the absolute path it names; a file URL
   // for another host, or with a query or fragment left over, is not a local document.
   if (/^file:/i.test(path)) {
@@ -14,8 +23,8 @@ export function localFilePath(raw: string): string | null {
   if (/^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith("//") || /[\x00-\x1f\\]/.test(path)) return null;
   try { path = decodeURIComponent(path); } catch { return null; }
   if (/^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith("//") || /[\x00-\x1f\\]/.test(path)) return null;
-  path = path.replace(/(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)$/, "");
-  return /\.(?:md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp|mp4|m4v|mov|webm)$/i.test(path) || /(?:^|\/)(?:readme|licen[sc]e|dockerfile|makefile|\.gitignore|\.gitattributes|\.editorconfig)$/i.test(path) ? path : null;
+  path = path.replace(LOCATION_END, "");
+  return DOCUMENT.test(path) ? path : null;
 }
 
 /** A live pane's folder, as the file viewer needs it to find who may open a path. */

@@ -5,7 +5,7 @@ import {
 } from "@/lib/file-preview-context";
 import { filePathsInText, markdownImagePaths } from "@/lib/chat-files";
 import { IMAGE_EXTENSION, splitMessageImages } from "@/lib/message-images";
-import { ArtifactCards } from "./artifact-card";
+import { FoundFileCards, useFoundFiles } from "./artifact-card";
 import { MediaViewerContext } from "./file-preview-provider";
 import { MessageImages } from "./message-images";
 
@@ -15,21 +15,26 @@ export function ChatMedia({ text, compact = false, uploads = true }: { text: str
   const url = useContext(FileMediaContext);
   const viewer = useContext(MediaViewerContext);
   const openFile = useContext(FilePreviewContext);
-  const { media, pages } = useMemo(() => {
+  const { carried, named, pages } = useMemo(() => {
     const inline = new Set(markdownImagePaths(text));
     const paths = [...new Set(filePathsInText(text))].filter((path) => !inline.has(path));
+    // The operator's own message: its images read as "Image 1…N" thumbnails, not as files.
+    const carried = compact ? splitMessageImages(text).images : [];
     return {
-      media: paths.filter((path) => IMAGE_EXTENSION.test(path) || VIDEO.test(path)).slice(0, 12),
+      carried,
+      named: paths.filter((path) => (IMAGE_EXTENSION.test(path) || VIDEO.test(path)) && !carried.includes(path)).slice(0, 12),
       pages: compact ? [] : paths.filter((path) => /\.html?$/i.test(path)).slice(0, 6),
     };
   }, [text, compact]);
+  // Nothing is offered before the bridge finds it: a name with nothing behind it draws nothing.
+  const found = useFoundFiles(url ? [...named, ...pages] : []);
   if (!url) return null;
-  // The operator's own message: its images read as "Image 1…N" thumbnails, not as files.
-  const carried = compact ? splitMessageImages(text).images : [];
   const images = uploads ? carried : [];
-  const shown = media.filter((path) => !carried.includes(path));
+  // A picture shows from where the bridge found it; one beyond the folder opens only from its card.
+  const shown = named.flatMap((path) => { const file = found.get(path); return file?.state === "preview" ? [file.resolved ?? path] : []; });
+  const cards = [...named, ...pages].flatMap((path) => { const file = found.get(path); return file && (file.state === "outside" || pages.includes(path)) ? [file] : []; });
   // Nothing to show draws nothing: every message runs through here, and most name no media.
-  if (!images.length && !shown.length && !pages.length) return null;
+  if (!images.length && !shown.length && !cards.length) return null;
   const gallery = shown.filter((path) => !VIDEO.test(path));
   const open = (path: string) => {
     if (viewer && gallery.includes(path)) viewer.open(gallery.map((p) => ({ kind: "file", path: p })), gallery.indexOf(path));
@@ -47,7 +52,7 @@ export function ChatMedia({ text, compact = false, uploads = true }: { text: str
           open={() => open(path)}
         />
       ))}
-      <ArtifactCards paths={pages} />
+      <FoundFileCards files={cards} />
     </div>
   );
 }

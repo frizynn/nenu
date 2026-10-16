@@ -535,12 +535,14 @@ describe("journal media", () => {
   });
 
   it("shows a delivered HTML file as a card that mounts no frame until opened", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
+      new URL(request.url).searchParams.getAll("inspect").map((path) => ({ path, state: "preview" })))));
     render(withViewer(<TranscriptView activityStatus="done" entries={[
       turn({ uuid: "ask", parts: [{ kind: "text", text: "make a page" }] }),
       turn({ uuid: "send", role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "SendUserFile", summary: "/tmp/out/report.html", result: { text: "sent", attachments: [{ kind: "file", path: "/tmp/out/report.html" }] } }] }),
       turn({ uuid: "done", role: "assistant", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "Here it is." }] }),
     ]} />));
-    const card = screen.getByRole("button", { name: "Open report.html" });
+    const card = await screen.findByRole("button", { name: "Open report.html" });
     expect(card).toHaveTextContent("HTML page · out/");
     expect(document.querySelector("iframe")).toBeNull();
     await userEvent.click(card);
