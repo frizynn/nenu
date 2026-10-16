@@ -169,10 +169,20 @@ describe("bare file URLs", () => {
     ]);
   });
 
+  it("reads an autolink as the link or the file it names", () => {
+    expect(parseInline("<https://example.com:8443/a.html>")).toEqual([
+      { kind: "link", href: "https://example.com:8443/a.html", spans: [{ kind: "text", text: "https://example.com:8443/a.html" }] },
+    ]);
+    expect(parseInline(`<file://${path}>`)).toEqual([{ kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] }]);
+    expect(parseInline("<javascript:alert(1)>")).toEqual([{ kind: "text", text: "<javascript:alert(1)>" }]);
+  });
+
   it("leaves a file URL for another host, a URL inside a word and a bare path as text", () => {
-    for (const text of ["file://server/share/report.html", "xhttps://example.com/report.html", `see ${path}`]) {
+    for (const text of ["file://server/share/report.html", "xhttps://example.com/report.html"]) {
       expect(parseInline(text)).toEqual([{ kind: "text", text }]);
     }
+    // A path in plain words is drawn as words, and names its file for the chat's list.
+    expect(parseInline(`see ${path}`)).toEqual([{ kind: "text", text: `see ${path}`, files: [path] }]);
   });
 });
 
