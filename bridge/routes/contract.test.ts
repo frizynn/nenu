@@ -91,7 +91,7 @@ let outside = "";
 let orgCalls = "";
 let projectsRoot = "";
 
-// Organizations is a stub on an empty registry, so no route here reaches the operator's projects.
+// Organizations is a stub on a registry of one test project, so no route here reaches the operator's projects.
 const ORG_ENV = ["COLLIE_HERDR_ORGANIZATIONS_BIN", "HERDR_PROJECTS_ROOT"] as const;
 const savedEnv = ORG_ENV.map((key) => [key, process.env[key]] as const);
 const STATUS = {
@@ -130,13 +130,15 @@ esac
 `);
   await chmod(org, 0o755);
   process.env.COLLIE_HERDR_ORGANIZATIONS_BIN = org;
-  process.env.HERDR_PROJECTS_ROOT = join(dir, "projects");
-  // One project, read from its files (this Organizations has no `overview --json`), with a capture in its library.
-  await mkdir(join(dir, "projects", "demo", "library", "t-0002"), { recursive: true });
-  await writeFile(join(dir, "projects", "demo", "PROJECT.md"), `+++\nname = "Demo"\ngoal = ""\n+++\n`);
-  await writeFile(join(dir, "projects", "demo", "library", "t-0002", "shot.png"), Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"));
-  await writeFile(join(dir, "projects", "demo", "PRIVATE.png"), Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"));
-  projectsRoot = join(dir, "projects");
+  // One project, read from its files (this Organizations has no `overview --json`), with a capture in
+  // its library. Outside the state directory, whose files are never served (ADR 0074).
+  projectsRoot = await mkdtemp(join(tmpdir(), "nenu-route-projects-"));
+  process.env.HERDR_PROJECTS_ROOT = projectsRoot;
+  const png = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex");
+  await mkdir(join(projectsRoot, "demo", "library", "t-0002"), { recursive: true });
+  await writeFile(join(projectsRoot, "demo", "PROJECT.md"), `+++\nname = "Demo"\ngoal = ""\n+++\n`);
+  await writeFile(join(projectsRoot, "demo", "library", "t-0002", "shot.png"), png);
+  await writeFile(join(projectsRoot, "demo", "PRIVATE.png"), png);
   // A shell pane: no agent, so no handler reaches for a conversation, journal or daemon.
   const paneInfo = { pane_id: "w:p", terminal_id: "t", workspace_id: "w", tab_id: "tab", focused: false, cwd: dir, agent_status: "idle" as const, revision: 0 };
   const herdr = {
@@ -168,6 +170,7 @@ esac
     await server.stop(true);
     await rm(dir, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+    await rm(projectsRoot, { recursive: true, force: true });
   };
 });
 
