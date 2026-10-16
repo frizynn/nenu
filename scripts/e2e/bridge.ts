@@ -192,7 +192,9 @@ async function portIsFree(port: number): Promise<boolean> {
  * the projects are seeded, so a seed can carry numbers the repo produced.
  */
 export async function startTestBridge(opts: {
-  port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; org?: (herd: DemoHerd, now: number) => OrgSeed; orgBin?: string; repo?: (dir: string) => void;
+  port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; orgBin?: string; repo?: (dir: string) => void;
+  /** The projects fake-org.ts starts from; `projects` is the registry's root, where a seed's library files go. */
+  org?: (herd: DemoHerd, now: number, projects: string) => OrgSeed;
   /** The herd the FakeHerdr starts with (default: the demo herd). */
   seed?: (fake: FakeHerdr, ctx: { claudeRoot: string; cwd: string; shift: number }) => Promise<DemoHerd>;
   /** Extra variables for the bridge process (machines.ts reads NENU_E2E_MACHINES and NENU_E2E_SSH_HOSTS through the stubs). */
@@ -275,7 +277,7 @@ export async function startTestBridge(opts: {
     }
     await fake.start();
   }
-  const org = opts.org && herd ? opts.org(herd, Date.now() + shift) : undefined;
+  const org = opts.org && herd ? opts.org(herd, Date.now() + shift, paths.projects) : undefined;
   if (org) {
     await writeFile(orgState, JSON.stringify(org, null, 2));
     // The registry lists a project only with its PROJECT.md; its repo is the bench folder, where the
