@@ -208,7 +208,7 @@ export function AccountList({ accounts, selected, onSelect, check }: {
     >
       {lead}
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-1.5 text-body">{name}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-body">{name}</span>
         {sub && <span className="text-caption text-pretty text-subtle-foreground tabular-nums">{sub}</span>}
       </span>
       <span className="text-subhead font-medium tabular-nums">{usd(cost)}</span>
@@ -221,7 +221,7 @@ export function AccountList({ accounts, selected, onSelect, check }: {
       {row(undefined, <Layers aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />, "All accounts", undefined, total)}
       {realAccounts(accounts).map((a) => row(
         a.id, <Mark agent={a.agent} />,
-        <>{a.label}{a.active && <span aria-hidden="true" className="size-1.5 rounded-full bg-status-done" />}</>,
+        <><span className="truncate">{a.label}</span>{a.active && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-status-done" />}</>,
         `${AGENT_NAME[a.agent]} · ${tokens(a.month.tokens)} tokens`, a.month.cost,
       ))}
       {unassigned && row(unassigned.id, <CircleDashed aria-hidden="true" className="size-4 shrink-0 text-subtle-foreground" />, "Unassigned", `${AGENT_NAME[unassigned.agent]} with no account on record`, unassigned.month.cost)}

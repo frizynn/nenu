@@ -52,7 +52,7 @@ export function ActivityCard({ model, accounts, title = "Activity" }: { model: M
   return (
     <section aria-label={title} className="usage-map relative flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4">
       <div className="flex items-center gap-3">
-        <h2 className="flex-1 text-subhead font-semibold">{title}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-subhead font-semibold">{title}</h2>
         <Segmented label="Measure" className="usage-seg" options={METRICS} value={metric} onChange={setMetric} />
       </div>
       <div ref={scroller} className="usage-scroll">

@@ -159,15 +159,17 @@ function Usage({ data, desk, account, onAccount, refresh }: {
     <div className="flex items-center gap-2">
       {data.splitByAccount && (
         <button type="button" onClick={() => setPicking(desk ? !listed : !picking)} aria-expanded={desk ? listed : picking}
-          className={cn("flex items-center gap-1.5 rounded-lg border bg-card pr-2.5 pl-3 text-footnote font-medium", desk ? "h-8" : "h-9")}>
-          {chosen ? <span aria-hidden="true" className={cn("size-2 rounded-full", AGENT_DOT[chosen.agent])} /> : <Layers aria-hidden="true" className="size-4 text-muted-foreground" />}
-          {chosen?.label ?? "All accounts"}
-          <ChevronsUpDown aria-hidden="true" className="size-3.5 text-subtle-foreground" />
+          className={cn("flex min-w-0 items-center gap-1.5 rounded-lg border bg-card pr-2.5 pl-3 text-footnote font-medium", desk ? "h-8" : "h-9")}>
+          {chosen ? <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", AGENT_DOT[chosen.agent])} /> : <Layers aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+          <span className="truncate">{chosen?.label ?? "All accounts"}</span>
+          <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-subtle-foreground" />
         </button>
       )}
       <span className="flex-1" />
-      <span className="text-footnote text-subtle-foreground">
-        {state === "scanning" ? "Updating…" : <>{error && <span title={error} className="text-destructive">Couldn’t update</span>}{error && scannedAt && " · "}{scannedAt && `Updated ${timeAgo(scannedAt)}`}</>}
+      <span className="shrink-0 text-footnote text-subtle-foreground">
+        {state === "scanning" ? "Updating…"
+          : error ? <span title={scannedAt ? `${error} · last updated ${timeAgo(scannedAt)}` : error} className="text-destructive">Couldn’t update</span>
+            : scannedAt && `Updated ${timeAgo(scannedAt)}`}
       </span>
       {desk && refresh}
     </div>
