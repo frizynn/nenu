@@ -152,6 +152,33 @@ describe("NotificationCoordinator — one notification per agent, sent once", ()
     expect(sink.renders).toHaveLength(2);
   });
 
+  test("an alert held back while Nenu was open told nobody: the agent's next finish still notifies", () => {
+    // The sink sends nothing while a screen has Nenu open (ADR 0072), so that first finish never
+    // reached the phone, and "once until you look" has nothing to count yet.
+    class OpenScreenSink implements NotifySink {
+      open = true;
+      readonly sent: AgentNotice[] = [];
+      render(notice: AgentNotice) {
+        if (this.open) return "open" as const;
+        this.sent.push(notice);
+        return "sent" as const;
+      }
+    }
+    const clock = new FakeClock();
+    const sink = new OpenScreenSink();
+    const policy = { maybe: () => true, wants: () => true };
+    let now = 1_000;
+    const coord = new NotificationCoordinator(clock, sink, 30_000, policy, undefined, () => undefined, () => now);
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    sink.open = false;
+    now += 60_000;
+    coord.onTransition(agent("p1", "working"), "done", "working");
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    expect(sink.sent.map((n) => n.title)).toEqual(["api finished"]);
+  });
+
   test("a finished agent that then waits on you still says so", () => {
     const { clock, sink, coord } = setup();
     coord.onTransition(agent("p1", "done"), "working", "done");
