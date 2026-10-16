@@ -8,7 +8,8 @@ import type { OrgSeed } from "./scenario.ts";
 
 // A coordinator's STATUS.md on the e2e bench (ADR 0087): a project whose root coordinator and one
 // nested coordinator each keep one, with every `[state]` the template names, thread ids, links and
-// the five sections, written as an agent would. It checks that the text reaches the page through
+// the template's sections (Asked, Needs your decision, Decisions), written as an agent would; what is
+// in progress and done is the Summary's, computed from the threads, so the file does not repeat it. It checks that the text reaches the page through
 // `/api/org/summary` and never the snapshot, that the block sits in a phone's first screen on the
 // project page and heads the coordinator's page, that a thread id opens its node, and captures both
 // pages on a phone (folded, opened, light) and a desk. `--quiet` seeds the same project without the
@@ -44,21 +45,9 @@ Objective: lanzar el checkout nuevo de Acme antes del viernes
 - Diseño del stock : lista compacta o tarjetas con foto ([comparación](https://github.com/acme/shop/pull/1352))
 - Clave de prueba del proveedor de pagos : pasarla hoy o dejar el QR para la semana que viene
 
-## In progress
-- t-0010 Rediseño del checkout : cuatro de seis partes listas
-- t-0013 Landing a 390 px : armando la versión para teléfono
-
-## Done
-- t-0015 Login con email (https://github.com/acme/shop/pull/1344)
-- t-0001 Hotfix del login
-
 ## Decisions
 - 2026-10-14 El checkout sale en partes, un PR por parte
-- 2026-10-15 Los envíos cobran por zona
-
-## Next
-- Cerrar el stock apenas elijas el diseño
-- Probar el pago con QR de punta a punta`;
+- 2026-10-15 Los envíos cobran por zona`;
 
 const CHECKOUT_STATUS = `# Status
 Objective: el checkout nuevo en seis partes, cada una con su PR
@@ -71,15 +60,8 @@ Objective: el checkout nuevo en seis partes, cada una con su PR
 ## Needs your decision
 - Stock : lista o tarjetas (https://github.com/acme/shop/pull/1352)
 
-## In progress
-- t-0013 Landing a 390 px : en curso
-
-## Done
-- t-0014 Cupones de descuento (https://github.com/acme/shop/pull/1351)
-- t-0015 Login con email (https://github.com/acme/shop/pull/1344)
-
-## Next
-- Envíos y stock`;
+## Decisions
+- 2026-10-15 El stock espera tu elección antes de seguir con envíos`;
 
 function seed(_herd: unknown, now: number, projects: string): OrgSeed {
   const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
