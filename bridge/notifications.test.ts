@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { AlertDetail } from "./alert-detail.ts";
 import {
+  decisionLine,
   interactionAlert,
   NotificationCoordinator,
   makeNotifySink,
   type AgentNotice,
+  type NoticeDecision,
   type NotifyClock,
   type NotifySink,
 } from "./notifications.ts";
@@ -40,8 +42,9 @@ class FakeClock implements NotifyClock<number> {
 
 class RecordingSink implements NotifySink {
   readonly renders: AgentNotice[] = [];
-  render(notice: AgentNotice): void {
+  render(notice: AgentNotice) {
     this.renders.push(notice);
+    return "sent" as const;
   }
   get last(): AgentNotice | undefined {
     return this.renders.at(-1);
@@ -255,6 +258,38 @@ describe("NotificationCoordinator — who, what and where", () => {
   });
 });
 
+describe("NotificationCoordinator — every decision is logged", () => {
+  test("says what it did with each alert and why, naming no one's words", () => {
+    const clock = new FakeClock();
+    const decisions: NoticeDecision[] = [];
+    let open = true;
+    const sink: NotifySink = { render: () => (open ? "open" : "sent") };
+    // Settings as shipped: an agent another agent launched does not push.
+    const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched };
+    const describe = (view: AgentView, status: "blocked" | "done"): AlertDetail =>
+      ({ status, kind: "agent", name: view.paneLabel ?? "", where: "", startedBy: "person", requested: false, launched: view.paneId === "p2", summary: "secret words" });
+    let now = 1_000;
+    const coord = new NotificationCoordinator(clock, sink, 30_000, policy, describe, () => undefined, () => now, (d) => decisions.push(d));
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    coord.onTransition(agent("p2", "done"), "working", "done");
+    clock.fireAll();
+    open = false;
+    now += 60_000;
+    coord.onTransition(agent("p1", "working"), "done", "working");
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    coord.onTransition(agent("p1", "working"), "done", "working");
+    coord.onTransition(agent("p1", "done"), "working", "done");
+    clock.fireAll();
+    expect(decisions.map((d) => decisionLine("main", d))).toEqual([
+      "notify main/p1 done (agent, started by person): not sent, Nenu is open on a screen",
+      "notify main/p2 done (agent, started by person, launched by an agent): not sent, no switch on in Settings pushes this turn",
+      "notify main/p1 done (agent, started by person): sent",
+      "notify main/p1 done (agent, started by person): not sent, it already notified and nobody has opened it since",
+    ]);
+  });
+});
+
 describe("makeNotifySink", () => {
   const notice: AgentNotice = { title: "api needs you", body: "demo", paneId: "w1:p1", renotify: true };
   class RecordingPush {
@@ -266,13 +301,14 @@ describe("makeNotifySink", () => {
 
   test("each agent's notice is its own push, tagged by its pane", () => {
     const push = new RecordingPush();
-    makeNotifySink(push, { isMuted: () => false }, "collie:herd").render(notice);
+    expect(makeNotifySink(push, { muted: () => null }, "collie:herd").render(notice)).toBe("sent");
     expect(push.sent).toEqual([{ title: "api needs you", body: "demo", tag: "collie:herd:w1:p1", paneId: "w1:p1", renotify: true }]);
   });
 
-  test("a snooze, or Nenu open on a screen, sends nothing at all", () => {
+  test("a snooze, or Nenu open on a screen, sends nothing at all, and says which held it back", () => {
     const push = new RecordingPush();
-    makeNotifySink(push, { isMuted: () => true }, "collie:herd").render(notice);
+    expect(makeNotifySink(push, { muted: () => "snoozed" }, "collie:herd").render(notice)).toBe("snoozed");
+    expect(makeNotifySink(push, { muted: () => "open" }, "collie:herd").render(notice)).toBe("open");
     expect(push.sent).toEqual([]);
   });
 });

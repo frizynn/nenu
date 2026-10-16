@@ -9,7 +9,7 @@ import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { startMachines } from "./machines-runtime.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
-import { AlertDescriber, NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
+import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
 import { Push } from "./push.ts";
 import { startServer } from "./server.ts";
@@ -175,10 +175,11 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
   };
   // Nothing is pushed while a snooze runs or Nenu is open on a screen: the page already shows it, and
   // a push the service worker then hid would count against iOS's silent-push quota (ADR 0072).
-  const quiet = { isMuted: () => snooze.isMuted() || live.watching() };
+  const quiet: MuteGate = { muted: () => snooze.isMuted() ? "snoozed" : live.watching() ? "open" : null };
   const sink = makeNotifySink(push, quiet, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
+  // Each decision goes to the journal, so a missing push is read there instead of deduced.
   const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name),
-    (paneId) => activity.get(name, paneId)?.seenAt);
+    (paneId) => activity.get(name, paneId)?.seenAt, Date.now, (decision) => console.log(decisionLine(name, decision)));
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
   // A finished turn is when new usage exists: a stale usage total catches up then (usage/runtime.ts).
   engine.onTransition((_agent, _from, to) => { if (to === "idle" || to === "done") usage.turnEnded(); });
