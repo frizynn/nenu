@@ -189,10 +189,12 @@ export class Usage implements UsageService {
   }
 
   async set(patch: Partial<UsagePrefs>): Promise<UsageResponse> {
-    const next = { ...this.prefs.current(), ...patch };
+    const prev = this.prefs.current();
+    const next = { ...prev, ...patch };
     await this.prefs.set(next);
     if (!next.on) this.child?.kill();
-    return this.read();
+    // Split decides which limit caches the scan reads, so a change shows at once.
+    return this.read({ fresh: next.on && next.splitByAccount !== prev.splitByAccount });
   }
 
   turnEnded(): void {
