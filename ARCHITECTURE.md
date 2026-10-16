@@ -323,6 +323,6 @@ it runs today. Fold each one in, and drop it from this list, in the release that
 - **Organizations.** Reads through the versioned `--json` contract, with the files as a fallback
   ([ADR 0061](./.adr/0061-nenu-reads-organizations-through-its-json-contract.md)). Each thread's
   report summary, captures and deliverables are read on demand, and the project's library is served
-  through one contained route ([ADR 0085](./.adr/0085-a-projects-library-is-read-through-one-contained-route.md)).
+  through one contained route ([ADR 0087](./.adr/0087-a-projects-library-is-read-through-one-contained-route.md)).
   A coordinator's STATUS.md comes the same way, with only its stamp in the snapshot
-  ([ADR 0087](./.adr/0087-a-coordinators-status-file-is-drawn-as-written.md)).
+  ([ADR 0089](./.adr/0089-a-coordinators-status-file-is-drawn-as-written.md)).

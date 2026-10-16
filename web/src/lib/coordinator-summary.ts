@@ -1,6 +1,6 @@
 // A coordinator's Summary: the work under it by outcome, for a person who reads results instead of
 // chats. The tree (org-tree.ts) stays the way Organizations draws it; only this view groups by
-// outcome (ADR 0086). Closed facts come first (resolved, merged), then what the agent is doing now,
+// outcome (ADR 0088). Closed facts come first (resolved, merged), then what the agent is doing now,
 // then what its last report said, so a report that says "done" never hides an agent that is asking
 // you something again, and an old "blocked" never hides one that is back at work.
 import { nodeState } from "./org-tree";

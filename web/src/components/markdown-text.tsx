@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
@@ -167,6 +167,96 @@ const ALIGN_CLASS: Record<string, string> = {
   right: "text-right",
 };
 
+type TableBlock = Extract<MdBlock, { kind: "table" }>;
+
+// A cell that wraps past this many lines has stopped reading as a column.
+const CRAMPED_LINES = 4;
+
+/** Whether a drawn grid reads as one: no cell wraps into a sliver, and nothing runs past its scroller. */
+function gridReads(scroller: HTMLElement): boolean {
+  if (scroller.scrollWidth > scroller.clientWidth + 1) return false;
+  return [...scroller.querySelectorAll("[data-cell]")].every((cell) => cell.getClientRects().length <= CRAMPED_LINES);
+}
+
+/**
+ * A table keeps its grid while the grid reads in the width it has: its columns wrap to fit, and a
+ * short-celled table stays a grid on a phone. Past that a phone could only pan it sideways a row at a
+ * time, hiding where the row went, so each row reads instead as a block of its cells under their
+ * headers. The grid is measured as drawn, in the real font; a wider column draws it again to look.
+ */
+function MdTable({ block }: { block: TableBlock }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  // How this grid measured the last time it was on screen: whether it read, in what width.
+  const [fit, setFit] = useState<{ block: TableBlock; reads: boolean; width: number } | null>(null);
+  // A wider column, or other cells, draw the grid again to look.
+  const rows = fit !== null && fit.block === block && !fit.reads && width <= fit.width;
+  // Every layout with the grid on screen measures it.
+  useLayoutEffect(() => {
+    const el = box.current;
+    const grid = el?.querySelector<HTMLElement>("[data-grid]");
+    if (!el || !grid) return;
+    const next = { block, reads: gridReads(grid), width: el.clientWidth };
+    setFit((last) => last?.block === next.block && last.reads === next.reads && last.width === next.width ? last : next);
+  });
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={box}>
+      {/* Its Copy sits above it, right-aligned like a code block's. */}
+      <div className="flex justify-end">
+        <CopyButton what="table" payload={() => ({ text: tableMarkdown(block), html: tableHtml(block) })} className={cn(QUIET_ACTION, "-mr-2")} />
+      </div>
+      {rows ? (
+        <div className="divide-y border-y tabular-nums">
+          {block.rows.map((row, r) => (
+            <dl key={r} className="space-y-1.5 py-2.5">
+              {row.map((cell, c) => (
+                <div key={c}>
+                  {block.header[c]?.length ? <dt className="text-footnote text-muted-foreground"><Spans spans={block.header[c]} /></dt> : null}
+                  <dd className={c === 0 ? "font-semibold" : undefined}><Spans spans={cell} /></dd>
+                </div>
+              ))}
+            </dl>
+          ))}
+        </div>
+      ) : (
+        <div data-grid className="overflow-x-auto">
+          <table className="border-collapse text-footnote tabular-nums">
+            <thead>
+              <tr>
+                {block.header.map((cell, i) => (
+                  <th key={i} className={`border px-2 py-1 font-semibold ${ALIGN_CLASS[block.align[i] ?? "left"]}`}>
+                    <span data-cell><Spans spans={cell} /></span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, c) => (
+                    <td key={c} className={`border px-2 py-1 align-top ${ALIGN_CLASS[block.align[c] ?? "left"]}`}>
+                      <span data-cell><Spans spans={cell} /></span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Block({ block }: { block: MdBlock }) {
   switch (block.kind) {
     case "heading": {
@@ -207,46 +297,7 @@ function Block({ block }: { block: MdBlock }) {
         </blockquote>
       );
     case "table":
-      // Columns can't be made to fit a phone, so the table keeps its real widths and pans inside its
-      // own scroller — the same thing a mobile browser does with a table on any normal page. Its Copy
-      // sits above it, right-aligned like a code block's.
-      return (
-        <div>
-          <div className="flex justify-end">
-            <CopyButton what="table" payload={() => ({ text: tableMarkdown(block), html: tableHtml(block) })} className={cn(QUIET_ACTION, "-mr-2")} />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-max border-collapse text-footnote tabular-nums">
-              <thead>
-                <tr>
-                  {block.header.map((cell, i) => (
-                    <th
-                      key={i}
-                      className={`border px-2 py-1 font-semibold ${ALIGN_CLASS[block.align[i] ?? "left"]}`}
-                    >
-                      <Spans spans={cell} />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {block.rows.map((row, r) => (
-                  <tr key={r}>
-                    {row.map((cell, c) => (
-                      <td
-                        key={c}
-                        className={`border px-2 py-1 align-top ${ALIGN_CLASS[block.align[c] ?? "left"]}`}
-                      >
-                        <Spans spans={cell} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
+      return <MdTable block={block} />;
     case "math":
       return <TexMath tex={block.text} display />;
     case "rule":

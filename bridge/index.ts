@@ -9,7 +9,7 @@ import { EventPoker } from "./event-poker.ts";
 import { LiveEvents, snapshotWatcher } from "./live-events.ts";
 import { startMachines } from "./machines-runtime.ts";
 import { DEFAULT_TIMEOUT_MS, HerdrClient } from "./herdr-client.ts";
-import { AlertDescriber, NotificationCoordinator, makeNotifySink, type NotifyClock } from "./notifications.ts";
+import { AlertDescriber, NotificationCoordinator, decisionLine, makeNotifySink, type MuteGate, type NotifyClock } from "./notifications.ts";
 import { NotifyPrefsStore } from "./notify-prefs.ts";
 import { Push } from "./push.ts";
 import { startServer } from "./server.ts";
@@ -29,6 +29,7 @@ import {
 } from "./update.ts";
 import { createBridgeStampReader } from "./bridge-stamp.ts";
 import { SWEEP_INTERVAL_MS, sweepUploads } from "./uploads.ts";
+import { Usage, usageRoots } from "./usage/runtime.ts";
 
 // How often the registry rescans the filesystem for sessions that appeared/disappeared after boot.
 const SESSION_REFRESH_MS = 15_000;
@@ -129,6 +130,14 @@ updateTimer?.unref();
 // every session publishes into it and each stream filters to its own session.
 const live = new LiveEvents();
 
+// Settings → Usage. Off unless turned on; then a scan runs in its own process now and then.
+const usage = new Usage({
+  stateDir: cfg.stateDir,
+  roots: usageRoots(cfg.journalRoots),
+  onScanned: () => { for (const session of registry.list()) live.publish({ session: session.name, topic: "usage" }); },
+});
+await usage.load();
+
 // ── Per-session runtime factory ──────────────────────────────────────────────
 // One HerdrClient + StateEngine + EventPoker + NotificationCoordinator per herdr session. The
 // registry calls this for the primary at construction and for each session discovered later. Push,
@@ -166,11 +175,14 @@ const makeSession: SessionFactory = (name, socketPath, isPrimary) => {
   };
   // Nothing is pushed while a snooze runs or Nenu is open on a screen: the page already shows it, and
   // a push the service worker then hid would count against iOS's silent-push quota (ADR 0072).
-  const quiet = { isMuted: () => snooze.isMuted() || live.watching() };
+  const quiet: MuteGate = { muted: () => snooze.isMuted() ? "snoozed" : live.watching() ? "open" : null };
   const sink = makeNotifySink(push, quiet, herdTagFor(isPrimary, name), isPrimary ? undefined : name);
+  // Each decision goes to the journal, so a missing push is read there instead of deduced.
   const notifications = new NotificationCoordinator(clock, sink, cfg.notifyDelayMs, notifyPrefs, alerts.for(name),
-    (paneId) => activity.get(name, paneId)?.seenAt);
+    (paneId) => activity.get(name, paneId)?.seenAt, Date.now, (decision) => console.log(decisionLine(name, decision)));
   engine.onTransition((agent, from, to) => notifications.onTransition(agent, from, to));
+  // A finished turn is when new usage exists: a stale usage total catches up then (usage/runtime.ts).
+  engine.onTransition((_agent, _from, to) => { if (to === "idle" || to === "done") usage.turnEnded(); });
   engine.onRemove((paneId) => notifications.onRemove(paneId));
 
   engine.start();
@@ -234,7 +246,7 @@ const machines = await startMachines(cfg.stateDir, () => {
   for (const session of registry.list()) live.publish({ session: session.name, topic: "snapshot" });
 });
 
-const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines });
+const server = startServer({ cfg, registry, push, snooze, notifyPrefs, alerts, updateMonitor, audit, activity, live, machines, usage });
 
 const shutdown = async () => {
   console.log("\n[bridge] shutting down");
@@ -242,6 +254,7 @@ const shutdown = async () => {
   // before we tear down the poll loops and exit.
   await server.stop();
   machines.stop();
+  usage.stop();
   clearInterval(refreshTimer);
   registry.disposeAll();
   // Writes are debounced, so the last few seconds of "you looked at this" live only in memory —

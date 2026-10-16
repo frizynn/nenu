@@ -6,7 +6,7 @@ import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import type { OrgSeed } from "./scenario.ts";
 
-// A coordinator's STATUS.md on the e2e bench (ADR 0087): a project whose root coordinator and one
+// A coordinator's STATUS.md on the e2e bench (ADR 0089): a project whose root coordinator and one
 // nested coordinator each keep one, with every `[state]` the template names, thread ids, links and
 // the five sections, written as an agent would. It checks that the text reaches the page through
 // `/api/org/summary` and never the snapshot, that the block sits in a phone's first screen on the
