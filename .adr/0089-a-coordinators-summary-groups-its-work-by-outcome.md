@@ -1,10 +1,10 @@
-# 0088. A coordinator's Summary groups its work by outcome
+# 0089. A coordinator's Summary groups its work by outcome
 
 - **Status:** Accepted (2026-10-16). Requested by the operator. Amends
   [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) for this one view: the tree
   stays as Organizations draws it everywhere, the node page included.
 - **Trail:** `web/src/lib/coordinator-summary.ts` · `web/src/components/coordinator-summary.tsx` ·
-  `web/src/routes/node.tsx` · [ADR 0087](./0087-a-projects-library-is-read-through-one-contained-route.md)
+  `web/src/routes/node.tsx` · [ADR 0088](./0088-a-projects-library-is-read-through-one-contained-route.md)
 
 ## Context
 
@@ -39,7 +39,7 @@ Without them the view can still group by what Organizations already knows (group
 
 The project page, the panel, the phone's Threads tab, Search and the node page's own tree still draw
 ADR 0064's tree; only this tab groups. A change to the placement rule lands in `outcome`, and its
-test names each case. The summaries are read on demand (ADR 0087), so the tab costs one read of
+test names each case. The summaries are read on demand (ADR 0088), so the tab costs one read of
 cached data when the page opens and when a node in it moves, and nothing on the poll.
 
 Do not add this grouping to the other views of a project: that is what ADR 0064 closed. Revisit if

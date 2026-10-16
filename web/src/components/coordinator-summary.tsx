@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const CaptureViewer = lazy(() => import("./capture-viewer"));
 
-// A coordinator's Summary (ADR 0088): the work under it by outcome, each card with what its agent's
+// A coordinator's Summary (ADR 0089): the work under it by outcome, each card with what its agent's
 // last report says in plain words, its PR, the pictures it took and the documents it left. Every
 // report field may be missing (an Organizations without them, a thread that has not reported), and
 // a card then shows only what Organizations knows. The summary is the agent's text, drawn as text.

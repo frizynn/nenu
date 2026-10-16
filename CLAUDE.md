@@ -164,7 +164,7 @@ the unit name; the Herdr action runs from anywhere.
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
   The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
   by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
-  only once a report has a verdict ([ADR 0088](./.adr/0088-a-coordinators-summary-groups-its-work-by-outcome.md)).
+  only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
