@@ -141,7 +141,7 @@ function PrChip({ pr }: { pr: ThreadPullRequest }) {
 }
 
 /**
- * The report's pictures in one row that scrolls sideways and snaps; a tap opens them large. Every
+ * The report's pictures in one row that scrolls sideways; a tap opens them large. Every
  * picture keeps its whole frame at one height, so a phone screen and a desk screen sit side by side
  * uncropped; a caption wraps under its own picture.
  */
@@ -149,8 +149,8 @@ function Captures({ project, captures }: { project: ProjectView; captures: reado
   const [opened, setOpened] = useState<number | null>(null);
   const images = captures.map((capture, index) => ({ key: capture.path, src: orgLibraryUrl(project.slug, capture.path), label: capture.caption || `Capture ${index + 1}` }));
   return <>
-    <ul aria-label="Captures" className="-mx-3.5 mt-3 flex snap-x snap-mandatory scroll-px-3.5 gap-2.5 overflow-x-auto overscroll-x-contain px-3.5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {images.map((image, index) => <li key={image.key} className="flex w-min shrink-0 snap-start flex-col">
+    <ul aria-label="Captures" className="-mx-3.5 mt-3 flex gap-2.5 overflow-x-auto overscroll-x-contain px-3.5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {images.map((image, index) => <li key={image.key} className="flex w-min shrink-0 flex-col">
         <CaptureThumb src={image.src} label={image.label} onOpen={() => setOpened(index)} />
         {captures[index]!.caption && <p className="mt-1.5 line-clamp-2 text-caption text-muted-foreground">{captures[index]!.caption}</p>}
       </li>)}
