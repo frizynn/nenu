@@ -140,13 +140,17 @@ function PrChip({ pr }: { pr: ThreadPullRequest }) {
   </a>;
 }
 
-/** The report's pictures in one row that scrolls sideways and snaps; a tap opens them large. */
+/**
+ * The report's pictures in one row that scrolls sideways and snaps; a tap opens them large. Every
+ * picture keeps its whole frame at one height, so a phone screen and a desk screen sit side by side
+ * uncropped; a caption wraps under its own picture.
+ */
 function Captures({ project, captures }: { project: ProjectView; captures: readonly ThreadCapture[] }) {
   const [opened, setOpened] = useState<number | null>(null);
   const images = captures.map((capture, index) => ({ key: capture.path, src: orgLibraryUrl(project.slug, capture.path), label: capture.caption || `Capture ${index + 1}` }));
   return <>
     <ul aria-label="Captures" className="-mx-3.5 mt-3 flex snap-x snap-mandatory scroll-px-3.5 gap-2.5 overflow-x-auto overscroll-x-contain px-3.5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {images.map((image, index) => <li key={image.key} className="w-[min(72%,16rem)] shrink-0 snap-start">
+      {images.map((image, index) => <li key={image.key} className="flex w-min shrink-0 snap-start flex-col">
         <CaptureThumb src={image.src} label={image.label} onOpen={() => setOpened(index)} />
         {captures[index]!.caption && <p className="mt-1.5 line-clamp-2 text-caption text-muted-foreground">{captures[index]!.caption}</p>}
       </li>)}
@@ -158,10 +162,11 @@ function Captures({ project, captures }: { project: ProjectView; captures: reado
 function CaptureThumb({ src, label, onOpen }: { src: string; label: string; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
   return <button type="button" aria-label={`Open ${label}`} onClick={onOpen}
-    className={cn("grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-lg bg-muted", IMAGE_EDGE)}>
+    className={cn("relative block h-64 min-w-32 overflow-hidden rounded-lg bg-muted sm:h-60", IMAGE_EDGE)}>
     {failed
-      ? <ImageIcon aria-hidden className="size-5 text-muted-foreground" />
-      : <img src={src} alt={label} loading="lazy" decoding="async" draggable={false} className="size-full object-contain" onError={() => setFailed(true)} />}
+      ? <ImageIcon aria-hidden className="absolute inset-0 m-auto size-5 text-muted-foreground" />
+      : <img src={src} alt={label} loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)}
+        className="block h-64 w-auto max-w-[min(calc(100vw-5rem),40rem)] object-contain sm:h-60" />}
   </button>;
 }
 
@@ -173,7 +178,7 @@ function Deliverables({ project, deliverables }: { project: ProjectView; deliver
       const name = <><Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{fileName(deliverable.path)}</span></>;
       return <li key={deliverable.path} className="min-w-0 max-w-full">
         {deliverable.kind === "md"
-          ? <span className={CHIP}>{name}</span>
+          ? <span className={cn(CHIP, "bg-transparent px-1 text-muted-foreground")}>{name}</span>
           : <a className={cn(CHIP, "hover:bg-accent")} href={orgLibraryUrl(project.slug, deliverable.path)} target="_blank" rel="noreferrer">
             {name}<ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
           </a>}
