@@ -75,7 +75,7 @@ export function LimitsCard({ blocks, more, onMore }: {
 }) {
   return (
     <ListSection title="Plan limits">
-      {!blocks.length && !more.length && <p className="px-4 py-3 text-footnote text-muted-foreground">No plan limit seen yet. Claude Code reports its own after a reply, and Codex with each turn.</p>}
+      {!blocks.length && !more.some((m) => m.best) && <p className="px-4 py-3 text-footnote text-muted-foreground">No plan limit seen yet. Claude Code reports its own after a reply, and Codex with each turn.</p>}
       {blocks.map((b) => (
         <div key={b.key} className={cn(hairline, "flex flex-col gap-3 px-4 py-3.5")}>
           <div className="flex items-center gap-2">
@@ -97,8 +97,9 @@ export function LimitsCard({ blocks, more, onMore }: {
       ))}
       {more.map((m) => (
         <button key={m.agent} type="button" onClick={onMore} className={cn(hairline, "flex min-h-10 items-center gap-2 px-4 text-left coarse:min-h-11 hover:bg-accent last:rounded-b-xl")}>
-          <span className="min-w-0 flex-1 truncate text-body">{m.count} more {m.agent === "claude" ? "Claude" : "Codex"} {m.count === 1 ? "account" : "accounts"}</span>
-          {m.best && <span className="text-footnote text-subtle-foreground tabular-nums">{m.best}</span>}
+          {/* Its own words stay whole; a long account name in the hint gives way. */}
+          <span className="flex-1 text-body whitespace-nowrap">{m.count}{blocks.length ? " more" : ""} {m.agent === "claude" ? "Claude" : "Codex"} {m.count === 1 ? "account" : "accounts"}</span>
+          {m.best && <span className="min-w-0 truncate text-footnote text-subtle-foreground tabular-nums">{m.best}</span>}
           <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-subtle-foreground" />
         </button>
       ))}
