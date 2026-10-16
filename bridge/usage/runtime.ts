@@ -2,16 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrefsFile } from "../prefs-file.ts";
 import type { UsageOn, UsageResponse, UsageScan } from "../types.ts";
-import { PRICES_CHECKED } from "./prices.ts";
-import { buildReport } from "./report.ts";
 import type { AccountsFile, ScanArgs } from "./scan-main.ts";
-import { readTotals, usageDir, type Totals } from "./scan.ts";
+import type { Totals } from "./scan.ts";
 
 // The bridge's side of usage: the Settings switches, and when a scan runs. Off, it is one small
 // prefs read at boot and nothing else: no process, no read of any log, no timer (ADR 0085).
 //
-// A scan runs as its own process at background priority, so its memory goes back to the system the
-// moment it ends. It starts when tracking is turned on, when the view asks and the last scan is over
+// A scan runs as its own process, at background priority after the first pass, so its memory goes
+// back to the system the moment it ends. It starts when tracking is turned on, when the view asks and the last scan is over
 // a minute old, and when an agent finishes a turn and the last scan is over six hours old, so logs
 // are counted before Claude Code deletes them at 30 days even if nobody opens the view.
 
@@ -65,9 +63,14 @@ async function* linesOf(stream: ReadableStream<Uint8Array>): AsyncIterable<strin
   }
 }
 
-export function spawnScan(stateDir: string, args: ScanArgs): ScanChild {
+/**
+ * The first pass runs at normal priority because the operator is watching its progress (measured on a
+ * large history: 5.6 s, against 35 s under `taskpolicy -b`, which throttles disk reads); every later
+ * scan reads only what was appended and runs in the background.
+ */
+export function spawnScan(stateDir: string, args: ScanArgs, firstPass = false): ScanChild {
   const script = join(import.meta.dir, "scan-main.ts");
-  const child = Bun.spawn([...backgroundPrefix(), process.execPath, script, stateDir, JSON.stringify(args)], {
+  const child = Bun.spawn([...(firstPass ? [] : backgroundPrefix()), process.execPath, script, stateDir, JSON.stringify(args)], {
     stdin: "ignore", stdout: "pipe", stderr: "ignore",
   });
   return { lines: linesOf(child.stdout), exited: child.exited, kill: () => child.kill() };
@@ -86,7 +89,7 @@ export interface UsageDeps {
   roots: { claude: string[]; codex: string[] };
   /** A scan moved on or finished: tell open pages to re-read (at most once a second while it runs). */
   onScanned: () => void;
-  spawn?: (stateDir: string, args: ScanArgs) => ScanChild;
+  spawn?: (stateDir: string, args: ScanArgs, firstPass: boolean) => ScanChild;
   now?: () => number;
 }
 
@@ -110,7 +113,7 @@ export class Usage implements UsageService {
 
   private accountsFile(): AccountsFile | undefined {
     try {
-      const file = JSON.parse(readFileSync(join(usageDir(this.deps.stateDir), "accounts.json"), "utf8")) as AccountsFile;
+      const file = JSON.parse(readFileSync(join(this.deps.stateDir, "usage", "accounts.json"), "utf8")) as AccountsFile;
       return file.v === 1 ? file : undefined;
     } catch {
       return undefined;
@@ -124,7 +127,7 @@ export class Usage implements UsageService {
   private scan(): Promise<void> {
     if (this.running) return this.running;
     const prefs = this.prefs.current();
-    const child = (this.deps.spawn ?? spawnScan)(this.deps.stateDir, { ...this.deps.roots, split: prefs.splitByAccount });
+    const child = (this.deps.spawn ?? spawnScan)(this.deps.stateDir, { ...this.deps.roots, split: prefs.splitByAccount }, this.lastScan() === undefined);
     this.child = child;
     this.error = undefined;
     this.running = (async () => {
@@ -177,17 +180,21 @@ export class Usage implements UsageService {
       const running = this.scan();
       await Promise.race([running, Bun.sleep(WAIT_MS)]);
     }
+    // Loaded on the first read while on, so a bridge with usage off holds none of this code.
+    const [{ readTotals }, { buildReport }] = await Promise.all([import("./scan.ts"), import("./report.ts")]);
     const totals = readTotals(this.deps.stateDir);
     const scan = this.scanState(totals);
-    if (!totals) return emptyReport(prefs.splitByAccount, scan, this.now());
+    if (!totals) return emptyReport(prefs.splitByAccount, scan, this.now(), (await import("./prices.ts")).PRICES_CHECKED);
     return buildReport({ totals, accounts: this.accountsFile(), splitByAccount: prefs.splitByAccount, scan, now: this.now(), account: opts.account });
   }
 
   async set(patch: Partial<UsagePrefs>): Promise<UsageResponse> {
-    const next = { ...this.prefs.current(), ...patch };
+    const prev = this.prefs.current();
+    const next = { ...prev, ...patch };
     await this.prefs.set(next);
     if (!next.on) this.child?.kill();
-    return this.read();
+    // Split decides which limit caches the scan reads, so a change shows at once.
+    return this.read({ fresh: next.on && next.splitByAccount !== prev.splitByAccount });
   }
 
   turnEnded(): void {
@@ -201,13 +208,13 @@ export class Usage implements UsageService {
   }
 }
 
-function emptyReport(splitByAccount: boolean, scan: UsageScan, now: number): UsageOn {
+function emptyReport(splitByAccount: boolean, scan: UsageScan, now: number, checked: string): UsageOn {
   const t = new Date(now);
   const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
   return {
     on: true, splitByAccount, scan, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, today,
     coverage: { trackedFrom: today }, periods: [], days: [], weeks: [],
-    levels: { cost: [0, 0, 0], tokens: [0, 0, 0] }, accounts: [], limits: [], prices: { checked: PRICES_CHECKED, unpriced: [] },
+    levels: { cost: [0, 0, 0], tokens: [0, 0, 0] }, accounts: [], limits: [], prices: { checked, unpriced: [] },
   };
 }
 

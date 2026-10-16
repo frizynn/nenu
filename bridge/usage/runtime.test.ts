@@ -11,14 +11,16 @@ afterEach(() => rmSync(stateDir, { recursive: true, force: true }));
 /** A scan that finishes when told to, counting how often one was started. */
 function fakeScans() {
   const started: Array<() => void> = [];
-  const spawn = (): ScanChild => {
+  const firstPass: boolean[] = [];
+  const spawn = (_dir: string, _args: unknown, first: boolean): ScanChild => {
+    firstPass.push(first);
     let finish!: () => void;
     const exited = new Promise<number>((resolve) => { finish = () => resolve(0); });
     started.push(finish);
     async function* lines() { await exited; yield JSON.stringify({ done: {} }); }
     return { lines: lines(), exited, kill: finish };
   };
-  return { started, spawn };
+  return { started, firstPass, spawn };
 }
 
 describe("usage runtime", () => {
@@ -78,6 +80,19 @@ describe("usage runtime", () => {
     expect(scans.started).toHaveLength(1);
     now += 7 * 3_600_000;
     usage.turnEnded();
+    expect(scans.started).toHaveLength(2);
+    // Only the first pass, watched on screen, runs at normal priority.
+    expect(scans.firstPass).toEqual([true, false]);
+  });
+
+  test("turning Split by account on rescans at once, so inactive accounts' limits appear", async () => {
+    const scans = fakeScans();
+    const usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => {}, spawn: scans.spawn });
+    await usage.load();
+    await usage.set({ on: true });
+    scans.started[0]!();
+    await Bun.sleep(5);
+    await usage.set({ splitByAccount: true });
     expect(scans.started).toHaveLength(2);
   });
 
