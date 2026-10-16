@@ -100,12 +100,12 @@ export const filePaneActions: Record<string, PaneAction> = {
         const openable = deviceAuth(req, cfg).authorized
           ? async (path: string) => { const file = await checkOpenable(path, cfg.stateDir); return "status" in file ? null : file.path; }
           : undefined;
-        try { return json(await artifactMetadata(cwd, url.searchParams.getAll("inspect"), { delivered, folders, openable }), null); }
+        try { return json(await artifactMetadata(cwd, url.searchParams.getAll("inspect"), { delivered, folders, openable, stateDir: cfg.stateDir }), null); }
         catch { return jsonError("At most 20 artifact paths per request.", 400, null); }
       }
       const current = rt.engine.current();
       const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
-      try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? "."), null); }
+      try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? ".", cfg.stateDir), null); }
       catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
     },
   },

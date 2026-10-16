@@ -21,6 +21,7 @@ const OMITTED: Record<NonNullable<DiffFile["omitted"]>, string> = {
   large: "Too long to show here",
   budget: "Past the size limit",
   untracked: "Untracked, not in git yet",
+  private: "Private file, not shown",
 };
 
 /** One read of a diff while `active`, again whenever `key` changes, aborted when either ends it. */

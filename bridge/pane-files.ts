@@ -25,18 +25,32 @@ const TEXT_NAMES = new Set(["readme", "license", "licence", "dockerfile", "makef
 export function isTextPath(path: string): boolean {
   return TEXT_EXTENSIONS.has(extname(path).toLowerCase()) || TEXT_NAMES.has(basename(path).toLowerCase());
 }
-const PRIVATE_PART = /^(?:\.env(?:\..*)?|\.git|\.ssh|\.aws|\.azure|\.gnupg|\.kube|\.config|\.codex|\.claude|\.npmrc|\.pypirc|\.netrc|credentials(?:\..*)?|auth\.json|id_(?:rsa|ed25519|ecdsa|dsa)(?:\..*)?)$/i;
-const PRIVATE_EXTENSION = /\.(?:pem|key|p12|pfx|keystore)$/i;
+/** Files and folders that hold credentials, by their whole name (compared lower-cased). */
+const PRIVATE_NAMES = new Set([
+  ".git", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".config", ".codex", ".claude", ".docker", ".mozilla",
+  ".password-store", "keyrings", ".zsh_sessions", ".envrc", ".mcp.json", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pypirc",
+  ".netrc", ".git-credentials", ".pgpass", ".vault-token", ".terraformrc", ".boto", ".s3cfg", ".htpasswd", "auth.json",
+  "fish_history",
+]);
+// Names that come with a suffix: .env.local, credentials.json, a key's .pub, Claude Code's
+// .claude.json (its account and MCP servers' env) and its backups, and every shell or REPL history.
+const PRIVATE_PART = /^(?:\.env(?:\..*)?|credentials(?:\..*)?|id_(?:rsa|ed25519|ecdsa|dsa)(?:\..*)?|\.claude\.json(?:\..*)?|\.\w*history)$/i;
+const PRIVATE_EXTENSION = /\.(?:pem|key|p12|pfx|keystore|jks|kdbx|ppk)$/i;
+// Places on a Mac where secrets live as ordinary-looking files: the login keychain, cookie stores
+// and browser profiles (saved passwords, session cookies). Matched on the whole path, so a name
+// relative to home is caught as well as the resolved absolute one.
+const MAC_SECRETS = /(?:^|\/)Library\/(?:Keychains|Cookies|Application Support\/(?:Google\/Chrome|BraveSoftware|Firefox|Arc|Microsoft Edge)|Safari|Containers\/com\.apple\.Safari)(?:\/|$)|\.keychain(?:-db)?$/i;
 
 /** Whether a resolved path sits in `dir`, compared on real paths so a link into it is caught too. */
-async function insideDir(path: string, dir: string): Promise<boolean> {
+export async function insideDir(path: string, dir: string): Promise<boolean> {
   const root = await realpath(dir).catch(() => resolve(dir));
   return path === root || path.startsWith(root + sep);
 }
 
 /** Apply the same policy to the supplied name and the resolved target of an in-project symlink. */
 export function isPrivateProjectPath(path: string): boolean {
-  return path.split(/[\\/]/).some((part) => PRIVATE_PART.test(part)) || PRIVATE_EXTENSION.test(path);
+  return path.split(/[\\/]/).some((part) => PRIVATE_NAMES.has(part.toLowerCase()) || PRIVATE_PART.test(part))
+    || PRIVATE_EXTENSION.test(path) || MAC_SECRETS.test(path);
 }
 
 /** Header that tells the client why a 404 happened when the reason is visible from the name alone. */

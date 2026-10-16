@@ -1,8 +1,8 @@
-# 0089. A coordinator's STATUS.md is drawn as written, at the top of its page
+# 0090. A coordinator's STATUS.md is drawn as written, at the top of its page
 
 - **Status:** Accepted (2026-10-16). Requested by the operator. Builds on
-  [ADR 0087](./0087-a-projects-library-is-read-through-one-contained-route.md) (what the snapshot leaves
-  out) and [ADR 0088](./0088-a-coordinators-summary-groups-its-work-by-outcome.md) (the coordinator's page).
+  [ADR 0088](./0088-a-projects-library-is-read-through-one-contained-route.md) (what the snapshot leaves
+  out) and [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md) (the coordinator's page).
 - **Trail:** `bridge/org-report.ts` (`status_file`) · `bridge/projects.ts` · `web/src/components/coordinator-status.tsx` ·
   `web/src/components/markdown-text.tsx` (`TextTokensContext`) · `scripts/e2e/coordinator-status.ts`
 
@@ -14,7 +14,7 @@ it stands, what needs his decision and what was decided, and prints it as `statu
 (`{path, text, updated}`, up to 8,000 characters) on the project, for the root coordinator, and on each
 coordinator node. It is named `status_file` because `status` is already the lifecycle of both. He wants
 to open Nenu and read it without opening a chat. What is in progress and what is done is not in the
-file: Organizations computes it from the threads, and the Summary (ADR 0088) draws it.
+file: Organizations computes it from the threads, and the Summary (ADR 0089) draws it.
 
 ## Decision
 

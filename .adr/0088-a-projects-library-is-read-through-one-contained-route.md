@@ -1,4 +1,4 @@
-# 0087. A project's library is read through one contained route
+# 0088. A project's library is read through one contained route
 
 - **Status:** Accepted (2026-10-16). Depends on Organizations adding `captures` and `deliverables` to
   each thread in `overview --json`; until it does, nothing links to the route.

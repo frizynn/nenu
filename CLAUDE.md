@@ -146,7 +146,8 @@ the unit name; the Herdr action runs from anywhere.
   the queue and the dialogs all relax to a 10 s safety net
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
 - Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/project/:projectSlug`,
-  `/project/:projectSlug/node/:nodeId`, `/settings`, `/pane/:paneId` and `/pane/:paneId/history`.
+  `/project/:projectSlug/node/:nodeId`, `/settings`, `/pane/:paneId`, `/pane/:paneId/history` and
+  `/pane/:paneId/file?path=`, a file's own viewer page.
   The router instance is module-scoped so it keeps its location.
 - **A workspace has no page.** Every way in opens the pane `workspaceEntry` picks; its tabs and panes
   are the strips above that chat, and `/space/:spaceId` only resolves old links and an empty workspace
@@ -163,10 +164,10 @@ the unit name; the Herdr action runs from anywhere.
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
   The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
   by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
-  only once a report has a verdict ([ADR 0088](./.adr/0088-a-coordinators-summary-groups-its-work-by-outcome.md)).
+  only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page, drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
-  ([ADR 0089](./.adr/0089-a-coordinators-status-file-is-drawn-as-written.md)).
+  ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
@@ -327,6 +328,10 @@ summaries and notes name files without delivering them, so they draw no file car
 message once: `parseInline` (`web/src/lib/markdown.ts`) finds code, links, URLs and paths, and the file
 list walks that parse, never the raw text. A card, image or video shows only once the bridge finds the
 file, and a name with nothing behind it draws nothing ([ADR 0086](./.adr/0086-the-chat-reads-a-message-once-and-offers-only-files-it-found.md)).
+Whatever opens a file is a link to its own page (`FileLink`): a tap opens the viewer in place, a
+long-press or a modified click opens the page in a new tab, never the raw `/file` bytes
+([ADR 0087](./.adr/0087-a-file-opens-in-a-new-tab-on-its-own-viewer-page.md)); `bun scripts/e2e/run.ts files`
+follows each of them and what the bridge refuses.
 
 Settings → Usage (`bridge/usage/`) reads the same Claude and Codex logs for token totals, off by
 default. It scans in its own short-lived process at background priority, never in the bridge, on a
@@ -337,7 +342,7 @@ A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pic
 whose real path is inside `<projects root>/<slug>/library`, itself a folder and not a link; anything else
 is 404. Bytes go through the preview's readers and HTML through its sandbox. The summaries and their paths
 come from `/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
-([ADR 0087](./.adr/0087-a-projects-library-is-read-through-one-contained-route.md)).
+([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

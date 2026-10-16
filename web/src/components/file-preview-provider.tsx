@@ -1,7 +1,8 @@
 import { checkForUpdate } from "@/lib/pwa";
 import { journalImageUrl, paneFileUrl } from "@/lib/api";
 import { Component, createContext, lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
-import { FilePreviewContext, FileMediaContext } from "@/lib/file-preview-context";
+import { FileHrefContext, FilePreviewContext, FileMediaContext } from "@/lib/file-preview-context";
+import { filePagePath } from "@/lib/nav";
 import type { PaneRoot } from "@/lib/file-links";
 
 const FilePreview = lazy(() => import("./file-preview"));
@@ -50,10 +51,11 @@ export function FilePreviewProvider({ paneId, session, panes, children }: { pane
     open: openItems,
   } : null, [paneId, session, openItems]);
   const visible = selection?.paneId === paneId && selection?.session === session ? selection : null;
-  return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}><MediaViewerContext.Provider value={viewer}>
+  const href = useMemo(() => paneId ? (path: string) => filePagePath(paneId, path, session) : null, [paneId, session]);
+  return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}><FileHrefContext.Provider value={href}><MediaViewerContext.Provider value={viewer}>
     {children}
     {visible && <PreviewBoundary key={visible.seq} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-sm">Opening document…</div>}>
       <FilePreview key={`${paneId}:${session}`} paneId={visible.paneId} session={session} items={visible.items} start={visible.start} panes={panes} onClose={close} />
     </Suspense></PreviewBoundary>}
-  </MediaViewerContext.Provider></FilePreviewContext.Provider></FileMediaContext.Provider>;
+  </MediaViewerContext.Provider></FileHrefContext.Provider></FilePreviewContext.Provider></FileMediaContext.Provider>;
 }
