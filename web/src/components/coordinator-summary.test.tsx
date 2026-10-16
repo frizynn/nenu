@@ -26,7 +26,7 @@ const summaries: ThreadSummary[] = [
   {
     id: "t-11", summary: "Two ways to show stock at 390 px. Pick one.",
     captures: [{ path: `${LIB}/t-11/a.png`, caption: "Option A: a list" }, { path: `${LIB}/t-11/b.png`, caption: "Option B: cards" }],
-    deliverables: [{ path: `${LIB}/t-11/compare.html`, kind: "html" }, { path: `${LIB}/t-11/compare.pdf`, kind: "pdf" }, { path: `${LIB}/t-11/notes.md`, kind: "md" }],
+    deliverables: [{ path: `${LIB}/t-11/compare.html`, kind: "html" }, { path: `${LIB}/t-11/compare.pdf`, kind: "pdf" }],
   },
   { id: "t-20", summary: "Not under Checkout.", captures: [], deliverables: [] },
 ];
@@ -72,8 +72,6 @@ it("opens a coordinator whose threads reported on its Summary: decisions, work i
   for (const name of ["compare.html", "compare.pdf"]) {
     expect(files.getByRole("link", { name: new RegExp(name.replace(".", "\\.")) })).toHaveAttribute("target", "_blank");
   }
-  // Markdown is named, not served.
-  expect(files.getByText("notes.md").closest("a")).toBeNull();
 
   expect(progress!.getByRole("article", { name: "Landing" })).toBeInTheDocument();
   expect(done!.getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(["Coupons", "Login fix"]);

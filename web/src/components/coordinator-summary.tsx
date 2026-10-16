@@ -170,18 +170,16 @@ function CaptureThumb({ src, label, onOpen }: { src: string; label: string; onOp
   </button>;
 }
 
-/** HTML and PDF open in a new tab through the library route; Markdown is named, as the route does not serve it. */
+/** HTML and PDF, each opened in a new tab through the library route. */
 function Deliverables({ project, deliverables }: { project: ProjectView; deliverables: readonly ThreadDeliverable[] }) {
   return <ul aria-label="Deliverables" className="mt-3 flex flex-wrap gap-2">
     {deliverables.map((deliverable) => {
       const Icon = deliverable.kind === "html" ? Globe : FileText;
-      const name = <><Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{fileName(deliverable.path)}</span></>;
       return <li key={deliverable.path} className="min-w-0 max-w-full">
-        {deliverable.kind === "md"
-          ? <span className={cn(CHIP, "bg-transparent px-1 text-muted-foreground")}>{name}</span>
-          : <a className={cn(CHIP, "hover:bg-accent")} href={orgLibraryUrl(project.slug, deliverable.path)} target="_blank" rel="noreferrer">
-            {name}<ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-          </a>}
+        <a className={cn(CHIP, "hover:bg-accent")} href={orgLibraryUrl(project.slug, deliverable.path)} target="_blank" rel="noreferrer">
+          <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{fileName(deliverable.path)}</span>
+          <ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+        </a>
       </li>;
     })}
   </ul>;

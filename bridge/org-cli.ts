@@ -558,7 +558,7 @@ const MAX_SUMMARY_CHARS = 600;
 const MAX_CAPTURES = 24;
 const MAX_DELIVERABLES = 10;
 const MAX_STATUS_CHARS = 8_000;
-const DELIVERABLE_KINDS: ReadonlyArray<ThreadDeliverable["kind"]> = ["html", "pdf", "md"];
+const DELIVERABLE_KINDS: ReadonlyArray<ThreadDeliverable["kind"]> = ["html", "pdf"];
 
 const absolutePath = (value: unknown): value is string =>
   typeof value === "string" && isAbsolute(value) && value.length <= 4096 && !/[\x00-\x1f]/.test(value);
