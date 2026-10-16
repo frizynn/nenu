@@ -88,6 +88,24 @@ it("says when there is nothing to count yet", async () => {
   expect(main().getByText(/No Claude Code transcripts or Codex sessions on this machine/)).toBeInTheDocument();
 });
 
+it("says why a first pass stopped, with no progress left on screen, and runs it again on Try again", async () => {
+  const asked = serve(usageOn({ scan: { state: "idle", firstPass: true, error: "scan stopped (exit 1)" }, days: [], periods: [] }));
+  open();
+  expect(await screen.findByRole("heading", { name: "Couldn’t read the logs" })).toBeInTheDocument();
+  expect(main().getByText("scan stopped (exit 1)")).toBeInTheDocument();
+  expect(main().queryByRole("progressbar")).toBeNull();
+  expect(main().queryByText(/Finding logs/)).toBeNull();
+  await userEvent.click(main().getByRole("button", { name: "Try again" }));
+  expect(asked).toEqual(["", "?fresh=1"]);
+});
+
+it("says when the last scan failed, beside the age of the numbers shown", async () => {
+  serve(usageOn({ scan: { state: "idle", firstPass: false, scannedAt: NOW - 3 * 3_600_000, error: "scan stopped (exit 1)" } }));
+  open();
+  expect(await screen.findByText("Couldn’t update")).toBeInTheDocument();
+  expect(main().getByText(/Updated 3h ago/)).toBeInTheDocument();
+});
+
 it("shows today, the week and the month, the plan limits, the map, the weeks and the month's breakdown", async () => {
   serve(usageOn());
   open();
@@ -125,6 +143,14 @@ it("warns near a limit and names the account with room", async () => {
   expect(limits.getAllByText("Active", { selector: "span" })).toHaveLength(2);
   expect(limits.getByRole("meter", { name: "5-hour" })).toHaveAttribute("aria-valuenow", "91");
   expect(limits.getByRole("alert")).toHaveTextContent("Close to the 5-hour limit. Work has room: 5-hour 0%, weekly 9%.");
+});
+
+it("says no plan limit was seen even when accounts are known, and counts them without a 'more'", async () => {
+  serve(usageSplit({ limits: [] }));
+  open();
+  const limits = within(await screen.findByRole("region", { name: "Plan limits" }));
+  expect(limits.getByText(/No plan limit seen yet/)).toBeInTheDocument();
+  expect(limits.getAllByRole("button").map((b) => b.textContent)).toEqual(["2 Claude accounts", "1 Codex account"]);
 });
 
 it("splits by account: picks one from the list and reads only that account", async () => {

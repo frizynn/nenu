@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -22,16 +22,19 @@ import { startTestBridge } from "./bridge.ts";
 // Then, on a desk with the page open: the /api/usage requests in 30 idle seconds, the squares the DOM
 // redraws while the pointer crosses 60 of them, and the arrow keys walking the map.
 //
-//   bun scripts/e2e/usage.ts [--port 8867] [--out DIR] [--before]
+//   bun scripts/e2e/usage.ts [--port 8867] [--out DIR] [--before | --edges]
 //
 // --before captures only Home, the chat and Settings, for a build without the group (run it from that
-// build's checkout).
+// build's checkout). --edges captures only the edges, each the real answer with Split on, bent one way:
+// a failed first pass, a failed later scan, amounts a thousand times larger and smaller, long names,
+// one account, no plan limit, a phone fourteen hours ahead of the bridge, and a desk 1024 wide.
 
 const { values } = parseArgs({
   options: {
     port: { type: "string", default: "8867" },
     out: { type: "string" },
     before: { type: "boolean", default: false },
+    edges: { type: "boolean", default: false },
   },
 });
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -154,17 +157,23 @@ let browser = await launchWebkit();
 const shots: string[] = [];
 
 type Reach = (page: Page, desk: boolean) => Promise<void>;
-async function capture(name: string, path: string, reach: Reach = async () => {}, opts: { prepare?: (page: Page) => Promise<void> } = {}) {
+type Device = { viewport: { width: number; height: number } } & Record<string, unknown>;
+const DEVICES: ReadonlyArray<readonly [string, Device]> = [["phone", PHONE], ["desk", DESKTOP]];
+async function capture(name: string, path: string, reach: Reach = async () => {}, opts: {
+  prepare?: (page: Page) => Promise<void>;
+  zone?: string;
+  devices?: ReadonlyArray<readonly [string, Device]>;
+} = {}) {
   await browser.close();
   browser = await launchWebkit();
-  for (const [deviceName, device] of [["phone", PHONE], ["desk", DESKTOP]] as const) {
+  for (const [deviceName, device] of opts.devices ?? DEVICES) {
     for (const scheme of ["dark", "light"] as const) {
-      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: opts.zone ?? "UTC", locale: "en-US" });
       const page = await context.newPage();
       await opts.prepare?.(page);
       await page.goto(`${bridge.url}${path}`);
       await page.waitForTimeout(1200);
-      const failed = await reach(page, deviceName === "desk").then(() => null, (err: Error) => err.message.split("\n")[0]!);
+      const failed = await reach(page, device.viewport.width >= 1024).then(() => null, (err: Error) => err.message.split("\n")[0]!);
       await page.waitForTimeout(500);
       if (failed) ((report.failures ??= []) as string[]).push(`${name}-${deviceName}-${scheme}: ${failed}`);
       const file = join(outDir, `${name}-${deviceName}-${scheme}${failed ? "-FAILED" : ""}.png`);
@@ -175,7 +184,7 @@ async function capture(name: string, path: string, reach: Reach = async () => {}
   }
 }
 
-type UsageAnswer = { on: boolean; scan?: { state: string; firstPass: boolean } };
+type UsageAnswer = { on: boolean; scan?: { state: string; firstPass: boolean; error?: string } };
 const usage = (query = "") => fetch(`${bridge.url}/api/usage${query}`).then((r) => r.json() as Promise<UsageAnswer>);
 const set = (patch: object) => fetch(`${bridge.url}/api/usage`, { method: "POST", body: JSON.stringify(patch) }).then((r) => r.json());
 /** Until a scan has run and none is running. */
@@ -198,7 +207,140 @@ const toUsageGroup = async (page: Page) => {
 };
 const usagePage = async (page: Page) => { await page.getByRole("region", { name: /^Activity/ }).waitFor({ timeout: 10_000 }); };
 
+// ── Edges (--edges) ──────────────────────────────────────────────────────────────────────────────
+
+type Json = Record<string, unknown>;
+type Levels = { cost: number[]; tokens: number[] };
+const COUNTS = new Set(["tokens", "input", "output", "cacheWrite", "cacheRead"]);
+/** Every cost times `money` and every token count times `count`, the map's levels with them. */
+function scale(value: unknown, money: number, count: number): unknown {
+  if (Array.isArray(value)) return value.map((v) => scale(v, money, count));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, typeof v === "number"
+    ? v * (k === "cost" ? money : COUNTS.has(k) ? count : 1)
+    : k === "levels" ? { cost: (v as Levels).cost.map((n) => n * money), tokens: (v as Levels).tokens.map((n) => n * count) }
+    : scale(v, money, count)]));
+}
+
+/** Until a scan has failed and none is running. */
+async function failed(query = ""): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    const u = await usage(query);
+    if (u.scan?.state === "idle" && u.scan.error) return;
+    await sleep(200);
+    query = "";
+  }
+  throw new Error("the usage scan never failed");
+}
+
+/** The page open on a desk for `ms` after `act`: how many times it read /api/usage. */
+async function readsWhileOpen(ms: number, act: (page: Page) => Promise<void> = async () => {}): Promise<number> {
+  const context = await browser.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
+  const page = await context.newPage();
+  let reads = 0;
+  page.on("request", (req) => { if (new URL(req.url()).pathname === "/api/usage") reads++; });
+  await page.goto(`${bridge.url}/settings/usage`);
+  await act(page);
+  await page.waitForTimeout(ms);
+  await context.close();
+  return reads;
+}
+
+/** The page, its activity map inside its own card on a desk (a phone scrolls it). */
+const mapInside: Reach = async (page, desk) => {
+  await usagePage(page);
+  if (!desk) return;
+  const past = await page.evaluate(() => {
+    const card = document.querySelector(".usage-map")!.getBoundingClientRect();
+    return Math.round(document.querySelector(".usage-grid")!.getBoundingClientRect().right - card.right);
+  }, null);
+  if (past > 0) throw new Error(`the map runs ${past}px past its card`);
+};
+
+/** A plan-limit row's own words are never the ones cut short. */
+const limitRowsWhole: Reach = async (page, desk) => {
+  await mapInside(page, desk);
+  const cut = await page.getByRole("region", { name: "Plan limits" }).getByRole("button").evaluateAll((buttons) =>
+    buttons.map((b) => b.firstElementChild as HTMLElement).filter((s) => s.scrollWidth > s.clientWidth).map((s) => s.textContent));
+  if (cut.length) throw new Error(`cut short: ${cut.join(", ")}`);
+};
+
+async function edges(): Promise<void> {
+  // A scan that cannot save: the first pass, then a later one, with the usage folder read-only.
+  const store = join(bridge.dir, "state", "usage");
+  await mkdir(store, { recursive: true });
+  await chmod(store, 0o500);
+  await set({ on: true });
+  await failed();
+  await capture("edge-first-pass-failed", "/settings/usage", async (page) => { await page.getByRole("heading", { name: "Couldn’t read the logs" }).waitFor({ timeout: 10_000 }); });
+  report.firstPassFailed = { readsIn15sOpen: await readsWhileOpen(15_000) };
+  await chmod(store, 0o700);
+  await writeLogs(bridge.dir);
+  await settled("?fresh=1");
+  await set({ splitByAccount: true });
+  await sleep(500);
+  await settled();
+  const base = (await usage()) as unknown as Json & { scan: Json; accounts: Json[]; limits: Json[]; periods: Json[] };
+
+  await chmod(store, 0o500);
+  await usage("?fresh=1");
+  await failed();
+  await capture("edge-scan-failed", "/settings/usage", async (page, desk) => {
+    await mapInside(page, desk);
+    await page.getByText("Couldn’t update").waitFor({ timeout: 10_000 });
+  });
+  report.scanFailed = { readsIn15sAfterRecalculate: await readsWhileOpen(15_000, async (page) => {
+    await usagePage(page);
+    await page.getByRole("button", { name: "Recalculate" }).click();
+  }) };
+  await chmod(store, 0o700);
+  await settled("?fresh=1");
+
+  const long = "a-repository-whose-name-runs-far-past-the-row-it-sits-in";
+  const active = base.accounts.find((a) => a.active && a.agent === "claude")!;
+  const bent: Array<[string, Json, Reach]> = [
+    ["edge-big", scale(base, 1000, 1000) as Json, mapInside],
+    ["edge-small", scale(base, 0.001, 0.001) as Json, mapInside],
+    ["edge-long-names", {
+      ...base,
+      accounts: base.accounts.map((a) => ({ ...a, label: a.id === active.id ? "anaccountlabelwithnospacesatallanywhere" : a.agent === "claude" && a.source !== "none" ? "Platform engineering shared seat" : a.label })),
+      periods: base.periods.map((p) => ({ ...p, byProject: (p.byProject as Json[]).map((r, i) => (i === 0 ? { ...r, label: long } : r)) })),
+    }, limitRowsWhole],
+    ["edge-one-account", { ...base, accounts: [active], limits: base.limits.filter((l) => l.account === active.id) }, limitRowsWhole],
+    ["edge-no-limits", { ...base, limits: [] }, limitRowsWhole],
+  ];
+  for (const [name, answer, reach] of bent) {
+    await capture(name, "/settings/usage", reach, { prepare: (page) => page.route("**/api/usage*", (route) => route.fulfill({ json: answer })) });
+  }
+  const [, longNames] = bent[2]!;
+  await capture("edge-long-list", "/settings/usage", async (page, desk) => {
+    await mapInside(page, desk);
+    await page.getByRole("button", { name: "All accounts" }).click();
+    await page.getByRole("option", { name: /^anaccountlabel/ }).click();
+    await page.getByRole("button", { name: /^anaccountlabel/ }).waitFor({ timeout: 5000 });
+    if (!desk) await page.getByRole("button", { name: /^anaccountlabel/ }).click();
+  }, { prepare: (page) => page.route("**/api/usage*", (route) => route.fulfill({ json: longNames })) });
+  await capture("edge-long-projects", "/settings/usage", async (page, desk) => {
+    await mapInside(page, desk);
+    await page.getByRole("radio", { name: "Project" }).click();
+    await page.getByRole("region", { name: / by$/ }).scrollIntoViewIfNeeded();
+  }, { prepare: (page) => page.route("**/api/usage*", (route) => route.fulfill({ json: longNames })) });
+  await capture("edge-big-settings", "/settings", toUsageGroup, { prepare: (page) => page.route("**/api/usage*", (route) => route.fulfill({ json: bent[0]![1] })) });
+  await capture("edge-zone", "/settings/usage", mapInside, { zone: "Pacific/Kiritimati" });
+  await capture("edge-desk", "/settings/usage", mapInside, { devices: [["1024", { ...DESKTOP, viewport: { width: 1024, height: 768 } }], ["1280", { ...DESKTOP, viewport: { width: 1280, height: 800 } }]] });
+  await capture("edge-desk-accounts", "/settings/usage", async (page, desk) => {
+    await usagePage(page);
+    await page.getByRole("button", { name: "All accounts" }).click();
+    await page.getByRole("listbox", { name: "Account" }).waitFor({ timeout: 5000 });
+    await mapInside(page, desk);
+  }, { devices: [["1024", { ...DESKTOP, viewport: { width: 1024, height: 768 } }], ["1280", { ...DESKTOP, viewport: { width: 1280, height: 800 } }]] });
+}
+
 try {
+  if (values.edges) {
+    await edges();
+    throw new Error("done");
+  }
   // Off, by default. Home and a chat never ask for usage; Settings does, once.
   const asked: string[] = [];
   {
@@ -313,12 +455,17 @@ try {
     for (let i = 0; i < 60; i++) await page.mouse.move(box.x + box.w - 4 - (i % 30) * 11, box.y + 4 + Math.floor(i / 30) * 22);
     await page.waitForTimeout(300);
     const mutations = await page.evaluate(() => (window as unknown as { __seen: unknown }).__seen, null);
-    await page.getByRole("listbox", { name: /^Activity/ }).press("ArrowLeft");
-    const activeLabel = await page.evaluate(() => {
-      const grid = document.querySelector('[role="listbox"][aria-label^="Activity"]')!;
-      return document.getElementById(grid.getAttribute("aria-activedescendant") ?? "")?.getAttribute("aria-label");
-    }, null);
-    report.idleDesk = { readsOnOpen: opened, readsIn30sIdle: idle, pointerOver60Squares: mutations, afterArrowLeft: activeLabel };
+    // The keys a screen reader user walks the map with, and the day each one lands on, as it is read out.
+    const keys: Record<string, unknown> = {};
+    for (const key of ["ArrowLeft", "ArrowUp", "ArrowDown", "End", "Home"]) {
+      await page.getByRole("listbox", { name: /^Activity/ }).press(key);
+      keys[key] = await page.evaluate(() => {
+        const grid = document.activeElement!;
+        return `${grid.getAttribute("role")} → ${document.getElementById(grid.getAttribute("aria-activedescendant") ?? "")?.getAttribute("aria-label")}`;
+      }, null);
+    }
+    await page.getByRole("listbox", { name: /^Activity/ }).press("End");
+    report.idleDesk = { readsOnOpen: opened, readsIn30sIdle: idle, pointerOver60Squares: mutations, keys };
     await page.screenshot({ path: join(outDir, "usage-keyboard-desk-dark.png"), animations: "disabled" });
     await context.close();
   }
