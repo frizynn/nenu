@@ -14,7 +14,7 @@ it stands, what needs his decision and what was decided, and prints it as `statu
 (`{path, text, updated}`, up to 8,000 characters) on the project, for the root coordinator, and on each
 coordinator node. It is named `status_file` because `status` is already the lifecycle of both. He wants
 to open Nenu and read it without opening a chat. What is in progress and what is done is not in the
-file: Organizations computes it from the threads, and the Summary (ADR 0086) draws it.
+file: Organizations computes it from the threads, and the Summary (ADR 0088) draws it.
 
 ## Decision
 
