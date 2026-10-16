@@ -47,7 +47,8 @@ export async function listHomeDirs(requested: string | null, { home = homedir(),
       truncated = true;
       break;
     }
-    if ((!hidden && entry.name.startsWith(".")) || isPrivateProjectPath(entry.name)) continue;
+    // On the path under home, not the bare name: ~/Library/Keychains is private, a Keychains folder elsewhere is not.
+    if ((!hidden && entry.name.startsWith(".")) || isPrivateProjectPath(relative(root, join(path, entry.name)))) continue;
     if (entry.isDirectory() || (entry.isSymbolicLink() && (await linkedDirIn(join(path, entry.name), root)))) entries.push(entry.name);
   }
   entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
