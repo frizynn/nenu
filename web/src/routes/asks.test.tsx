@@ -131,3 +131,10 @@ it("says Your asks needs a newer Organizations, without asking the bridge", asyn
   expect(await screen.findByText("This Herdr Organizations can’t list asks yet; update it to see them here.")).toBeInTheDocument();
   expect(requests).toEqual([]);
 });
+
+it("a worker's page has no card, and does not read the asks", async () => {
+  const { requests } = setup("/project/shop/node/t-0011");
+  expect(await screen.findByRole("region", { name: "Node" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Coordinator card" })).not.toBeInTheDocument();
+  expect(requests).toEqual([]);
+});

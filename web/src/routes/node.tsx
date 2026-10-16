@@ -37,12 +37,15 @@ export function NodeRoute() {
   const readOnly = isReadOnly(data.device);
   const refresh = () => revalidator.revalidate();
   const isRoot = nodeId === ROOT;
-  const subtree = project && (isRoot || node?.thread.role === "coordinator") ? threadTree(project, isRoot ? undefined : node?.thread.id) : [];
+  const coordinating = isRoot || node?.thread.role === "coordinator";
+  const subtree = project && coordinating ? threadTree(project, isRoot ? undefined : node?.thread.id) : [];
   const read = useThreadSummaries(project, node ? [node.thread, ...subtree] : subtree);
   const { summaries, failed } = read;
-  const asks = useAsks(data.projects);
+  // Only a coordinator has a card to fill.
+  const asks = useAsks(coordinating ? data.projects : undefined);
   const live = (paneId: string | undefined) => paneId !== undefined && data.agents.some((pane) => pane.paneId === paneId);
-  const openNode = (target: OrgNode) => navigate(live(target.thread.paneId) ? panePath(target.thread.paneId!, data.session) : nodePath(project!.slug, target.thread.id, data.session));
+  const openNode = (slug: string) => ({ thread }: OrgNode) =>
+    navigate(thread.paneId && live(thread.paneId) ? panePath(thread.paneId, data.session) : nodePath(slug, thread.id, data.session));
 
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
@@ -66,7 +69,7 @@ export function NodeRoute() {
         {agent && <span>{agent}</span>}
       </p>}
       {card && <CoordinatorCard project={project} coordinatorId={ROOT} status={read.status ?? undefined} usage={read.usage ?? undefined}
-        asks={asks.list} summaries={summaries} onOpenNode={openNode} />}
+        asks={asks.list} summaries={summaries} onOpenNode={openNode(project.slug)} />}
       {read.status && <CoordinatorStatus status={read.status} project={project} closed={card} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
       {pane && <Button type="button" size="lg" onClick={() => navigate(panePath(pane.paneId, data.session))}>
         <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
@@ -93,7 +96,7 @@ export function NodeRoute() {
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
-      {card && <CoordinatorCard project={project} coordinatorId={thread.id} status={status} usage={usage} asks={asks.list} summaries={summaries} onOpenNode={openNode} />}
+      {card && <CoordinatorCard project={project} coordinatorId={thread.id} status={status} usage={usage} asks={asks.list} summaries={summaries} onOpenNode={openNode(project.slug)} />}
       {status && <CoordinatorStatus status={status} project={project} closed={card} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>

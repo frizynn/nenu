@@ -4,10 +4,9 @@ import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
   SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
+  type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { askGroup, readAsks, type OrgAskRow } from "./org-asks.ts";
-import type { OrgCoordinator } from "./org-cli.ts";
 import type { OrgStatusFile } from "./org-report.ts";
 import {
   PR_ASKS, type AgentView, type AsksList, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest,
