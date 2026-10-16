@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -258,6 +258,41 @@ describe("ProjectRegistry: Organizations fields", () => {
       expect(project).not.toHaveProperty("icon");
       expect(project).not.toHaveProperty("tone");
     }
+  });
+
+  test("a thread's verdict reaches the snapshot; its summary, captures and deliverables are read apart, from --json only", async () => {
+    const root = fixture();
+    const library = join(root, "demo", "library", "t-0002");
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({}),
+      overviewThread({
+        id: "t-0002", verdict: "done", summary: "Checkout works at 390 px.",
+        captures: [{ path: join(library, "checkout.png"), caption: "Checkout" }], deliverables: [{ path: join(library, "report.html"), kind: "html" }],
+      }),
+      overviewThread({ id: "t-0003", verdict: "blocked" }),
+    ]) });
+    // The files carry none of it.
+    expect(registry.list("default", true, [])[0]!.threads.some((thread) => "verdict" in thread)).toBe(false);
+    expect(registry.summaries("demo")).toBeNull();
+
+    await registry.refresh();
+    const threads = registry.list("default", true, [])[0]!.threads;
+    expect(threads.map((thread) => thread.verdict ?? null)).toEqual([null, "done", "blocked"]);
+    expect(threads[0]).not.toHaveProperty("verdict");
+    expect(JSON.stringify(threads)).not.toContain("Checkout");
+    expect(registry.summaries("demo")).toEqual([{
+      id: "t-0002", summary: "Checkout works at 390 px.",
+      captures: [{ path: join(library, "checkout.png"), caption: "Checkout" }], deliverables: [{ path: join(library, "report.html"), kind: "html" }],
+    }]);
+    expect(registry.summaries("other")).toBeNull();
+  });
+
+  test("a project's library is its own folder's, and only for a project the registry lists", async () => {
+    const root = fixture();
+    const registry = registryFor(root);
+    registry.list("default", true, []);
+    expect(registry.library("demo")).toBe(join(realpathSync(root), "demo", "library"));
+    for (const slug of ["other", "../demo", "", "Demo"]) expect(registry.library(slug)).toBeUndefined();
   });
 
   test("falls back to the files when the installed Organizations has no --json", async () => {

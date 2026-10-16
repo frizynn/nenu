@@ -332,6 +332,12 @@ default. It scans in its own short-lived process at background priority, never i
 timer or under a file watch, keeps tokens and prices them at read time, and never reads a credential
 or calls a usage endpoint ([ADR 0085](./.adr/0085-usage-is-scanned-in-its-own-process-from-the-agents-logs.md)).
 
+A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pictures, HTML and PDFs
+whose real path is inside `<projects root>/<slug>/library`, itself a folder and not a link; anything else
+is 404. Bytes go through the preview's readers and HTML through its sandbox. The summaries and their paths
+come from `/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
+([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).
+
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and
 only to write-level devices.

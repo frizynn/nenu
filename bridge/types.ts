@@ -256,6 +256,29 @@ export interface ProjectThreadView {
   autoMerge?: boolean;
   /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
   prAction?: PrAction;
+  /** The `Status:` line of the agent's last report. Absent without one, and from an Organizations that predates it. */
+  verdict?: ThreadVerdict;
+}
+
+/** What an agent's report says of its work, from the fixed `Status:` line Organizations reads. */
+export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
+export const THREAD_VERDICTS: readonly ThreadVerdict[] = ["done", "needs-decision", "blocked", "failed"];
+
+/** A picture the agent left in the project's library, with what it shows. */
+export interface ThreadCapture { path: string; caption: string }
+/** A document the agent left in the project's library. */
+export interface ThreadDeliverable { path: string; kind: "html" | "pdf" | "md" }
+
+/**
+ * What a thread's report says in plain words and shows, read on demand (`/api/org/summary`), never
+ * with the snapshot. Listed only for a thread that has at least one of them. The summary is the
+ * agent's own text: data, drawn as text.
+ */
+export interface ThreadSummary {
+  id: string;
+  summary?: string;
+  captures: ThreadCapture[];
+  deliverables: ThreadDeliverable[];
 }
 
 /** What `thread pr-action` asks a thread's agent to do, most pressing first as Organizations orders them. */

@@ -321,4 +321,6 @@ it runs today. Fold each one in, and drop it from this list, in the release that
   previews, ETags on media
   ([ADR 0059](./.adr/0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md)).
 - **Organizations.** Reads through the versioned `--json` contract, with the files as a fallback
-  ([ADR 0061](./.adr/0061-nenu-reads-organizations-through-its-json-contract.md)).
+  ([ADR 0061](./.adr/0061-nenu-reads-organizations-through-its-json-contract.md)). Each thread's
+  report summary, captures and deliverables are read on demand, and the project's library is served
+  through one contained route ([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).

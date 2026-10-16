@@ -1,7 +1,8 @@
+import { libraryFileResponse } from "../org-library.ts";
 import { coordinatorChoices, createProject, listRoutines, mergeThread, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
-import { json } from "./http.ts";
+import { json, secure } from "./http.ts";
 
 export const orgRoutes: Route[] = [
   orgRead("/api/org/start-options", "Could not read the start options.", ({ orgRun }, project) => startOptions(orgRun, project)),
@@ -10,6 +11,21 @@ export const orgRoutes: Route[] = [
   orgRead("/api/org/tasks", "Could not read the task list.", async ({ projects }, project) => ({ tasks: await projects.tasks(project) })),
   orgRead("/api/org/status", "Could not read the project's status.", async ({ projects }, project) => ({ status: await projects.status(project) })),
   orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
+  // Read by a node's page while it is on screen, from what the last overview read: no spawn.
+  orgRead("/api/org/summary", "Could not read the summaries.", async ({ projects }, project) => ({ threads: projects.summaries(project) })),
+  {
+    // A picture, HTML page or PDF from the project's library (org-library.ts). Read-level, as a
+    // pane's /file is: a new tab is a top-level navigation and carries no Origin.
+    method: "GET",
+    path: "/api/org/library",
+    access: "read",
+    session: false,
+    async handle({ cfg, projects }, { req, url }) {
+      return secure(await libraryFileResponse(projects.library(url.searchParams.get("project") ?? ""), url.searchParams.get("path"), {
+        ifNoneMatch: req.headers.get("if-none-match"), inlineAssets: cfg.htmlInlineAssets, host: req.headers.get("host") ?? undefined, stateDir: cfg.stateDir,
+      }));
+    },
+  },
   // Read when the window that starts or replaces the coordinator opens, never on a poll.
   orgRead("/api/org/coordinator-options", "Could not read what the coordinator can run.", ({ orgRun }, project) => coordinatorChoices(orgRun, project)),
   orgWrite("/api/org/node/start", "org.node.start", "Could not start node.", async ({ orgRun }, body, rt) => {
