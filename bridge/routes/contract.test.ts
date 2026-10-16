@@ -369,7 +369,7 @@ describe("a project's library and summaries", () => {
 
   test("summaries are none, not an error, while Organizations is read from its files", async () => {
     const response = await fetch(`${url}/api/org/summary?project=demo`, { headers: { "x-device": "tablet" } });
-    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, threads: null } });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, threads: null, status: null } });
     expect((await fetch(`${url}/api/org/summary?project=..%2Fx`)).status).toBe(400);
   });
 });

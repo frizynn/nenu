@@ -280,11 +280,58 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(threads.map((thread) => thread.verdict ?? null)).toEqual([null, "done", "blocked"]);
     expect(threads[0]).not.toHaveProperty("verdict");
     expect(JSON.stringify(threads)).not.toContain("Checkout");
-    expect(registry.summaries("demo")).toEqual([{
+    expect(registry.summaries("demo")).toEqual({ status: null, threads: [{
       id: "t-0002", summary: "Checkout works at 390 px.",
       captures: [{ path: join(library, "checkout.png"), caption: "Checkout" }], deliverables: [{ path: join(library, "report.html"), kind: "html" }],
-    }]);
+    }] });
     expect(registry.summaries("other")).toBeNull();
+  });
+
+  test("a coordinator's STATUS.md reaches the snapshot only as its stamp; its text is read apart, with the summaries", async () => {
+    const root = fixture();
+    const file = (text: string, updated = "2026-10-16T12:00:00Z") => ({ path: join(root, "STATUS.md"), text, updated });
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({}),
+      overviewThread({ id: "t-0002", role: "coordinator", status_file: file("# Status\n- [working] t-0003 Envíos", "2026-10-16T11:00:00Z") }),
+    ], [], { status_file: file("# Status\nObjective: ship the checkout") }) });
+    expect(registry.list("default", true, [])[0]).not.toHaveProperty("statusUpdated");
+
+    await registry.refresh();
+    const project = registry.list("default", true, [])[0]!;
+    expect(project.statusUpdated).toBe("2026-10-16T12:00:00Z");
+    expect(project.threads.map((thread) => thread.statusUpdated ?? null)).toEqual([null, "2026-10-16T11:00:00Z"]);
+    expect(JSON.stringify(project)).not.toContain("Objective");
+    expect(JSON.stringify(project)).not.toContain("Envíos");
+    expect(registry.summaries("demo")).toEqual({
+      status: { text: "# Status\nObjective: ship the checkout", updated: "2026-10-16T12:00:00Z" },
+      threads: [{ id: "t-0002", captures: [], deliverables: [], status: { text: "# Status\n- [working] t-0003 Envíos", updated: "2026-10-16T11:00:00Z" } }],
+    });
+  });
+
+  test("an edit to a coordinator's STATUS.md re-reads the overview, as an edit to Organizations' own files does", async () => {
+    const root = fixture();
+    const path = join(root, "STATUS.md");
+    writeFileSync(path, "# Status\n");
+    let now = 1;
+    const calls: string[][] = [];
+    const registry = registryFor(root, { now: () => now, run: overviewRun([overviewThread({})], calls, { status_file: { path, text: "# Status", updated: "2026-10-16T12:00:00Z" } }) });
+    await registry.refresh();
+    // The path is known only once the overview names it; the next read settles on it.
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    const before = calls.length;
+
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(calls.length).toBe(before);
+
+    utimesSync(path, new Date(), new Date(Date.now() + 5_000));
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(calls.length).toBe(before + 1);
   });
 
   test("a project's library is its own folder's, and only for a project the registry lists", async () => {
