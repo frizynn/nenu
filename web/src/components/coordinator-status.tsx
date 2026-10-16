@@ -5,7 +5,7 @@ import { timeAgo } from "@/lib/format";
 import type { ProjectView, StatusFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// A coordinator's STATUS.md (ADR 0087): what the operator asked and where each thing stands, kept by
+// A coordinator's STATUS.md (ADR 0089): what the operator asked and where each thing stands, kept by
 // the agent and drawn as it wrote it, through the transcript's Markdown renderer. It adds two touches
 // and nothing else: a known `[state]` opening a line is a chip, and a thread id this project lists
 // opens its node. A long file folds under Show all.

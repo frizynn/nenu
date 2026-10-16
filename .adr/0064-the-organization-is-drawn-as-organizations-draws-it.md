@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-11). Amended by [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
   the desk's sidebar no longer draws the tree; its Search does. Amended by
-  [ADR 0086](./0086-a-coordinators-summary-groups-its-work-by-outcome.md): a coordinator's Summary tab
+  [ADR 0088](./0088-a-coordinators-summary-groups-its-work-by-outcome.md): a coordinator's Summary tab
   groups its work by outcome, beside the tree.
 - **Trail:** `web/src/lib/org-tree.ts` · `web/src/components/project-tasks.tsx` ·
   `web/src/components/workbench-sidebar.tsx` · `web/src/routes/node.tsx` · Organizations `src/ui.rs`

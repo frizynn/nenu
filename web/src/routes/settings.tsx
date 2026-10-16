@@ -12,6 +12,7 @@ import { NotifyPrefsControl, type DevicePush } from "@/components/notify-prefs-c
 import { SnoozeControl } from "@/components/snooze-control";
 import { ThemeControl } from "@/components/theme-control";
 import { UpdateCheckControl } from "@/components/update-check-control";
+import { UsageControl } from "@/components/usage-control";
 import { ListRow, ListSection } from "@/components/ui/list-group";
 import { Switch, switchSlot } from "@/components/ui/switch";
 import { usePushControl } from "@/hooks/use-push";
@@ -22,7 +23,7 @@ import { useServerBuild } from "@/lib/server-build";
 import { useSession } from "@/lib/session";
 import { isReadOnly } from "@/lib/types";
 
-// Settings, as a grouped list: This device, Notify when, Updates, About. Reachable from
+// Settings, as a grouped list: This device, Usage, Notify when, Updates, Machines, About. Reachable from
 // the home header gear. Lives under the root route, so the snapshot polling/push-setup in RootLayout
 // keeps running behind it. Every group's rows are there from the first frame. Footers are not: when
 // push state lands on a blocked or unavailable device, "This device" gains its note and the "Notify
@@ -85,6 +86,8 @@ export function SettingsRoute() {
             </div>
           </ListRow>
         </ListSection>
+
+        <UsageControl readOnly={isReadOnly(root?.device)} session={session} />
 
         {/* Mounted while push state is still UNKNOWN, and only removed once we positively learn the
             bridge has no VAPID keys: gating on `state` truthiness inserted the group one frame late

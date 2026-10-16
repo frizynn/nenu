@@ -12,7 +12,7 @@ import { paneFileResponse } from "./pane-files.ts";
 // HTML or a PDF. Everything else is the same 404, so a probe cannot tell a missing file from a refused
 // one. The reads go through the pane preview's own readers, which repeat the containment on the open
 // descriptor, apply the private-path policy and Nenu's state directory, cap the size and check a
-// picture's or a PDF's bytes; HTML runs only in the preview's opaque, offline sandbox (ADR 0085).
+// picture's or a PDF's bytes; HTML runs only in the preview's opaque, offline sandbox (ADR 0087).
 
 const SERVED = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".html", ".pdf"]);
 

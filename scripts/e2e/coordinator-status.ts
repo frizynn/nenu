@@ -6,7 +6,7 @@ import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import type { OrgSeed } from "./scenario.ts";
 
-// A coordinator's STATUS.md on the e2e bench (ADR 0087): a project whose root coordinator and one
+// A coordinator's STATUS.md on the e2e bench (ADR 0089): a project whose root coordinator and one
 // nested coordinator each keep one, with every `[state]` the template names, thread ids, links and
 // the template's sections (Asked, Needs your decision, Decisions), written as an agent would; what is
 // in progress and done is the Summary's, computed from the threads, so the file does not repeat it. It checks that the text reaches the page through
