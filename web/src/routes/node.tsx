@@ -4,11 +4,13 @@ import { ExternalLink, ChatCircle, ChatCircleSlash } from "@/components/ui/icon"
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
+import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
 import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
-import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
+import { CloseNodeDialog, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, STATE_LABEL, awaits, flatten, orgTree } from "@/lib/org-tree";
@@ -27,6 +29,8 @@ export function NodeRoute() {
   const node = tree && flatten([...tree.open, ...tree.history]).find((candidate) => candidate.thread.id === nodeId);
   const readOnly = isReadOnly(data.device);
   const refresh = () => revalidator.revalidate();
+  const subtree = project && node?.thread.role === "coordinator" ? threadTree(project, node.thread.id) : [];
+  const { summaries, failed } = useThreadSummaries(project, node ? [node.thread, ...subtree] : []);
 
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
@@ -60,6 +64,7 @@ export function NodeRoute() {
           {thread.pr.url && <a className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" href={thread.pr.url} target="_blank" rel="noreferrer">
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
         {thread.branch && <p className="mt-1.5 truncate font-mono text-xs text-muted-foreground">{thread.branch}</p>}
+        <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
         {(live || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {live && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
@@ -68,7 +73,8 @@ export function NodeRoute() {
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
       </section>
-      {coordinator && <OrgTreeList project={project} threads={threadTree(project, thread.id)} panes={data.agents} session={data.session} readOnly={readOnly}
+      {coordinator && <CoordinatorWork key={thread.id} coordinator={thread} summaries={summaries} failed={failed}
+        project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
       <CloseNodeDialog project={project} node={closing ? node : null} session={data.session} onCancel={() => setClosing(false)}
         onClosed={() => { setClosing(false); void refresh(); }} />

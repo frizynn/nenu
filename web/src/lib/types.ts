@@ -202,6 +202,20 @@ export interface ProjectThreadView {
   autoMerge?: boolean;
   /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
   prAction?: PrAction;
+  /** The `Status:` line of the agent's last report; absent without one. */
+  verdict?: ThreadVerdict;
+}
+
+/** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable and ThreadSummary in bridge/types.ts. */
+export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
+export interface ThreadCapture { path: string; caption: string }
+export interface ThreadDeliverable { path: string; kind: "html" | "pdf" | "md" }
+/** What a thread's report says and shows (`/api/org/summary`). The summary is the agent's text: draw it as text. */
+export interface ThreadSummary {
+  id: string;
+  summary?: string;
+  captures: ThreadCapture[];
+  deliverables: ThreadDeliverable[];
 }
 
 /** Mirror PrAsk and PrAction in bridge/types.ts. */

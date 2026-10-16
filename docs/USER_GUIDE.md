@@ -360,6 +360,14 @@ Everything resolved sits in one grey **History** at the end, closed until you op
 coordinator folds over the threads it ran, newest first. Tapping a node opens its chat when it runs in
 a live pane, and its detail page otherwise; nothing jumps elsewhere.
 
+A coordinator's page also has a **Summary** tab: everything under it in three sections, **Needs your
+decision**, **In progress** and **Done**, newest first. Each card shows what the agent's last report
+says in plain words, its pull request, the pictures it took (swipe the row, tap one to see it large)
+and the documents it left; an HTML page or PDF opens in a new tab. The coordinator's own report heads
+the page. This needs a Herdr Organizations whose reports carry a status and a summary; with an older
+one the page opens on its threads as before, and the Summary shows each thread's state and pull
+request only.
+
 **Close** (the check on an open row) stops a node and its view and keeps its branch, worktree and
 report. A coordinator that still runs open work is refused until those are closed. **Replace
 coordinator** (on the coordinator's row) stops the project coordinator and starts a new one on the
