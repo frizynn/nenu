@@ -73,12 +73,15 @@ export function CoordinatorStatus({ status, project, onOpenNode, now = Date.now(
       <h3 className="text-subhead font-semibold">Status</h3>
       {Number.isFinite(updated) && <span className="text-footnote text-muted-foreground">updated {timeAgo(updated, now)}</span>}
     </div>
-    <div ref={box} className={cn("mt-1.5", !open && "max-h-72 overflow-hidden",
+    {/* The left gutter keeps a list's markers inside the fold's clip. Section headings read as labels
+        under the block's own title (markdown-text draws levels 1 and 2 as `text-headline`). */}
+    <div ref={box} className={cn("-ml-2 mt-1.5 pl-2 [&_.text-headline]:mt-3 [&_.text-headline]:text-footnote [&_.text-headline]:font-semibold [&_.text-headline]:text-muted-foreground",
+      !open && "max-h-72 overflow-hidden",
       // The fade clears a full line above the cut, so a row the cut slices is never read as whole.
       !open && overflows && "[mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-1.5rem))]")}>
       <TextTokensContext.Provider value={tokens}><MarkdownText text={text} className="text-subhead" /></TextTokensContext.Provider>
     </div>
-    {overflows && <button type="button" className="quiet-action -ml-2 mt-1" onClick={() => setOpen(!open)}>
+    {overflows && <button type="button" className={cn("quiet-action -ml-2", open ? "mt-1" : "-mt-6")} onClick={() => setOpen(!open)}>
       {open ? "Show less" : "Show all"}
     </button>}
   </section>;
