@@ -76,6 +76,8 @@ export interface ScanResult {
   /** Largest row read whole. */
   fallbackMax: number;
   skipped: number;
+  /** Told to stop before the last log: nothing should be saved. */
+  stopped: boolean;
   ms: number;
 }
 
@@ -199,6 +201,8 @@ export interface ScanInput {
   onProgress?: (p: Progress) => void;
   /** Bytes per read; lines longer than this are skipped through and read back only if they hold a row. */
   chunk?: number;
+  /** Asked before each log; true ends the scan there. */
+  stop?: () => boolean;
 }
 
 /** Local calendar day of an epoch ms, cached per quarter hour (no zone offset is finer). */
@@ -219,7 +223,7 @@ function dayCutter() {
 export function scan(input: ScanInput): ScanResult {
   const { roots, state, totals, seen, book } = input;
   const started = performance.now();
-  const r: ScanResult = { files: 0, read: 0, bytes: 0, rows: 0, duplicates: 0, fallback: 0, fallbackMax: 0, skipped: 0, ms: 0 };
+  const r: ScanResult = { files: 0, read: 0, bytes: 0, rows: 0, duplicates: 0, fallback: 0, fallbackMax: 0, skipped: 0, stopped: false, ms: 0 };
   const dayOf = dayCutter();
   const names = new Map<number, string>(); // interned model names by hash of their bytes
 
@@ -466,6 +470,7 @@ export function scan(input: ScanInput): ScanResult {
   const claudeMarkers = [USAGE];
   const next = [-2, -2, -2];
   for (const job of jobs) {
+    if (input.stop?.()) { r.stopped = true; break; }
     const entry = state.files[job.key] ?? (state.files[job.key] = { o: 0, s: 0 });
     if (job.size < entry.o) { entry.o = 0; entry.t = undefined; } // rewritten: start over
     const markers = job.agent === "claude" ? claudeMarkers : CODEX_MARKERS;
