@@ -291,8 +291,8 @@ limits. Claude and ChatGPT plans are flat-rate, so the cost is a comparison, not
   date they were read; a model with no price shows its tokens and is listed as unpriced.
 - **When it reads.** When you turn it on, when you open the view and the last read is over a minute
   old, and after an agent finishes a turn if the last read is over six hours old. Each read is a
-  separate process at background priority that reads only what was added since the last one, then
-  exits. Nenu keeps its own daily totals in `<state dir>/usage/`, so days stay after Claude Code
+  separate process that reads only what was added since the last one, then exits; after the first
+  one it runs at background priority. Nenu keeps its own daily totals in `<state dir>/usage/`, so days stay after Claude Code
   deletes transcripts (30 days by default); days before you turned it on only exist while their
   logs do.
 - **Accounts.** Codex records the account in each session. Claude Code does not, so Nenu notes which

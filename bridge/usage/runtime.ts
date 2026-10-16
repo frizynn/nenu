@@ -10,8 +10,8 @@ import { readTotals, usageDir, type Totals } from "./scan.ts";
 // The bridge's side of usage: the Settings switches, and when a scan runs. Off, it is one small
 // prefs read at boot and nothing else: no process, no read of any log, no timer (ADR 0085).
 //
-// A scan runs as its own process at background priority, so its memory goes back to the system the
-// moment it ends. It starts when tracking is turned on, when the view asks and the last scan is over
+// A scan runs as its own process, at background priority after the first pass, so its memory goes
+// back to the system the moment it ends. It starts when tracking is turned on, when the view asks and the last scan is over
 // a minute old, and when an agent finishes a turn and the last scan is over six hours old, so logs
 // are counted before Claude Code deletes them at 30 days even if nobody opens the view.
 
@@ -65,9 +65,14 @@ async function* linesOf(stream: ReadableStream<Uint8Array>): AsyncIterable<strin
   }
 }
 
-export function spawnScan(stateDir: string, args: ScanArgs): ScanChild {
+/**
+ * The first pass runs at normal priority because the operator is watching its progress (measured on a
+ * large history: 5.6 s, against 35 s under `taskpolicy -b`, which throttles disk reads); every later
+ * scan reads only what was appended and runs in the background.
+ */
+export function spawnScan(stateDir: string, args: ScanArgs, firstPass = false): ScanChild {
   const script = join(import.meta.dir, "scan-main.ts");
-  const child = Bun.spawn([...backgroundPrefix(), process.execPath, script, stateDir, JSON.stringify(args)], {
+  const child = Bun.spawn([...(firstPass ? [] : backgroundPrefix()), process.execPath, script, stateDir, JSON.stringify(args)], {
     stdin: "ignore", stdout: "pipe", stderr: "ignore",
   });
   return { lines: linesOf(child.stdout), exited: child.exited, kill: () => child.kill() };
@@ -86,7 +91,7 @@ export interface UsageDeps {
   roots: { claude: string[]; codex: string[] };
   /** A scan moved on or finished: tell open pages to re-read (at most once a second while it runs). */
   onScanned: () => void;
-  spawn?: (stateDir: string, args: ScanArgs) => ScanChild;
+  spawn?: (stateDir: string, args: ScanArgs, firstPass: boolean) => ScanChild;
   now?: () => number;
 }
 
@@ -124,7 +129,7 @@ export class Usage implements UsageService {
   private scan(): Promise<void> {
     if (this.running) return this.running;
     const prefs = this.prefs.current();
-    const child = (this.deps.spawn ?? spawnScan)(this.deps.stateDir, { ...this.deps.roots, split: prefs.splitByAccount });
+    const child = (this.deps.spawn ?? spawnScan)(this.deps.stateDir, { ...this.deps.roots, split: prefs.splitByAccount }, this.lastScan() === undefined);
     this.child = child;
     this.error = undefined;
     this.running = (async () => {

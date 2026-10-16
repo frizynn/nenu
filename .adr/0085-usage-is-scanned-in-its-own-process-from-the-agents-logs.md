@@ -40,8 +40,10 @@ large history (3,550 logs, 13.7 GB, the longest line 13.6 MB):
 1. **Read the agents' own logs**, Claude Code transcripts and Codex rollouts, and nothing that needs
    the operator to reconfigure an agent. Plan limits come from what is already on disk: Nenu's
    status-line snapshots and the rollouts. Never a credential, never a usage endpoint.
-2. **Scan in a short-lived Bun process at background priority** (`taskpolicy -b` on macOS, `nice -n
-   19` on Linux) that writes daily totals and per-log offsets under `<stateDir>/usage/` and exits.
+2. **Scan in a short-lived Bun process** that writes daily totals and per-log offsets under
+   `<stateDir>/usage/` and exits. Every scan after the first runs at background priority
+   (`taskpolicy -b` on macOS, `nice -n 19` on Linux); the first pass does not, because the operator
+   is watching it and background priority throttles disk reads (35 s against 5.6 s, measured).
    The bridge only reads the small totals to answer `GET /api/usage`.
 3. **Read only new bytes, and rows in place.** Offsets per log (whole lines only; a Codex rollout by
    its id so archiving does not double it), directory listings reused while their mtime holds, rows
