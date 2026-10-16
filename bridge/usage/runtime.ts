@@ -82,6 +82,8 @@ const CATCH_UP_MS = 6 * 60 * 60_000;
 const WAIT_MS = 300;
 /** Progress is announced at most this often, so the first pass's screen moves without a poll. */
 const PROGRESS_EVERY_MS = 1000;
+/** A scan reports after every log it reads; one silent this long is stuck (a stalled disk) and is stopped. */
+const QUIET_MS = 5 * 60_000;
 
 export interface UsageDeps {
   stateDir: string;
@@ -91,6 +93,7 @@ export interface UsageDeps {
   onScanned: () => void;
   spawn?: (stateDir: string, args: ScanArgs, firstPass: boolean) => ScanChild;
   now?: () => number;
+  quietMs?: number;
 }
 
 export class Usage implements UsageService {
@@ -100,6 +103,8 @@ export class Usage implements UsageService {
   private progress: Pick<UsageScan, "files" | "totalFiles" | "bytes" | "totalBytes"> | undefined;
   private error: string | undefined;
   private scannedAt: number | undefined;
+  /** When the last scan ended, however it ended: a failed one waits as long as a finished one. */
+  private endedAt: number | undefined;
   private readonly now: () => number;
 
   constructor(private readonly deps: UsageDeps) {
@@ -133,8 +138,10 @@ export class Usage implements UsageService {
     this.running = (async () => {
       let done = false;
       let announced = this.now();
+      const quiet = setTimeout(() => child.kill(), this.deps.quietMs ?? QUIET_MS);
       try {
         for await (const line of child.lines) {
+          quiet.refresh();
           let msg: { progress?: UsageScan; done?: unknown };
           try { msg = JSON.parse(line); } catch { continue; }
           if (msg.progress) {
@@ -152,7 +159,9 @@ export class Usage implements UsageService {
       } catch (err) {
         this.error = (err as Error).message.slice(0, 200);
       } finally {
-        if (done) this.scannedAt = this.now();
+        clearTimeout(quiet);
+        this.endedAt = this.now();
+        if (done) this.scannedAt = this.endedAt;
         this.child = undefined;
         this.running = undefined;
         this.progress = undefined;
@@ -175,7 +184,7 @@ export class Usage implements UsageService {
   async read(opts: { account?: string; fresh?: boolean } = {}): Promise<UsageResponse> {
     const prefs = this.prefs.current();
     if (!prefs.on) return { on: false, splitByAccount: prefs.splitByAccount };
-    const last = this.lastScan();
+    const last = this.endedAt ?? this.lastScan();
     if (opts.fresh || last === undefined || this.now() - last > FRESH_MS) {
       const running = this.scan();
       await Promise.race([running, Bun.sleep(WAIT_MS)]);
@@ -199,7 +208,7 @@ export class Usage implements UsageService {
 
   turnEnded(): void {
     if (!this.prefs.current().on || this.running) return;
-    const last = this.lastScan();
+    const last = this.endedAt ?? this.lastScan();
     if (last === undefined || this.now() - last > CATCH_UP_MS) void this.scan();
   }
 
