@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { AccountBook, codexAccount, UNASSIGNED } from "./accounts.ts";
 import { bytesEqual, hashRanges, isoMsAt, objectEnd, stringEnd, text, topLevelFields, uintAt } from "./bytes.ts";
@@ -34,6 +34,8 @@ export interface Totals {
   repos: Record<string, string>;
   /** Codex account → its latest plan limits, from the rollouts. */
   codexLimits: Record<string, CodexLimits>;
+  /** The save these totals belong to: they were counted with `scan.<gen>.json` and `seen.<seen>.bin`. */
+  files?: { gen: number; seen: number };
 }
 
 /** What the scan remembers per log. Claude logs by path; Codex rollouts by id, because Codex moves them. */
@@ -535,7 +537,7 @@ export function scan(input: ScanInput): ScanResult {
   return r;
 }
 
-// ── The store on disk: <stateDir>/usage/{totals.json, scan.json, seen.bin} ──
+// ── The store on disk: <stateDir>/usage/{totals.json, scan.<gen>.json, seen.<gen>.bin} ──
 
 export interface Store { totals: Totals; state: ScanState; seen: Seen }
 
@@ -557,30 +559,40 @@ export function readTotals(stateDir: string): Totals | undefined {
 
 export function loadStore(stateDir: string, today: string, tz: string): Store {
   const dir = usageDir(stateDir);
-  const state = readJson(join(dir, "scan.json")) as ScanState | undefined;
+  const totals = readTotals(stateDir);
+  const state = totals?.files && (readJson(join(dir, `scan.${totals.files.gen}.json`)) as ScanState | undefined);
+  // Totals without the offsets they were counted with would be counted again: start over instead.
+  if (!totals || !state || state.v !== 1) return { totals: emptyTotals(today, tz), state: { v: 1, files: {}, dirs: {}, cwds: {} }, seen: new Seen() };
   let seenBytes: Uint8Array | undefined;
-  try { seenBytes = readFileSync(join(dir, "seen.bin")); } catch { /* first scan */ }
-  return {
-    totals: readTotals(stateDir) ?? emptyTotals(today, tz),
-    state: state && state.v === 1 ? state : { v: 1, files: {}, dirs: {}, cwds: {} },
-    seen: Seen.decode(seenBytes),
-  };
+  try { seenBytes = readFileSync(join(dir, `seen.${totals.files!.seen}.bin`)); } catch { /* none kept */ }
+  return { totals, state, seen: Seen.decode(seenBytes) };
 }
 
 /** Days of message keys kept for cross-file deduplication; Claude Code deletes transcripts at 30. */
 const SEEN_DAYS = 90;
 
-/** Totals last, so a reader never sees totals ahead of the offsets that produced them. */
+/**
+ * One rename commits a save. The offsets and the seen set go to new names first, and totals.json, which
+ * names them, goes last: a scan stopped anywhere (a restart kills it, kill -9) leaves the last save
+ * whole, so a log is never counted twice or skipped. The bridge reads totals.json alone.
+ */
 export function saveStore(stateDir: string, store: Store, now = Date.now()): void {
   const dir = usageDir(stateDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const put = (name: string, data: string | Uint8Array) => {
     const path = join(dir, name);
-    const tmp = `${path}.tmp`;
-    writeFileSync(tmp, data, { mode: 0o600 });
-    renameSync(tmp, path);
+    writeFileSync(`${path}.tmp`, data, { mode: 0o600 });
+    renameSync(`${path}.tmp`, path);
   };
-  if (store.seen.changed) put("seen.bin", store.seen.encode(now, SEEN_DAYS));
-  put("scan.json", JSON.stringify(store.state));
-  put("totals.json", JSON.stringify(store.totals));
+  const prev = store.totals.files;
+  const gen = (prev?.gen ?? 0) + 1;
+  const seen = prev && !store.seen.changed ? prev.seen : gen;
+  if (seen === gen) put(`seen.${gen}.bin`, store.seen.encode(now, SEEN_DAYS));
+  put(`scan.${gen}.json`, JSON.stringify(store.state));
+  put("totals.json", JSON.stringify({ ...store.totals, files: { gen, seen } }));
+  // What this save replaced, and what a stopped one left behind.
+  for (const name of readdirSync(dir)) {
+    const m = /^(scan|seen)\.(\d+)\./.exec(name);
+    if (m && Number(m[2]) !== (m[1] === "scan" ? gen : seen)) rmSync(join(dir, name), { force: true });
+  }
 }
