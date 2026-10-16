@@ -206,6 +206,8 @@ export interface ProjectThreadView {
   verdict?: ThreadVerdict;
   /** When a coordinator's STATUS.md last changed; its text comes with the summaries. */
   statusUpdated?: string;
+  /** Changes when Organizations' reading of its tokens does; the numbers come with the summaries. */
+  usageStamp?: string;
 }
 
 /** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable, ThreadSummary and StatusFile in bridge/types.ts. */
@@ -227,7 +229,7 @@ export interface ThreadSummary {
  */
 export interface StatusFile { text: string; updated: string; objective?: string; needsDecision?: string[] }
 
-/** Mirror AskState, AskConfirmed, AskLink, Ask, AskGroup, AskCoordinator, AskRow, AskDecision, AsksList and TokenUsage in bridge/types.ts. */
+/** Mirror AskState, AskConfirmed, AskLink, Ask, AskGroup, AskCoordinator, AskRow, AskDecision, AsksList and TokenUsage in bridge/org-types.ts. */
 export type AskState = "open" | "working" | "needs-decision" | "answered" | "done" | "unknown";
 export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
 export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
@@ -243,8 +245,8 @@ export interface TokenUsage {
   input: number; output: number; cacheRead: number; cacheWrite: number;
   context: number; peakContext: number; compactions: number; updated: string; overCap: string[];
 }
-/** The project coordinator as the ticker last saw it (`/api/org/summary`); `state` is empty before it looked. */
-export interface CoordinatorAgent { agent: string; model: string; state: string }
+/** The project coordinator as the ticker last saw it (`/api/org/summary`); `state` is empty before it looked. Mirrors OrgCoordinator in bridge/org-cli.ts. */
+export interface CoordinatorAgent { agent: string; model: string; state: "working" | "blocked" | "idle" | "done" | "" }
 
 /** Mirror PrAsk and PrAction in bridge/types.ts. */
 export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
@@ -348,6 +350,8 @@ export interface ProjectView {
   statusUpdated?: string;
   /** How many of its coordinators' asks and decisions wait on you; absent when this Organizations cannot list asks. */
   waitingAsks?: number;
+  /** The project coordinator's token reading stamp, as a thread's `usageStamp`. */
+  usageStamp?: string;
 }
 
 export type NodeRole = "worker" | "coordinator";

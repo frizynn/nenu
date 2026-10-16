@@ -4,7 +4,7 @@ import { ExternalLink, ChatCircle, ChatCircleSlash } from "@/components/ui/icon"
 
 import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
-import { CoordinatorCard, hasCard } from "@/components/coordinator-card";
+import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorStatus } from "@/components/coordinator-status";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
 import { NodeDot } from "@/components/node-row";
@@ -17,7 +17,7 @@ import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, STATE_LABEL, awaits, flatten, liveState, orgTree, type OrgNode } from "@/lib/org-tree";
-import { isReadOnly, type AgentStatus } from "@/lib/types";
+import { isReadOnly } from "@/lib/types";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
@@ -46,6 +46,7 @@ export function NodeRoute() {
   const live = (paneId: string | undefined) => paneId !== undefined && data.agents.some((pane) => pane.paneId === paneId);
   const openNode = (slug: string) => ({ thread }: OrgNode) =>
     navigate(thread.paneId && live(thread.paneId) ? panePath(thread.paneId, data.session) : nodePath(slug, thread.id, data.session));
+  const openStatusNode = (slug: string) => (id: string) => navigate(nodePath(slug, id, data.session));
 
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
@@ -55,10 +56,9 @@ export function NodeRoute() {
   } else if (isRoot) {
     const pane = project.coordinator && live(project.coordinator.paneId) ? project.coordinator : undefined;
     // The live pane says what the agent does now; else what the ticker saw when it last looked.
-    const status = pane?.liveStatus ?? STATUS_WORDS.find((word) => word === read.coordinator?.state);
+    const status = pane?.liveStatus ?? (read.coordinator?.state || undefined);
     const state = status && liveState(status);
     const agent = [pane?.agent ?? read.coordinator?.agent, read.coordinator?.model].filter(Boolean).join(" · ");
-    const card = hasCard(asks.list, read.status ?? undefined, read.usage ?? undefined);
     body = <>
       <TasksHeader title="Coordinator" paused={project.status === "paused"} subtitle={<>
         Project coordinator of <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline" to={projectPath(project.slug, data.session)}>{project.name}</Link>
@@ -68,9 +68,8 @@ export function NodeRoute() {
         {state && agent && <span aria-hidden>·</span>}
         {agent && <span>{agent}</span>}
       </p>}
-      {card && <CoordinatorCard project={project} coordinatorId={ROOT} status={read.status ?? undefined} usage={read.usage ?? undefined}
-        asks={asks.list} summaries={summaries} onOpenNode={openNode(project.slug)} />}
-      {read.status && <CoordinatorStatus status={read.status} project={project} closed={card} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
+      <CoordinatorHead project={project} coordinatorId={ROOT} status={read.status ?? undefined} usage={read.usage ?? undefined}
+        asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
       {pane && <Button type="button" size="lg" onClick={() => navigate(panePath(pane.paneId, data.session))}>
         <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
     </>;
@@ -89,15 +88,15 @@ export function NodeRoute() {
     const ask = awaits(thread);
     const note = ask ? ASK[ask].label : thread.note;
     const status = summaries.get(thread.id)?.status;
-    const usage = summaries.get(thread.id)?.usage;
-    const card = coordinator && hasCard(asks.list, status, usage);
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
-      {card && <CoordinatorCard project={project} coordinatorId={thread.id} status={status} usage={usage} asks={asks.list} summaries={summaries} onOpenNode={openNode(project.slug)} />}
-      {status && <CoordinatorStatus status={status} project={project} closed={card} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
+      {coordinator
+        ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
+          asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
+        : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
           {age && <span className="text-muted-foreground">· {age}</span>}</p>
@@ -125,6 +124,3 @@ export function NodeRoute() {
 
   return <ColumnPage data={data} title={isRoot && project ? "Coordinator" : node?.thread.title ?? project?.name ?? "Project"} back={back}>{body}</ColumnPage>;
 }
-
-/** The agent states Herdr reports, as the ticker records the coordinator's. */
-const STATUS_WORDS: readonly AgentStatus[] = ["working", "blocked", "idle", "done"];

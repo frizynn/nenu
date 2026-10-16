@@ -28,11 +28,12 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
   status: StatusFile;
   project: ProjectView;
   onOpenNode: (id: string) => void;
-  /** Start as one line that opens the file: a card above it already says what the file says. */
+  /** One line that opens the file, while a card above it already says what the file says. */
   closed?: boolean;
   now?: number;
 }) {
-  const [shown, setShown] = useState(!closed);
+  const [opened, setOpened] = useState(false);
+  const shown = opened || !closed;
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -78,7 +79,7 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
   </div>;
   if (!shown) return <section aria-label="Status" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3">
     {heading}
-    <button type="button" className="quiet-action -ml-2 mt-1" onClick={() => setShown(true)}>Show STATUS.md</button>
+    <button type="button" className="quiet-action -ml-2 mt-1" onClick={() => setOpened(true)}>Show STATUS.md</button>
   </section>;
 
   return <section aria-label="Status" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3">

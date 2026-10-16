@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, GitPullRequest, TriangleAlert } from "@/components/ui/icon";
 
+import { CoordinatorStatus } from "@/components/coordinator-status";
 import { NodeDot } from "@/components/node-row";
 import { prSummary } from "@/components/project-tasks";
 import { StatusDot } from "@/components/status-badge";
@@ -9,12 +10,12 @@ import { askDetail, coordinatorAsks } from "@/lib/asks";
 import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { timeAgo } from "@/lib/format";
 import { flatten, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
-import type { AskGroup, AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
+import type { AskGroup, AskRow, AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
 
 // A coordinator's card (ADR 0091), as Herdr Organizations' popup draws one: its objective, what waits
 // on you, its other asks with what their links confirm, the agents it runs with their state and
 // verdict, their pull requests, and how full its context is. Every part comes from fields
-// Organizations prints; an Organizations that predates them draws no card.
+// Organizations prints; an Organizations that predates them draws no card, and an empty one none.
 
 /** Rows a section lists before saying how many more. */
 const MOST = 5;
@@ -29,27 +30,48 @@ export function AskMark({ group }: { group: AskGroup }) {
   return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" className="size-2" /></span>;
 }
 
-/** Whether Organizations printed anything a card draws; without it the page stays as it was. */
-export function hasCard(asks: AsksList | null, status: StatusFile | undefined, usage: TokenUsage | undefined): boolean {
-  return Boolean(asks?.asks || status?.objective || usage);
-}
-
-export function CoordinatorCard({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, now = Date.now() }: {
+/**
+ * A coordinator's card, then its STATUS.md, decided here for every coordinator page. The card shows
+ * only with something to say about this coordinator, from fields an older Organizations does not
+ * print. The file starts closed only when the card already says what it says (the objective, the
+ * asks, the decisions), and waits for the asks, so which read lands first never changes either.
+ */
+export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode }: {
   project: ProjectView;
   /** `root` for the project's own coordinator. */
   coordinatorId: string;
   status?: StatusFile;
   usage?: TokenUsage;
-  asks: AsksList | null;
+  asks: { list: AsksList | null; loaded: boolean };
   summaries: ReadonlyMap<string, ThreadSummary>;
   /** Opens one of its agents: its chat when it runs in a live pane, its page otherwise. */
   onOpenNode: (node: OrgNode) => void;
+  /** Opens a node a thread id in the file names. */
+  onOpenStatusNode: (id: string) => void;
+}) {
+  const mine = coordinatorAsks(asks.list, project.slug, coordinatorId);
+  const tree = orgTree(project.threads);
+  const agents = coordinatorId === "root" ? tree.open : flatten(tree.open).find((node) => node.thread.id === coordinatorId)?.children ?? [];
+  const says = Boolean(status?.objective || mine?.waiting.length || mine?.asks.length);
+  const printed = Boolean(asks.list?.asks || status?.objective || usage);
+  return <>
+    {printed && (says || usage || agents.length > 0) &&
+      <CoordinatorCard status={status} usage={usage} mine={mine} agents={agents} summaries={summaries} onOpenNode={onOpenNode} />}
+    {status && asks.loaded && <CoordinatorStatus status={status} project={project} closed={says} onOpenNode={onOpenStatusNode} />}
+  </>;
+}
+
+function CoordinatorCard({ status, usage, mine, agents, summaries, onOpenNode, now = Date.now() }: {
+  status?: StatusFile;
+  usage?: TokenUsage;
+  mine: { waiting: string[]; asks: AskRow[] } | null;
+  /** Its open nodes, as the tree orders them. */
+  agents: OrgNode[];
+  summaries: ReadonlyMap<string, ThreadSummary>;
+  onOpenNode: (node: OrgNode) => void;
   now?: number;
 }) {
-  const mine = coordinatorAsks(asks, project.slug, coordinatorId);
-  const tree = orgTree(project.threads);
-  const children = coordinatorId === "root" ? tree.open : flatten(tree.open).find((node) => node.thread.id === coordinatorId)?.children ?? [];
-  const prs = children.filter((node) => node.thread.pr);
+  const prs = agents.filter((node) => node.thread.pr);
   const updated = Date.parse(status?.updated ?? "");
 
   return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
@@ -66,8 +88,8 @@ export function CoordinatorCard({ project, coordinatorId, status, usage, asks, s
     {mine && mine.asks.length > 0 && <CardList label="Asks" count={mine.asks.length}>
       {mine.asks.slice(0, MOST).map((ask) => <Row key={`${ask.line}:${ask.text}`} mark={<AskMark group={ask.group} />} title={ask.text} detail={askDetail(ask)} />)}
     </CardList>}
-    {children.length > 0 && <CardList label="Agents" count={children.length}>
-      {children.slice(0, MOST).map((node) => {
+    {agents.length > 0 && <CardList label="Agents" count={agents.length}>
+      {agents.slice(0, MOST).map((node) => {
         const { thread } = node;
         const overCap = (summaries.get(thread.id)?.usage?.overCap.length ?? 0) > 0;
         const detail = [STATE_LABEL[node.state], thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");

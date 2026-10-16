@@ -19,15 +19,16 @@ const EMPTY = { summaries: NONE, status: null, usage: null, coordinator: null };
 /**
  * What the reports of `threads` say and show, and the project coordinator's STATUS.md, read while a
  * page is on screen and again only when one of them moves: a new report changes its `updated` or its
- * unread mark, an edited STATUS.md its `statusUpdated`. The snapshot does not carry the texts, so its
+ * unread mark, an edited STATUS.md its `statusUpdated`, a new token reading its `usageStamp`. The
+ * snapshot does not carry the texts or the numbers, so its
  * own revalidation is not enough to see one change. Only a project read through Organizations'
  * `--json` has any; a failed read keeps what was shown and says why.
  */
 export function useThreadSummaries(project: ProjectView | undefined, threads: readonly ProjectThreadView[]): Read {
   const [read, setRead] = useState<Read & { slug: string } | null>(null);
   const slug = project?.source === "json" ? project.slug : undefined;
-  const moved = [project?.statusUpdated ?? "", ...threads.map((thread) =>
-    `${thread.id}:${thread.status}:${thread.group ?? ""}:${thread.updated ?? ""}:${thread.reportUnacked ? 1 : 0}:${thread.verdict ?? ""}:${thread.statusUpdated ?? ""}`)].join(",");
+  const moved = [project?.statusUpdated ?? "", project?.usageStamp ?? "", ...threads.map((thread) =>
+    `${thread.id}:${thread.status}:${thread.group ?? ""}:${thread.updated ?? ""}:${thread.reportUnacked ? 1 : 0}:${thread.verdict ?? ""}:${thread.statusUpdated ?? ""}:${thread.usageStamp ?? ""}`)].join(",");
   useEffect(() => {
     if (!slug) return;
     const controller = new AbortController();

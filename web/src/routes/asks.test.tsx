@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { AskRow, AsksList, ProjectThreadView, ProjectView, ThreadSummary } from "@/lib/types";
@@ -47,13 +47,24 @@ const SUMMARY: { threads: ThreadSummary[]; status: unknown; usage: unknown; coor
   coordinator: { agent: "claude", model: "opus", state: "idle" },
 };
 
-function setup(path: string, { project = {}, asks = ASKS, summary = SUMMARY }: { project?: Partial<ProjectView>; asks?: AsksList; summary?: object } = {}) {
+function setup(path: string, { project = {}, asks = ASKS, summary = SUMMARY, wait = { asks: 0, summary: 0 } }: {
+  project?: Partial<ProjectView>; asks?: AsksList; summary?: object; wait?: { asks: number; summary: number };
+} = {}) {
   const requests: string[] = [];
+  const summaries: string[] = [];
   server.use(
-    http.get("/api/org/asks", ({ request }) => { requests.push(new URL(request.url).pathname); return HttpResponse.json({ ok: true, ...asks }); }),
-    http.get("/api/org/summary", () => HttpResponse.json({ ok: true, ...summary })),
+    http.get("/api/org/asks", async ({ request }) => {
+      requests.push(new URL(request.url).pathname);
+      await delay(wait.asks);
+      return HttpResponse.json({ ok: true, ...asks });
+    }),
+    http.get("/api/org/summary", async ({ request }) => {
+      summaries.push(new URL(request.url).pathname);
+      await delay(wait.summary);
+      return HttpResponse.json({ ok: true, ...summary });
+    }),
   );
-  const data: HomeData = { bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined, sessions: [], session: undefined,
+  let data: HomeData = { bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined, sessions: [], session: undefined,
     projects: [{ slug: "shop", name: "Shop", status: "active", nodeActions: true, source: "json", threads, waitingAsks: 3, statusUpdated: minutesAgo(4), ...project }],
     snoozedUntil: null, update: undefined, error: false, authError: false };
   const router = createMemoryRouter([{
@@ -61,7 +72,12 @@ function setup(path: string, { project = {}, asks = ASKS, summary = SUMMARY }: {
     children: [{ path: "asks", element: <AsksRoute /> }, { path: "project/:projectSlug/node/:nodeId", element: <NodeRoute /> }],
   }], { initialEntries: [path] });
   render(<RouterProvider router={router} />);
-  return { router, requests, user: userEvent.setup() };
+  /** The next snapshot, as a poll would bring it. */
+  const next = (project: Partial<ProjectView>) => {
+    data = { ...data, projects: data.projects!.map((candidate) => ({ ...candidate, ...project })) };
+    return router.revalidate();
+  };
+  return { router, requests, summaries, next, user: userEvent.setup() };
 }
 
 it("lists every ask in the popup's groups, each with whose it is and where it stands, and opens its coordinator", async () => {
@@ -137,4 +153,42 @@ it("a worker's page has no card, and does not read the asks", async () => {
   expect(await screen.findByRole("region", { name: "Node" })).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Coordinator card" })).not.toBeInTheDocument();
   expect(requests).toEqual([]);
+});
+
+describe("whichever read lands first", () => {
+  // A coordinator that runs nothing open, as awam's root reads today: a STATUS.md in free prose.
+  const lone: ProjectThreadView[] = [{ id: "t-0010", title: "Checkout", parentId: "root", role: "coordinator", status: "open", group: "idle" }];
+  const prose = (extra: object = {}) => ({ threads: [{ id: "t-0010", captures: [], deliverables: [], status: { text: "# Status\nfree prose", updated: minutesAgo(3), ...extra } }], status: null, usage: null, coordinator: null });
+  const orders = [{ asks: 0, summary: 150 }, { asks: 150, summary: 0 }];
+
+  it.each(orders)("a coordinator with nothing for a card draws none and keeps its STATUS.md open (asks at $asks ms, summary at $summary ms)", async (wait) => {
+    setup("/project/shop/node/t-0010", { project: { threads: lone, waitingAsks: 0 }, asks: { asks: [], decisions: [] }, summary: prose(), wait });
+    const status = await screen.findByRole("region", { name: "Status" });
+    await waitFor(() => expect(status).toHaveTextContent("free prose"));
+    await delay(200);
+    expect(screen.queryByRole("region", { name: "Coordinator card" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show STATUS.md" })).not.toBeInTheDocument();
+  });
+
+  it.each(orders)("a card that says what the file says folds it, and the file never shows open first (asks at $asks ms, summary at $summary ms)", async (wait) => {
+    setup("/project/shop/node/t-0010", { project: { threads: lone, waitingAsks: 0 }, asks: { asks: [], decisions: [] }, summary: prose({ objective: "the checkout" }), wait });
+    const card = await screen.findByRole("region", { name: "Coordinator card" });
+    expect(card).toHaveTextContent("the checkout");
+    // Until both reads are in, the file is not on screen at all.
+    expect(screen.queryByText("free prose")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Show STATUS.md" })).toBeInTheDocument();
+    await delay(200);
+    expect(screen.queryByText("free prose")).not.toBeInTheDocument();
+  });
+});
+
+it("reads the tokens again when the snapshot says the reading moved, with the page open", async () => {
+  const { summaries, next } = setup("/project/shop/node/t-0010", { project: { usageStamp: "a" } });
+  await screen.findByRole("region", { name: "Coordinator card" });
+  await waitFor(() => expect(summaries).toHaveLength(1));
+  await next({ waitingAsks: 3 });
+  await delay(50);
+  expect(summaries).toHaveLength(1);
+  await next({ threads: threads.map((thread) => thread.id === "t-0010" ? { ...thread, usageStamp: "2026-10-16T21:00:00Z|context_warn" } : thread) });
+  await waitFor(() => expect(summaries).toHaveLength(2));
 });
