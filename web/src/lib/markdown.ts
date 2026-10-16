@@ -103,8 +103,8 @@ const INLINE_RE = new RegExp(
     "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
     "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
     // 8,9  a bare file:// or web URL in prose, after a space or an opening bracket, short of the
-    // punctuation that ends a sentence. A file URL and a pull request's page read as links (an agent
-    // writes them meaning one); any other web URL stays text.
+    // punctuation that ends a sentence. An agent writes it meaning a link, so it reads as one: a file
+    // URL opens the file it names, a web URL itself, and a pull request's page is named owner/repo#N.
     "(^|[\\s([{])((?:file|https?):\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
     String.raw`\$\$((?:${TEX})+?)\$\$`, // 10   display math
     String.raw`\\\[((?:${TEX})+?)\\\]`, // 11   display math
@@ -165,9 +165,9 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
       else push({ kind: "text", text: m[0] });
     } else if (m[9] !== undefined) {
       const path = localFilePath(m[9]);
-      const pr = path ? null : pullRequestRef(m[9]);
+      const href = path ? null : safeHref(m[9]);
       push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] }
-        : pr ? { kind: "link", href: m[9], spans: [{ kind: "text", text: pr }] } : { kind: "text", text: m[9] });
+        : href ? { kind: "link", href, spans: [{ kind: "text", text: pullRequestRef(href) ?? href }] } : { kind: "text", text: m[9] });
     } else {
       const tex = m[10] ?? m[11] ?? m[12] ?? m[13] ?? "";
       const display = m[10] !== undefined || m[11] !== undefined;

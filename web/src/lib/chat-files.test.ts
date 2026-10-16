@@ -68,6 +68,8 @@ it("scans slash-heavy tool output without blocking the chat", () => {
   const output = ` ${Array(24).fill("folder").join("/")}/noextension `;
   const start = performance.now();
   expect(filePathsInText(output)).toEqual([]);
+  // Dotted text is a run of URL-scheme characters with no "://" after it.
+  expect(filePathsInText("a.".repeat(100_000))).toEqual([]);
   expect(performance.now() - start).toBeLessThan(500);
   expect(filePathsInText('Saved src/one.ts\\nweb/src/two.ts\\n')).not.toContain('src/one.ts\\nweb/src/two.ts');
 });

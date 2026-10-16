@@ -20,6 +20,8 @@ const PHOTO_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
 /** The same image-or-link shape the Markdown parser reads; group 1 is the target. */
 const MARKDOWN_LINK = /!?\[[^\]\n]*\]\((<[^>\n]+>|[^)\s]+)\)/g;
 const QUOTED_CANDIDATE =/(["'`])([^"'`\n]{1,4096})\1/g;
+// The scheme is bounded so a long dotted word is not rescanned from each of its letters.
+const SCHEME_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'`<>]*/gi;
 // This deliberately recognises only the extensions already accepted by localFilePath. The bridge
 // remains authoritative about whether the named file exists, is inside the pane cwd, is private,
 // and is small enough to preview.
@@ -79,6 +81,9 @@ export function filePathsInText(text: string): string[] {
   // A link to a local file names it by its target; its label ("report.html") is only a caption and
   // must not become a second, relative mention that resolves somewhere else.
   text = text.replace(MARKDOWN_LINK, (link, target: string) => localFilePath(target) ? " " : link);
+  // A web URL names a page on another host: what follows its port (`:8443/page.html`) or sits in its
+  // query (`?file=a.pdf`) is not a file in the pane's folder.
+  text = text.replace(SCHEME_URL, (url) => localFilePath(url) ? url : " ");
   for (const match of text.matchAll(QUOTED_CANDIDATE)) {
     const path = localFilePath(match[2] ?? "");
     if (path) paths.push(path);
