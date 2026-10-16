@@ -280,7 +280,7 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(threads.map((thread) => thread.verdict ?? null)).toEqual([null, "done", "blocked"]);
     expect(threads[0]).not.toHaveProperty("verdict");
     expect(JSON.stringify(threads)).not.toContain("Checkout");
-    expect(registry.summaries("demo")).toEqual({ status: null, threads: [{
+    expect(registry.summaries("demo")).toEqual({ status: null, usage: null, coordinator: null, threads: [{
       id: "t-0002", summary: "Checkout works at 390 px.",
       captures: [{ path: join(library, "checkout.png"), caption: "Checkout" }], deliverables: [{ path: join(library, "report.html"), kind: "html" }],
     }] });
@@ -305,6 +305,7 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(registry.summaries("demo")).toEqual({
       status: { text: "# Status\nObjective: ship the checkout", updated: "2026-10-16T12:00:00Z" },
       threads: [{ id: "t-0002", captures: [], deliverables: [], status: { text: "# Status\n- [working] t-0003 Envíos", updated: "2026-10-16T11:00:00Z" } }],
+      usage: null, coordinator: null,
     });
   });
 
@@ -315,23 +316,25 @@ describe("ProjectRegistry: Organizations fields", () => {
     let now = 1;
     const calls: string[][] = [];
     const registry = registryFor(root, { now: () => now, run: overviewRun([overviewThread({})], calls, { status_file: { path, text: "# Status", updated: "2026-10-16T12:00:00Z" } }) });
+    // Each refresh also asks for the asks; this counts the overviews.
+    const overviews = () => calls.filter((argv) => argv[0] === "overview").length;
     await registry.refresh();
     // The path is known only once the overview names it; the next read settles on it.
     now += 10_000;
     registry.list("default", true, []);
     await Bun.sleep(0);
-    const before = calls.length;
+    const before = overviews();
 
     now += 10_000;
     registry.list("default", true, []);
     await Bun.sleep(0);
-    expect(calls.length).toBe(before);
+    expect(overviews()).toBe(before);
 
     utimesSync(path, new Date(), new Date(Date.now() + 5_000));
     now += 10_000;
     registry.list("default", true, []);
     await Bun.sleep(0);
-    expect(calls.length).toBe(before + 1);
+    expect(overviews()).toBe(before + 1);
   });
 
   test("a project's library is its own folder's, and only for a project the registry lists", async () => {
@@ -382,7 +385,9 @@ describe("ProjectRegistry: Organizations fields", () => {
 
   test("an invalidation during a refresh resolves only after a refresh that started after it", async () => {
     const gates: Array<() => void> = [];
-    const run: OrgRun = async () => {
+    const run: OrgRun = async (argv) => {
+      // The asks a refresh reads beside the overview answer at once; the overview is what this holds.
+      if (argv[0] === "asks") return { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'asks'" };
       await new Promise<void>((resolve) => gates.push(resolve));
       return { code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [] }), stderr: "" };
     };
@@ -453,5 +458,107 @@ describe("looseWorkspaceIds", () => {
     const projects = registry.list("default", true, [pane({})]);
     const workspace = (workspaceId: string): WorkspaceView => ({ workspaceId, number: 1, label: workspaceId, focused: false, activeTabId: "", tabCount: 1, paneCount: 1 });
     expect(looseWorkspaceIds([workspace("w1"), workspace("w9")], projects)).toEqual(["w9"]);
+  });
+});
+
+describe("ProjectRegistry: asks", () => {
+  /** An ask row as `asks --json` prints it (Organizations docs/json.md, Asks). */
+  const askRow = (coordinator: { id: string; title: string }, state: string, text: string, extra: Record<string, unknown> = {}) => ({
+    project: "demo", coordinator, line: 4, state, text, answer: "", links: [], confirmed: "", mismatch: "", ...extra,
+  });
+  const ROOT = { id: "root", title: "" };
+  const CHECKOUT = { id: "t-0002", title: "Checkout" };
+  const OLD = { id: "t-0003", title: "Old lead" };
+  const status = (root: string, extra: Record<string, unknown>) => ({ path: join(root, "STATUS.md"), text: "# Status", updated: "2026-10-16T12:00:00Z", ...extra });
+
+  /** Organizations with `asks`: the overview and the asks each answer their own command. */
+  function asksRun(root: string, rows: unknown[] | null, calls: string[][] = []): OrgRun {
+    const overview = overviewRun([
+      overviewThread({}),
+      overviewThread({ id: "t-0002", title: "Checkout", role: "coordinator", status_file: status(root, { needs_decision: ["Stock : list or cards"] }) }),
+      overviewThread({ id: "t-0003", title: "Old lead", role: "coordinator", status: "resolved", group: "resolved", status_file: status(root, { needs_decision: ["Stale"] }) }),
+    ], [], { status_file: status(root, { objective: "Ship it", needs_decision: ["Pilot : yes or no"] }) });
+    return async (argv, opts) => {
+      calls.push(argv);
+      if (argv[0] !== "asks") return overview(argv, opts);
+      return rows ? { code: 0, stdout: JSON.stringify({ schema_version: 1, asks: rows }), stderr: "" } : { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'asks'" };
+    };
+  }
+
+  test("each ask is placed as Organizations orders it, the decisions join it, and the snapshot carries only how many wait", async () => {
+    const root = fixture();
+    const calls: string[][] = [];
+    const registry = registryFor(root, { run: asksRun(root, [
+      askRow(ROOT, "needs-decision", "Pilot with batch 2"),
+      askRow(ROOT, "done", "Ship the checkout", { confirmed: "in-progress", mismatch: "a linked PR is still open",
+        links: [{ kind: "thread", text: "t-0002", target: "t-0002", thread: "t-0002", title: "Checkout", state: "ready-for-review", pr: "https://github.com/acme/demo/pull/12", pr_state: "open" }] }),
+      askRow(OLD, "needs-decision", "Which bank"),
+      askRow(CHECKOUT, "working", "Copy fix", { answer: "landing it" }),
+      askRow(ROOT, "answered", "Is it fast?", { answer: "yes, measured" }),
+      askRow(ROOT, "unknown", "a line with no bullet"),
+    ], calls) });
+    expect(registry.asks()).toBeNull();
+    expect(registry.list("default", true, [])[0]).not.toHaveProperty("waitingAsks");
+
+    await registry.refresh();
+    expect(calls).toContainEqual(["asks", "--json"]);
+    const asks = registry.asks()!;
+    expect(asks.asks.map((ask) => [ask.coordinator.id, ask.group, ask.text])).toEqual([
+      ["root", "waiting", "Pilot with batch 2"],
+      ["root", "unclosed", "Ship the checkout"],
+      // A resolved coordinator takes no answer: its decision waits on no one.
+      ["t-0003", "progress", "Which bank"],
+      ["t-0002", "progress", "Copy fix"],
+      ["root", "done", "Is it fast?"],
+      ["root", "other", "a line with no bullet"],
+    ]);
+    expect(asks.asks[1]!.links[0]).toEqual({ kind: "thread", text: "t-0002", target: "t-0002", thread: "t-0002", title: "Checkout", state: "ready-for-review", pr: "https://github.com/acme/demo/pull/12", prState: "open" });
+    expect(asks.decisions).toEqual([
+      { project: "demo", coordinator: ROOT, text: "Pilot : yes or no" },
+      { project: "demo", coordinator: CHECKOUT, text: "Stock : list or cards" },
+    ]);
+    const project = registry.list("default", true, [])[0]!;
+    expect(project.waitingAsks).toBe(3);
+    expect(JSON.stringify(project)).not.toContain("Pilot");
+  });
+
+  test("an Organizations without `asks` lists none, and the snapshot is as it was", async () => {
+    const root = fixture();
+    const registry = registryFor(root, { run: asksRun(root, null) });
+    await registry.refresh();
+    expect(registry.asks()).toBeNull();
+    expect(registry.list("default", true, [])[0]).not.toHaveProperty("waitingAsks");
+  });
+
+  test("asks are read only with the overview: a binary that fails it falls back to the files, asks and all", async () => {
+    const root = fixture();
+    const registry = registryFor(root, { run: async (argv) => argv[0] === "asks"
+      ? { code: 0, stdout: JSON.stringify({ schema_version: 1, asks: [askRow(ROOT, "open", "Docs")] }), stderr: "" }
+      : { code: 1, stdout: "", stderr: "boom" } });
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.source).toBe("files");
+    expect(registry.asks()).toBeNull();
+  });
+
+  test("a STATUS.md's objective, asks and decisions, the coordinators' token use and the project coordinator's agent come with the summaries", async () => {
+    const root = fixture();
+    const usage = { input: 10, output: 20, cache_read: 30, cache_write: 40, context: 412_000, peak_context: 967_000, compactions: 3, updated: "2026-10-16T11:00:00Z", over_cap: ["context_warn"] };
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({}),
+      overviewThread({ id: "t-0002", role: "coordinator", usage: { ...usage, over_cap: [] }, status_file: status(root, {
+        objective: "Checkout", asks: [askRow(ROOT, "working", "Copy fix", { project: undefined, coordinator: undefined })], needs_decision: ["Stock"],
+      }) }),
+      overviewThread({ id: "t-0003", usage: { ...usage, context: "full" } }),
+    ], [], { usage, coordinator: { pane_id: "w1:p1", agent: "claude", model: "opus", state: "idle" }, status_file: status(root, { objective: "  Ship it  ", asks: "none" }) }) });
+    await registry.refresh();
+    const summaries = registry.summaries("demo")!;
+    expect(summaries.status).toEqual({ text: "# Status", updated: "2026-10-16T12:00:00Z", objective: "Ship it" });
+    expect(summaries.usage).toEqual({ input: 10, output: 20, cacheRead: 30, cacheWrite: 40, context: 412_000, peakContext: 967_000, compactions: 3, updated: "2026-10-16T11:00:00Z", overCap: ["context_warn"] });
+    expect(summaries.coordinator).toEqual({ agent: "claude", model: "opus", state: "idle" });
+    const checkout = summaries.threads.find((thread) => thread.id === "t-0002")!;
+    expect(checkout.status).toMatchObject({ objective: "Checkout", needsDecision: ["Stock"], asks: [{ state: "working", text: "Copy fix", links: [], confirmed: "", mismatch: "" }] });
+    expect(checkout.usage?.overCap).toEqual([]);
+    // A count that is not one drops the whole reading rather than showing half of it.
+    expect(summaries.threads.find((thread) => thread.id === "t-0003")).toBeUndefined();
   });
 });

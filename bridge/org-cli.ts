@@ -1,6 +1,6 @@
 import { servicePath } from "./claude-sessions.ts";
-import { parseReport, parseStatusFile, type OrgReport, type OrgStatusFile } from "./org-report.ts";
-import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView } from "./types.ts";
+import { parseReport, parseStatusFile, parseUsage, type OrgReport, type OrgStatusFile } from "./org-report.ts";
+import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView, type TokenUsage } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -438,6 +438,14 @@ export interface OrgOverviewThread extends OrgReport {
   pr: OrgOverviewPullRequest | null;
   /** What a client may ask of the thread itself (`create-pr`); absent from an Organizations that predates it. */
   actions?: string[];
+  usage: TokenUsage | null;
+}
+
+/** The project's coordinator as the ticker last saw its pane; `state` is empty before it looked. */
+export interface OrgCoordinator {
+  agent: string;
+  model: string;
+  state: string;
 }
 
 export interface OrgOverviewProject {
@@ -450,6 +458,9 @@ export interface OrgOverviewProject {
   tone: string;
   /** The project coordinator's STATUS.md, as a thread's. */
   status_file: OrgStatusFile | null;
+  /** The project coordinator's token use and how it was started; null from an Organizations that predates them, or a project never opened. */
+  usage: TokenUsage | null;
+  coordinator: OrgCoordinator | null;
   threads: OrgOverviewThread[];
 }
 
@@ -494,6 +505,10 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     icon: pickName(value.icon),
     tone: pickName(value.tone),
     status_file: parseStatusFile(value.status_file),
+    usage: parseUsage(value.usage),
+    coordinator: isRecord(value.coordinator)
+      ? { agent: text(value.coordinator.agent), model: text(value.coordinator.model), state: text(value.coordinator.state) }
+      : null,
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];
@@ -528,6 +543,7 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     pr,
     ...parseActions(value.actions),
     ...parseReport(value),
+    usage: parseUsage(value.usage),
   };
 }
 

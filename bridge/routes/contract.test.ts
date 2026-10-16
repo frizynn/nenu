@@ -30,6 +30,7 @@ const CASES: Case[] = [
   { method: "GET", path: "/api/org/context", level: "read", session: false },
   { method: "GET", path: "/api/org/coordinator-options", level: "read", session: false },
   { method: "GET", path: "/api/org/summary", level: "read", session: false },
+  { method: "GET", path: "/api/org/asks", level: "read", session: false },
   { method: "GET", path: "/api/org/library", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
@@ -369,8 +370,13 @@ describe("a project's library and summaries", () => {
 
   test("summaries are none, not an error, while Organizations is read from its files", async () => {
     const response = await fetch(`${url}/api/org/summary?project=demo`, { headers: { "x-device": "tablet" } });
-    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, threads: null, status: null } });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, threads: null, status: null, usage: null, coordinator: null } });
     expect((await fetch(`${url}/api/org/summary?project=..%2Fx`)).status).toBe(400);
+  });
+
+  test("asks are none, not an error, while Organizations is read from its files", async () => {
+    const response = await fetch(`${url}/api/org/asks`, { headers: { "x-device": "tablet" } });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, asks: null, decisions: [] } });
   });
 });
 
