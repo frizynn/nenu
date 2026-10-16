@@ -2,10 +2,18 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
+/**
+ * How long after a file's mtime its metadata is trusted to move with its content. ext4 stamps writes
+ * from a coarse clock: two writes in a row read back the same mtime and ctime (measured), so a
+ * same-size edit right after a hash would keep the old one. Like git's "racy" index entries, a file
+ * hashed within this window of its mtime is hashed again on the next read.
+ */
+const RACY_NS = 1_000_000_000n;
+
 /** Content, not checkout timestamps, determines whether loaded code needs a restart. Metadata
  * only invalidates each file's cached hash, keeping the snapshot's throttled scan inexpensive. */
 export function createBridgeStampReader(bridgeDir: string, rootDir: string): () => string {
-  const cache = new Map<string, { metadata: string; digest: string }>();
+  const cache = new Map<string, { metadata: string; digest: string; settled: boolean }>();
   return () => {
     const entries: [string, string][] = [];
     const seen = new Set<string>();
@@ -15,8 +23,9 @@ export function createBridgeStampReader(bridgeDir: string, rootDir: string): () 
         const stat = statSync(path, { bigint: true });
         const metadata = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
         let cached = cache.get(path);
-        if (cached?.metadata !== metadata) {
-          cached = { metadata, digest: createHash("sha256").update(readFileSync(path)).digest("hex") };
+        if (cached?.metadata !== metadata || !cached.settled) {
+          const hashedAt = BigInt(Date.now()) * 1_000_000n;
+          cached = { metadata, digest: createHash("sha256").update(readFileSync(path)).digest("hex"), settled: stat.mtimeNs + RACY_NS < hashedAt };
           cache.set(path, cached);
         }
         entries.push([relative(rootDir, path), cached.digest]);
