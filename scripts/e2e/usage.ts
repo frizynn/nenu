@@ -168,7 +168,8 @@ async function capture(name: string, path: string, reach: Reach = async () => {}
   browser = await launchWebkit();
   for (const [deviceName, device] of opts.devices ?? DEVICES) {
     for (const scheme of ["dark", "light"] as const) {
-      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: opts.zone ?? "UTC", locale: "en-US" });
+      // A fed answer must reach the page: the service worker's own fetch would pass Playwright's route by.
+      const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: opts.zone ?? "UTC", locale: "en-US", ...(opts.prepare ? { serviceWorkers: "block" } : {}) });
       const page = await context.newPage();
       await opts.prepare?.(page);
       await page.goto(`${bridge.url}${path}`);
@@ -265,6 +266,23 @@ const limitRowsWhole: Reach = async (page, desk) => {
   if (cut.length) throw new Error(`cut short: ${cut.join(", ")}`);
 };
 
+/** Nothing in a card runs past the card, nor anything past the page; the map's scroller is a phone's to scroll. */
+const contained: Reach = async (page, desk) => {
+  await mapInside(page, desk);
+  const out = await page.evaluate(() => {
+    const main = document.querySelector("main")!;
+    const past = new Set<string>();
+    for (const el of Array.from(main.querySelectorAll<HTMLElement>("*"))) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || el.closest(".usage-scroll")) continue;
+      const box = (el.parentElement?.closest(".rounded-xl") ?? main).getBoundingClientRect();
+      if (r.right > box.right + 1) past.add(el.textContent?.trim().slice(0, 40) || el.tagName);
+    }
+    return [...past].slice(0, 4);
+  }, null);
+  if (out.length) throw new Error(`runs past its box: ${out.join(" | ")}`);
+};
+
 async function edges(): Promise<void> {
   // A scan that cannot save: the first pass, then a later one, with the usage folder read-only.
   const store = join(bridge.dir, "state", "usage");
@@ -305,7 +323,7 @@ async function edges(): Promise<void> {
       ...base,
       accounts: base.accounts.map((a) => ({ ...a, label: a.id === active.id ? "anaccountlabelwithnospacesatallanywhere" : a.agent === "claude" && a.source !== "none" ? "Platform engineering shared seat" : a.label })),
       periods: base.periods.map((p) => ({ ...p, byProject: (p.byProject as Json[]).map((r, i) => (i === 0 ? { ...r, label: long } : r)) })),
-    }, limitRowsWhole],
+    }, async (page, desk) => { await limitRowsWhole(page, desk); await contained(page, desk); }],
     ["edge-one-account", { ...base, accounts: [active], limits: base.limits.filter((l) => l.account === active.id) }, limitRowsWhole],
     ["edge-no-limits", { ...base, limits: [] }, limitRowsWhole],
   ];
@@ -319,6 +337,7 @@ async function edges(): Promise<void> {
     await page.getByRole("option", { name: /^anaccountlabel/ }).click();
     await page.getByRole("button", { name: /^anaccountlabel/ }).waitFor({ timeout: 5000 });
     if (!desk) await page.getByRole("button", { name: /^anaccountlabel/ }).click();
+    await contained(page, desk);
   }, { prepare: (page) => page.route("**/api/usage*", (route) => route.fulfill({ json: longNames })) });
   await capture("edge-long-projects", "/settings/usage", async (page, desk) => {
     await mapInside(page, desk);

@@ -99,11 +99,11 @@ it("says why a first pass stopped, with no progress left on screen, and runs it 
   expect(asked).toEqual(["", "?fresh=1"]);
 });
 
-it("says when the last scan failed, beside the age of the numbers shown", async () => {
+it("says when the last scan failed in words a phone's row has room for, the reason and age on hover", async () => {
   serve(usageOn({ scan: { state: "idle", firstPass: false, scannedAt: NOW - 3 * 3_600_000, error: "scan stopped (exit 1)" } }));
   open();
-  expect(await screen.findByText("Couldn’t update")).toBeInTheDocument();
-  expect(main().getByText(/Updated 3h ago/)).toBeInTheDocument();
+  expect(await screen.findByText("Couldn’t update")).toHaveAttribute("title", "scan stopped (exit 1) · last updated 3h ago");
+  expect(main().queryByText(/Updated 3h ago/)).toBeNull();
 });
 
 it("shows today, the week and the month, the plan limits, the map, the weeks and the month's breakdown", async () => {
