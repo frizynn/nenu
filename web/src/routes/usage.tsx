@@ -7,7 +7,7 @@ import { AccountList, BreakdownCard, LimitsCard, Stats, WeeksCard } from "@/comp
 import { ActivityCard } from "@/components/usage-map";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Activity, ChevronRight, ChevronsUpDown, Info, Layers, Pending, RefreshCw, SearchX } from "@/components/ui/icon";
+import { Activity, ChevronRight, ChevronsUpDown, Info, Layers, Pending, RefreshCw, SearchX, TriangleAlert } from "@/components/ui/icon";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { getUsage } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
@@ -74,7 +74,7 @@ export function UsageRoute() {
           : !data.on
             ? <Off session={root.session} />
             : data.scan.firstPass
-              ? <FirstPass data={data} />
+              ? <FirstPass data={data} onRetry={() => load.current(true)} />
               : !data.days.length && !data.coverage.logsFrom
                 ? <NoData />
                 : <Usage data={data} desk={desk} account={account} onAccount={setAccount} refresh={refresh} />}
@@ -106,8 +106,19 @@ function NoData() {
 
 const gb = (bytes: number) => `${Math.round(bytes / 1e8) / 10}`;
 
-function FirstPass({ data }: { data: UsageOn }) {
+function FirstPass({ data, onRetry }: { data: UsageOn; onRetry: () => void }) {
   const { files = 0, totalFiles = 0, bytes = 0, totalBytes = 0, error } = data.scan;
+  // A first pass that failed has nothing running any more, and the bridge waits a minute before it
+  // starts another on its own: say why, and offer it now.
+  if (error) {
+    return (
+      <div className="usage-narrow rounded-xl border bg-card">
+        <EmptyState icon={TriangleAlert} title="Couldn’t read the logs" className="py-8" action={<Button size="lg" onClick={onRetry}>Try again</Button>}>
+          {error}
+        </EmptyState>
+      </div>
+    );
+  }
   const pct = totalBytes ? Math.round((bytes / totalBytes) * 100) : 0;
   return (
     <section aria-label="First pass" className="usage-narrow flex flex-col gap-3 rounded-xl border bg-card p-5">
@@ -121,9 +132,7 @@ function FirstPass({ data }: { data: UsageOn }) {
         <span>{totalFiles ? `${files.toLocaleString("en-US")} of ${totalFiles.toLocaleString("en-US")} files` : "Finding logs…"}</span>
         {totalBytes > 0 && <span>{gb(bytes)} of {gb(totalBytes)} GB</span>}
       </div>
-      <p className={cn("text-footnote", error ? "text-destructive" : "text-subtle-foreground")}>
-        {error ? `The scan stopped: ${error}` : "After this, Nenu reads only new lines."}
-      </p>
+      <p className="text-footnote text-subtle-foreground">After this, Nenu reads only new lines.</p>
     </section>
   );
 }
@@ -140,14 +149,11 @@ function Usage({ data, desk, account, onAccount, refresh }: {
   const limits = limitBlocks(data, account, Date.now());
   const month = data.periods.find((p) => p.key === "month");
   const chosen = account ? data.accounts.find((a) => a.id === account) : undefined;
+  const { state, scannedAt, error } = data.scan;
   // A desk lists the accounts beside the numbers once one is asked for; a phone opens the list in
   // place, under the button. (A sheet would cost the app's first load 140 B: Rolldown splits the
   // chunk presence.ts shares once a lazy page reaches it, measured 2026-10-16.)
   const listed = desk && data.splitByAccount && (picking || account !== undefined);
-  const pick = (id: string | undefined) => {
-    onAccount(id);
-    setPicking(desk && id !== undefined);
-  };
 
   const scope = (
     <div className="flex items-center gap-2">
@@ -160,7 +166,9 @@ function Usage({ data, desk, account, onAccount, refresh }: {
         </button>
       )}
       <span className="flex-1" />
-      <span className="text-footnote text-subtle-foreground">{data.scan.state === "scanning" ? "Updating…" : data.scan.scannedAt ? `Updated ${timeAgo(data.scan.scannedAt)}` : ""}</span>
+      <span className="text-footnote text-subtle-foreground">
+        {state === "scanning" ? "Updating…" : <>{error && <span title={error} className="text-destructive">Couldn’t update</span>}{error && scannedAt && " · "}{scannedAt && `Updated ${timeAgo(scannedAt)}`}</>}
+      </span>
       {desk && refresh}
     </div>
   );
@@ -176,8 +184,8 @@ function Usage({ data, desk, account, onAccount, refresh }: {
   const source = <p className="text-footnote text-muted-foreground">Claude Code accounts follow each recorded switch; Codex sessions record their own account.</p>;
   const accounts = (
     <AccountList accounts={data.accounts} selected={account} check={desk} onSelect={(id) => {
-      pick(id);
-      if (!desk) setPicking(false);
+      onAccount(id);
+      setPicking(desk && id !== undefined);
     }} />
   );
 
