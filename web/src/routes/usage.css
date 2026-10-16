@@ -2,20 +2,25 @@
    the shapes only it draws. Colours come from index.css's tokens. Tailwind utilities on the page are
    ones the app already ships, so the page adds nothing to the app's own stylesheet. */
 
-/* ── Layout: one column on a phone, in the order a phone reads it; two on a desk ── */
+/* ── Layout: one column on a phone, in the order a phone reads it; two where a desk has room ── */
 .usage-page { display: flex; flex-direction: column; gap: 16px; }
 .usage-page > .usage-col { display: contents; }
 .usage-page .usage-at-1 { order: 1; } .usage-page .usage-at-2 { order: 2; } .usage-page .usage-at-3 { order: 3; }
 .usage-page .usage-at-4 { order: 4; } .usage-page .usage-at-5 { order: 5; } .usage-page .usage-at-6 { order: 6; }
 .usage-page .usage-at-7 { order: 7; }
-.usage-accounts { display: grid; grid-template-columns: 21rem minmax(0, 1fr); align-items: start; gap: 24px; }
+.usage-accounts { display: flex; flex-direction: column; gap: 16px; }
 .usage-narrow { width: 100%; }
 @media (min-width: 1024px) {
-  .usage-column { max-width: 66rem; }
+  .usage-column { max-width: 66rem; container-type: inline-size; }
+  .usage-narrow { width: 30rem; margin-inline: auto; }
+}
+/* Two columns only where the year's map, 643px with its card, fits beside the 22rem one: a desk's sidebar
+   leaves a 1280px window one column. */
+@container (min-width: 64rem) {
   .usage-page { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; gap: 20px; }
   .usage-page > .usage-col { display: flex; flex-direction: column; gap: 16px; }
   .usage-page > .usage-side { padding-top: 48px; }
-  .usage-narrow { width: 30rem; margin-inline: auto; }
+  .usage-accounts { display: grid; grid-template-columns: 21rem minmax(0, 1fr); align-items: start; gap: 24px; }
 }
 
 /* ── Cards ── */
