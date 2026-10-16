@@ -12,14 +12,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- **Your asks** lists what you asked every coordinator, grouped as Herdr Organizations' popup groups it (wait on you, does not close, in progress, done, other lines); each row says the project, the coordinator and its answer or why it does not close, and opens that coordinator. It sits beside Routines on a desk and atop Projects in a phone's Search, with how many wait on you (ADR 0091) (4a5e15e2, 44f75606).
-- A coordinator's page opens on its card: objective, what waits on you, its asks, its agents with state and verdict, their pull requests, and context and compactions marked over a cap; the project's own coordinator has one at `node/root`. Its STATUS.md folds under it (44f75606, dfbd330d).
-- `bun scripts/e2e/asks.ts [--quiet]` captures both with Google Chrome headless, and with an Organizations that predates them (44f75606).
+- Your asks: every ask to every coordinator, grouped as Organizations' popup groups them; a row opens its coordinator (ADR 0091) (4a5e15e2, 44f75606, ff49cc08).
+- A coordinator's page opens on its card: objective, what waits on you, asks, agents, PRs and tokens; the project's own at `node/root` (44f75606, e768bff2).
+- `bun scripts/e2e/asks.ts [--quiet]` captures both in Chrome headless, with and without the fields (44f75606).
 
 ### Fixed
 
-- A same-size edit in the clock tick after the bridge hashed a file still changes its code stamp; ext4 stamps both writes alike, so the stamp test failed on such hosts (53d05e10).
-- The ctl suite's minimal-PATH case no longer finds a Tailscale the host installed in `/usr/bin`, which failed it on Linux (f7a477bf).
+- An edit in the clock tick after the bridge hashed a file still changes its code stamp (53d05e10).
+- The ctl suite's minimal-PATH case ignores a Tailscale installed in `/usr/bin` (f7a477bf).
 
 ## [1.17.0] - 2026-10-16
 
