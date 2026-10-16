@@ -406,6 +406,34 @@ describe("herdr-organizations --json contract", () => {
     }
   });
 
+  it("reads a thread's verdict, summary, captures and deliverables, bounded and checked, and none from an older Organizations", async () => {
+    const capture = (n: number) => ({ path: `/p/demo/library/t-0002/shot-${n}.png`, caption: `Shot ${n}` });
+    const reported = {
+      ...overviewThread,
+      verdict: "needs-decision",
+      summary: "x".repeat(700),
+      captures: [capture(0), { path: "relative.png", caption: "dropped" }, { path: "/p/demo/library/t-0002/no-caption.png" }, "junk", ...Array.from({ length: 30 }, (_, n) => capture(n + 1))],
+      deliverables: [
+        { path: "/p/demo/library/t-0002/report.html", kind: "html" },
+        { path: "/p/demo/library/t-0002/notes.md", kind: "md" },
+        { path: "/p/demo/library/t-0002/run.sh", kind: "sh" },
+        ...Array.from({ length: 12 }, (_, n) => ({ path: `/p/demo/library/t-0002/r${n}.pdf`, kind: "pdf" })),
+      ],
+    };
+    const odd = { ...overviewThread, id: "t-0003", verdict: "shipped", summary: 7, captures: "none", deliverables: null };
+    const older = { ...overviewThread, id: "t-0004" };
+    const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo", goal: "", status: "active", threads: [reported, odd, older] }] }), stderr: "" });
+
+    const [thread, malformed, before] = (await readOverview(run, "/root"))![0]!.threads;
+    expect(thread!.verdict).toBe("needs-decision");
+    expect(thread!.summary).toBe("x".repeat(600));
+    expect(thread!.captures).toHaveLength(24);
+    expect(thread!.captures.slice(0, 2)).toEqual([capture(0), { path: "/p/demo/library/t-0002/no-caption.png", caption: "" }]);
+    expect(thread!.deliverables).toHaveLength(10);
+    expect(thread!.deliverables.slice(0, 2)).toEqual([{ path: "/p/demo/library/t-0002/report.html", kind: "html" }, { path: "/p/demo/library/t-0002/notes.md", kind: "md" }]);
+    for (const empty of [malformed!, before!]) expect(empty).toMatchObject({ verdict: null, summary: null, captures: [], deliverables: [] });
+  });
+
   it("keeps an unread pull request's unknown numbers as null, never zero", async () => {
     const unread = { ...overviewThread, pr: { url: overviewThread.pr.url, state: "", review: "", checks: null, additions: null, deletions: null, failing: [], comment_count: null, draft: null, mergeable: null, merge_blocker: "the ticker has not read this pull request yet" } };
     const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo", goal: "", status: "active", threads: [unread] }] }), stderr: "" });

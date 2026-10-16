@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
@@ -29,6 +29,8 @@ const CASES: Case[] = [
   { method: "GET", path: "/api/org/status", level: "read", session: false },
   { method: "GET", path: "/api/org/context", level: "read", session: false },
   { method: "GET", path: "/api/org/coordinator-options", level: "read", session: false },
+  { method: "GET", path: "/api/org/summary", level: "read", session: false },
+  { method: "GET", path: "/api/org/library", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
   { method: "POST", path: "/api/org/project/open", level: "write", session: true },
@@ -87,6 +89,7 @@ const seen: string[] = [];
 const audited: Array<{ action: string; device?: string | null; detail?: Record<string, unknown> }> = [];
 let outside = "";
 let orgCalls = "";
+let projectsRoot = "";
 
 // Organizations is a stub on an empty registry, so no route here reaches the operator's projects.
 const ORG_ENV = ["COLLIE_HERDR_ORGANIZATIONS_BIN", "HERDR_PROJECTS_ROOT"] as const;
@@ -128,6 +131,12 @@ esac
   await chmod(org, 0o755);
   process.env.COLLIE_HERDR_ORGANIZATIONS_BIN = org;
   process.env.HERDR_PROJECTS_ROOT = join(dir, "projects");
+  // One project, read from its files (this Organizations has no `overview --json`), with a capture in its library.
+  await mkdir(join(dir, "projects", "demo", "library", "t-0002"), { recursive: true });
+  await writeFile(join(dir, "projects", "demo", "PROJECT.md"), `+++\nname = "Demo"\ngoal = ""\n+++\n`);
+  await writeFile(join(dir, "projects", "demo", "library", "t-0002", "shot.png"), Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"));
+  await writeFile(join(dir, "projects", "demo", "PRIVATE.png"), Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex"));
+  projectsRoot = join(dir, "projects");
   // A shell pane: no agent, so no handler reaches for a conversation, journal or daemon.
   const paneInfo = { pane_id: "w:p", terminal_id: "t", workspace_id: "w", tab_id: "tab", focused: false, cwd: dir, agent_status: "idle" as const, revision: 0 };
   const herdr = {
@@ -336,6 +345,29 @@ describe("a project's status for Notes", () => {
   test("answers an error when the command ran and failed, and refuses a slug that is not one", async () => {
     expect(await read("gone")).toEqual({ status: 502, body: { ok: false, error: "herdr-organizations failed (1): herdr-organizations: no project `gone`" } });
     expect((await read("..%2Fx")).status).toBe(400);
+  });
+});
+
+describe("a project's library and summaries", () => {
+  const library = async (path: string, device = "tablet") => {
+    // A link opened in a new tab is a top-level navigation and carries no Origin.
+    const response = await fetch(`${url}/api/org/library?project=demo&path=${encodeURIComponent(path)}`, { headers: { "x-device": device } });
+    return { status: response.status, type: response.headers.get("content-type") };
+  };
+
+  test("a read-only device opens a capture inside the project's library, and nothing beside it", async () => {
+    const root = await realpath(projectsRoot);
+    expect(await library(join(root, "demo", "library", "t-0002", "shot.png"))).toEqual({ status: 200, type: "image/png" });
+    expect((await library(join(root, "demo", "PRIVATE.png"))).status).toBe(404);
+    expect((await library(join(root, "demo", "library", "..", "PRIVATE.png"))).status).toBe(404);
+    const other = await fetch(`${url}/api/org/library?project=other&path=${encodeURIComponent(join(root, "demo", "library", "t-0002", "shot.png"))}`, { headers: { "x-device": "tablet" } });
+    expect(other.status).toBe(404);
+  });
+
+  test("summaries are none, not an error, while Organizations is read from its files", async () => {
+    const response = await fetch(`${url}/api/org/summary?project=demo`, { headers: { "x-device": "tablet" } });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, threads: null } });
+    expect((await fetch(`${url}/api/org/summary?project=..%2Fx`)).status).toBe(400);
   });
 });
 
