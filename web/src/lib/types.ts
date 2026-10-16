@@ -211,7 +211,7 @@ export interface ProjectThreadView {
 /** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable, ThreadSummary and StatusFile in bridge/types.ts. */
 export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
 export interface ThreadCapture { path: string; caption: string }
-export interface ThreadDeliverable { path: string; kind: "html" | "pdf" | "md" }
+export interface ThreadDeliverable { path: string; kind: "html" | "pdf" }
 /** What a thread's report says and shows (`/api/org/summary`). The summary is the agent's text: draw it as text. */
 export interface ThreadSummary {
   id: string;

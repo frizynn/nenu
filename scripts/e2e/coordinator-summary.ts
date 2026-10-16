@@ -94,7 +94,7 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
   const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
   const shots = mocks();
   const captures = (thread: string) => shots.filter((shot) => shot.thread === thread).map((shot) => ({ path: library(projects, thread, shot.file), caption: shot.caption }));
-  const report = (thread: string, verdict: string, summary: string, deliverables: Array<[string, "html" | "pdf" | "md"]> = []) => quiet ? {} : {
+  const report = (thread: string, verdict: string, summary: string, deliverables: Array<[string, "html" | "pdf"]> = []) => quiet ? {} : {
     verdict, summary, captures: captures(thread), deliverables: deliverables.map(([file, kind]) => ({ path: library(projects, thread, file), kind })),
   };
   const pr = (number: number, extra: Record<string, unknown>) => ({
@@ -116,7 +116,7 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
           [["plan.html", "html"]])),
         node("t-0011", "Panel de stock a 390 px", "t-0010", "worker", "idle", 12, report("t-0011", "needs-decision",
           "Hay dos formas de mostrar el stock en el teléfono. La lista entra en una pantalla; las tarjetas se leen mejor pero piden scroll. Las dos funcionan igual en escritorio. Elegí una y la termino hoy.",
-          [["comparacion.html", "html"], ["comparacion.pdf", "pdf"], ["notas.md", "md"]])),
+          [["comparacion.html", "html"], ["comparacion.pdf", "pdf"]])),
         node("t-0012", "Pago con QR", "t-0010", "worker", "idle", 40, report("t-0012", "blocked",
           "Falta la clave de prueba del proveedor de pagos. Sin ella no puedo probar el pago de punta a punta. Si me la pasás, lo cierro en una hora.")),
         node("t-0013", "Landing a 390 px", "t-0010", "worker", "working", 0, { workspace_id: herd.working.split(":")[0], tab_id: "w1:t1", pane_id: herd.working }),

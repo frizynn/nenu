@@ -269,7 +269,7 @@ export const THREAD_VERDICTS: readonly ThreadVerdict[] = ["done", "needs-decisio
 /** A picture the agent left in the project's library, with what it shows. */
 export interface ThreadCapture { path: string; caption: string }
 /** A document the agent left in the project's library. */
-export interface ThreadDeliverable { path: string; kind: "html" | "pdf" | "md" }
+export interface ThreadDeliverable { path: string; kind: "html" | "pdf" }
 
 /**
  * What a thread's report says in plain words and shows, read on demand (`/api/org/summary`), never

@@ -430,7 +430,8 @@ describe("herdr-organizations --json contract", () => {
     expect(thread!.captures).toHaveLength(24);
     expect(thread!.captures.slice(0, 2)).toEqual([capture(0), { path: "/p/demo/library/t-0002/no-caption.png", caption: "" }]);
     expect(thread!.deliverables).toHaveLength(10);
-    expect(thread!.deliverables.slice(0, 2)).toEqual([{ path: "/p/demo/library/t-0002/report.html", kind: "html" }, { path: "/p/demo/library/t-0002/notes.md", kind: "md" }]);
+    // Organizations prints only html and pdf; any other kind, a Markdown file included, is dropped.
+    expect(thread!.deliverables.slice(0, 2)).toEqual([{ path: "/p/demo/library/t-0002/report.html", kind: "html" }, { path: "/p/demo/library/t-0002/r0.pdf", kind: "pdf" }]);
     for (const empty of [malformed!, before!]) expect(empty).toMatchObject({ verdict: null, summary: null, captures: [], deliverables: [] });
   });
 
