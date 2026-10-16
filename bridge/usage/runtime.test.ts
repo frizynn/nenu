@@ -45,6 +45,27 @@ describe("usage runtime", () => {
     expect(scanned).toBe(1);
   });
 
+  test("a long scan announces its progress at most once a second, then its end", async () => {
+    let now = 0;
+    let announced = 0;
+    let finish!: () => void;
+    const exited = new Promise<number>((resolve) => { finish = () => resolve(0); });
+    const progress = (bytes: number) => JSON.stringify({ progress: { files: 1, totalFiles: 9, bytes, totalBytes: 900 } });
+    async function* lines() {
+      for (const [at, bytes] of [[100, 100], [600, 200], [1200, 300], [1500, 400], [2300, 500]] as const) { now = at; yield progress(bytes); }
+      await exited;
+      yield JSON.stringify({ done: {} });
+    }
+    const usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => announced++, spawn: () => ({ lines: lines(), exited, kill: finish }), now: () => now });
+    await usage.load();
+    const first = await usage.set({ on: true });
+    expect(first).toMatchObject({ scan: { state: "scanning", bytes: 500, totalBytes: 900 } });
+    expect(announced).toBe(2);
+    finish();
+    await Bun.sleep(5);
+    expect(announced).toBe(3);
+  });
+
   test("a finished turn catches up only when the last scan is hours old", async () => {
     let now = 1_000_000_000_000;
     const scans = fakeScans();
