@@ -43,18 +43,21 @@ export interface AgentNotice {
   renotify: boolean;
 }
 
+/** What became of a notice: pushed, or held back by a snooze or by Nenu open on a screen. */
+export type NoticeOutcome = "sent" | "snoozed" | "open";
+
 export interface NotifySink {
   /** Show (or replace) this agent's notification. */
-  render(notice: AgentNotice): void;
+  render(notice: AgentNotice): NoticeOutcome;
 }
 
 /** Just the transport the sink needs — "deliver this message to the devices". */
 export interface PushSender {
   send(msg: PushMessage): unknown;
 }
-/** Just the check the sink needs — "should nothing be pushed right now?": a snooze, or Nenu open on a screen. */
+/** Just the check the sink needs — "should nothing be pushed right now, and why?": a snooze, or Nenu open on a screen. */
 export interface MuteGate {
-  isMuted(): boolean;
+  muted(): Exclude<NoticeOutcome, "sent"> | null;
 }
 
 /**
@@ -72,10 +75,12 @@ export function makeNotifySink(
 ): NotifySink {
   return {
     render: (n) => {
-      if (mute.isMuted()) return;
+      const held = mute.muted();
+      if (held) return held;
       const msg: PushMessage = { title: n.title, body: n.body, tag: `${herdTag}:${n.paneId}`, paneId: n.paneId, renotify: n.renotify };
       if (sessionName !== undefined) msg.session = sessionName;
       void push.send(msg);
+      return "sent";
     },
   };
 }
@@ -126,6 +131,32 @@ export class AlertDescriber {
   }
 }
 
+/**
+ * What the coordinator did with an alert once it knew who it was about: sent it, had it held back
+ * (`snoozed`, `open`), left it to a Settings switch that is off or a turn that never pushes (`rule`),
+ * or skipped it because that kind already went out and nobody has looked since (`told`).
+ */
+export interface NoticeDecision {
+  paneId: string;
+  alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested" | "launched">;
+  outcome: NoticeOutcome | "rule" | "told";
+}
+
+const OUTCOME_WORDS: Record<NoticeDecision["outcome"], string> = {
+  sent: "sent",
+  snoozed: "not sent, snoozed",
+  open: "not sent, Nenu is open on a screen",
+  rule: "not sent, no switch on in Settings pushes this turn",
+  told: "not sent, it already notified and nobody has opened it since",
+};
+
+/** One journal line per decision, naming no person's words: the pane, what the turn was and what happened. */
+export function decisionLine(session: string, d: NoticeDecision): string {
+  const a = d.alert;
+  const turn = [a.kind, `started by ${a.startedBy}`, a.requested && "asked from Nenu", a.launched && "launched by an agent"].filter(Boolean).join(", ");
+  return `notify ${session}/${d.paneId} ${a.status} (${turn}): ${OUTCOME_WORDS[d.outcome]}`;
+}
+
 /** An alert still in its debounce window (`handle`), or past it and being described (`handle` null). */
 interface Pending<H> {
   handle: H | null;
@@ -151,6 +182,7 @@ export class NotificationCoordinator<H = unknown> {
     /** When Nenu last showed this pane to the operator (the activity ledger); undefined when unknown. */
     private readonly seenAt: (paneId: string) => number | undefined = () => undefined,
     private readonly now: () => number = Date.now,
+    private readonly decided: (decision: NoticeDecision) => void = () => {},
   ) {}
 
   /** Wire to `StateEngine.onTransition`. */
@@ -178,10 +210,12 @@ export class NotificationCoordinator<H = unknown> {
     const admit = (alert: AlertDetail) => {
       if (this.pending.get(id) !== entry) return;
       this.pending.delete(id);
-      if (!this.policy.wants(alert) || this.alreadyTold(id, alert.status)) return;
+      const outcome = !this.policy.wants(alert) ? "rule" : this.alreadyTold(id, alert.status) ? "told" : this.sink.render(notice(id, alert));
+      this.decided({ paneId: id, alert, outcome });
+      // Only a notice that went out counts as told: one held back reached nobody.
+      if (outcome !== "sent") return;
       this.outstanding.set(id, alert);
       this.notified.set(id, { at: this.now(), status: alert.status });
-      this.sink.render(notice(id, alert));
     };
     if (detail instanceof Promise) detail.then(admit, () => admit(describeAlert(agent, entry.status)));
     else admit(detail);

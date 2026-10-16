@@ -155,10 +155,34 @@ describe("bare file URLs", () => {
     ]);
   });
 
-  it("leaves a file URL for another host, a web URL and a bare path as text", () => {
-    for (const text of ["file://server/share/report.html", "https://example.com/report.html", `see ${path}`]) {
+  it("reads a bare web URL as a link to itself, leaving trailing punctuation as text", () => {
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    expect(parseInline(`Resumen al día: ${href}.`)).toEqual([
+      { kind: "text", text: "Resumen al día: " },
+      { kind: "link", href, spans: [{ kind: "text", text: href }] },
+      { kind: "text", text: "." },
+    ]);
+    expect(parseInline("(http://localhost:5173/?tab=usage)")).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "link", href: "http://localhost:5173/?tab=usage", spans: [{ kind: "text", text: "http://localhost:5173/?tab=usage" }] },
+      { kind: "text", text: ")" },
+    ]);
+  });
+
+  it("reads an autolink as the link or the file it names", () => {
+    expect(parseInline("<https://example.com:8443/a.html>")).toEqual([
+      { kind: "link", href: "https://example.com:8443/a.html", spans: [{ kind: "text", text: "https://example.com:8443/a.html" }] },
+    ]);
+    expect(parseInline(`<file://${path}>`)).toEqual([{ kind: "file", path, spans: [{ kind: "text", text: `file://${path}` }] }]);
+    expect(parseInline("<javascript:alert(1)>")).toEqual([{ kind: "text", text: "<javascript:alert(1)>" }]);
+  });
+
+  it("leaves a file URL for another host, a URL inside a word and a bare path as text", () => {
+    for (const text of ["file://server/share/report.html", "xhttps://example.com/report.html"]) {
       expect(parseInline(text)).toEqual([{ kind: "text", text }]);
     }
+    // A path in plain words is drawn as words, and names its file for the chat's list.
+    expect(parseInline(`see ${path}`)).toEqual([{ kind: "text", text: `see ${path}`, files: [path] }]);
   });
 });
 

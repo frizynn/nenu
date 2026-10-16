@@ -18,6 +18,7 @@ describe("parseLiveEvent", () => {
     expect(parseLiveEvent('{"topic":"snapshot"}')).toEqual({ topic: "snapshot" });
     expect(parseLiveEvent('{"topic":"queue","paneId":"w1:p1"}')).toEqual({ topic: "queue", paneId: "w1:p1" });
     expect(parseLiveEvent('{"topic":"org"}')).toEqual({ topic: "org" });
+    expect(parseLiveEvent('{"topic":"usage"}')).toEqual({ topic: "usage" });
     expect(parseLiveEvent('{"topic":"interaction","paneId":"w1:p1"}')).toEqual({ topic: "interaction", paneId: "w1:p1" });
     expect(parseLiveEvent('{"topic":"toString"}')).toBeNull();
     expect(parseLiveEvent('{"topic":"resync"}')).toBeNull();

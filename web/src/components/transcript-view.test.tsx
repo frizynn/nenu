@@ -535,12 +535,14 @@ describe("journal media", () => {
   });
 
   it("shows a delivered HTML file as a card that mounts no frame until opened", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
+      new URL(request.url).searchParams.getAll("inspect").map((path) => ({ path, state: "preview" })))));
     render(withViewer(<TranscriptView activityStatus="done" entries={[
       turn({ uuid: "ask", parts: [{ kind: "text", text: "make a page" }] }),
       turn({ uuid: "send", role: "assistant", turn: { status: "completed" }, parts: [{ kind: "tool", name: "SendUserFile", summary: "/tmp/out/report.html", result: { text: "sent", attachments: [{ kind: "file", path: "/tmp/out/report.html" }] } }] }),
       turn({ uuid: "done", role: "assistant", phase: "final_answer", turn: { status: "completed" }, parts: [{ kind: "text", text: "Here it is." }] }),
     ]} />));
-    const card = screen.getByRole("button", { name: "Open report.html" });
+    const card = await screen.findByRole("button", { name: "Open report.html" });
     expect(card).toHaveTextContent("HTML page · out/");
     expect(document.querySelector("iframe")).toBeNull();
     await userEvent.click(card);
@@ -563,28 +565,51 @@ describe("journal media", () => {
     expect(screen.getByRole("button", { name: "assets/canvas.template.html" })).toBeEnabled();
   });
 
-  it("opens a card at the file the bridge finds and says so when nothing is there", async () => {
-    let written = false;
-    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
-      new URL(request.url).searchParams.getAll("inspect").map((path) => path === "later.html" && !written
-        ? { path, state: "missing" }
-        : { path, state: "preview", resolved: `/repo/${path}` }))));
+  // The phone drew this link as plain text over a "resumen-del-dia.html · 8443/ · Not found" card.
+  it("opens a web URL in prose as a link, with no file card for the page it names", async () => {
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: `Resumen al día: ${href}` }] })]} />));
+    expect(screen.getByRole("link", { name: href })).toHaveAttribute("href", href);
+    expect(screen.queryByRole("button", { name: /resumen-del-dia\.html/ })).not.toBeInTheDocument();
+  });
+
+  it("opens a Markdown link to a web page and draws no card for it", async () => {
+    // The second capture: the link opened, and the "8443/ · Not found" card stayed under it.
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: `Te paso los links con nombre, como [el resumen del día](${href}), que Nenu ya deja tocar.` }] })]} />));
+    expect(screen.getByRole("link", { name: "el resumen del día" })).toHaveAttribute("href", href);
+    expect(screen.queryByRole("button", { name: /resumen-del-dia\.html/ })).not.toBeInTheDocument();
+  });
+
+  it("draws a card only for a file the bridge finds, and nothing for a name with nothing behind it", async () => {
+    const asked: string[] = [];
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => {
+      const names = new URL(request.url).searchParams.getAll("inspect");
+      asked.push(...names);
+      return HttpResponse.json(names.map((path) => path === "later.html" ? { path, state: "missing" } : { path, state: "preview", resolved: `/repo/${path}` }));
+    }));
     render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; writing `later.html` next." }] })]} />));
     // Each step is a request and a render; a loaded machine (the pre-push hook beside other suites)
     // needs more than findBy's default second for them.
     const slow = { timeout: 5000 };
-    const later = await screen.findByRole("button", { name: "later.html: file not found" }, slow);
-    expect(later).toHaveTextContent("Not found");
-    await userEvent.click(screen.getByRole("button", { name: "Open canvas.template.html" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open canvas.template.html" }, slow));
     // The line under the name is the folder; its tooltip is the whole path the preview opened.
     expect(await screen.findByTitle("/repo/assets/canvas.template.html", undefined, slow)).toHaveTextContent("/repo/assets");
-    await userEvent.click(screen.getByRole("button", { name: "Close document" }));
-    // A tap on a missing card asks again, and opens once the agent has written the file.
-    await userEvent.click(later);
-    expect(screen.queryByTitle("/repo/later.html")).not.toBeInTheDocument();
-    written = true;
-    await userEvent.click(later);
-    expect(await screen.findByTitle("/repo/later.html", undefined, slow)).toBeInTheDocument();
+    expect(asked).toContain("later.html");
+    expect(screen.queryByRole("button", { name: /later\.html: / })).not.toBeInTheDocument();
+    expect(screen.queryByText("Not found")).not.toBeInTheDocument();
+  });
+
+  it("shows a named image only once the bridge finds it, from where it found it", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
+      new URL(request.url).searchParams.getAll("inspect").map((path) => path === "shots/gone.png"
+        ? { path, state: "missing" }
+        : { path, state: "preview", resolved: `/repo/${path}` }))));
+    render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Before: shots/home.png. The old one, shots/gone.png, is deleted." }] })]} />));
+    const image = await screen.findByRole("img", { name: "home.png" }, { timeout: 5000 });
+    expect(image).toHaveAttribute("src", `/api/pane/w1%3Ap1/file?path=${encodeURIComponent("/repo/shots/home.png")}`);
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /gone\.png/ })).not.toBeInTheDocument();
   });
 
   it("renders a local Markdown image in place and keeps it out of the media list below", () => {

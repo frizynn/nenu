@@ -49,3 +49,8 @@ export function routinesPath(session?: string): string {
 export function settingsPath(session?: string): string {
   return `/settings${sessionSearch(session)}`;
 }
+
+/** Settings → Usage: tokens and API-equivalent cost from the agents' own logs. */
+export function usagePath(session?: string): string {
+  return `/settings/usage${sessionSearch(session)}`;
+}

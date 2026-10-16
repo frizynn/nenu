@@ -47,6 +47,8 @@ export const routes: RouteObject[] = [
       { path: "project/:projectSlug", handle: depth(1), element: <ProjectRoute /> },
       { path: "project/:projectSlug/node/:nodeId", handle: depth(2), element: <NodeRoute /> },
       { path: "settings", handle: depth(1), element: <SettingsRoute /> },
+      // Its map and charts load only when it is opened (Settings → Usage).
+      { path: "settings/usage", handle: depth(2), lazy: async () => ({ Component: (await import("@/routes/usage")).UsageRoute }) },
       // Read only, and opened from the desk's bar: its code loads when it is opened.
       { path: "routines", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/routines")).RoutinesRoute }) },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
