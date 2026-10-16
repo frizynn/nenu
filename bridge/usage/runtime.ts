@@ -77,12 +77,14 @@ const FRESH_MS = 60_000;
 const CATCH_UP_MS = 6 * 60 * 60_000;
 /** How long a view waits for a scan before answering with what is saved. */
 const WAIT_MS = 300;
+/** Progress is announced at most this often, so the first pass's screen moves without a poll. */
+const PROGRESS_EVERY_MS = 1000;
 
 export interface UsageDeps {
   stateDir: string;
   /** Claude config dirs and Codex homes, as the journal roots name them. */
   roots: { claude: string[]; codex: string[] };
-  /** A scan finished: tell open pages to re-read. */
+  /** A scan moved on or finished: tell open pages to re-read (at most once a second while it runs). */
   onScanned: () => void;
   spawn?: (stateDir: string, args: ScanArgs) => ScanChild;
   now?: () => number;
@@ -127,6 +129,7 @@ export class Usage implements UsageService {
     this.error = undefined;
     this.running = (async () => {
       let done = false;
+      let announced = this.now();
       try {
         for await (const line of child.lines) {
           let msg: { progress?: UsageScan; done?: unknown };
@@ -134,6 +137,10 @@ export class Usage implements UsageService {
           if (msg.progress) {
             const { files, totalFiles, bytes, totalBytes } = msg.progress;
             this.progress = { files, totalFiles, bytes, totalBytes };
+            if (this.now() - announced >= PROGRESS_EVERY_MS) {
+              announced = this.now();
+              this.deps.onScanned();
+            }
           }
           if (msg.done) done = true;
         }
