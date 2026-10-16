@@ -741,7 +741,7 @@ export interface SubagentHistoryResponse {
 // ── Live invalidations ─────────────────────────────────────────────────────────
 
 /** What an invalidation names (mirrors LiveTopic in bridge/types.ts). Never state (ADR 0054). */
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity" | "usage";
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity";
 
 // ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
 
