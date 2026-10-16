@@ -39,6 +39,7 @@ describe("prices", () => {
     expect(costOf("claude-opus-5-5+fast", [1, M, M, 0, 0, 0, 0])).toBeCloseTo(2 * (4 + 20));
     expect(costOf("claude-haiku-4-5-20251001", [1, M, 0, 0, 0, 0, 0])).toBeCloseTo(1);
     expect(costOf("claude-haiku-5-5+long", [1, M, 0, 0, 0, 0, 0])).toBeCloseTo(0.5);
+    expect(costOf("claude-haiku-5-5-20261001+long", [1, M, 0, 0, 0, 0, 0])).toBeCloseTo(0.5);
     expect(costOf("mystery-model", [1, M, 0, 0, 0, 0, 0])).toBeUndefined();
     expect([modelLabel("claude-opus-5-5"), modelLabel("claude-opus-5-5+fast"), modelLabel("gpt-6.1-sol"), modelLabel("claude-haiku-4-5-20251001")])
       .toEqual(["Opus 5.5", "Opus 5.5 · fast", "GPT-6.1 Sol", "Haiku 4.5"]);
