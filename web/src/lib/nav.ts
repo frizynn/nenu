@@ -1,7 +1,7 @@
 // Route path helpers. Pane ids contain a colon (e.g. "wE:p2"), so they must be URL-encoded in the
 // path; React Router decodes them back in useParams. The active session rides along as `?s=` so a
 // navigation stays scoped to the session you're viewing (see lib/session.ts) — omitted on primary.
-import { sessionSearch } from "./session";
+import { SESSION_PARAM, sessionSearch } from "./session";
 import { workspaceEntry, type Herd } from "./spaces";
 
 export function panePath(paneId: string, session?: string): string {
@@ -15,6 +15,16 @@ export function panePath(paneId: string, session?: string): string {
  */
 export function historyPath(paneId: string, session?: string): string {
   return `/pane/${encodeURIComponent(paneId)}/history${sessionSearch(session)}`;
+}
+
+/**
+ * A file's own page: Nenu's viewer on the whole screen, for a new tab or a link to keep. It reads the
+ * file through the same routes as the viewer in a chat, so it opens nothing the chat could not.
+ */
+export function filePagePath(paneId: string, path: string, session?: string): string {
+  const query = new URLSearchParams({ path });
+  if (session) query.set(SESSION_PARAM, session);
+  return `/pane/${encodeURIComponent(paneId)}/file?${query}`;
 }
 
 /**

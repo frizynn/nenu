@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-16
+
+### Added
+
+- Every file the chat hands over opens in a new tab as well as in place: links, code paths, images, cards and the Files, Artifacts and Project lists are real links to the file's own viewer page, `/pane/:id/file?path=`, which a long-press or a modified click opens; the viewer offers it too (More on a phone). It reads through the same routes as the viewer, never the raw bytes (ADR 0087) (0f90a91e).
+- `bun scripts/e2e/run.ts files` follows every way to open a file in WebKit, the confirmed Open of a file outside the folder, and what the bridge must refuse (0f90a91e).
+
+### Fixed
+
+- One private-path policy guards every file reader: `.claude.json`, `.mcp.json`, Docker and Yarn credentials, shell histories and more are refused like `.env`; Mac keychains and browser profiles are refused by the preview and the lists as well as by Open; Nenu's own state is never listed; a pull request's diff names a private file without its lines (05cd0567, abd271c2).
+
 ## [1.16.1] - 2026-10-16
 
 ### Fixed

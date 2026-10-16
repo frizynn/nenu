@@ -253,8 +253,8 @@ export interface DiffFile {
   deletions: number;
   binary?: true;
   hunks?: DiffHunk[];
-  /** `untracked`: a new file git does not track yet, named without lines. */
-  omitted?: "binary" | "large" | "budget" | "untracked";
+  /** `untracked`: a new file git does not track yet, named without lines. `private`: a credential file, never shown. */
+  omitted?: "binary" | "large" | "budget" | "untracked" | "private";
 }
 
 /** What a session's Changes compares: its branch against where it started, or what is not committed. */

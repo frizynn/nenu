@@ -11,12 +11,13 @@ import "./inspector-panels";
 
 const branch: PaneDiff = {
   ok: true, base: "main", head: "feat/checkout", source: "worktree",
-  totals: { files: 2, additions: 3, deletions: 1 },
+  totals: { files: 3, additions: 4, deletions: 2 },
   files: [
     { path: "app/cart.ts", status: "modified", additions: 3, deletions: 1, hunks: [
       { header: "@@ -1,3 +1,5 @@", oldStart: 1, newStart: 1, lines: [" a", "-b", "+bee", "+c", "+d"] },
     ] },
     { path: "notes.txt", status: "added", additions: 0, deletions: 0, omitted: "untracked" },
+    { path: ".env", status: "modified", additions: 1, deletions: 1, omitted: "private" },
   ],
 };
 const uncommitted: PaneDiff = { ...branch, source: "uncommitted", base: "feat/checkout", totals: { files: 1, additions: 0, deletions: 0 }, files: [branch.files[1]!] };
@@ -87,6 +88,8 @@ it("shows a session's changes without a pull request, Branch or Uncommitted", as
   expect(await within(panel()).findByText(/This session's worktree on/)).toBeInTheDocument();
   expect(within(panel()).queryByRole("link", { name: /Open on GitHub/ })).not.toBeInTheDocument();
   expect(within(panel()).getByText("Untracked, not in git yet")).toBeInTheDocument();
+  // A credential file is named among the changes, its lines never shown.
+  expect(within(panel()).getByText("Private file, not shown")).toBeInTheDocument();
 
   const scope = within(panel()).getByRole("radiogroup", { name: "Diff scope" });
   expect(within(scope).getByRole("radio", { name: "Branch" })).toHaveAttribute("aria-checked", "true");

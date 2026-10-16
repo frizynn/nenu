@@ -54,6 +54,8 @@ export const routes: RouteObject[] = [
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
       { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, element: <DetailRoute /> },
+      // A file's own page, for a link opened in a new tab: the viewer's code loads when it is opened.
+      { path: "pane/:paneId/file", handle: depth(4), lazy: async () => ({ Component: (await import("@/routes/file")).FileRoute }) },
       {
         path: "pane/:paneId/history",
         handle: depth(4),

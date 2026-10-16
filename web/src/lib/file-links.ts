@@ -1,3 +1,5 @@
+import { paneDisplayName, type AgentView } from "./types";
+
 /** The extensions a name in agent prose may end in to read as a local file. The bridge decides whether it exists. */
 export const FILE_EXTENSIONS = "md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp|mp4|m4v|mov|webm";
 /** Files known by their whole name, extension or not. */
@@ -29,6 +31,11 @@ export function localFilePath(raw: string): string | null {
 
 /** A live pane's folder, as the file viewer needs it to find who may open a path. */
 export interface PaneRoot { paneId: string; cwd?: string; label: string }
+
+/** Every live pane's folder, agents and shells alike. */
+export function paneRootsOf(herd: { agents: readonly AgentView[]; shellPanes: readonly AgentView[] }): PaneRoot[] {
+  return [...herd.agents, ...herd.shellPanes].map((entry) => ({ paneId: entry.paneId, cwd: entry.cwd, label: paneDisplayName(entry) }));
+}
 
 /**
  * The pane whose folder holds an absolute `path`, deepest folder first, other than `except`. The
