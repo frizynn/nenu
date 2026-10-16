@@ -320,13 +320,21 @@ that device and the resolved file, served `no-store` with HTML and SVG under the
 Before the chat offers a file, `files?inspect=` (`bridge/artifact-metadata.ts`) follows the name:
 the pane's cwd, delivered files, then folders the pane's journal names. It serves no bytes, and
 outside the cwd it reports a file only to a device that could mint an Open link for it. Compaction
-summaries and notes name files without delivering them, so they draw no file cards.
+summaries and notes name files without delivering them, so they draw no file cards. The chat reads a
+message once: `parseInline` (`web/src/lib/markdown.ts`) finds code, links, URLs and paths, and the file
+list walks that parse, never the raw text. A card, image or video shows only once the bridge finds the
+file, and a name with nothing behind it draws nothing ([ADR 0086](./.adr/0086-the-chat-reads-a-message-once-and-offers-only-files-it-found.md)).
+
+Settings → Usage (`bridge/usage/`) reads the same Claude and Codex logs for token totals, off by
+default. It scans in its own short-lived process at background priority, never in the bridge, on a
+timer or under a file watch, keeps tokens and prices them at read time, and never reads a credential
+or calls a usage endpoint ([ADR 0085](./.adr/0085-usage-is-scanned-in-its-own-process-from-the-agents-logs.md)).
 
 A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pictures, HTML and PDFs
 whose real path is inside `<projects root>/<slug>/library`, itself a folder and not a link; anything else
 is 404. Bytes go through the preview's readers and HTML through its sandbox. The summaries and their paths
 come from `/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
-([ADR 0085](./.adr/0085-a-projects-library-is-read-through-one-contained-route.md)).
+([ADR 0087](./.adr/0087-a-projects-library-is-read-through-one-contained-route.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

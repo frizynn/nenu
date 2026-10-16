@@ -13,6 +13,31 @@ describe("chat file references", () => {
     expect(filePathsInText("https://example.com/public.pdf javascript:bad.png")).toEqual([]);
   });
 
+  it("finds no file inside a web URL, after its port or in its query", () => {
+    // The phone showed this link as a "resumen-del-dia.html · 8443/ · Not found" card.
+    expect(filePathsInText("Resumen al día: https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html")).toEqual([]);
+    expect(filePathsInText("https://ci.example.com/view?file=docs/report.pdf;mode=raw,next=out/log.txt")).toEqual([]);
+    expect(filePathsInText("(http://localhost:5173/README)")).toEqual([]);
+    // The prose around the URL still names its files.
+    expect(filePathsInText("Ver https://example.com:8443/a.html y docs/plan.md")).toEqual(["docs/plan.md"]);
+  });
+
+  it("finds no file in a link, an autolink or an address to a web page, its port included", () => {
+    // The second capture: the link opened, and the "8443/ · Not found" card stayed under it.
+    const href = "https://rise-l.taild6bfcf.ts.net:8443/resumen-del-dia.html";
+    expect(filePathsInText(`Te paso los links con nombre, como [el resumen del día](${href}), que Nenu ya deja tocar.`)).toEqual([]);
+    expect(filePathsInText(`El resumen: <${href}>.`)).toEqual([]);
+    expect(filePathsInText("Abrilo en localhost:8443/resumen-del-dia.html o javascript:bad.png")).toEqual([]);
+  });
+
+  it("reads code as code: a fenced block names no file, an inline path does", () => {
+    expect(filePathsInText("```sh\nopen out/board.html\ncurl https://h:8443/x.html\n```\n\nListo: `out/board.html`.")).toEqual(["out/board.html"]);
+  });
+
+  it("finds a path wherever prose puts it: emphasis, a list, a table cell", () => {
+    expect(filePathsInText("**docs/a.md** y *docs/b.md*\n\n- docs/c.md\n\n| Archivo |\n| --- |\n| docs/d.md |")).toEqual(["docs/a.md", "docs/b.md", "docs/c.md", "docs/d.md"]);
+  });
+
   it("reads a file:// link by its target and never offers its label as a second, relative file", () => {
     // The shape that 404'd on the phone: the label resolved against the pane's folder.
     const target = "/Users/demo/Obsidian/acme/Research/artifacts/board-20261009/board-summary.html";
@@ -59,6 +84,10 @@ it("scans slash-heavy tool output without blocking the chat", () => {
   const output = ` ${Array(24).fill("folder").join("/")}/noextension `;
   const start = performance.now();
   expect(filePathsInText(output)).toEqual([]);
+  // Dotted text is a run of URL-scheme characters with no "://" after it.
+  expect(filePathsInText("a.".repeat(100_000))).toEqual([]);
+  // A CSV or a key=value dump: every separator may precede a path, and none may restart the scan.
+  for (const separator of [",", ";", ":", "="]) expect(filePathsInText(`a${separator}`.repeat(50_000))).toEqual([]);
   expect(performance.now() - start).toBeLessThan(500);
   expect(filePathsInText('Saved src/one.ts\\nweb/src/two.ts\\n')).not.toContain('src/one.ts\\nweb/src/two.ts');
 });

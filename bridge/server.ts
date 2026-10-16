@@ -9,6 +9,7 @@ import { ConversationService } from "./conversation-service.ts";
 import { Interactions } from "./interactions.ts";
 import { JournalWatch } from "./journal-watch.ts";
 import { NO_MACHINES } from "./machines.ts";
+import { NO_USAGE } from "./usage/runtime.ts";
 import { describeAlert } from "./alert-detail.ts";
 import { AwaitingReplies } from "./awaiting-replies.ts";
 import { adapterFor, buildJournalRegistry } from "./journal/registry.ts";
@@ -142,6 +143,7 @@ export function startServer(opts: ServerDeps) {
     agentStates,
     fileGrants: new FileGrants(),
     machines: opts.machines ?? NO_MACHINES,
+    usage: opts.usage ?? NO_USAGE,
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
   services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));

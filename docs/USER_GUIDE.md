@@ -277,6 +277,35 @@ phone makes no extra polling requests and does not wait for the conversation his
 provider-reported, with their observation time and reset times in the usage popover. Claude versions
 or accounts that omit a limit leave it unavailable; Nenu never estimates account limits from tokens.
 
+### Usage: tokens and cost over time
+
+Settings → Usage adds up what Claude Code and Codex used on this machine: tokens and what they would
+cost on the API at list price, per day, agent, model, repo and account, plus each account's plan
+limits. Claude and ChatGPT plans are flat-rate, so the cost is a comparison, not your bill.
+
+- **Off by default.** Off, Nenu reads no agent log and starts nothing. "Track usage" turns it on;
+  "Split by account" shows accounts and the limits of accounts not in use.
+- **Where the numbers come from.** Claude Code's transcripts (`<config dir>/projects`) and Codex's
+  rollouts (`$CODEX_HOME/sessions` and `archived_sessions`), the same roots the chat reads. A repo's
+  worktrees count as one project. Prices are in `bridge/usage/prices.ts`, with their sources and the
+  date they were read; a model with no price shows its tokens and is listed as unpriced.
+- **When it reads.** When you turn it on, when you open the view and the last read is over a minute
+  old, and after an agent finishes a turn if the last read is over six hours old. Each read is a
+  separate process that reads only what was added since the last one, then exits; after the first
+  one it runs at background priority. Nenu keeps its own daily totals in `<state dir>/usage/`, so days stay after Claude Code
+  deletes transcripts (30 days by default); days before you turned it on only exist while their
+  logs do.
+- **Accounts.** Codex records the account in each session. Claude Code does not, so Nenu notes which
+  account each config dir is signed into (a hash of its account and organization ids, never the
+  email) each time it reads, and uses an account tool's log when there is one: hats
+  (`$HATS_STATE_DIR` or `~/.local/state/hats/switches.jsonl`, exact to the session) or claude-swap
+  (`~/.claude-swap-backup/claude-swap.log`). With one account and no tool, everything is that account.
+  Usage from before the first known switch of a multi-account setup is "Unassigned".
+- **Limits.** Claude's come from the status-line capture above (`scripts/install-claude-statusline.ts`)
+  and only show for the account in use when it last answered. Codex's come from its sessions. With
+  "Split by account", accounts not in use show the last reading hats or claude-swap saved, with its age.
+  Nenu never reads credentials or calls a usage endpoint.
+
 ### Knowing whether an agent is working
 
 Nenu reads each agent's own record of its turn: Claude's per-process session file

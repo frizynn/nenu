@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { FileText, Globe, LayoutTemplate } from "@/components/ui/icon";
 
 import { fetchArtifactMetadata, type ArtifactMetadata } from "@/lib/api";
@@ -19,61 +19,66 @@ function describe(path: string, designboard: string | undefined): { title: strin
   return { title: name, sub: folder ? `${kind} · ${folder}/` : kind, Icon: isHtml(path) ? Globe : FileText };
 }
 
-/** `missing`: the bridge found nothing by that name; a tap asks it again rather than opening a 404. */
-export function ArtifactCard({ path, designboard, missing = false, onOpen }: { path: string; designboard?: string; missing?: boolean; onOpen?: () => void }) {
+export function ArtifactCard({ path, designboard, onOpen }: { path: string; designboard?: string; onOpen?: () => void }) {
   const { title, sub, Icon } = describe(path, designboard);
   return (
-    <button type="button" disabled={!onOpen} onClick={onOpen} aria-label={missing ? `${title}: file not found` : `Open ${title}`} title={path}
+    <button type="button" disabled={!onOpen} onClick={onOpen} aria-label={`Open ${title}`} title={path}
       className="flex w-full max-w-lg min-w-0 items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-accent/30 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none disabled:opacity-70">
       <span className="grid h-12 w-[4.5rem] shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground"><Icon className="size-5" aria-hidden="true" /></span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
-        <span className={`truncate text-sm font-medium${missing ? " text-muted-foreground line-through" : ""}`}>{title}</span>
+        <span className="truncate text-sm font-medium">{title}</span>
         <span className="truncate text-xs text-muted-foreground">{sub}</span>
       </span>
-      {onOpen && <span className="shrink-0 px-1 text-xs text-muted-foreground">{missing ? "Not found" : "Open"}</span>}
+      {onOpen && <span className="shrink-0 px-1 text-xs text-muted-foreground">Open</span>}
     </button>
   );
 }
 
+/** A name the bridge found a file behind. */
+export type FoundFile = Exclude<ArtifactMetadata, { state: "missing" }>;
+
 /**
- * Cards for a turn's artifacts. The bridge says where each name leads before the card offers it:
- * a name relative to another folder opens at the file it found, and a name with nothing behind it
- * says so instead of opening a 404.
+ * The files of `paths` the bridge found, by the name the chat used, once it has answered. A name it
+ * found nothing behind, or has not answered for yet, is absent: the chat offers only what opens.
  */
-export function ArtifactCards({ paths }: { paths: readonly string[] }) {
+export function useFoundFiles(paths: readonly string[]): ReadonlyMap<string, FoundFile> {
   const viewer = useContext(MediaViewerContext);
-  const openFile = useContext(FilePreviewContext);
-  const [found, setFound] = useState<ReadonlyMap<string, ArtifactMetadata>>(new Map());
-  const key = JSON.stringify(paths.slice(0, 20));
+  const [found, setFound] = useState<ReadonlyMap<string, FoundFile>>(new Map());
+  const key = JSON.stringify(paths);
   const paneId = viewer?.paneId;
   const session = viewer?.session;
-  const ask = useCallback(async (wanted: string[], signal?: AbortSignal) => {
-    if (!paneId || !wanted.length) return [];
-    const answers = await fetchArtifactMetadata(paneId, wanted, session, signal);
-    setFound((known) => new Map([...known, ...answers.map((entry) => [entry.path, entry] as const)]));
-    return answers;
-  }, [paneId, session]);
   useEffect(() => {
+    const wanted: string[] = JSON.parse(key);
+    if (!paneId || !wanted.length) return;
     const controller = new AbortController();
-    ask(JSON.parse(key), controller.signal).catch(() => {});
+    // Twenty names a request keeps its URL short; a turn that hands over more still gets every card.
+    const batches = Array.from({ length: Math.ceil(wanted.length / 20) }, (_, i) => wanted.slice(i * 20, i * 20 + 20));
+    Promise.all(batches.map((batch) => fetchArtifactMetadata(paneId, batch, session, controller.signal))).then((answers) => setFound((known) => new Map([
+      ...known,
+      ...answers.flat().flatMap((entry) => entry.state === "missing" ? [] : [[entry.path, entry] as const]),
+    ])), () => {});
     return () => controller.abort();
-  }, [ask, key]);
-  if (!paths.length) return null;
-  const canOpen = Boolean(viewer || openFile);
-  const show = (path: string) => viewer ? viewer.open([{ kind: "file", path }]) : openFile?.(path);
+  }, [paneId, session, key]);
+  return found;
+}
+
+/** Cards for found files, each opening the file the bridge found under its name. */
+export function FoundFileCards({ files }: { files: readonly FoundFile[] }) {
+  const viewer = useContext(MediaViewerContext);
+  const openFile = useContext(FilePreviewContext);
+  if (!files.length) return null;
+  const open = (path: string) => viewer ? viewer.open([{ kind: "file", path }]) : openFile?.(path);
   return (
     <div className="flex flex-col gap-2" aria-label="Artifacts">
-      {paths.map((path) => {
-        const known = found.get(path);
-        if (known?.state !== "missing") return <ArtifactCard key={path} path={path}
-          designboard={known?.state === "preview" ? known.designboard : undefined}
-          onOpen={canOpen ? () => show(known?.resolved ?? path) : undefined} />;
-        // Named before it was written, or removed since: look again, and open only what is there.
-        const recheck = () => void ask([path]).then(([answer]) => {
-          if (answer && answer.state !== "missing") show(answer.resolved ?? path);
-        }, () => {});
-        return <ArtifactCard key={path} path={path} missing onOpen={canOpen ? recheck : undefined} />;
-      })}
+      {files.map((file) => <ArtifactCard key={file.path} path={file.path}
+        designboard={file.state === "preview" ? file.designboard : undefined}
+        onOpen={viewer || openFile ? () => open(file.resolved ?? file.path) : undefined} />)}
     </div>
   );
+}
+
+/** Cards for a turn's artifacts, once the bridge finds each one. */
+export function ArtifactCards({ paths }: { paths: readonly string[] }) {
+  const found = useFoundFiles(paths);
+  return <FoundFileCards files={paths.flatMap((path) => found.get(path) ?? [])} />;
 }
