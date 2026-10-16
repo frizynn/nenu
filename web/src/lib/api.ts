@@ -35,6 +35,7 @@ import type {
   OrgTask,
   UpdateInfo,
   UploadResponse,
+  UsageResponse,
 } from "./types";
 
 export type { NotifyPrefs, UpdateInfo };
@@ -865,6 +866,20 @@ export function getMachineSettings(): Promise<MachineSettings> {
 /** Bridge-wide: on, the bridge dials every machine Herdr saved; off, it dials none. */
 export function setMachinesOn(on: boolean): Promise<MachineSettings> {
   return req<MachineSettings>("/api/machines", { method: "POST", body: JSON.stringify({ on }) });
+}
+
+/**
+ * Settings → Usage (bridge/usage/). Bridge-wide, off by default. A read may start a scan of only the
+ * new log lines when the last one is over a minute old; `fresh` starts one regardless, and `account`
+ * narrows the numbers to one account while Split by account is on.
+ */
+export function getUsage(account?: string, fresh?: boolean): Promise<UsageResponse> {
+  const query = [account && `account=${encodeURIComponent(account)}`, fresh && "fresh=1"].filter(Boolean).join("&");
+  return req<UsageResponse>(`/api/usage${query && `?${query}`}`);
+}
+
+export function setUsage(patch: { on?: boolean; splitByAccount?: boolean }): Promise<UsageResponse> {
+  return req<UsageResponse>("/api/usage", { method: "POST", body: JSON.stringify(patch) });
 }
 
 /** Fetch the bridge-wide notification-type preferences (which agent statuses push). */

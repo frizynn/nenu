@@ -47,6 +47,9 @@ function open(onRender?: (phase: string) => void) {
 }
 
 const main = () => within(screen.getByRole("main"));
+const two = (n: number) => String(n).padStart(2, "0");
+/** A reset time as the page writes it, in this machine's zone. */
+const clock = (iso: string) => { const d = new Date(iso); return `${two(d.getHours())}:${two(d.getMinutes())}`; };
 
 it("says usage is off and leads to the setting that turns it on", async () => {
   serve({ on: false, splitByAccount: false });
@@ -95,11 +98,11 @@ it("shows today, the week and the month, the plan limits, the map, the weeks and
   const limits = within(main().getByRole("region", { name: "Plan limits" }));
   expect(limits.getByText("Claude Code")).toBeInTheDocument();
   expect(limits.getByRole("meter", { name: "5-hour" })).toHaveAttribute("aria-valuenow", "10");
-  expect(limits.getByText("Resets 17:40 · now")).toBeInTheDocument();
+  expect(limits.getByText(`Resets ${clock("2026-10-14T17:40:00Z")} · now`)).toBeInTheDocument();
   expect(limits.getByText("No reading yet")).toBeInTheDocument();
   expect(limits.getByText("Codex")).toBeInTheDocument();
   expect(limits.getByText("Plus")).toBeInTheDocument();
-  expect(limits.getByText("Resets Thu 22 Oct, 14:22 · seen 11h ago")).toBeInTheDocument();
+  expect(limits.getByText(`Resets Thu 22 Oct, ${clock("2026-10-22T14:22:00Z")} · seen 11h ago`)).toBeInTheDocument();
   expect(main().getByRole("listbox", { name: /Activity/ })).toBeInTheDocument();
   expect(main().getByRole("region", { name: "By week" })).toBeInTheDocument();
 
@@ -119,7 +122,7 @@ it("warns near a limit and names the account with room", async () => {
   open();
   const limits = within(await screen.findByRole("region", { name: "Plan limits" }));
   expect(limits.getByText("Claude Code · Studio")).toBeInTheDocument();
-  expect(limits.getByText("Active", { selector: "span" })).toBeInTheDocument();
+  expect(limits.getAllByText("Active", { selector: "span" })).toHaveLength(2);
   expect(limits.getByRole("meter", { name: "5-hour" })).toHaveAttribute("aria-valuenow", "91");
   expect(limits.getByRole("alert")).toHaveTextContent("Close to the 5-hour limit. Work has room: 5-hour 0%, weekly 9%.");
 });
@@ -132,7 +135,7 @@ it("splits by account: picks one from the list and reads only that account", asy
   await userEvent.click(main().getByRole("button", { name: "All accounts" }));
   const list = within(await screen.findByRole("listbox", { name: "Account" }));
   expect(list.getAllByRole("option").map((o) => o.textContent)).toEqual([
-    "All accounts$16,921", "StudioClaude Code · 900M tokens$300", "WorkClaude Code · 400M tokens$150",
+    "All accounts$520", "StudioClaude Code · 900M tokens$300", "WorkClaude Code · 400M tokens$150",
     "ChatGPTCodex · 100M tokens$50", "UnassignedClaude Code with no account on record$20",
   ]);
   await userEvent.click(list.getByRole("option", { name: /^Work/ }));

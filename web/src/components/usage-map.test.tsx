@@ -71,7 +71,7 @@ describe("ActivityCard", () => {
     const options = within(map).getAllByRole("option");
     for (const option of options.slice(-20)) fireEvent.pointerOver(option);
     fireEvent.pointerOver(screen.getByRole("option", { name: /^Tue 13 Oct 2026/ }));
-    const detail = screen.getByRole("status");
+    const detail = screen.getByRole("group", { name: "Day detail" });
     expect(detail).toHaveTextContent("Tue 13 Oct");
     expect(detail).toHaveTextContent("$2,760");
     expect(detail).toHaveTextContent("8.9B tokens · busiest day");

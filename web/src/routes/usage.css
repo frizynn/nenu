@@ -1,0 +1,103 @@
+/* Settings → Usage (routes/usage.tsx), loaded with the page and never with the app: its layout and
+   the shapes only it draws. Colours come from index.css's tokens. Tailwind utilities on the page are
+   ones the app already ships, so the page adds nothing to the app's own stylesheet. */
+
+/* ── Layout: one column on a phone, in the order a phone reads it; two on a desk ── */
+.usage-page { display: flex; flex-direction: column; gap: 16px; }
+.usage-page > .usage-col { display: contents; }
+.usage-page .usage-at-1 { order: 1; } .usage-page .usage-at-2 { order: 2; } .usage-page .usage-at-3 { order: 3; }
+.usage-page .usage-at-4 { order: 4; } .usage-page .usage-at-5 { order: 5; } .usage-page .usage-at-6 { order: 6; }
+.usage-page .usage-at-7 { order: 7; }
+.usage-accounts { display: grid; grid-template-columns: 21rem minmax(0, 1fr); align-items: start; gap: 24px; }
+.usage-narrow { width: 100%; }
+@media (min-width: 1024px) {
+  .usage-column { max-width: 66rem; }
+  .usage-page { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; gap: 20px; }
+  .usage-page > .usage-col { display: flex; flex-direction: column; gap: 16px; }
+  .usage-page > .usage-side { padding-top: 48px; }
+  .usage-narrow { width: 30rem; margin-inline: auto; }
+}
+
+/* ── Cards ── */
+.usage-stat { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 12px; }
+.usage-stat-value { font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.02em; }
+@media (min-width: 1024px) {
+  .usage-stat { gap: 4px; padding: 14px 16px; }
+  .usage-stat-value { font-size: var(--text-title); line-height: var(--text-title--line-height); }
+}
+.usage-claude { background: var(--glyph-orange); }
+.usage-codex { background: var(--glyph-teal); }
+.usage-selected { background: var(--workbench-row-selected); }
+.usage-alert { background: color-mix(in oklab, var(--status-blocked) 12%, transparent); }
+.usage-meter { box-shadow: inset 0 0 0 1px var(--border); }
+/* A limit window Claude Code has not reported yet. */
+.usage-pending { background: repeating-linear-gradient(90deg, var(--muted) 0 6px, transparent 6px 10px); box-shadow: inset 0 0 0 1px var(--border); }
+.usage-amount { min-width: 4rem; text-align: right; }
+.usage-account:not(:first-child)::before { content: ""; position: absolute; top: 0; right: 0; left: 44px; height: 1px; background: var(--border); }
+
+/* A card header's segmented control: the Settings one, smaller. */
+.usage-seg { height: 28px; }
+.usage-seg > button { padding-inline: 10px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
+
+/* ── By week: stacked bars, Claude Code under Codex; this week's bar is still filling ── */
+.usage-bars { position: relative; display: flex; height: 112px; align-items: flex-end; gap: 3%; padding-right: 44px; border-bottom: 1px solid var(--border); }
+.usage-bars > div { display: flex; height: 100%; flex: 1; flex-direction: column; justify-content: flex-end; gap: 1px; }
+.usage-bars > div > span:first-child { border-radius: 3px 3px 0 0; }
+.usage-bars > div > span { min-height: 2px; }
+.usage-week-now { background: repeating-linear-gradient(135deg, var(--glyph-orange) 0 4px, color-mix(in oklab, var(--glyph-orange) 70%, transparent) 4px 7px); }
+.usage-axis { position: absolute; inset-inline: 0; border-top: 1px dashed var(--border); }
+.usage-axis > span { position: absolute; top: -16px; right: 0; }
+.usage-weeks { display: flex; gap: 3%; padding-right: 44px; }
+.usage-weeks > span { flex: 1; text-align: center; white-space: nowrap; }
+
+/* ── The activity map: one CSS grid of 371 squares, 53 Monday-first weeks as GitHub draws them,
+   filled column by column. The squares are too small for the radius scale, so they take GitHub's 2px. ── */
+.usage-map {
+  --cell: 10px;
+  --gap: 3px;
+  --heat-0: light-dark(rgb(0 0 0 / 6%), rgb(255 255 255 / 6%));
+  --heat-1: light-dark(oklch(0.88 0.05 264), oklch(0.36 0.08 262));
+  --heat-2: light-dark(oklch(0.76 0.11 264), oklch(0.48 0.11 262));
+  --heat-3: light-dark(oklch(0.62 0.17 264), oklch(0.61 0.14 262));
+  --heat-4: light-dark(oklch(0.488 0.217 264), oklch(0.76 0.15 262));
+}
+@media (min-width: 1024px) {
+  .usage-map { --cell: 9px; --gap: 2px; }
+}
+
+/* A phone shows the latest weeks and scrolls back; the oldest edge fades into the card. */
+.usage-scroll { overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 28px); }
+.usage-scroll::-webkit-scrollbar { display: none; }
+.usage-frame { display: grid; width: max-content; grid-template-columns: auto auto; gap: 4px; }
+@media (min-width: 1024px) {
+  .usage-scroll { overflow: visible; mask-image: none; }
+}
+
+.usage-months, .usage-grid { display: grid; grid-auto-columns: var(--cell); column-gap: var(--gap); }
+.usage-months { height: 14px; grid-template-rows: 14px; }
+.usage-months > span { grid-row: 1; white-space: nowrap; }
+.usage-days { display: none; width: 24px; grid-template-rows: repeat(7, var(--cell)); row-gap: var(--gap); line-height: var(--cell); }
+@media (min-width: 1024px) {
+  .usage-days { display: grid; }
+}
+.usage-grid { position: relative; grid-template-rows: repeat(7, var(--cell)); grid-auto-flow: column; row-gap: var(--gap); }
+.usage-grid:focus-visible { outline-offset: 4px; }
+
+.usage-grid > [data-i], .usage-legend > span { border-radius: 2px; background: var(--heat-0); }
+.usage-grid > .l1 { background: var(--heat-1); }
+.usage-grid > .l2 { background: var(--heat-2); }
+.usage-grid > .l3 { background: var(--heat-3); }
+.usage-grid > .l4 { background: var(--heat-4); }
+/* Before the oldest log: unknown, not zero. */
+.usage-grid > .s { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--subtle-foreground) 55%, transparent) 0 1.5px, transparent 1.5px 3.5px); box-shadow: inset 0 0 0 1px var(--border); }
+.usage-legend > span { width: var(--cell); height: var(--cell); }
+
+/* The one active square: a ring placed on its grid area, so moving it redraws no square. */
+.usage-ring { position: absolute; inset: -2px; border-radius: 3px; outline: 1.5px solid var(--foreground); pointer-events: none; }
+
+/* The active day: a bar under the map on a phone; on a desk, a card beside the square while it is
+   pointed at or focused. */
+@media (min-width: 1024px) {
+  .usage-detail { position: absolute; top: 56px; z-index: 10; width: 14.5rem; padding: 12px 14px; border: 1px solid var(--border); background: var(--popover); box-shadow: var(--shadow-float); }
+  .usage-detail:not([data-shown]) { display: none; }
+}
