@@ -339,8 +339,8 @@ the page. This needs a Herdr Organizations whose reports carry a status and a su
 one the page opens on its threads as before, and the Summary shows each thread's state and pull
 request only.
 
-When a coordinator keeps a **STATUS.md** (what you asked and where it stands, what needs your decision,
-what is in progress and what is done), its page opens with it in a **Status** block, and the project
+When a coordinator keeps a **STATUS.md** (what you asked and where it stands, what needs your decision
+and what was decided), its page opens with it in a **Status** block, and the project
 page shows the root coordinator's under the project's name. A state such as `[needs-decision]` at the
 start of a line reads as a coloured label, and a thread id such as `t-0042` opens that thread. A long
 file folds; **Show all** opens the rest. With a Herdr Organizations that does not publish the file there

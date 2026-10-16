@@ -8,7 +8,7 @@
 ## Context
 
 A coordinator's Summary shows what each thread left behind: pictures with captions and documents
-(HTML, PDF, Markdown). Organizations copies them home into `<project>/library/<thread id>/` and
+(HTML and PDF). Organizations copies them home into `<project>/library/<thread id>/` and
 refuses to copy a library that is a symbolic link, or a link inside one (measured,
 `copy_home_local` and its tests). Once a thread is resolved its worktree and pane are gone, so the
 pane preview (`/file`, rooted at a live pane's folder) cannot serve them, and the confirmed Open
@@ -38,9 +38,8 @@ says must never be skipped; or a route of its own, rooted at the library folder.
 
 Any picture, HTML page or PDF in a project's library is readable by any device that passes the read
 gate: the exposure the pane preview already has for the same files while they sit in a worktree.
-Markdown deliverables are not served; the Summary names them without a link. A projects root under a
-private path part (inside `~/.config`, say) serves nothing, because the private-path policy reads the
-real path.
+A projects root under a private path part (inside `~/.config`, say) serves nothing, because the
+private-path policy reads the real path.
 
 Do not widen the route to other folders of the project (its threads, reports or `.state`), follow a
 library that is a link, or serve a kind the browser could execute outside the sandbox. Revisit if

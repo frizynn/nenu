@@ -10,10 +10,11 @@
 
 The operator asks his coordinators many things in chat, and agent notices bury the questions. Herdr
 Organizations now has each coordinator keep one Markdown file, STATUS.md, with what he asked and where
-it stands, what needs his decision, what is moving and what is done, and prints it as `status_file`
+it stands, what needs his decision and what was decided, and prints it as `status_file`
 (`{path, text, updated}`, up to 8,000 characters) on the project, for the root coordinator, and on each
 coordinator node. It is named `status_file` because `status` is already the lifecycle of both. He wants
-to open Nenu and read it without opening a chat.
+to open Nenu and read it without opening a chat. What is in progress and what is done is not in the
+file: Organizations computes it from the threads, and the Summary (ADR 0086) draws it.
 
 ## Decision
 

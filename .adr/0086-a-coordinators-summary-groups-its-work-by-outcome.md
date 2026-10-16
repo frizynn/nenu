@@ -32,8 +32,8 @@ Without them the view can still group by what Organizations already knows (group
    Summary only when the coordinator or a node under it carries a verdict, so an Organizations without
    the fields keeps the page as it was.
 4. **A card says what its report says**: the agent's summary as text, its PR, its captures in one row
-   that scrolls sideways and opens large, and its documents (HTML and PDF open through the library
-   route; Markdown is named). The coordinator's own report heads the page.
+   that scrolls sideways and opens large, and its documents (HTML and PDF, opened through the library
+   route). The coordinator's own report heads the page.
 
 ## Consequences
 
