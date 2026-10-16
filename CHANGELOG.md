@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-16
+
+### Added
+
+- Settings → Machines → Show other machines (off by default): every machine Herdr has saved, its chats in Home, the sidebar and Search, New chat on any of them, each reached through its own Nenu over SSH. Off, Nenu looks and runs as before. Docs: "Several machines" in the user guide (505d34ef).
+
 ## [1.14.1] - 2026-10-15
 
 ### Fixed
