@@ -142,6 +142,17 @@ describe("Claude transcripts", () => {
     expect(r).toMatchObject({ rows: 0, duplicates: 1 });
   });
 
+  test("a scan told to stop (its bridge is gone) reads no further log and counts nothing", () => {
+    const t = setup();
+    writeFileSync(join(t.project, "s1.jsonl"), `${assistant({ id: "msg_1", req: "a", ts: "2026-01-10T12:00:00.000Z" })}\n`);
+    const r = scan({
+      roots: { claude: [{ configDir: t.claude }], codex: [] }, state: t.state, totals: t.totals, seen: t.seen,
+      book: new AccountBook([]), repoOf: (cwd) => repoOf(cwd, home), stop: () => true,
+    });
+    expect(r).toMatchObject({ stopped: true, read: 0, rows: 0 });
+    expect(t.totals.days).toEqual({});
+  });
+
   test("each message goes to the account active when it was written", () => {
     const t = setup();
     writeFileSync(join(t.project, "s1.jsonl"), [
