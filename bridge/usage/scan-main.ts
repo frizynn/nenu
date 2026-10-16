@@ -7,7 +7,7 @@ import {
 } from "./accounts.ts";
 import { claudeStatuslineLimits, claudeSwapLimits, codexLimits, hatsLimits, newestPerAccount, type AccountLimits } from "./limits.ts";
 import { repoOf } from "./repos.ts";
-import { loadStore, saveStore, scan, usageDir } from "./scan.ts";
+import { loadStore, localDate, saveStore, scan, usageDir } from "./scan.ts";
 
 // The scan process. The bridge starts it at background priority (runtime.ts); it reads the logs,
 // saves totals and offsets under <stateDir>/usage and exits, so the bridge never holds the scan's
@@ -43,8 +43,7 @@ export const identityFile = (configDir: string, home = homedir()) =>
 
 export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home = homedir(), env = process.env) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const d = new Date(now);
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = localDate(now);
   const dir = usageDir(stateDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 

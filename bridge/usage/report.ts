@@ -2,7 +2,7 @@ import type {
   UsageAccount, UsageAgent, UsageAmount, UsageDay, UsageLimits, UsageOn, UsagePeriod, UsagePeriodKey, UsageRow, UsageScan, UsageWeek,
 } from "../types.ts";
 import type { AccountsFile } from "./scan-main.ts";
-import type { Totals } from "./scan.ts";
+import { localDate, type Totals } from "./scan.ts";
 import { costOf, modelLabel, PRICES_CHECKED } from "./prices.ts";
 
 // Totals on disk → the view's numbers. Runs in the bridge per request: a year of totals is a few
@@ -13,10 +13,6 @@ const MAP_DAYS = 371; // 53 weeks
 const WEEKS = 12;
 const TOP_PROJECTS = 8;
 
-export const localDate = (ms: number): string => {
-  const t = new Date(ms);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-};
 /** Noon of a local date, so adding days never trips over a DST hour. */
 const noon = (date: string) => new Date(`${date}T12:00:00`).getTime();
 const addDays = (date: string, n: number) => localDate(noon(date) + n * DAY_MS);
@@ -35,6 +31,16 @@ export interface ReportInput {
   now: number;
   /** Only honoured with Split by account on. */
   account?: string;
+}
+
+/** Before the first pass has saved anything: tracking is on and nothing is counted yet. */
+export function emptyReport(splitByAccount: boolean, scan: UsageScan, now: number): UsageOn {
+  const today = localDate(now);
+  return {
+    on: true, splitByAccount, scan, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, today,
+    coverage: { trackedFrom: today }, periods: [], days: [], weeks: [],
+    levels: { cost: [0, 0, 0], tokens: [0, 0, 0] }, accounts: [], limits: [], prices: { checked: PRICES_CHECKED, unpriced: [] },
+  };
 }
 
 export function buildReport(input: ReportInput): UsageOn {

@@ -205,17 +205,19 @@ export interface ScanInput {
   stop?: () => boolean;
 }
 
-/** Local calendar day of an epoch ms, cached per quarter hour (no zone offset is finer). */
+/** The local calendar day of an epoch ms, YYYY-MM-DD. */
+export const localDate = (ms: number): string => {
+  const t = new Date(ms);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+};
+
+/** localDate, cached per quarter hour (no zone offset is finer). */
 function dayCutter() {
   const cache = new Map<number, string>();
   return (ms: number): string => {
     const q = Math.floor(ms / 900_000);
     let d = cache.get(q);
-    if (d === undefined) {
-      const t = new Date(q * 900_000);
-      d = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-      cache.set(q, d);
-    }
+    if (d === undefined) cache.set(q, (d = localDate(q * 900_000)));
     return d;
   };
 }

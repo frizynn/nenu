@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrefsFile } from "../prefs-file.ts";
-import type { UsageOn, UsageResponse, UsageScan } from "../types.ts";
+import type { UsageResponse, UsageScan } from "../types.ts";
 import type { AccountsFile, ScanArgs } from "./scan-main.ts";
 import type { Totals } from "./scan.ts";
 
@@ -190,10 +190,10 @@ export class Usage implements UsageService {
       await Promise.race([running, Bun.sleep(WAIT_MS)]);
     }
     // Loaded on the first read while on, so a bridge with usage off holds none of this code.
-    const [{ readTotals }, { buildReport }] = await Promise.all([import("./scan.ts"), import("./report.ts")]);
+    const [{ readTotals }, { buildReport, emptyReport }] = await Promise.all([import("./scan.ts"), import("./report.ts")]);
     const totals = readTotals(this.deps.stateDir);
     const scan = this.scanState(totals);
-    if (!totals) return emptyReport(prefs.splitByAccount, scan, this.now(), (await import("./prices.ts")).PRICES_CHECKED);
+    if (!totals) return emptyReport(prefs.splitByAccount, scan, this.now());
     return buildReport({ totals, accounts: this.accountsFile(), splitByAccount: prefs.splitByAccount, scan, now: this.now(), account: opts.account });
   }
 
@@ -215,16 +215,6 @@ export class Usage implements UsageService {
   stop(): void {
     this.child?.kill();
   }
-}
-
-function emptyReport(splitByAccount: boolean, scan: UsageScan, now: number, checked: string): UsageOn {
-  const t = new Date(now);
-  const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-  return {
-    on: true, splitByAccount, scan, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, today,
-    coverage: { trackedFrom: today }, periods: [], days: [], weeks: [],
-    levels: { cost: [0, 0, 0], tokens: [0, 0, 0] }, accounts: [], limits: [], prices: { checked, unpriced: [] },
-  };
 }
 
 /** The bridge's Claude config dirs and Codex homes, from the journal roots (`<dir>/projects`, `<home>/sessions`). */
