@@ -337,6 +337,28 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(overviews()).toBe(before + 1);
   });
 
+  test("a new token reading (Organizations' .state/usage.json) re-reads the overview", async () => {
+    const root = fixture();
+    const usage = join(root, "demo", ".state", "usage.json");
+    writeFileSync(usage, "{}");
+    let now = 1;
+    const calls: string[][] = [];
+    const registry = registryFor(root, { now: () => now, run: overviewRun([overviewThread({})], calls) });
+    const overviews = () => calls.filter((argv) => argv[0] === "overview").length;
+    await registry.refresh();
+    const before = overviews();
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(overviews()).toBe(before);
+
+    writeFileSync(usage, '{"nodes":{}}');
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(overviews()).toBe(before + 1);
+  });
+
   test("a project's library is its own folder's, and only for a project the registry lists", async () => {
     const root = fixture();
     const registry = registryFor(root);
@@ -530,6 +552,18 @@ describe("ProjectRegistry: asks", () => {
     expect(registry.list("default", true, [])[0]).not.toHaveProperty("waitingAsks");
   });
 
+  test("a failed read of the asks keeps the last one, so the list does not vanish for a refresh", async () => {
+    const root = fixture();
+    let fail = false;
+    const working = asksRun(root, [askRow(ROOT, "needs-decision", "Pilot with batch 2")]);
+    const registry = registryFor(root, { run: async (argv, opts) => argv[0] === "asks" && fail ? { code: 124, stdout: "", stderr: "" } : working(argv, opts) });
+    await registry.refresh();
+    fail = true;
+    await registry.refresh();
+    expect(registry.asks()?.asks.map((ask) => ask.text)).toEqual(["Pilot with batch 2"]);
+    expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(3);
+  });
+
   test("asks are read only with the overview: a binary that fails it falls back to the files, asks and all", async () => {
     const root = fixture();
     const registry = registryFor(root, { run: async (argv) => argv[0] === "asks"
@@ -553,8 +587,17 @@ describe("ProjectRegistry: asks", () => {
     await registry.refresh();
     const summaries = registry.summaries("demo")!;
     expect(summaries.status).toEqual({ text: "# Status", updated: "2026-10-16T12:00:00Z", objective: "Ship it" });
+    // The snapshot carries only a stamp of each reading, so a page showing the numbers reads them again when it moves.
+    const project = registry.list("default", true, [])[0]!;
+    expect(project.usageStamp).toBe("2026-10-16T11:00:00Z|context_warn");
+    expect(project.threads.map((thread) => thread.usageStamp ?? null)).toEqual([null, "2026-10-16T11:00:00Z|", null]);
+    expect(JSON.stringify(project)).not.toContain("967000");
     expect(summaries.usage).toEqual({ input: 10, output: 20, cacheRead: 30, cacheWrite: 40, context: 412_000, peakContext: 967_000, compactions: 3, updated: "2026-10-16T11:00:00Z", overCap: ["context_warn"] });
     expect(summaries.coordinator).toEqual({ agent: "claude", model: "opus", state: "idle" });
+    // A state this Nenu does not know reads as none.
+    const odd = registryFor(fixture(), { run: overviewRun([], [], { coordinator: { pane_id: "", agent: "codex", model: "", state: "dreaming" } }) });
+    await odd.refresh();
+    expect(odd.summaries("demo")!.coordinator).toEqual({ agent: "codex", model: "", state: "" });
     const checkout = summaries.threads.find((thread) => thread.id === "t-0002")!;
     // Its asks come from `asks --json`, with every other coordinator's.
     expect(checkout.status).toEqual({ text: "# Status", updated: "2026-10-16T12:00:00Z", objective: "Checkout", needsDecision: ["Stock"] });

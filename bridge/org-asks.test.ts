@@ -20,12 +20,14 @@ describe("readAsks", () => {
     expect(rows?.map((row) => [row.coordinator.id, row.text, row.mismatch])).toEqual([["t-0001", "Copy fix", "a linked thread is resolved"], ["root", "Docs", ""]]);
   });
 
-  test("an Organizations that cannot say answers undefined, never an error", async () => {
-    expect(await readAsks(answer(2, "", "error: unrecognized subcommand 'asks'"), "/p")).toBeUndefined();
-    expect(await readAsks(answer(0, "not json"), "/p")).toBeUndefined();
-    expect(await readAsks(answer(0, JSON.stringify({ schema_version: 2, asks: [] })), "/p")).toBeUndefined();
-    expect(await readAsks(answer(0, JSON.stringify({ schema_version: 1 })), "/p")).toBeUndefined();
+  test("an Organizations without the document answers null; a read that failed throws", async () => {
+    // As 0856581, before `asks` existed, answers (measured).
+    expect(await readAsks(answer(2, "", "error: unrecognized subcommand 'asks'\n\n  tip: a similar subcommand exists: 'task'"), "/p")).toBeNull();
+    expect(await readAsks(answer(0, JSON.stringify({ schema_version: 2, asks: [] })), "/p")).toBeNull();
+    expect(await readAsks(answer(0, JSON.stringify({ schema_version: 1 })), "/p")).toBeNull();
     expect(await readAsks(answer(0, JSON.stringify({ schema_version: 1, asks: [] })), "/p")).toEqual([]);
+    await expect(readAsks(answer(124, "", ""), "/p")).rejects.toThrow("asks --json failed (124)");
+    await expect(readAsks(answer(0, "not json"), "/p")).rejects.toThrow();
   });
 
   test("a row without its project, coordinator or a known state is skipped", async () => {

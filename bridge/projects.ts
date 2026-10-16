@@ -8,10 +8,8 @@ import {
 } from "./org-cli.ts";
 import { askGroup, readAsks, type OrgAskRow } from "./org-asks.ts";
 import type { OrgStatusFile } from "./org-report.ts";
-import {
-  PR_ASKS, type AgentView, type AsksList, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest,
-  type ThreadSummary, type TokenUsage, type WorkspaceView,
-} from "./types.ts";
+import type { AsksList, StatusFile, TokenUsage } from "./org-types.ts";
+import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -25,7 +23,7 @@ const SLUG_DIR_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const THREAD_FILE_RE = /^t-\d{4,}\.toml$/;
 const THREAD_ID_RE = /^t-\d{4,}$/;
 /** The `.state/` files whose change can change what `overview --json` prints. Stat only, never read here. */
-const STATE_FILES = ["project.json", "coordinator.json", "ticker.json"];
+const STATE_FILES = ["project.json", "coordinator.json", "ticker.json", "usage.json"];
 
 type JsonObject = Record<string, unknown>;
 type TomlObject = Record<string, unknown>;
@@ -297,6 +295,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(prAction ? { prAction } : {}),
     ...(record.verdict ? { verdict: record.verdict } : {}),
     ...(record.status_file ? { statusUpdated: record.status_file.updated } : {}),
+    ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
   };
 }
 
@@ -311,7 +310,11 @@ function threadSummary(record: OrgOverviewThread): ThreadSummary | undefined {
 }
 
 /** What a client is given of a STATUS.md: what it says and when it changed, never where it lives. */
-const statusText = ({ path: _path, ...status }: OrgStatusFile): StatusFile => status;
+const statusText = ({ text, updated, objective, needsDecision }: OrgStatusFile): StatusFile =>
+  ({ text, updated, ...(objective ? { objective } : {}), ...(needsDecision ? { needsDecision } : {}) });
+
+/** What changes whenever a token reading does: when its last request was, and the caps it passed. */
+const usageStamp = (usage: TokenUsage) => `${usage.updated}|${usage.overCap.join(",")}`;
 
 /** Depth from the parent chain; an unknown parent or a cycle stops at the project root. */
 function withDepth(threads: Array<{ view: OrgThreadView; binding: Binding }>): void {
@@ -420,6 +423,7 @@ export class ProjectRegistry {
           ...picks(record.icon, record.tone),
           ...(record.statusFile ? { statusUpdated: record.statusFile.updated } : {}),
           ...(record.waitingAsks !== undefined ? { waitingAsks: record.waitingAsks } : {}),
+          ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
           coordinator: coordinatorPane ? {
             paneId: coordinatorPane.paneId,
             agent: coordinatorPane.agent,
@@ -546,8 +550,12 @@ export class ProjectRegistry {
     this.lastRefresh = this.now();
     this.stamp = this.fingerprint();
     const files = this.readFiles();
+    // A failed read of the asks keeps the last one; an Organizations without them has none.
     const [overview, asks] = this.run
-      ? await Promise.all([readOverview(this.run, this.root).catch(() => undefined), readAsks(this.run, this.root).catch(() => undefined)])
+      ? await Promise.all([
+        readOverview(this.run, this.root).catch(() => undefined),
+        readAsks(this.run, this.root).then((rows) => rows ?? undefined, () => this.askRows),
+      ])
       : [undefined, undefined];
     const askRows = overview ? asks : undefined;
     const next = overview ? this.fromJson(overview, files, askRows) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));

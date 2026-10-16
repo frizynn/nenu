@@ -1,7 +1,8 @@
 import { isAbsolute } from "node:path";
 
 import { parseDecisions } from "./org-asks.ts";
-import { THREAD_VERDICTS, type StatusFile, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict, type TokenUsage } from "./types.ts";
+import type { StatusFile, TokenUsage } from "./org-types.ts";
+import { THREAD_VERDICTS, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
 
 // What `overview --json` says of a thread's last report, and of a coordinator's STATUS.md, read
 // within the bounds Organizations writes them (docs/json.md). Every field is newer than the rest of

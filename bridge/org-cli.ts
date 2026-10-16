@@ -1,6 +1,7 @@
 import { servicePath } from "./claude-sessions.ts";
 import { parseReport, parseStatusFile, parseUsage, type OrgReport, type OrgStatusFile } from "./org-report.ts";
-import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView, type TokenUsage } from "./types.ts";
+import type { TokenUsage } from "./org-types.ts";
+import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -441,11 +442,14 @@ export interface OrgOverviewThread extends OrgReport {
   usage: TokenUsage | null;
 }
 
-/** The project's coordinator as the ticker last saw its pane; `state` is empty before it looked. */
+/** The agent states Herdr reports, as the ticker records the project coordinator's. */
+const COORDINATOR_STATES = ["working", "blocked", "idle", "done"] as const;
+
+/** The project's coordinator as the ticker last saw its pane; `state` is empty before it looked, or for a state this Nenu does not know. */
 export interface OrgCoordinator {
   agent: string;
   model: string;
-  state: string;
+  state: typeof COORDINATOR_STATES[number] | "";
 }
 
 export interface OrgOverviewProject {
@@ -506,14 +510,18 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     tone: pickName(value.tone),
     status_file: parseStatusFile(value.status_file),
     usage: parseUsage(value.usage),
-    coordinator: isRecord(value.coordinator)
-      ? { agent: text(value.coordinator.agent), model: text(value.coordinator.model), state: text(value.coordinator.state) }
-      : null,
+    coordinator: parseCoordinator(value.coordinator),
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];
     }),
   };
+}
+
+function parseCoordinator(value: unknown): OrgCoordinator | null {
+  if (!isRecord(value)) return null;
+  const { agent, model, state } = value;
+  return { agent: text(agent), model: text(model), state: COORDINATOR_STATES.find((known) => known === state) ?? "" };
 }
 
 function parseThread(value: unknown): OrgOverviewThread | undefined {

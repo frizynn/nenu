@@ -1,5 +1,5 @@
 import type { OrgRun } from "./org-cli.ts";
-import { ASK_CONFIRMED, ASK_STATES, type Ask, type AskCoordinator, type AskGroup, type AskLink } from "./types.ts";
+import { ASK_CONFIRMED, ASK_STATES, type Ask, type AskCoordinator, type AskGroup, type AskLink } from "./org-types.ts";
 
 // The operator's asks as Organizations reads them out of each coordinator's STATUS.md (docs/json.md,
 // Asks): the state the coordinator wrote, the one its links confirm, and why they disagree. Nenu only
@@ -21,19 +21,18 @@ export interface OrgAskRow extends Ask {
 }
 
 /**
- * `asks --json`: every coordinator's asks in Organizations' order. Undefined when this Organizations
- * cannot say (no such command, a failed run, another schema version), as `readOverview` answers.
+ * `asks --json`: every coordinator's asks in Organizations' order. Null when this Organizations has
+ * no such document (it refuses the command, or prints another schema version); thrown when the read
+ * itself failed, so the caller can keep what it last read.
  */
-export async function readAsks(run: OrgRun, root: string): Promise<OrgAskRow[] | undefined> {
+export async function readAsks(run: OrgRun, root: string): Promise<OrgAskRow[] | null> {
   const result = await run(["asks", "--json"], { env: { HERDR_PROJECTS_ROOT: root }, timeoutMs: 10_000 });
-  if (result.code !== 0) return undefined;
-  let value: unknown;
-  try {
-    value = JSON.parse(result.stdout);
-  } catch {
-    return undefined;
+  if (result.code !== 0) {
+    if (/unrecognized subcommand|unexpected argument/i.test(result.stderr)) return null;
+    throw new Error(`asks --json failed (${result.code})`);
   }
-  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.asks)) return undefined;
+  const value: unknown = JSON.parse(result.stdout);
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.asks)) return null;
   return value.asks.flatMap((item): OrgAskRow[] => {
     const ask = isRecord(item) ? parseAsk(item) : null;
     if (!ask || !isRecord(item) || typeof item.project !== "string" || !isRecord(item.coordinator)) return [];
