@@ -96,6 +96,42 @@ describe("usage runtime", () => {
     expect(scans.started).toHaveLength(2);
   });
 
+  test("a scan that fails is not started again by the reads its end sets off", async () => {
+    let spawned = 0;
+    const failing = (): ScanChild => {
+      spawned++;
+      return { lines: (async function* () {})(), exited: Bun.sleep(1).then(() => 1), kill() {} };
+    };
+    // The page and the Settings row read again on every `usage` event (web/src/routes/usage.tsx).
+    const usage: Usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => void usage.read(), spawn: failing });
+    await usage.load();
+    try {
+      await usage.set({ on: true });
+      await Bun.sleep(50);
+      expect(spawned).toBe(1);
+      expect(await usage.read()).toMatchObject({ scan: { state: "idle", error: "scan stopped (exit 1)" } });
+      expect(spawned).toBe(1);
+    } finally {
+      await usage.set({ on: false });
+    }
+  });
+
+  test("a scan that goes quiet is stopped, so usage does not stay scanning for good", async () => {
+    let killed = 0;
+    let finish!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => { finish = resolve; });
+    async function* lines() { await exited; }
+    const usage = new Usage({
+      stateDir, roots: { claude: [], codex: [] }, onScanned: () => {}, quietMs: 20,
+      spawn: () => ({ lines: lines(), exited, kill: () => { killed++; finish(143); } }),
+    });
+    await usage.load();
+    await usage.set({ on: true });
+    await Bun.sleep(60);
+    expect(killed).toBe(1);
+    expect(await usage.read()).toMatchObject({ scan: { state: "idle", error: "scan stopped (exit 143)" } });
+  });
+
   test("the scan runs at background priority", () => {
     expect(backgroundPrefix("darwin", () => null, () => true)).toEqual(["/usr/sbin/taskpolicy", "-b"]);
     expect(backgroundPrefix("linux", () => "/usr/bin/nice")).toEqual(["/usr/bin/nice", "-n", "19"]);

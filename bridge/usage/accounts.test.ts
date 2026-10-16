@@ -25,6 +25,17 @@ describe("account ids", () => {
     expect(claudeIdentity(Buffer.from('{"numStartups":3}'))).toBeUndefined();
   });
 
+  test("only the top-level oauthAccount counts, whatever order or caches surround it", () => {
+    const ids = { accountUuid: "00000000-0000-4000-8000-000000000001", organizationUuid: "00000000-0000-4000-8000-0000000000aa" };
+    const other = { accountUuid: "00000000-0000-4000-8000-0000000000ff", organizationUuid: "00000000-0000-4000-8000-0000000000ee" };
+    const read = (o: object) => claudeIdentity(Buffer.from(JSON.stringify(o, null, 2)));
+    // Claude Code writes .claude.json indented; caches of other features hold the same key names.
+    expect(read({ promoCache: { oauthAccount: other }, oauthAccount: ids })).toBe("9ae25bfbd05c9e76");
+    expect(read({ oauthAccount: { ccOnboardingFlags: { seen: true }, ...ids } })).toBe("9ae25bfbd05c9e76");
+    // Signed out: no account, not the ids some cache keeps.
+    expect(read({ oauthAccount: null, cachedUsageUtilization: other })).toBeUndefined();
+  });
+
   test("a rollout without creator_account_id is unassigned", () => {
     expect(codexAccount(undefined)).toBe(UNASSIGNED.codex);
     expect(codexAccount("acct-1")).toBe(`codex:${accountHash("acct-1")}`);

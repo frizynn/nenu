@@ -7,11 +7,13 @@ import {
 } from "./accounts.ts";
 import { claudeStatuslineLimits, claudeSwapLimits, codexLimits, hatsLimits, newestPerAccount, type AccountLimits } from "./limits.ts";
 import { repoOf } from "./repos.ts";
-import { loadStore, saveStore, scan, usageDir } from "./scan.ts";
+import { loadStore, localDate, saveStore, scan, usageDir } from "./scan.ts";
 
-// The scan process. The bridge starts it at background priority (usage-runtime.ts); it reads the
-// logs, saves totals and offsets under <stateDir>/usage and exits, so the bridge never holds the
-// scan's memory. stdout carries one JSON object per line: {progress} while reading, then {done}.
+// The scan process. The bridge starts it at background priority (runtime.ts); it reads the logs,
+// saves totals and offsets under <stateDir>/usage and exits, so the bridge never holds the scan's
+// memory. stdout carries one JSON object per line: {progress} while reading, then {done}. A scan whose
+// bridge died (kill -9, a crash, a host with no supervisor) stops at the next log and saves nothing, so
+// it never runs beside the next bridge's scan.
 //
 //   bun bridge/usage/scan-main.ts <stateDir> '{"claude":[configDir…],"codex":[codexHome…],"split":bool}'
 
@@ -31,14 +33,17 @@ export interface AccountsFile { v: 1; at: number; accounts: AccountView[]; limit
 
 const read = (path: string): string | undefined => { try { return readFileSync(path, "utf8"); } catch { return undefined; } };
 
+/** True once the bridge that started this scan is gone: the process now belongs to init or launchd. */
+const bridge = process.ppid;
+const orphaned = () => process.ppid !== bridge;
+
 /** Where a config dir keeps its `.claude.json`: the default dir's sits beside it in the home folder. */
 export const identityFile = (configDir: string, home = homedir()) =>
   configDir === join(home, ".claude") ? join(home, ".claude.json") : join(configDir, ".claude.json");
 
 export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home = homedir(), env = process.env) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const d = new Date(now);
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = localDate(now);
   const dir = usageDir(stateDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 
@@ -78,7 +83,9 @@ export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home
     state: store.state, totals: store.totals, seen: store.seen, book,
     repoOf: (cwd) => repoOf(cwd, home),
     onProgress: (p) => process.stdout.write(`${JSON.stringify({ progress: p })}\n`),
+    stop: orphaned,
   });
+  if (result.stopped) return result;
 
   // ── Accounts and their limits ──
   const limits: AccountLimits[] = [...codexLimits(store.totals.codexLimits)];
@@ -139,5 +146,5 @@ if (import.meta.main) {
   const cpu = process.cpuUsage();
   const result = runScan(stateDir, args);
   const used = process.cpuUsage(cpu);
-  process.stdout.write(`${JSON.stringify({ done: { ...result, cpuMs: Math.round((used.user + used.system) / 1000), rssMb: Math.round(process.memoryUsage.rss() / 2 ** 20) } })}\n`);
+  if (!result.stopped) process.stdout.write(`${JSON.stringify({ done: { ...result, cpuMs: Math.round((used.user + used.system) / 1000), rssMb: Math.round(process.memoryUsage.rss() / 2 ** 20) } })}\n`);
 }

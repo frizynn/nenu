@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { objectEnd, stringEnd, text, topLevelFields } from "./bytes.ts";
 
 // Which account each message was billed to. Codex rollouts say so themselves (`creator_account_id`);
 // Claude Code transcripts never do, so Claude usage is attributed from a time line of "account X
@@ -76,20 +77,31 @@ export function parseClaudeSwapLog(text: string, configDir: string): SwitchLine[
   return out;
 }
 
-/** The signed-in Claude account of a `.claude.json`, read by byte search without parsing the file. */
+const OAUTH_ACCOUNT = [Buffer.from("oauthAccount")];
+const IDS = [Buffer.from("accountUuid"), Buffer.from("organizationUuid")];
+
+/**
+ * The signed-in Claude account of a `.claude.json`: the two ids of its top-level `oauthAccount`, found
+ * in place without parsing the file. Caches of other features hold keys of the same names, so only
+ * that object's own fields count, and nothing else in the file is decoded.
+ */
 export function claudeIdentity(file: Uint8Array): string | undefined {
-  const text = Buffer.from(file.buffer, file.byteOffset, file.byteLength);
-  const at = text.indexOf('"oauthAccount"');
-  if (at < 0) return undefined;
-  const end = text.indexOf("}", at);
-  const value = (key: string) => {
-    const k = text.indexOf(`"${key}"`, at);
-    if (k < 0 || k > end) return undefined;
-    const m = /^"[^"]+"\s*:\s*"([0-9a-fA-F-]{8,64})"/.exec(text.toString("latin1", k, k + 120));
-    return m?.[1];
+  const root = file.indexOf(0x7b);
+  const end = root < 0 ? -1 : objectEnd(file, root, file.length);
+  if (end < 0) return undefined;
+  const at = new Int32Array(IDS.length);
+  topLevelFields(file, root, end, OAUTH_ACCOUNT, at);
+  const open = at[0]!;
+  const close = open > 0 && file[open] === 0x7b ? objectEnd(file, open, end) : -1;
+  if (close < 0) return undefined;
+  topLevelFields(file, open, close, IDS, at);
+  const id = (k: number) => {
+    const to = at[k]! > 0 && file[at[k]!] === 0x22 ? stringEnd(file, at[k]! + 1, close) : -1;
+    const value = to < 0 ? "" : text(file, at[k]! + 1, to);
+    return /^[0-9a-fA-F-]{8,64}$/.test(value) ? value : undefined;
   };
-  const account = value("accountUuid");
-  const org = value("organizationUuid");
+  const account = id(0);
+  const org = id(1);
   return account && org ? accountHash(`${account}:${org}`) : undefined;
 }
 

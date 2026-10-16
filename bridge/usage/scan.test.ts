@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AccountBook, accountHash } from "./accounts.ts";
 import { repoOf } from "./repos.ts";
-import { emptyTotals, loadStore, saveStore, scan, Seen, type ScanState, type Totals } from "./scan.ts";
+import { emptyTotals, loadStore, readTotals, saveStore, scan, Seen, type ScanState, type Totals } from "./scan.ts";
 
 let home = "";
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "nenu-usage-")); });
@@ -141,6 +142,17 @@ describe("Claude transcripts", () => {
     expect(r).toMatchObject({ rows: 0, duplicates: 1 });
   });
 
+  test("a scan told to stop (its bridge is gone) reads no further log and counts nothing", () => {
+    const t = setup();
+    writeFileSync(join(t.project, "s1.jsonl"), `${assistant({ id: "msg_1", req: "a", ts: "2026-01-10T12:00:00.000Z" })}\n`);
+    const r = scan({
+      roots: { claude: [{ configDir: t.claude }], codex: [] }, state: t.state, totals: t.totals, seen: t.seen,
+      book: new AccountBook([]), repoOf: (cwd) => repoOf(cwd, home), stop: () => true,
+    });
+    expect(r).toMatchObject({ stopped: true, read: 0, rows: 0 });
+    expect(t.totals.days).toEqual({});
+  });
+
   test("each message goes to the account active when it was written", () => {
     const t = setup();
     writeFileSync(join(t.project, "s1.jsonl"), [
@@ -217,5 +229,55 @@ describe("projects", () => {
     expect(repoOf(join(home, "src", "app"), home).label).toBe("app");
     expect(repoOf(join(home, "notes"), home).label).toBe("notes");
     expect(repoOf(join(home, "gone", "worktree"), home).label).toBe("worktree");
+  });
+});
+
+describe("the store on disk", () => {
+  const codexLine = (ts: string, total: number[]) => JSON.stringify({
+    timestamp: ts, type: "event_msg",
+    payload: { type: "token_count", info: { total_token_usage: { input_tokens: total[0], cached_input_tokens: total[1], output_tokens: total[2], reasoning_output_tokens: 0 } } },
+  });
+
+  /** Two scans of growing logs; the second one's save stops at its `stopAt`-th rename (a restart, kill -9). */
+  function twoScans(name: string, stopAt?: number) {
+    const root = join(home, name);
+    const project = join(root, ".claude", "projects", "-work-demo");
+    const rollouts = join(root, ".codex", "sessions");
+    mkdirSync(project, { recursive: true });
+    mkdirSync(rollouts, { recursive: true });
+    const stateDir = join(root, "state");
+    mkdirSync(stateDir);
+    const once = (stop?: number) => {
+      const store = loadStore(stateDir, "2026-01-10", "UTC");
+      scan({ roots: { claude: [{ configDir: join(root, ".claude") }], codex: [join(root, ".codex")] }, ...store, book: new AccountBook([]), repoOf: (cwd) => repoOf(cwd, home) });
+      const rename = fs.renameSync;
+      let renames = 0;
+      const spy = stop === undefined ? undefined : spyOn(fs, "renameSync").mockImplementation((from, to) => {
+        if (++renames === stop) throw new Error("stopped");
+        rename(from, to);
+      });
+      try { saveStore(stateDir, store, Date.parse("2026-01-10T13:00:00Z")); } catch { /* the process died here */ } finally { spy?.mockRestore(); }
+    };
+    const claudeLog = join(project, "s1.jsonl");
+    const codexLog = join(rollouts, "rollout-2026-01-10T12-00-00-r1.jsonl");
+    writeFileSync(claudeLog, `${assistant({ id: "msg_1", req: "a", ts: "2026-01-10T12:00:00.000Z" })}\n`);
+    writeFileSync(codexLog, `${codexLine("2026-01-10T12:00:00.000Z", [100, 0, 10])}\n`);
+    once();
+    appendFileSync(claudeLog, `${assistant({ id: "msg_2", req: "b", ts: "2026-01-10T12:01:00.000Z" })}\n`);
+    appendFileSync(codexLog, `${codexLine("2026-01-10T12:01:00.000Z", [250, 0, 30])}\n`);
+    once(stopAt);
+    once();
+    const sums: Record<string, number[]> = {};
+    for (const day of Object.values(readTotals(stateDir)!.days)) for (const [k, v] of Object.entries(day)) {
+      const s = (sums[k.split("|")[0]!] ??= [0, 0, 0, 0, 0, 0, 0]);
+      v.forEach((n, i) => (s[i]! += n));
+    }
+    return sums;
+  }
+
+  test("a scan stopped anywhere in its save loses nothing and counts nothing twice", () => {
+    const whole = twoScans("whole");
+    expect(whole).toEqual({ claude: [2, 20, 100, 400, 200, 2000, 0], codex: [2, 250, 30, 0, 0, 0, 0] });
+    for (let stopAt = 1; stopAt <= 6; stopAt++) expect({ stopAt, sums: twoScans(`stop-${stopAt}`, stopAt) }).toEqual({ stopAt, sums: whole });
   });
 });
