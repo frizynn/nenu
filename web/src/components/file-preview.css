@@ -44,7 +44,7 @@
   .file-preview-backdrop { padding: 0; }
   .file-preview-panel { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--background); color: var(--foreground); }
   .file-preview-header { justify-content: space-between; gap: 0; min-height: calc(48px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(4px, env(safe-area-inset-right)) 0 max(4px, env(safe-area-inset-left)); background: var(--chrome); }
-  .file-preview-kind, .preview-close { display: none; }
+  .file-preview-kind, .preview-close, .preview-new-tab { display: none; }
   .preview-done { display: inline-flex; }
   .file-preview-heading { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; flex: none; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
   .file-preview-title { max-width: 100%; font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; }

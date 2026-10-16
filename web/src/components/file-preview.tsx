@@ -246,7 +246,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
             {where && <p ref={whereRef} className="file-preview-subtitle" title={filePath || undefined}>{where}</p>}
           </div>
           <div className="file-preview-actions">
-            {newTab && <a href={newTab} target="_blank" rel="noopener" aria-label="Open in new tab" title="Open in new tab" className="file-preview-action max-sm:hidden">
+            {newTab && <a href={newTab} target="_blank" rel="noopener" aria-label="Open in new tab" title="Open in new tab" className="file-preview-action preview-new-tab">
               <ExternalLink className="size-5" aria-hidden="true" /></a>}
             {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-5" aria-hidden="true" /></a>}
             <button ref={more} type="button" aria-label="More actions" aria-haspopup="dialog" aria-expanded={menu} className="file-preview-action"

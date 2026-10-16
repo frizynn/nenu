@@ -19,7 +19,7 @@ export interface Locator {
   isVisible(): Promise<boolean>;
   count(): Promise<number>;
   selectOption(value: string): Promise<unknown>;
-  waitFor(opts?: { state?: "visible" | "attached"; timeout?: number }): Promise<void>;
+  waitFor(opts?: { state?: "visible" | "attached" | "hidden"; timeout?: number }): Promise<void>;
   first(): Locator;
   last(): Locator;
   innerText(): Promise<string>;

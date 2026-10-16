@@ -118,13 +118,16 @@ export async function filesBench(bridge: TestBridge, browser: Browser, outDir: s
       const spec = page.getByRole("link", { name: "docs/spec.pdf" });
       await spec.click();
       const pdfViewer = page.getByRole("dialog", { name: "spec.pdf" });
-      const pdfDrawn = await pdfViewer.locator("canvas").first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      // Drawn means the document opened ("1 / 1") and its page finished rendering.
+      const drawn = async (viewer: ReturnType<Page["getByRole"]>) => await viewer.getByText("1 / 1").waitFor({ timeout: 20_000 }).then(() => true, () => false)
+        && await viewer.getByText("Rendering page…").waitFor({ state: "hidden", timeout: 20_000 }).then(() => true, () => false);
+      const pdfDrawn = await drawn(pdfViewer);
       check("a code path opens the PDF and draws it", pdfDrawn);
       await shot(page, "phone-viewer-pdf");
       // The same page opened as a new tab would: straight from its address.
       const tab = await context.newPage();
       await tab.goto(bridge.url + filePage("docs/spec.pdf"));
-      check("the PDF's own page draws it too", await tab.getByRole("dialog", { name: "spec.pdf" }).locator("canvas").first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      check("the PDF's own page draws it too", await drawn(tab.getByRole("dialog", { name: "spec.pdf" })));
       await shot(tab, "phone-page-pdf");
       await tab.close();
       await closeViewer(page);
