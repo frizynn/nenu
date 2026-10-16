@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-16
+
+### Added
+
+- Settings → Usage (off by default): tokens and API-list-price cost of Claude Code and Codex from their own logs, per day, agent, account, model and repo, with each account's plan limits, a year's activity map and the weeks and month by agent, model or repo. A background process reads the logs once and then only what is new; the cost is what the tokens would cost on the API, not what a plan charges (0c6b535f).
+
 ## [1.15.0] - 2026-10-16
 
 ### Added
