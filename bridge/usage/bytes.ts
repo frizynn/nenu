@@ -4,6 +4,7 @@
 // allocates only when a model name or a day changes.
 
 const QUOTE = 0x22, BACKSLASH = 0x5c, COLON = 0x3a, OPEN = 0x7b, CLOSE = 0x7d, LIST = 0x5b, END_LIST = 0x5d;
+const isSpace = (c: number | undefined) => c === 0x20 || c === 0x0a || c === 0x0d || c === 0x09;
 
 /** Index of the `}` that closes the object opened at `open`, or -1 if `to` comes first. */
 export function objectEnd(b: Uint8Array, open: number, to: number): number {
@@ -50,7 +51,7 @@ export function bytesEqual(b: Uint8Array, at: number, key: Uint8Array): boolean 
 
 /**
  * The value of each `keys[k]` found directly inside the object spanning `[open, close]`, as the byte
- * index where its value starts (-1 when absent). Keys of nested objects are not matched, so a field
+ * index where its value starts, past any indentation (-1 when absent). Keys of nested objects are not matched, so a field
  * that also appears deeper (`usage.iterations[].input_tokens`) cannot be mistaken for the top one.
  */
 export function topLevelFields(b: Uint8Array, open: number, close: number, keys: readonly Uint8Array[], out: Int32Array): void {
@@ -65,7 +66,11 @@ export function topLevelFields(b: Uint8Array, open: number, close: number, keys:
       if (depth === 1 && b[end + 1] === COLON) {
         const len = end - i - 1;
         for (let k = 0; k < keys.length; k++) {
-          if (out[k]! < 0 && keys[k]!.length === len && bytesEqual(b, i + 1, keys[k]!)) out[k] = end + 2;
+          if (out[k]! < 0 && keys[k]!.length === len && bytesEqual(b, i + 1, keys[k]!)) {
+            let at = end + 2;
+            while (isSpace(b[at])) at++;
+            out[k] = at;
+          }
         }
       }
       i = end;
