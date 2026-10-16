@@ -30,10 +30,11 @@
  * ``**`c6fe96`**`` (bold wrapping code) is routine in agent prose, and a flat model rendered those
  * backticks literally. `code` is the one leaf: its content is verbatim by definition.
  */
-import { localFilePath } from "./file-links";
+import { FILE_EXTENSIONS, FILE_LOCATION, FILE_NAMES, localFilePath } from "./file-links";
 
 export type MdSpan =
-  | { kind: "text"; text: string }
+  /** `files`: the local files these words name in passing, for the chat's file list; drawn as words. */
+  | { kind: "text"; text: string; files?: string[] }
   | { kind: "code"; text: string }
   /** LaTeX, verbatim like code: `$…$` and `\(…\)` inline, `$$…$$` and `\[…\]` as display. */
   | { kind: "math"; text: string; display: boolean }
@@ -94,33 +95,53 @@ const TEX = String.raw`\\[^\n]|[^\\$\`\n]`;
 // Its first and last characters: the same, minus whitespace.
 const TEX_EDGE = String.raw`\\[^\n]|[^\\$\`\s]`;
 
-// Ordered so the greedier delimiters win: ``code`` before **bold** before *italic*, `$$` before `$`.
-// Emphasis bodies forbid a leading/trailing space (see the glob note above) and can't span a newline.
+// One pass reads every construct, so the file detector (chat-files.ts) and the renderer see the same
+// thing: a URL is a URL to its end, never a path after its port or in its query; a link's target is a
+// link; code is code. Leftmost wins, and at one position the earlier alternative wins: code before
+// emphasis before links, any `scheme://` before a path, `$$` before `$`. Emphasis bodies forbid a
+// leading/trailing space (see the glob note above) and can't span a newline.
+const SCHEME = "[a-z][a-z\\d+.-]{0,31}";
+// A path segment stops at whitespace, a quote, a bracket, a separator and every character that may
+// precede a path, so an attempt never re-reads text another attempt already passed.
+const SEGMENT = String.raw`[^\s"'\`<>()[\]{}|/\\,;:=*$]+`;
+const FILE_PATH = String.raw`(?:\.{0,2}/|/)?(?:${SEGMENT}/)*(?:${SEGMENT}\.(?:${FILE_EXTENSIONS})|(?:${FILE_NAMES}))${FILE_LOCATION}?`;
 const INLINE_RE = new RegExp(
   [
-    "(`+)([^`]+?)\\1", // 1,2  inline code
-    "\\*\\*(\\S(?:[^\\n]*?\\S)?)\\*\\*", // 3    bold
-    "\\*(\\S(?:[^\\n*]*?\\S)?)\\*", // 4    italic
-    "(!?)\\[([^\\]\\n]*)\\]\\((<[^>\\n]+>|[^)\\s]+)\\)", // 5,6,7 image or link
-    // 8,9  a bare file:// or web URL in prose, after a space or an opening bracket, short of the
-    // punctuation that ends a sentence. A file URL and a pull request's page read as links (an agent
-    // writes them meaning one); any other web URL stays text.
-    "(^|[\\s([{])((?:file|https?):\\/\\/[^\\s\"'`<>()[\\]{}|\\\\*]*[^\\s\"'`<>()[\\]{}|\\\\*.,;:!?])",
-    String.raw`\$\$((?:${TEX})+?)\$\$`, // 10   display math
-    String.raw`\\\[((?:${TEX})+?)\\\]`, // 11   display math
-    String.raw`\\\(((?:${TEX})+?)\\\)`, // 12   inline math
-    // 13   inline math. A dollar is also a price and a shell variable, so `$5 and $10`, `$HOME/$USER`
-    // and `${A}/${B}` are not formulas: no space just inside, and nothing word-like after the
-    // closing `$`. The opening `$` must not follow a word character either (checked below).
-    String.raw`\$((?:${TEX_EDGE})(?:(?:${TEX})*?(?:${TEX_EDGE}))?)\$(?![\w\${(])`,
+    "(?<fence>`+)(?<code>[^`]+?)\\k<fence>",
+    "\\*\\*(?<bold>\\S(?:[^\\n]*?\\S)?)\\*\\*",
+    "\\*(?<italic>\\S(?:[^\\n*]*?\\S)?)\\*",
+    "(?<bang>!?)\\[(?<label>[^\\]\\n]*)\\]\\((?<target><[^>\\n]+>|[^)\\s]+)\\)",
+    // An autolink, `<https://…>`, and a URL in prose, short of the punctuation that ends a sentence.
+    // An agent writes either meaning a link: a file URL opens the file it names, a web URL itself.
+    `<(?<autolink>${SCHEME}:[^\\s<>]+)>`,
+    String.raw`\b(?<url>${SCHEME}://[^\s"'\`<>()[\]{}|\\*]*[^\s"'\`<>()[\]{}|\\*.,;:!?])`,
+    String.raw`\$\$(?<displayMath>(?:${TEX})+?)\$\$`,
+    String.raw`\\\[(?<bracketMath>(?:${TEX})+?)\\\]`,
+    String.raw`\\\((?<parenMath>(?:${TEX})+?)\\\)`,
+    // A dollar is also a price and a shell variable, so `$5 and $10`, `$HOME/$USER` and `${A}/${B}`
+    // are not formulas: no space just inside, and nothing word-like after the closing `$`. The
+    // opening `$` must not follow a word character either (checked below).
+    String.raw`\$(?<dollarMath>(?:${TEX_EDGE})(?:(?:${TEX})*?(?:${TEX_EDGE}))?)\$(?![\w\${(])`,
+    // A quoted name may hold spaces ("docs/My Report.pdf"); it counts only when it is a file name.
+    String.raw`(?<quote>["'])(?<quoted>[^"'\`\n*[\]<>$\\]{1,4096})\k<quote>`,
+    // A path in plain words, after a space, a bracket or a separator.
+    String.raw`(?<lead>^|[\s([{:;,=])(?<path>${FILE_PATH})(?=$|[\s),.;:!?\]}])`,
   ].join("|"),
-  "g",
+  "gi",
 );
 
 // Emphasis nests, so parsing recurses into each body. Every level strips at least one delimiter pair,
 // so it always terminates — this bound is belt-and-braces against pathological input, past which the
 // remaining text is simply left as text.
 const MAX_INLINE_DEPTH = 6;
+
+/** A URL in prose: the file it names, a link to itself, or (an unsafe scheme) its words. */
+function urlSpan(url: string, literal: string): MdSpan {
+  const path = localFilePath(url);
+  if (path) return { kind: "file", path, spans: [{ kind: "text", text: url }] };
+  const href = safeHref(url);
+  return href ? { kind: "link", href, spans: [{ kind: "text", text: pullRequestRef(href) ?? href }] } : { kind: "text", text: literal };
+}
 
 /** Parse one line/paragraph of inline Markdown. Pure, and recursive through emphasis/link bodies. */
 export function parseInline(text: string, depth = 0): MdSpan[] {
@@ -129,8 +150,10 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
     if (span.kind === "text" && span.text === "") return;
     // Text that a refused delimiter split stays one run, so find highlights can span it.
     const prev = spans.at(-1);
-    if (span.kind === "text" && prev?.kind === "text") prev.text += span.text;
-    else spans.push(span);
+    if (span.kind === "text" && prev?.kind === "text") {
+      prev.text += span.text;
+      if (span.files) (prev.files ??= []).push(...span.files);
+    } else spans.push(span);
   };
   if (depth >= MAX_INLINE_DEPTH) {
     push({ kind: "text", text });
@@ -139,38 +162,45 @@ export function parseInline(text: string, depth = 0): MdSpan[] {
 
   // A fresh regex per call: INLINE_RE is stateful (`g`), and recursion would otherwise clobber the
   // parent's lastIndex mid-scan.
-  const re = new RegExp(INLINE_RE.source, "g");
+  const re = new RegExp(INLINE_RE.source, INLINE_RE.flags);
   let last = 0;
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
-    // `US$5` or `\$x$`: a dollar after a word character or a backslash opens nothing. Keep it as text
-    // and scan on from the next character, where a real formula may still start.
-    if (m[13] !== undefined && /[\w\\$]/.test(text[m.index - 1] ?? "")) {
+    const g = m.groups!;
+    const before = text[m.index - 1] ?? "";
+    // `US$5` or `\$x$`: a dollar after a word character or a backslash opens nothing, and neither does
+    // the apostrophe in "Fran's". A quote that holds no file name is just punctuation, and a colon
+    // glued to a word starts an address (`javascript:x.png`, `localhost:8443/a.html`), not a path.
+    // Keep it as text and scan on from the next character, where something else may still start.
+    if ((g.dollarMath !== undefined && /[\w\\$]/.test(before))
+      || (g.quoted !== undefined && (/\w/.test(before) || !localFilePath(g.quoted)))
+      || (g.lead === ":" && /\w/.test(before))) {
       re.lastIndex = m.index + 1;
       continue;
     }
-    // A bare file URL's match starts at the space or bracket before it, which stays text.
-    push({ kind: "text", text: text.slice(last, m.index + (m[8]?.length ?? 0)) });
-    if (m[2] !== undefined) push({ kind: "code", text: m[2] }); // leaf: content is verbatim
-    else if (m[3] !== undefined) push({ kind: "bold", spans: parseInline(m[3], depth + 1) });
-    else if (m[4] !== undefined) push({ kind: "italic", spans: parseInline(m[4], depth + 1) });
-    else if (m[6] !== undefined && m[7] !== undefined) {
-      const path = localFilePath(m[7]);
-      const href = safeHref(m[7]);
+    // A path's match starts at the space or bracket before it, which stays text.
+    push({ kind: "text", text: text.slice(last, m.index + (g.lead?.length ?? 0)) });
+    if (g.code !== undefined) push({ kind: "code", text: g.code }); // leaf: content is verbatim
+    else if (g.bold !== undefined) push({ kind: "bold", spans: parseInline(g.bold, depth + 1) });
+    else if (g.italic !== undefined) push({ kind: "italic", spans: parseInline(g.italic, depth + 1) });
+    else if (g.label !== undefined && g.target !== undefined) {
+      const path = localFilePath(g.target);
+      const href = safeHref(g.target);
       // An unsafe target keeps its literal Markdown, so nothing silently disappears from the text.
-      if (m[5] && path && /\.(?:png|jpe?g|gif|webp)$/i.test(path)) push({ kind: "image", path, alt: m[6] });
-      else if (path) push({ kind: "file", path, spans: parseInline(m[6] || path, depth + 1) });
-      else if (href) push({ kind: "link", href, spans: parseInline(m[6] || href, depth + 1) });
+      if (g.bang && path && /\.(?:png|jpe?g|gif|webp)$/i.test(path)) push({ kind: "image", path, alt: g.label });
+      else if (path) push({ kind: "file", path, spans: parseInline(g.label || path, depth + 1) });
+      else if (href) push({ kind: "link", href, spans: parseInline(g.label || href, depth + 1) });
       else push({ kind: "text", text: m[0] });
-    } else if (m[9] !== undefined) {
-      const path = localFilePath(m[9]);
-      const pr = path ? null : pullRequestRef(m[9]);
-      push(path ? { kind: "file", path, spans: [{ kind: "text", text: m[9] }] }
-        : pr ? { kind: "link", href: m[9], spans: [{ kind: "text", text: pr }] } : { kind: "text", text: m[9] });
+    } else if (g.autolink !== undefined) push(urlSpan(g.autolink, m[0]));
+    else if (g.url !== undefined) push(urlSpan(g.url, g.url));
+    else if (g.quoted !== undefined) push({ kind: "text", text: m[0], files: [localFilePath(g.quoted)!] });
+    else if (g.path !== undefined) {
+      const path = localFilePath(g.path);
+      push({ kind: "text", text: g.path, ...(path ? { files: [path] } : {}) });
     } else {
-      const tex = m[10] ?? m[11] ?? m[12] ?? m[13] ?? "";
-      const display = m[10] !== undefined || m[11] !== undefined;
+      const tex = g.displayMath ?? g.bracketMath ?? g.parenMath ?? g.dollarMath ?? "";
+      const display = g.displayMath !== undefined || g.bracketMath !== undefined;
       push(tex.trim() ? { kind: "math", text: tex.trim(), display } : { kind: "text", text: m[0] });
     }
     last = m.index + m[0].length;

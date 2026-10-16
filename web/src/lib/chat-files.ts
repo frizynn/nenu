@@ -17,15 +17,6 @@ export interface ChatFileReference {
 }
 
 const PHOTO_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
-/** The same image-or-link shape the Markdown parser reads; group 1 is the target. */
-const MARKDOWN_LINK = /!?\[[^\]\n]*\]\((<[^>\n]+>|[^)\s]+)\)/g;
-const QUOTED_CANDIDATE =/(["'`])([^"'`\n]{1,4096})\1/g;
-// This deliberately recognises only the extensions already accepted by localFilePath. The bridge
-// remains authoritative about whether the named file exists, is inside the pane cwd, is private,
-// and is small enough to preview.
-// Directory segments exclude separators so a missing extension cannot trigger exponential backtracking.
-const BARE_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|\/\\]+\/)*[^\s"'`<>()[\]{}|\/\\]+\.(?:md|markdown|mdx|pdf|txt|log|csv|tsv|json|jsonc|jsonl|ya?ml|toml|xml|[cm]?js|jsx|ts|tsx|py|rb|sh|bash|zsh|s?css|html?|svg|sql|rs|go|java|kt|swift|c|h|cpp|hpp|graphql|prisma|diff|patch|ini|conf|rst|png|jpe?g|gif|webp|mp4|m4v|mov|webm)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
-const SPECIAL_NAME_CANDIDATE = /(?:^|[\s([{:;,=])((?:\.{0,2}\/|\/)?(?:[^\s"'`<>()[\]{}|\/\\]+\/)*(?:readme|licen[sc]e|dockerfile|makefile|\.gitignore|\.gitattributes|\.editorconfig)(?::\d+(?::\d+)?|#L\d+(?:-L?\d+)?)?)(?=$|[\s),.;!?\]}])/gi;
 
 function normalisePath(path: string): string {
   const absolute = path.startsWith("/");
@@ -39,7 +30,10 @@ function normalisePath(path: string): string {
   return absolute ? `/${joined}` : joined || ".";
 }
 
-/** Every inline span of a Markdown text, nested spans included, in reading order. */
+/**
+ * Every inline span of a Markdown text, nested spans included, in reading order. A file link's label
+ * is only its caption ("report.html"), so it is not read as a second, relative mention.
+ */
 function markdownSpans(text: string): MdSpan[] {
   const out: MdSpan[] = [];
   const spans = (items: MdSpan[]) => {
@@ -60,12 +54,16 @@ function markdownSpans(text: string): MdSpan[] {
   return out;
 }
 
-function markdownPaths(text: string, includeCode = true): string[] {
-  return markdownSpans(text).flatMap((span) => {
-    if (span.kind === "file" || span.kind === "image") return [span.path];
-    const path = span.kind === "code" && includeCode ? localFilePath(span.text) : null;
-    return path ? [path] : [];
-  });
+/**
+ * What one span names: the file a link, an image or a file URL points at, the path a code span is,
+ * the files plain words mention. Read off the same parse that draws the text (markdown.ts), so what is
+ * a URL, a link's target or fenced code on screen is never also a file here.
+ */
+function spanFiles(span: MdSpan): string[] {
+  if (span.kind === "file" || span.kind === "image") return [span.path];
+  if (span.kind === "text") return span.files ?? [];
+  const path = span.kind === "code" ? localFilePath(span.text) : null;
+  return path ? [path] : [];
 }
 
 /** The local images a text already shows in place, as `![alt](path)`. */
@@ -73,25 +71,18 @@ export function markdownImagePaths(text: string): string[] {
   return markdownSpans(text).flatMap((span) => span.kind === "image" ? [span.path] : []);
 }
 
-/** Extract previewable local-file mentions from prose and compact tool summaries/results. */
+/** The local files a text links to, which is how an answer hands one over. */
+function linkedFiles(text: string): string[] {
+  return markdownSpans(text).flatMap((span) => span.kind === "file" || span.kind === "image" ? [span.path] : []);
+}
+
+/**
+ * Previewable local-file mentions in prose and in compact tool summaries/results. The bridge remains
+ * authoritative about whether the named file exists, is inside the pane cwd, is private, and is small
+ * enough to preview.
+ */
 export function filePathsInText(text: string): string[] {
-  const paths = markdownPaths(text);
-  // A link to a local file names it by its target; its label ("report.html") is only a caption and
-  // must not become a second, relative mention that resolves somewhere else.
-  text = text.replace(MARKDOWN_LINK, (link, target: string) => localFilePath(target) ? " " : link);
-  for (const match of text.matchAll(QUOTED_CANDIDATE)) {
-    const path = localFilePath(match[2] ?? "");
-    if (path) paths.push(path);
-  }
-  for (const match of text.matchAll(BARE_CANDIDATE)) {
-    const path = localFilePath(match[1] ?? "");
-    if (path) paths.push(path);
-  }
-  for (const match of text.matchAll(SPECIAL_NAME_CANDIDATE)) {
-    const path = localFilePath(match[1] ?? "");
-    if (path) paths.push(path);
-  }
-  return paths;
+  return markdownSpans(text).flatMap(spanFiles);
 }
 
 function textInPart(part: TranscriptPart): string[] {
@@ -113,7 +104,7 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
     const perEntry = new Set<string>();
     for (const part of entry.parts) {
       const sent = sentFiles(part);
-      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? markdownPaths(part.text, false).map(normalisePath) : sent.map(normalisePath));
+      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? linkedFiles(part.text).map(normalisePath) : sent.map(normalisePath));
       for (const text of textInPart(part)) {
         for (const candidate of [...filePathsInText(text), ...sent]) {
           const path = localFilePath(candidate);

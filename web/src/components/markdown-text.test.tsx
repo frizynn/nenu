@@ -213,6 +213,28 @@ describe("tables", () => {
     Reflect.deleteProperty(globalThis, "ClipboardItem");
   });
 
+  it("keeps a table whose cells read on one line or a few as a grid", () => {
+    render(<MarkdownText text={TABLE} />);
+    expect(screen.getByRole("table")).toHaveTextContent("Opción");
+  });
+
+  // The phone cut a three-column table of options at its right edge, with no hint it went on.
+  it("reads a table the width squeezes past reading as rows, each cell under its header", () => {
+    // jsdom lays nothing out: a cell reporting five line boxes is one a phone wrapped into a sliver.
+    const lines = vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
+      return (this.hasAttribute("data-cell") ? Array(5).fill(new DOMRect()) : []) as unknown as DOMRectList;
+    });
+    try {
+      render(<MarkdownText text={TABLE} />);
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      const rows = screen.getAllByRole("term").map((term) => `${term.textContent}: ${term.nextElementSibling?.textContent}`);
+      expect(rows).toEqual(["Opción: A", "Costo: $0", "Opción: B", "Costo: $40"]);
+      expect(screen.getByRole("button", { name: "Copy table" })).toBeInTheDocument();
+    } finally {
+      lines.mockRestore();
+    }
+  });
+
   // 0.65.0 had no way to take a table out of the chat but selecting it by hand.
   it("copy as Markdown text, with an HTML twin a spreadsheet pastes as cells", async () => {
     const written: Array<Record<string, string>> = [];
