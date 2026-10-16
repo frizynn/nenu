@@ -3,10 +3,10 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
-import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type WorkspaceView } from "./types.ts";
+import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -290,7 +290,15 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),
     ...(prAction ? { prAction } : {}),
+    ...(record.verdict ? { verdict: record.verdict } : {}),
   };
+}
+
+/** What the thread's report says and shows, or undefined when it says none of it. */
+function threadSummary(record: OrgOverviewThread): ThreadSummary | undefined {
+  const { summary, captures, deliverables } = record;
+  if (!summary && !captures.length && !deliverables.length) return undefined;
+  return { id: record.id, ...(summary ? { summary } : {}), captures, deliverables };
 }
 
 /** Depth from the parent chain; an unknown parent or a cycle stops at the project root. */
@@ -321,7 +329,8 @@ interface FileProject extends Picks {
   session: string;
   roots: string[];
   coordinator: Binding;
-  threads: Array<{ view: OrgThreadView; binding: Binding }>;
+  /** `summary` stays out of the snapshot: up to 600 characters and 34 paths a thread, read only by the page that shows them. */
+  threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary }>;
 }
 
 interface ProjectRecord extends FileProject {
@@ -369,18 +378,7 @@ export class ProjectRegistry {
 
   list(sessionName: string, isPrimary: boolean, panes: readonly AgentView[]): OrgProjectView[] {
     this.sessions.add(sessionName);
-    if (!this.loaded) {
-      // The first read paints from the files at once; the `--json` view follows as an `org` event.
-      this.loaded = true;
-      this.stamp = this.fingerprint();
-      this.nextStat = this.now() + STAT_MS;
-      this.records = this.readFiles().map((project) => ({ ...project, source: "files", prActions: false }));
-      this.nodeActions = !this.upstream();
-      this.rewatch();
-      this.schedule(false);
-    } else if (this.now() >= this.nextStat) {
-      this.check();
-    }
+    this.read();
     return this.records
       .filter((record) => record.session ? record.session === sessionName : isPrimary)
       .map((record) => {
@@ -410,6 +408,40 @@ export class ProjectRegistry {
           workspaceIds: [...workspaceIds],
         };
       });
+  }
+
+  /** The records as last read: the first read paints from the files at once, and the `--json` view follows as an `org` event. */
+  private read(): void {
+    if (!this.loaded) {
+      this.loaded = true;
+      this.stamp = this.fingerprint();
+      this.nextStat = this.now() + STAT_MS;
+      this.records = this.readFiles().map((project) => ({ ...project, source: "files", prActions: false }));
+      this.nodeActions = !this.upstream();
+      this.rewatch();
+      this.schedule(false);
+    } else if (this.now() >= this.nextStat) {
+      this.check();
+    }
+  }
+
+  /**
+   * What each thread's report says and shows, for the threads whose report says any of it. Null
+   * when Organizations is read from its files, which carry none of it, or the project is not listed.
+   */
+  summaries(project: string): ThreadSummary[] | null {
+    const slug = validateProjectSlug(project);
+    this.read();
+    const record = this.records.find((candidate) => candidate.slug === slug);
+    if (!record || record.source !== "json") return null;
+    return record.threads.flatMap(({ summary }) => summary ? [summary] : []);
+  }
+
+  /** The folder Organizations copies each thread's files into, for a project this registry lists; undefined otherwise. */
+  library(project: string): string | undefined {
+    if (!SLUG_RE.test(project)) return undefined;
+    this.read();
+    return this.records.some((record) => record.slug === project) ? join(this.root, project, "library") : undefined;
   }
 
   /**
@@ -637,7 +669,7 @@ export class ProjectRegistry {
     return projects.flatMap((project) => {
       if (project.status === "archived") return [];
       const local = files.find((file) => file.slug === project.slug);
-      const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({ view: jsonThread(thread, prActions), binding: binding(thread) }));
+      const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({ view: jsonThread(thread, prActions), binding: binding(thread), summary: threadSummary(thread) }));
       withDepth(threads);
       return [{
         slug: project.slug,

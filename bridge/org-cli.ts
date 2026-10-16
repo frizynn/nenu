@@ -1,5 +1,7 @@
+import { isAbsolute } from "node:path";
+
 import { servicePath } from "./claude-sessions.ts";
-import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView } from "./types.ts";
+import { PR_ASKS, THREAD_VERDICTS, type PrAsk, type RoutineList, type RoutineView, type TemplateView, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
 
 export type OrgRun = (
   argv: string[],
@@ -436,6 +438,11 @@ export interface OrgOverviewThread {
   pr: OrgOverviewPullRequest | null;
   /** What a client may ask of the thread itself (`create-pr`); absent from an Organizations that predates it. */
   actions?: string[];
+  /** The report's `Status:` line; null without one and from an Organizations that predates it, as are the next three. */
+  verdict: ThreadVerdict | null;
+  summary: string | null;
+  captures: ThreadCapture[];
+  deliverables: ThreadDeliverable[];
 }
 
 export interface OrgOverviewProject {
@@ -522,7 +529,30 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     ...(typeof value.auto_merge === "boolean" ? { auto_merge: value.auto_merge } : {}),
     pr,
     ...parseActions(value.actions),
+    verdict: THREAD_VERDICTS.find((verdict) => verdict === value.verdict) ?? null,
+    summary: typeof value.summary === "string" && value.summary.trim() ? value.summary.slice(0, MAX_SUMMARY_CHARS) : null,
+    captures: libraryFiles(value.captures, MAX_CAPTURES, (item) => ({ caption: typeof item.caption === "string" ? item.caption : "" })),
+    deliverables: libraryFiles(value.deliverables, MAX_DELIVERABLES, (item) => {
+      const kind = DELIVERABLE_KINDS.find((candidate) => candidate === item.kind);
+      return kind && { kind };
+    }),
   };
+}
+
+// The bounds Organizations writes them within (docs/json.md); a longer list is cut, never refused.
+const MAX_SUMMARY_CHARS = 600;
+const MAX_CAPTURES = 24;
+const MAX_DELIVERABLES = 10;
+const DELIVERABLE_KINDS: ReadonlyArray<ThreadDeliverable["kind"]> = ["html", "pdf", "md"];
+
+/** The files of a report's list that name an absolute path, each with the rest `extra` reads; a malformed entry is skipped. */
+function libraryFiles<T extends object>(value: unknown, max: number, extra: (item: Record<string, unknown>) => T | undefined): Array<{ path: string } & T> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.path !== "string" || !isAbsolute(item.path) || item.path.length > 4096 || /[\x00-\x1f]/.test(item.path)) return [];
+    const rest = extra(item);
+    return rest ? [{ path: item.path, ...rest }] : [];
+  }).slice(0, max);
 }
 
 function parseActions(value: unknown): { actions?: string[] } {
