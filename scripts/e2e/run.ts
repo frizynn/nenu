@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
+import { filesBench } from "./files.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
@@ -26,6 +27,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts stop-state [--port 8797] [--out DIR] Stop from the session file, under a custom statusline
 //   bun scripts/e2e/run.ts baseline [--port 8797] [--out DIR] [--seconds 60] [--sends 5]
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
+//   bun scripts/e2e/run.ts files    [--port 8797] [--out DIR]   Every file a chat hands over, followed: taps, new tabs, lists, Open, refusals
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  A busy Home, calm then asked: captures, each list, requests per minute
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
@@ -1621,6 +1623,15 @@ async function artifacts(): Promise<void> {
   }
 }
 
+/** Every way a chat hands over a file, followed for real: taps, new tabs, the lists, the confirmed Open and what the bridge refuses. */
+async function files(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const checks = await withBench((bridge, browser) => filesBench(bridge, browser, outDir), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "files.json"), JSON.stringify(checks, null, 2));
+  for (const c of checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  if (checks.some((c) => !c.ok)) process.exit(1);
+}
+
 /**
  * Home over a neutral project (homeOrg) and two pull requests from GitHub, one on the working pane's
  * branch and one on a branch no pane is on: phone and desk, dark and light, then each list the
@@ -3195,6 +3206,7 @@ else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
 else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
+else if (command === "files") await files();
 else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
 else if (command === "terminal") await terminal(values.before === true);
@@ -3208,6 +3220,6 @@ else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

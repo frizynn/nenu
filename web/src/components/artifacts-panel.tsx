@@ -9,6 +9,7 @@ import { formatClock, type ActivityArtifact } from "@/lib/activity";
 import { paneFileUrl } from "@/lib/api";
 import { artifactCandidate, artifactSections, fileExtension, type ChatFileReference } from "@/lib/chat-files";
 import { cn } from "@/lib/utils";
+import { FileLink } from "./file-link";
 
 const ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring";
 const TILE = "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground";
@@ -77,30 +78,30 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
         const board = known?.state === "preview" ? known.designboard : undefined;
         const Icon = board ? LayoutTemplate : fileIcon(file.name);
         const kind = board ? "Designboard" : KIND_LABEL[fileExtension(file)] ?? fileExtension(file).toUpperCase();
+        const target = known && known.state !== "missing" ? known.resolved ?? file.path : file.path;
         return <li key={file.path}>
-          <button type="button" aria-label={`Open ${board ?? file.name}`} title={file.path} className={ROW}
-            onClick={() => onOpen(known && known.state !== "missing" ? known.resolved ?? file.path : file.path)}>
+          <FileLink path={target} onOpen={() => onOpen(target)} label={`Open ${board ?? file.name}`} title={file.path} className={ROW}>
             <span className={cn(TILE, board && "text-primary")}><Icon aria-hidden="true" className="size-4" /></span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{board ?? file.name}</span>
               <span className="block truncate text-xs text-muted-foreground">{caption(kind, when(file.lastSeen.timestamp))}</span>
             </span>
-          </button>
+          </FileLink>
         </li>;
       })}</ul>
     </Section>
 
     <Section title="Images" count={images.length}>
       <div className="grid grid-cols-2 gap-3 px-2 sm:grid-cols-3">
-        {images.map((file) => <button key={file.path} type="button" aria-label={`Open ${file.name}`} title={file.path} onClick={() => onOpen(file.src)}
-          className="group min-w-0 text-left focus-visible:outline-none">
+        {images.map((file) => <FileLink key={file.path} path={file.src} onOpen={() => onOpen(file.src)} label={`Open ${file.name}`} title={file.path}
+          className="group block min-w-0 text-left focus-visible:outline-none">
           <span className="block aspect-[4/3] overflow-hidden rounded-xl border bg-muted transition-colors group-hover:border-primary/40 group-focus-visible:ring-[3px] group-focus-visible:ring-ring">
             <img src={paneFileUrl(paneId, file.src, session)} alt="" loading="lazy" className="size-full object-contain"
               onError={() => setBroken((known) => new Set(known).add(file.path))} />
           </span>
           <span className="mt-1.5 block truncate text-sm font-medium">{file.name}</span>
           <span className="block truncate text-xs text-muted-foreground">{caption(fileExtension(file).toUpperCase(), when(file.lastSeen.timestamp))}</span>
-        </button>)}
+        </FileLink>)}
       </div>
     </Section>
 

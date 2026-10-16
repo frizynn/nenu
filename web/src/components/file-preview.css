@@ -6,6 +6,9 @@
 .file-preview-backdrop[data-leaving] { pointer-events: none; }
 .file-preview-panel { position: relative; display: flex; flex-direction: column; width: min(100%, 960px); height: min(90dvh, 100%); min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); outline: none; }
 .file-preview-panel--full { width: min(100%, 1440px); height: 100%; }
+/* A file's own page: the viewer is the page, edge to edge, over the app's own background. */
+.file-preview-backdrop--page { padding: 0; background: var(--background); }
+.file-preview-panel--page { width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--background); color: var(--foreground); }
 
 .file-preview-header { position: relative; display: flex; flex-shrink: 0; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 16px; border-bottom: 1px solid var(--border); }
 .file-preview-heading { display: flex; min-width: 0; flex: 1; flex-direction: column; }

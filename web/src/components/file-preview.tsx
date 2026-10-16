@@ -1,12 +1,12 @@
 import { lazy, Suspense, useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, Copy, Download, FileText, Globe, Pending, Ellipsis, RefreshCw, X } from "@/components/ui/icon";
+import { Check, ChevronLeft, Copy, Download, ExternalLink, FileText, Globe, Pending, Ellipsis, RefreshCw, X } from "@/components/ui/icon";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { fetchArtifactMetadata, fetchPaneFile, journalImageUrl, PaneFileError, paneFileUrl } from "@/lib/api";
 import { displayPath } from "@/lib/display-path";
 import { shortCwd } from "@/lib/format";
 import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
-import { FilePreviewContext } from "@/lib/file-preview-context";
+import { FileHrefContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { shortName, useFitted } from "@/lib/fit-text";
 import { IMAGE_EXTENSION } from "@/lib/message-images";
 import { useHoldReload } from "@/lib/reload-guard";
@@ -46,9 +46,11 @@ function whereLine(folder: string, from: string, max: number): string {
   return [folder && shortCwd(folder, max), from && `from ${from}`].filter(Boolean).join(" · ");
 }
 
-export default function FilePreview({ paneId, session, items, start = 0, path, panes = [], onClose }: {
+export default function FilePreview({ paneId, session, items, start = 0, path, panes = [], page = false, onClose }: {
   paneId: string;
   session?: string;
+  /** The file's own page (routes/file.tsx): the whole screen, and no link to a new tab, being one. */
+  page?: boolean;
   /** Live panes, so a file beyond this pane's folder can be opened from the pane that holds it. */
   panes?: readonly PaneRoot[];
   /** A gallery to step through; `path` is the one-file shorthand. */
@@ -77,6 +79,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const probe = useRef<AbortController | null>(null);
   const narrow = useMediaQuery("(max-width: 639px)");
   const openFile = useContext(FilePreviewContext);
+  const fileHref = useContext(FileHrefContext);
   const itemKey = keyOf(item);
   // A name the pane's folder lacks can live in a folder the conversation names (a summary recapping
   // another repo, a scratchpad): where the bridge found it, for this item only.
@@ -84,7 +87,11 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const shown = useRef(itemKey);
   shown.current = itemKey;
   const filePath = item?.kind !== "file" ? "" : moved?.itemKey === itemKey ? moved.path : item.path;
-  const openRelated = openFile ? (target: string) => openFile(target.startsWith("/") ? target : filePath.slice(0, filePath.lastIndexOf("/") + 1) + target) : null;
+  // A link inside a document names its target from the document's folder.
+  const related = (target: string) => target.startsWith("/") ? target : filePath.slice(0, filePath.lastIndexOf("/") + 1) + target;
+  const openRelated = openFile ? (target: string) => openFile(related(target)) : null;
+  const hrefRelated = fileHref ? (target: string) => fileHref(related(target)) : null;
+  const newTab = !page && fileHref && item?.kind === "file" ? fileHref(filePath) : null;
   const name = item?.kind === "journal" ? item.label : fileName(filePath);
   const html = isHtml(item);
   const image = isImage(item);
@@ -224,10 +231,10 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   const where = useFitted(whereRef, heading, whereLine(folder, sourceLabel, Infinity), (max) => whereLine(folder, sourceLabel, max), narrow ? 28 : 96);
   const Icon = html ? Globe : FileText;
 
-  return createPortal(<div className={cn("file-preview-backdrop", image && "file-preview-backdrop--image")} data-leaving={leaving ? "" : undefined}
-    onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+  return createPortal(<div className={cn("file-preview-backdrop", image && "file-preview-backdrop--image", page && "file-preview-backdrop--page")} data-leaving={leaving ? "" : undefined}
+    onClick={(event) => { if (!page && event.target === event.currentTarget) close(); }}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label={name} tabIndex={-1} onKeyDown={onKeyDown}
-      className={cn("file-preview-panel", html && "file-preview-panel--full", image && "file-preview-panel--image")}>
+      className={cn("file-preview-panel", (html || page) && "file-preview-panel--full", image && "file-preview-panel--image", page && "file-preview-panel--page")}>
       {image ? <ImageViewer images={gallery} index={at} name={name} downloadUrl={downloadUrl} error={failure || undefined}
         onStep={step} onClose={close} onDismissed={onClose} onImageError={imageError} onImageLoad={(src) => failedImages.current.delete(src)} />
       : <>
@@ -239,6 +246,8 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
             {where && <p ref={whereRef} className="file-preview-subtitle" title={filePath || undefined}>{where}</p>}
           </div>
           <div className="file-preview-actions">
+            {newTab && <a href={newTab} target="_blank" rel="noopener" aria-label="Open in new tab" title="Open in new tab" className="file-preview-action max-sm:hidden">
+              <ExternalLink className="size-5" aria-hidden="true" /></a>}
             {downloadUrl && <a href={downloadUrl} download={name} aria-label="Download file" className="file-preview-action"><Download className="size-5" aria-hidden="true" /></a>}
             <button ref={more} type="button" aria-label="More actions" aria-haspopup="dialog" aria-expanded={menu} className="file-preview-action"
               onClick={() => { setCopied(false); setMenu(!menu); }}><Ellipsis className="size-5" aria-hidden="true" /></button>
@@ -246,6 +255,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
           </div>
           <WorkbenchPopover open={menu} onDismiss={() => setMenu(false)} anchorRef={more} label="More actions" className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
             <ActionGroups onRun={(action) => action()} groups={[{ label: "More actions", actions: [
+              ...(newTab ? [{ id: "tab", label: "Open in new tab", icon: ExternalLink, run: () => { setMenu(false); window.open(newTab, "_blank", "noopener"); } }] : []),
               { id: "reload", label: "Reload", icon: RefreshCw, run: () => { setMenu(false); setAttempt((value) => value + 1); } },
               { id: "copy", label: copied ? "Copied path" : "Copy path", icon: copied ? Check : Copy, run: () => void copyPath() },
             ] }]} />
@@ -254,14 +264,14 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
         {error ? <div className="file-preview-content">{failure}</div>
           : html ? <HtmlViewer paneId={source} session={session} path={filePath} name={name} reload={attempt} onError={fail} />
           : <div className="file-preview-content">
-            <DocumentContent data={data} name={name} openRelated={openRelated} onError={mediaFailed} />
+            <DocumentContent data={data} name={name} openRelated={openRelated} hrefRelated={hrefRelated} onError={mediaFailed} />
           </div>}
       </>}
     </div>
   </div>, document.body);
 }
 
-function DocumentContent({ data, name, openRelated, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; onError: (message: string) => void }) {
+function DocumentContent({ data, name, openRelated, hrefRelated, onError }: { data: DocumentData | null; name: string; openRelated: ((path: string) => void) | null; hrefRelated: ((path: string) => string) | null; onError: (message: string) => void }) {
   if (!data) return <Loading />;
   switch (data.kind) {
     case "pdf":
@@ -273,9 +283,9 @@ function DocumentContent({ data, name, openRelated, onError }: { data: DocumentD
       return <img src={data.url} alt={name} decoding="async" className="mx-auto h-auto max-w-full" onError={() => onError("Could not load this image.")} />;
     case "text":
       if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{data.text}</pre>;
-      return <FilePreviewContext.Provider value={openRelated}>
+      return <FilePreviewContext.Provider value={openRelated}><FileHrefContext.Provider value={hrefRelated}>
         <MarkdownText text={data.text} className="mx-auto max-w-3xl p-5 sm:p-8" />
-      </FilePreviewContext.Provider>;
+      </FileHrefContext.Provider></FilePreviewContext.Provider>;
   }
 }
 

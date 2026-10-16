@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileIcon } from "@/components/ui/file-icon";
 import { ChevronRight, Folder, FolderOpen, RefreshCw } from "@/components/ui/icon";
 import { fetchProjectFiles, type ProjectFilesPage } from "@/lib/api";
+import { FileLink } from "./file-link";
 
 type Props = {
   paneId: string;
@@ -86,10 +87,10 @@ function Directory({
               name={file.name}
             />
           ) : (
-            <button
-              type="button"
+            <FileLink
+              path={file.path}
+              onOpen={() => onOpen(file.path)}
               title={file.path}
-              onClick={() => onOpen(file.path)}
               style={{ paddingLeft: `${Math.min(depth, 10) * 12 + 24}px` }}
               className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-sm hover:bg-muted/40"
             >
@@ -98,7 +99,7 @@ function Directory({
                 className="shrink-0 text-muted-foreground"
               />
               <span className="truncate">{file.name}</span>
-            </button>
+            </FileLink>
           )}
         </li>
       ))}

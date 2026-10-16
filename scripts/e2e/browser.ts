@@ -9,8 +9,10 @@ import { join } from "node:path";
 
 export interface Request { url(): string; method(): string }
 export interface Route { request(): Request; fulfill(opts: { json?: unknown; status?: number }): Promise<void> }
+export interface APIResponse { status(): number; headers(): Record<string, string>; json(): Promise<unknown> }
+export interface APIRequest { get(url: string): Promise<APIResponse> }
 export interface Locator {
-  click(opts?: { timeout?: number }): Promise<void>;
+  click(opts?: { timeout?: number; modifiers?: Array<"Alt" | "Control" | "Meta" | "Shift"> }): Promise<void>;
   hover(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
   press(key: string, opts?: { timeout?: number }): Promise<void>;
@@ -24,6 +26,9 @@ export interface Locator {
   getAttribute(name: string, opts?: { timeout?: number }): Promise<string | null>;
   scrollIntoViewIfNeeded(): Promise<void>;
   evaluateAll<T>(fn: (elements: Element[]) => T): Promise<T>;
+  evaluate<T>(fn: (element: Element) => T): Promise<T>;
+  allTextContents(): Promise<string[]>;
+  locator(selector: string): Locator;
   screenshot(opts: { path?: string; animations?: "disabled" }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
@@ -38,7 +43,10 @@ export interface Page {
   getByPlaceholder(text: string | RegExp): Locator;
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   locator(selector: string, opts?: { hasText?: string | RegExp }): Locator;
+  getByTitle(text: string | RegExp): Locator;
   url(): string;
+  waitForURL(url: string, opts?: { timeout?: number }): Promise<void>;
+  request: APIRequest;
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   clock: { install(opts: { time: number }): Promise<void> };
@@ -51,7 +59,12 @@ export interface Page {
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, opts?: { timeout?: number }): Promise<unknown>;
   close(): Promise<void>;
 }
-export interface Context { newPage(): Promise<Page>; close(): Promise<void> }
+export interface Context {
+  newPage(): Promise<Page>;
+  close(): Promise<void>;
+  waitForEvent(event: "page", opts?: { timeout?: number }): Promise<Page>;
+  request: APIRequest;
+}
 export interface Browser {
   newContext(opts: Record<string, unknown>): Promise<Context>;
   close(): Promise<void>;
