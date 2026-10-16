@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-10-16
+
+### Added
+
+- **Your asks** lists what you asked every coordinator, grouped as Herdr Organizations' popup groups it (wait on you, does not close, in progress, done, other lines); each row says the project, the coordinator and its answer or why it does not close, and opens that coordinator. It sits beside Routines on a desk and atop Projects in a phone's Search, with how many wait on you (ADR 0091) (7301a5ed, a54b0be7).
+- A coordinator's page opens on its card: objective, what waits on you, its asks, its agents with state and verdict, their pull requests, and context and compactions marked over a cap; the project's own coordinator has one at `node/root`. Its STATUS.md folds under it (a54b0be7, f38881cc).
+- `bun scripts/e2e/asks.ts [--quiet]` captures both with Google Chrome headless, and with an Organizations that predates them (a54b0be7).
+
+### Fixed
+
+- A same-size edit in the clock tick after the bridge hashed a file still changes its code stamp; ext4 stamps both writes alike, so the stamp test failed on such hosts (419b7c55).
+
 ## [1.17.0] - 2026-10-16
 
 ### Added
