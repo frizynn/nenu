@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-10-16
+
+### Fixed
+
+- The chat reads a message once, and its file list reads the same parse: a web URL or a link to one, its port included, opens as a link and draws no file card, `<https://…>` opens too, a fenced block names no file, and a 100 KB CSV reads in a millisecond instead of 3 s (cd99f097, 605ac859).
+- A file card, an image or a video in the chat shows only once the bridge finds the file, and opens what it found; a name with nothing behind it draws nothing instead of a "Not found" card (605ac859).
+- A table a phone would cut at its edge reads as rows, each cell under its header; one that fits stays a grid, its columns wrapping (dc83ee22).
+- A push held back while Nenu was open on a screen no longer counts as sent, so that agent's next finish still reaches the phone; the bridge's journal logs what it did with each alert (26747a52).
+
 ## [1.16.0] - 2026-10-16
 
 ### Added
