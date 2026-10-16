@@ -44,16 +44,18 @@ export type FoundFile = Exclude<ArtifactMetadata, { state: "missing" }>;
 export function useFoundFiles(paths: readonly string[]): ReadonlyMap<string, FoundFile> {
   const viewer = useContext(MediaViewerContext);
   const [found, setFound] = useState<ReadonlyMap<string, FoundFile>>(new Map());
-  const key = JSON.stringify(paths.slice(0, 20));
+  const key = JSON.stringify(paths);
   const paneId = viewer?.paneId;
   const session = viewer?.session;
   useEffect(() => {
     const wanted: string[] = JSON.parse(key);
     if (!paneId || !wanted.length) return;
     const controller = new AbortController();
-    fetchArtifactMetadata(paneId, wanted, session, controller.signal).then((answers) => setFound((known) => new Map([
+    // Twenty names a request keeps its URL short; a turn that hands over more still gets every card.
+    const batches = Array.from({ length: Math.ceil(wanted.length / 20) }, (_, i) => wanted.slice(i * 20, i * 20 + 20));
+    Promise.all(batches.map((batch) => fetchArtifactMetadata(paneId, batch, session, controller.signal))).then((answers) => setFound((known) => new Map([
       ...known,
-      ...answers.flatMap((entry) => entry.state === "missing" ? [] : [[entry.path, entry] as const]),
+      ...answers.flat().flatMap((entry) => entry.state === "missing" ? [] : [[entry.path, entry] as const]),
     ])), () => {});
     return () => controller.abort();
   }, [paneId, session, key]);

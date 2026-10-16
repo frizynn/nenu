@@ -177,29 +177,28 @@ function gridReads(scroller: HTMLElement): boolean {
  */
 function MdTable({ block }: { block: TableBlock }) {
   const box = useRef<HTMLDivElement>(null);
-  // Measured with the grid on screen: whether it read, at what width. Null draws the grid to measure.
+  const [width, setWidth] = useState(0);
+  // How this grid measured the last time it was on screen: whether it read, in what width.
   const [fit, setFit] = useState<{ block: TableBlock; reads: boolean; width: number } | null>(null);
-  const measuring = fit === null;
+  // A wider column, or other cells, draw the grid again to look.
+  const rows = fit !== null && fit.block === block && !fit.reads && width <= fit.width;
+  // Every layout with the grid on screen measures it.
+  useLayoutEffect(() => {
+    const el = box.current;
+    const grid = el?.querySelector<HTMLElement>("[data-grid]");
+    if (!el || !grid) return;
+    const next = { block, reads: gridReads(grid), width: el.clientWidth };
+    setFit((last) => last?.block === next.block && last.reads === next.reads && last.width === next.width ? last : next);
+  });
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const measure = () => setFit((last) => {
-      const width = el.clientWidth;
-      const scroller = el.querySelector<HTMLElement>("[data-grid]");
-      if (scroller) {
-        const reads = gridReads(scroller);
-        return last?.block === block && last.width === width && last.reads === reads ? last : { block, reads, width };
-      }
-      // The rows are drawn: a wider column may fit the grid, so draw it again and look.
-      return last && width > last.width ? null : last;
-    });
-    measure();
+    setWidth(el.clientWidth);
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [block, measuring]);
-  const rows = fit?.block === block && !fit.reads;
+  }, []);
   return (
     <div ref={box}>
       {/* Its Copy sits above it, right-aligned like a code block's. */}

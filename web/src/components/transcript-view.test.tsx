@@ -583,10 +583,11 @@ describe("journal media", () => {
 
   it("draws a card only for a file the bridge finds, and nothing for a name with nothing behind it", async () => {
     const asked: string[] = [];
-    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => HttpResponse.json(
-      new URL(request.url).searchParams.getAll("inspect").map((path) => (asked.push(path), path === "later.html"
-        ? { path, state: "missing" }
-        : { path, state: "preview", resolved: `/repo/${path}` })))));
+    server.use(http.get(/\/api\/pane\/[^/]+\/files$/, ({ request }) => {
+      const names = new URL(request.url).searchParams.getAll("inspect");
+      asked.push(...names);
+      return HttpResponse.json(names.map((path) => path === "later.html" ? { path, state: "missing" } : { path, state: "preview", resolved: `/repo/${path}` }));
+    }));
     render(withViewer(<TranscriptView entries={[turn({ role: "assistant", parts: [{ kind: "text", text: "Edited `assets/canvas.template.html`; writing `later.html` next." }] })]} />));
     // Each step is a request and a render; a loaded machine (the pre-push hook beside other suites)
     // needs more than findBy's default second for them.

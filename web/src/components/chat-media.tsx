@@ -30,9 +30,10 @@ export function ChatMedia({ text, compact = false, uploads = true }: { text: str
   const found = useFoundFiles(url ? [...named, ...pages] : []);
   if (!url) return null;
   const images = uploads ? carried : [];
+  const media = named.flatMap((path) => found.get(path) ?? []);
   // A picture shows from where the bridge found it; one beyond the folder opens only from its card.
-  const shown = named.flatMap((path) => { const file = found.get(path); return file?.state === "preview" ? [file.resolved ?? path] : []; });
-  const cards = [...named, ...pages].flatMap((path) => { const file = found.get(path); return file && (file.state === "outside" || pages.includes(path)) ? [file] : []; });
+  const shown = media.flatMap((file) => file.state === "preview" ? [file.resolved ?? file.path] : []);
+  const cards = [...media.filter((file) => file.state === "outside"), ...pages.flatMap((path) => found.get(path) ?? [])];
   // Nothing to show draws nothing: every message runs through here, and most name no media.
   if (!images.length && !shown.length && !cards.length) return null;
   const gallery = shown.filter((path) => !VIDEO.test(path));

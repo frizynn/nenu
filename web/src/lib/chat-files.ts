@@ -55,18 +55,15 @@ function markdownSpans(text: string): MdSpan[] {
 }
 
 /**
- * The local files a text names, read by the same parse that draws it (markdown.ts), so what is a URL,
- * a link or code on screen is never also a file here. `linked` keeps only what it links to: a link or
- * an image to a local file, and a file URL.
+ * What one span names: the file a link, an image or a file URL points at, the path a code span is,
+ * the files plain words mention. Read off the same parse that draws the text (markdown.ts), so what is
+ * a URL, a link's target or fenced code on screen is never also a file here.
  */
-function namedFiles(text: string, linked = false): string[] {
-  return markdownSpans(text).flatMap((span) => {
-    if (span.kind === "file" || span.kind === "image") return [span.path];
-    if (linked) return [];
-    if (span.kind === "text") return span.files ?? [];
-    const path = span.kind === "code" ? localFilePath(span.text) : null;
-    return path ? [path] : [];
-  });
+function spanFiles(span: MdSpan): string[] {
+  if (span.kind === "file" || span.kind === "image") return [span.path];
+  if (span.kind === "text") return span.files ?? [];
+  const path = span.kind === "code" ? localFilePath(span.text) : null;
+  return path ? [path] : [];
 }
 
 /** The local images a text already shows in place, as `![alt](path)`. */
@@ -74,12 +71,19 @@ export function markdownImagePaths(text: string): string[] {
   return markdownSpans(text).flatMap((span) => span.kind === "image" ? [span.path] : []);
 }
 
+/** The local files a text links to, which is how an answer hands one over. */
+function linkedFiles(text: string): string[] {
+  return markdownSpans(text).flatMap((span) => span.kind === "file" || span.kind === "image" ? [span.path] : []);
+}
+
 /**
- * Previewable local-file mentions in prose and in compact tool summaries/results: links, file URLs,
- * code spans and paths in plain words. The bridge remains authoritative about whether the named file
- * exists, is inside the pane cwd, is private, and is small enough to preview.
+ * Previewable local-file mentions in prose and in compact tool summaries/results. The bridge remains
+ * authoritative about whether the named file exists, is inside the pane cwd, is private, and is small
+ * enough to preview.
  */
-export const filePathsInText = (text: string): string[] => namedFiles(text);
+export function filePathsInText(text: string): string[] {
+  return markdownSpans(text).flatMap(spanFiles);
+}
 
 function textInPart(part: TranscriptPart): string[] {
   // Injected text (a skill's body, a notification) is not the conversation; its paths are not the chat's files.
@@ -100,7 +104,7 @@ export function chatFileReferences(entries: TranscriptEntry[]): ChatFileReferenc
     const perEntry = new Set<string>();
     for (const part of entry.parts) {
       const sent = sentFiles(part);
-      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? namedFiles(part.text, true).map(normalisePath) : sent.map(normalisePath));
+      const deliveredPaths = new Set(entry.role === "assistant" && part.kind === "text" ? linkedFiles(part.text).map(normalisePath) : sent.map(normalisePath));
       for (const text of textInPart(part)) {
         for (const candidate of [...filePathsInText(text), ...sent]) {
           const path = localFilePath(candidate);
