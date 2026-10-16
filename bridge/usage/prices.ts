@@ -47,13 +47,12 @@ const PRICES: Readonly<Record<string, Rates>> = {
 
 const FAST = new Set(["claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"]);
 
-/** A dated id (`claude-haiku-4-5-20251001`) prices as its family. */
+/** A dated id (`claude-haiku-4-5-20251001`, also `…+long`) prices as its family. */
 function rates(model: string): { rates: Rates; factor: number } | undefined {
-  const fast = model.endsWith("+fast");
-  const base = fast ? model.slice(0, -5) : model;
-  const found = PRICES[base] ?? PRICES[base.replace(/-\d{8}$/, "")];
+  const [, family, tier] = /^(.+?)(?:-\d{8})?(\+fast|\+long)?$/.exec(model)!;
+  const found = PRICES[tier === "+long" ? `${family}+long` : family!];
   if (!found) return undefined;
-  return { rates: found, factor: fast && FAST.has(base.replace(/-\d{8}$/, "")) ? 2 : 1 };
+  return { rates: found, factor: tier === "+fast" && FAST.has(family!) ? 2 : 1 };
 }
 
 /** The token columns a day's total keeps, in the order the scan writes them. */
