@@ -4,8 +4,9 @@ import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
   SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgStatusFile, type OrgTask,
+  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
+import type { OrgStatusFile } from "./org-report.ts";
 import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
