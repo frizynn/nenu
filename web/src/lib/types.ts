@@ -882,3 +882,134 @@ export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "d
 
 /** What the CLI's own queue did with a delivered row. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";
+
+// ── Usage (GET /api/usage): tokens and API-equivalent cost of Claude Code and Codex, from their logs ──
+
+export type UsageAgent = "claude" | "codex";
+
+/** Tokens and what they would cost on the API at list price (USD, two decimals); not a bill. */
+export interface UsageAmount {
+  cost: number;
+  tokens: number;
+}
+
+export interface UsageTokenDetail {
+  /** Uncached input. */
+  input: number;
+  /** Includes reasoning. */
+  output: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
+
+export interface UsageRow extends UsageAmount {
+  id: string;
+  label: string;
+  agent: UsageAgent;
+}
+
+export type UsagePeriodKey = "today" | "week" | "month" | "all";
+
+export interface UsagePeriod extends UsageAmount, UsageTokenDetail {
+  key: UsagePeriodKey;
+  /** First local day of the period, YYYY-MM-DD; weeks start on Monday. */
+  from: string;
+  agents: Partial<Record<UsageAgent, UsageAmount>>;
+  /** By cost, highest first. */
+  byModel: UsageRow[];
+  /** Repos (a repo's worktrees count together): the top 8, then one row `id: "_rest"` for the others. */
+  byProject: UsageRow[];
+}
+
+/** Only days with usage, within the last 371, oldest first. */
+export interface UsageDay extends UsageAmount {
+  date: string;
+  agents: Partial<Record<UsageAgent, UsageAmount>>;
+  /** With Split by account on and no account filter. */
+  accounts?: Array<UsageAmount & { id: string }>;
+}
+
+/** The last 12 weeks, oldest first. */
+export interface UsageWeek {
+  /** Monday, YYYY-MM-DD. */
+  start: string;
+  agents: Partial<Record<UsageAgent, UsageAmount>>;
+}
+
+export interface UsageLimitWindow {
+  name: "five_hour" | "seven_day" | "other";
+  windowMinutes: number;
+  usedPercent: number;
+  /** Epoch seconds. */
+  resetsAt?: number;
+}
+
+export interface UsageLimits {
+  agent: UsageAgent;
+  /** Absent with Split by account off: the agent's newest reading. */
+  account?: string;
+  /** Epoch ms of the reading. */
+  observedAt: number;
+  source: "statusline" | "codex" | "hats" | "claude-swap";
+  plan?: string;
+  windows: UsageLimitWindow[];
+}
+
+export interface UsageAccount {
+  /** "claude:<16 hex>", "claude:swap-2", "codex:<16 hex>", "claude:unassigned". */
+  id: string;
+  agent: UsageAgent;
+  /** The operator's alias, "Claude 2", "Account 2", "ChatGPT" or "Unassigned"; never an email. */
+  label: string;
+  source: "observed" | "hats" | "claude-swap" | "codex" | "none";
+  /** The account the CLI uses now, as last seen. */
+  active: boolean;
+  /** Epoch ms of the switch that made it active, and of the one that ended its last turn as active. */
+  activeSince?: number;
+  activeUntil?: number;
+  /** This month. */
+  month: UsageAmount;
+}
+
+export interface UsageScan {
+  state: "idle" | "scanning";
+  /** No totals yet: the first pass is still reading. */
+  firstPass: boolean;
+  files?: number;
+  totalFiles?: number;
+  bytes?: number;
+  totalBytes?: number;
+  /** Epoch ms the last scan finished. */
+  scannedAt?: number;
+  error?: string;
+}
+
+export interface UsageOff {
+  on: false;
+  splitByAccount: boolean;
+}
+
+export interface UsageOn {
+  on: true;
+  splitByAccount: boolean;
+  scan: UsageScan;
+  /** IANA zone the days are cut in. */
+  timeZone: string;
+  today: string;
+  /** Earliest day any log had; the day Nenu started keeping totals of its own. */
+  coverage: { logsFrom?: string; trackedFrom: string };
+  /** The account filter applied (only with Split by account on). */
+  account?: string;
+  /** today, week, month, all. */
+  periods: UsagePeriod[];
+  days: UsageDay[];
+  weeks: UsageWeek[];
+  /** Quartile cuts of the active days, for the map's four levels. */
+  levels: { cost: [number, number, number]; tokens: [number, number, number] };
+  /** Empty with Split by account off. */
+  accounts: UsageAccount[];
+  limits: UsageLimits[];
+  prices: { checked: string; unpriced: string[] };
+}
+
+export type UsageResponse = UsageOff | UsageOn;

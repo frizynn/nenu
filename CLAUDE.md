@@ -319,6 +319,11 @@ the pane's cwd, delivered files, then folders the pane's journal names. It serve
 outside the cwd it reports a file only to a device that could mint an Open link for it. Compaction
 summaries and notes name files without delivering them, so they draw no file cards.
 
+Settings → Usage (`bridge/usage/`) reads the same Claude and Codex logs for token totals, off by
+default. It scans in its own short-lived process at background priority, never in the bridge, on a
+timer or under a file watch, keeps tokens and prices them at read time, and never reads a credential
+or calls a usage endpoint ([ADR 0085](./.adr/0085-usage-is-scanned-in-its-own-process-from-the-agents-logs.md)).
+
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and
 only to write-level devices.

@@ -29,6 +29,7 @@ import type { SessionRegistry, SessionRuntime } from "../sessions.ts";
 import type { Snooze } from "../snooze.ts";
 import type { Subagents } from "../subagents.ts";
 import type { UpdateMonitor } from "../update.ts";
+import type { UsageService } from "../usage/runtime.ts";
 import type { WebAssetArchive } from "../web-assets.ts";
 
 /** What startServer's caller hands in: the process-wide pieces index.ts owns. */
@@ -46,6 +47,8 @@ export interface ServerDeps {
   live: LiveEvents;
   /** Herdr's saved machines (machines.ts). Absent in-process: no machines. */
   machines?: MachineDirectory;
+  /** Settings → Usage (usage/runtime.ts). Absent in-process: off. */
+  usage?: UsageService;
 }
 
 /** Everything a route handler may use, built once per server by startServer. */
@@ -78,6 +81,7 @@ export interface Services extends ServerDeps {
   /** Single-use links to files the operator confirmed opening outside the preview (ADR 0063). */
   fileGrants: FileGrants;
   machines: MachineDirectory;
+  usage: UsageService;
 }
 
 export type AccessLevel = "read" | "write";
