@@ -292,6 +292,9 @@ test("two scopes deliver in parallel; one scope delivers in order", async () => 
       if (r.id === "one") await gate;
       return { status: "sent" as const };
     });
+    // A slow runner can take longer than any fixed wait to start both: wait for them, then as long again
+    // for a second row of the same scope that should not start.
+    for (let waited = 0; started.length < 2 && waited < 2_000; waited += 10) await Bun.sleep(10);
     await Bun.sleep(30);
     // The slow first row of one scope does not hold the other scope back, nor let its own second row pass.
     expect(started.toSorted()).toEqual(["one", "other"]);
