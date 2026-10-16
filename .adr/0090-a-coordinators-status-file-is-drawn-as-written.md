@@ -1,6 +1,7 @@
 # 0090. A coordinator's STATUS.md is drawn as written, at the top of its page
 
-- **Status:** Accepted (2026-10-16). Requested by the operator. Builds on
+- **Status:** Accepted (2026-10-16). Amended by [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md):
+  under a coordinator's card the file starts closed. Requested by the operator. Builds on
   [ADR 0088](./0088-a-projects-library-is-read-through-one-contained-route.md) (what the snapshot leaves
   out) and [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md) (the coordinator's page).
 - **Trail:** `bridge/org-report.ts` (`status_file`) · `bridge/projects.ts` · `web/src/components/coordinator-status.tsx` ·

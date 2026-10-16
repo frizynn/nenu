@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, Clock, House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
+import { ChevronRight, Clock, House, Laptop, LayoutGrid, ListChecks, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
 
 import { DeskLists } from "@/components/desk-nav";
 import { openNewDialog } from "@/components/new-agent-sheet";
@@ -19,11 +19,12 @@ import { workspaceTree } from "@/lib/workspace-tree";
 import { displayName } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
+import { asksAvailable } from "@/hooks/use-asks";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { needsYouCount, needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, nodePath, panePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
+import { asksPath, homePath, nodePath, panePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { isOpenThread, projectForPane } from "@/lib/projects";
@@ -167,6 +168,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {!phone && <Link className="nav-row" to={routinesPath(data.session)} aria-current={pathname === "/routines" ? "page" : undefined}>
           <Clock aria-hidden size={16} /><span className="nav-row-text">Routines</span>
         </Link>}
+        {!phone && <AsksRow data={data} current={pathname === "/asks"} lead={false} />}
       </div>}
 
       {/* A link followed from the desk's tree ends its search once the page is on screen, as a result does. */}
@@ -289,6 +291,24 @@ function DrawerSections({ data }: { data: HomeData }) {
 }
 
 /**
+ * Your asks, where the projects are listed, with how many wait on you; only when Organizations can
+ * list asks (ADR 0091), so an older one leaves the lists as they were.
+ */
+function AsksRow({ data, current, lead }: { data: HomeData; current: boolean; lead: boolean }) {
+  if (!asksAvailable(data.projects)) return null;
+  const waiting = (data.projects ?? []).reduce((sum, project) => sum + (project.waitingAsks ?? 0), 0);
+  return (
+    <Link className="nav-row" to={asksPath(data.session)} aria-current={current ? "page" : undefined}
+      aria-label={waiting > 0 ? `Your asks, ${waiting} ${waiting === 1 ? "waits" : "wait"} on you` : undefined}>
+      {/* In the bar's top rows the glyph leads as Home's does; among the projects, in their column. */}
+      {lead ? <span className="nav-lead"><ListChecks aria-hidden size={16} /></span> : <ListChecks aria-hidden size={16} />}
+      <span className="nav-row-text">Your asks</span>
+      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" className="size-1.5" />{waiting}</span>}
+    </Link>
+  );
+}
+
+/**
  * Projects first, then the workspaces no project holds a pane in. `folded` is the phone's: every
  * project and workspace starts closed, and what the operator opens there lasts while the sheet does,
  * so the next open is compact again and the desk's remembered folds stay the desk's.
@@ -306,6 +326,8 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
     {projects.length > 0 && (
       <section aria-label="Projects" className="nav-group">
         <h3 className="nav-label">Projects</h3>
+        {/* The desk lists it at the top of its bar. */}
+        {folded && <AsksRow data={data} current={false} lead />}
         {projects.map((project) => (
           <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded}
             expanded={prefs.expanded} onExpand={setExpanded} panes={projectPanes(data, project)} />

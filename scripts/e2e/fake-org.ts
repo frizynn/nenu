@@ -24,6 +24,8 @@ interface FakeProject {
  */
 interface FakeState {
   profiles: string[];
+  /** `asks --json`'s rows; without them the fake answers `asks` as an Organizations that predates it. */
+  asks?: Array<{ project: string; [key: string]: unknown }>;
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   choices?: boolean;
   projects: FakeProject[];
@@ -101,6 +103,9 @@ const [command, sub] = argv;
 const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
+} else if (command === "asks" && "json" in flags) {
+  if (!state.asks) fail("unrecognized subcommand 'asks'");
+  console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter((row) => !flags.project || row.project === flags.project) }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
   console.log(state.profiles.join("\n"));
 } else if (command === "profile" && sub === "list" && "json" in flags) {

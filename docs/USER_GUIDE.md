@@ -375,6 +375,18 @@ start of a line reads as a coloured label, and a thread id such as `t-0042` open
 file folds; **Show all** opens the rest. With a Herdr Organizations that does not publish the file there
 is no block.
 
+**Your asks** lists everything you asked any coordinator, in one place: what waits on you, what does
+not close (the coordinator says done but its pull request is still open, say), what is in progress,
+what is done, and lines that do not follow the format. Each row says the project, the coordinator and
+its answer, or why it does not close, and a tap opens that coordinator. It sits above the projects in
+the desk's bar and at the top of Projects in a phone's Search, with how many wait on you.
+
+A coordinator's page then opens on its **card**: its objective, what waits on you, its other asks, the
+agents it runs with their state and verdict, their pull requests, and how full its context is, marked
+when it passed a cap. The project's own coordinator has its card too, opened from Your asks. Its
+STATUS.md stays one tap below, under **Show STATUS.md**. Both need a Herdr Organizations with `asks`;
+with an older one neither shows, and the pages are as before.
+
 **Close** (the check on an open row) stops a node and its view and keeps its branch, worktree and
 report. A coordinator that still runs open work is refused until those are closed. **Replace
 coordinator** (on the coordinator's row) stops the project coordinator and starts a new one on the

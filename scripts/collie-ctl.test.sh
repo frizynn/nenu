@@ -1496,6 +1496,13 @@ EOF
 test_tailscale_is_found_outside_a_minimal_path() {
   setup_case ts-outside-path
   ln -s "$(command -v dirname)" "${BIN_DIR}/dirname"
+  # launchd's /usr/bin:/bin, less a Tailscale the host itself installed there (a Linux package does),
+  # which would answer before the CLI this case stages.
+  local system="${CASE_DIR}/system"
+  mkdir -p "$system"
+  for tool in /usr/bin/* /bin/*; do
+    [ "${tool##*/}" = tailscale ] || [ -e "${system}/${tool##*/}" ] || ln -s "$tool" "${system}/${tool##*/}"
+  done
   local cli="${HOME_DIR}/.local/bin/tailscale"
   mkdir -p "$(dirname "$cli")"
   cat > "$cli" <<'EOF'
@@ -1510,7 +1517,7 @@ EOF
 set -euo pipefail
 export HOME="$HOME_DIR"
 export HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
-export PATH="$BIN_DIR:$(dirname "$(command -v bun)"):/usr/bin:/bin"
+export PATH="$BIN_DIR:$(dirname "$(command -v bun)"):$system"
 export COLLIE_CTL_TAILSCALE_FALLBACKS="\${1-$cli}"
 source "$CTL"
 discover_tailscale_hosts

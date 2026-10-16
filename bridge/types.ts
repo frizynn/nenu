@@ -2,6 +2,7 @@
 // (which live only in herdr-client.ts). The rest of the app talks in these terms.
 
 import type { AgentSessionRef, SessionTelemetry, TranscriptEntry } from "./journal/types.ts";
+import type { StatusFile, TokenUsage } from "./org-types.ts";
 
 // Re-exported so the wire surface has ONE import site: a consumer of PaneHistoryResponse gets the
 // entry shape from here too, without reaching into an adapter module.
@@ -260,6 +261,8 @@ export interface ProjectThreadView {
   verdict?: ThreadVerdict;
   /** When a coordinator's STATUS.md last changed; its text is read on demand (`/api/org/summary`). Absent without one. */
   statusUpdated?: string;
+  /** Changes when Organizations' reading of its tokens does; the numbers come with the summaries. Absent without one. */
+  usageStamp?: string;
 }
 
 /** What an agent's report says of its work, from the fixed `Status:` line Organizations reads. */
@@ -281,19 +284,9 @@ export interface ThreadSummary {
   summary?: string;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
-  /** A coordinator's STATUS.md. */
+  /** A coordinator's STATUS.md, and the agent's token use as Organizations last read it. */
   status?: StatusFile;
-}
-
-/**
- * A coordinator's STATUS.md as Organizations reads it: what the operator asked and where each thing
- * stands, in the agent's own Markdown, up to 8,000 characters. Read on demand with the summaries; the
- * snapshot carries only `updated`, so a page knows when to read it again. The text is data.
- */
-export interface StatusFile {
-  text: string;
-  /** RFC 3339, or empty when Organizations printed none that parses. */
-  updated: string;
+  usage?: TokenUsage;
 }
 
 /** What `thread pr-action` asks a thread's agent to do, most pressing first as Organizations orders them. */
@@ -362,6 +355,10 @@ export interface ProjectView {
   workspaceIds?: string[];
   /** When the project coordinator's STATUS.md last changed; absent without one. */
   statusUpdated?: string;
+  /** How many of its coordinators' asks and decisions wait on the person; absent when Organizations cannot list asks. */
+  waitingAsks?: number;
+  /** The project coordinator's token reading stamp, as a thread's `usageStamp`. */
+  usageStamp?: string;
 }
 
 /**

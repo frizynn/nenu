@@ -1,6 +1,8 @@
 import { isAbsolute } from "node:path";
 
-import { THREAD_VERDICTS, type StatusFile, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
+import { parseDecisions } from "./org-asks.ts";
+import type { StatusFile, TokenUsage } from "./org-types.ts";
+import { THREAD_VERDICTS, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
 
 // What `overview --json` says of a thread's last report, and of a coordinator's STATUS.md, read
 // within the bounds Organizations writes them (docs/json.md). Every field is newer than the rest of
@@ -45,12 +47,37 @@ export function parseReport(thread: Record<string, unknown>): OrgReport {
   };
 }
 
-/** A STATUS.md with an absolute path and some text; anything else reads as none. */
+/**
+ * A STATUS.md with an absolute path and some text; anything else reads as none. What Organizations
+ * reads out of the text (its objective and decisions) comes only when it printed them.
+ */
 export function parseStatusFile(value: unknown): OrgStatusFile | null {
   if (!isRecord(value) || !absolutePath(value.path) || typeof value.text !== "string" || !value.text.trim()) return null;
   const updated = typeof value.updated === "string" && Number.isFinite(Date.parse(value.updated)) ? value.updated : "";
-  return { path: value.path, text: value.text.slice(0, MAX_STATUS_CHARS), updated };
+  const objective = typeof value.objective === "string" ? value.objective.trim().slice(0, MAX_SUMMARY_CHARS) : "";
+  const needsDecision = parseDecisions(value.needs_decision);
+  return {
+    path: value.path, text: value.text.slice(0, MAX_STATUS_CHARS), updated,
+    ...(objective ? { objective } : {}),
+    ...(needsDecision.length ? { needsDecision } : {}),
+  };
 }
+
+/** Token use as Organizations last read it; null before a read, or when any count is not one. */
+export function parseUsage(value: unknown): TokenUsage | null {
+  if (!isRecord(value)) return null;
+  const read = (key: string) => isCount(value[key]) ? value[key] : -1;
+  const counts = {
+    input: read("input"), output: read("output"), cacheRead: read("cache_read"), cacheWrite: read("cache_write"),
+    context: read("context"), peakContext: read("peak_context"), compactions: read("compactions"),
+  };
+  if (Object.values(counts).some((count) => count < 0)) return null;
+  const overCap = Array.isArray(value.over_cap) ? value.over_cap.filter((cap): cap is string => typeof cap === "string" && /^[a-z][a-z_]{0,39}$/.test(cap)) : [];
+  const updated = typeof value.updated === "string" && Number.isFinite(Date.parse(value.updated)) ? value.updated : "";
+  return { ...counts, updated, overCap };
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 /** The files of a report's list that name an absolute path, each with the rest `extra` reads; a malformed entry is skipped. */
 function libraryFiles<T extends object>(value: unknown, max: number, extra: (item: Record<string, unknown>) => T | undefined): Array<{ path: string } & T> {

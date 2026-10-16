@@ -8,6 +8,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-10-16
+
+### Added
+
+- Your asks: every ask to every coordinator, grouped as Organizations' popup groups them; a row opens its coordinator (ADR 0091) (4a5e15e2, 44f75606, ff49cc08).
+- A coordinator's page opens on its card: objective, what waits on you, asks, agents, PRs and tokens; the project's own at `node/root` (44f75606, e768bff2).
+- `bun scripts/e2e/asks.ts [--quiet]` captures both in Chrome headless, with and without the fields (44f75606).
+
+### Fixed
+
+- An edit in the clock tick after the bridge hashed a file still changes its code stamp (53d05e10).
+- The ctl suite's minimal-PATH case ignores a Tailscale installed in `/usr/bin` (f7a477bf).
+
 ## [1.17.0] - 2026-10-16
 
 ### Added

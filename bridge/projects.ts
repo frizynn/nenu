@@ -4,10 +4,12 @@ import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
   SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
+  type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
+import { askGroup, readAsks, type OrgAskRow } from "./org-asks.ts";
 import type { OrgStatusFile } from "./org-report.ts";
-import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
+import type { AsksList, StatusFile, TokenUsage } from "./org-types.ts";
+import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
 const STAT_MS = 2_000;
@@ -21,7 +23,7 @@ const SLUG_DIR_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const THREAD_FILE_RE = /^t-\d{4,}\.toml$/;
 const THREAD_ID_RE = /^t-\d{4,}$/;
 /** The `.state/` files whose change can change what `overview --json` prints. Stat only, never read here. */
-const STATE_FILES = ["project.json", "coordinator.json", "ticker.json"];
+const STATE_FILES = ["project.json", "coordinator.json", "ticker.json", "usage.json"];
 
 type JsonObject = Record<string, unknown>;
 type TomlObject = Record<string, unknown>;
@@ -293,18 +295,26 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(prAction ? { prAction } : {}),
     ...(record.verdict ? { verdict: record.verdict } : {}),
     ...(record.status_file ? { statusUpdated: record.status_file.updated } : {}),
+    ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
   };
 }
 
-/** What the thread's report says and shows, or undefined when it says none of it. */
+/** What the thread's report says and shows, and its token use, or undefined when it has none of it. */
 function threadSummary(record: OrgOverviewThread): ThreadSummary | undefined {
-  const { summary, captures, deliverables, status_file: status } = record;
-  if (!summary && !captures.length && !deliverables.length && !status) return undefined;
-  return { id: record.id, ...(summary ? { summary } : {}), captures, deliverables, ...(status ? { status: statusText(status) } : {}) };
+  const { summary, captures, deliverables, status_file: status, usage } = record;
+  if (!summary && !captures.length && !deliverables.length && !status && !usage) return undefined;
+  return {
+    id: record.id, ...(summary ? { summary } : {}), captures, deliverables,
+    ...(status ? { status: statusText(status) } : {}), ...(usage ? { usage } : {}),
+  };
 }
 
-/** What a client is given of a STATUS.md: its text and when it changed, never where it lives. */
-const statusText = ({ text, updated }: OrgStatusFile): StatusFile => ({ text, updated });
+/** What a client is given of a STATUS.md: what it says and when it changed, never where it lives. */
+const statusText = ({ text, updated, objective, needsDecision }: OrgStatusFile): StatusFile =>
+  ({ text, updated, ...(objective ? { objective } : {}), ...(needsDecision ? { needsDecision } : {}) });
+
+/** What changes whenever a token reading does: when its last request was, and the caps it passed. */
+const usageStamp = (usage: TokenUsage) => `${usage.updated}|${usage.overCap.join(",")}`;
 
 /** Depth from the parent chain; an unknown parent or a cycle stops at the project root. */
 function withDepth(threads: Array<{ view: OrgThreadView; binding: Binding }>): void {
@@ -344,6 +354,11 @@ interface ProjectRecord extends FileProject {
   /** The project coordinator's STATUS.md, and where every STATUS.md in the project lives; `--json` only. */
   statusFile?: OrgStatusFile;
   statusPaths?: string[];
+  /** The project coordinator's token use and how it was started, when Organizations prints them. */
+  usage?: TokenUsage;
+  coordinatorAgent?: OrgCoordinator;
+  /** Asks and decisions waiting on the person; absent when this Organizations cannot list asks. */
+  waitingAsks?: number;
 }
 
 export class ProjectRegistry {
@@ -354,6 +369,8 @@ export class ProjectRegistry {
   private readonly watchEnabled: boolean;
   private readonly upstream: () => boolean;
   private records: ProjectRecord[] = [];
+  /** Every coordinator's asks as the last refresh read them; undefined when this Organizations has none to give. */
+  private askRows: OrgAskRow[] | undefined;
   private nodeActions = true;
   private loaded = false;
   private stamp = "";
@@ -405,6 +422,8 @@ export class ProjectRegistry {
           status: record.status,
           ...picks(record.icon, record.tone),
           ...(record.statusFile ? { statusUpdated: record.statusFile.updated } : {}),
+          ...(record.waitingAsks !== undefined ? { waitingAsks: record.waitingAsks } : {}),
+          ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
           coordinator: coordinatorPane ? {
             paneId: coordinatorPane.paneId,
             agent: coordinatorPane.agent,
@@ -438,12 +457,35 @@ export class ProjectRegistry {
    * What each thread's report says and shows, for the threads whose report says any of it. Null
    * when Organizations is read from its files, which carry none of it, or the project is not listed.
    */
-  summaries(project: string): { threads: ThreadSummary[]; status: StatusFile | null } | null {
+  summaries(project: string): { threads: ThreadSummary[]; status: StatusFile | null; usage: TokenUsage | null; coordinator: OrgCoordinator | null } | null {
     const slug = validateProjectSlug(project);
     this.read();
     const record = this.records.find((candidate) => candidate.slug === slug);
     if (!record || record.source !== "json") return null;
-    return { threads: record.threads.flatMap(({ summary }) => summary ? [summary] : []), status: record.statusFile ? statusText(record.statusFile) : null };
+    return {
+      threads: record.threads.flatMap(({ summary }) => summary ? [summary] : []),
+      status: record.statusFile ? statusText(record.statusFile) : null,
+      usage: record.usage ?? null,
+      coordinator: record.coordinatorAgent ?? null,
+    };
+  }
+
+  /**
+   * Every listed project's asks, each placed as Organizations orders it, and the decisions of the
+   * coordinators that still take an answer, from the last refresh: no spawn. Null when this
+   * Organizations cannot list asks.
+   */
+  asks(): AsksList | null {
+    this.read();
+    if (!this.askRows) return null;
+    const records = new Map(this.records.map((record) => [record.slug, record]));
+    return {
+      asks: this.askRows.flatMap((row) => {
+        const record = records.get(row.project);
+        return record ? [{ ...row, group: askGroup(row, resolvedCoordinator(record, row.coordinator.id)) }] : [];
+      }),
+      decisions: this.records.flatMap((record) => openDecisions(record)),
+    };
   }
 
   /** The folder Organizations copies each thread's files into, for a project this registry lists; undefined otherwise. */
@@ -508,11 +550,19 @@ export class ProjectRegistry {
     this.lastRefresh = this.now();
     this.stamp = this.fingerprint();
     const files = this.readFiles();
-    const overview = this.run ? await readOverview(this.run, this.root).catch(() => undefined) : undefined;
-    const next = overview ? this.fromJson(overview, files) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
+    // A failed read of the asks keeps the last one; an Organizations without them has none.
+    const [overview, asks] = this.run
+      ? await Promise.all([
+        readOverview(this.run, this.root).catch(() => undefined),
+        readAsks(this.run, this.root).then((rows) => rows ?? undefined, () => this.askRows),
+      ])
+      : [undefined, undefined];
+    const askRows = overview ? asks : undefined;
+    const next = overview ? this.fromJson(overview, files, askRows) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
     const nodeActions = !this.upstream();
-    const changed = nodeActions !== this.nodeActions || JSON.stringify(next) !== JSON.stringify(this.records);
+    const changed = nodeActions !== this.nodeActions || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRows) !== JSON.stringify(this.askRows);
     this.records = next;
+    this.askRows = askRows;
     this.nodeActions = nodeActions;
     this.loaded = true;
     this.rewatch();
@@ -674,7 +724,7 @@ export class ProjectRegistry {
     });
   }
 
-  private fromJson(projects: OrgOverviewProject[], files: FileProject[]): ProjectRecord[] {
+  private fromJson(projects: OrgOverviewProject[], files: FileProject[], asks: OrgAskRow[] | undefined): ProjectRecord[] {
     // Every thread comes from the same binary, so one carrying the flags shows the actions exist.
     const prActions = projects.some((project) => project.threads.some((thread) => typeof thread.auto_merge === "boolean"));
     return projects.flatMap((project) => {
@@ -682,7 +732,7 @@ export class ProjectRegistry {
       const local = files.find((file) => file.slug === project.slug);
       const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({ view: jsonThread(thread, prActions), binding: binding(thread), summary: threadSummary(thread) }));
       withDepth(threads);
-      return [{
+      const record = {
         slug: project.slug,
         name: project.name,
         ...(project.goal ? { goal: project.goal } : {}),
@@ -697,7 +747,29 @@ export class ProjectRegistry {
         prActions,
         ...(project.status_file ? { statusFile: project.status_file } : {}),
         statusPaths: [project.status_file, ...project.threads.map((thread) => thread.status_file)].flatMap((file) => file ? [file.path] : []),
-      }];
+        ...(project.usage ? { usage: project.usage } : {}),
+        ...(project.coordinator ? { coordinatorAgent: project.coordinator } : {}),
+      };
+      return [asks ? { ...record, waitingAsks: waitingAsks(record, asks) } : record];
     });
   }
+}
+
+/** Whether coordinator `id` of a project is resolved; the project's own (`root`) never is. */
+function resolvedCoordinator(record: ProjectRecord, id: string): boolean {
+  return record.threads.some(({ view }) => view.id === id && view.status === "resolved");
+}
+
+/** The `## Needs your decision` lines of a project's coordinators that still take an answer, root first. */
+function openDecisions(record: ProjectRecord): AsksList["decisions"] {
+  const root = (record.statusFile?.needsDecision ?? []).map((text) => ({ project: record.slug, coordinator: { id: "root", title: "" }, text }));
+  const nodes = record.threads.flatMap(({ view, summary }) => view.status === "resolved" ? [] : (summary?.status?.needsDecision ?? [])
+    .map((text) => ({ project: record.slug, coordinator: { id: view.id, title: view.title }, text })));
+  return [...root, ...nodes];
+}
+
+/** How many of a project's asks and decisions wait on the person, as Your asks counts them. */
+function waitingAsks(record: ProjectRecord, asks: readonly OrgAskRow[]): number {
+  const waiting = asks.filter((row) => row.project === record.slug && askGroup(row, resolvedCoordinator(record, row.coordinator.id)) === "waiting");
+  return waiting.length + openDecisions(record).length;
 }

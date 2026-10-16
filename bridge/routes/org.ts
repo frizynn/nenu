@@ -12,7 +12,18 @@ export const orgRoutes: Route[] = [
   orgRead("/api/org/status", "Could not read the project's status.", async ({ projects }, project) => ({ status: await projects.status(project) })),
   orgRead("/api/org/context", "Could not read the project's context.", ({ projects }, project) => projects.context(project)),
   // Read by a node's page while it is on screen, from what the last overview read: no spawn.
-  orgRead("/api/org/summary", "Could not read the summaries.", async ({ projects }, project) => projects.summaries(project) ?? { threads: null, status: null }),
+  orgRead("/api/org/summary", "Could not read the summaries.", async ({ projects }, project) =>
+    projects.summaries(project) ?? { threads: null, status: null, usage: null, coordinator: null }),
+  // Your asks, every project's at once, from what the last refresh read: no spawn. Null when this Organizations cannot list them.
+  {
+    method: "GET",
+    path: "/api/org/asks",
+    access: "read",
+    session: false,
+    async handle({ projects }, { req }) {
+      return json({ ok: true, ...(projects.asks() ?? { asks: null, decisions: [] }) }, req.headers.get("accept-encoding"));
+    },
+  },
   {
     // A picture, HTML page or PDF from the project's library (org-library.ts). Read-level, as a
     // pane's /file is: a new tab is a top-level navigation and carries no Origin.

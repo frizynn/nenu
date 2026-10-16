@@ -1,5 +1,6 @@
 import { servicePath } from "./claude-sessions.ts";
-import { parseReport, parseStatusFile, type OrgReport, type OrgStatusFile } from "./org-report.ts";
+import { parseReport, parseStatusFile, parseUsage, type OrgReport, type OrgStatusFile } from "./org-report.ts";
+import type { TokenUsage } from "./org-types.ts";
 import { PR_ASKS, type PrAsk, type RoutineList, type RoutineView, type TemplateView } from "./types.ts";
 
 export type OrgRun = (
@@ -438,6 +439,17 @@ export interface OrgOverviewThread extends OrgReport {
   pr: OrgOverviewPullRequest | null;
   /** What a client may ask of the thread itself (`create-pr`); absent from an Organizations that predates it. */
   actions?: string[];
+  usage: TokenUsage | null;
+}
+
+/** The agent states Herdr reports, as the ticker records the project coordinator's. */
+const COORDINATOR_STATES = ["working", "blocked", "idle", "done"] as const;
+
+/** The project's coordinator as the ticker last saw its pane; `state` is empty before it looked, or for a state this Nenu does not know. */
+export interface OrgCoordinator {
+  agent: string;
+  model: string;
+  state: typeof COORDINATOR_STATES[number] | "";
 }
 
 export interface OrgOverviewProject {
@@ -450,6 +462,9 @@ export interface OrgOverviewProject {
   tone: string;
   /** The project coordinator's STATUS.md, as a thread's. */
   status_file: OrgStatusFile | null;
+  /** The project coordinator's token use and how it was started; null from an Organizations that predates them, or a project never opened. */
+  usage: TokenUsage | null;
+  coordinator: OrgCoordinator | null;
   threads: OrgOverviewThread[];
 }
 
@@ -494,11 +509,19 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     icon: pickName(value.icon),
     tone: pickName(value.tone),
     status_file: parseStatusFile(value.status_file),
+    usage: parseUsage(value.usage),
+    coordinator: parseCoordinator(value.coordinator),
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];
     }),
   };
+}
+
+function parseCoordinator(value: unknown): OrgCoordinator | null {
+  if (!isRecord(value)) return null;
+  const { agent, model, state } = value;
+  return { agent: text(agent), model: text(model), state: COORDINATOR_STATES.find((known) => known === state) ?? "" };
 }
 
 function parseThread(value: unknown): OrgOverviewThread | undefined {
@@ -528,6 +551,7 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     pr,
     ...parseActions(value.actions),
     ...parseReport(value),
+    usage: parseUsage(value.usage),
   };
 }
 
