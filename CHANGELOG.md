@@ -19,6 +19,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - A same-size edit in the clock tick after the bridge hashed a file still changes its code stamp; ext4 stamps both writes alike, so the stamp test failed on such hosts (419b7c55).
+- The ctl suite's minimal-PATH case no longer finds a Tailscale the host installed in `/usr/bin`, which failed it on Linux (21716253).
 
 ## [1.17.0] - 2026-10-16
 
