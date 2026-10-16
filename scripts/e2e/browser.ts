@@ -12,7 +12,7 @@ export interface Route { request(): Request; fulfill(opts: { json?: unknown; sta
 export interface APIResponse { status(): number; headers(): Record<string, string>; json(): Promise<unknown> }
 export interface APIRequest { get(url: string): Promise<APIResponse> }
 export interface Locator {
-  click(opts?: { timeout?: number; modifiers?: Array<"Alt" | "Control" | "Meta" | "Shift"> }): Promise<void>;
+  click(opts?: { timeout?: number; modifiers?: Array<"Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift"> }): Promise<void>;
   hover(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
   press(key: string, opts?: { timeout?: number }): Promise<void>;

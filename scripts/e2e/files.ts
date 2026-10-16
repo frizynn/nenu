@@ -87,8 +87,8 @@ export async function filesBench(bridge: TestBridge, browser: Browser, outDir: s
       check("prose link is a link to the file's own page", await report.getAttribute("href") === filePage("reports/test-report.md"), await report.getAttribute("href") ?? "no href");
       await report.click();
       const reportViewer = page.getByRole("dialog", { name: "test-report.md" });
-      const reportOpened = await reportViewer.getByRole("heading", { name: "Test report" }).waitFor({ timeout: 8_000 }).then(() => true, () => false);
-      check("a tap opens the document in the viewer", reportOpened && page.url() === chat);
+      const reportOpened = await reportViewer.getByText("All 48 checkout tests pass.", { exact: false }).waitFor({ timeout: 8_000 }).then(() => true, () => false);
+      check("a tap opens the document in the viewer, on the chat's own address", reportOpened && new URL(page.url()).pathname === new URL(chat).pathname, `${reportOpened} ${page.url()}`);
       await shot(page, "phone-viewer-markdown");
       // A link inside the document opens the sibling, from the document's folder.
       const notes = reportViewer.getByRole("link", { name: "the notes" });
@@ -224,7 +224,7 @@ export async function filesBench(bridge: TestBridge, browser: Browser, outDir: s
       await closeViewer(deskPage);
       const [modified] = await Promise.all([
         desk.waitForEvent("page", { timeout: 8_000 }).catch(() => null),
-        deskPage.getByRole("link", { name: "test report" }).click({ modifiers: ["Meta"] }),
+        deskPage.getByRole("link", { name: "test report" }).click({ modifiers: ["ControlOrMeta"] }),
       ]);
       check("a modified click opens a new tab and leaves the chat as it was",
         modified !== null && await deskPage.getByRole("dialog", { name: "test-report.md" }).count() === 0, modified?.url() ?? "no new tab");
