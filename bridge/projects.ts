@@ -333,7 +333,7 @@ interface FileProject extends Picks {
   session: string;
   roots: string[];
   coordinator: Binding;
-  /** `summary` stays out of the snapshot: up to 600 characters and 34 paths a thread, read only by the page that shows them. */
+  /** `summary` stays out of the snapshot: up to 600 characters, 34 paths and a STATUS.md a thread, read only by the page that shows them. */
   threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary }>;
 }
 
