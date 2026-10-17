@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  canMoveNodes,
   coordinatorChoices,
   createProject,
   listProfiles,
   listRoutines,
   listTemplates,
   mergeThread,
+  moveNode,
   openProject,
   OrgCliError,
   orgEnv,
@@ -162,7 +164,36 @@ describe("herdr-organizations CLI adapter", () => {
     expect(await startNode(run, "/tmp/herdr.sock", {
       project: "acme", title: "-Billing", parent: "t-0010", task: "Coordinate billing.", role: "coordinator", profile: "codex",
     }, () => false)).toMatchObject({ id: "t-0042", role: "coordinator", parent: "t-0010", profile: "codex" });
-    expect(calls[0]!.argv).toEqual(["node", "start", "acme", "--role=coordinator", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
+    expect(calls[0]!.argv).toEqual(["node", "start", "acme", "--role=coordinator", "--can-spawn", "--kind=tab", "--parent=t-0010", "--title=-Billing", "--profile=codex", "--task-file", "-"]);
+  });
+
+  it("moves a node under another parent and checks what Organizations says it did", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, id: "t-0012", parent_id: "t-0010" }), stderr: "" });
+
+    expect(await moveNode(run, "/tmp/herdr.sock", { project: "acme", id: "t-0012", parent: "t-0010" })).toEqual({ id: "t-0012", project: "acme", parent: "t-0010" });
+    expect(calls).toEqual([{
+      argv: ["node", "move", "acme", "t-0012", "--parent=t-0010", "--json"],
+      opts: { env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
+    }]);
+    await expect(moveNode(fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, id: "t-0012", parent_id: "root" }), stderr: "" }).run, "/s", { project: "acme", id: "t-0012", parent: "t-0010" }))
+      .rejects.toThrow("invalid move response");
+    await expect(moveNode(fakeRun({ code: 1, stdout: "", stderr: "error: node `t-0012` is a worker and cannot spawn" }).run, "/s", { project: "acme", id: "t-0013", parent: "t-0012" }))
+      .rejects.toThrow("cannot spawn");
+  });
+
+  it("refuses a move it can tell is wrong before running the CLI", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
+    await expect(moveNode(run, "/s", { project: "acme", id: "t-0012", parent: "t-0012" })).rejects.toThrow("its own parent");
+    await expect(moveNode(run, "/s", { project: "acme", id: "t-0012", parent: "--parent=root" })).rejects.toThrow("Node ID must look like t-1234");
+    await expect(moveNode(run, "/s", { project: "../acme", id: "t-0012", parent: "root" })).rejects.toThrow("Project must use lowercase");
+    await expect(moveNode(run, "/s", { project: "acme", id: "root", parent: "t-0010" })).rejects.toThrow("Node ID must look like t-1234");
+    expect(calls).toEqual([]);
+  });
+
+  it("knows node move is there only when its help exits 0", async () => {
+    expect(await canMoveNodes(fakeRun({ code: 0, stdout: "Usage: herdr-organizations node move", stderr: "" }).run)).toBe(true);
+    expect(await canMoveNodes(fakeRun({ code: 2, stdout: "", stderr: "error: unrecognized subcommand 'move'" }).run)).toBe(false);
+    expect(await canMoveNodes(async () => { throw new Error("spawn failed"); })).toBe(false);
   });
 
   it("starts a top-level thread through upstream herdr-projects and refuses what it cannot do", async () => {

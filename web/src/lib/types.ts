@@ -344,6 +344,8 @@ export interface ProjectView {
   prActions?: boolean;
   /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
   nodeActions?: boolean;
+  /** Organizations can hang a node under another parent (`node move`); absent or false hides Move. */
+  nodeMoves?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
   /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */
