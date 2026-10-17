@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactElement } from "react";
@@ -161,6 +161,21 @@ describe("AppHeader — the phone's leading control", () => {
     const back = screen.getByRole("button", { name: "Back to Main" });
     expect(back).toHaveTextContent("Main");
     expect(back).not.toHaveClass("lg:hidden");
+  });
+
+  it("keeps a thread's way up to its coordinator on a desk, named, where the flat sidebar cannot climb", () => {
+    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "coord-arreglos", to: "/pane/c1" }}><span>AWA-476</span></AppHeader>);
+    const back = screen.getByRole("link", { name: "Back to coord-arreglos" });
+    expect(back).not.toHaveClass("lg:hidden");
+    expect(back).toHaveTextContent("coord-arreglos");
+  });
+
+  it("steps aside on a desk when the sidebar lists the parent, a project or Home, or the page has its own close", () => {
+    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "Acme", to: "/project/acme" }} />);
+    expect(screen.getByRole("link", { name: "Back to Acme" })).toHaveClass("lg:hidden");
+    cleanup();
+    renderAt("/pane/t1/history", <AppHeader bridge="connected" error={false} back={{ label: "AWA-476", to: "/pane/t1" }} />);
+    expect(screen.getByRole("link", { name: "Back to AWA-476" })).toHaveClass("lg:hidden");
   });
 });
 

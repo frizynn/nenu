@@ -1,4 +1,4 @@
-import { createBrowserRouter, type RouteObject } from "react-router";
+import { createBrowserRouter, type RouteObject, type ShouldRevalidateFunction } from "react-router";
 
 import { BootSplash, RootError, RootLayout } from "@/routes/root";
 import { HomeRoute } from "@/routes/home";
@@ -30,11 +30,21 @@ function depth(value: number): MotionHandle {
   return { depth: value };
 }
 
+// What a chat shows in place, a phone's tab or a thread docked on a desk, lives in the URL so a reload
+// and a way back keep it, but switching it reads nothing new: the snapshot and the mirror already hold it.
+const IN_PLACE = ["view", "thread"];
+const keepInPlace: ShouldRevalidateFunction = ({ currentUrl, nextUrl, formMethod, defaultShouldRevalidate }) => {
+  if (formMethod || currentUrl.href === nextUrl.href || currentUrl.pathname !== nextUrl.pathname) return defaultShouldRevalidate;
+  const rest = (url: URL) => [...url.searchParams].filter(([key]) => !IN_PLACE.includes(key)).sort().join("&");
+  return rest(currentUrl) === rest(nextUrl) ? false : defaultShouldRevalidate;
+};
+
 export const routes: RouteObject[] = [
   {
     id: ROOT_ROUTE_ID,
     path: "/",
     loader: rootLoader,
+    shouldRevalidate: keepInPlace,
     element: <RootLayout />,
     // Catches render-phase errors and loader throws (e.g. a missing :paneId) so a component bug
     // shows a recoverable screen instead of React Router's blank default.
@@ -55,7 +65,7 @@ export const routes: RouteObject[] = [
       { path: "asks", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/asks")).AsksRoute }) },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
-      { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, element: <DetailRoute /> },
+      { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, shouldRevalidate: keepInPlace, element: <DetailRoute /> },
       // A file's own page, for a link opened in a new tab: the viewer's code loads when it is opened.
       { path: "pane/:paneId/file", handle: depth(4), lazy: async () => ({ Component: (await import("@/routes/file")).FileRoute }) },
       {

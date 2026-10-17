@@ -8,6 +8,7 @@ import { vi } from "vitest";
 import { server } from "@/test/setup";
 
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
+import { animateNavigations } from "@/lib/motion";
 import type { AgentView, ProjectView } from "@/lib/types";
 import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
@@ -61,6 +62,8 @@ function setup(path: string, data: HomeData) {
       },
     ],
   }], { initialEntries: [path] });
+  // As the app's router: every navigation it starts remembers the page it came from.
+  animateNavigations(router);
   render(<RouterProvider router={router} />);
   return { router, user: userEvent.setup() };
 }
@@ -79,34 +82,43 @@ it("opens a project on its coordinator's chat, and switches Chat, Threads and PR
 
   const tabs = within(screen.getByRole("tablist", { name: "Project" }));
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
-  expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByTestId("conversation")).not.toBeInTheDocument());
+  // The tab lives in the URL, in place: a reload or a way back lands on it, and it adds no history.
+  expect(router.state.location.search).toBe("?view=threads");
+  expect(router.state.historyAction).toBe("REPLACE");
   expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Docs", "Build"]);
   // Merge only where Organizations says nothing blocks it.
   await user.click(tabs.getByRole("tab", { name: /PRs/ }));
-  expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · Ready to merge");
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Docs/ })).toHaveTextContent("PR #9 · Ready to merge"));
   expect(screen.getByRole("button", { name: /^Build/ })).toHaveTextContent("PR #12 · Checks running 1/2");
   expect(screen.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
   expect(screen.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
   await user.click(tabs.getByRole("tab", { name: "Chat" }));
-  expect(screen.getByTestId("conversation")).toBeInTheDocument();
+  expect(await screen.findByTestId("conversation")).toBeInTheDocument();
+  expect(router.state.location.search).toBe("");
   expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
 
-  // A thread opens from the Threads tab; it shows its siblings as chips and its PR above the composer.
+  // A thread opens from the Threads tab, one level down: a push, with no flash of the coordinator's Chat.
   await user.click(tabs.getByRole("tab", { name: /Threads/ }));
-  await user.click(within(screen.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Build/ }));
-  expect(router.state.location.pathname).toBe("/pane/worker");
+  await user.click(within(await screen.findByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Build/ }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/pane/worker"));
+  expect(router.state.historyAction).toBe("PUSH");
   // The coordinator's conversation is still mounted until the route re-renders; wait for the swap.
   await waitFor(() => expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker"));
   expect(screen.getByRole("heading", { name: "Build" })).toBeInTheDocument();
   expect(screen.getByTestId("chat")).toHaveAttribute("data-role", "worker");
-  const chips = within(screen.getByRole("navigation", { name: "Threads" }));
-  const build = chips.getByRole("button", { name: /Build/ });
-  expect(build).toHaveAttribute("aria-current", "true");
-  // The shared strip, which steps aside with the tab and pane strips while a phone keyboard is up.
-  expect(build.closest("[data-workbench-navigation-band]")).not.toBeNull();
-  expect(chips.getByRole("button", { name: /coordinator/ })).toBeInTheDocument();
+  // A thread shows what its coordinator shows, in the same place: Chat, Threads and PRs under the title.
+  const own = within(screen.getByRole("tablist", { name: "Project" }));
+  expect(own.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
   // Its PR, siblings and background work ride in the row above the composer.
   expect(screen.getByTestId("chips")).toHaveTextContent("chips for Build");
+
+  // A sibling from the thread's Threads tab takes the thread's place, so the history keeps one entry per level.
+  await user.click(own.getByRole("tab", { name: /Threads/ }));
+  await user.click(within(await screen.findByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Docs/ }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/pane/docs"));
+  expect(router.state.historyAction).toBe("REPLACE");
 });
 
 it("counts on a phone's PRs tab only the pull requests still open, never a resolved thread's", async () => {
@@ -122,7 +134,7 @@ it("merges a thread's PR from a phone's PRs tab only after confirming", async ()
   server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
   const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
   await user.click(await screen.findByRole("tab", { name: /^PRs/ }));
-  await user.click(screen.getByRole("button", { name: "Merge Docs" }));
+  await user.click(await screen.findByRole("button", { name: "Merge Docs" }));
   expect(posted).toBeUndefined();
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
@@ -218,21 +230,27 @@ describe("a wide screen, the project as the session panel's first tab", () => {
   });
 });
 
-it("keeps a phone thread's way to the project's threads and coordinator when it has no chips", async () => {
-  // Only this thread runs and the coordinator is gone: no chips, so the workspace strip stays.
+it("keeps a phone thread's way to the project's threads and coordinator when its siblings are stopped", async () => {
+  // Only this thread runs and the coordinator is gone.
   const docsStopped = { ...project, threads: project.threads.map((thread) => thread.id === "T2" ? { ...thread, paneId: undefined } : thread) };
   const { router, user } = setup("/pane/worker", home([pane("worker")], [docsStopped]));
   expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
-  expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
-  expect(screen.getByRole("navigation", { name: "Workspace tabs" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Threads, 2 open" }));
-  expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+  const tabs = within(screen.getByRole("tablist", { name: "Project" }));
+  await user.click(tabs.getByRole("tab", { name: /^Threads2$/ }));
+  await waitFor(() => expect(screen.queryByTestId("conversation")).not.toBeInTheDocument());
   expect(screen.getByRole("button", { name: /^Build/ }).closest("li")).toHaveAttribute("aria-current", "true");
   expect(screen.getByRole("button", { name: "Close Docs" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Coordinator/ })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Back to chat" }));
-  expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:worker");
+  await user.click(tabs.getByRole("tab", { name: "Chat" }));
+  expect(await screen.findByTestId("conversation")).toHaveTextContent("conversation:worker");
   expect(router.state.location.pathname).toBe("/pane/worker");
+});
+
+it("opens a phone coordinator on the tab its URL names, as a reload or a way back does", async () => {
+  setup("/pane/coord?view=prs", home([pane("coord"), pane("worker"), pane("docs")]));
+  expect(await screen.findByRole("button", { name: "Merge Docs" })).toBeInTheDocument();
+  expect(screen.queryByTestId("conversation")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("tab", { name: /^PRs/ })[0]).toHaveAttribute("aria-selected", "true");
 });
 
 describe("a coordinator under the project", () => {
@@ -248,24 +266,24 @@ describe("a coordinator under the project", () => {
   it("lists its own row in its threads, never the project coordinator as not running", async () => {
     const { router, user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
     await user.click(await screen.findByRole("tab", { name: /Threads/ }));
+    const own = await screen.findByRole("button", { name: /^Coordinator/ });
     expect(screen.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
     expect(screen.queryByText("Not running")).not.toBeInTheDocument();
-    const own = screen.getByRole("button", { name: /^Coordinator/ });
     expect(own).toHaveTextContent("You're here");
     expect(own.closest("li")).toHaveAttribute("aria-current", "true");
 
     // A thread it runs lists the same coordinator above its siblings, one tap from its chat.
-    // The app remounts the frame per pane (root.tsx keys the route's provider by pane and session);
-    // this harness has no such key, so the frame would carry the Threads view over to the next pane.
-    // Back to Chat first, as the app would start there. (The stub draws the strip beside the overlay,
-    // which is why the segmented control shows twice.)
-    await user.click(screen.getAllByRole("tab", { name: "Chat" })[0]!);
-    await router.navigate("/pane/worker");
-    await user.click(await screen.findByRole("button", { name: "Threads, 1 open" }));
-    const lead = screen.getByRole("button", { name: /^Coordinator/ });
+    await user.click(screen.getByRole("button", { name: /^Build/ }));
+    await screen.findByRole("heading", { name: "Build" });
+    await user.click(screen.getByRole("tab", { name: /^Threads/ }));
+    await waitFor(() => expect(router.state.location.search).toBe("?view=threads"));
+    const lead = await screen.findByRole("button", { name: /^Coordinator/ });
     expect(lead).not.toHaveTextContent("You're here");
+    // Up the tree: it entered from the coordinator's Threads, so this is a step back, not one more entry.
     await user.click(lead);
-    expect(router.state.location.pathname).toBe("/pane/lead");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/pane/lead"));
+    expect(router.state.historyAction).toBe("POP");
+    expect(router.state.location.search).toBe("?view=threads");
   });
 
   it("lists its own row in the panel beside it on a wide screen", async () => {

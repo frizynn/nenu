@@ -4,7 +4,7 @@ import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
-import { armMotion } from "@/lib/motion";
+import { armMotion, useGoUp } from "@/lib/motion";
 import { homePath, settingsPath } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { CollieHome } from "@/components/collie-home";
@@ -23,6 +23,10 @@ export interface HeaderBack {
    *  stays on a desk, where the sidebar cannot reach it. */
   inPlace?: boolean;
 }
+
+/** Parents the desk's flat sidebar cannot climb to, a thread's coordinator or a node's parent, so the
+ *  back stays on a desk with their name beside it. */
+const UNLISTED_PARENTS = ["/pane/:paneId", "/project/:projectSlug/node/:nodeId"];
 
 interface AppHeaderProps {
   // Brief network failures do not animate the header. A sustained outage mutes the mark.
@@ -57,7 +61,7 @@ const HOME_ROUTE = "/";
 
 // A real 44 px box on a phone, its chevron at the leading edge so the stroke lines up with the 16 px page
 // gutter without a negative margin (which would push the focus ring off screen). On a desk the sidebar
-// is the way around, so the back steps aside, unless its parent is shown in place.
+// is the way around, so the back steps aside, unless its parent is shown in place or not listed there.
 const BACK_CONTROL = "flex h-11 min-w-11 shrink-0 items-center rounded-md pl-1 text-foreground transition-opacity active:opacity-60";
 
 // Shared header and connection treatment for every route; its size and padding live in workbench.css.
@@ -76,12 +80,16 @@ export function AppHeader({
   const navigation = useContext(WorkbenchNavigationContext);
   const { pathname } = useLocation();
   const session = useSession();
+  const goUp = useGoUp();
   const lost = useConnectionLost(isConnecting({ bridge, error }));
   // Home's bar is the brand: the page's headline sits right under it, so it carries no title of its own.
   const home = matchPath(HOME_ROUTE, pathname) !== null;
   const mark = !back && home;
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
-  const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : "lg:hidden");
+  const parent = back?.to ?? homePath(session);
+  // Only from a chat or a node: a page under a chat (its history) has its own way back on a desk.
+  const unlisted = !back?.onClick && [pathname, parent.split("?")[0]!].every((path) => UNLISTED_PARENTS.some((route) => matchPath(route, path) !== null));
+  const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : unlisted ? "lg:pr-2" : "lg:hidden");
   // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
   // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
   const titled = (title !== undefined && !home && !titleHidden) || Boolean(children) || Boolean(override);
@@ -103,7 +111,14 @@ export function AppHeader({
               {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
             </button>
           ) : (
-            <Link to={back?.to ?? homePath(session)} onClick={() => armMotion("pop")} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>{icon}</Link>
+            // A link for its address and a long-press, but a tap goes up through the history (useGoUp).
+            <Link to={parent} onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              goUp(parent);
+            }} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>
+              {icon}{unlisted && <span className="hidden max-w-48 truncate text-body lg:inline">{back?.label}</span>}
+            </Link>
           )}
           {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that
               pushes the right cluster to the edge. min-w-0 so a long title truncates when tight. */}
