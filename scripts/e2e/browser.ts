@@ -55,6 +55,7 @@ export interface Page {
   mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
   setViewportSize(size: { width: number; height: number }): Promise<void>;
   goBack(): Promise<unknown>;
+  reload(): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, opts?: { timeout?: number }): Promise<unknown>;
   close(): Promise<void>;
