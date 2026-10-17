@@ -84,12 +84,21 @@ function parseLinks(value: unknown): AskLink[] {
 }
 
 /**
- * A line that is only a parenthesis, such as `(nothing for now; …)`: a coordinator's placeholder under a
- * heading, neither an ask nor a decision, so it neither lists nor counts as waiting on the person.
+ * What a coordinator writes under an empty heading, `none` or one parenthesis such as `(nothing for
+ * now; …)`: neither an ask nor a decision, so it neither lists nor counts as waiting on the person.
+ * Organizations' own rule (asks.rs `is_placeholder`): the first parenthesis must close at the last
+ * character, so `(urgent) Pilot? (task:AWA-711)` is a real line.
  */
 export function placeholder(text: string): boolean {
-  const line = text.trim();
-  return line.startsWith("(") && line.endsWith(")");
+  const line = text.trim().replace(/\.+$/, "");
+  if (line.toLowerCase() === "none") return true;
+  if (!line.startsWith("(")) return false;
+  let depth = 0;
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] === "(") depth++;
+    else if (line[index] === ")" && --depth === 0) return index === line.length - 1;
+  }
+  return false;
 }
 
 /** One ask, from a status file's `asks` or a row of `asks --json`; null without a known state or text, or for a placeholder. */
@@ -122,7 +131,8 @@ export function parseDecisions(value: unknown): string[] {
  * format. A resolved coordinator takes no answer, so its `needs-decision` waits on no one.
  */
 export function askGroup(ask: Pick<Ask, "state" | "mismatch" | "answeredAt">, coordinatorResolved: boolean): AskGroup {
-  // An answered `needs-decision` no longer waits on the person: it sorts with `open` and `working`.
+  // An answered `needs-decision` keeps its state until the coordinator writes the answer, and waits on
+  // no one meanwhile: it sorts with `open` and `working`, as Organizations' `Ask::rank` does.
   if (ask.state === "needs-decision" && !coordinatorResolved && !ask.answeredAt) return "waiting";
   if (ask.mismatch) return "unclosed";
   if (ask.state === "open" || ask.state === "working" || ask.state === "needs-decision") return "progress";

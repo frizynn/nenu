@@ -204,11 +204,12 @@ it("reads the tokens again when the snapshot says the reading moved, with the pa
 describe("narrowing, chips and Answer (ADR 0093)", () => {
   const link = (kind: "thread" | "pr" | "task" | "page", text: string, extra: Partial<AskRow["links"][number]> = {}) =>
     ({ kind, text, target: "", thread: "", title: "", state: "", pr: "", prState: "", ...extra });
+  // Organizations takes an answer on every row of a coordinator that runs.
   const linked: AsksList = { ...ASKS, answers: true, asks: [
-    ask(CHECKOUT, "waiting", "needs-decision", "Prospects or numbers first?", { line: 5, answer: "both are ready",
+    ask(CHECKOUT, "waiting", "needs-decision", "Prospects or numbers first?", { line: 5, answer: "both are ready", answerable: true,
       links: [link("thread", "t-0012", { thread: "t-0012", state: "working" }), link("task", "task:AWA-569", { state: "missing" }),
         link("pr", "https://github.com/acme/shop/pull/1352", { target: "https://github.com/acme/shop/pull/1352", state: "open" })] }),
-    ...ASKS.asks!,
+    ...ASKS.asks!.map((row) => ({ ...row, answerable: true as const })),
   ] };
 
   it("reads an ask's links as chips: a thread opens its node, a pull request its page, a task names its state", async () => {
@@ -240,6 +241,19 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
     const row = within(waiting).getByText("Prospects or numbers first?").closest("li")!;
     expect(row).toHaveTextContent("Answered · Prospects first, then numbers");
     expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+  });
+
+  it("offers no Answer on a row Organizations takes none on, and says an answered one is answered", async () => {
+    const answered: AsksList = { ...linked, asks: [
+      ask(CHECKOUT, "progress", "needs-decision", "Prospects or numbers first?", { line: 5, answerable: true, answeredAt: new Date(Date.now() - 5 * 60_000).toISOString() }),
+      ask(ROOT, "waiting", "needs-decision", "Pilot with batch 2", { line: 4 }),
+    ] };
+    setup("/asks", { asks: answered });
+    const progress = await screen.findByRole("region", { name: "In progress" });
+    const row = within(progress).getByText("Prospects or numbers first?").closest("li")!;
+    expect(row).toHaveTextContent("Answered 5m ago");
+    expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Wait on you" })).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
   });
 
   it("keeps the answer box open with the reason when Organizations refuses", async () => {

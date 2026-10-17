@@ -90,12 +90,16 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
   console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: pane.pane_id }));
 }
 
-/** `asks answer`: the ask on that line of that coordinator's STATUS.md is answered with the text. */
+/**
+ * `asks answer`, as Organizations does it: the answer goes to the coordinator, and the line keeps what
+ * the coordinator wrote, state included, with `answered_at` until the coordinator changes it.
+ */
 function answer(slug: string, coordinator: string, line: number, text: string): void {
   const row = state.asks!.find((candidate) => candidate.project === slug && (candidate.coordinator as { id: string }).id === coordinator && candidate.line === line)
     ?? fail(`line ${line} is not an ask of ${coordinator}`);
   if (!text) fail("the answer is empty");
-  Object.assign(row, { state: "answered", answer: text });
+  if (!(row.actions as string[] | undefined)?.includes("answer")) fail(`${coordinator} takes no answer`);
+  row.answered_at = new Date().toISOString();
   writeFileSync(file!, JSON.stringify(state, null, 2));
   console.log(JSON.stringify({ schema_version: 1, project: slug, coordinator, line, answered_at: new Date().toISOString() }));
 }

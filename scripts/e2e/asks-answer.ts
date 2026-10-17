@@ -34,8 +34,9 @@ Objective: "Mensajes dentro del admin" construida, probada y en develop, unidad 
 const link = (kind: string, text: string, extra: Record<string, unknown> = {}) =>
   ({ kind, text, target: text, thread: "", title: "", state: "", pr: "", pr_state: "", ...extra });
 const GESTION = { id: "t-0002", title: "AWAM gestión" };
+// Every coordinator here runs, so Organizations takes an answer on each of its rows.
 const ask = (project: string, coordinator: { id: string; title: string }, line: number, state: string, text: string, answer: string, extra: Record<string, unknown> = {}) =>
-  ({ project, coordinator, line, state, text, answer, links: [], confirmed: "", mismatch: "", ...extra });
+  ({ project, coordinator, line, state, text, answer, links: [], confirmed: "", mismatch: "", actions: ["answer"], ...extra });
 const ASKS = [
   ask("awam", GESTION, 5, "needs-decision", "¿Prospectos primero o varios números?", "las dos están listas para arrancar", {
     links: [link("thread", "t-0004", { thread: "t-0004", title: "AWA-697 · varios números en Mensajes", state: "working" }),
@@ -133,6 +134,13 @@ async function main(): Promise<void> {
         await page.waitForTimeout(2500);
         if (!(await page.locator("main").innerText()).includes("Answered")) failures.push("the answered row does not say so");
         await shoot(page, "asks-respondido-1440");
+        // A fresh read, as a reload brings it: the answered ask stays out of what waits on you.
+        await page.goto(`${bridge.url}/asks?project=awam&coordinator=t-0002`);
+        await page.waitForTimeout(2000);
+        const after = await page.locator("main").innerText();
+        if (after.includes("Wait on you") || await page.getByRole("button", { name: /^Answer / }).count()) failures.push("after a reload the answered ask waits on you again");
+        if (!/Answered \d+[smh]? ?ago|Answered just now|Answered/.test(after)) failures.push("after a reload the answered ask does not say so");
+        await shoot(page, "asks-respondido-recarga-1440");
       }
       await context.close();
     }

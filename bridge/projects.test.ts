@@ -608,6 +608,22 @@ describe("ProjectRegistry: asks", () => {
     expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(1);
   });
 
+  test("an answered ask waits on no one: it is in progress and leaves the count", async () => {
+    const root = fixture();
+    const overview = overviewRun([overviewThread({})]);
+    const run: OrgRun = async (argv, opts) => argv[0] !== "asks" ? overview(argv, opts) : { code: 0, stderr: "", stdout: JSON.stringify({ schema_version: 1, asks: [
+      askRow(ROOT, "needs-decision", "Pilot with batch 2", { actions: ["answer"], answered_at: "2026-10-17T10:00:00Z" }),
+      askRow(ROOT, "needs-decision", "Which bank", { actions: ["answer"] }),
+    ] }) };
+    const registry = registryFor(root, { run });
+    await registry.refresh();
+    expect(registry.asks()!.asks.map((ask) => [ask.text, ask.group, ask.answeredAt ?? ""])).toEqual([
+      ["Pilot with batch 2", "progress", "2026-10-17T10:00:00Z"],
+      ["Which bank", "waiting", ""],
+    ]);
+    expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(1);
+  });
+
   test("a line that is only a parenthesis is neither an ask nor a decision, and waits on no one", async () => {
     const root = fixture();
     const overview = overviewRun([overviewThread({})], [], { status_file: status(root, { needs_decision: ["(nada por ahora; nada para confirmar)", "Pilot : yes or no"] }) });

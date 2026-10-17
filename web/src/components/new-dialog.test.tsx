@@ -364,6 +364,16 @@ describe("+ → a project → a coordinator → its chat", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("puts New coordinator above the coordinators, so a long list never hides it", async () => {
+    const many: ProjectView = { ...organizer, threads: [...organizer.threads, ...Array.from({ length: 11 }, (_, index) =>
+      ({ id: `t-${100 + index}`, title: `coord-${index}`, parentId: "root", role: "coordinator" as const, status: "open" as const }))] };
+    const { user } = setup({ data: { ...data, projects: [many] }, entry: "/?s=work" });
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    const [start, coordinators] = ["Start or open", "Coordinators"].map((name) => screen.getByRole("region", { name }));
+    expect(start!.compareDocumentPosition(coordinators!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(start!).getByRole("button", { name: /^New coordinator/ })).toBeInTheDocument();
+  });
+
   it("opens the project coordinator's chat, and a coordinator with no pane on its page", async () => {
     const first = setup({ data, entry: "/?s=work" });
     await first.user.click(await screen.findByRole("button", { name: /^Acme/ }));

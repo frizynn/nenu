@@ -13,7 +13,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - Your asks narrows by project and coordinator, kept in its address; a coordinator's card lists its own the same way (ADR 0093) (33de679f, 4a7f3382).
-- Answer on an ask that waits on you, through `asks answer` where Organizations has it (9fd50c9b, 33de679f).
+- Answer on an ask that waits on you, through `asks answer` where Organizations takes one; answered, it waits on no one (9fd50c9b, 33de679f, 92dadefa).
 - `bun scripts/e2e/asks-answer.ts [--before]` captures Your asks and a card at 390 and 1440 px (334de240).
 
 ### Changed
@@ -22,13 +22,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b).
+- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b, 92dadefa).
 
 ## [1.19.0] - 2026-10-17
 
 ### Added
 
-- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383).
+- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383, e6c8f5d8).
 - A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
 - Move to…: an open node goes under another coordinator where Organizations offers `node move` for it (a026e2fb, 9b2d5632, a0526cf3).
 - `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).

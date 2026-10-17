@@ -19,13 +19,15 @@ that is only a parenthesis, and Answer on what waits on him. Herdr Organizations
 
 ## Decision
 
-1. **A line that is only a parenthesis is a placeholder.** The bridge leaves it out of the asks and the
-   decisions, so it neither lists nor counts as waiting. This is the one judgement Nenu adds to
-   Organizations' fields; it reads the text Organizations printed and nothing else of STATUS.md.
+1. **A placeholder is what Organizations calls one.** `none`, or one parenthesis whose first `(` closes at
+   the last character (asks.rs `is_placeholder`): the bridge leaves it out of the asks and the decisions,
+   so it neither lists nor counts as waiting. `(urgent) Pilot? (task:AWA-711)` is a real line. Nenu reads
+   the text Organizations printed and nothing else of STATUS.md.
 2. **Answer goes through Organizations, on the person's tap.** The person's words go to `asks answer` on
    standard input, never in the argv, and stay out of the audit. An ask's own text is still never sent.
-   Answer shows only on an ask that waits on you, with a line, where `asks answer --help` exits 0. A
-   decision line has no line to answer on.
+   Answer shows only on a row that waits on you, has a line and whose `actions` list `answer`, where
+   `asks answer --help` exits 0. Organizations keeps the line's state and adds `answered_at`: an answered
+   `needs-decision` waits on no one and sorts with what is in progress, saying when it was answered.
 3. **One list, narrowed where it is read.** Your asks narrows by project and coordinator, in its address;
    a coordinator's card draws the same list narrowed to itself, without naming whose each row is. A
    link is a chip: what it points at and the state Organizations confirmed.
