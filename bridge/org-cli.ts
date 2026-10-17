@@ -328,8 +328,11 @@ export async function startNode(
   }
   // `--flag=value` keeps a title that starts with a hyphen from reading as a flag.
   const fields = [`--title=${title}`, ...(profile ? [`--profile=${profile}`] : [])];
+  // A coordinator says what it is rather than lean on Organizations' defaults: it may start nodes of its
+  // own and runs in a tab of the project's workspace, never a worktree. A template carries its own.
+  const placement = template ? [`--template=${template}`] : role === "coordinator" ? [`--role=${role}`, "--can-spawn", "--kind=tab"] : [`--role=${role}`];
   const argv = nodes
-    ? ["node", "start", project, ...(template ? [`--template=${template}`] : [`--role=${role}`]), `--parent=${parent}`, ...fields, "--task-file", "-"]
+    ? ["node", "start", project, ...placement, `--parent=${parent}`, ...fields, "--task-file", "-"]
     : ["thread", "start", project, ...fields, "--task-file", "-"];
   const result = await run(argv, { stdin: task, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
   if (result.code !== 0) throw commandError(result);
@@ -339,6 +342,35 @@ export async function startNode(
     throw new OrgCliError("herdr-organizations returned an invalid start response.");
   }
   return { id: value.id, project, title, parent, role, profile, template };
+}
+
+/**
+ * `node move`: hang a node, with everything under it, under another parent: the project root or an
+ * open coordinator. Organizations refuses a parent that may not start nodes and a move that would
+ * loop the tree; the bridge only checks the shape of each id.
+ */
+export async function moveNode(
+  run: OrgRun,
+  socketPath: string,
+  input: { project: unknown; id: unknown; parent: unknown },
+): Promise<{ id: string; project: string; parent: string }> {
+  const project = validateProjectSlug(input.project);
+  const id = validateNodeId(input.id);
+  const parent = validateParent(input.parent);
+  if (parent === id) throw new OrgValidationError("A node cannot be its own parent.");
+  const result = await run(["node", "move", project, id, `--parent=${parent}`, "--json"], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
+  if (result.code !== 0) throw commandError(result);
+  const value = parseJson(result.stdout, "node move");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || value.id !== id || value.parent_id !== parent) {
+    throw new OrgCliError("herdr-organizations returned an invalid move response.");
+  }
+  return { id, project, parent };
+}
+
+/** Whether this Organizations has `node move`: its help exits 0, and one that predates it exits non-zero. */
+export async function canMoveNodes(run: OrgRun): Promise<boolean> {
+  const result = await run(["node", "move", "--help"], { timeoutMs: 10_000 }).catch(() => null);
+  return result?.code === 0;
 }
 
 /**

@@ -34,6 +34,15 @@ export function projectForPane(projects: readonly ProjectView[] | undefined, pan
   return undefined;
 }
 
+/**
+ * The project coordinator while an agent runs in its pane. Organizations records the pane before its
+ * agent runs, and keeps it once the agent quits back to the shell: a pane with no agent in it is no
+ * running coordinator.
+ */
+export function runningCoordinator(project: ProjectView): ProjectView["coordinator"] {
+  return project.coordinator && project.coordinator.agent !== "shell" ? project.coordinator : undefined;
+}
+
 /** The coordinator's pane while it runs: a project then opens on that conversation instead of its organization. */
 export function liveCoordinator(project: ProjectView | undefined, panes: readonly AgentView[]): string | undefined {
   const paneId = project?.coordinator?.paneId;

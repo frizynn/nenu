@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.19.0] - 2026-10-17
+## [1.20.0] - 2026-10-17
 
 ### Added
 
@@ -25,6 +25,24 @@ All notable changes to Nenu are recorded here. The format follows
 - A sibling takes the thread's place in the history; a phone's tab lives in the URL, so a reload or a way back lands on it (00fd14de).
 - A coordinator's thread slides in as a push and back out as a pop; siblings cross-fade (00fd14de).
 - The motion bench waits for its row in the page, not the sidebar's hidden copy (33f76be0).
+
+## [1.19.0] - 2026-10-17
+
+### Added
+
+- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383, e6c8f5d8).
+- A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
+- Move to…: an open node goes under another coordinator where Organizations offers `node move` for it (a026e2fb, 9b2d5632, a0526cf3).
+- `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).
+
+### Changed
+
+- A coordinator started from Nenu names `--can-spawn --kind=tab` instead of leaning on defaults (a026e2fb).
+- New's Thread row moves into each project's step (d81fde80).
+
+### Fixed
+
+- A task row's age no longer shows through its actions (7792d023).
 
 ## [1.18.0] - 2026-10-16
 

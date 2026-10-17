@@ -1,5 +1,5 @@
 import { libraryFileResponse } from "../org-library.ts";
-import { coordinatorChoices, createProject, listRoutines, mergeThread, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { coordinatorChoices, createProject, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json, secure } from "./http.ts";
@@ -52,6 +52,10 @@ export const orgRoutes: Route[] = [
     if (refusal) throw new OrgValidationError(refusal);
     await resolveNode(orgRun, rt.socketPath, { project: body.project, id: body.id });
     return { response: {}, detail: { project: body.project, id: body.id } };
+  }),
+  orgWrite("/api/org/node/move", "org.node.move", "Could not move node.", async ({ orgRun }, body, rt) => {
+    const moved = await moveNode(orgRun, rt.socketPath, { project: body.project, id: body.id, parent: body.parent });
+    return { response: { moved: { id: moved.id, parent: moved.parent } }, detail: moved };
   }),
   // The person waits on the redirect to the coordinator's chat, so the projects are re-read first.
   orgWrite("/api/org/project/open", "org.project.open", "Could not start the coordinator.", async ({ orgRun }, body, rt) => {

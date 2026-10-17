@@ -34,6 +34,7 @@ const CASES: Case[] = [
   { method: "GET", path: "/api/org/library", level: "read", session: false },
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
+  { method: "POST", path: "/api/org/node/move", level: "write", session: true },
   { method: "POST", path: "/api/org/project/open", level: "write", session: true },
   { method: "POST", path: "/api/org/coordinator/replace", level: "write", session: true },
   { method: "POST", path: "/api/org/project/create", level: "write", session: true },
