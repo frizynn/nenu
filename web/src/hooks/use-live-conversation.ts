@@ -26,6 +26,21 @@ const IDLE_MS = 12_000;
 // While the live stream is up the bridge watches the journal and names each append (ADR 0058), so a
 // busy transcript only needs the safety-net poll.
 const LIVE_BUSY_MS = 10_000;
+// The conversations last read, newest last, so a chat opened again paints at once while the read
+// behind it runs. Until that read lands, a failure says so at once: what is on screen is a memory.
+const REMEMBERED = 8;
+const remembered = new Map<string, PaneHistoryResponse>();
+
+function remember(scope: string, history: PaneHistoryResponse | null): void {
+  remembered.delete(scope);
+  if (!history) return;
+  remembered.set(scope, history);
+  if (remembered.size > REMEMBERED) remembered.delete(remembered.keys().next().value!);
+}
+
+export function __forgetConversations(): void {
+  remembered.clear();
+}
 
 /** A small, newest-anchored journal window; the history route owns older turns. */
 export function useLiveConversation({
@@ -38,12 +53,14 @@ export function useLiveConversation({
   const scope = JSON.stringify([paneId, session ?? null]);
   const [state, setState] = useState<ConversationState>({
     scope,
-    history: null,
+    history: remembered.get(scope) ?? null,
     loading: false,
     error: false,
   });
   const stateRef = useRef(state);
   stateRef.current = state;
+  // The scope whose conversation this mount has read itself, not only remembered.
+  const confirmed = useRef<string | null>(null);
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const refreshRef = useRef<(queueIfPending?: boolean) => void>(() => {});
@@ -77,12 +94,15 @@ export function useLiveConversation({
       const controller = new AbortController();
       request = controller;
       if (stateRef.current.scope !== scope || !stateRef.current.history) {
-        publish({ scope, history: null, loading: true, error: false });
+        const kept = remembered.get(scope) ?? null;
+        publish({ scope, history: kept, loading: kept === null, error: false });
       }
       try {
         const history = await fetchHistory(paneId, { limit: 60 }, session, controller.signal);
         if (!disposed && !controller.signal.aborted) {
           failedAt = null;
+          confirmed.current = scope;
+          remember(scope, history);
           const previous = stateRef.current;
           if (previous.scope !== scope || previous.history !== history || previous.loading || previous.error) {
             publish({ scope, history, loading: false, error: false });
@@ -92,7 +112,8 @@ export function useLiveConversation({
         if (!disposed && !controller.signal.aborted) {
           const authError = isApiErrorStatus(error, 401) || isApiErrorStatus(error, 403);
           failedAt ??= Date.now();
-          const visibleError = authError || !stateRef.current.history || Date.now() - failedAt >= CONNECTION_LOST_MS;
+          if (authError) remember(scope, null);
+          const visibleError = authError || !stateRef.current.history || confirmed.current !== scope || Date.now() - failedAt >= CONNECTION_LOST_MS;
           publish({ ...stateRef.current, history: authError ? null : stateRef.current.history, loading: false, error: visibleError });
         }
       } finally {
