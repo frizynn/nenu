@@ -53,6 +53,10 @@ export interface Ask {
   confirmed: AskConfirmed;
   /** Why `state` does not close with what the links confirm, in Organizations' fixed words; empty when it closes. */
   mismatch: string;
+  /** RFC 3339, once the person answered this line with `asks answer`, until the coordinator changes it; absent otherwise. */
+  answeredAt?: string;
+  /** Organizations takes an answer on this row: its `actions` list `answer`. Absent otherwise. */
+  answerable?: true;
 }
 
 /** Where Your asks lists an ask: Organizations' order (`Ask::rank`), as its coordinator stands. */

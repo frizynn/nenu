@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { askGroup, parseAsk, readAsks } from "./org-asks.ts";
+import { askGroup, parseAsk, placeholder, readAsks } from "./org-asks.ts";
 import type { OrgRun } from "./org-cli.ts";
 
 const answer = (code: number, stdout: string, stderr = ""): OrgRun => async () => ({ code, stdout, stderr });
@@ -40,6 +40,14 @@ describe("readAsks", () => {
 });
 
 describe("parseAsk", () => {
+  test("reads when the person answered the line, and whether Organizations takes an answer on it", () => {
+    const row = { state: "needs-decision", text: "Pilot?", line: 5, answered_at: "2026-10-17T10:00:00Z", actions: ["answer"] };
+    expect(parseAsk(row)).toMatchObject({ answeredAt: "2026-10-17T10:00:00Z", answerable: true });
+    const plain = parseAsk({ state: "needs-decision", text: "Pilot?", answered_at: "yesterday", actions: [] });
+    expect(plain).not.toHaveProperty("answeredAt");
+    expect(plain).not.toHaveProperty("answerable");
+  });
+
   test("keeps only the links of a kind it knows, and a confirmation from a newer Organizations confirms nothing", () => {
     expect(parseAsk({
       line: 3, state: "done", text: "Ship it", answer: "merged", confirmed: "half-done", mismatch: "",
@@ -51,7 +59,22 @@ describe("parseAsk", () => {
   });
 });
 
+describe("placeholder", () => {
+  test("is Organizations' rule: `none`, or one parenthesis whose first `(` closes at the last character", () => {
+    for (const line of ["(nada por ahora; ninguna unidad depende de esto)", "(none)", "none", "None.", "  (a (nested) one)  ", "(nothing for now)."]) {
+      expect([line, placeholder(line)]).toEqual([line, true]);
+    }
+    for (const line of ["(urgente) ¿Piloto con lote 2? (task:AWA-711)", "Pilot : yes or no (t-0002)", "(a) b", "(unclosed", "nonetheless"]) {
+      expect([line, placeholder(line)]).toEqual([line, false]);
+    }
+  });
+});
+
 describe("askGroup", () => {
+  test("an answered `needs-decision` waits on no one: it sorts with what is in progress", () => {
+    expect(askGroup({ state: "needs-decision", mismatch: "", answeredAt: "2026-10-17T10:00:00Z" }, false)).toBe("progress");
+  });
+
   test("follows Organizations' rank: waits on you, does not close, in progress, done, other lines", () => {
     const ask = (state: Parameters<typeof askGroup>[0]["state"], mismatch = "") => ({ state, mismatch });
     expect(askGroup(ask("needs-decision"), false)).toBe("waiting");

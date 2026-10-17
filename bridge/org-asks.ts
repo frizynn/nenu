@@ -43,12 +43,21 @@ export async function readAsks(run: OrgRun, root: string): Promise<OrgAskRow[] |
 }
 
 /**
- * A line that is only a parenthesis, such as `(nothing for now; …)`: a coordinator's placeholder under a
- * heading, neither an ask nor a decision, so it neither lists nor counts as waiting on the person.
+ * What a coordinator writes under an empty heading, `none` or one parenthesis such as `(nothing for
+ * now; …)`: neither an ask nor a decision, so it neither lists nor counts as waiting on the person.
+ * Organizations' own rule (asks.rs `is_placeholder`): the first parenthesis must close at the last
+ * character, so `(urgent) Pilot? (task:AWA-711)` is a real line.
  */
 export function placeholder(text: string): boolean {
-  const line = text.trim();
-  return line.startsWith("(") && line.endsWith(")");
+  const line = text.trim().replace(/\.+$/, "");
+  if (line.toLowerCase() === "none") return true;
+  if (!line.startsWith("(")) return false;
+  let depth = 0;
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] === "(") depth++;
+    else if (line[index] === ")" && --depth === 0) return index === line.length - 1;
+  }
+  return false;
 }
 
 /** One ask, from a status file's `asks` or a row of `asks --json`; null without a known state or text, or for a placeholder. */
@@ -72,7 +81,15 @@ export function parseAsk(value: unknown): Ask | null {
     // A value from a newer Organizations confirms nothing this Nenu can name.
     confirmed: ASK_CONFIRMED.find((candidate) => candidate === value.confirmed) ?? "",
     mismatch: text(value.mismatch),
+    ...answered(value),
   };
+}
+
+/** When the person answered the line, and whether Organizations takes an answer on it (`actions` lists `answer`). */
+function answered(item: Record<string, unknown>): Pick<Ask, "answeredAt" | "answerable"> {
+  const at = typeof item.answered_at === "string" && Number.isFinite(Date.parse(item.answered_at)) ? item.answered_at : "";
+  const answerable = Array.isArray(item.actions) && item.actions.includes("answer");
+  return { ...(at ? { answeredAt: at } : {}), ...(answerable ? { answerable: true } : {}) };
 }
 
 /** A status file's `needs_decision` lines, placeholders left out; none when the field is missing or malformed. */
@@ -86,8 +103,10 @@ export function parseDecisions(value: unknown): string[] {
  * person, what does not close, what is in progress, what is done, then lines that do not follow the
  * format. A resolved coordinator takes no answer, so its `needs-decision` waits on no one.
  */
-export function askGroup(ask: Pick<Ask, "state" | "mismatch">, coordinatorResolved: boolean): AskGroup {
-  if (ask.state === "needs-decision" && !coordinatorResolved) return "waiting";
+export function askGroup(ask: Pick<Ask, "state" | "mismatch" | "answeredAt">, coordinatorResolved: boolean): AskGroup {
+  // An answered `needs-decision` keeps its state until the coordinator writes the answer, and waits on
+  // no one meanwhile: it sorts with `open` and `working`, as Organizations' `Ask::rank` does.
+  if (ask.state === "needs-decision" && !coordinatorResolved && !ask.answeredAt) return "waiting";
   if (ask.mismatch) return "unclosed";
   if (ask.state === "open" || ask.state === "working" || ask.state === "needs-decision") return "progress";
   if (ask.state === "answered" || ask.state === "done") return "done";

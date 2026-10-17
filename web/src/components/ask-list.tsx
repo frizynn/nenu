@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { answerOrgAsk } from "@/lib/api";
 import { coordinatorName, linkChip, type AskEntry, type askSections, type ChipTone } from "@/lib/asks";
 import type { AskGroup } from "@/lib/types";
+import { timeAgo } from "@/lib/format";
 import { nodePath } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ export function AskSections({ sections, session, whose, answers, compact = false
         </h2>
         <ul className="flex flex-col">
           {section.entries.map((entry) => <AskItem key={entry.key} entry={entry} session={session} whose={whose} compact={compact}
-            answer={answered[entry.key]} answerable={answers && section.group === "waiting" && entry.line > 0}
+            answer={answered[entry.key]} answerable={answers && entry.answerable && section.group === "waiting" && entry.line > 0}
             onAnswered={(text) => setAnswered((current) => ({ ...current, [entry.key]: text }))} />)}
         </ul>
       </section>
@@ -82,6 +83,8 @@ function AskItem({ entry, session, whose, compact, answer, answerable, onAnswere
           : <p className="break-words text-subhead">{entry.text}</p>}
         {line && <p className="break-words text-footnote text-muted-foreground">{line}</p>}
         {answer !== undefined && <p className="break-words text-footnote text-muted-foreground"><span className="font-medium text-status-done">Answered</span> · {answer}</p>}
+        {answer === undefined && entry.answeredAt && <p className="text-footnote text-muted-foreground">
+          <span className="font-medium text-status-done">Answered</span> {timeAgo(Date.parse(entry.answeredAt), Date.now())}</p>}
         {entry.links.length > 0 && <ul aria-label="Links" className="mt-1.5 flex flex-wrap gap-1.5">
           {entry.links.map((link, index) => <li key={index}><Chip chip={linkChip(link)} project={entry.project.slug} session={session} /></li>)}
         </ul>}

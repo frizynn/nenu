@@ -236,7 +236,13 @@ export type AskState = "open" | "working" | "needs-decision" | "answered" | "don
 export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
 export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
 /** One line under a coordinator's `## Asked`. Its text and answer are the operator's and the coordinator's words: draw them as text. */
-export interface OrgAsk { line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string }
+export interface OrgAsk {
+  line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string;
+  /** RFC 3339, once the person answered this line, until the coordinator changes it. */
+  answeredAt?: string;
+  /** Organizations takes an answer on this row. */
+  answerable?: true;
+}
 export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
 export interface AskCoordinator { id: string; title: string }
 export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }

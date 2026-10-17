@@ -24,6 +24,10 @@ export interface AskEntry {
   links: AskLink[];
   /** Its line in the coordinator's STATUS.md, which `asks answer` names; 0 for a decision line, which is not answered there. */
   line: number;
+  /** Organizations takes an answer on it. */
+  answerable: boolean;
+  /** When the person answered it, until its coordinator changes the line. */
+  answeredAt?: string;
 }
 
 /** Narrows the list to a project, and within it to one coordinator (`root` for the project's own). */
@@ -38,12 +42,13 @@ export function askSections(list: AsksList, projects: readonly ProjectView[], fi
   const asks = (list.asks ?? []).flatMap((row, index): AskEntry[] => {
     const project = bySlug.get(row.project);
     return project && matches(filter, row) ? [{ key: `ask:${row.project}:${row.coordinator.id}:${row.line}:${index}`, group: row.group, project,
-      coordinator: row.coordinator, text: row.text, detail: askDetail(row), links: row.links, line: row.line }] : [];
+      coordinator: row.coordinator, text: row.text, detail: askDetail(row), links: row.links, line: row.line,
+      answerable: row.answerable === true, ...(row.answeredAt ? { answeredAt: row.answeredAt } : {}) }] : [];
   });
   const decisions = list.decisions.flatMap((decision, index): AskEntry[] => {
     const project = bySlug.get(decision.project);
     return project && matches(filter, decision) ? [{ key: `decision:${decision.project}:${decision.coordinator.id}:${index}`, group: "waiting", project,
-      coordinator: decision.coordinator, text: decision.text, detail: "decision", links: [], line: 0 }] : [];
+      coordinator: decision.coordinator, text: decision.text, detail: "decision", links: [], line: 0, answerable: false }] : [];
   });
   return ORDER.flatMap((group) => {
     const entries = [...asks.filter((entry) => entry.group === group), ...(group === "waiting" ? decisions : [])];
