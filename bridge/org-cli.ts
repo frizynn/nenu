@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 import { servicePath } from "./claude-sessions.ts";
 import { parseReport, parseStatusFile, parseUsage, type OrgReport, type OrgStatusFile } from "./org-report.ts";
 import type { TokenUsage } from "./org-types.ts";
@@ -533,6 +535,8 @@ export interface OrgOverviewProject {
   /** The project coordinator's token use and how it was started; null from an Organizations that predates them, or a project never opened. */
   usage: TokenUsage | null;
   coordinator: OrgCoordinator | null;
+  /** The folder of its reports, libraries and status files (the `records` setting); empty where Organizations prints none (`overview` does not yet). */
+  records: string;
   threads: OrgOverviewThread[];
 }
 
@@ -584,6 +588,7 @@ function parseProject(value: unknown): OrgOverviewProject | undefined {
     status_file: parseStatusFile(value.status_file),
     usage: parseUsage(value.usage),
     coordinator: parseCoordinator(value.coordinator),
+    records: typeof value.records === "string" && isAbsolute(value.records) && !/[\x00-\x1f]/.test(value.records) ? value.records : "",
     threads: value.threads.flatMap((item) => {
       const thread = parseThread(item);
       return thread ? [thread] : [];

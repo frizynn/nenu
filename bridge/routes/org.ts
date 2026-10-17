@@ -1,4 +1,4 @@
-import { libraryFileResponse } from "../org-library.ts";
+import { libraryFileResponse, reportResponse } from "../org-library.ts";
 import { answerAsk, coordinatorChoices, createProject, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -35,6 +35,17 @@ export const orgRoutes: Route[] = [
       return secure(await libraryFileResponse(projects.library(url.searchParams.get("project") ?? ""), url.searchParams.get("path"), {
         ifNoneMatch: req.headers.get("if-none-match"), inlineAssets: cfg.htmlInlineAssets, host: req.headers.get("host") ?? undefined, stateDir: cfg.stateDir,
       }));
+    },
+  },
+  {
+    // A thread's report, named by its id, from the project's records folder (org-library.ts). Read
+    // when a question's context opens, never on a poll.
+    method: "GET",
+    path: "/api/org/report",
+    access: "read",
+    session: false,
+    async handle({ cfg, projects }, { url }) {
+      return secure(await reportResponse(projects.report(url.searchParams.get("project") ?? "", url.searchParams.get("thread") ?? ""), { stateDir: cfg.stateDir }));
     },
   },
   // Read when the window that starts or replaces the coordinator opens, never on a poll.

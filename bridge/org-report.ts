@@ -25,6 +25,10 @@ export interface OrgReport {
   deliverables: ThreadDeliverable[];
   /** A coordinator's STATUS.md; null for a worker and without one. */
   status_file: OrgStatusFile | null;
+  /** The home copy of its report, in the project's records folder; null before there is one, or from an Organizations that predates it. */
+  report: string | null;
+  /** The folder for the files it produced, `<records>/library/<id>`; empty from an Organizations that predates it. */
+  library: string;
 }
 
 const MAX_SUMMARY_CHARS = 600;
@@ -44,6 +48,8 @@ export function parseReport(thread: Record<string, unknown>): OrgReport {
       return kind && { kind };
     }),
     status_file: parseStatusFile(thread.status_file),
+    report: absolutePath(thread.report) ? thread.report : null,
+    library: absolutePath(thread.library) ? thread.library : "",
   };
 }
 
