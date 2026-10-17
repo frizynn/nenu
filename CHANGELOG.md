@@ -8,6 +8,15 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-10-17
+
+### Fixed
+
+- A phone raises no toast when an agent finishes, only when one asks; the finish is New on its Home row (ADR 0094) (1b330e5d).
+- Escape closes the phone's Search sheet, after clearing a typed query (beec331c).
+- Recents and the desk's chats keep their order while on screen and reorder when you come back (a3291bd6).
+- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search and rows that move while quiet (de51bf50).
+
 ## [1.18.0] - 2026-10-16
 
 ### Added
