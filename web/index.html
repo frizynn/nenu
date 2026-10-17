@@ -30,10 +30,12 @@
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/nenu-apple-touch-icon.png" />
-    <!-- First-paint splash: Nenu appears the instant the PWA opens, bridging the OS
-         launch splash and React mount (createRoot replaces #root, so it clears itself). Critical CSS
-         is inlined here so it paints and animates before the app bundle/index.css load — pure CSS,
-         no JS. It mirrors routes/root.tsx's BootSplash so the hand-off stays visually stable. -->
+    <!-- First-paint splash, bridging the OS launch splash and React mount (createRoot replaces
+         #root, so it clears itself). Its mark and caption stay hidden for the first second: a load
+         that quick goes from the page's background straight to routes/root.tsx's BootSplash, the
+         app's own frame, so there is one boot screen. Only a slow bundle (a cold cache on a slow
+         link) shows them. Critical CSS is inlined so it paints before the app bundle/index.css
+         load — pure CSS, no JS. -->
     <style>
       /* index.css has not loaded at this point, so the splash declares `color-scheme` itself —
          otherwise light-dark() below has nothing to resolve against and every value falls to its
@@ -62,23 +64,29 @@
         color: light-dark(#55555a, #b4b4b9);
         font: 500 0.875rem/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
       }
+      .boot-splash > * {
+        animation: boot-splash-late 1s;
+      }
       .boot-splash__dog {
         width: 4rem;
         height: 4rem;
         object-fit: contain;
-        animation: boot-nenu-breathe 1.15s ease-in-out infinite;
+        animation: boot-splash-late 1s, boot-nenu-breathe 1.15s ease-in-out 1s infinite;
       }
       @media (prefers-color-scheme: dark) {
         :root:not(.light) .boot-splash__dog { filter: invert(1); }
       }
       :root.dark .boot-splash__dog { filter: invert(1); }
+      @keyframes boot-splash-late {
+        from, to { visibility: hidden; }
+      }
       @keyframes boot-nenu-breathe {
         0%, 100% { transform: translateY(0) scale(0.96); opacity: 0.72; }
         50% { transform: translateY(-3%) scale(1); opacity: 1; }
       }
       @media (prefers-reduced-motion: reduce) {
         .boot-splash__dog {
-          animation: none;
+          animation: boot-splash-late 1s;
         }
       }
     </style>
