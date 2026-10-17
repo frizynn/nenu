@@ -289,6 +289,15 @@ function Fold<T>({ value, children }: { value: T | null | false; children: (valu
   );
 }
 
+/** The chips' line, empty and unseen: the height it will take, kept while the chat settles. */
+function ChipLineHold() {
+  return (
+    <div aria-hidden className="composer-chips" data-hold="">
+      <div className="composer-line"><div className="composer-chip-row"><span className="composer-chip invisible">&nbsp;</span></div></div>
+    </div>
+  );
+}
+
 /** A send that did not go through, said above the box until the next edit or send. */
 interface SendFailure {
   error: string;
@@ -694,6 +703,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
   const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
+  // A chat's chips come from reads that answer after it mounts. While it settles, a chat where they are
+  // likely keeps their line's height, so their arrival moves neither the box nor the thread; if none
+  // come, the hold ends, once. Elsewhere nothing is held: a hold there would mostly end in that jump.
+  const [chipsSettling, setChipsSettling] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setChipsSettling(false), FOLD_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -1437,6 +1454,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             at its start, so it folds open and shut only when both come or go; beside chips, Stop just
             leaves. The conversation's live turn already says "Working for …" just above, so only the
             terminal view repeats it here. */}
+        {chipsSettling && chips.likely && !chips.chips.length && !stop.offered ? <ChipLineHold /> :
         <Fold value={(chips.chips.length > 0 || stop.offered) && { stop: stop.offered }}>{(line) => (
           <ComposerChips {...chips} trailing={line.stop && (
             <div role="group" aria-label="Agent working" className="composer-working">
@@ -1444,7 +1462,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               <StopControl stop={stop} disabled={locked} />
             </div>
           )} />
-        )}</Fold>
+        )}</Fold>}
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes

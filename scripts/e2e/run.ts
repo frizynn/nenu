@@ -2943,7 +2943,7 @@ async function composerAround(): Promise<void> {
       await page.route("**/api/pane/*/activity*", async (route) => {
         const url = new URL(route.request().url());
         if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "412 pass", truncated: false, updatedAt: now } });
-        const late = process.env.NENU_E2E_LATE_CHIPS ? { ...activity, tasks: activity.tasks.filter((t) => t.status !== "running") } : activity;
+        const late = process.env.NENU_E2E_LATE_CHIPS ? { ...activity, tasks: process.env.NENU_E2E_NO_CHIPS ? [] : activity.tasks.filter((t) => t.status !== "running") } : activity;
         // A real session log takes a while to read: the chips land after the box has drawn.
         if (process.env.NENU_E2E_LATE_CHIPS) await sleep(1200);
         return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? late : { ...activity, tasks: [] } });
@@ -2978,7 +2978,8 @@ async function composerAround(): Promise<void> {
       await page.waitForTimeout(2000);
       seen[`${deviceName}:open-shifts`] = await page.evaluate(() => {
         const log = (window as unknown as { __shifts?: Array<{ value: number; sources: string[] }> }).__shifts ?? [];
-        return { count: log.length, fold: log.filter((s) => s.sources.some((src) => src.includes("composer-fold"))).length, total: log.reduce((a, s) => a + s.value, 0) };
+        const from = (name: string) => log.filter((s) => s.sources.some((src) => src.includes(name))).length;
+        return { count: log.length, fold: from("composer-fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
       }, null);
       // A quiet chat is read only for how it opens.
       if (process.env.NENU_E2E_LATE_CHIPS) {
@@ -3070,7 +3071,7 @@ async function composerAround(): Promise<void> {
     // (finished commands and routines), as in a quiet chat; its chips arrive a moment late.
     if (process.env.NENU_E2E_LATE_CHIPS) project.threads = project.threads.filter((t) => t.id === "t-0012" || t.id === "t-0010").map((t) => ({ ...t, pr: null }));
     const hour = 3_600_000;
-    project.routines = [
+    project.routines = process.env.NENU_E2E_NO_CHIPS ? [] : [
       { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
       { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
         last_run: new Date(now - 20 * hour).toISOString(), next_run: new Date(now + 4 * hour).toISOString() },

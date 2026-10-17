@@ -1402,7 +1402,7 @@ export function AgentChat({
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
-            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
+            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail, likely: Boolean(projectChips),
               onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}

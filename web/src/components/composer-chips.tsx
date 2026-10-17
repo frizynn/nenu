@@ -139,6 +139,8 @@ export interface ChipLine {
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
+  /** Chips are likely here (a project's chat): while it settles, the line keeps its height for them. */
+  likely?: boolean;
 }
 
 /** The history entry an open panel stands on, so a phone's Back closes the panel and not the chat. */
