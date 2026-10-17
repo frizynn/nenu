@@ -79,6 +79,54 @@ it("folds the Working row shut when the turn ends, out of reach while it goes", 
   await waitFor(() => expect(row).not.toBeInTheDocument());
 });
 
+// Opening a chat, its chips arrive a moment after it mounts; folding them open walked the conversation
+// up in ten steps every time. What arrives while the chat settles is simply there; later, it folds.
+it("draws a row that arrives while the chat settles at once, and folds open one that comes later", async () => {
+  const start = Date.now();
+  const now = vi.spyOn(Date, "now").mockReturnValue(start);
+  try {
+    const { rerender } = setup({ working: false });
+    rerender({ working: true });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
+    rerender({ working: false });
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument());
+    now.mockReturnValue(start + 5000);
+    rerender({ working: true });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "opening");
+  } finally {
+    now.mockRestore();
+  }
+});
+
+// Folding at once still moved the box by the line's height when the chips landed. A project's chat keeps
+// that height while it settles, so they land in place; a hold that meets no chip ends, and a chat where
+// chips are unlikely holds nothing.
+it("keeps the chips' line height while a project's chat settles, hands it to the chips, and lets go if none come", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const chip = { id: "routines" as const, label: "Routines", count: 1, content: "nightly" };
+    const hold = () => document.querySelector("[data-hold]");
+    const { rerender } = setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
+    expect(hold()).toHaveAttribute("aria-hidden", "true");
+    rerender({ chips: { chips: [chip], open: null, onOpenChange: vi.fn(), likely: true } });
+    expect(hold()).toBeNull();
+    expect(screen.getByRole("button", { name: "Routines, 1" })).toBeVisible();
+    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
+    rerender({ chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(hold()).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("holds nothing in a chat where chips are unlikely", () => {
+  setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn() } });
+  expect(document.querySelector("[data-hold]")).toBeNull();
+});
+
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
   const { user, rerender } = setup();
   await user.click(stopButton()!);

@@ -64,7 +64,7 @@ describe("more than one machine", () => {
 
   it("the composer's machine is the pane's", () => {
     render(<ComposerPlace machine="build-box" />);
-    expect(screen.getByText("build-box")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Where this runs: build-box" })).toBeTruthy();
   });
 
   it("a machine is not a Herdr session: the session switcher stays out of it", () => {
