@@ -57,13 +57,15 @@ export function codexModels(data: unknown): ModelCatalog {
 
 /** CLI aliases are candidates, not a complete entitlement list. These labels/aliases are present
  * in Claude Code's native model picker; the browser must revalidate its chosen row before Apply.
+ * An alias carries no description: which version it means is the CLI's to say, and the picker shows
+ * it once the agent reports it or its own picker lists it.
  */
 export function claudeModels(data: unknown = {}): ModelCatalog {
   const models = [
     { name: "Default (recommended)", description: "Use the agent's configured default" },
-    { name: "Opus", description: "Opus model family" },
-    { name: "Sonnet", description: "Sonnet model family" },
-    { name: "Haiku", description: "Haiku model family" },
+    { name: "Opus", description: "" },
+    { name: "Sonnet", description: "" },
+    { name: "Haiku", description: "" },
   ];
   const extra = object(data).additionalModelOptionsCache;
   if (Array.isArray(extra)) for (const entry of extra.slice(0, 96)) {

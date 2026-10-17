@@ -1331,7 +1331,7 @@ export function AgentChat({
           {!subagent && showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
             open={panels.panel === "model"} anchorRef={modelTriggerRef} agent={agent?.agent}
             text={modelSource.text} menu={liveModelBlock} modelPresent={modelPresent} catalog={catalog}
-            reportedModel={telemetry?.model}
+            reportedModel={telemetry?.model} reportedEffort={telemetry?.effort}
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}

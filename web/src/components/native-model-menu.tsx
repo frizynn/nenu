@@ -13,6 +13,25 @@ interface Props {
   disabled?: boolean;
 }
 
+/** The value the picker's `←/→` row names, without its glyph or its trailing "effort". */
+export const effortValue = (label: string) => label.replace(/^[^\p{L}\p{N}]+/u, "").replace(/\s+effort$/i, "");
+
+/** The picker's own `←/→` row as two arrows around the value it names; it sends only those two keys. */
+export function EffortStepper({ effort, disabled, onStep }: {
+  effort: { verb: string; label: string };
+  disabled?: boolean;
+  onStep: (key: "Left" | "Right") => void | Promise<void>;
+}) {
+  const arrow = "flex min-h-9 min-w-9 items-center justify-center rounded hover:bg-accent disabled:opacity-50 coarse:min-h-11 coarse:min-w-11";
+  return (
+    <div className="inline-flex items-center rounded-md border border-border bg-muted/50 p-0.5">
+      <button type="button" disabled={disabled} aria-label={`Left — ${effort.verb} (${effort.label})`} onClick={() => void onStep("Left")} className={arrow}><ChevronLeft aria-hidden="true" className="size-4" /></button>
+      <span className="min-w-20 px-2 text-center text-xs font-medium capitalize">{effortValue(effort.label)}</span>
+      <button type="button" disabled={disabled} aria-label={`Right — ${effort.verb} (${effort.label})`} onClick={() => void onStep("Right")} className={arrow}><ChevronRight aria-hidden="true" className="size-4" /></button>
+    </div>
+  );
+}
+
 // Row styling adapted from T3 Code ModelListRow.tsx at 191a4ef (MIT; THIRD_PARTY_NOTICES.md).
 // The catalogue and selection come exclusively from the currently observed agent menu.
 export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Props) {
@@ -84,11 +103,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
 
       {effort && <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
         <span className="text-xs text-muted-foreground">Reasoning effort</span>
-        <div className="inline-flex items-center rounded-md border border-border bg-muted/50 p-0.5">
-          <button type="button" disabled={locked} aria-label={`Left — ${effort.verb} (${effort.label})`} onClick={() => void press("effort-left", { keys: ["Left"], nav: true })} className="flex min-h-9 min-w-9 items-center justify-center rounded hover:bg-accent disabled:opacity-50"><ChevronLeft aria-hidden="true" className="size-4" /></button>
-          <span className="min-w-20 px-2 text-center text-xs font-medium">{effort.label.replace(/^[^\p{L}\p{N}]+/u, "").replace(/\s+effort$/i, "")}</span>
-          <button type="button" disabled={locked} aria-label={`Right — ${effort.verb} (${effort.label})`} onClick={() => void press("effort-right", { keys: ["Right"], nav: true })} className="flex min-h-9 min-w-9 items-center justify-center rounded hover:bg-accent disabled:opacity-50"><ChevronRight aria-hidden="true" className="size-4" /></button>
-        </div>
+        <EffortStepper effort={effort} disabled={locked} onStep={(key) => press(`effort-${key}`, { keys: [key], nav: true })} />
       </div>}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-3">
