@@ -4,8 +4,7 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
-import type { DemoHerd } from "./scenario.ts";
-import type { OrgSeed } from "./scenario.ts";
+import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // A project that organizes coordinators (ADR 0092), captured with Google Chrome headless at 390 and
 // 1440 px: + lists the projects, a project lists its coordinators with New coordinator, a pick opens
@@ -72,7 +71,8 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
         node("t-0011", "Panel de stock a 390 px", "t-0010", "worker", "waiting-on-you", 4, bound(herd.blocked, "w2:t1")),
         node("t-0012", "Landing a 390 px", "t-0010", "worker", "working", 0, bound(herd.working, "w1:t1")),
         node("t-0013", "Login con email", "t-0010", "worker", "idle", 40),
-        node("t-0020", "Lanzamiento mayorista", "root", "coordinator", "working", 6, {
+        // Organizations groups a coordinator whose report has a verdict as ready for review.
+        node("t-0020", "Lanzamiento mayorista", "root", "coordinator", "ready-for-review", 6, { verdict: "done",
           status_file: statusFile("nodes/t-0020/STATUS.md", WHOLESALE_STATUS, 30, { objective: "abrir la venta mayorista en noviembre" }),
         }),
         node("t-0021", "Precios por volumen", "t-0020", "worker", "working", 3),
@@ -91,7 +91,12 @@ async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
   const failures: string[] = [];
-  const bridge = await startTestBridge({ port, fake: true, org: seed });
+  // Herdr reads a coordinator whose turn ended `done`, as the operator's were on 2026-10-17.
+  const bridge = await startTestBridge({ port, fake: true, org: seed, seed: async (fake, ctx) => {
+    const herd = await seedDemoHerd(fake, ctx);
+    fake.setStatus(herd.idle, "done");
+    return herd;
+  } });
   let browser: Browser | null = null;
   try {
     const deadline = Date.now() + 15_000;

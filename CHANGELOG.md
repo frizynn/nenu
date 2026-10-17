@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-10-17
+
+### Fixed
+
+- A coordinator reads as working, needs you or idle, never "Ready for review", on the project page, +, its page and for the project's own (c97249ae).
+
 ## [1.21.0] - 2026-10-17
 
 ### Added
