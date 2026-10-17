@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useSearchParams, useRouteLoaderData } from "react-router";
 import { ListChecks } from "@/components/ui/icon";
 
@@ -74,23 +75,28 @@ function AskFilters({ list, projects, filter, onChange }: {
 }) {
   const asked = projects.filter((project) => coordinatorsOf(list, project.slug).length > 0);
   const coordinators = filter.project ? coordinatorsOf(list, filter.project) : [];
+  const projectId = useId();
+  const coordinatorId = useId();
+  const field = "flex min-w-0 flex-1 flex-col gap-1 sm:max-w-60";
+  const label = "text-footnote font-medium text-muted-foreground";
+  // Labelled by id, not by wrapping: a wrapping label would add the chosen option to the name.
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-60">
-        <span className="text-footnote font-medium text-muted-foreground">Project</span>
-        <select className={selectField} value={filter.project ?? ""} onChange={(event) => onChange({ project: event.currentTarget.value || undefined })}>
+      <div className={field}>
+        <label htmlFor={projectId} className={label}>Project</label>
+        <select id={projectId} className={selectField} value={filter.project ?? ""} onChange={(event) => onChange({ project: event.currentTarget.value || undefined })}>
           <option value="">All projects</option>
           {asked.map((project) => <option key={project.slug} value={project.slug}>{project.name}</option>)}
         </select>
-      </label>
-      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-60">
-        <span className="text-footnote font-medium text-muted-foreground">Coordinator</span>
-        <select className={selectField} value={filter.coordinator ?? ""} disabled={!filter.project}
+      </div>
+      <div className={field}>
+        <label htmlFor={coordinatorId} className={label}>Coordinator</label>
+        <select id={coordinatorId} className={selectField} value={filter.coordinator ?? ""} disabled={!filter.project}
           onChange={(event) => onChange({ project: filter.project, coordinator: event.currentTarget.value || undefined })}>
           <option value="">All coordinators</option>
           {coordinators.map((coordinator) => <option key={coordinator.id} value={coordinator.id}>{coordinatorName(coordinator)}</option>)}
         </select>
-      </label>
+      </div>
     </div>
   );
 }
