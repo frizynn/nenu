@@ -1,22 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import { Captures, Deliverables, VERDICT_TONE } from "@/components/coordinator-summary";
-import { MarkdownText } from "@/components/markdown-text";
-import { errorMessage } from "@/components/node-start";
-import { fetchOrgReport, isApiErrorStatus } from "@/lib/api";
-import { contextThread, linkChip, reportBody, type AskEntry } from "@/lib/asks";
+import { ReportText, useThreadReport } from "@/components/thread-report";
+import { contextThread, linkChip, type AskEntry } from "@/lib/asks";
 import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { nodePath } from "@/lib/nav";
-import type { AskLink, ThreadReport } from "@/lib/types";
+import type { AskLink } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // What a question is about, opened under it (ADR 0096): the whole report of the thread its links name,
 // as the agent wrote it (tables, lists, links) with its captures and documents, read from the project's
 // records folder when it opens. A question with no thread behind it shows what its links say instead.
 // The report is the agent's Markdown, drawn as text.
-
-type Read = { state: "reading" } | { state: "read"; report: ThreadReport } | { state: "none" } | { state: "failed"; error: string };
 
 export function AskContext({ entry, session, children }: {
   entry: AskEntry;
@@ -26,23 +22,8 @@ export function AskContext({ entry, session, children }: {
 }) {
   const thread = contextThread(entry);
   const project = entry.project.slug;
-  const [read, setRead] = useState<Read>({ state: "reading" });
-  useEffect(() => {
-    if (!thread) return;
-    const controller = new AbortController();
-    setRead({ state: "reading" });
-    fetchOrgReport(project, thread, controller.signal).then(
-      ({ report }) => setRead({ state: "read", report }),
-      (failure: unknown) => {
-        if (controller.signal.aborted) return;
-        setRead(isApiErrorStatus(failure, 404) ? { state: "none" } : { state: "failed", error: errorMessage(failure) });
-      },
-    );
-    return () => controller.abort();
-  }, [project, thread]);
-
+  const read = useThreadReport(project, thread);
   const links = [entry, ...entry.parts].flatMap((part) => part.links);
-  const note = (text: string) => <p className="text-footnote text-muted-foreground">{text}</p>;
   return (
     <section aria-label="Context" className="mt-2 rounded-xl border border-border bg-card/40 px-3.5 py-3">
       {thread ? <>
@@ -54,11 +35,8 @@ export function AskContext({ entry, session, children }: {
           {read.state === "read" && read.report.verdict &&
             <span className={cn("text-footnote font-medium", VERDICT_TONE[read.report.verdict])}>{VERDICT_LABEL[read.report.verdict]}</span>}
         </div>
-        {read.state === "reading" && note("Reading the report…")}
-        {read.state === "none" && note("This thread has no report yet.")}
-        {read.state === "failed" && <p role="alert" className="text-footnote text-muted-foreground">Could not read the report: {read.error}</p>}
+        <ReportText read={read} />
         {read.state === "read" && <>
-          <MarkdownText text={reportBody(read.report.text)} className="text-subhead" />
           {read.report.captures.length > 0 && <Captures project={entry.project} captures={read.report.captures} />}
           {read.report.deliverables.length > 0 && <Deliverables project={entry.project} deliverables={read.report.deliverables} />}
         </>}

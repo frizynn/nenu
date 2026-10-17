@@ -7,7 +7,7 @@
   fold into one question).
 - **Trail:** `bridge/projects.ts` (`recordsFolder`, `library`, `report`) · `bridge/org-library.ts`
   (`reportResponse`) · `bridge/routes/org.ts` · `web/src/lib/asks.ts` (`foldRelated`, `unclosed`,
-  `reportBody`) · `web/src/components/ask-list.tsx` · `web/src/components/ask-context.tsx` ·
+  `reportBody`) · `web/src/components/ask-list.tsx` · `web/src/components/ask-context.tsx` · `web/src/components/thread-report.tsx` ·
   `scripts/e2e/asks-context.ts` · Organizations `docs/json.md` (Thread `report`, `library`; Project
   detail `records`; Asks `mismatch`)
 
@@ -43,8 +43,10 @@ después no cargan las imágenes … y no entiendo por qué no se cierra en Does
    links) name, drawn as written through `MarkdownText` (tables, lists, links), without its `Status:`
    line and its `## Captures` list, which the gallery shows; Answer at its foot. With no thread behind
    it, what each link points at. In place, not a side panel: it reads the same on a phone and a desk,
-   and Answer stays next to what it answers.
-4. **Rows about the same thing read as one question.** Within a group and one coordinator, a row joins
+   and Answer stays next to what it answers. The thread's own page, where "Report of" leads, opens the
+   same report under its summary ("Full report"), read only when opened.
+4. **Rows about the same thing read as one question.** Within a group (never "Does not close", where
+   each row has its own reason and its own ask of the coordinator) and one coordinator, a row joins
    an earlier one when their links name the same thread or task, or when it links no thread or task and
    its text opens with the id of a task that row links. The earlier row heads; each part keeps its line
    and its own Answer, since `asks answer` takes one line. Nothing joins across coordinators or groups,

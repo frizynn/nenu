@@ -1,4 +1,4 @@
-import { askDetail, askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, type AskEntry } from "./asks";
+import { askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, type AskEntry } from "./asks";
 import type { AskRow, AsksList, ProjectView } from "./types";
 
 // Rows as `asks --json` prints them (Organizations docs/json.md, Asks), each placed by the bridge.
@@ -34,11 +34,7 @@ it("groups the asks in Organizations' order, the decisions after the asks that w
   expect(asksHeadline(sections)).toBe("all coordinators · 2 wait on you · 2 do not close · 2 in progress · 1 done");
 });
 
-it("says why an ask does not close, else its answer, and leaves its links to their chips", () => {
-  const [, unclosed, , , vendors] = list.asks!;
-  expect(askDetail(unclosed!)).toBe("done · a linked PR is still open");
-  expect(askDetail({ ...unclosed!, mismatch: "" })).toBe("merged");
-  expect(askDetail(vendors!)).toBe("reading");
+it("leaves an ask's links to their chips", () => {
   expect(sectionsFor({ project: "shop" }).flatMap((section) => section.entries).find((entry) => entry.text === "Ship the checkout")?.links).toHaveLength(1);
 });
 
@@ -139,4 +135,15 @@ it("says what does not close and where, and asks its coordinator in ids, never t
 it("draws a report without its Status line and its captures list, which the gallery shows", () => {
   expect(reportBody("Status: needs-decision\n\n## Summary\nPick one.\n\n## Captures\n- a.png - A\n\n## Next\nChoose")).toBe("## Summary\nPick one.\n\n## Next\nChoose");
   expect(reportBody("# Title\nStatus: done\n## Report\nText")).toBe("# Title\nStatus: done\n## Report\nText");
+});
+
+it("never folds rows that do not close: each keeps its own reason and its own ask", () => {
+  const sections = askSections({
+    asks: [
+      row(PAY, "unclosed", "done", "Coupons in the cart", { line: 6, mismatch: "a linked task is still to do", links: [task("ACM-9")] }),
+      row(PAY, "unclosed", "working", "Coupons on the receipt", { line: 7, mismatch: "a linked thread is resolved", links: [task("ACM-9"), link("thread", "t-0030", { thread: "t-0030", state: "resolved" })] }),
+    ],
+    decisions: [],
+  }, projects);
+  expect(sections[0]!.entries.map((entry) => [entry.text, entry.parts.length])).toEqual([["Coupons in the cart", 0], ["Coupons on the receipt", 0]]);
 });

@@ -59,7 +59,9 @@ export function askSections(list: AsksList, projects: readonly ProjectView[], fi
   });
   // A decision follows the asks of its group, as the popup lists them.
   return ORDER.flatMap((group) => {
-    const entries = foldRelated([...asks.filter((entry) => entry.group === group), ...decisions.filter((entry) => entry.group === group)]);
+    const listed = [...asks.filter((entry) => entry.group === group), ...decisions.filter((entry) => entry.group === group)];
+    // Each row that does not close has its own reason and its own ask of the coordinator: none folds.
+    const entries = group === "unclosed" ? listed : foldRelated(listed);
     return entries.length ? [{ group, label: ASK_GROUP_LABEL[group], entries }] : [];
   });
 }
@@ -187,11 +189,6 @@ export function asksHeadline(sections: ReturnType<typeof askSections>, scope = "
     `${count("progress")} in progress`,
     `${count("done")} done`,
   ].join(" · ");
-}
-
-/** What a row says after the ask: why it does not close, else its answer. Its links are chips of their own (`linkChip`). */
-export function askDetail(ask: OrgAsk): string {
-  return ask.mismatch ? `${words(ask.state)} · ${ask.mismatch}` : ask.answer;
 }
 
 /** How a link's state reads at a glance: waits on you, still moving, finished, or gone wrong. */

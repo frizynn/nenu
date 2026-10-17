@@ -7,6 +7,7 @@ import {
   type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { askGroup, decisionGroup, readAsks, type OrgAskRow, type OrgDecisionRow } from "./org-asks.ts";
+import type { ThreadReportSource } from "./org-library.ts";
 import type { OrgStatusFile } from "./org-report.ts";
 import type { AskDecision, AsksList, StatusFile, TokenUsage } from "./org-types.ts";
 import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
@@ -526,7 +527,7 @@ export class ProjectRegistry {
    * of it, for a project this registry lists from `--json`; undefined otherwise. The client names the
    * thread, never the path.
    */
-  report(project: string, id: string): { path: string; records: string; title: string; summary?: ThreadSummary; verdict?: OrgThreadView["verdict"] } | undefined {
+  report(project: string, id: string): ThreadReportSource | undefined {
     if (!SLUG_RE.test(project) || !THREAD_ID_RE.test(id)) return undefined;
     this.read();
     const record = this.records.find((candidate) => candidate.slug === project);

@@ -47,6 +47,15 @@ export async function libraryFileResponse(
   return response;
 }
 
+/** Where a thread's report is, the records folder it must sit in, and what the overview read of it (`ProjectRegistry.report`). */
+export interface ThreadReportSource {
+  path: string;
+  records: string;
+  title: string;
+  summary?: ThreadSummary;
+  verdict?: ThreadVerdict;
+}
+
 /** A thread's report as Your asks shows it: what Organizations read of it, and its Markdown as written. */
 export interface ThreadReport {
   title: string;
@@ -64,7 +73,7 @@ export interface ThreadReport {
  * same 404.
  */
 export async function reportResponse(
-  found: { path: string; records: string; title: string; summary?: ThreadSummary; verdict?: ThreadVerdict } | undefined,
+  found: ThreadReportSource | undefined,
   options: { stateDir: string },
 ): Promise<Response> {
   const missing = new Response(JSON.stringify({ ok: false, error: "No report for this thread." }), { status: 404, headers: { "content-type": "application/json", "cache-control": "no-store" } });

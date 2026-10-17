@@ -291,6 +291,14 @@ async function main(): Promise<void> {
         pages[`thread-${width}`] = { images };
         if (label === "after" && (!images.length || images.some((value) => value === 0))) failures.push(`thread-${width}: a capture did not load`);
         await shoot(page, `thread-${width}`);
+        const full = page.getByRole("button", { name: "Full report" });
+        if (await full.count()) {
+          await full.click();
+          await page.getByRole("region", { name: "Full report" }).getByText("Abandono esperado en pago").first().waitFor({ timeout: 10_000 })
+            .catch(() => failures.push(`thread-${width}: the full report shows no table`));
+          await page.waitForTimeout(600);
+          await shoot(page, `thread-${width}-full`);
+        } else if (label === "after") failures.push(`thread-${width}: no Full report`);
         await context.close();
       }
     }

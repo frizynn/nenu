@@ -89,7 +89,6 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
   /** The answer of each of its parts, in order. */
   parts: Answering[];
 }) {
-  const [writing, setWriting] = useState(false);
   const [open, setOpen] = useState(false);
   const { answer } = answering;
   const line = [whose && entry.project.name, whose && coordinatorName(entry.coordinator), answer === undefined && entry.detail].filter(Boolean).join(" · ");
@@ -97,11 +96,6 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
   const why = unclosed(entry);
   // A row with nothing behind it (no thread, task or page) has no context to open.
   const explained = [entry, ...entry.parts].some((part) => part.links.length > 0);
-  const answerable = answering.answerable && answer === undefined;
-  const answerButton = answerable && !writing &&
-    <button type="button" className="quiet-action" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>Answer</button>;
-  const answerForm = answerable && writing &&
-    <AnswerForm entry={entry} session={session} onCancel={() => setWriting(false)} onAnswered={(text) => { setWriting(false); answering.onAnswered(text); }} />;
   return (
     <li className={cn("flex min-w-0 items-start gap-2.5 rounded-lg py-2", !compact && "px-2.5")}>
       <span className="pt-0.5">{answer === undefined ? <AskMark group={entry.group} /> : <AskMark group="done" />}</span>
@@ -120,11 +114,11 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
           {explained && <button type="button" className="quiet-action" aria-expanded={open} onClick={() => setOpen(!open)}>
             <ChevronRight aria-hidden className={cn("size-3.5 transition-transform", open && "rotate-90")} />Context
           </button>}
-          {!open && answerButton}
+          {!open && <AnswerControl entry={entry} session={session} answering={answering} />}
         </div>
-        {!open && answerForm}
         {open && explained && <AskContext entry={entry} session={session}>
-          {answerable && <div className="mt-3 -ml-2 border-t border-border pt-2">{answerButton}{answerForm}</div>}
+          {answering.answerable && answer === undefined && <div className="mt-3 -ml-2 border-t border-border pt-2">
+            <AnswerControl entry={entry} session={session} answering={answering} /></div>}
         </AskContext>}
       </div>
     </li>
@@ -133,17 +127,22 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
 
 /** One part of a question: a decision about the same thread or task, with its own line and Answer. */
 function Part({ head, part, session, answering }: { head: AskEntry; part: AskEntry; session?: string; answering: Answering }) {
-  const [writing, setWriting] = useState(false);
   const { answer } = answering;
   return <li className="min-w-0 border-l-2 border-border pl-3">
     <p className="break-words text-subhead">{partText(head, part)}</p>
     {answer === undefined && part.detail && <p className="break-words text-footnote text-muted-foreground">{part.detail}</p>}
     <Answered answer={answer} at={part.answeredAt} />
     {part.links.length > 0 && <Chips entry={part} links={part.links} session={session} />}
-    {answering.answerable && answer === undefined && (writing
-      ? <AnswerForm entry={part} session={session} onCancel={() => setWriting(false)} onAnswered={(text) => { setWriting(false); answering.onAnswered(text); }} />
-      : <button type="button" className="quiet-action mt-1 -ml-2" aria-label={`Answer ${part.text}`} onClick={() => setWriting(true)}>Answer</button>)}
+    {answering.answerable && answer === undefined && <div className="mt-1 -ml-2 flex"><AnswerControl entry={part} session={session} answering={answering} /></div>}
   </li>;
+}
+
+/** Answer on a line that takes one: the button, then the form in its place until it is sent or cancelled. */
+function AnswerControl({ entry, session, answering }: { entry: AskEntry; session?: string; answering: Answering }) {
+  const [writing, setWriting] = useState(false);
+  if (!answering.answerable || answering.answer !== undefined) return null;
+  if (!writing) return <button type="button" className="quiet-action" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>Answer</button>;
+  return <AnswerForm entry={entry} session={session} onCancel={() => setWriting(false)} onAnswered={(text) => { setWriting(false); answering.onAnswered(text); }} />;
 }
 
 function Answered({ answer, at }: { answer?: string; at?: string }) {
@@ -256,7 +255,7 @@ function AnswerForm({ entry, session, onCancel, onAnswered }: {
   }
 
   return (
-    <form className="mt-2 flex flex-col gap-2" onSubmit={(event) => void submit(event)}>
+    <form className="mt-2 flex w-full flex-col gap-2" onSubmit={(event) => void submit(event)}>
       <label htmlFor={id} className="sr-only">Your answer</label>
       {/* STATUS.md keeps an ask on one line, so a line break becomes a space. */}
       <textarea id={id} rows={2} value={text} maxLength={2_000} autoFocus disabled={busy}

@@ -3,6 +3,7 @@ import { ChevronRight, ExternalLink, FileText, GitPullRequest, Globe, ImageIcon 
 
 import { IMAGE_EDGE } from "@/components/message-images";
 import { NodeDot } from "@/components/node-row";
+import { FullReport } from "@/components/thread-report";
 import { OrgTreeList, prSummary, threadAge, threadDetail } from "@/components/project-tasks";
 import { orgLibraryUrl } from "@/lib/api";
 import { summarySections, VERDICT_LABEL } from "@/lib/coordinator-summary";
@@ -116,10 +117,16 @@ function SummaryCard({ project, thread, summary, panes, parent, now, onOpen }: {
 
 /** A node's own report at the top of its page: its verdict, then what it says and shows. Nothing without one. */
 export function OwnReport({ project, thread, summary }: { project: ProjectView; thread: ProjectThreadView; summary?: ThreadSummary }) {
+  const [full, setFull] = useState(false);
   if (!thread.verdict && !summary) return null;
   return <div className="mt-3 border-t border-border pt-3">
     {thread.verdict && <p className={cn("text-footnote font-medium", VERDICT_TONE[thread.verdict])}>Report: {VERDICT_LABEL[thread.verdict]}</p>}
     <ReportContent project={project} summary={summary} />
+    {/* The whole report, read when opened; the pictures and documents above stay where they are. */}
+    <button type="button" className="quiet-action mt-2 -ml-2" aria-expanded={full} onClick={() => setFull(!full)}>
+      <ChevronRight aria-hidden className={cn("size-3.5 transition-transform", full && "rotate-90")} />Full report
+    </button>
+    {full && <FullReport project={project.slug} thread={thread.id} />}
   </div>;
 }
 
