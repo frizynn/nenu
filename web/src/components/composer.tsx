@@ -255,19 +255,26 @@ const NO_CHIPS: ChipLine = { chips: [], open: null, onOpenChange: () => {} };
 // How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
 const FOLD_OPEN_MS = 220;
 const FOLD_SHUT_MS = 150;
+// How long a chat takes to settle: its chips come from reads that answer after it mounts.
+const FOLD_SETTLE_MS = 2000;
 
 /**
  * A row above the box (Stop's, a notice) folds open and shut instead of appearing at once, so the
- * thread above moves with it rather than jumping. One already there on mount is simply there.
- * Folding shut, it keeps showing what it last showed, out of reach: inert and hidden from assistive
- * tech, so a Stop on its way out can never be pressed.
+ * thread above moves with it rather than jumping. One already there on mount, or arriving while the
+ * chat is still settling (the chips its first reads bring), is simply there: opening a chat must not
+ * play a fold that walks the conversation up in steps. Folding shut, it keeps showing what it last
+ * showed, out of reach: inert and hidden from assistive tech, so a Stop on its way out can never be
+ * pressed.
  */
 function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
   const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
+  const [mountedAt] = useState(() => Date.now());
   const last = useRef<T | null>(null);
   if (value) last.current = value;
   const shown = Boolean(value);
-  useEffect(() => setPhase((current) => (shown ? (current === "open" ? current : "opening") : current === "shut" ? current : "shutting")), [shown]);
+  useEffect(() => setPhase((current) => (shown
+    ? current === "open" ? current : Date.now() - mountedAt < FOLD_SETTLE_MS ? "open" : "opening"
+    : current === "shut" ? current : "shutting")), [shown, mountedAt]);
   useEffect(() => {
     if (phase !== "opening" && phase !== "shutting") return;
     const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);
@@ -278,6 +285,15 @@ function Fold<T>({ value, children }: { value: T | null | false; children: (valu
   return (
     <div className="composer-fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
       <div>{children(last.current)}</div>
+    </div>
+  );
+}
+
+/** The chips' line, empty and unseen: the height it will take, kept while the chat settles. */
+function ChipLineHold() {
+  return (
+    <div aria-hidden className="composer-chips" data-hold="">
+      <div className="composer-line"><div className="composer-chip-row"><span className="composer-chip invisible">&nbsp;</span></div></div>
     </div>
   );
 }
@@ -687,6 +703,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
   const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
+  // A chat's chips come from reads that answer after it mounts. While it settles, a chat where they are
+  // likely keeps their line's height, so their arrival moves neither the box nor the thread; if none
+  // come, the hold ends, once. Elsewhere nothing is held: a hold there would mostly end in that jump.
+  const [chipsSettling, setChipsSettling] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setChipsSettling(false), FOLD_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -1430,6 +1454,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             at its start, so it folds open and shut only when both come or go; beside chips, Stop just
             leaves. The conversation's live turn already says "Working for …" just above, so only the
             terminal view repeats it here. */}
+        {chipsSettling && chips.likely && !chips.chips.length && !stop.offered ? <ChipLineHold /> :
         <Fold value={(chips.chips.length > 0 || stop.offered) && { stop: stop.offered }}>{(line) => (
           <ComposerChips {...chips} trailing={line.stop && (
             <div role="group" aria-label="Agent working" className="composer-working">
@@ -1437,7 +1462,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               <StopControl stop={stop} disabled={locked} />
             </div>
           )} />
-        )}</Fold>
+        )}</Fold>}
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
         <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes

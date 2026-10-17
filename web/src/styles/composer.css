@@ -94,10 +94,12 @@
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
 }
 /* The line above the box: one chip per kind of work around the chat (composer-chips.tsx) at its start,
-   Stop at its end, and the open chip's panel over it. Alone, either keeps the height and the place its
-   own line gave it. Marks are still; only opening a panel moves, once, for 180ms. The chips scroll
-   sideways when a phone cannot fit them, so each keeps its 44px reach inside the row's own padding. */
-.composer-chips { display: flex; flex-direction: column; gap: 6px; }
+   Stop at its end, and the open chip's panel floating over the thread, anchored to the line: it takes
+   no height, so neither the box nor the conversation moves when it opens. Alone, either keeps the height
+   and the place its own line gave it. Marks are still; only the panel moves, once, as it opens. The
+   chips scroll sideways when a phone cannot fit them, so each keeps its 44px reach inside the row's own
+   padding. */
+.composer-chips { position: relative; }
 .composer-line { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
 .composer-chip-row { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
 .composer-chip-row::-webkit-scrollbar { display: none; }
@@ -110,8 +112,12 @@
   .composer-chip::before { content: ""; position: absolute; inset: -4px 0; }
 }
 .composer-chip-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.composer-chip-panel { display: flex; flex-direction: column; max-height: min(22rem, 45dvh); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); opacity: 1; translate: 0 0; transition: opacity 180ms ease-out, translate 180ms ease-out; }
-@starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; } }
+/* Finished work only: no frame and the muted ink, a step behind the chips that are live. */
+.composer-chip[data-quiet] { border-color: transparent; background: transparent; color: var(--muted-foreground); }
+.composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 2px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), translate 200ms cubic-bezier(0.23, 1, 0.32, 1), scale 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; scale: 0.98; } }
+/* A desk's composer is wide: the panel keeps a list's measure, from the chips' edge. */
+@media (min-width: 768px) { .composer-chip-panel { right: auto; width: min(100%, 30rem); } }
 .composer-chip-panel-head { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 8px 0 14px; color: var(--muted-foreground); font-size: var(--text-footnote); }
 .composer-chip-panel-head h2 { font-weight: 400; }
 .composer-chip-panel-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 8px 8px; }
@@ -125,6 +131,9 @@
 .composer-place { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; padding: 0 6px; }
 .composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }
 .composer-place-item .font-mono { font-size: var(--text-caption); }
+.composer-place-detail { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: var(--text-footnote); }
+.composer-place-detail dt { color: var(--muted-foreground); }
+.composer-place-detail dd { min-width: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }

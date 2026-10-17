@@ -72,12 +72,12 @@ it("names what waits on you and what runs in two chips, each listing only its ow
   expect(await working()).toHaveAccessibleName(/^Background, \d+$/);
   await user.click(ask);
   expect(ask).toHaveAttribute("aria-expanded", "true");
-  const asking = screen.getByRole("region", { name: "Needs you" });
+  const asking = screen.getByRole("dialog", { name: "Needs you" });
   expect(within(within(asking).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / }).map((r) => r.getAttribute("aria-label"))).toEqual(["Expand reviewer"]);
   // One panel at a time: Background takes Needs you's place.
   await user.click(await working());
-  expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
-  const sheet = screen.getByRole("region", { name: "Background" });
+  expect(screen.queryByRole("dialog", { name: "Needs you" })).not.toBeInTheDocument();
+  const sheet = screen.getByRole("dialog", { name: "Background" });
   const rows = within(within(sheet).getByRole("list", { name: "In progress" })).getAllByRole("button", { name: /^Expand / });
   expect(rows.map((r) => r.getAttribute("aria-label"))).toContain(`Expand ${runningRun.name}`);
   expect(rows.map((r) => r.getAttribute("aria-label"))).not.toContain("Expand reviewer");
@@ -88,7 +88,7 @@ it("names what waits on you and what runs in two chips, each listing only its ow
   await user.click(within(sheet).getByRole("button", { name: "Published (1)" }));
   expect(within(sheet).getByRole("link", { name: /Rediseño Nenu sobre Herdr/ })).toHaveAttribute("target", "_blank");
   // The cards that used to duplicate this list inside the chat are gone.
-  expect(screen.queryByRole("region", { name: /^Workflow / })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: /^Workflow / })).not.toBeInTheDocument();
 });
 
 it("keeps finished work one tap away once nothing waits or runs", async () => {
@@ -98,9 +98,11 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   const button = await working();
   // Nothing runs, so the chip does not say Background: it says what finished.
   expect(button).toHaveAccessibleName(/^Done, \d+$/);
+  // …quietly: finished work never stands beside live work at the same weight.
+  expect(button).toHaveAttribute("data-quiet");
   expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.click(button);
-  const sheet = screen.getByRole("region", { name: "Done" });
+  const sheet = screen.getByRole("dialog", { name: "Done" });
   expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
   await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
@@ -113,7 +115,7 @@ it("says Published when all the session left is pages it published", async () =>
   const button = await working();
   expect(button).toHaveAccessibleName("Published, 1");
   await user.click(button);
-  expect(within(screen.getByRole("region", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
+  expect(within(screen.getByRole("dialog", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
 });
 
 it("shows no chip when the session has nothing at all", async () => {
@@ -134,7 +136,7 @@ it("on a desk, the list stays open while you read it when the last process ends"
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
   await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
-  expect(screen.getByRole("region", { name: "Done" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Done" })).toBeVisible();
   expect(screen.getByRole("list", { name: "Done" })).toBeVisible();
 });
 
@@ -179,8 +181,8 @@ it("on a phone, details replace the panel's content: one panel, named once, with
   await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
-  expect(screen.queryByRole("region", { name: "Background" })).not.toBeInTheDocument();
-  const sheet = screen.getByRole("region", { name: runningRun.name });
+  expect(screen.queryByRole("dialog", { name: "Background" })).not.toBeInTheDocument();
+  const sheet = screen.getByRole("dialog", { name: runningRun.name });
   // Once the details have drawn, the run is named once, by the panel's own title.
   expect(await within(sheet).findByText("agents done")).toBeVisible();
   expect(within(sheet).getAllByRole("heading", { name: runningRun.name })).toHaveLength(1);
@@ -190,19 +192,19 @@ it("on a phone, details replace the panel's content: one panel, named once, with
   const title = within(sheet).getByRole("heading", { name: runningRun.name });
   expect(backs[0]!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await user.click(backs[0]!);
-  expect(screen.getByRole("region", { name: "Background" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Background" })).toBeVisible();
 });
 
 it("on a desk, details open in a side panel and the chat stays usable", async () => {
   setDesktop(true);
   const { user } = renderChat();
   await user.click(await working());
-  expect(screen.getByRole("region", { name: "Background" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Background" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
   await user.click(screen.getByRole("button", { name: `Details of ${runningRun.name}` }));
   const panel = screen.getByRole("complementary", { name: `Details: ${runningRun.name}` });
   expect(await within(panel).findByRole("heading", { name: runningRun.name })).toBeVisible();
-  expect(screen.queryByRole("region", { name: "Background" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Background" })).not.toBeInTheDocument();
   const box = screen.getByRole("textbox");
   await user.type(box, "still typing");
   expect(box).toHaveValue("still typing");
@@ -216,7 +218,7 @@ it("a command's output opens as details in the same panel", async () => {
   await user.click(await working());
   await user.click(screen.getByRole("button", { name: "Expand bun test --watch" }));
   await user.click(screen.getByRole("button", { name: "Details of bun test --watch" }));
-  expect(screen.getByRole("region", { name: "bun test --watch" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "bun test --watch" })).toBeVisible();
   expect(await screen.findByText("412 pass")).toBeVisible();
 });
 
@@ -227,7 +229,7 @@ it("opens a subagent's conversation in place of the chat, and Back to Main retur
   expect(screen.getByText("Review the diff")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Open conversation: reviewer" }));
   expect(await screen.findByText("Child result")).toBeVisible();
-  expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Needs you" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Back to Main" }));
   expect(screen.queryByText("Child result")).not.toBeInTheDocument();
 });
@@ -308,5 +310,5 @@ it("keeps a run's details open on a phone when the last process ends, and the ch
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
   await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
-  expect(screen.getByRole("region", { name: runningRun.name })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: runningRun.name })).toBeVisible();
 });
