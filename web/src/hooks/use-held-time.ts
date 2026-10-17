@@ -8,15 +8,18 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
  * window lost focus), on `reorder` (the list's "N updates"), and with every fresh mount. Not on a
  * navigation: on a desk the bar stays up, and the row just clicked moved 120 px when its own visit
  * re-sorted it. A live order measured 250 row moves a minute on a phone's Home with a busy herd
- * (`bun scripts/e2e/calm.ts`).
+ * (`bun scripts/e2e/calm.ts`). Rows with the same time keep the order they first came in: the list
+ * hands them over in an order that changes with their state.
  */
 export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number): {
   at: (item: T) => number;
+  /** `items` newest held time first, ties in the order they first came. */
+  order: (items: readonly T[]) => T[];
   /** How many of `items` sit somewhere else in the order their latest times give: what `reorder` would move. */
   moved: (items: readonly T[]) => number;
   reorder: () => void;
 } {
-  const held = useRef(new Map<string, number>());
+  const held = useRef(new Map<string, { time: number; seq: number }>());
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const reorder = useCallback(() => {
     held.current = new Map();
@@ -33,15 +36,21 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
       window.removeEventListener("focus", onReturn);
     };
   }, [reorder]);
-  const heldAt = (item: T) => {
+  const entry = (item: T) => {
     const id = key(item);
-    let time = held.current.get(id);
-    if (time === undefined) held.current.set(id, time = at(item));
-    return time;
+    let found = held.current.get(id);
+    if (!found) held.current.set(id, found = { time: at(item), seq: held.current.size });
+    return found;
+  };
+  const heldAt = (item: T) => entry(item).time;
+  const order = (items: readonly T[]) => {
+    // Rows new to the list take their place in the tie order as handed over, before any comparison.
+    for (const item of items) entry(item);
+    return [...items].sort((a, b) => heldAt(b) - heldAt(a) || entry(a).seq - entry(b).seq);
   };
   const moved = (items: readonly T[]) => {
-    const live = [...items].sort((a, b) => at(b) - at(a));
-    return [...items].sort((a, b) => heldAt(b) - heldAt(a)).filter((item, index) => live[index] !== item).length;
+    const live = order(items).sort((a, b) => at(b) - at(a) || entry(a).seq - entry(b).seq);
+    return order(items).filter((item, index) => live[index] !== item).length;
   };
-  return { at: heldAt, moved, reorder };
+  return { at: heldAt, order, moved, reorder };
 }

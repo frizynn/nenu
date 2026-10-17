@@ -93,7 +93,7 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
   // Each chat keeps the place it had when the bar drew it, so a row never moves under the pointer: one
   // that finishes says +1 where it is. "N updates" puts them in order, as coming back to the window does.
   const held = useHeldTime((chat: DeskChat) => chat.key, (chat) => chat.at);
-  const chats = deskChats(data).sort((a, b) => held.at(b) - held.at(a));
+  const chats = held.order(deskChats(data));
   const updates = held.moved(chats);
   const { shown, hidden } = more ? { shown: chats, hidden: 0 } : preview(chats, CHATS_SHOWN, (chat) => isCurrent(chat) || needsYou(chat));
   const revealed = new Set(more ? chats.slice(CHATS_SHOWN).map((chat) => chat.key) : []);

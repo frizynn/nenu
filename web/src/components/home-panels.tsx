@@ -307,7 +307,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
-  const recent = everyRecent.filter(kept).sort((a, b) => held.at(b) - held.at(a));
+  const recent = held.order(everyRecent.filter(kept));
   const updates = list === "recents" ? held.moved(recent) : 0;
   const workspaces = everyWorkspace.map((group) => {
     const tabs = group.tabs.map((tab) => ({ ...tab, chats: tab.chats.filter(kept) })).filter((tab) => tab.chats.length > 0);

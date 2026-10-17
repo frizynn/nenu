@@ -47,3 +47,11 @@ it("leaves a session that turns New in its place, and reorders on N updates", as
   expect(rows()).toEqual(["/pane/c", "/pane/a", "/pane/b"]);
   expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
 });
+
+// Sessions first seen in the same read share a time, and the snapshot hands them over in an order that moves with their state.
+it("keeps sessions with the same time in the order they first came, however they are handed over", () => {
+  const { rows, show } = setup([chat("a", 100), chat("b", 100), chat("c", 100)]);
+  show([chat("c", 100), chat("b", 100), chat("a", 100)]);
+  expect(rows()).toEqual(["/pane/a", "/pane/b", "/pane/c"]);
+  expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
+});
