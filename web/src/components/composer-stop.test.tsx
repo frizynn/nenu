@@ -79,6 +79,27 @@ it("folds the Working row shut when the turn ends, out of reach while it goes", 
   await waitFor(() => expect(row).not.toBeInTheDocument());
 });
 
+// Opening a chat, its chips arrive a moment after it mounts; folding them open walked the conversation
+// up in ten steps every time. What arrives while the chat settles is simply there; later, it folds.
+it("draws a row that arrives while the chat settles at once, and folds open one that comes later", async () => {
+  const start = Date.now();
+  const now = vi.spyOn(Date, "now").mockReturnValue(start);
+  try {
+    const { rerender } = setup({ working: false });
+    rerender({ working: true });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
+    rerender({ working: false });
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument());
+    now.mockReturnValue(start + 5000);
+    rerender({ working: true });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "opening");
+  } finally {
+    now.mockRestore();
+  }
+});
+
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
   const { user, rerender } = setup();
   await user.click(stopButton()!);
