@@ -53,6 +53,10 @@ export interface Ask {
   confirmed: AskConfirmed;
   /** Why `state` does not close with what the links confirm, in Organizations' fixed words; empty when it closes. */
   mismatch: string;
+  /** RFC 3339, once the person answered this line with `asks answer`, until the coordinator changes it; absent otherwise. */
+  answeredAt?: string;
+  /** Organizations takes an answer on this row: its `actions` list `answer`. Absent otherwise. */
+  answerable?: true;
 }
 
 /** Where Your asks lists an ask: Organizations' order (`Ask::rank`), as its coordinator stands. */
@@ -68,11 +72,22 @@ export interface AskRow extends Ask {
   group: AskGroup;
 }
 
-/** A `## Needs your decision` line of a coordinator that still takes an answer. */
+/**
+ * A `## Needs your decision` line of a coordinator that still takes an answer. An Organizations that
+ * prints decisions as rows (`asks --json`'s `decisions`) gives its line, links and answer; one that
+ * prints only the status file's lines gives the text, with line 0 and no links.
+ */
 export interface AskDecision {
   project: string;
   coordinator: AskCoordinator;
   text: string;
+  /** Its line in the STATUS.md, which `asks answer --line` takes; 0 when Organizations gave only the text. */
+  line: number;
+  links: AskLink[];
+  /** Waits on the person until answered, then in progress until the coordinator moves it to `## Decisions`. */
+  group: Extract<AskGroup, "waiting" | "progress">;
+  answeredAt?: string;
+  answerable?: true;
 }
 
 /** Every coordinator's asks and open decisions (`/api/org/asks`), read when the page opens. */
