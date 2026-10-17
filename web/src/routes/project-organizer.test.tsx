@@ -70,7 +70,7 @@ describe("a project that organizes coordinators", () => {
     const coordinators = await screen.findByRole("list", { name: "Coordinators" });
     expect(titlesOf(coordinators)).toEqual(["Lead"]);
     // Folded, the row says what it holds.
-    expect(within(coordinators).getByRole("button", { name: /^Lead ?Coordinator/ })).toHaveTextContent("Coordinator · Idle · 3 open · 1 needs you");
+    expect(within(coordinators).getByRole("button", { name: /^Lead ?Idle/ })).toHaveTextContent("Idle · 3 open · 1 needs you");
     expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Hotfix"]);
     // No project coordinator to start as if it were missing, and not its empty STATUS.md on top.
     expect(screen.queryByText("Not running")).not.toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("a project that organizes coordinators", () => {
     expect(inside.getByRole("button", { name: "New thread under Lead" })).toBeInTheDocument();
     expect(inside.getByRole("button", { name: "New coordinator under Lead" })).toBeInTheDocument();
     // The row itself still opens the coordinator's chat.
-    await user.click(screen.getByRole("button", { name: /^Lead ?Coordinator/ }));
+    await user.click(screen.getByRole("button", { name: /^Lead ?Idle/ }));
     expect(router.state.location.pathname).toBe("/pane/lead");
   });
 

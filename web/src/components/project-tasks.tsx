@@ -53,12 +53,13 @@ export function threadDetail(thread: ProjectThreadView, panes: readonly AgentVie
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** A tree row's second line: what an open node is doing, or what a resolved one was; a folded coordinator adds what it holds. */
-function nodeDetail(node: OrgNode, panes: readonly AgentView[], folded = false): string {
+/** A tree row's second line: what an open node is doing, or what a resolved one was; a coordinator on the project page says what it holds. */
+function nodeDetail(node: OrgNode, panes: readonly AgentView[], organized = false): string {
   const { thread } = node;
-  if (node.state !== "resolved" && thread.role === "coordinator" && folded) {
+  if (organized) {
     const { open, needs } = openUnder(node);
-    return ["Coordinator", STATE_LABEL[node.state], open > 0 && `${open} open`, needs > 0 && `${needs} need${needs === 1 ? "s" : ""} you`].filter(Boolean).join(" · ");
+    // The Coordinators heading, or the chevron of one nested in another, already says what it is.
+    return [STATE_LABEL[node.state], open > 0 && `${open} open`, needs > 0 && `${needs} need${needs === 1 ? "s" : ""} you`].filter(Boolean).join(" · ");
   }
   if (node.state !== "resolved") return thread.role === "coordinator" ? `Coordinator · ${threadDetail(thread, panes)}` : threadDetail(thread, panes);
   const kind = thread.role !== "coordinator" ? "Thread" : node.children.length ? `Coordinator · ${plural(node.children.length, "thread")}` : "Coordinator";
@@ -231,7 +232,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
     ];
     const work = node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className={cn("task-list", !organized && "task-branch")}>{node.children.map(branch)}</ul>;
     return (
-      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, organized && !open)} age={threadAge(thread, now)} current={onScreen(node)}
+      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, organized)} age={threadAge(thread, now)} current={onScreen(node)}
         onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
         fold={organized || (resolved && node.children.length > 0) ? { open, onToggle: toggle } : undefined} actions={actions}>
         {open && (organized

@@ -61,7 +61,7 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
             <span className={cn("block break-words text-sm font-medium", state === "resolved" && "text-muted-foreground")}>{title}</span>
             <span className="block truncate text-xs text-muted-foreground">{detail}</span>
           </span>
-          {age && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
+          {age && <span className="task-age shrink-0 text-xs tabular-nums text-muted-foreground">{age}</span>}
         </button>
         {fold && <button type="button" className="task-fold" aria-label={`${title} threads`} aria-expanded={fold.open} onClick={fold.onToggle}>
           <ChevronRight aria-hidden className="size-4" />
