@@ -8,18 +8,46 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-17
+
+### Added
+
+- A decision waiting on you has its links as chips and Answer on its own line, where Organizations prints decision rows; answered, it waits on no one (ADR 0093) (fdd9dd55, 13bad973).
+- `bun scripts/e2e/asks-answer.ts` answers a decision too (97e68ace).
+
+## [1.20.0] - 2026-10-17
+
+### Added
+
+- Your asks narrows by project and coordinator, kept in its address; a coordinator's card lists its own the same way (ADR 0093) (33de679f, 4a7f3382).
+- Answer on an ask that waits on you, through `asks answer` where Organizations takes one; answered, it waits on no one (9fd50c9b, 33de679f, 92dadefa).
+- `bun scripts/e2e/asks-answer.ts [--before]` captures Your asks and a card at 390 and 1440 px (334de240).
+
+### Changed
+
+- An ask's links read as short chips with their state, not raw text (33de679f).
+
+### Fixed
+
+- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b, 92dadefa).
+
 ## [1.19.0] - 2026-10-17
 
 ### Added
 
-- A chip's panel floats over the thread: opening it moves neither the box nor the chat; a press outside, Escape and a phone's Back close it (3daf8f3c).
-- A phone's row under the box keeps model, effort and context; branch and machine are one tap away, whole (3daf8f3c).
-- Threads that ended fold into Working's Done group, muted; a chip with only finished work is drawn quietly (3daf8f3c).
-- `bun scripts/e2e/run.ts composer` measures the box, the thread's scroll and layout shifts around each chip (89f6a4db).
+- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383, e6c8f5d8).
+- A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
+- Move to…: an open node goes under another coordinator where Organizations offers `node move` for it (a026e2fb, 9b2d5632, a0526cf3).
+- `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).
+
+### Changed
+
+- A coordinator started from Nenu names `--can-spawn --kind=tab` instead of leaning on defaults (a026e2fb).
+- New's Thread row moves into each project's step (d81fde80).
 
 ### Fixed
 
-- Opening a chat no longer folds its chips open and walks the conversation up (99cf86fe).
+- A task row's age no longer shows through its actions (7792d023).
 
 ## [1.18.0] - 2026-10-16
 

@@ -137,3 +137,35 @@ export function flatten(nodes: readonly OrgNode[]): OrgNode[] {
 export function holds(node: OrgNode, test: (node: OrgNode) => boolean): boolean {
   return test(node) || node.children.some((child) => holds(child, test));
 }
+
+export interface Placed {
+  node: OrgNode;
+  /** 0 for a node at the project's top level. */
+  depth: number;
+}
+
+/** Every open coordinator, in the tree's order, each with how deep it sits: the coordinators a project organizes. */
+export function openCoordinators(tree: OrgTree): Placed[] {
+  const walk = (nodes: readonly OrgNode[], depth: number): Placed[] =>
+    nodes.flatMap((node) => node.thread.role === "coordinator" ? [{ node, depth }, ...walk(node.children, depth + 1)] : []);
+  return walk(tree.open, 0);
+}
+
+/**
+ * Where an open node can go: the project's top level, or an open coordinator that is neither the node,
+ * one of its own, nor where it already is. Organizations judges the rest, such as a coordinator that
+ * may not start nodes.
+ */
+export function moveTargets(tree: OrgTree, node: OrgNode): { root: boolean; coordinators: Placed[] } {
+  const own = new Set(flatten([node]).map((n) => n.thread.id));
+  return {
+    root: node.thread.parentId !== "root",
+    coordinators: openCoordinators(tree).filter(({ node: target }) => !own.has(target.thread.id) && target.thread.id !== node.thread.parentId),
+  };
+}
+
+/** How much open work hangs under a node, and how much of it needs you. */
+export function openUnder(node: OrgNode): { open: number; needs: number } {
+  const under = flatten(node.children).filter((n) => n.state !== "resolved");
+  return { open: under.length, needs: under.filter((n) => n.state === "needs").length };
+}

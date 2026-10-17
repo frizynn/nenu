@@ -1,6 +1,8 @@
 # 0091. Your asks and a coordinator's card come from Organizations' fields
 
-- **Status:** Accepted (2026-10-16). Requested by the operator. Amends
+- **Status:** Accepted (2026-10-16). Amended by [ADR 0093](./0093-asks-are-answered-and-narrowed-where-they-are-read.md):
+  a line that is only a parenthesis is a placeholder, Answer writes the person's words through `asks
+  answer`, and the card draws its asks as Your asks does. Requested by the operator. Amends
   [ADR 0090](./0090-a-coordinators-status-file-is-drawn-as-written.md) point 2: under a card, the
   STATUS.md starts closed. Meets 0090's own condition for revisiting it: Organizations now publishes
   the asks as data.

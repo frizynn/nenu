@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, historyCount, nodeState, orgTree, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -94,4 +94,35 @@ it("refuses to close a coordinator that still runs open nodes, and says how many
   ]).open;
   expect(closeRefusal(lead!)).toBe("Lead still has 2 open under it.");
   expect(closeRefusal(solo!)).toBeUndefined();
+});
+
+describe("a project's coordinators", () => {
+  // Lead runs Docs and Checkout, which runs Pay; Old is resolved; Hotfix sits at the top level.
+  const tree = orgTree([
+    node("lead", "root", { role: "coordinator" }),
+    node("docs", "lead", { group: "waiting-on-you" }),
+    node("checkout", "lead", { role: "coordinator" }),
+    node("pay", "checkout"),
+    node("old", "root", { role: "coordinator", status: "resolved" }),
+    node("hotfix", "root"),
+  ]);
+  const find = (id: string) => flatten(tree.open).find((n) => n.thread.id === id)!;
+
+  it("lists every open coordinator in the tree's order, with how deep it sits", () => {
+    expect(openCoordinators(tree).map(({ node: n, depth }) => [n.thread.id, depth])).toEqual([["lead", 0], ["checkout", 1]]);
+  });
+
+  it("moves a node only to the top level or a coordinator outside it and other than its parent", () => {
+    const ids = (n: OrgNode) => { const t = moveTargets(tree, n); return [t.root, t.coordinators.map(({ node: c }) => c.thread.id)]; };
+    expect(ids(find("docs"))).toEqual([true, ["checkout"]]);
+    expect(ids(find("pay"))).toEqual([true, ["lead"]]);
+    expect(ids(find("hotfix"))).toEqual([false, ["lead", "checkout"]]);
+    // Its own coordinator under it is no place for a coordinator.
+    expect(ids(find("lead"))).toEqual([false, []]);
+  });
+
+  it("counts the open work under a node and how much of it needs you", () => {
+    expect(openUnder(find("lead"))).toEqual({ open: 3, needs: 1 });
+    expect(openUnder(find("hotfix"))).toEqual({ open: 0, needs: 0 });
+  });
 });
