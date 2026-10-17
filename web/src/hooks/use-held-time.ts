@@ -1,24 +1,30 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 
 /**
  * The time a list sorts each row by, held at what it was when the row first came on screen, so rows
  * already in view never trade places under a finger or a pointer while their agents work. A row that
- * arrives takes its own time and lands where it belongs, and so does a row whose agent turns to `news`
- * (it finished or asks for you): that move is the notice, since a finished agent raises no toast
- * (ADR 0094), and below the fold or under an old period it would go unseen. The whole hold lets go when the operator comes back
- * to the page (it was hidden, or the window lost focus), and with every fresh mount: the list then
- * reads the herd as it is now. Not on a navigation: on a desk the bar stays up, and the row just
- * clicked moved 120 px when its own visit re-sorted it. A live order measured 250 row moves a minute
- * on a phone's Home with a busy herd (`bun scripts/e2e/calm.ts`).
+ * arrives takes its own time and lands where it belongs; a row that finishes stays put and says so in
+ * place (New, +1). The hold lets go when the operator comes back to the page (it was hidden, or the
+ * window lost focus), on `reorder` (the list's "N updates"), and with every fresh mount. Not on a
+ * navigation: on a desk the bar stays up, and the row just clicked moved 120 px when its own visit
+ * re-sorted it. A live order measured 250 row moves a minute on a phone's Home with a busy herd
+ * (`bun scripts/e2e/calm.ts`).
  */
-export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number, news: (item: T) => boolean): (item: T) => number {
-  const held = useRef(new Map<string, { time: number; news: boolean }>());
-  const [, release] = useReducer((n: number) => n + 1, 0);
+export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number): {
+  at: (item: T) => number;
+  /** How many of `items` sit somewhere else in the order their latest times give: what `reorder` would move. */
+  moved: (items: readonly T[]) => number;
+  reorder: () => void;
+} {
+  const held = useRef(new Map<string, number>());
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const reorder = useCallback(() => {
+    held.current = new Map();
+    redraw();
+  }, []);
   useEffect(() => {
     const onReturn = () => {
-      if (document.visibilityState !== "visible") return;
-      held.current = new Map();
-      release();
+      if (document.visibilityState === "visible") reorder();
     };
     document.addEventListener("visibilitychange", onReturn);
     window.addEventListener("focus", onReturn);
@@ -26,13 +32,16 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
       document.removeEventListener("visibilitychange", onReturn);
       window.removeEventListener("focus", onReturn);
     };
-  }, []);
-  return (item) => {
+  }, [reorder]);
+  const heldAt = (item: T) => {
     const id = key(item);
-    const now = news(item);
-    const last = held.current.get(id);
-    const time = !last || (now && !last.news) ? at(item) : last.time;
-    held.current.set(id, { time, news: now });
+    let time = held.current.get(id);
+    if (time === undefined) held.current.set(id, time = at(item));
     return time;
   };
+  const moved = (items: readonly T[]) => {
+    const live = [...items].sort((a, b) => at(b) - at(a));
+    return [...items].sort((a, b) => heldAt(b) - heldAt(a)).filter((item, index) => live[index] !== item).length;
+  };
+  return { at: heldAt, moved, reorder };
 }

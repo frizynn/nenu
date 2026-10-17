@@ -1,4 +1,5 @@
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, it } from "vitest";
@@ -34,14 +35,15 @@ it("keeps Recents in the order it came on screen with while agents work, and reo
   expect(rows()).toEqual(["/pane/c", "/pane/new", "/pane/a", "/pane/b"]);
 });
 
-// A finished agent raises no toast (ADR 0094), so its New must not wait below the fold for a return.
-it("moves a session up as it turns New, from below the fold too", () => {
-  const first = Array.from({ length: 8 }, (_, i) => chat(`p${i}`, 800 - i * 100));
+// A finished agent raises no toast (ADR 0094); its row says New where it is, and "N updates" reorders.
+it("leaves a session that turns New in its place, and reorders on N updates", async () => {
+  const first = [chat("a", 300), chat("b", 200), chat("c", 100)];
   const { rows, show } = setup(first);
-  expect(rows()).not.toContain("/pane/p7");
-  show([chat("p7", 900, true), ...first.slice(0, 7)]);
-  expect(rows()[0]).toBe("/pane/p7");
-  // Still New on the next read, it stays where it rose to.
-  show([chat("p7", 900, true), chat("p0", 1_000), ...first.slice(1, 7)]);
-  expect(rows().slice(0, 2)).toEqual(["/pane/p7", "/pane/p0"]);
+  expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
+  show([chat("c", 900, true), chat("a", 300), chat("b", 200)]);
+  expect(rows()).toEqual(["/pane/a", "/pane/b", "/pane/c"]);
+  expect(within(screen.getByRole("link", { name: /^c/ })).getByText("New")).toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "3 updates" }));
+  expect(rows()).toEqual(["/pane/c", "/pane/a", "/pane/b"]);
+  expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
 });

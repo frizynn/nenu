@@ -300,14 +300,15 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
   // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
-  // Recents keeps the order it came on screen with, so a row never moves under the finger; one that
-  // turns New moves up to say so.
-  const at = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at, (chat) => chat.unseen);
+  // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
+  // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
+  const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
   if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
-  const recent = everyRecent.filter(kept).sort((a, b) => at(b) - at(a));
+  const recent = everyRecent.filter(kept).sort((a, b) => held.at(b) - held.at(a));
+  const updates = list === "recents" ? held.moved(recent) : 0;
   const workspaces = everyWorkspace.map((group) => {
     const tabs = group.tabs.map((tab) => ({ ...tab, chats: tab.chats.filter(kept) })).filter((tab) => tab.chats.length > 0);
     // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
@@ -327,6 +328,11 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
               onClick={() => { setList(key); rememberList(key); }} className={desk ? "panel-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
+        {/* Always laid out, so its arrival moves neither the tabs nor the rows. */}
+        <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
+          className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground max-sm:min-w-[6.5rem]", !updates && "invisible", projects.length === 0 && "ml-auto")}>
+          {Math.max(updates, 1)} {updates <= 1 ? "update" : "updates"}
+        </button>
         {projects.length > 0 && (
           <label className={cn("relative ml-auto min-w-0 focus-within:ring-2 focus-within:ring-ring max-sm:hidden",
             desk ? "quiet-action -mr-2" : "inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground hover:text-foreground")}>
