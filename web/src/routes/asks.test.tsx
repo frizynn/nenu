@@ -93,7 +93,7 @@ it("lists every ask in the popup's groups, each with whose it is and where it st
   expect(within(waiting).getAllByRole("link").map((link) => link.textContent)).toEqual(["Pilot with batch 2", "Stock : list or cards"]);
   expect(within(waiting).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
   const unclosed = screen.getByRole("region", { name: "Does not close" });
-  expect(unclosed).toHaveTextContent("Ship the couponsShop · Coordinator · done · a linked PR is still open");
+  expect(unclosed).toHaveTextContent("Ship the couponsShop · Coordinator · approvedMarked done, but a linked PR is still open.");
 
   await user.click(within(unclosed).getByRole("link", { name: /Land the copy fix/ }));
   expect(router.state.location.pathname).toBe("/project/shop/node/t-0010");
@@ -112,7 +112,7 @@ it("opens a coordinator's page on its card: objective, what waits on you, its as
   expect(regions.slice(0, regions.indexOf("Status") + 1)).toEqual(["Coordinator card", "Wait on you", "Does not close", "In progress", "Status"]);
   expect(main.getByRole("button", { name: "Show STATUS.md" })).toBeInTheDocument();
   expect(card).toHaveTextContent("Objectiveupdated 12m agothe checkout in six parts");
-  expect(card).toHaveTextContent("Does not close1Land the copy fixworking · a linked thread is resolved");
+  expect(card).toHaveTextContent("Does not close1Land the copy fixMarked working, but a linked thread is resolved.");
   expect(card).toHaveTextContent("In progress1Card tokensnext after the copy fix");
   // Only its own: no project or coordinator named on its rows.
   expect(within(card).queryByText(/^Shop · /)).not.toBeInTheDocument();
@@ -134,7 +134,7 @@ it("gives the project's own coordinator a page of its own: its agent, its card, 
   // What the ticker saw of it, without a live pane.
   expect(main.getByText("claude · opus").parentElement).toHaveTextContent("Idle·claude · opus");
   await waitFor(() => expect(card).toHaveTextContent("Wait on you1Pilot with batch 2yes or no"));
-  expect(card).toHaveTextContent("Does not close1Ship the couponsdone · a linked PR is still open");
+  expect(card).toHaveTextContent("Does not close1Ship the couponsapprovedMarked done, but a linked PR is still open.");
   expect(card).toHaveTextContent("Done1Does it cut cost?yes, measured twice");
   expect(card).toHaveTextContent("Agents1CheckoutIdle");
   expect(card.querySelector("[data-over-cap]")).toHaveTextContent("Over cap: context");

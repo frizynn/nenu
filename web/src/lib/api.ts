@@ -36,6 +36,7 @@ import type {
   OrgRoutine,
   OrgTask,
   StatusFile,
+  ThreadReport,
   ThreadSummary,
   TokenUsage,
   UpdateInfo,
@@ -738,6 +739,11 @@ export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<
 /** Every coordinator's asks and open decisions, as the bridge last read them; `asks` is null when Organizations cannot list them. */
 export function fetchOrgAsks(signal?: AbortSignal): Promise<{ ok: true } & AsksList> {
   return req("/api/org/asks", { signal }, undefined, ORG_LIST_TIMEOUT_MS);
+}
+
+/** A thread's report, read from the project's records folder when a question's context opens; 404 without one. */
+export function fetchOrgReport(project: string, thread: string, signal?: AbortSignal): Promise<{ ok: true; report: ThreadReport }> {
+  return req(`/api/org/report?project=${encodeURIComponent(project)}&thread=${encodeURIComponent(thread)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
 /** A picture, HTML page or PDF in the project's library; anything else answers 404. */

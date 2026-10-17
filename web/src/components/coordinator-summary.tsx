@@ -20,7 +20,7 @@ const CaptureViewer = lazy(() => import("./capture-viewer"));
 
 /** Done cards drawn at a time: a long-running coordinator resolves dozens. */
 const DONE_PAGE = 10;
-const VERDICT_TONE: Record<ThreadVerdict, string> = { done: "text-status-done", "needs-decision": "text-status-blocked", blocked: "text-status-blocked", failed: "text-status-blocked" };
+export const VERDICT_TONE: Record<ThreadVerdict, string> = { done: "text-status-done", "needs-decision": "text-status-blocked", blocked: "text-status-blocked", failed: "text-status-blocked" };
 const CHIP = "inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md bg-muted px-2 text-caption font-medium text-foreground";
 
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
@@ -145,7 +145,7 @@ function PrChip({ pr }: { pr: ThreadPullRequest }) {
  * picture keeps its whole frame at one height, so a phone screen and a desk screen sit side by side
  * uncropped; a caption wraps under its own picture.
  */
-function Captures({ project, captures }: { project: ProjectView; captures: readonly ThreadCapture[] }) {
+export function Captures({ project, captures }: { project: ProjectView; captures: readonly ThreadCapture[] }) {
   const [opened, setOpened] = useState<number | null>(null);
   const images = captures.map((capture, index) => ({ key: capture.path, src: orgLibraryUrl(project.slug, capture.path), label: capture.caption || `Capture ${index + 1}` }));
   return <>
@@ -171,7 +171,7 @@ function CaptureThumb({ src, label, onOpen }: { src: string; label: string; onOp
 }
 
 /** HTML and PDF, each opened in a new tab through the library route. */
-function Deliverables({ project, deliverables }: { project: ProjectView; deliverables: readonly ThreadDeliverable[] }) {
+export function Deliverables({ project, deliverables }: { project: ProjectView; deliverables: readonly ThreadDeliverable[] }) {
   return <ul aria-label="Deliverables" className="mt-3 flex flex-wrap gap-2">
     {deliverables.map((deliverable) => {
       const Icon = deliverable.kind === "html" ? Globe : FileText;

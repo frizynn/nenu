@@ -225,6 +225,14 @@ export interface ThreadSummary {
   status?: StatusFile;
   usage?: TokenUsage;
 }
+/** A thread's report (`/api/org/report`), mirroring bridge/org-library.ts: its Markdown as the agent wrote it, drawn as text. */
+export interface ThreadReport {
+  title: string;
+  verdict?: ThreadVerdict;
+  text: string;
+  captures: ThreadCapture[];
+  deliverables: ThreadDeliverable[];
+}
 /**
  * A coordinator's STATUS.md: the agent's Markdown, drawn as text. `updated` is RFC 3339 or empty.
  * The objective and decisions are what Organizations read out of it, absent from one that predates them.
