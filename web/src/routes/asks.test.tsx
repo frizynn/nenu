@@ -266,20 +266,23 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
     expect(screen.getByLabelText("Your answer")).toHaveValue("yes");
   });
 
-  it("narrows to a project and then a coordinator, in the address, and a coordinator's card lists only its own", async () => {
+  it("narrows to a project and then a coordinator, in the address", async () => {
     const { router, user } = setup("/asks", { asks: linked });
     await screen.findByRole("region", { name: "Wait on you" });
+    // Each pick is a navigation: the page draws what it narrowed to once the router commits it, and
+    // the Coordinator selector opens only then.
     await user.selectOptions(screen.getByLabelText("Project"), "shop");
-    expect(router.state.location.search).toBe("?project=shop");
+    await waitFor(() => expect(router.state.location.search).toBe("?project=shop"));
+    await waitFor(() => expect(screen.getByLabelText("Coordinator")).toBeEnabled());
     await user.selectOptions(screen.getByLabelText("Coordinator"), "t-0010");
-    expect(router.state.location.search).toBe("?project=shop&coordinator=t-0010");
-    expect(screen.getByText(/^Shop · Checkout · 2 wait on you/)).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe("?project=shop&coordinator=t-0010"));
+    expect(await screen.findByText(/^Shop · Checkout · 2 wait on you/)).toBeInTheDocument();
     const main = within(screen.getByRole("main"));
     expect(main.queryByText("Pilot with batch 2")).not.toBeInTheDocument();
     expect(main.getByText("Card tokens")).toBeInTheDocument();
     // All projects clears the coordinator too.
     await user.selectOptions(screen.getByLabelText("Project"), "");
-    expect(router.state.location.search).toBe("");
+    await waitFor(() => expect(router.state.location.search).toBe(""));
   });
 
   it("opens narrowed from its address", async () => {
