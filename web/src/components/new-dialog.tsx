@@ -305,8 +305,9 @@ function projectHint(project: ProjectView): string {
 }
 
 /**
- * A project's step: its coordinators, the project's own first while it runs, each opening its chat
- * (its page when it runs in no pane); then a new coordinator or thread, and the project's page.
+ * A project's step: a new coordinator or thread and the project's page first, so they stay in view
+ * over a long list; then its coordinators, the project's own first while it runs, each opening its
+ * chat (its page when it runs in no pane).
  */
 function CoordinatorsPane({ project, session, readOnly, onOpen, onNew }: {
   project: ProjectView;
@@ -339,8 +340,8 @@ function CoordinatorsPane({ project, session, readOnly, onOpen, onNew }: {
   ];
   return (
     <div className="flex flex-col gap-4 pb-3">
-      <ChoiceList title="Coordinators" rows={rows} empty={project.status === "paused" ? `${project.name} is paused.` : "No coordinator runs here yet."} />
       <ChoiceList title="Start or open" rows={actions} />
+      <ChoiceList title="Coordinators" rows={rows} empty={project.status === "paused" ? `${project.name} is paused.` : "No coordinator runs here yet."} />
     </div>
   );
 }
