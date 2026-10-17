@@ -14,6 +14,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 - A project page no longer jumps when its STATUS.md arrives: it waits up to a second for it, and draws it at once when opened again (40c2cb32).
 - A chat opened again paints its last conversation at once and refreshes behind it, no skeleton; a failed refresh says so (3951d4c1).
+- A chat drawn from memory says it is updating when its read takes over half a second; losing read access forgets them all (8df71221).
 - A direct load or reload shows one boot screen, the app's own frame, not the splash and then the frame (bbbda476).
 
 ### Added
