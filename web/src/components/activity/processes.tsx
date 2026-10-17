@@ -135,11 +135,13 @@ function Fold({ title, count, extra, children }: { title: string; count: number;
 
 /**
  * Waiting first, then running, then a folded "Done (n)" with the newest few and the claude.ai pages
- * the session published. Rows expand in place.
+ * the session published. Rows expand in place. `finished` is other work that ended (a project's
+ * resolved threads), folded in with the session's own.
  */
-export function ProcessesList({ processes, artifacts = [], now, stale, onRetry, onDetail, onOpenSubagent }: {
+export function ProcessesList({ processes, artifacts = [], finished, now, stale, onRetry, onDetail, onOpenSubagent }: {
   processes: Processes;
   artifacts?: ActivityArtifact[];
+  finished?: { count: number; rows: ReactNode };
   now: number;
   stale?: boolean;
   onRetry?: () => void;
@@ -149,6 +151,7 @@ export function ProcessesList({ processes, artifacts = [], now, stale, onRetry, 
   const [all, setAll] = useState(false);
   const live = [...processes.waiting, ...processes.running];
   const done = all ? processes.done : processes.done.slice(0, DONE_PREVIEW);
+  const doneCount = processes.done.length + (finished?.count ?? 0);
   const row = (item: ProcessItem) => <ProcessRow key={`${item.kind}:${item.id}`} item={item} now={now} onDetail={onDetail} onOpenSubagent={onOpenSubagent} />;
   return (
     <div className="flex flex-col gap-1">
@@ -158,9 +161,10 @@ export function ProcessesList({ processes, artifacts = [], now, stale, onRetry, 
       </div>}
       {live.length === 0 && <p className="px-2 py-2 text-sm text-muted-foreground">Nothing running in the background.</p>}
       {live.length > 0 && <ul aria-label="In progress" className="flex flex-col">{live.map(row)}</ul>}
-      {processes.done.length > 0 && <Fold title="Done" count={processes.done.length} extra={(open) => open && processes.done.length > DONE_PREVIEW &&
+      {doneCount > 0 && <Fold title="Done" count={doneCount} extra={(open) => open && processes.done.length > DONE_PREVIEW &&
         <button type="button" onClick={() => setAll(!all)} className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground lg:min-h-8">{all ? "Show less" : "Show all"}</button>}>
-        <ul aria-label="Done" className="flex flex-col">{done.map(row)}</ul>
+        {finished && finished.count > 0 && finished.rows}
+        {processes.done.length > 0 && <ul aria-label="Done" className="flex flex-col">{done.map(row)}</ul>}
       </Fold>}
       {artifacts.length > 0 && <Fold title="Published" count={artifacts.length}><ArtifactList artifacts={artifacts} /></Fold>}
     </div>

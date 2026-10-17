@@ -14,7 +14,7 @@ import { PrList, prLists } from "@/components/threads-panel";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
 import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
@@ -988,8 +988,8 @@ export function AgentChat({
   const published = activity.data?.available ? activity.data.artifacts : [];
   // The row above the composer: what needs you and what works, this session's background work beside
   // the project's threads around it, then the project's open PRs and its routines.
-  const processList = (part: Partial<typeof processes>, artifacts: typeof published = []) => (
-    <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} now={processesNow} stale={activity.stale || subagents.stale}
+  const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"]) => (
+    <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
       onOpenSubagent={(item) => {
         if (!subagents.list?.available) return;
@@ -1019,13 +1019,18 @@ export function AgentChat({
       {around && threadRows(around.needs)}
       {sessionWork && processes.waiting.length > 0 && processList({ waiting: processes.waiting })}
     </> }] : []),
-    // Nothing runs: the chip says what finished instead, so done work stays one tap away.
+    // Nothing runs: the chip says what finished instead, quietly, so done work stays one tap away
+    // without standing beside what is live. Resolved threads around the chat fold in with it, but
+    // never raise the chip on their own: a project's history would keep it up for good.
     ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
       // The chat's own turn is never in this count: the session's work alone reads as Background.
       label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Done" : "Published",
-      count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined, content: <>
+      count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined,
+      quiet: workingCount === 0, content: <>
       {around && threadRows(around.working)}
-      {sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) && processList({ running: processes.running, done: processes.done }, published)}
+      {(sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) || (around?.resolved.length ?? 0) > 0) &&
+        processList({ running: processes.running, done: processes.done }, published,
+          around && around.resolved.length > 0 ? { count: around.resolved.length, rows: threadRows(around.resolved) } : undefined)}
     </> }] : []),
     ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, content: <div className="flex flex-col gap-2">
       <PrList project={projectChips.project} threads={projectChips.threads} session={projectChips.session} readOnly={projectChips.readOnly}
@@ -1403,7 +1408,7 @@ export function AgentChat({
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             workingSince={workingSince}
-            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
+            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail, likely: Boolean(projectChips),
               onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}

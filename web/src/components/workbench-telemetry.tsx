@@ -98,7 +98,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
   };
   if (mode === "metrics") return <UsageDetails telemetry={telemetry} stale={stale} />;
   return (
-    <div className="workbench-telemetry flex min-w-0 flex-1 flex-nowrap items-center gap-1 text-xs text-muted-foreground">
+    <div className="workbench-telemetry flex min-w-0 flex-nowrap items-center gap-1 text-xs text-muted-foreground">
       <button
         ref={modelTriggerRef}
         type="button"

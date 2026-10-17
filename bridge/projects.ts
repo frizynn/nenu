@@ -15,6 +15,8 @@ import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type Projec
 const STAT_MS = 2_000;
 /** The fewest milliseconds between two `overview --json` spawns; a forced refresh skips it. */
 const MIN_REFRESH_MS = 5_000;
+/** The longest wait before a read of Organizations that failed is tried again; it doubles up to this from MIN_REFRESH_MS. */
+const RETRY_MAX_MS = 60_000;
 const WATCH_DEBOUNCE_MS = 250;
 /** How long an Organizations without a command (`node move`, `asks answer`) is believed before it is asked again: an upgrade adds it. */
 const PROBE_MS = 10 * 60_000;
@@ -392,6 +394,9 @@ export class ProjectRegistry {
   private stamp = "";
   private nextStat = 0;
   private lastRefresh = -Infinity;
+  /** Reads of Organizations that failed in a row, and when the next one is due though no file changed. */
+  private failures = 0;
+  private retryAt = Infinity;
   private inFlight: Promise<void> | undefined;
   /** A refresh asked for while one ran; `force` if any of those asks skipped the throttle. */
   private again: { force: boolean } | undefined;
@@ -568,17 +573,26 @@ export class ProjectRegistry {
     this.lastRefresh = this.now();
     this.stamp = this.fingerprint();
     const files = this.readFiles();
-    // A failed read of the asks keeps the last one; an Organizations without them has none.
+    // A failed read keeps what the last good one showed (an Organizations without the documents has
+    // none of them), and is tried again on a later read though no file changed: a restart whose first
+    // read timed out would otherwise serve no asks until something in the registry moved.
+    let failed = false;
+    const fail = <T>(kept: T) => () => { failed = true; return kept; };
     const [overview, asks, nodeMoves, askAnswers] = this.run
       ? await Promise.all([
-        readOverview(this.run, this.root).catch(() => undefined),
-        readAsks(this.run, this.root).then((read) => read ?? undefined, () => this.askRead),
+        readOverview(this.run, this.root).catch(fail(undefined)),
+        readAsks(this.run, this.root).then((read) => read ?? undefined, fail(this.askRead)),
         this.has(this.run, "move"),
         this.has(this.run, "answer"),
       ])
       : [undefined, undefined, false, false];
-    const askRead = overview ? asks : undefined;
-    const next = overview ? this.fromJson(overview, files, askRead) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
+    const keep = failed && !overview && this.records.some((record) => record.source === "json");
+    const askRead = overview || keep ? asks : undefined;
+    const next = overview ? this.fromJson(overview, files, askRead)
+      : keep ? this.records
+      : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
+    this.failures = failed ? this.failures + 1 : 0;
+    this.retryAt = failed ? this.now() + Math.min(RETRY_MAX_MS, MIN_REFRESH_MS * 2 ** (this.failures - 1)) : Infinity;
     const nodeActions = !this.upstream();
     const changed = nodeActions !== this.nodeActions || nodeMoves !== this.nodeMoves || askAnswers !== this.askAnswers || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRead) !== JSON.stringify(this.askRead);
     this.records = next;
@@ -619,7 +633,7 @@ export class ProjectRegistry {
 
   private check(): void {
     this.nextStat = this.now() + STAT_MS;
-    if (this.fingerprint() !== this.stamp) void this.schedule(this.urgent > 0);
+    if (this.fingerprint() !== this.stamp || this.now() >= this.retryAt) void this.schedule(this.urgent > 0);
   }
 
   /**
