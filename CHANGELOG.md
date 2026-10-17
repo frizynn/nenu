@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-17
+
+### Added
+
+- A decision waiting on you has its links as chips and Answer on its own line, where Organizations prints decision rows; answered, it waits on no one (ADR 0093) (fdd9dd55, 13bad973).
+- `bun scripts/e2e/asks-answer.ts` answers a decision too (97e68ace).
+
 ## [1.20.0] - 2026-10-17
 
 ### Added
