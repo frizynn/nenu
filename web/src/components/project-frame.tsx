@@ -1,6 +1,5 @@
-import { lazy, Suspense, useContext, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, useEffect, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
-import { ListChecks, ChatCircle } from "@/components/ui/icon";
 
 import type { ProjectChipsSource } from "@/components/composer-chips";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
@@ -8,6 +7,7 @@ import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionIn
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { PrList, prLists } from "@/components/threads-panel";
 import type { HomeData } from "@/lib/loaders";
+import { armMotion, useGoUp } from "@/lib/motion";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
@@ -19,7 +19,6 @@ const ProjectPanel = lazy(() => import("./project-panel").then((module) => ({ de
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {
   title: string;
-  headerAction?: ReactNode;
   /** The header's last control, right of every other: the desk's way back to a folded panel. */
   headerTrail?: ReactNode;
   overlay?: ReactNode;
@@ -32,7 +31,11 @@ export interface ProjectChatSlots {
 /** The search param naming the thread docked beside its coordinator on a desk. */
 export const SPLIT_PARAM = "thread";
 
-type PhoneView = "chat" | "threads" | "prs";
+/** The search param naming a phone's tab, so a reload or a way back lands on the list you left. */
+export const VIEW_PARAM = "view";
+
+const PHONE_VIEWS = ["chat", "threads", "prs"] as const;
+type PhoneView = (typeof PHONE_VIEWS)[number];
 
 /** Who a pane answers to and which threads sit beside it. */
 export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">) {
@@ -56,10 +59,11 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 /**
  * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
  * the chat, with the project as its first tab, or docks a thread there (`?thread=`); the
- * sidebar lists the threads, so the chat carries none of them. A phone switches the coordinator between Chat,
- * Threads and PRs in place, keeping the chat mounted so its draft and scroll survive; a thread shows
- * its siblings as chips and a header button to the project's threads; every chat counts the threads
- * around it, their pull requests and the project's routines in the chips above the composer.
+ * sidebar lists the threads, so the chat carries none of them. On a phone a coordinator and its threads
+ * switch between Chat, Threads and PRs in place, in the same band under the title, keeping the chat
+ * mounted so its draft and scroll survive; every chat counts the threads around it, their pull requests
+ * and the project's routines in the chips above the composer. Moving down the tree pushes, across it
+ * replaces the page, and up it goes back (useGoUp), so the history holds one entry per level.
  */
 export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   owner: PaneProject;
@@ -73,12 +77,38 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const revalidator = useRevalidator();
   const [search, setSearch] = useSearchParams();
   const desk = inspector.desk;
-  const [view, setView] = useState<PhoneView>("chat");
+  const goUp = useGoUp();
   const scope = projectScope(owner, data);
   const readOnly = isReadOnly(data.device);
   const refresh = () => revalidator.revalidate();
-  const openPane = (id: string) => { setView("chat"); if (id !== paneId) navigate(panePath(id, data.session)); };
-  const openNode = (id: string) => navigate(nodePath(project.slug, id, data.session));
+  const asked = search.get(VIEW_PARAM);
+  const view: PhoneView = PHONE_VIEWS.find((candidate) => candidate === asked) ?? "chat";
+  const setView = (next: PhoneView) => setSearch((current) => {
+    const params = new URLSearchParams(current);
+    if (next === "chat") params.delete(VIEW_PARAM);
+    else params.set(VIEW_PARAM, next);
+    return params;
+  }, { replace: true });
+  // A coordinator's threads sit below it; a thread's are its siblings, beside it.
+  const go = (path: string) => {
+    if (scope.coordinating) {
+      armMotion("push");
+      void navigate(path);
+    } else {
+      armMotion("fade");
+      void navigate(path, { replace: true });
+    }
+  };
+  const openPane = (id: string) => {
+    if (id === paneId) setView("chat");
+    else if (id === scope.coordinatorPane && !scope.coordinating) goUp(panePath(id, data.session));
+    else go(panePath(id, data.session));
+  };
+  const openNode = (id: string) => {
+    const path = nodePath(project.slug, id, data.session);
+    if (!scope.coordinating && id === scope.coordinator?.id) goUp(path);
+    else go(path);
+  };
 
   // A docked thread is only meaningful beside its own coordinator on a desk.
   const splitPane = search.get(SPLIT_PARAM);
@@ -102,22 +132,10 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
 
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
-  // A phone thread switches between its chat and the project's threads with one header button.
-  const phoneWorker = !desk && !scope.coordinating;
-  const tasksShown = phoneWorker && view === "threads";
   const pr = sessionPr(data, paneId, thread);
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
-  const headerAction = phoneWorker ? (
-    <button type="button" className="project-toggle" aria-label={tasksShown ? "Back to chat" : `Threads, ${openCount} open`}
-      onClick={() => setView(tasksShown ? "chat" : "threads")}>
-      {tasksShown ? <><ChatCircle aria-hidden className="size-3.5" />Chat</> : <>
-        <ListChecks aria-hidden className="size-3.5" />Threads
-        {openCount > 0 && <span className="tabular-nums text-muted-foreground">{openCount}</span>}
-      </>}
-    </button>
-  ) : undefined;
 
-  const phoneTabs = !desk && scope.coordinating ? (
+  const phoneTabs = !desk ? (
     <div className="project-segmented-band">
       <div role="tablist" aria-label="Project" className="project-segmented">
         {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
@@ -130,8 +148,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   ) : undefined;
 
   const chipCoordinator = scope.coordinatorPane ? { paneId: scope.coordinatorPane, label: "coordinator" } : undefined;
-  // The panel lists the siblings (and their coordinator) already; chips take its place when it is put away.
-  const chips = !scope.coordinating && !panelShown && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
+  // A desk's panel lists the siblings (and their coordinator) already; chips take its place when it is put away.
+  const chips = desk && !scope.coordinating && !panelShown && threadChipsShown(scope.siblings, chipCoordinator !== undefined) ? (
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
@@ -141,13 +159,12 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
       {view === "threads" ? tasks : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
     </div></div>
-  ) : tasksShown ? <div className="project-overlay">{tasks}</div> : undefined;
+  ) : undefined;
 
   return (
     <div className="project-frame">
       {children({
         title: thread?.title ?? project.name,
-        headerAction,
         headerTrail,
         overlay,
         // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.

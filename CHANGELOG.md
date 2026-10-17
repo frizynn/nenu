@@ -8,11 +8,11 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.23.0] - 2026-10-17
+## [1.24.0] - 2026-10-17
 
 ### Added
 
-- "N updates" on Recents and on the desk's chats puts the rows in order on a tap (8973e065).
+- "N updates" on Recents and on the desk's chats counts the rows with news and puts them in order on a tap (8973e065, cf7f209a).
 - `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search, rows that move while quiet and how long an off-screen ask takes to show (de51bf50, 53943310).
 
 ### Fixed
@@ -21,6 +21,30 @@ All notable changes to Nenu are recorded here. The format follows
 - Recents and the desk's chats keep their order while on screen: a row that finishes stays put with its New or +1, and reorders on a return to the page (a3291bd6, 8973e065, 8dfd31af).
 - On a desk, a chat that asks for you past More still shows, after the rows on screen (8973e065).
 - Escape on the phone's Search sheet clears a typed query and keeps the box, then closes the sheet (beec331c, f0d582f7).
+
+## [1.23.0] - 2026-10-17
+
+### Added
+
+- On a desk, a thread's header goes up to its coordinator, named, and a node's to its parent (00fd14de).
+- `bun scripts/e2e/run.ts back` walks into a project's threads and back, three ways, counting the history (33f76be0, 73a46e14, a4b2679b).
+
+### Changed
+
+- On a phone a thread shows the Chat, Threads and PRs band its coordinator does, in place of the sibling chips and the Threads button (00fd14de).
+
+### Fixed
+
+- The back control goes back instead of pushing its parent: three backs from a thread leave three entries, not eight more, and the system's Back from Home leaves Nenu (00fd14de, af59c3ee, 4841b653).
+- A sibling takes the thread's place in the history; a phone's tab lives in the URL, so a reload or a way back lands on it (00fd14de).
+- A coordinator's thread slides in as a push and back out as a pop; siblings cross-fade (00fd14de).
+- The motion bench waits for its row in the page, not the sidebar's hidden copy (33f76be0).
+
+## [1.22.1] - 2026-10-17
+
+### Fixed
+
+- A read of Organizations that failed is tried again with no file changed, so a restart no longer serves no asks until the registry moves (486c4b04).
 
 ## [1.22.0] - 2026-10-17
 

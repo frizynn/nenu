@@ -1180,14 +1180,30 @@ describe("AgentChat — a project thread's back", () => {
     expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
   });
 
-  it("leads a thread of the project itself back to the project", () => {
+  it("leads a thread of the project itself back to the chat the project opens on, its coordinator's while it runs", () => {
     renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/pane/w1%3Ap2");
+  });
+
+  it("leads a thread of the project itself back to the project's page while its coordinator is stopped", () => {
+    renderChat({ agents: [fixtureAgents[0]!], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
     expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
   });
 
   it("leads the project's own coordinator Home", () => {
     renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([], "w1:p1") });
     expect(screen.getByRole("button", { name: "Back to Home" })).toBeInTheDocument();
+  });
+
+  it("leads the project's own coordinator to the project's page where the project organizes coordinators", () => {
+    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([thread("t-1", "Checkout", "root", "coordinator")], "w1:p1") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
+  });
+
+  it("leads a thread at the root of a project that organizes coordinators to the project's coordinator while it runs", () => {
+    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
+      projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/pane/w1%3Ap2");
   });
 });
 

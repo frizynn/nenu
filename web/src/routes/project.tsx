@@ -3,15 +3,15 @@ import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } 
 import { ColumnPage } from "@/components/column-page";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { ProjectMissing } from "@/components/project-missing";
-import { ProjectTasks, organizes } from "@/components/project-tasks";
+import { ProjectTasks } from "@/components/project-tasks";
 import { asksAvailable, useAsks } from "@/hooks/use-asks";
 import { coordinatorAsks } from "@/lib/asks";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodePath, panePath } from "@/lib/nav";
-import { openCoordinators, orgTree, type OrgNode } from "@/lib/org-tree";
+import { openCoordinators, organizes, orgTree, type OrgNode } from "@/lib/org-tree";
 import { isReadOnly, type StatusFile } from "@/lib/types";
-import { liveCoordinator, runningCoordinator } from "@/lib/projects";
+import { projectChat, runningCoordinator } from "@/lib/projects";
 
 // A project with only its own coordinator opens on that coordinator's conversation; the pane route
 // frames it with the task list. A project that organizes coordinators is their page (ADR 0092): each
@@ -26,7 +26,7 @@ export function ProjectRoute() {
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
   const tree = project ? orgTree(project.threads) : undefined;
   const organizer = tree !== undefined && organizes(tree);
-  const coordinator = organizer ? undefined : liveCoordinator(project, data.agents);
+  const coordinator = projectChat(project, data.agents);
   const coordinators = organizer && tree ? openCoordinators(tree).map(({ node }) => node.thread) : [];
   const read = useThreadSummaries(coordinator ? undefined : project, coordinators);
   // Only the cards read the asks, and only a project that organizes coordinators draws them.

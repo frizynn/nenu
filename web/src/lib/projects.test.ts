@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupByRecency, looseChats, projectForPane, projectSummary, recencyOf } from "./projects";
+import { groupByRecency, looseChats, projectChat, projectForPane, projectSummary, recencyOf } from "./projects";
 import type { AgentView, ProjectView } from "./types";
 
 const DAY = 86_400_000;
@@ -71,5 +71,21 @@ describe("pane ownership", () => {
     expect(projectForPane([project], "b")?.thread?.id).toBe("T2");
     expect(projectForPane([project], "nope")).toBeUndefined();
     expect(looseChats([pane("c"), pane("b"), pane("x")], [project]).map((chat) => chat.paneId)).toEqual(["x"]);
+  });
+});
+
+describe("projectChat", () => {
+  const pane = (paneId: string) => ({ paneId }) as AgentView;
+  const worker = { id: "T1", title: "Build", parentId: "root", role: "worker", status: "open" } as const;
+  const hub: ProjectView = { slug: "hub", name: "Hub", goal: "", status: "active", coordinator: { paneId: "coord", agent: "claude", liveStatus: "idle" }, threads: [worker] };
+
+  it("is the project coordinator's chat while it runs, the page a back to the project lands on", () => {
+    expect(projectChat(hub, [pane("coord")])).toBe("coord");
+    expect(projectChat(hub, [])).toBeUndefined();
+  });
+
+  it("is none for a project that organizes coordinators: the project is their page", () => {
+    const organizer = { ...hub, threads: [...hub.threads, { id: "L", title: "Lead", parentId: "root", role: "coordinator", status: "open" } as const] };
+    expect(projectChat(organizer, [pane("coord")])).toBeUndefined();
   });
 });

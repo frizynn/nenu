@@ -449,6 +449,71 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(calls.length).toBeGreaterThan(before);
   });
 
+  test("a read of Organizations that failed is tried again on a later read, with no file changed", async () => {
+    // Measured on 2026-10-17: a restart whose first `overview` failed served no asks until a file changed.
+    const root = fixture();
+    let now = 1;
+    let down = true;
+    const reads: string[] = [];
+    const overview = overviewRun([overviewThread({})]);
+    const run: OrgRun = async (argv, opts) => {
+      if (argv.includes("--help")) return { code: 0, stdout: "", stderr: "" };
+      reads.push(argv[0]!);
+      // A timeout, as the runner reports one: Organizations did not answer in time.
+      if (down) return { code: 124, stdout: "", stderr: "" };
+      if (argv[0] === "asks") return { code: 0, stdout: JSON.stringify({ schema_version: 1, asks: [] }), stderr: "" };
+      return overview(argv, opts);
+    };
+    const registry = registryFor(root, { now: () => now, run });
+    registry.list("default", true, []);
+    await registry.invalidate();
+    expect(registry.asks()).toBeNull();
+    expect(registry.list("default", true, [])[0]!.source).toBe("files");
+
+    down = false;
+    now += 60_000;
+    registry.list("default", true, []);
+    for (let i = 0; i < 50 && registry.asks() === null; i++) await Bun.sleep(2);
+    expect(registry.asks()).toEqual({ asks: [], decisions: [], answers: true });
+    expect(registry.list("default", true, [])[0]!.source).toBe("json");
+  });
+
+  test("a read that fails after a good one keeps what the good one showed", async () => {
+    const root = fixture();
+    let down = false;
+    const overview = overviewRun([overviewThread({})]);
+    const run: OrgRun = async (argv, opts) => {
+      if (argv.includes("--help")) return { code: 0, stdout: "", stderr: "" };
+      if (down) return { code: 124, stdout: "", stderr: "" };
+      if (argv[0] === "asks") return { code: 0, stdout: JSON.stringify({ schema_version: 1, asks: [] }), stderr: "" };
+      return overview(argv, opts);
+    };
+    const registry = registryFor(root, { run });
+    await registry.refresh();
+    down = true;
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]).toMatchObject({ source: "json", name: "Demo (json)" });
+    expect(registry.asks()).toEqual({ asks: [], decisions: [], answers: true });
+  });
+
+  test("an Organizations without the contract is not asked again on every read", async () => {
+    const root = fixture();
+    let now = 1;
+    const calls: string[][] = [];
+    const run: OrgRun = async (argv) => {
+      calls.push(argv);
+      return { code: 2, stdout: "", stderr: "error: unexpected argument '--json' found" };
+    };
+    const registry = registryFor(root, { now: () => now, run });
+    registry.list("default", true, []);
+    await registry.invalidate();
+    const before = calls.filter((argv) => argv[0] === "overview").length;
+    now += 60_000;
+    registry.list("default", true, []);
+    await Bun.sleep(10);
+    expect(calls.filter((argv) => argv[0] === "overview").length).toBe(before);
+  });
+
   test("an invalidation during a refresh resolves only after a refresh that started after it", async () => {
     const gates: Array<() => void> = [];
     const run: OrgRun = async (argv) => {
