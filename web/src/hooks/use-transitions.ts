@@ -9,9 +9,10 @@ import { setStatus } from "@/lib/status";
 const DESK = "(min-width: 1024px)";
 
 // In-app lifecycle notifications. We diff each snapshot against the previous one and surface a
-// header status line when an agent crosses into a state that wants attention. Background/OS
-// notifications are handled separately by the server via Web Push; this is the foreground equivalent,
-// and a phone's alone: on a desk the sidebar's row says it.
+// header status line when an agent starts asking for you. Background/OS notifications are handled
+// separately by the server via Web Push; this is the foreground equivalent, and a phone's alone: on a
+// desk the sidebar's row says it. An agent that finishes raises nothing: its row says "New" (Home on a
+// phone, +1 in a desk's bar), since a toast per finish chains over the header and takes its taps (ADR 0094).
 //
 // The first snapshot never fires (prev is null), so opening the app doesn't spam the status line
 // for agents that were already blocked — matching the server's transition semantics.
@@ -31,11 +32,9 @@ export function useAgentTransitions(agents: AgentView[], openPaneId: string | nu
     });
     // A desk's sidebar marks the chat's row with a +1 (components/desk-nav.tsx), so a toast over the page would say it twice.
     if (typeof window.matchMedia === "function" && window.matchMedia(DESK).matches) return;
-    const blocked = changed.filter((agent) => agent.status === "blocked");
-    const attention = blocked.length ? blocked : changed.filter((agent) => agent.status === "done");
+    const attention = changed.filter((agent) => agent.status === "blocked");
     if (!attention.length) return;
 
-    const needsInput = blocked.length > 0;
     const first = attention[0]!;
     // The pane's own name, as its header and the sidebar show it. Only the bare CLI id ("claude",
     // the last fallback) gets a capital; a label is printed as the operator wrote it.
@@ -43,7 +42,7 @@ export function useAgentTransitions(agents: AgentView[], openPaneId: string | nu
     const subject = attention.length > 1 ? `${attention.length} agents`
       : !name ? "Agent"
       : name === first.agent ? name.charAt(0).toUpperCase() + name.slice(1) : name;
-    const title = `${subject} ${needsInput ? attention.length === 1 ? "needs your input" : "need your input" : "finished"}`;
+    const title = `${subject} ${attention.length === 1 ? "needs your input" : "need your input"}`;
     const locations = [...new Set(attention.map((agent) => {
       const { place, tab } = displayPlace(agent, projects);
       return [place, tab].filter(Boolean).join(" · ");
@@ -51,6 +50,6 @@ export function useAgentTransitions(agents: AgentView[], openPaneId: string | nu
     const description = locations.slice(0, 3).join(", ") + (locations.length > 3 ? ` +${locations.length - 3} more` : "");
     // One agent opens its pane; several open Home, whose Needs you lists each of them.
     const to = attention.length === 1 ? panePath(first.paneId, session) : homePath(session);
-    setStatus(title, needsInput ? "warn" : "success", undefined, { description, background: true, to });
+    setStatus(title, "warn", undefined, { description, background: true, to });
   }, [agents, openPaneId, session, projects]);
 }

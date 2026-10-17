@@ -6,6 +6,7 @@ import { NodeDot } from "@/components/node-row";
 import { OpeningMark, PaneMark } from "@/components/nav-rows";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";
+import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, liveliest, projectActivity, projectAgents, type DeskChat } from "@/lib/desk-nav";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
@@ -81,19 +82,31 @@ function DeskProjects({ data, now, onNewProject }: { data: HomeData; now: number
   );
 }
 
+/** A chat that waits on you: past More it still shows, after the rows on screen, so nothing moves to say it. */
+const needsYou = (chat: DeskChat) => chat.pane?.status === "blocked" || (chat.thread !== undefined && awaits(chat.thread) !== undefined);
+
 function DeskChats({ data, now }: { data: HomeData; now: number }) {
   const { paneId, projectSlug, nodeId } = useParams();
   const [more, setMore] = useState(false);
   const isCurrent = (chat: DeskChat) =>
     (chat.paneId !== undefined && chat.paneId === paneId) || (chat.project === projectSlug && chat.thread?.id === nodeId && nodeId !== undefined);
-  const chats = deskChats(data).sort((a, b) => b.at - a.at);
-  const { shown, hidden } = more ? { shown: chats, hidden: 0 } : preview(chats, CHATS_SHOWN, isCurrent);
+  // Each chat keeps the place it had when the bar drew it, so a row never moves under the pointer: one
+  // that finishes says +1 where it is. "N updates" puts them in order, as coming back to the window does.
+  const held = useHeldTime((chat: DeskChat) => chat.key, (chat) => chat.at);
+  const chats = held.order(deskChats(data));
+  const updates = held.moved(chats);
+  const { shown, hidden } = more ? { shown: chats, hidden: 0 } : preview(chats, CHATS_SHOWN, (chat) => isCurrent(chat) || needsYou(chat));
   const revealed = new Set(more ? chats.slice(CHATS_SHOWN).map((chat) => chat.key) : []);
   return (
     <section aria-label="Chats" className="nav-desk nav-chats">
-      {groupByRecency(shown, (chat) => chat.at, now).map((group) => (
+      {groupByRecency(shown, held.at, now).map((group, index) => (
         <section key={group.key} aria-label={group.label} className="nav-group">
-          <h3 className="nav-label">{group.label}</h3>
+          {index === 0
+            ? <div className="nav-label">
+              <h3 className="nav-label-text">{group.label}</h3>
+              {updates > 0 && <button type="button" className="nav-label-updates" onClick={held.reorder}>{updates} {updates === 1 ? "update" : "updates"}</button>}
+            </div>
+            : <h3 className="nav-label">{group.label}</h3>}
           {group.items.map((chat) => <ChatRow key={chat.key} chat={chat} session={data.session} current={isCurrent(chat)} revealed={revealed.has(chat.key)} />)}
         </section>
       ))}
