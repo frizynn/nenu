@@ -410,6 +410,17 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(asked).toEqual([["node", "move", "--help"], ["node", "move", "--help"]]);
   });
 
+  test("a node is movable only where Organizations' actions list `move`", async () => {
+    const registry = registryFor(fixture(), { run: overviewRun([
+      overviewThread({ id: "t-0002", actions: ["move"] }),
+      overviewThread({ id: "t-0003", title: "Fixed", actions: ["create-pr"] }),
+    ]) });
+    await registry.refresh();
+    const [movable, fixed] = registry.list("default", true, [])[0]!.threads;
+    expect(movable).toMatchObject({ id: "t-0002", movable: true });
+    expect(fixed).not.toHaveProperty("movable");
+  });
+
   test("never asks upstream herdr-projects for node move", async () => {
     const calls: string[][] = [];
     const registry = registryFor(fixture(), { run: overviewRun([], calls), upstream: () => true });
