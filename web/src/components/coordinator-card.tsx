@@ -27,7 +27,7 @@ const CAP_WORD: Record<string, string> = { context_warn: "context", compaction_w
  * print. The file starts closed only when the card already says what it says (the objective, the
  * asks, the decisions), and waits for the asks, so which read lands first never changes either.
  */
-export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, listsAgents = true, session }: {
+export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, readOnly, listsAgents = true, session }: {
   project: ProjectView;
   /** `root` for the project's own coordinator. */
   coordinatorId: string;
@@ -35,6 +35,8 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   listsAgents?: boolean;
   /** The session an answer to one of its asks goes to. */
   session?: string;
+  /** A read-only device: its asks send nothing. */
+  readOnly: boolean;
   status?: StatusFile;
   usage?: TokenUsage;
   asks: { list: AsksList | null; loaded: boolean };
@@ -54,7 +56,7 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   return <>
     {printed && (says || usage || listed.length > 0 || prs.length > 0) &&
       <CoordinatorCard status={status} usage={usage} agents={listed} prs={prs} summaries={summaries} onOpenNode={onOpenNode}
-        asks={asks.list && <AskSections compact whose={false} session={session} answers={asks.list.answers === true}
+        asks={asks.list && <AskSections compact whose={false} session={session} answers={asks.list.answers === true} readOnly={readOnly}
           sections={askSections(asks.list, [project], { project: project.slug, coordinator: coordinatorId })} />} />}
     {status && asks.loaded && <CoordinatorStatus status={status} project={project} closed={says} onOpenNode={onOpenStatusNode} />}
   </>;

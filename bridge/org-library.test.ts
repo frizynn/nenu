@@ -3,7 +3,9 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { libraryFileResponse } from "./org-library.ts";
+import type { OrgRun } from "./org-cli.ts";
+import { libraryFileResponse, reportResponse, type ThreadReport } from "./org-library.ts";
+import { ProjectRegistry } from "./projects.ts";
 
 // A project's library is the folder Organizations copies each thread's captures and deliverables
 // into (`<project>/library/<thread id>/`). The route serves pictures, HTML and PDFs from it and
@@ -119,5 +121,101 @@ describe("a project's library", () => {
     expect((await serve(join(root, "missing", "library"), join(root, "missing", "library", "a.png"))).status).toBe(404);
     expect((await serve(join(root, "demo", "library"), null)).status).toBe(400);
     expect((await serve(join(root, "demo", "library"), `${thread}/checkout.png\u0000`)).status).toBe(404);
+  });
+});
+
+/**
+ * A projects root with `demo`, whose records folder (Organizations' `records` setting) is elsewhere:
+ * the library and the reports live there, as `overview --json` reports each thread's `library` and
+ * `report`. Beside them, a picture and a report outside the library, and links that lead out.
+ */
+async function recordsFixture() {
+  const root = join(tmpdir(), `nenu-library-${crypto.randomUUID()}`);
+  const records = join(tmpdir(), `nenu-records-${crypto.randomUUID()}`);
+  roots.push(root, records);
+  mkdirSync(join(root, "demo"), { recursive: true });
+  writeFileSync(join(root, "demo", "PROJECT.md"), `+++\nname = "Demo"\n+++\n`);
+  const thread = join(records, "library", "t-0002");
+  mkdirSync(thread, { recursive: true });
+  mkdirSync(join(records, "threads"), { recursive: true });
+  writeFileSync(join(thread, "checkout.png"), PNG);
+  writeFileSync(join(records, "stray.png"), PNG);
+  writeFileSync(join(records, "threads", "t-0002.md"), "Status: needs-decision\n\n## Summary\nPick one.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n");
+  writeFileSync(join(records, "threads", "t-0003.md"), "Status: done\n");
+  writeFileSync(join(root, "outside.md"), "# Not a report");
+  symlinkSync(join(records, "stray.png"), join(thread, "linked.png"));
+  symlinkSync(join(records, "threads", "t-0003.md"), join(records, "threads", "t-0004.md"));
+  const node = (id: string, report: string | null) => ({
+    id, title: `Thread ${id}`, parent_id: "root", role: "worker", status: "resolved", group: "resolved", group_label: "Resolved", note: "", branch: "",
+    workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: "", report_unacked: false, pr: null, verdict: "needs-decision", summary: "Pick one.",
+    captures: [{ path: join(thread, "checkout.png"), caption: "Checkout" }], deliverables: [], library: join(records, "library", id), report,
+  });
+  const run: OrgRun = async (argv) => argv[0] !== "overview" ? { code: 2, stdout: "", stderr: "error: unrecognized subcommand" } : {
+    code: 0, stderr: "", stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo", goal: "", status: "active", icon: "", tone: "", threads: [
+      node("t-0002", join(records, "threads", "t-0002.md")),
+      node("t-0003", join(root, "outside.md")),
+      node("t-0004", join(records, "threads", "t-0004.md")),
+      node("t-0005", join(records, "threads", "..", "..", "outside.md")),
+      node("t-0006", null),
+    ] }] }),
+  };
+  const registry = new ProjectRegistry({ root, now: () => 1, run, watch: false, upstream: () => false });
+  await registry.refresh();
+  return { registry, records, thread, root };
+}
+
+const state = { stateDir: join(tmpdir(), "nenu-library-state") };
+
+describe("a project whose records folder is outside the projects root", () => {
+  test("serves a capture from the library there, by its bytes", async () => {
+    const { registry, thread } = await recordsFixture();
+    try {
+      const response = await serve(registry.library("demo"), join(thread, "checkout.png"));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("image/png");
+    } finally {
+      registry.close();
+    }
+  });
+
+  test("refuses a file outside that library, a path climbing out with `..`, or a link inside it", async () => {
+    const { registry, records, thread, root } = await recordsFixture();
+    try {
+      const library = registry.library("demo");
+      for (const path of [join(records, "stray.png"), join(thread, "..", "..", "stray.png"), join(thread, "linked.png"), join(root, "demo", "library", "t-0002", "checkout.png")]) {
+        expect((await serve(library, path)).status, path).toBe(404);
+      }
+    } finally {
+      registry.close();
+    }
+  });
+
+  test("serves a thread's report by its id, as written, with what the overview read of it", async () => {
+    const { registry, thread } = await recordsFixture();
+    try {
+      const response = await reportResponse(registry.report("demo", "t-0002"), state);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const { report } = await response.json() as { report: ThreadReport };
+      expect(report).toEqual({
+        title: "Thread t-0002", verdict: "needs-decision", text: "Status: needs-decision\n\n## Summary\nPick one.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n",
+        captures: [{ path: join(thread, "checkout.png"), caption: "Checkout" }], deliverables: [],
+      });
+    } finally {
+      registry.close();
+    }
+  });
+
+  test("refuses a report outside the records folder, climbing out with `..`, behind a link, missing or for a thread it does not know", async () => {
+    const { registry } = await recordsFixture();
+    try {
+      for (const [slug, id] of [["demo", "t-0003"], ["demo", "t-0004"], ["demo", "t-0005"], ["demo", "t-0006"], ["demo", "t-0099"], ["demo", "../t-0002"], ["other", "t-0002"]]) {
+        const response = await reportResponse(registry.report(slug!, id!), state);
+        expect(response.status, `${slug} ${id}`).toBe(404);
+        expect(await response.text()).not.toContain("Not a report");
+      }
+    } finally {
+      registry.close();
+    }
   });
 });

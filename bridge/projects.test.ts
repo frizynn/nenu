@@ -367,6 +367,39 @@ describe("ProjectRegistry: Organizations fields", () => {
     for (const slug of ["other", "../demo", "", "Demo"]) expect(registry.library(slug)).toBeUndefined();
   });
 
+  test("a project's records folder comes from Organizations: its library and reports are read there, even outside the projects root", async () => {
+    const root = fixture();
+    const records = join(tmpdir(), `nenu-records-${crypto.randomUUID()}`);
+    const report = join(records, "threads", "t-0002.md");
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({ library: join(records, "library", "t-0001") }),
+      overviewThread({ id: "t-0002", title: "Checkout", verdict: "needs-decision", report, library: join(records, "library", "t-0002") }),
+    ]) });
+    // The files name no records folder: the project's own, and no report.
+    registry.list("default", true, []);
+    expect(registry.library("demo")).toBe(join(realpathSync(root), "demo", "library"));
+    expect(registry.report("demo", "t-0002")).toBeUndefined();
+
+    await registry.refresh();
+    expect(registry.library("demo")).toBe(join(records, "library"));
+    expect(registry.report("demo", "t-0002")).toMatchObject({ path: report, records, title: "Checkout", verdict: "needs-decision" });
+    for (const [slug, id] of [["demo", "t-0001"], ["demo", "t-0099"], ["demo", "../t-0002"], ["demo", "root"], ["other", "t-0002"]]) {
+      expect(registry.report(slug!, id!), `${slug} ${id}`).toBeUndefined();
+    }
+    // The paths stay out of the snapshot.
+    expect(JSON.stringify(registry.list("default", true, []))).not.toContain(records);
+  });
+
+  test("a records folder Organizations prints wins, and one that predates `library` keeps the project's own folder", async () => {
+    const root = fixture();
+    const printed = registryFor(root, { run: overviewRun([overviewThread({ library: "/elsewhere/library/t-0001" })], [], { records: "/records/demo" }) });
+    await printed.refresh();
+    expect(printed.library("demo")).toBe("/records/demo/library");
+    const old = registryFor(root, { run: overviewRun([overviewThread({})]) });
+    await old.refresh();
+    expect(old.library("demo")).toBe(join(realpathSync(root), "demo", "library"));
+  });
+
   test("falls back to the files when the installed Organizations has no --json", async () => {
     const run: OrgRun = async () => ({ code: 2, stdout: "", stderr: "error: unexpected argument '--json'" });
     const registry = registryFor(fixture(), { run });

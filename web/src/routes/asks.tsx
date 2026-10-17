@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { asksAvailable, useAsks } from "@/hooks/use-asks";
 import { askSections, asksHeadline, coordinatorName, type AskFilter } from "@/lib/asks";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { AskCoordinator, AsksList, ProjectView } from "@/lib/types";
+import { isReadOnly, type AskCoordinator, type AsksList, type ProjectView } from "@/lib/types";
 
 /**
  * Your asks (ADR 0091): everything you asked any coordinator, in one list grouped the way Herdr
@@ -46,7 +46,7 @@ export function AsksRoute() {
         : <div className="mt-6 flex flex-col gap-6">
           {failed && line(failed)}
           {sections.length === 0 ? line("Nothing asked here.")
-            : <AskSections sections={sections} session={data.session} whose answers={list.answers === true} />}
+            : <AskSections sections={sections} session={data.session} whose answers={list.answers === true} readOnly={isReadOnly(data.device)} />}
         </div>}
     </ColumnPage>
   );

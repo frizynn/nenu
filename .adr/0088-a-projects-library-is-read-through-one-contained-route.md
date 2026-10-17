@@ -1,6 +1,7 @@
 # 0088. A project's library is read through one contained route
 
-- **Status:** Accepted (2026-10-16). Depends on Organizations adding `captures` and `deliverables` to
+- **Status:** Accepted (2026-10-16). Amended by [ADR 0096](./0096-a-question-carries-its-context.md):
+  the library is rooted in the project's records folder, and a thread's report is served by its id. Depends on Organizations adding `captures` and `deliverables` to
   each thread in `overview --json`; until it does, nothing links to the route.
 - **Trail:** `bridge/org-library.ts` · `bridge/routes/org.ts` · `bridge/projects.ts` (`library`,
   `summaries`) · Organizations `src/thread.rs` (`copy_home_local`)

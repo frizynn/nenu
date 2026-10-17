@@ -1,12 +1,13 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
   SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { askGroup, decisionGroup, readAsks, type OrgAskRow, type OrgDecisionRow } from "./org-asks.ts";
+import type { ThreadReportSource } from "./org-library.ts";
 import type { OrgStatusFile } from "./org-report.ts";
 import type { AskDecision, AsksList, StatusFile, TokenUsage } from "./org-types.ts";
 import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
@@ -356,7 +357,7 @@ interface FileProject extends Picks {
   roots: string[];
   coordinator: Binding;
   /** `summary` stays out of the snapshot: up to 600 characters, 34 paths and a STATUS.md a thread, read only by the page that shows them. */
-  threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary }>;
+  threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary; report?: string }>;
 }
 
 /** What the last `asks --json` read: every coordinator's asks, and its decision rows where Organizations prints them. */
@@ -373,6 +374,8 @@ interface ProjectRecord extends FileProject {
   coordinatorAgent?: OrgCoordinator;
   /** Asks and decisions waiting on the person; absent when this Organizations cannot list asks. */
   waitingAsks?: number;
+  /** Where Organizations keeps its reports and library (`recordsFolder`); `--json` only. */
+  recordsDir?: string;
 }
 
 export class ProjectRegistry {
@@ -515,7 +518,22 @@ export class ProjectRegistry {
   library(project: string): string | undefined {
     if (!SLUG_RE.test(project)) return undefined;
     this.read();
-    return this.records.some((record) => record.slug === project) ? join(this.root, project, "library") : undefined;
+    const record = this.records.find((candidate) => candidate.slug === project);
+    return record && join(record.recordsDir ?? join(this.root, project), "library");
+  }
+
+  /**
+   * Where thread `id`'s report is and the records folder it must sit in, with what the overview read
+   * of it, for a project this registry lists from `--json`; undefined otherwise. The client names the
+   * thread, never the path.
+   */
+  report(project: string, id: string): ThreadReportSource | undefined {
+    if (!SLUG_RE.test(project) || !THREAD_ID_RE.test(id)) return undefined;
+    this.read();
+    const record = this.records.find((candidate) => candidate.slug === project);
+    const thread = record?.threads.find(({ view }) => view.id === id);
+    if (!record?.recordsDir || !thread?.report) return undefined;
+    return { path: thread.report, records: record.recordsDir, title: thread.view.title, summary: thread.summary, ...(thread.view.verdict ? { verdict: thread.view.verdict } : {}) };
   }
 
   /**
@@ -784,7 +802,9 @@ export class ProjectRegistry {
     return projects.flatMap((project) => {
       if (project.status === "archived") return [];
       const local = files.find((file) => file.slug === project.slug);
-      const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({ view: jsonThread(thread, prActions), binding: binding(thread), summary: threadSummary(thread) }));
+      const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({
+        view: jsonThread(thread, prActions), binding: binding(thread), summary: threadSummary(thread), ...(thread.report ? { report: thread.report } : {}),
+      }));
       withDepth(threads);
       const record = {
         slug: project.slug,
@@ -803,10 +823,25 @@ export class ProjectRegistry {
         statusPaths: [project.status_file, ...project.threads.map((thread) => thread.status_file)].flatMap((file) => file ? [file.path] : []),
         ...(project.usage ? { usage: project.usage } : {}),
         ...(project.coordinator ? { coordinatorAgent: project.coordinator } : {}),
+        recordsDir: recordsFolder(project, this.root),
       };
       return [asks ? { ...record, waitingAsks: waitingAsks(record, asks) } : record];
     });
   }
+}
+
+/**
+ * The folder Organizations keeps a project's reports, libraries and status files in: the `records`
+ * setting, else the project's own folder. `overview --json` does not print it yet, but each thread's
+ * `library` is `<records>/library/<id>`, so it is read from there, and the project's folder (the default
+ * of an Organizations that predates both) is what is left.
+ */
+function recordsFolder(project: OrgOverviewProject, root: string): string {
+  if (project.records) return project.records;
+  for (const { id, library } of project.threads) {
+    if (basename(library) === id && basename(dirname(library)) === "library") return dirname(dirname(library));
+  }
+  return join(root, project.slug);
 }
 
 /** Whether coordinator `id` of a project is resolved; the project's own (`root`) never is. */

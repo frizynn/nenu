@@ -212,7 +212,7 @@ async function main(): Promise<void> {
         const { page, context } = await open("/asks", device, "Your asks");
         const text = await page.locator("main").innerText();
         pages[name] = { regions: await regions(page) };
-        for (const words of ["Wait on you", "Does not close", "In progress", "Done", "Other lines", "a linked PR is still open", "Acme Shop · Rediseño del checkout"]) {
+        for (const words of ["Wait on you", "Does not close", "In progress", "Done", "Other lines", "Marked done, but PR #1351 is still open.", "Acme Shop · Rediseño del checkout"]) {
           if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
         }
         await shoot(page, name);
