@@ -36,6 +36,7 @@ describe("chat file references", () => {
 
   it("finds a path wherever prose puts it: emphasis, a list, a table cell", () => {
     expect(filePathsInText("**docs/a.md** y *docs/b.md*\n\n- docs/c.md\n\n| Archivo |\n| --- |\n| docs/d.md |")).toEqual(["docs/a.md", "docs/b.md", "docs/c.md", "docs/d.md"]);
+    expect(filePathsInText("- **Cambios:**\n  - docs/e.md\n    - docs/f.md")).toEqual(["docs/e.md", "docs/f.md"]);
   });
 
   it("reads a file:// link by its target and never offers its label as a second, relative file", () => {

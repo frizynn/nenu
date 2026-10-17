@@ -44,7 +44,7 @@ function markdownSpans(text: string): MdSpan[] {
   };
   const block = (item: MdBlock) => {
     if (item.kind === "heading" || item.kind === "paragraph" || item.kind === "quote") spans(item.spans);
-    else if (item.kind === "list") item.items.forEach(spans);
+    else if (item.kind === "list") item.items.forEach((entry) => { spans(entry.spans); entry.lists.forEach(block); });
     else if (item.kind === "table") {
       item.header.forEach(spans);
       item.rows.flat().forEach(spans);

@@ -12,10 +12,12 @@
 // through the pane's file route, never fetched from the network), and LaTeX math (kept as its TeX
 // source; the renderer draws it). Not HTML passthrough.
 //
-// FLAT BY DESIGN. Blocks don't nest: a table or a list inside a blockquote or a list item is read as
-// the outer block's text, so a quoted table still collapses into a run-on line. Closing that means a
-// recursive block parser, which is a different program from this one — and agents put tables at the
-// top level, where the collapse actually hurt (#72).
+// FLAT BY DESIGN, LISTS ASIDE. Blocks don't nest: a table inside a blockquote or a list item is read
+// as the outer block's text, so a quoted table still collapses into a run-on line. Closing that means
+// a recursive block parser, which is a different program from this one — and agents put tables at the
+// top level, where the collapse actually hurt (#72). The one nesting read is a list's own: an item
+// indented under another is its sub-item, since agents nest a bold heading's points under it and
+// drawn as siblings they lose which heading they belong to.
 //
 // TWO DELIBERATE OMISSIONS, both because this content is code-heavy:
 //  - `_underscore_` emphasis is NOT supported. It would mangle `snake_case_identifiers`, which
@@ -53,7 +55,7 @@ export type MdBlock =
   | { kind: "code"; lang: string; text: string }
   /** A display formula on lines of its own. `text` is its TeX, never inline-parsed. */
   | { kind: "math"; text: string }
-  | { kind: "list"; ordered: boolean; items: MdSpan[][] }
+  | MdList
   | { kind: "quote"; spans: MdSpan[] }
   /**
    * GFM table. `align` is one entry per column (null = unaligned), and every row is padded or
@@ -63,6 +65,10 @@ export type MdBlock =
   | { kind: "rule" };
 
 export type MdAlign = "left" | "center" | "right" | null;
+
+/** A list item: its words, then the lists indented under it. */
+export interface MdListItem { spans: MdSpan[]; lists: MdList[] }
+export interface MdList { kind: "list"; ordered: boolean; items: MdListItem[] }
 
 // Only these schemes may become a real link. Everything else (javascript:, data:, vbscript:, or a
 // bare word) renders as plain text — a link is the one place this view could otherwise hand a URL
@@ -214,6 +220,48 @@ const FENCE = /^\s*(?:```|~~~)\s*(\S*)/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const UL_ITEM = /^\s*[-*+]\s+(.*)$/;
 const OL_ITEM = /^\s*\d+[.)]\s+(.*)$/;
+const isItem = (line: string) => UL_ITEM.exec(line) ?? OL_ITEM.exec(line);
+
+/** A line's leading whitespace in columns, a tab reaching the next stop of four. */
+function indentOf(line: string): number {
+  let columns = 0;
+  for (const char of line) {
+    if (char === " ") columns++;
+    else if (char === "\t") columns += 4 - (columns % 4);
+    else break;
+  }
+  return columns;
+}
+
+/**
+ * The list that starts at `start`, an item line. Its items share the first one's indent (give or
+ * take a column, as hand-aligned numbers drift), an item two or more columns deeper starts a list
+ * under the item before it, and a shallower one, a change of marker kind or any other line ends it.
+ */
+function parseList(lines: string[], start: number): { list: MdList; end: number } {
+  const base = indentOf(lines[start]!);
+  const ordered = OL_ITEM.test(lines[start]!);
+  const items: MdListItem[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const item = isItem(lines[i]!);
+    if (!item) break;
+    const indent = indentOf(lines[i]!);
+    if (indent < base) break;
+    const parent = items.at(-1);
+    if (indent > base + 1 && parent) {
+      const nested = parseList(lines, i);
+      parent.lists.push(nested.list);
+      i = nested.end;
+      continue;
+    }
+    // A run stays one list only while its marker kind holds — a switch starts a new block.
+    if (OL_ITEM.test(lines[i]!) !== ordered) break;
+    items.push({ spans: parseInline(item[1] ?? ""), lists: [] });
+    i++;
+  }
+  return { list: { kind: "list", ordered, items }, end: i };
+}
 const QUOTE = /^\s*>\s?(.*)$/;
 
 // A table is recognised by its DELIMITER row, never by the header alone: a line of prose containing
@@ -374,19 +422,10 @@ export function parseMarkdown(source: string): MdBlock[] {
       continue;
     }
 
-    const isItem = (l: string) => UL_ITEM.exec(l) ?? OL_ITEM.exec(l);
-    const firstItem = isItem(line);
-    if (firstItem) {
-      const ordered = OL_ITEM.test(line);
-      const items: MdSpan[][] = [];
-      while (i < lines.length) {
-        const item = isItem(lines[i]!);
-        // A run stays one list only while its marker kind holds — a switch starts a new block.
-        if (!item || OL_ITEM.test(lines[i]!) !== ordered) break;
-        items.push(parseInline(item[1] ?? ""));
-        i++;
-      }
-      blocks.push({ kind: "list", ordered, items });
+    if (isItem(line)) {
+      const { list, end } = parseList(lines, i);
+      blocks.push(list);
+      i = end;
       continue;
     }
 

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { FilePreviewContext } from "@/lib/file-preview-context";
@@ -218,17 +218,32 @@ describe("tables", () => {
     expect(screen.getByRole("table")).toHaveTextContent("Opción");
   });
 
-  // The phone cut a three-column table of options at its right edge, with no hint it went on.
-  it("reads a table the width squeezes past reading as rows, each cell under its header", () => {
+  // The phone cut a three-column table of options at its right edge, with no hint it went on; then
+  // stacked every cell under its header, so a row of four took half the screen and read as a form.
+  it("reads a table the width squeezes as one entry per row: its first cell the title, the rest after their headers", () => {
     // jsdom lays nothing out: a cell reporting five line boxes is one a phone wrapped into a sliver.
     const lines = vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
       return (this.hasAttribute("data-cell") ? Array(5).fill(new DOMRect()) : []) as unknown as DOMRectList;
     });
     try {
-      render(<MarkdownText text={TABLE} />);
+      const { container } = render(<MarkdownText text={[
+        "| Lo que dijiste | Qué se hizo | PR | En vivo |", "|---|---|---|---|",
+        "| Parpadeo y saltos | Proyecto y chat cargan sin saltar, y el arranque muestra una sola pantalla | #212 | sí |",
+        "| La lista se reordena | Home mantiene el orden | | no |",
+      ].join("\n")} />);
       expect(screen.queryByRole("table")).not.toBeInTheDocument();
-      const rows = screen.getAllByRole("term").map((term) => `${term.textContent}: ${term.nextElementSibling?.textContent}`);
-      expect(rows).toEqual(["Opción: A", "Costo: $0", "Opción: B", "Costo: $40"]);
+      const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-table-row]"));
+      expect(rows).toHaveLength(2);
+      // The title says which column it is only to a screen reader; the eye reads it as the row's name.
+      expect(rows[0]!.firstElementChild).toHaveTextContent("Lo que dijiste: Parpadeo y saltos");
+      expect(rows[0]!.firstElementChild).toHaveClass("font-semibold");
+      const cells = (row: HTMLElement) => within(row).queryAllByRole("term").map((term) => `${term.textContent}: ${term.nextElementSibling?.textContent}`);
+      expect(cells(rows[0]!)).toEqual(["Qué se hizo: Proyecto y chat cargan sin saltar, y el arranque muestra una sola pantalla", "PR: #212", "En vivo: sí"]);
+      // An empty cell says nothing; a short value sits beside the others, a long one on its own line.
+      expect(cells(rows[1]!)).toEqual(["Qué se hizo: Home mantiene el orden", "En vivo: no"]);
+      const entry = (row: HTMLElement, text: string) => within(row).getByText(text).closest("dl > div")!;
+      expect(entry(rows[0]!, "Proyecto y chat cargan sin saltar, y el arranque muestra una sola pantalla")).toHaveClass("basis-full");
+      expect(entry(rows[0]!, "#212")).not.toHaveClass("basis-full");
       expect(screen.getByRole("button", { name: "Copy table" })).toBeInTheDocument();
     } finally {
       lines.mockRestore();
@@ -273,6 +288,20 @@ describe("tables", () => {
 
 // The math itself is drawn by the browser from MathML, loaded on first use; these pin what reaches
 // the DOM. The pixels are checked in WebKit (see the PR), not here.
+describe("lists", () => {
+  // A bold heading's points drew as its siblings, so which heading they belonged to was lost.
+  it("draws a sub-item inside its item, one level in, with the next level's marker", () => {
+    const { container } = render(<MarkdownText text={"- **Parpadeo, en el banco:**\n  - Las filas pasaron a 0.\n  - El salto pasó a 0.\n- **Pendiente:** el release"} />);
+    const outer = container.querySelector("ul")!;
+    expect(outer).toHaveClass("list-disc");
+    expect(outer.children).toHaveLength(2);
+    const nested = outer.children[0]!.querySelector("ul")!;
+    expect(nested).toHaveClass("list-[circle]");
+    expect(Array.from(nested.children).map((li) => li.textContent)).toEqual(["Las filas pasaron a 0.", "El salto pasó a 0."]);
+    expect(outer.children[1]).toHaveTextContent("Pendiente: el release");
+  });
+});
+
 describe("math", () => {
   it("renders inline and block math as MathML", async () => {
     const { container } = render(<MarkdownText text={"La energía: $E = mc^2$.\n\n$$\n\\frac{a}{b}\n$$"} />);
