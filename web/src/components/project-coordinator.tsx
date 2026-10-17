@@ -5,7 +5,7 @@ import { errorMessage } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
 import type { Organize } from "@/components/project-tasks";
 import { openOrgProject, replaceOrgCoordinator, type CoordinatorChoice } from "@/lib/api";
-import { liveState } from "@/lib/org-tree";
+import { coordinatorState } from "@/lib/org-tree";
 import { runningCoordinator } from "@/lib/projects";
 import { setStatus } from "@/lib/status";
 import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
@@ -36,7 +36,7 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   const here = current === coordinator.paneId;
   // Upstream herdr-projects has no `coordinator replace`.
   const replaceable = !readOnly && project.nodeActions !== false;
-  const row = <TaskRow state={liveState(coordinator.liveStatus) ?? "idle"} title={organize ? "Project coordinator" : "Coordinator"}
+  const row = <TaskRow state={coordinatorState(coordinator.liveStatus) ?? "idle"} title={organize ? "Project coordinator" : "Coordinator"}
     detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
     current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat" fold={organize ? { open, onToggle: () => setOpen(!open) } : undefined}
     actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined}>
