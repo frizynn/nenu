@@ -8,6 +8,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-17
+
+### Added
+
+- A chip's panel floats over the thread: opening it moves neither the box nor the chat; a press outside, Escape and a phone's Back close it (3daf8f3c).
+- A phone's row under the box keeps model, effort and context; branch and machine are one tap away, whole (3daf8f3c).
+- Threads that ended fold into Working's Done group, muted; a chip with only finished work is drawn quietly (3daf8f3c).
+- `bun scripts/e2e/run.ts composer` measures the box, the thread's scroll and layout shifts around each chip (89f6a4db).
+
+### Fixed
+
+- Opening a chat no longer folds its chips open and walks the conversation up (99cf86fe).
+
 ## [1.18.0] - 2026-10-16
 
 ### Added
