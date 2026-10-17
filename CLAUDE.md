@@ -184,7 +184,10 @@ the unit name; the Herdr action runs from anywhere.
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, Your asks, projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
-  ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)).
+  ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
+  is New on its Home row, and only an agent that asks raises a toast
+  ([ADR 0094](./.adr/0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md)). The bar's chats and
+  Home's Recents keep their order while on screen (`hooks/use-held-time.ts`).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

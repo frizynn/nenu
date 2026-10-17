@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.23.1] - 2026-10-17
+## [1.24.1] - 2026-10-17
 
 ### Fixed
 
@@ -20,6 +20,20 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - `bun scripts/e2e/load.ts` measures layout shift on a project, skeleton frames on a chat opened again and boot screens (3943d3d1).
+
+## [1.24.0] - 2026-10-17
+
+### Added
+
+- "N updates" on Recents and on the desk's chats counts the rows with news and puts them in order on a tap (8973e065, cf7f209a).
+- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search, rows that move while quiet and how long an off-screen ask takes to show (de51bf50, 53943310, 0f74a2a7).
+
+### Fixed
+
+- A phone raises no toast when an agent finishes, only when one asks; the finish is New on its row (ADR 0094) (1b330e5d).
+- Recents and the desk's chats keep their order while on screen: a row that finishes stays put with its New or +1, and reorders on a return to the page (a3291bd6, 8973e065, 8dfd31af).
+- On a desk, a chat that asks for you past More still shows, after the rows on screen (8973e065).
+- Escape on the phone's Search sheet clears a typed query and keeps the box, then closes the sheet (beec331c, f0d582f7).
 
 ## [1.23.0] - 2026-10-17
 

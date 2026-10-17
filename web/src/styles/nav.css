@@ -140,6 +140,9 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
 @media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 .nav-more { color: var(--subtle-foreground); }
+/* The bar's chats held in place: a quiet text button that puts them in order. Its height stays inside the label's. */
+.nav-label-updates { height: 22px; margin-right: -6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; cursor: pointer; }
+@media (hover: hover) { .nav-label-updates:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 /* An agent that finished or asked since you last looked: a quiet count, never a toast over the page. */
 .nav-unread { flex-shrink: 0; color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; font-variant-numeric: tabular-nums; }
 
