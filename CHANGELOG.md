@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-10-17
+
+### Fixed
+
+- A read of Organizations that failed is tried again with no file changed, so a restart no longer serves no asks until the registry moves (486c4b04).
+
 ## [1.22.0] - 2026-10-17
 
 ### Added
