@@ -246,7 +246,15 @@ export interface OrgAsk {
 export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
 export interface AskCoordinator { id: string; title: string }
 export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
-export interface AskDecision { project: string; coordinator: AskCoordinator; text: string }
+/**
+ * A decision line: `line` 0 and no links when Organizations gave only its text; waiting until answered,
+ * in progress after. `line`, `links` and `group` are absent from a bridge that predates decision rows,
+ * which a rebuilt page can meet until the bridge restarts: it then reads as text that waits on you.
+ */
+export interface AskDecision {
+  project: string; coordinator: AskCoordinator; text: string; line?: number; links?: AskLink[];
+  group?: "waiting" | "progress"; answeredAt?: string; answerable?: true;
+}
 /** `asks` is null when this Organizations cannot list asks. */
 /** `answers` is whether this Organizations can answer an ask (`asks answer`); absent from an older bridge. */
 export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[]; answers?: boolean }

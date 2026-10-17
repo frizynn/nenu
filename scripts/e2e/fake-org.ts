@@ -30,6 +30,8 @@ interface FakeState {
   answers?: boolean;
   /** `asks --json`'s rows; without them the fake answers `asks` as an Organizations that predates it. */
   asks?: Array<{ project: string; [key: string]: unknown }>;
+  /** `asks --json`'s decision rows, from the Organizations that answers them; left out without any. */
+  decisions?: Array<{ project: string; [key: string]: unknown }>;
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   choices?: boolean;
   projects: FakeProject[];
@@ -95,8 +97,9 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
  * the coordinator wrote, state included, with `answered_at` until the coordinator changes it.
  */
 function answer(slug: string, coordinator: string, line: number, text: string): void {
-  const row = state.asks!.find((candidate) => candidate.project === slug && (candidate.coordinator as { id: string }).id === coordinator && candidate.line === line)
-    ?? fail(`line ${line} is not an ask of ${coordinator}`);
+  const row = [...state.asks!, ...(state.decisions ?? [])]
+    .find((candidate) => candidate.project === slug && (candidate.coordinator as { id: string }).id === coordinator && candidate.line === line)
+    ?? fail(`line ${line} is not an ask or decision of ${coordinator}`);
   if (!text) fail("the answer is empty");
   if (!(row.actions as string[] | undefined)?.includes("answer")) fail(`${coordinator} takes no answer`);
   row.answered_at = new Date().toISOString();
@@ -147,7 +150,9 @@ if (command === "overview") {
   else answer(positionals[0]!, positionals[1]!, Number(flags.line), readFileSync(0, "utf8").trim());
 } else if (command === "asks" && "json" in flags) {
   if (!state.asks) fail("unrecognized subcommand 'asks'");
-  console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter((row) => !flags.project || row.project === flags.project) }));
+  const mine = (row: { project: string }) => !flags.project || row.project === flags.project;
+  const decisions = (state.decisions ?? []).filter(mine);
+  console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter(mine), ...(decisions.length ? { decisions } : {}) }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
   console.log(state.profiles.join("\n"));
 } else if (command === "profile" && sub === "list" && "json" in flags) {

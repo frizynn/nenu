@@ -48,6 +48,12 @@ const ASKS = [
       link("thread", "t-0005", { thread: "t-0005", title: "AWA-700 · Prospectos en el admin", state: "working" })], confirmed: "in-progress" }),
   ask("research", { id: "root", title: "" }, 5, "done", "Comparar dos proveedores", "elegimos el de Córdoba", { links: [link("page", "https://example.com/vendors")] }),
 ];
+/** The decision rows Organizations 4bc9f05 prints: the placeholder is not one, a real decision carries its line and links. */
+const DECISIONS = [{
+  project: "awam", coordinator: GESTION, actions: ["answer"], line: 10,
+  text: "Datos del comercio en el PDF : cargarlos en Facturación (recomendada) o traerlos del padrón",
+  links: [link("task", "task:AWA-711", { target: "AWA-711", title: "Datos del PDF", state: "todo" })],
+}];
 const fileAsks = (project: string, coordinator: string) => ASKS.filter((row) => row.project === project && row.coordinator.id === coordinator)
   .map(({ project: _project, coordinator: _coordinator, ...rest }) => rest);
 
@@ -61,6 +67,7 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
   return {
     profiles: ["claude", "codex"],
     asks: ASKS,
+    ...(before ? {} : { decisions: DECISIONS }),
     projects: [{
       slug: "awam", name: "AWAM", goal: "Coordinar el trabajo de AWAM: frentes, agentes, revisiones y merges", status: "active",
       coordinator: { pane_id: "", workspace_id: "", tab_id: "" },
@@ -138,9 +145,22 @@ async function main(): Promise<void> {
         await page.goto(`${bridge.url}/asks?project=awam&coordinator=t-0002`);
         await page.waitForTimeout(2000);
         const after = await page.locator("main").innerText();
-        if (after.includes("Wait on you") || await page.getByRole("button", { name: /^Answer / }).count()) failures.push("after a reload the answered ask waits on you again");
+        if (await page.getByRole("button", { name: "Answer ¿Prospectos primero o varios números?" }).count()) failures.push("after a reload the answered ask waits on you again");
         if (!/Answered \d+[smh]? ?ago|Answered just now|Answered/.test(after)) failures.push("after a reload the answered ask does not say so");
         await shoot(page, "asks-respondido-recarga-1440");
+        // A decision line answers the same way, on its own line, its links as chips.
+        await page.goto(`${bridge.url}/asks`);
+        await page.waitForTimeout(2000);
+        const decision = await page.locator("main").innerText();
+        if (decision.includes("(task:AWA-711)") || !decision.includes("AWA-711")) failures.push("the decision's links do not read as chips");
+        await page.getByRole("button", { name: /^Answer Datos del comercio/ }).click();
+        await page.getByLabel("Your answer").fill("Cargarlos en Facturación.");
+        await page.getByRole("button", { name: "Send answer" }).click();
+        await page.waitForTimeout(2500);
+        await page.goto(`${bridge.url}/asks`);
+        await page.waitForTimeout(2000);
+        if (await page.getByRole("button", { name: /^Answer Datos del comercio/ }).count()) failures.push("after a reload the answered decision waits on you again");
+        await shoot(page, "asks-decision-respondida-1440");
       }
       await context.close();
     }
@@ -152,7 +172,10 @@ async function main(): Promise<void> {
 
     const calls = await bridge.orgCalls();
     const answers = calls.filter((argv) => argv[0] === "asks" && argv[1] === "answer" && !argv.includes("--help"));
-    if (!before && JSON.stringify(answers) !== JSON.stringify([["asks", "answer", "awam", "t-0002", "--line=5", "--text-file", "-", "--json"]])) {
+    if (!before && JSON.stringify(answers) !== JSON.stringify([
+      ["asks", "answer", "awam", "t-0002", "--line=5", "--text-file", "-", "--json"],
+      ["asks", "answer", "awam", "t-0002", "--line=10", "--text-file", "-", "--json"],
+    ])) {
       failures.push(`Organizations was asked ${JSON.stringify(answers)}`);
     }
     const snapshot = await (await fetch(`${bridge.url}/api/snapshot`)).json() as { projects: Array<{ slug: string; waitingAsks?: number }> };

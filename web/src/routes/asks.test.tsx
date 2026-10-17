@@ -291,3 +291,56 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
     expect(screen.queryByText("Card tokens")).not.toBeInTheDocument();
   });
 });
+
+describe("decision rows, from an Organizations that prints them (ADR 0093)", () => {
+  const task = { kind: "task" as const, text: "task:AWA-711", target: "AWA-711", thread: "", title: "Datos del PDF", state: "todo", pr: "", prState: "" };
+  const rows: AsksList = { ...ASKS, answers: true, decisions: [
+    { project: "shop", coordinator: CHECKOUT, text: "Datos del comercio : Facturación o padrón", line: 9, links: [task], group: "waiting", answerable: true },
+    { project: "shop", coordinator: CHECKOUT, text: "Stock : list or cards", line: 10, links: [], group: "progress", answerable: true,
+      answeredAt: new Date(Date.now() - 3 * 60_000).toISOString() },
+  ] };
+
+  it("draws a decision with its links as chips and answers it on its own line", async () => {
+    let posted: unknown;
+    server.use(http.post("/api/org/asks/answer", async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json({ ok: true, answered: { project: "shop", coordinator: "t-0010", line: 9, answeredAt: "2026-10-17T10:00:00Z" } });
+    }));
+    const { user } = setup("/asks", { asks: rows });
+    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const row = within(waiting).getByText("Datos del comercio : Facturación o padrón").closest("li")!;
+    expect(row).toHaveTextContent("Shop · Checkout · decision");
+    expect(within(within(row).getByRole("list", { name: "Links" })).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["AWA-711todo"]);
+    await user.click(within(row).getByRole("button", { name: "Answer Datos del comercio : Facturación o padrón" }));
+    await user.type(screen.getByLabelText("Your answer"), "Facturación");
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    await waitFor(() => expect(posted).toEqual({ project: "shop", coordinator: "t-0010", line: 9, text: "Facturación" }));
+    expect(row).toHaveTextContent("Answered · Facturación");
+  });
+
+  it("puts an answered decision with what is in progress, saying when, with no Answer", async () => {
+    setup("/asks", { asks: rows });
+    const progress = await screen.findByRole("region", { name: "In progress" });
+    const row = within(progress).getByText("Stock : list or cards").closest("li")!;
+    expect(row).toHaveTextContent("Answered 3m ago");
+    expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Wait on you" })).queryByText("Stock : list or cards")).not.toBeInTheDocument();
+  });
+
+  it("lists a coordinator's decisions on its card the same way", async () => {
+    setup("/project/shop/node/t-0010", { asks: rows });
+    const card = await screen.findByRole("region", { name: "Coordinator card" });
+    await waitFor(() => expect(card).toHaveTextContent("Wait on you1Datos del comercio : Facturación o padróndecision"));
+    expect(within(card).getByRole("button", { name: "Answer Datos del comercio : Facturación o padrón" })).toBeInTheDocument();
+    expect(card).toHaveTextContent("Stock : list or cardsdecisionAnswered 3m ago");
+  });
+
+  it("from a bridge that predates decision rows, a decision is text that waits on you, with no Answer", async () => {
+    const old: AsksList = { ...ASKS, answers: true, decisions: [{ project: "shop", coordinator: CHECKOUT, text: "Stock : list or cards" }] };
+    setup("/asks", { asks: old });
+    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const row = within(waiting).getByText("Stock : list or cards").closest("li")!;
+    expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("list", { name: "Links" })).not.toBeInTheDocument();
+  });
+});

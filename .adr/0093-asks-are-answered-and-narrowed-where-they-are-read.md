@@ -28,6 +28,9 @@ that is only a parenthesis, and Answer on what waits on him. Herdr Organizations
    Answer shows only on a row that waits on you, has a line and whose `actions` list `answer`, where
    `asks answer --help` exits 0. Organizations keeps the line's state and adds `answered_at`: an answered
    `needs-decision` waits on no one and sorts with what is in progress, saying when it was answered.
+   A `## Needs your decision` line is answered the same way where Organizations prints it as a row
+   (`asks --json`'s `decisions`, with its line, links and `answered_at`); an Organizations that prints
+   only the status file's lines gives text, which waits on you with no Answer.
 3. **One list, narrowed where it is read.** Your asks narrows by project and coordinator, in its address;
    a coordinator's card draws the same list narrowed to itself, without naming whose each row is. A
    link is a chip: what it points at and the state Organizations confirmed.
