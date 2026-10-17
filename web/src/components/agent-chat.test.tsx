@@ -895,7 +895,7 @@ describe("AgentChat — native workbench interactions", () => {
     expect(screen.getByRole("dialog", { name: "Model picker" })).toBeVisible();
     // The chip stays in the input row as the picker's anchor.
     expect(screen.getByRole("button", { name: "Choose model" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("radio", { name: "gpt-6-astra" })).toBeVisible();
+    expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeVisible();
     expect(screen.queryByText("Old terminal output that must not become the conversation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live terminal" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Type into terminal" })).not.toBeInTheDocument();
@@ -908,7 +908,7 @@ describe("AgentChat — native workbench interactions", () => {
 });
 
 
-it("preloads once and opens, selects and closes models without terminal requests", async () => {
+it("preloads once and opens and closes models without terminal requests", async () => {
   let catalogs = 0;
   const writes = vi.fn();
   server.use(
@@ -925,15 +925,13 @@ it("preloads once and opens, selects and closes models without terminal requests
   renderChat({ paneId: agent.paneId, agent, agents: [agent] });
   await waitFor(() => expect(catalogs).toBe(1));
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
-  const option = await screen.findByRole("radio", { name: "gpt-5.6-sol" });
+  const option = await screen.findByRole("menuitemradio", { name: "gpt-5.6-sol" });
   expect(option).toBeEnabled();
-  fireEvent.click(option);
-  expect(option).toHaveAttribute("aria-checked", "true");
   expect(writes).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close model picker" }));
   expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
-  expect(screen.getByRole("radio", { name: "gpt-6-astra" })).toBeEnabled();
+  expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeEnabled();
   expect(catalogs).toBe(1);
   expect(writes).not.toHaveBeenCalled();
   expect(dismissModelPicker).not.toHaveBeenCalled();

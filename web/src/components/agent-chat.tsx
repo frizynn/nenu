@@ -412,7 +412,7 @@ export function AgentChat({
   const panels = useWorkbenchPanels({
     scope: JSON.stringify([paneId, session]), modelPresent,
     otherDialogPresent: dialogPresent && !modelPresent, writable: writableRef.current,
-    // Browsing is local. The agent is contacted only by the explicit Use model action.
+    // Browsing is local. The agent is contacted only when a row is tapped, the explicit choice.
     openModel: async () => true,
     modelInputActive: localModel.inputActive,
     beforeDismissModel: localModel.cancel,
@@ -1331,7 +1331,7 @@ export function AgentChat({
           {!subagent && showConversation && <WorkbenchModelPanel scope={JSON.stringify([paneId, session])}
             open={panels.panel === "model"} anchorRef={modelTriggerRef} agent={agent?.agent}
             text={modelSource.text} menu={liveModelBlock} modelPresent={modelPresent} catalog={catalog}
-            reportedModel={telemetry?.model}
+            reportedModel={telemetry?.model} reportedEffort={telemetry?.effort}
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
             onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}

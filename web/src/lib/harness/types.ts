@@ -98,6 +98,13 @@ export interface HarnessAdapter {
    * still the only source for what the key does to Codex's own queue.
    */
   interrupt?: TurnInterrupt;
+  /**
+   * Where this agent's model picker sets the reasoning effort, measured on its `/model` screen:
+   * `"arrows"`, a `←/→` row on that screen beside the model list; `"after-model"`, a list of its own
+   * the picker opens once a model is chosen. OPTIONAL, and absence means unknown: Nenu then shows
+   * the reported effort without offering a way to change it.
+   */
+  modelEffort?: "arrows" | "after-model";
 }
 
 export interface TurnInterrupt {

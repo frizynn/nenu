@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-10-17
+
+### Added
+
+- The model picker applies a model with one tap, checks the one running with its version, and keeps a failure in the sheet to retry (dca070f7).
+- Effort sits under the model list: where the agent's picker has arrows beside it the value opens them, and tapping the running model confirms it; elsewhere it shows the value and when it is chosen (dca070f7, fa5e7c68).
+- A phone's Back closes the model picker (dca070f7).
+- `bun scripts/e2e/run.ts reading` captures tables, nested lists, the way back and the model picker on a phone and a desk (dbcdf59b).
+
+### Changed
+
+- On a phone, a table too wide for its grid reads one entry per row: its first cell as the title, the rest after their headers; a row is half as tall (41e1590f).
+- A list item indented under another is drawn as its sub-item, one level in (41e1590f).
+
+### Fixed
+
+- The last line of a chat stands clear of the button back to the latest message (6c0dc8f4).
+
 ## [1.24.1] - 2026-10-17
 
 ### Fixed

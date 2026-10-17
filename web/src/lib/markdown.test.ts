@@ -1,4 +1,4 @@
-import { parseInline, parseMarkdown, safeHref } from "./markdown";
+import { parseInline, parseMarkdown, safeHref, type MdList } from "./markdown";
 
 // The Markdown grammar for transcript prose. It exists because agent output IS Markdown and reading
 // `## Heading` / `**bold**` raw on a phone is worse than reading it formatted — but it must never
@@ -225,12 +225,38 @@ describe("parseMarkdown", () => {
       {
         kind: "list",
         ordered: false,
-        items: [[{ kind: "text", text: "one" }], [{ kind: "text", text: "two" }]],
+        items: [{ spans: [{ kind: "text", text: "one" }], lists: [] }, { spans: [{ kind: "text", text: "two" }], lists: [] }],
       },
     ]);
     const ol = parseMarkdown("1. first\n2. second");
     expect(ol[0]).toMatchObject({ kind: "list", ordered: true });
     expect((ol[0] as { items: unknown[] }).items).toHaveLength(2);
+  });
+
+  // What an agent writes under a bold heading: its points indented, then back out to the next heading.
+  it("reads an indented item as a sub-item of the one above it, and an outdented one as the parent's sibling", () => {
+    const text = (block: unknown) => (block as { spans: Array<{ text?: string; spans?: Array<{ text: string }> }> }).spans
+      .map((span) => span.text ?? span.spans!.map((inner) => inner.text).join("")).join("");
+    const [list, ...rest] = parseMarkdown("- **Parpadeo:**\n  - filas a 0\n  - salto a 0\n    1. medido dos veces\n- **Pendiente:** release\n\nDespués.");
+    expect(rest).toEqual([{ kind: "paragraph", spans: [{ kind: "text", text: "Después." }] }]);
+    expect(list).toMatchObject({ kind: "list", ordered: false });
+    const items = (list as MdList).items;
+    expect(items.map(text)).toEqual(["Parpadeo:", "Pendiente: release"]);
+    const sub = items[0]!.lists;
+    expect(sub).toHaveLength(1);
+    expect(sub[0]!.items.map(text)).toEqual(["filas a 0", "salto a 0"]);
+    expect(sub[0]!.items[1]!.lists[0]).toMatchObject({ ordered: true });
+    expect(sub[0]!.items[1]!.lists[0]!.items.map(text)).toEqual(["medido dos veces"]);
+    expect(items[1]!.lists).toEqual([]);
+  });
+
+  it("nests by columns, a tab reaching the next stop of four, and keeps a one-column drift a sibling", () => {
+    const [tabbed] = parseMarkdown("1. uno\n\t- adentro\n2. dos") as MdList[];
+    expect(tabbed!.items).toHaveLength(2);
+    expect(tabbed!.items[0]!.lists[0]!.items).toHaveLength(1);
+    const [drift] = parseMarkdown("- uno\n - dos") as MdList[];
+    expect(drift!.items).toHaveLength(2);
+    expect(drift!.items[0]!.lists).toEqual([]);
   });
 
   it("switching marker kind starts a new list, not one mixed block", () => {

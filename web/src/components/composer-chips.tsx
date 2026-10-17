@@ -3,6 +3,7 @@ import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X } from "@/compon
 
 import { StatusDot } from "@/components/status-badge";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
+import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { threadAge, threadDetail } from "@/components/project-tasks";
 import { fetchOrgRoutines } from "@/lib/api";
@@ -143,10 +144,6 @@ export interface ChipLine {
   likely?: boolean;
 }
 
-/** The history entry an open panel stands on, so a phone's Back closes the panel and not the chat. */
-const PANEL_ENTRY = "nenuChipPanel";
-const onPanelEntry = () => Boolean((window.history.state as Record<string, unknown> | null)?.[PANEL_ENTRY]);
-
 /** A press that belongs to something the panel opened, such as a confirmation or a diff over the page. */
 const inLayerAbove = (target: Element) => target.closest('[role="dialog"], [role="alertdialog"], [data-workbench-popover]') !== null;
 
@@ -166,13 +163,16 @@ export function ComposerChips({ chips, open, onOpenChange, detail, trailing }: C
   const panel = useRef<HTMLElement>(null);
   const shown = chips.find((chip) => chip.id === open);
   const phoneBack = useMediaQuery("(pointer: coarse)");
+  // A phone's Back closes the panel. Closed by a row that opens another page, its entry stays:
+  // stepping back then would race the navigation the row just started.
+  const leaveEntry = useBackCloses("nenuChipPanel", Boolean(shown), phoneBack, () => closeRef.current("back"));
   // How the panel closes says what follows. Its own ✕, Escape or chip steps back over the entry it
   // pushed, so Back afterwards leaves the chat, and hands focus to the chip; a press outside leaves
   // both alone, since it may be starting a navigation or placing a caret; Back has already stepped.
   const closeRef = useRef<(how: "own" | "outside" | "back") => void>(() => {});
   closeRef.current = (how) => {
     if (!shown) return;
-    if (how === "own" && phoneBack && onPanelEntry()) window.history.back();
+    if (how === "own") leaveEntry();
     onOpenChange(null);
     if (how !== "outside") buttons.current.get(shown.id)?.focus({ preventScroll: true });
   };
@@ -204,17 +204,6 @@ export function ComposerChips({ chips, open, onOpenChange, detail, trailing }: C
       document.removeEventListener("keydown", onKey);
     };
   }, [Boolean(shown)]);
-
-  // A phone's Back closes the panel: it stands on an entry of its own, a copy of the chat's, so the
-  // router sees the same page on either side of it. Closed by a row that opens another page, its entry
-  // stays: stepping back then would race the navigation the row just started.
-  useEffect(() => {
-    if (!shown || !phoneBack) return;
-    if (!onPanelEntry()) window.history.pushState({ ...(window.history.state as object | null), [PANEL_ENTRY]: true }, "");
-    const onPop = () => { if (!onPanelEntry()) closeRef.current("back"); };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [Boolean(shown), phoneBack]);
 
   if (chips.length === 0 && !trailing) return null;
   const close = () => closeRef.current("own");

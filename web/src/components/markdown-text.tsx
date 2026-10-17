@@ -1,6 +1,6 @@
 import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { parseMarkdown, pullRequestRef, type MdBlock, type MdSpan } from "@/lib/markdown";
+import { parseMarkdown, pullRequestRef, type MdBlock, type MdList, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -177,11 +177,15 @@ function gridReads(scroller: HTMLElement): boolean {
   return [...scroller.querySelectorAll("[data-cell]")].every((cell) => cell.getClientRects().length <= CRAMPED_LINES);
 }
 
+// A cell this short sits beside the row's other short cells; a longer one takes its own line.
+const SHORT_CELL_CHARS = 24;
+
 /**
  * A table keeps its grid while the grid reads in the width it has: its columns wrap to fit, and a
  * short-celled table stays a grid on a phone. Past that a phone could only pan it sideways a row at a
- * time, hiding where the row went, so each row reads instead as a block of its cells under their
- * headers. The grid is measured as drawn, in the real font; a wider column draws it again to look.
+ * time, hiding where the row went, so each row reads instead as one entry: its first cell as the
+ * title, the others under it after their headers. The grid is measured as drawn, in the real font; a
+ * wider column draws it again to look.
  */
 function MdTable({ block }: { block: TableBlock }) {
   const box = useRef<HTMLDivElement>(null);
@@ -214,16 +218,24 @@ function MdTable({ block }: { block: TableBlock }) {
         <CopyButton what="table" payload={() => ({ text: tableMarkdown(block), html: tableHtml(block) })} className={cn(QUIET_ACTION, "-mr-2")} />
       </div>
       {rows ? (
-        <div className="divide-y border-y tabular-nums">
+        <div className="divide-y border-y">
           {block.rows.map((row, r) => (
-            <dl key={r} className="space-y-1.5 py-2.5">
-              {row.map((cell, c) => (
-                <div key={c}>
-                  {block.header[c]?.length ? <dt className="text-footnote text-muted-foreground"><Spans spans={block.header[c]} /></dt> : null}
-                  <dd className={c === 0 ? "font-semibold" : undefined}><Spans spans={cell} /></dd>
-                </div>
-              ))}
-            </dl>
+            <div key={r} data-table-row className="py-2">
+              {/* The first column names the row; the rest follow it, a short value beside the others
+                  and a long one on a line of its own, each after its header. */}
+              <div className="font-semibold">
+                {block.header[0]?.length ? <span className="sr-only"><Spans spans={block.header[0]} />: </span> : null}
+                <Spans spans={row[0] ?? []} />
+              </div>
+              <dl className="flex flex-wrap gap-x-3.5 tabular-nums">
+                {row.slice(1).map((cell, i) => cell.length === 0 ? null : (
+                  <div key={i} className={cn("min-w-0", spanText(cell).length > SHORT_CELL_CHARS && "basis-full")}>
+                    {block.header[i + 1]?.length ? <dt className="mr-1.5 inline text-footnote text-muted-foreground"><Spans spans={block.header[i + 1]!} /></dt> : null}
+                    <dd className="inline"><Spans spans={cell} /></dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           ))}
         </div>
       ) : (
@@ -256,6 +268,23 @@ function MdTable({ block }: { block: TableBlock }) {
   );
 }
 
+// A list's marker says how deep it sits, as a word processor's does: disc, circle, then square.
+const BULLETS = ["list-disc", "list-[circle]", "list-[square]"];
+
+function ListBlock({ list, depth }: { list: MdList; depth: number }) {
+  const Tag = list.ordered ? "ol" : "ul";
+  return (
+    <Tag className={cn("ml-4 space-y-0.5 marker:text-muted-foreground", list.ordered ? "list-decimal" : BULLETS[Math.min(depth, BULLETS.length - 1)], depth > 0 && "mt-0.5")}>
+      {list.items.map((item, i) => (
+        <li key={i} className="pl-0.5">
+          <Spans spans={item.spans} />
+          {item.lists.map((nested, j) => <ListBlock key={j} list={nested} depth={depth + 1} />)}
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
 function Block({ block }: { block: MdBlock }) {
   switch (block.kind) {
     case "heading": {
@@ -275,20 +304,8 @@ function Block({ block }: { block: MdBlock }) {
           <Hit text={block.text} />
         </CodeBlock>
       );
-    case "list": {
-      const Tag = block.ordered ? "ol" : "ul";
-      return (
-        <Tag
-          className={`ml-4 space-y-0.5 ${block.ordered ? "list-decimal" : "list-disc"} marker:text-muted-foreground`}
-        >
-          {block.items.map((item, i) => (
-            <li key={i} className="pl-0.5">
-              <Spans spans={item} />
-            </li>
-          ))}
-        </Tag>
-      );
-    }
+    case "list":
+      return <ListBlock list={block} depth={0} />;
     case "quote":
       return (
         <blockquote className="border-l-2 pl-2.5 text-muted-foreground italic">

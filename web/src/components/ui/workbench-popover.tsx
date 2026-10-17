@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { X } from "@/components/ui/icon";
+import { useBackCloses } from "@/hooks/use-back-closes";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
-export type WorkbenchDismissReason = "outside" | "escape" | "close";
+export type WorkbenchDismissReason = "outside" | "escape" | "close" | "back";
 
 interface WorkbenchPopoverProps {
   open: boolean;
@@ -11,19 +13,33 @@ interface WorkbenchPopoverProps {
   label: string;
   children: ReactNode;
   className?: string;
+  /** On a touch screen, Back closes it (a sheet a phone expects to leave that way). */
+  phoneBack?: boolean;
 }
 
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
-export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className }: WorkbenchPopoverProps) {
+export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false }: WorkbenchPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
+  const coarse = useMediaQuery("(pointer: coarse)");
+  // How it last closed: an outside press may be starting a navigation and Back already stepped, so
+  // only the other ways out, its parent's included, step back over the entry it stands on.
+  const closedBy = useRef<WorkbenchDismissReason | null>(null);
+  const leaveEntry = useBackCloses("nenuPopover", open, phoneBack && coarse, () => dismiss("back"));
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open) { wasOpen.current = true; closedBy.current = null; return; }
+    if (wasOpen.current && closedBy.current !== "outside" && closedBy.current !== "back") leaveEntry();
+    wasOpen.current = false;
+  }, [open, leaveEntry]);
   const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; height: number } | null>(null);
 
   const dismiss = useCallback((reason: WorkbenchDismissReason) => {
     if (dismissed.current) return;
     dismissed.current = true;
+    closedBy.current = reason;
     const active = document.activeElement;
     const restore = reason !== "outside" &&
       (active === document.body || active === anchorRef.current || (active !== null && panelRef.current?.contains(active)));
