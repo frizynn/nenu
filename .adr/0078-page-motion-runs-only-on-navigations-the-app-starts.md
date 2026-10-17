@@ -1,6 +1,7 @@
 # 0078. Page motion runs only on navigations the app starts
 
 - **Status:** Accepted (2026-10-15).
+- **Amended by:** [ADR 0095](./0095-the-back-control-steps-back-through-the-history.md): the back steps back through the history, and an armed replace or history step animates.
 - **Trail:** `web/src/lib/motion.ts` · `web/src/router.tsx` · `web/src/index.css` (Page motion) ·
   `web/src/lib/notification-open.ts` · `web/src/sw.ts` · `scripts/e2e/run.ts motion`
 
