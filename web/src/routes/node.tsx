@@ -16,7 +16,7 @@ import { useAsks } from "@/hooks/use-asks";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { ASK, STATE_LABEL, awaits, flatten, liveState, orgTree, type OrgNode } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, coordinatorState, flatten, orgTree, type OrgNode } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
@@ -57,7 +57,7 @@ export function NodeRoute() {
     const pane = project.coordinator && live(project.coordinator.paneId) ? project.coordinator : undefined;
     // The live pane says what the agent does now; else what the ticker saw when it last looked.
     const status = pane?.liveStatus ?? (read.coordinator?.state || undefined);
-    const state = status && liveState(status);
+    const state = status && coordinatorState(status);
     const agent = [pane?.agent ?? read.coordinator?.agent, read.coordinator?.model].filter(Boolean).join(" · ");
     body = <>
       <TasksHeader title="Coordinator" paused={project.status === "paused"} subtitle={<>

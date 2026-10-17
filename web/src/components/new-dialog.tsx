@@ -25,7 +25,7 @@ import { createOrgProject, fetchHomeDirs } from "@/lib/api";
 import { baseName, tildePath } from "@/lib/dir-picker";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodePath, panePath, projectPath } from "@/lib/nav";
-import { STATE_LABEL, liveState, openCoordinators, orgTree } from "@/lib/org-tree";
+import { STATE_LABEL, coordinatorState, openCoordinators, orgTree } from "@/lib/org-tree";
 import { projectForPane, projectSummary, runningCoordinator } from "@/lib/projects";
 import { useHoldReload } from "@/lib/reload-guard";
 import { workspaceName } from "@/lib/spaces";
@@ -321,8 +321,8 @@ function CoordinatorsPane({ project, session, readOnly, onOpen, onNew }: {
   const roles = readOnly ? [] : startableRoles(project);
   const rows: ChoiceRow[] = [
     ...(root ? [{
-      key: "root", title: "Project coordinator", mark: <NodeDot state={liveState(root.liveStatus) ?? "idle"} className="size-2.5" />,
-      detail: [STATE_LABEL[liveState(root.liveStatus) ?? "idle"], root.agent].join(" · "), onChoose: () => onOpen(panePath(root.paneId, session)),
+      key: "root", title: "Project coordinator", mark: <NodeDot state={coordinatorState(root.liveStatus) ?? "idle"} className="size-2.5" />,
+      detail: [STATE_LABEL[coordinatorState(root.liveStatus) ?? "idle"], root.agent].join(" · "), onChoose: () => onOpen(panePath(root.paneId, session)),
     }] : []),
     ...coordinators.map(({ node, depth }) => {
       const parent = depth > 0 ? project.threads.find((t) => t.id === node.thread.parentId) : undefined;

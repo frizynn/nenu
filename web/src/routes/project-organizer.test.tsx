@@ -81,6 +81,14 @@ describe("a project that organizes coordinators", () => {
     expect(screen.getByRole("button", { name: "New coordinator" })).toBeInTheDocument();
   });
 
+  it("says what a coordinator is doing, never that it is ready for review", async () => {
+    const reported = threads.map((thread) => thread.id === "t-3" ? { ...thread, liveStatus: "done" as const, group: "ready-for-review", verdict: "done" as const } : thread);
+    setup(home([{ ...project, threads: reported }]));
+    const coordinators = await screen.findByRole("list", { name: "Coordinators" });
+    expect(within(coordinators).getByRole("button", { name: /^Lead ?Idle/ })).toHaveTextContent("Idle · 3 open · 1 needs you");
+    expect(coordinators).not.toHaveTextContent("Ready for review");
+  });
+
   it("opens a coordinator's row on its card, its work, and New under it", async () => {
     const { user, router } = setup(home([project]));
     await user.click(await screen.findByRole("button", { name: "Lead threads" }));
