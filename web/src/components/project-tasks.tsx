@@ -194,10 +194,11 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   const onScreen = (node: OrgNode) => currentPaneId !== undefined && node.thread.paneId === currentPaneId;
   const [closing, setClosing] = useState<OrgNode | null>(null);
   const [moving, setMoving] = useState<OrgNode | null>(null);
-  // A node can go under any coordinator of the project, not only the ones this view lists.
+  // Organizations says which nodes have another parent; the dialog lists every coordinator of the
+  // project a node could go under, not only the ones this view lists.
   const whole = orgTree(project.threads);
   const movable = (node: OrgNode) => {
-    if (!project.nodeMoves) return false;
+    if (!project.nodeMoves || !node.thread.movable) return false;
     const targets = moveTargets(whole, node);
     return targets.root || targets.coordinators.length > 0;
   };

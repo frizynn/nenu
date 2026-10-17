@@ -44,7 +44,9 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
   const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
   const node = (id: string, title: string, parent: string, role: "worker" | "coordinator", group: string, minutes: number, extra: Record<string, unknown> = {}) => ({
     id, title, parent_id: parent, role, can_spawn: role === "coordinator", status: group === "resolved" ? "resolved" : "open", group, group_label: group, note: "",
-    branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null, ...extra,
+    branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null,
+    // Organizations lists `move` for every open node here: each has a coordinator outside it to go under.
+    actions: group === "resolved" ? [] : ["move"], ...extra,
   });
   const statusFile = (file: string, text: string, minutes: number, fields: Record<string, unknown> = {}) =>
     ({ path: join(projects, "acme", file), text, updated: ago(minutes), ...fields });

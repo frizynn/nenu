@@ -30,7 +30,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 - + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383).
 - A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
-- Move to…: an open node goes under another coordinator where Organizations has `node move` (a026e2fb, 9b2d5632).
+- Move to…: an open node goes under another coordinator where Organizations offers `node move` for it (a026e2fb, 9b2d5632, a0526cf3).
 - `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).
 
 ### Changed

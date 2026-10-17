@@ -179,7 +179,7 @@ the unit name; the Herdr action runs from anywhere.
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
   page, each a row folding over its card and work, the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
-  shows only where `node move --help` exits 0
+  shows only where `node move --help` exits 0 and the node's `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, Your asks, projects as flat rows and chats by when they last moved; the tree is Search's. An

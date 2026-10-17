@@ -301,6 +301,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),
     ...(prAction ? { prAction } : {}),
+    ...(record.actions?.includes("move") ? { movable: true as const } : {}),
     ...(record.verdict ? { verdict: record.verdict } : {}),
     ...(record.status_file ? { statusUpdated: record.status_file.updated } : {}),
     ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),

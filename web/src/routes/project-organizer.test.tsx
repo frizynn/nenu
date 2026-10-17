@@ -18,14 +18,14 @@ const node = (id: string, title: string, parentId: string, extra: Partial<Projec
   ({ id, title, parentId, role: "worker", status: "open", ...extra });
 const pane = (paneId: string): AgentView => ({ paneId, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false });
 
-/** Lead runs Docs (waiting on you) and Checkout, which runs Pay; Hotfix sits at the top level; Plan is History. */
+/** Lead runs Docs (waiting on you) and Checkout, which runs Pay; Hotfix sits at the top level; Plan is History. Organizations can move every open one. */
 const threads: ProjectThreadView[] = [
   node("t-1", "Plan", "root", { role: "coordinator", status: "resolved" }),
-  node("t-3", "Lead", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle", agent: "claude" }),
-  node("t-4", "Docs", "t-3", { group: "waiting-on-you" }),
-  node("t-5", "Checkout", "t-3", { role: "coordinator", group: "working" }),
-  node("t-6", "Pay", "t-5", { group: "idle" }),
-  node("t-7", "Hotfix", "root", { group: "idle" }),
+  node("t-3", "Lead", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle", agent: "claude", movable: true }),
+  node("t-4", "Docs", "t-3", { group: "waiting-on-you", movable: true }),
+  node("t-5", "Checkout", "t-3", { role: "coordinator", group: "working", movable: true }),
+  node("t-6", "Pay", "t-5", { group: "idle", movable: true }),
+  node("t-7", "Hotfix", "root", { group: "idle", movable: true }),
 ];
 const project: ProjectView = { slug: "hub", name: "Hub", goal: "Ship it", status: "active", source: "json", nodeActions: true, waitingAsks: 0, threads };
 
@@ -194,5 +194,12 @@ describe("Move to…", () => {
     setup(home([project]));
     expect(await screen.findByRole("button", { name: "Close Hotfix" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Move/ })).not.toBeInTheDocument();
+  });
+
+  it("offers Move only on a node whose actions Organizations lists it in", async () => {
+    const fixed = threads.map((thread) => thread.id === "t-7" ? { ...thread, movable: undefined } : thread);
+    setup(home([{ ...project, nodeMoves: true, threads: fixed }]));
+    expect(await screen.findByRole("button", { name: "Close Hotfix" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move Hotfix" })).not.toBeInTheDocument();
   });
 });
