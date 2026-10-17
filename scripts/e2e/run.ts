@@ -37,6 +37,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
 //   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips and Stop above the box: four moments, phone and desk, the height they take
+//   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; what opening a panel moves
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
@@ -2906,6 +2907,186 @@ async function chips(before: boolean): Promise<void> {
 }
 
 /**
+ * Around the box on a 390px phone and a 1440px desk: a worker with a sibling that needs you, one that
+ * works, two resolved, its routines and PRs, background work running and finished, a long branch and
+ * another machine. Each chip opens and closes; the box's top and the thread's scroll are read before,
+ * open and after, and none may move.
+ */
+async function composerAround(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const prs = join(outDir, "gh-prs.json");
+  process.env.NENU_E2E_GH_PRS = prs;
+  let size = { additions: 0, deletions: 0 };
+  const branch = "fix/meli-contracargos-reintentos-webhook";
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const now = bridge.now();
+    const iso = (ago: number) => new Date(now - ago).toISOString();
+    const activity = { sessionKey: "bench", available: true, workflows: [], artifacts: [], tasks: [
+      { id: "b0001", kind: "bash", title: "bun test --watch", status: "running", at: now - 8_000, hasOutput: true },
+      { id: "b0002", kind: "bash", title: "bun run build", status: "completed", exitCode: 0, at: now - 900_000, hasOutput: true },
+      { id: "b0003", kind: "bash", title: "bun run lint", status: "failed", exitCode: 1, at: now - 1_500_000, hasOutput: true },
+    ] };
+    const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
+      { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
+    ] };
+    const shots: string[] = [];
+    const seen: Record<string, unknown> = {};
+    const moved: string[] = [];
+    // A conversation long enough to scroll, so a panel that took the thread's height would show.
+    await writeChatJournal(herd.journals.get(herd.working)!, now, 4, "running");
+    for (const [deviceName, device] of [["390", PHONE], ["1440", DESKTOP]] as const) {
+      bridge.fake!.setStatus(herd.working, process.env.NENU_E2E_IDLE ? "idle" : "working");
+      const context = await browser.newContext({ ...device, colorScheme: "dark", timezoneId: "UTC", locale: "en-US", ...(process.env.NENU_E2E_LATE_CHIPS ? { reducedMotion: "no-preference" } : {}) });
+      const page = await context.newPage();
+      await page.clock.install({ time: now });
+      await page.route("**/api/pane/*/activity*", async (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "412 pass", truncated: false, updatedAt: now } });
+        const late = process.env.NENU_E2E_LATE_CHIPS ? { ...activity, tasks: activity.tasks.filter((t) => t.status !== "running") } : activity;
+        // A real session log takes a while to read: the chips land after the box has drawn.
+        if (process.env.NENU_E2E_LATE_CHIPS) await sleep(1200);
+        return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? late : { ...activity, tasks: [] } });
+      });
+      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: process.env.NENU_E2E_LATE_CHIPS ? { ...subagents, agents: [] } : subagents }));
+      // Another machine on screen, as Herdr names it when it saves more than one.
+      await page.route("**/api/snapshot*", async (route) => {
+        const json = await (await fetch(route.request().url())).json() as { session?: string; machines?: unknown };
+        json.machines = [{ session: json.session, label: "build-box-remote", state: "online" }, { session: "@laptop", label: "laptop", state: "online" }];
+        await route.fulfill({ json });
+      });
+      // What the agent reports in a real session: its model, effort and context.
+      await page.route("**/api/pane/*/history*", async (route) => {
+        const json = await (await fetch(route.request().url())).json() as Record<string, unknown>;
+        if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 22_000, windowTokens: 200_000, usedPercent: 11 } };
+        await route.fulfill({ json });
+      });
+      // Layout shifts while the chat opens (Chromium reports them; WebKit has no such entry).
+      await page.addInitScript(() => {
+        const log: Array<{ value: number; sources: string[] }> = [];
+        (window as unknown as { __shifts: typeof log }).__shifts = log;
+        try {
+          new PerformanceObserver((list) => {
+            for (const entry of list.getEntries() as unknown as Array<{ value: number; sources?: Array<{ node?: Node }> }>) {
+              log.push({ value: entry.value, sources: (entry.sources ?? []).map((s) => (s.node instanceof Element ? `${s.node.tagName.toLowerCase()}.${s.node.className}`.slice(0, 60) : "")) });
+            }
+          }).observe({ type: "layout-shift", buffered: true });
+        } catch { /* no layout-shift entries in this engine */ }
+      }, null);
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
+      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(2000);
+      seen[`${deviceName}:open-shifts`] = await page.evaluate(() => {
+        const log = (window as unknown as { __shifts?: Array<{ value: number; sources: string[] }> }).__shifts ?? [];
+        return { count: log.length, fold: log.filter((s) => s.sources.some((src) => src.includes("composer-fold"))).length, total: log.reduce((a, s) => a + s.value, 0) };
+      }, null);
+      // A quiet chat is read only for how it opens.
+      if (process.env.NENU_E2E_LATE_CHIPS) {
+        seen[`${deviceName}:chips`] = await page.getByRole("group", { name: "Status" }).getByRole("button").evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label") ?? ""));
+        await page.screenshot({ path: join(outDir, `${deviceName}-quiet.png`), animations: "disabled" });
+        await context.close();
+        continue;
+      }
+      const shoot = async (step: string) => {
+        const path = join(outDir, `${deviceName}-${step}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      const read = () => page.evaluate(() => {
+        const box = document.querySelector(".composer-box")?.getBoundingClientRect();
+        const thread = document.querySelector<HTMLElement>(".chat-thread");
+        const scroller = thread && [thread, ...Array.from(thread.querySelectorAll<HTMLElement>("*"))].find((el) => /auto|scroll/.test(getComputedStyle(el).overflowY));
+        const meta = document.querySelector<HTMLElement>(".composer-meta");
+        const cut = meta ? Array.from(meta.querySelectorAll<HTMLElement>("*")).filter((el) => el.children.length === 0 && el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent) : [];
+        return {
+          boxTop: box ? Math.round(box.top) : null,
+          threadBottom: thread ? Math.round(thread.getBoundingClientRect().bottom) : null,
+          scrollTop: scroller ? Math.round(scroller.scrollTop) : null,
+          meta: meta ? { text: meta.innerText.replace(/\s+/g, " "), width: meta.scrollWidth, clientWidth: meta.clientWidth, cut } : null,
+          sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          focus: document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName ?? null,
+        };
+      }, null);
+      await shoot("closed");
+      const rest = await read();
+      seen[`${deviceName}:closed`] = rest;
+      const row = page.getByRole("group", { name: "Status" });
+      const labels = await row.getByRole("button").evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label") ?? ""));
+      seen[`${deviceName}:chips`] = labels;
+      for (const label of labels) {
+        const chip = row.getByRole("button", { name: label, exact: true });
+        await chip.click();
+        await page.waitForTimeout(500);
+        const slug = label.split(",")[0]!.toLowerCase().replace(/\s+/g, "-");
+        await shoot(`open-${slug}`);
+        const open = await read();
+        seen[`${deviceName}:open-${slug}`] = open;
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(400);
+        const after = await read();
+        seen[`${deviceName}:after-${slug}`] = after;
+        for (const [when, m] of [["open", open], ["after", after]] as const) {
+          if (m.boxTop !== rest.boxTop || m.scrollTop !== rest.scrollTop || m.threadBottom !== rest.threadBottom) moved.push(`${deviceName}:${when}-${slug}`);
+        }
+      }
+      // What ended stays one tap away, folded and quiet under what still works.
+      await row.getByRole("button", { name: /^Working/ }).click();
+      await page.waitForTimeout(400);
+      await page.getByRole("dialog", { name: "Working" }).getByRole("button", { name: /^Done/ }).click();
+      await page.waitForTimeout(300);
+      await shoot("open-working-done");
+      // A press on the thread closes the panel and moves nothing.
+      await page.mouse.click(8, 110);
+      await page.waitForTimeout(400);
+      await shoot("outside");
+      seen[`${deviceName}:outside`] = { ...(await read()), open: await page.locator("#composer-chip-panel").count() };
+      if (deviceName === "390") {
+        // A phone's Back closes the panel and stays on the chat.
+        const url = page.url();
+        await row.getByRole("button", { name: /^Needs you/ }).waitFor({ timeout: 3000 }).catch(() => {});
+        await row.getByRole("button", { name: /^Needs you/ }).click();
+        await page.waitForTimeout(400);
+        await page.goBack();
+        await page.waitForTimeout(600);
+        seen["390:back"] = { ...(await read()), open: await page.locator("#composer-chip-panel").count(), sameUrl: page.url() === url };
+        // Where it runs, whole, one tap from the row under the box.
+        await page.getByRole("button", { name: /^Where this runs/ }).click();
+        await page.waitForTimeout(400);
+        await shoot("place");
+        await page.keyboard.press("Escape");
+      }
+      await context.close();
+    }
+    return { shots, seen, moved, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, (herd, now) => {
+    const seed = homeOrg(herd, now, size);
+    const project = seed.projects[0]!;
+    const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+    const sibling = (id: string, title: string, group: string, minutes: number) => ({ ...project.threads[3]!, id, title, group, group_label: group,
+      status: group === "resolved" ? "resolved" : "open", workspace_id: "", tab_id: "", pane_id: "", branch: "", pr: null, updated: ago(minutes) });
+    project.threads[3] = { ...project.threads[3]!, branch };
+    project.threads.push(sibling("t-0015", "Shipping rates", "working", 2), sibling("t-0016", "Old cart page", "resolved", 300), sibling("t-0017", "Coupon field", "resolved", 900));
+    // $NENU_E2E_LATE_CHIPS: nothing around the chat but what its own reads bring after it mounts
+    // (finished commands and routines), as in a quiet chat; its chips arrive a moment late.
+    if (process.env.NENU_E2E_LATE_CHIPS) project.threads = project.threads.filter((t) => t.id === "t-0012" || t.id === "t-0010").map((t) => ({ ...t, pr: null }));
+    const hour = 3_600_000;
+    project.routines = [
+      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
+      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
+        last_run: new Date(now - 20 * hour).toISOString(), next_run: new Date(now + 4 * hour).toISOString() },
+    ];
+    return seed;
+  }, (dir) => {
+    size = seedDiffRepo(dir);
+    benchRepo(dir);
+    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
+  });
+  await writeFile(join(outDir, "composer.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ moved: result.moved, seen: result.seen }, null, 2));
+  if (result.unexpectedWrites.length) process.exit(1);
+}
+
+/**
  * The chips and Stop above the box, on a phone and a desk, dark and light, in four moments: a working
  * chat with one background command (Working 1 and Stop), the same with none (Stop alone), a chat at
  * rest with a command still running (chips alone), and homeOrg's worker with everything around it
@@ -3216,6 +3397,7 @@ else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
 else if (command === "chips") await chips(values.before === true);
 else if (command === "chip-line") await chipLine();
+else if (command === "composer") await composerAround();
 else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
