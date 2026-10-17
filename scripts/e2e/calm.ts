@@ -154,9 +154,10 @@ async function run(): Promise<void> {
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     let stop = churn(fake);
     try {
-      // A thread in a project: its ‹ goes up to the project, its chips to the coordinator and siblings.
+      // A thread in a project: its ‹ goes up, the band under its header (sibling chips before 1.23.0,
+      // Chat · Threads · PRs since) switches beside it.
       const taps: Array<Record<string, unknown>> = [];
-      for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", 'nav[aria-label="Threads"] button']] as const) {
+      for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", 'nav[aria-label="Threads"] button, [role="tablist"][aria-label="Project"] [role="tab"][aria-selected="false"]']] as const) {
         await page.goto(bridge.url + chat);
         await page.locator("textarea").first().waitFor({ timeout: 15_000 });
         // Wait for the fleet to be finishing, so a phone that raises a toast has one up.
@@ -165,7 +166,8 @@ async function run(): Promise<void> {
         if (name === "back") await shoot(page, "phone-chat-while-agents-finish");
         const hit = await tap(page, selector);
         await page.waitForTimeout(1200);
-        const landed = new URL(page.url()).pathname;
+        // A tab of the thread's band switches in place, and since 1.23.0 it says so in the query.
+        const landed = new URL(page.url()).pathname + new URL(page.url()).search;
         taps.push({ name, toastUp: toasts > 0, touched: hit, landed, firstTry: landed !== chat && hit !== "notification" });
       }
       out.phoneTaps = taps;
