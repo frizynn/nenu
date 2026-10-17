@@ -22,7 +22,7 @@ export interface AskEntry {
   /** Its answer, or why it does not close; `decision` for a decision line. */
   detail: string;
   links: AskLink[];
-  /** Its line in the coordinator's STATUS.md, which `asks answer` names; 0 for a decision line, which is not answered there. */
+  /** Its line in the coordinator's STATUS.md, which `asks answer` names; 0 where Organizations gave none. */
   line: number;
   /** Organizations takes an answer on it. */
   answerable: boolean;
@@ -47,11 +47,13 @@ export function askSections(list: AsksList, projects: readonly ProjectView[], fi
   });
   const decisions = list.decisions.flatMap((decision, index): AskEntry[] => {
     const project = bySlug.get(decision.project);
-    return project && matches(filter, decision) ? [{ key: `decision:${decision.project}:${decision.coordinator.id}:${index}`, group: "waiting", project,
-      coordinator: decision.coordinator, text: decision.text, detail: "decision", links: [], line: 0, answerable: false }] : [];
+    return project && matches(filter, decision) ? [{ key: `decision:${decision.project}:${decision.coordinator.id}:${decision.line}:${index}`,
+      group: decision.group ?? "waiting", project, coordinator: decision.coordinator, text: decision.text, detail: "decision",
+      links: decision.links ?? [], line: decision.line ?? 0, answerable: decision.answerable === true, ...(decision.answeredAt ? { answeredAt: decision.answeredAt } : {}) }] : [];
   });
+  // A decision follows the asks of its group, as the popup lists them.
   return ORDER.flatMap((group) => {
-    const entries = [...asks.filter((entry) => entry.group === group), ...(group === "waiting" ? decisions : [])];
+    const entries = [...asks.filter((entry) => entry.group === group), ...decisions.filter((entry) => entry.group === group)];
     return entries.length ? [{ group, label: ASK_GROUP_LABEL[group], entries }] : [];
   });
 }
@@ -139,7 +141,8 @@ export function coordinatorAsks(list: AsksList | null, project: string, coordina
   const mine = (item: { project: string; coordinator: AskCoordinator }) => item.project === project && item.coordinator.id === coordinator;
   const rows = list.asks.filter(mine);
   return {
-    waiting: [...list.decisions.filter(mine).map((decision: AskDecision) => decision.text), ...rows.filter((row) => row.group === "waiting").map(said)],
+    waiting: [...list.decisions.filter((decision) => mine(decision) && decision.group !== "progress").map((decision: AskDecision) => decision.text),
+      ...rows.filter((row) => row.group === "waiting").map(said)],
     asks: rows.filter((row) => row.group !== "waiting"),
   };
 }
