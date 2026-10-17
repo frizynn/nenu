@@ -8,7 +8,8 @@ import type { OrgSeed } from "./scenario.ts";
 
 // What loading draws, on a phone and a desk, with the reads slowed to what a real host takes: a
 // project page while its coordinator's STATUS.md arrives (layout shift on the way in and on the way
-// back), a chat opened again after a few seconds (frames that show the skeleton, frames to its text),
+// back), a chat opened again after a few seconds (frames that show the skeleton, frames to its text;
+// then on a slow link, where it must say it is updating),
 // and a direct load (which boot screens follow each other before the page). Chrome, for the
 // Layout Instability API.
 //
@@ -118,7 +119,7 @@ async function main(): Promise<void> {
     }
 
     browser = await launchChrome();
-    const open = async (device: Record<string, unknown>, slow: { snapshot?: number } = {}) => {
+    const open = async (device: Record<string, unknown>, slow: { snapshot?: number; history?: number } = {}) => {
       const context = await browser!.newContext({ ...device, timezoneId: "UTC", locale: "en-US" }) as Awaited<ReturnType<Browser["newContext"]>> & {
         addInitScript(fn: () => void): Promise<void>;
         route(url: string, handler: (route: { request(): { method(): string; url(): string }; continue(): Promise<void> }) => Promise<void>): Promise<void>;
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
       // The reads a real host is slow at: Organizations' summary and the journal. The snapshot only on a cold boot.
       await context.route("**/api/**", async (route) => {
         const { pathname } = new URL(route.request().url());
-        const wait = pathname.startsWith("/api/org/summary") || /\/history$/.test(pathname) ? delay
+        const wait = /\/history$/.test(pathname) ? slow.history ?? delay : pathname.startsWith("/api/org/summary") ? delay
           : pathname === "/api/snapshot" ? slow.snapshot ?? 0 : 0;
         if (wait) await Bun.sleep(wait);
         await route.continue().catch(() => {});
@@ -175,7 +176,8 @@ async function main(): Promise<void> {
       }
       // A chat: opened, left for Home, opened again.
       {
-        const { page, context } = await open(device);
+        const slow: { history?: number } = {};
+        const { page, context } = await open(device, slow);
         const chat = "/pane/w1%3Aidle";
         await page.goto(bridge.url + "/");
         await page.waitForTimeout(1500);
@@ -198,6 +200,20 @@ async function main(): Promise<void> {
         results[`chat-again-${name}`] = again;
         if (skeletonMs > 0) failures.push(`chat-again-${name}: skeleton for ${skeletonMs} ms`);
         if (!again.firstFrameHasText) failures.push(`chat-again-${name}: the first frame has no text`);
+        // Opened again on a slow link: the remembered conversation says it is updating until its read lands.
+        await page.evaluate(() => history.back(), null);
+        await page.waitForTimeout(1500);
+        slow.history = 2500;
+        await tapLink(page, chat);
+        await page.waitForTimeout(900);
+        const marked = await page.evaluate(() => Array.from(document.querySelectorAll("[role='status']")).filter((el) => el.textContent === "Updating…")
+          .map((el) => { const box = el.getBoundingClientRect(); return { top: Math.round(box.top), height: Math.round(box.height), visible: box.height > 0 && getComputedStyle(el).visibility !== "hidden" }; }), null) as Array<{ top: number; height: number; visible: boolean }>;
+        await shoot(page, `chat-slow-${name}`);
+        await page.waitForTimeout(2500);
+        const cleared = await page.getByText("Updating…").count();
+        results[`chat-slow-${name}`] = { markedAt900ms: marked.some((m) => m.visible), mark: marked, clearedAfterRead: cleared === 0 };
+        if (!marked.some((m) => m.visible)) failures.push(`chat-slow-${name}: no Updating mark while the read is slow`);
+        if (cleared) failures.push(`chat-slow-${name}: the mark stayed after the read`);
         await context.close();
       }
       // A direct load, the snapshot slowed so each boot screen is seen.
