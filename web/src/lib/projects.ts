@@ -1,6 +1,7 @@
 // Pure view-model helpers for the project hub: what a project's status reads as, which project a
 // pane belongs to, and how chats are grouped by recency. Kept free of React so the sidebar, the
 // home list and the project panel share one definition and the rules stay unit-testable.
+import { organizes, orgTree } from "./org-tree";
 import type { AgentView, ProjectThreadView, ProjectView } from "./types";
 
 export const isOpenThread = (thread: ProjectThreadView) => thread.status !== "resolved";
@@ -47,6 +48,14 @@ export function runningCoordinator(project: ProjectView): ProjectView["coordinat
 export function liveCoordinator(project: ProjectView | undefined, panes: readonly AgentView[]): string | undefined {
   const paneId = project?.coordinator?.paneId;
   return paneId && panes.some((pane) => pane.paneId === paneId) ? paneId : undefined;
+}
+
+/**
+ * The chat a project's page opens on: its own coordinator's while it runs, unless the project organizes
+ * coordinators and is their page (ADR 0092). Whatever goes up to the project lands there.
+ */
+export function projectChat(project: ProjectView | undefined, panes: readonly AgentView[]): string | undefined {
+  return project && !organizes(orgTree(project.threads)) ? liveCoordinator(project, panes) : undefined;
 }
 
 /** Chats are the agent panes outside any project; a project's panes live in its task list. */

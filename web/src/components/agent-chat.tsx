@@ -81,7 +81,7 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { projectForPane } from "@/lib/projects";
+import { projectChat, projectForPane } from "@/lib/projects";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
@@ -98,15 +98,19 @@ const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg 
 
 /**
  * Where a project thread's back leads, one level up as its node page's does: the coordinator it runs
- * under (its chat while that runs, else its page), else its project. The project's own coordinator
- * has none: the project opens on it, so its back stays Home.
+ * under (its chat while that runs, else its page), else its project, named by the chat the project
+ * opens on so the back can step back to it. The project's own coordinator has none: the project opens
+ * on it, so its back stays Home.
  */
 function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], session?: string): HeaderBack | undefined {
   const owner = projectForPane(projects, paneId);
   if (!owner?.thread) return undefined;
   const { project, thread } = owner;
   const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
-  if (!parent) return { label: project.name, to: projectPath(project.slug, session) };
+  if (!parent) {
+    const chat = projectChat(project, panes);
+    return { label: project.name, to: chat ? panePath(chat, session) : projectPath(project.slug, session) };
+  }
   const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
   return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session) };
 }

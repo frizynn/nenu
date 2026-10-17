@@ -1180,8 +1180,13 @@ describe("AgentChat — a project thread's back", () => {
     expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
   });
 
-  it("leads a thread of the project itself back to the project", () => {
+  it("leads a thread of the project itself back to the chat the project opens on, its coordinator's while it runs", () => {
     renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
+    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/pane/w1%3Ap2");
+  });
+
+  it("leads a thread of the project itself back to the project's page while its coordinator is stopped", () => {
+    renderChat({ agents: [fixtureAgents[0]!], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
     expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
   });
 
