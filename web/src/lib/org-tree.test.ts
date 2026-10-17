@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, historyCount, nodeState, orgTree, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -22,6 +22,30 @@ describe("nodeState", () => {
     expect(nodeState(node("a", "root", { status: "starting" }))).toBe("working");
     // A live status reported for a node with no pane is not evidence of anything.
     expect(nodeState(node("a", "root", { liveStatus: "working" }))).toBe("idle");
+  });
+});
+
+describe("a coordinator's state", () => {
+  const coordinator = (extra: Partial<ProjectThreadView>) => node("c", "root", { role: "coordinator", ...extra });
+  it("never reads as ready for review: it works, needs you, or is idle", () => {
+    // Organizations groups a coordinator whose report has a verdict as ready for review.
+    expect(nodeState(coordinator({ group: "ready-for-review", verdict: "done" }))).toBe("idle");
+    // Herdr's `done` is a turn that ended: the coordinator waits at its prompt.
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "done", group: "ready-for-review" }))).toBe("idle");
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "working", group: "ready-for-review" }))).toBe("working");
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "blocked", group: "idle" }))).toBe("needs");
+    expect(nodeState(coordinator({ group: "waiting-on-you" }))).toBe("needs");
+    expect(nodeState(coordinator({ status: "failed" }))).toBe("needs");
+    expect(nodeState(coordinator({ group: "working" }))).toBe("working");
+    expect(nodeState(coordinator({ status: "starting" }))).toBe("working");
+    expect(nodeState(coordinator({ status: "resolved", group: "resolved" }))).toBe("resolved");
+    // A thread keeps Organizations' reading.
+    expect(nodeState(node("t", "root", { group: "ready-for-review" }))).toBe("review");
+  });
+
+  it("reads the project's own coordinator the same way", () => {
+    expect([coordinatorState("done"), coordinatorState("working"), coordinatorState("blocked"), coordinatorState("idle"), coordinatorState("unknown")])
+      .toEqual(["idle", "working", "needs", "idle", undefined]);
   });
 });
 
@@ -94,4 +118,35 @@ it("refuses to close a coordinator that still runs open nodes, and says how many
   ]).open;
   expect(closeRefusal(lead!)).toBe("Lead still has 2 open under it.");
   expect(closeRefusal(solo!)).toBeUndefined();
+});
+
+describe("a project's coordinators", () => {
+  // Lead runs Docs and Checkout, which runs Pay; Old is resolved; Hotfix sits at the top level.
+  const tree = orgTree([
+    node("lead", "root", { role: "coordinator" }),
+    node("docs", "lead", { group: "waiting-on-you" }),
+    node("checkout", "lead", { role: "coordinator" }),
+    node("pay", "checkout"),
+    node("old", "root", { role: "coordinator", status: "resolved" }),
+    node("hotfix", "root"),
+  ]);
+  const find = (id: string) => flatten(tree.open).find((n) => n.thread.id === id)!;
+
+  it("lists every open coordinator in the tree's order, with how deep it sits", () => {
+    expect(openCoordinators(tree).map(({ node: n, depth }) => [n.thread.id, depth])).toEqual([["lead", 0], ["checkout", 1]]);
+  });
+
+  it("moves a node only to the top level or a coordinator outside it and other than its parent", () => {
+    const ids = (n: OrgNode) => { const t = moveTargets(tree, n); return [t.root, t.coordinators.map(({ node: c }) => c.thread.id)]; };
+    expect(ids(find("docs"))).toEqual([true, ["checkout"]]);
+    expect(ids(find("pay"))).toEqual([true, ["lead"]]);
+    expect(ids(find("hotfix"))).toEqual([false, ["lead", "checkout"]]);
+    // Its own coordinator under it is no place for a coordinator.
+    expect(ids(find("lead"))).toEqual([false, []]);
+  });
+
+  it("counts the open work under a node and how much of it needs you", () => {
+    expect(openUnder(find("lead"))).toEqual({ open: 3, needs: 1 });
+    expect(openUnder(find("hotfix"))).toEqual({ open: 0, needs: 0 });
+  });
 });

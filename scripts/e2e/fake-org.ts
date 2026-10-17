@@ -24,8 +24,14 @@ interface FakeProject {
  */
 interface FakeState {
   profiles: string[];
+  /** `false` is an Organizations without `node move`. */
+  moves?: boolean;
+  /** `false` is an Organizations without `asks answer`. */
+  answers?: boolean;
   /** `asks --json`'s rows; without them the fake answers `asks` as an Organizations that predates it. */
   asks?: Array<{ project: string; [key: string]: unknown }>;
+  /** `asks --json`'s decision rows, from the Organizations that answers them; left out without any. */
+  decisions?: Array<{ project: string; [key: string]: unknown }>;
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   choices?: boolean;
   projects: FakeProject[];
@@ -74,13 +80,47 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
   if (flags.profile && !state.profiles.includes(flags.profile)) fail(`there is no profile \`${flags.profile}\``);
   const next = Math.max(0, ...state.projects.flatMap((p) => p.threads).map((t) => Number(t.id.slice(2)))) + 1;
   const id = `t-${String(next).padStart(4, "0")}`;
+  // `start_pane` stands for the tab Organizations opens: the new node runs in that pane of the FakeHerdr.
+  const pane = (project.start_pane ?? { workspace_id: "", tab_id: "", pane_id: "" }) as { workspace_id: string; tab_id: string; pane_id: string };
   project.threads.push({
-    id, title: flags.title, parent_id: parent, role, status: "starting", group: "working", group_label: "Working", note: "starting",
-    branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: new Date().toISOString(), report_unacked: false,
-    auto_fix_ci: false, auto_merge: false, pr: null,
+    id, title: flags.title, parent_id: parent, role, status: pane.pane_id ? "open" : "starting", group: "working", group_label: "Working", note: pane.pane_id ? "" : "starting",
+    branch: "", ...pane, cwd: "", updated: new Date().toISOString(), report_unacked: false,
+    auto_fix_ci: false, auto_merge: false, pr: null, can_spawn: role === "coordinator" && "can-spawn" in flags,
   });
+  delete project.start_pane;
   writeFileSync(file!, JSON.stringify(state, null, 2));
-  console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: "" }));
+  console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: pane.pane_id }));
+}
+
+/**
+ * `asks answer`, as Organizations does it: the answer goes to the coordinator, and the line keeps what
+ * the coordinator wrote, state included, with `answered_at` until the coordinator changes it.
+ */
+function answer(slug: string, coordinator: string, line: number, text: string): void {
+  const row = [...state.asks!, ...(state.decisions ?? [])]
+    .find((candidate) => candidate.project === slug && (candidate.coordinator as { id: string }).id === coordinator && candidate.line === line)
+    ?? fail(`line ${line} is not an ask or decision of ${coordinator}`);
+  if (!text) fail("the answer is empty");
+  if (!(row.actions as string[] | undefined)?.includes("answer")) fail(`${coordinator} takes no answer`);
+  row.answered_at = new Date().toISOString();
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+  console.log(JSON.stringify({ schema_version: 1, project: slug, coordinator, line, answered_at: new Date().toISOString() }));
+}
+
+/** `node move`: the node, with everything under it, under the project root or an open coordinator not under it. */
+function move(slug: string, id: string, parent: string): void {
+  const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
+  const node = project.threads.find((thread) => thread.id === id) ?? fail(`no node ${id}`);
+  if (parent !== "root") {
+    const target = project.threads.find((thread) => thread.id === parent) ?? fail(`no node ${parent}`);
+    if (target.role !== "coordinator" || target.status === "resolved") fail(`node \`${parent}\` cannot take children`);
+    for (let at: FakeThread | undefined = target; at; at = project.threads.find((thread) => thread.id === at!.parent_id)) {
+      if (at.id === id) fail(`moving ${id} under ${parent} would make a cycle`);
+    }
+  }
+  node.parent_id = parent;
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+  console.log(JSON.stringify({ schema_version: 1, id, parent_id: parent }));
 }
 
 /** `node resolve --close-view`: the node is resolved; its agent and view would stop. */
@@ -100,12 +140,19 @@ function newer(slug: string | undefined, field: "tasks" | "detail" | "routines" 
 }
 
 const [command, sub] = argv;
-const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") ? 2 : 1));
+const twoWords = ["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") || (command === "asks" && sub === "answer");
+const { flags, positionals } = parse(argv.slice(twoWords ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
+} else if (command === "asks" && sub === "answer") {
+  if (state.answers === false || !state.asks) fail("unrecognized subcommand 'answer'");
+  if ("help" in flags) console.log("Usage: herdr-organizations asks answer <SLUG> <COORDINATOR> --line <N> --text-file <FILE>");
+  else answer(positionals[0]!, positionals[1]!, Number(flags.line), readFileSync(0, "utf8").trim());
 } else if (command === "asks" && "json" in flags) {
   if (!state.asks) fail("unrecognized subcommand 'asks'");
-  console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter((row) => !flags.project || row.project === flags.project) }));
+  const mine = (row: { project: string }) => !flags.project || row.project === flags.project;
+  const decisions = (state.decisions ?? []).filter(mine);
+  console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter(mine), ...(decisions.length ? { decisions } : {}) }));
 } else if (command === "profile" && sub === "list" && "names" in flags) {
   console.log(state.profiles.join("\n"));
 } else if (command === "profile" && sub === "list" && "json" in flags) {
@@ -120,6 +167,10 @@ if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, coordinator: role, thread: { ...role, last: null } }));
 } else if (command === "node" && sub === "start") {
   start(positionals[0]!, flags, flags.role === "coordinator" ? "coordinator" : "worker", flags.parent || "root");
+} else if (command === "node" && sub === "move") {
+  if (state.moves === false) fail("unrecognized subcommand 'move'");
+  if ("help" in flags) console.log("Usage: herdr-organizations node move <SLUG> <ID> --parent <PARENT>");
+  else move(positionals[0]!, positionals[1]!, flags.parent ?? fail("--parent is required"));
 } else if (command === "node" && sub === "resolve") {
   resolve(positionals[0]!, positionals[1]!);
 } else if (command === "coordinator" && sub === "replace") {

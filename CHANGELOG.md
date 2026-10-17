@@ -8,14 +8,66 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.18.1] - 2026-10-17
+## [1.22.0] - 2026-10-17
+
+### Added
+
+- "N updates" on Recents and on the desk's chats puts the rows in order on a tap (8973e065).
+- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search, rows that move while quiet and how long an off-screen ask takes to show (de51bf50, 53943310).
 
 ### Fixed
 
-- A phone raises no toast when an agent finishes, only when one asks; the finish is New on its Home row (ADR 0094) (1b330e5d).
-- Escape closes the phone's Search sheet, after clearing a typed query (beec331c).
-- Recents and the desk's chats keep their order while on screen and reorder when you come back (a3291bd6).
-- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search and rows that move while quiet (de51bf50).
+- A phone raises no toast when an agent finishes, only when one asks; the finish is New on its row (ADR 0094) (1b330e5d).
+- Recents and the desk's chats keep their order while on screen: a row that finishes stays put with its New or +1, and reorders on a return to the page (a3291bd6, 8973e065, 8dfd31af).
+- On a desk, a chat that asks for you past More still shows, after the rows on screen (8973e065).
+- Escape on the phone's Search sheet clears a typed query and keeps the box, then closes the sheet (beec331c, f0d582f7).
+
+## [1.21.1] - 2026-10-17
+
+### Fixed
+
+- A coordinator reads as working, needs you or idle, never "Ready for review", on the project page, +, its page and for the project's own (c97249ae).
+
+## [1.21.0] - 2026-10-17
+
+### Added
+
+- A decision waiting on you has its links as chips and Answer on its own line, where Organizations prints decision rows; answered, it waits on no one (ADR 0093) (fdd9dd55, 13bad973).
+- `bun scripts/e2e/asks-answer.ts` answers a decision too (97e68ace).
+
+## [1.20.0] - 2026-10-17
+
+### Added
+
+- Your asks narrows by project and coordinator, kept in its address; a coordinator's card lists its own the same way (ADR 0093) (33de679f, 4a7f3382).
+- Answer on an ask that waits on you, through `asks answer` where Organizations takes one; answered, it waits on no one (9fd50c9b, 33de679f, 92dadefa).
+- `bun scripts/e2e/asks-answer.ts [--before]` captures Your asks and a card at 390 and 1440 px (334de240).
+
+### Changed
+
+- An ask's links read as short chips with their state, not raw text (33de679f).
+
+### Fixed
+
+- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b, 92dadefa).
+
+## [1.19.0] - 2026-10-17
+
+### Added
+
+- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383, e6c8f5d8).
+- A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
+- Move to…: an open node goes under another coordinator where Organizations offers `node move` for it (a026e2fb, 9b2d5632, a0526cf3).
+- `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).
+
+### Changed
+
+- A coordinator started from Nenu names `--can-spawn --kind=tab` instead of leaning on defaults (a026e2fb).
+- New's Thread row moves into each project's step (d81fde80).
+
+### Fixed
+
+- A task row's age no longer shows through its actions (7792d023).
 
 ## [1.18.0] - 2026-10-16
 

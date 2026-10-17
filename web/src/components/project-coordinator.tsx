@@ -3,16 +3,22 @@ import { Play, RefreshCw } from "@/components/ui/icon";
 
 import { errorMessage } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
+import type { Organize } from "@/components/project-tasks";
 import { openOrgProject, replaceOrgCoordinator, type CoordinatorChoice } from "@/lib/api";
-import { liveState } from "@/lib/org-tree";
+import { coordinatorState } from "@/lib/org-tree";
+import { runningCoordinator } from "@/lib/projects";
 import { setStatus } from "@/lib/status";
 import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
 
 // Drawn only when Start or Replace is tapped, so it stays out of the first load.
 const CoordinatorWindow = lazy(() => import("@/components/coordinator-window").then((module) => ({ default: module.CoordinatorWindow })));
 
-/** The project's own coordinator: its row, which can replace it with another agent, or a way to start it. */
-export function ProjectCoordinator({ project, panes, session, current, readOnly, onOpenPane, onChanged }: {
+/**
+ * The project's own coordinator: its row, which can replace it with another agent, or a way to start
+ * it. On a project that organizes coordinators (`organize`) it is the first of them, folded over its
+ * card, and only while it runs: Start is then a small action beside New (StartProjectCoordinator).
+ */
+export function ProjectCoordinator({ project, panes, session, current, readOnly, onOpenPane, onChanged, organize }: {
   project: ProjectView;
   panes: readonly AgentView[];
   session?: string;
@@ -20,22 +26,26 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   readOnly: boolean;
   onOpenPane: (paneId: string) => void;
   onChanged: () => Promise<void> | void;
+  organize?: Organize;
 }) {
   const [replacing, setReplacing] = useState(false);
-  const coordinator = project.coordinator;
-  // Organizations records the coordinator's pane before its agent runs, and keeps it once the agent
-  // quits back to the shell: a pane with no agent in it is no running coordinator.
-  if (!coordinator || coordinator.agent === "shell") return <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
+  const [open, setOpen] = useState(false);
+  const coordinator = runningCoordinator(project);
+  if (!coordinator) return organize ? null : <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
   const doing = panes.find((pane) => pane.paneId === coordinator.paneId)?.terminalTitle ?? STATUS_LABEL[coordinator.liveStatus];
   const here = current === coordinator.paneId;
   // Upstream herdr-projects has no `coordinator replace`.
   const replaceable = !readOnly && project.nodeActions !== false;
+  const row = <TaskRow state={coordinatorState(coordinator.liveStatus) ?? "idle"} title={organize ? "Project coordinator" : "Coordinator"}
+    detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
+    current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat" fold={organize ? { open, onToggle: () => setOpen(!open) } : undefined}
+    actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined}>
+    {organize && open && <div className="task-branch task-fold-body" role="group" aria-label="Inside Project coordinator">{organize.card("root")}</div>}
+  </TaskRow>;
   return <>
-    <ul className="task-list mb-2">
-      <TaskRow state={liveState(coordinator.liveStatus) ?? "idle"} title="Coordinator" detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
-        current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat"
-        actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined} />
-    </ul>
+    {organize
+      ? <section aria-label="Project coordinator" className="mb-1"><ul className="task-list">{row}</ul></section>
+      : <ul className="task-list mb-2">{row}</ul>}
     {replacing && <ReplaceCoordinator project={project} agent={coordinator.agent} session={session}
       onReplaced={() => { setReplacing(false); void onChanged(); }} onCancel={() => setReplacing(false)} />}
   </>;
@@ -72,17 +82,29 @@ function ReplaceCoordinator({ project, agent, session, onReplaced, onCancel }: {
   </Suspense>;
 }
 
+/** Start the project coordinator, as one small action among New thread and New coordinator. Nothing while it runs. */
+export function StartProjectCoordinator({ project, session, onStarted }: {
+  project: ProjectView;
+  session?: string;
+  onStarted: () => Promise<void> | void;
+}) {
+  if (runningCoordinator(project) || project.status === "paused" || project.nodeActions === false) return null;
+  return <CoordinatorStart project={project} session={session} readOnly={false} onStarted={onStarted} compact />;
+}
+
 /**
  * The project coordinator, not running: Start asks what it runs on, then runs Organizations' `open`,
  * and the button says it is starting until the page becomes its chat. That holds while Organizations
  * has recorded the pane but no agent runs in it yet; it ends with the chat, an error, or a line from
  * Organizations (an agent waiting on a dialog).
  */
-function CoordinatorStart({ project, session, readOnly, onStarted }: {
+function CoordinatorStart({ project, session, readOnly, onStarted, compact = false }: {
   project: ProjectView;
   session?: string;
   readOnly: boolean;
   onStarted: () => Promise<void> | void;
+  /** One quiet action instead of the section that stands in for the coordinator's row. */
+  compact?: boolean;
 }) {
   const [choosing, setChoosing] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -106,6 +128,20 @@ function CoordinatorStart({ project, session, readOnly, onStarted }: {
     }
   }
 
+  const chooser = choosing && <Suspense fallback={null}>
+    <CoordinatorWindow project={project.slug} session={session} mode="start" onSubmit={(choice) => void start(choice)} onClose={() => setChoosing(false)} />
+  </Suspense>;
+  const said = <>
+    {outcome?.error && <p role="alert" className="mt-2 text-sm text-destructive">{outcome.text}</p>}
+    {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-xs text-muted-foreground">{outcome.text}</p>}
+  </>;
+  if (compact) return <>
+    <button type="button" className="quiet-action" aria-haspopup="dialog" disabled={starting} onClick={() => setChoosing(true)}>
+      <Play aria-hidden className="size-4" />{starting ? "Starting project coordinator…" : "Start project coordinator"}
+    </button>
+    {outcome && <div className="basis-full">{said}</div>}
+    {chooser}
+  </>;
   return (
     <section aria-label="Project coordinator" className="mb-3 rounded-xl border border-border bg-card/40 px-3.5 py-2.5">
       <div className="flex min-h-9 items-center gap-2.5">
@@ -121,11 +157,8 @@ function CoordinatorStart({ project, session, readOnly, onStarted }: {
           </button>
         )}
       </div>
-      {outcome?.error && <p role="alert" className="mt-2 text-sm text-destructive">{outcome.text}</p>}
-      {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-xs text-muted-foreground">{outcome.text}</p>}
-      {choosing && <Suspense fallback={null}>
-        <CoordinatorWindow project={project.slug} session={session} mode="start" onSubmit={(choice) => void start(choice)} onClose={() => setChoosing(false)} />
-      </Suspense>}
+      {said}
+      {chooser}
     </section>
   );
 }

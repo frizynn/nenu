@@ -26,7 +26,7 @@ export function useAsks(projects: readonly ProjectView[] | undefined): Read {
     if (!enabled) return;
     const controller = new AbortController();
     fetchOrgAsks(controller.signal).then(
-      ({ asks, decisions }) => setRead({ list: { asks, decisions }, loaded: true, failed: null }),
+      ({ asks, decisions, answers }) => setRead({ list: { asks, decisions, answers }, loaded: true, failed: null }),
       (failure: unknown) => { if (!controller.signal.aborted) setRead((current) => ({ ...current, loaded: true, failed: errorMessage(failure) })); },
     );
     return () => controller.abort();

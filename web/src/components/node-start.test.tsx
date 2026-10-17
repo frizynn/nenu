@@ -110,7 +110,7 @@ it("opens the one New flow on the project's thread, a Back away from everything 
   expect(screen.getByLabelText("Project")).toHaveValue("nenu");
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("dialog", { name: "New" })).toBeInTheDocument();
-  expect(within(screen.getByRole("navigation", { name: "Create" })).getByRole("button", { name: /^Thread/ })).toBeInTheDocument();
+  expect(within(screen.getByRole("navigation", { name: "Create" })).getByRole("button", { name: /^Nenu/ })).toBeInTheDocument();
 });
 
 it("starts a thread from a template, which carries its own profile", async () => {

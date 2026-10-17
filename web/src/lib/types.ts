@@ -202,6 +202,8 @@ export interface ProjectThreadView {
   autoMerge?: boolean;
   /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
   prAction?: PrAction;
+  /** Organizations has another parent for it (`node move`): its `actions` lists `move`. Absent otherwise. */
+  movable?: true;
   /** The `Status:` line of the agent's last report; absent without one. */
   verdict?: ThreadVerdict;
   /** When a coordinator's STATUS.md last changed; its text comes with the summaries. */
@@ -234,13 +236,28 @@ export type AskState = "open" | "working" | "needs-decision" | "answered" | "don
 export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
 export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
 /** One line under a coordinator's `## Asked`. Its text and answer are the operator's and the coordinator's words: draw them as text. */
-export interface OrgAsk { line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string }
+export interface OrgAsk {
+  line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string;
+  /** RFC 3339, once the person answered this line, until the coordinator changes it. */
+  answeredAt?: string;
+  /** Organizations takes an answer on this row. */
+  answerable?: true;
+}
 export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
 export interface AskCoordinator { id: string; title: string }
 export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
-export interface AskDecision { project: string; coordinator: AskCoordinator; text: string }
+/**
+ * A decision line: `line` 0 and no links when Organizations gave only its text; waiting until answered,
+ * in progress after. `line`, `links` and `group` are absent from a bridge that predates decision rows,
+ * which a rebuilt page can meet until the bridge restarts: it then reads as text that waits on you.
+ */
+export interface AskDecision {
+  project: string; coordinator: AskCoordinator; text: string; line?: number; links?: AskLink[];
+  group?: "waiting" | "progress"; answeredAt?: string; answerable?: true;
+}
 /** `asks` is null when this Organizations cannot list asks. */
-export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[] }
+/** `answers` is whether this Organizations can answer an ask (`asks answer`); absent from an older bridge. */
+export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[]; answers?: boolean }
 export interface TokenUsage {
   input: number; output: number; cacheRead: number; cacheWrite: number;
   context: number; peakContext: number; compactions: number; updated: string; overCap: string[];
@@ -344,6 +361,8 @@ export interface ProjectView {
   prActions?: boolean;
   /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
   nodeActions?: boolean;
+  /** Organizations can hang a node under another parent (`node move`); absent or false hides Move. */
+  nodeMoves?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
   /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */

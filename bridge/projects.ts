@@ -3,12 +3,12 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
-import { askGroup, readAsks, type OrgAskRow } from "./org-asks.ts";
+import { askGroup, decisionGroup, readAsks, type OrgAskRow, type OrgDecisionRow } from "./org-asks.ts";
 import type { OrgStatusFile } from "./org-report.ts";
-import type { AsksList, StatusFile, TokenUsage } from "./org-types.ts";
+import type { AskDecision, AsksList, StatusFile, TokenUsage } from "./org-types.ts";
 import { PR_ASKS, type AgentView, type LivePublisher, type PrAction, type ProjectThreadView, type ProjectView, type ThreadPullRequest, type ThreadSummary, type WorkspaceView } from "./types.ts";
 
 /** How often a snapshot read re-stats the registry when no watcher fired (the watcher's safety net). */
@@ -16,6 +16,12 @@ const STAT_MS = 2_000;
 /** The fewest milliseconds between two `overview --json` spawns; a forced refresh skips it. */
 const MIN_REFRESH_MS = 5_000;
 const WATCH_DEBOUNCE_MS = 250;
+/** How long an Organizations without a command (`node move`, `asks answer`) is believed before it is asked again: an upgrade adds it. */
+const PROBE_MS = 10 * 60_000;
+/** The commands Nenu offers only where Organizations has them. */
+const PROBED = { move: ["node", "move"], answer: ["asks", "answer"] } as const;
+type Probed = keyof typeof PROBED;
+interface Probe { value: boolean; at: number; asking?: Promise<boolean> }
 const MAX_PROJECTS = 100;
 const MAX_THREADS = 500;
 const MAX_METADATA_BYTES = 64 * 1024;
@@ -57,6 +63,8 @@ export interface OrgProjectView extends ProjectView {
   prActions: boolean;
   /** Organizations can start coordinators and nest nodes (`node start`); upstream herdr-projects cannot. */
   nodeActions: boolean;
+  /** Organizations can hang a node under another parent (`node move`). */
+  nodeMoves: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds: string[];
   threads: OrgThreadView[];
@@ -293,6 +301,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),
     ...(prAction ? { prAction } : {}),
+    ...(record.actions?.includes("move") ? { movable: true as const } : {}),
     ...(record.verdict ? { verdict: record.verdict } : {}),
     ...(record.status_file ? { statusUpdated: record.status_file.updated } : {}),
     ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
@@ -348,6 +357,9 @@ interface FileProject extends Picks {
   threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary }>;
 }
 
+/** What the last `asks --json` read: every coordinator's asks, and its decision rows where Organizations prints them. */
+interface AsksRead { asks: OrgAskRow[]; decisions?: OrgDecisionRow[] }
+
 interface ProjectRecord extends FileProject {
   source: "json" | "files";
   prActions: boolean;
@@ -370,8 +382,12 @@ export class ProjectRegistry {
   private readonly upstream: () => boolean;
   private records: ProjectRecord[] = [];
   /** Every coordinator's asks as the last refresh read them; undefined when this Organizations has none to give. */
-  private askRows: OrgAskRow[] | undefined;
+  private askRead: AsksRead | undefined;
   private nodeActions = true;
+  private nodeMoves = false;
+  private askAnswers = false;
+  /** What each probed command's help last said, when it was asked, and the question in flight. */
+  private probes: Record<Probed, Probe> = { move: { value: false, at: -Infinity }, answer: { value: false, at: -Infinity } };
   private loaded = false;
   private stamp = "";
   private nextStat = 0;
@@ -433,6 +449,7 @@ export class ProjectRegistry {
           source: record.source,
           prActions: record.prActions,
           nodeActions: this.nodeActions,
+          nodeMoves: this.nodeMoves,
           workspaceIds: [...workspaceIds],
         };
       });
@@ -477,14 +494,15 @@ export class ProjectRegistry {
    */
   asks(): AsksList | null {
     this.read();
-    if (!this.askRows) return null;
+    if (!this.askRead) return null;
     const records = new Map(this.records.map((record) => [record.slug, record]));
     return {
-      asks: this.askRows.flatMap((row) => {
+      asks: this.askRead.asks.flatMap((row) => {
         const record = records.get(row.project);
         return record ? [{ ...row, group: askGroup(row, resolvedCoordinator(record, row.coordinator.id)) }] : [];
       }),
-      decisions: this.records.flatMap((record) => openDecisions(record)),
+      decisions: this.records.flatMap((record) => openDecisions(record, this.askRead!)),
+      answers: this.askAnswers,
     };
   }
 
@@ -551,22 +569,44 @@ export class ProjectRegistry {
     this.stamp = this.fingerprint();
     const files = this.readFiles();
     // A failed read of the asks keeps the last one; an Organizations without them has none.
-    const [overview, asks] = this.run
+    const [overview, asks, nodeMoves, askAnswers] = this.run
       ? await Promise.all([
         readOverview(this.run, this.root).catch(() => undefined),
-        readAsks(this.run, this.root).then((rows) => rows ?? undefined, () => this.askRows),
+        readAsks(this.run, this.root).then((read) => read ?? undefined, () => this.askRead),
+        this.has(this.run, "move"),
+        this.has(this.run, "answer"),
       ])
-      : [undefined, undefined];
-    const askRows = overview ? asks : undefined;
-    const next = overview ? this.fromJson(overview, files, askRows) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
+      : [undefined, undefined, false, false];
+    const askRead = overview ? asks : undefined;
+    const next = overview ? this.fromJson(overview, files, askRead) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
     const nodeActions = !this.upstream();
-    const changed = nodeActions !== this.nodeActions || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRows) !== JSON.stringify(this.askRows);
+    const changed = nodeActions !== this.nodeActions || nodeMoves !== this.nodeMoves || askAnswers !== this.askAnswers || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRead) !== JSON.stringify(this.askRead);
     this.records = next;
-    this.askRows = askRows;
+    this.askRead = askRead;
     this.nodeActions = nodeActions;
+    this.nodeMoves = nodeMoves;
+    this.askAnswers = askAnswers;
     this.loaded = true;
     this.rewatch();
     if (changed) for (const session of this.sessions) this.live?.publish({ session, topic: "org" });
+  }
+
+  /**
+   * A probed command's help, asked once, and again only while it said no and a while has passed. Two
+   * refreshes at once share one question, so neither reads the other's stale answer.
+   */
+  private has(run: OrgRun, command: Probed): Promise<boolean> {
+    const probe = this.probes[command];
+    if (this.upstream()) return Promise.resolve(false);
+    if (probe.asking) return probe.asking;
+    if (probe.value || this.now() - probe.at < PROBE_MS) return Promise.resolve(probe.value);
+    probe.at = this.now();
+    probe.asking = offers(run, PROBED[command]).then((value) => {
+      probe.value = value;
+      probe.asking = undefined;
+      return value;
+    });
+    return probe.asking;
   }
 
   close(): void {
@@ -724,7 +764,7 @@ export class ProjectRegistry {
     });
   }
 
-  private fromJson(projects: OrgOverviewProject[], files: FileProject[], asks: OrgAskRow[] | undefined): ProjectRecord[] {
+  private fromJson(projects: OrgOverviewProject[], files: FileProject[], asks: AsksRead | undefined): ProjectRecord[] {
     // Every thread comes from the same binary, so one carrying the flags shows the actions exist.
     const prActions = projects.some((project) => project.threads.some((thread) => typeof thread.auto_merge === "boolean"));
     return projects.flatMap((project) => {
@@ -760,16 +800,25 @@ function resolvedCoordinator(record: ProjectRecord, id: string): boolean {
   return record.threads.some(({ view }) => view.id === id && view.status === "resolved");
 }
 
-/** The `## Needs your decision` lines of a project's coordinators that still take an answer, root first. */
-function openDecisions(record: ProjectRecord): AsksList["decisions"] {
-  const root = (record.statusFile?.needsDecision ?? []).map((text) => ({ project: record.slug, coordinator: { id: "root", title: "" }, text }));
+/**
+ * The `## Needs your decision` lines of a project's coordinators that still take an answer: the rows
+ * `asks --json` prints, else the status files' lines as text, root first.
+ */
+function openDecisions(record: ProjectRecord, read: AsksRead): AskDecision[] {
+  if (read.decisions) {
+    return read.decisions.filter((row) => row.project === record.slug && !resolvedCoordinator(record, row.coordinator.id))
+      .map((row) => ({ ...row, group: decisionGroup(row) }));
+  }
+  const line = (coordinator: AskDecision["coordinator"]) => (text: string): AskDecision =>
+    ({ project: record.slug, coordinator, text, line: 0, links: [], group: "waiting" });
+  const root = (record.statusFile?.needsDecision ?? []).map(line({ id: "root", title: "" }));
   const nodes = record.threads.flatMap(({ view, summary }) => view.status === "resolved" ? [] : (summary?.status?.needsDecision ?? [])
-    .map((text) => ({ project: record.slug, coordinator: { id: view.id, title: view.title }, text })));
+    .map(line({ id: view.id, title: view.title })));
   return [...root, ...nodes];
 }
 
-/** How many of a project's asks and decisions wait on the person, as Your asks counts them. */
-function waitingAsks(record: ProjectRecord, asks: readonly OrgAskRow[]): number {
-  const waiting = asks.filter((row) => row.project === record.slug && askGroup(row, resolvedCoordinator(record, row.coordinator.id)) === "waiting");
-  return waiting.length + openDecisions(record).length;
+/** How many of a project's asks and decisions wait on the person. */
+function waitingAsks(record: ProjectRecord, read: AsksRead): number {
+  const waiting = read.asks.filter((row) => row.project === record.slug && askGroup(row, resolvedCoordinator(record, row.coordinator.id)) === "waiting");
+  return waiting.length + openDecisions(record, read).filter((decision) => decision.group === "waiting").length;
 }

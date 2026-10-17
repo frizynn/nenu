@@ -20,13 +20,28 @@ export function liveState(status: AgentStatus): OpenState | undefined {
 }
 
 /**
+ * A coordinator's state from its agent's. A coordinator has nothing to review: a turn that ended
+ * (Herdr's `done`) leaves it idle at its prompt. Undefined while Herdr cannot tell.
+ */
+export function coordinatorState(status: AgentStatus): OpenState | undefined {
+  const live = liveState(status);
+  return live === "review" ? "idle" : live;
+}
+
+/**
  * Organizations' group decides, as its popup does (landing reads as review); the live pane is the
- * fresher reading of whether an agent is working, and a failed start needs you.
+ * fresher reading of whether an agent is working, and a failed start needs you. A coordinator is the
+ * exception: it never reads as ready for review, which Organizations groups it as once its report has
+ * a verdict and Herdr's `done` would say after every turn; it works, needs you, or is idle.
  */
 export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
   if (thread.status === "failed" || live === "needs" || thread.group === "waiting-on-you") return "needs";
+  if (thread.role === "coordinator") {
+    const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
+    return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");
+  }
   const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
   if (thread.group === "ready-for-review" || thread.group === "landing" || approved || live === "review") return "review";
   if (live) return live;
@@ -136,4 +151,36 @@ export function flatten(nodes: readonly OrgNode[]): OrgNode[] {
 /** Whether a node or one under it passes `test`, e.g. holds the pane on screen. */
 export function holds(node: OrgNode, test: (node: OrgNode) => boolean): boolean {
   return test(node) || node.children.some((child) => holds(child, test));
+}
+
+export interface Placed {
+  node: OrgNode;
+  /** 0 for a node at the project's top level. */
+  depth: number;
+}
+
+/** Every open coordinator, in the tree's order, each with how deep it sits: the coordinators a project organizes. */
+export function openCoordinators(tree: OrgTree): Placed[] {
+  const walk = (nodes: readonly OrgNode[], depth: number): Placed[] =>
+    nodes.flatMap((node) => node.thread.role === "coordinator" ? [{ node, depth }, ...walk(node.children, depth + 1)] : []);
+  return walk(tree.open, 0);
+}
+
+/**
+ * Where an open node can go: the project's top level, or an open coordinator that is neither the node,
+ * one of its own, nor where it already is. Organizations judges the rest, such as a coordinator that
+ * may not start nodes.
+ */
+export function moveTargets(tree: OrgTree, node: OrgNode): { root: boolean; coordinators: Placed[] } {
+  const own = new Set(flatten([node]).map((n) => n.thread.id));
+  return {
+    root: node.thread.parentId !== "root",
+    coordinators: openCoordinators(tree).filter(({ node: target }) => !own.has(target.thread.id) && target.thread.id !== node.thread.parentId),
+  };
+}
+
+/** How much open work hangs under a node, and how much of it needs you. */
+export function openUnder(node: OrgNode): { open: number; needs: number } {
+  const under = flatten(node.children).filter((n) => n.state !== "resolved");
+  return { open: under.length, needs: under.filter((n) => n.state === "needs").length };
 }

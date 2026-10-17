@@ -328,8 +328,11 @@ export async function startNode(
   }
   // `--flag=value` keeps a title that starts with a hyphen from reading as a flag.
   const fields = [`--title=${title}`, ...(profile ? [`--profile=${profile}`] : [])];
+  // A coordinator says what it is rather than lean on Organizations' defaults: it may start nodes of its
+  // own and runs in a tab of the project's workspace, never a worktree. A template carries its own.
+  const placement = template ? [`--template=${template}`] : role === "coordinator" ? [`--role=${role}`, "--can-spawn", "--kind=tab"] : [`--role=${role}`];
   const argv = nodes
-    ? ["node", "start", project, ...(template ? [`--template=${template}`] : [`--role=${role}`]), `--parent=${parent}`, ...fields, "--task-file", "-"]
+    ? ["node", "start", project, ...placement, `--parent=${parent}`, ...fields, "--task-file", "-"]
     : ["thread", "start", project, ...fields, "--task-file", "-"];
   const result = await run(argv, { stdin: task, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
   if (result.code !== 0) throw commandError(result);
@@ -339,6 +342,71 @@ export async function startNode(
     throw new OrgCliError("herdr-organizations returned an invalid start response.");
   }
   return { id: value.id, project, title, parent, role, profile, template };
+}
+
+/**
+ * `node move`: hang a node, with everything under it, under another parent: the project root or an
+ * open coordinator. Organizations refuses a parent that may not start nodes and a move that would
+ * loop the tree; the bridge only checks the shape of each id.
+ */
+export async function moveNode(
+  run: OrgRun,
+  socketPath: string,
+  input: { project: unknown; id: unknown; parent: unknown },
+): Promise<{ id: string; project: string; parent: string }> {
+  const project = validateProjectSlug(input.project);
+  const id = validateNodeId(input.id);
+  const parent = validateParent(input.parent);
+  if (parent === id) throw new OrgValidationError("A node cannot be its own parent.");
+  const result = await run(["node", "move", project, id, `--parent=${parent}`, "--json"], { env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
+  if (result.code !== 0) throw commandError(result);
+  const value = parseJson(result.stdout, "node move");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || value.id !== id || value.parent_id !== parent) {
+    throw new OrgCliError("herdr-organizations returned an invalid move response.");
+  }
+  return { id, project, parent };
+}
+
+/** Whether this Organizations has a command (`node move`, `asks answer`): its help exits 0, and one that predates it exits non-zero. */
+export async function offers(run: OrgRun, command: readonly [string, string]): Promise<boolean> {
+  const result = await run([...command, "--help"], { timeoutMs: 10_000 }).catch(() => null);
+  return result?.code === 0;
+}
+
+/** An answer to an ask: the person's own words on one line, which Organizations writes after the ask. */
+export function validateAnswer(value: unknown): string {
+  if (typeof value !== "string") throw new OrgValidationError("The answer must be text.");
+  const answer = value.trim();
+  if (!answer) throw new OrgValidationError("Write an answer first.");
+  if (Array.from(answer).length > 2_000) throw new OrgValidationError("The answer must be 2,000 characters or fewer.");
+  if (/[\r\n]/.test(answer)) throw new OrgValidationError("The answer must be one line.");
+  return answer;
+}
+
+/**
+ * `asks answer`: write the person's answer to the ask on `line` of a coordinator's STATUS.md (`root`
+ * for the project's own) and check the document Organizations prints. The answer goes on standard
+ * input, never in the argv.
+ */
+export async function answerAsk(
+  run: OrgRun,
+  socketPath: string,
+  input: { project: unknown; coordinator: unknown; line: unknown; text: unknown },
+): Promise<{ project: string; coordinator: string; line: number; answeredAt: string }> {
+  const project = validateProjectSlug(input.project);
+  const coordinator = validateParent(input.coordinator);
+  const line = input.line;
+  if (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1) throw new OrgValidationError("The ask's line must be a line number.");
+  const text = validateAnswer(input.text);
+  const result = await run(["asks", "answer", project, coordinator, `--line=${line}`, "--text-file", "-", "--json"],
+    { stdin: text, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
+  if (result.code !== 0) throw commandError(result);
+  const value = parseJson(result.stdout, "asks answer");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || value.project !== project || value.coordinator !== coordinator || value.line !== line
+    || typeof value.answered_at !== "string") {
+    throw new OrgCliError("herdr-organizations returned an invalid answer response.");
+  }
+  return { project, coordinator, line, answeredAt: value.answered_at };
 }
 
 /**

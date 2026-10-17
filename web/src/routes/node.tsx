@@ -16,7 +16,7 @@ import { useAsks } from "@/hooks/use-asks";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { ASK, STATE_LABEL, awaits, flatten, liveState, orgTree, type OrgNode } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, coordinatorState, flatten, orgTree, type OrgNode } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
@@ -57,7 +57,7 @@ export function NodeRoute() {
     const pane = project.coordinator && live(project.coordinator.paneId) ? project.coordinator : undefined;
     // The live pane says what the agent does now; else what the ticker saw when it last looked.
     const status = pane?.liveStatus ?? (read.coordinator?.state || undefined);
-    const state = status && liveState(status);
+    const state = status && coordinatorState(status);
     const agent = [pane?.agent ?? read.coordinator?.agent, read.coordinator?.model].filter(Boolean).join(" · ");
     body = <>
       <TasksHeader title="Coordinator" paused={project.status === "paused"} subtitle={<>
@@ -69,7 +69,7 @@ export function NodeRoute() {
         {agent && <span>{agent}</span>}
       </p>}
       <CoordinatorHead project={project} coordinatorId={ROOT} status={read.status ?? undefined} usage={read.usage ?? undefined}
-        asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
+        asks={asks} summaries={summaries} session={data.session} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
       {pane && <Button type="button" size="lg" onClick={() => navigate(panePath(pane.paneId, data.session))}>
         <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
     </>;
@@ -95,7 +95,7 @@ export function NodeRoute() {
       </>} />
       {coordinator
         ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
-          asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
+          asks={asks} summaries={summaries} session={data.session} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
         : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
