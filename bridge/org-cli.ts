@@ -367,10 +367,46 @@ export async function moveNode(
   return { id, project, parent };
 }
 
-/** Whether this Organizations has `node move`: its help exits 0, and one that predates it exits non-zero. */
-export async function canMoveNodes(run: OrgRun): Promise<boolean> {
-  const result = await run(["node", "move", "--help"], { timeoutMs: 10_000 }).catch(() => null);
+/** Whether this Organizations has a command (`node move`, `asks answer`): its help exits 0, and one that predates it exits non-zero. */
+export async function offers(run: OrgRun, command: readonly [string, string]): Promise<boolean> {
+  const result = await run([...command, "--help"], { timeoutMs: 10_000 }).catch(() => null);
   return result?.code === 0;
+}
+
+/** An answer to an ask: the person's own words on one line, which Organizations writes after the ask. */
+export function validateAnswer(value: unknown): string {
+  if (typeof value !== "string") throw new OrgValidationError("The answer must be text.");
+  const answer = value.trim();
+  if (!answer) throw new OrgValidationError("Write an answer first.");
+  if (Array.from(answer).length > 2_000) throw new OrgValidationError("The answer must be 2,000 characters or fewer.");
+  if (/[\r\n]/.test(answer)) throw new OrgValidationError("The answer must be one line.");
+  return answer;
+}
+
+/**
+ * `asks answer`: write the person's answer to the ask on `line` of a coordinator's STATUS.md (`root`
+ * for the project's own) and check the document Organizations prints. The answer goes on standard
+ * input, never in the argv.
+ */
+export async function answerAsk(
+  run: OrgRun,
+  socketPath: string,
+  input: { project: unknown; coordinator: unknown; line: unknown; text: unknown },
+): Promise<{ project: string; coordinator: string; line: number; answeredAt: string }> {
+  const project = validateProjectSlug(input.project);
+  const coordinator = validateParent(input.coordinator);
+  const line = input.line;
+  if (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1) throw new OrgValidationError("The ask's line must be a line number.");
+  const text = validateAnswer(input.text);
+  const result = await run(["asks", "answer", project, coordinator, `--line=${line}`, "--text-file", "-", "--json"],
+    { stdin: text, env: { HERDR_SOCKET_PATH: socketPath }, timeoutMs: 30_000 });
+  if (result.code !== 0) throw commandError(result);
+  const value = parseJson(result.stdout, "asks answer");
+  if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || value.project !== project || value.coordinator !== coordinator || value.line !== line
+    || typeof value.answered_at !== "string") {
+    throw new OrgCliError("herdr-organizations returned an invalid answer response.");
+  }
+  return { project, coordinator, line, answeredAt: value.answered_at };
 }
 
 /**

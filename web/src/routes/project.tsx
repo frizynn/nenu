@@ -47,7 +47,7 @@ export function ProjectRoute() {
   const card = (coordinatorId: string) => project && <CoordinatorHead project={project} coordinatorId={coordinatorId} listsAgents={false}
     status={(coordinatorId === "root" ? read.status : read.summaries.get(coordinatorId)?.status) ?? undefined}
     usage={(coordinatorId === "root" ? read.usage : read.summaries.get(coordinatorId)?.usage) ?? undefined}
-    asks={asks} summaries={read.summaries} onOpenNode={openNode} onOpenStatusNode={(id) => navigate(nodePath(projectSlug, id, data.session))} />;
+    asks={asks} summaries={read.summaries} session={data.session} onOpenNode={openNode} onOpenStatusNode={(id) => navigate(nodePath(projectSlug, id, data.session))} />;
 
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
     {!project ? <ProjectMissing session={data.session} />

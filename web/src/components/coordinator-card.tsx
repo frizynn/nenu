@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
-import { Check, GitPullRequest, TriangleAlert } from "@/components/ui/icon";
+import { GitPullRequest, TriangleAlert } from "@/components/ui/icon";
 
+import { AskSections } from "@/components/ask-list";
 import { CoordinatorStatus } from "@/components/coordinator-status";
 import { NodeDot } from "@/components/node-row";
 import { prSummary } from "@/components/project-tasks";
-import { StatusDot } from "@/components/status-badge";
 import { formatContextTokens } from "@/components/workbench-context-meter";
-import { askDetail, coordinatorAsks } from "@/lib/asks";
+import { askSections, coordinatorAsks } from "@/lib/asks";
 import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { timeAgo } from "@/lib/format";
 import { flatten, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
-import type { AskGroup, AskRow, AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
+import type { AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
 
 // A coordinator's card (ADR 0091), as Herdr Organizations' popup draws one: its objective, what waits
 // on you, its other asks with what their links confirm, the agents it runs with their state and
@@ -21,27 +21,20 @@ import type { AskGroup, AskRow, AsksList, ProjectView, StatusFile, ThreadSummary
 const MOST = 5;
 const CAP_WORD: Record<string, string> = { context_warn: "context", compaction_warn: "compactions", tokens_warn: "tokens" };
 
-/** An ask's mark in its group: red waits on you, a warning does not close, yellow is in progress, a check is done. */
-export function AskMark({ group }: { group: AskGroup }) {
-  const box = "flex size-4 shrink-0 items-center justify-center";
-  if (group === "unclosed") return <span className={box}><TriangleAlert aria-hidden size={14} className="text-status-working" /></span>;
-  if (group === "done") return <span className={box}><Check aria-hidden size={14} className="text-status-done" /></span>;
-  if (group === "other") return <span className={box}><span aria-hidden className="size-1 rounded-full bg-muted-foreground" /></span>;
-  return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" className="size-2" /></span>;
-}
-
 /**
  * A coordinator's card, then its STATUS.md, decided here for every coordinator page. The card shows
  * only with something to say about this coordinator, from fields an older Organizations does not
  * print. The file starts closed only when the card already says what it says (the objective, the
  * asks, the decisions), and waits for the asks, so which read lands first never changes either.
  */
-export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, listsAgents = true }: {
+export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, listsAgents = true, session }: {
   project: ProjectView;
   /** `root` for the project's own coordinator. */
   coordinatorId: string;
   /** False where the tree beside the card already lists its agents: the project page. */
   listsAgents?: boolean;
+  /** The session an answer to one of its asks goes to. */
+  session?: string;
   status?: StatusFile;
   usage?: TokenUsage;
   asks: { list: AsksList | null; loaded: boolean };
@@ -60,15 +53,18 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   const prs = agents.filter((node) => node.thread.pr);
   return <>
     {printed && (says || usage || listed.length > 0 || prs.length > 0) &&
-      <CoordinatorCard status={status} usage={usage} mine={mine} agents={listed} prs={prs} summaries={summaries} onOpenNode={onOpenNode} />}
+      <CoordinatorCard status={status} usage={usage} agents={listed} prs={prs} summaries={summaries} onOpenNode={onOpenNode}
+        asks={asks.list && <AskSections compact whose={false} session={session} answers={asks.list.answers === true}
+          sections={askSections(asks.list, [project], { project: project.slug, coordinator: coordinatorId })} />} />}
     {status && asks.loaded && <CoordinatorStatus status={status} project={project} closed={says} onOpenNode={onOpenStatusNode} />}
   </>;
 }
 
-function CoordinatorCard({ status, usage, mine, agents, prs, summaries, onOpenNode, now = Date.now() }: {
+function CoordinatorCard({ status, usage, asks, agents, prs, summaries, onOpenNode, now = Date.now() }: {
   status?: StatusFile;
   usage?: TokenUsage;
-  mine: { waiting: string[]; asks: AskRow[] } | null;
+  /** Its asks, as Your asks draws them, narrowed to this coordinator. */
+  asks: ReactNode;
   /** Its open nodes, as the tree orders them; none where the tree beside it lists them. */
   agents: OrgNode[];
   /** Those of its open nodes with a pull request. */
@@ -87,12 +83,7 @@ function CoordinatorCard({ status, usage, mine, agents, prs, summaries, onOpenNo
       </div>
       <p className="mt-0.5 break-words text-subhead">{status.objective}</p>
     </div>}
-    {mine && mine.waiting.length > 0 && <CardList label="Waits on you" count={mine.waiting.length}>
-      {mine.waiting.slice(0, MOST).map((text, index) => <Row key={index} mark={<AskMark group="waiting" />} title={text} />)}
-    </CardList>}
-    {mine && mine.asks.length > 0 && <CardList label="Asks" count={mine.asks.length}>
-      {mine.asks.slice(0, MOST).map((ask) => <Row key={`${ask.line}:${ask.text}`} mark={<AskMark group={ask.group} />} title={ask.text} detail={askDetail(ask)} />)}
-    </CardList>}
+    {asks}
     {agents.length > 0 && <CardList label="Agents" count={agents.length}>
       {agents.slice(0, MOST).map((node) => {
         const { thread } = node;
@@ -134,13 +125,6 @@ function CardList({ label, count, children }: { label: string; count: number; ch
     <ul className="mt-0.5">{children}</ul>
     {count > MOST && <p className="pl-6.5 text-footnote text-muted-foreground">+{count - MOST} more</p>}
   </div>;
-}
-
-function Row({ mark, title, detail }: { mark: ReactNode; title: string; detail?: string }) {
-  return <li className="flex min-w-0 items-start gap-2.5 py-1">
-    <span className="pt-0.5">{mark}</span>
-    <RowText title={title} detail={detail} />
-  </li>;
 }
 
 function RowText({ title, detail }: { title: string; detail?: string }) {

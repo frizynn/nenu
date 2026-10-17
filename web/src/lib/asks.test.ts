@@ -1,4 +1,4 @@
-import { askDetail, askSections, asksHeadline, coordinatorAsks, coordinatorName, linkWords } from "./asks";
+import { askDetail, askSections, asksHeadline, coordinatorAsks, coordinatorName, linkChip } from "./asks";
 import type { AskRow, AsksList, ProjectView } from "./types";
 
 // Rows as `asks --json` prints them (Organizations docs/json.md, Asks), each placed by the bridge.
@@ -34,12 +34,45 @@ it("groups the asks in Organizations' order, the decisions after the asks that w
   expect(asksHeadline(sections)).toBe("all coordinators · 2 wait on you · 2 do not close · 2 in progress · 1 done");
 });
 
-it("says why an ask does not close, else its answer and what each link confirms", () => {
+it("says why an ask does not close, else its answer, and leaves its links to their chips", () => {
   const [, unclosed, , , vendors] = list.asks!;
   expect(askDetail(unclosed!)).toBe("done · a linked PR is still open");
-  expect(askDetail({ ...unclosed!, mismatch: "" })).toBe("merged · t-0001 ready for review (PR open)");
-  expect(askDetail(vendors!)).toBe("reading · https://example.com/vendors");
-  expect(linkWords({ kind: "pr", text: "#12", target: "", thread: "t-0001", title: "", state: "merged", pr: "", prState: "merged" })).toBe("#12 merged");
+  expect(askDetail({ ...unclosed!, mismatch: "" })).toBe("merged");
+  expect(askDetail(vendors!)).toBe("reading");
+  expect(sectionsFor({ project: "shop" }).flatMap((section) => section.entries).find((entry) => entry.text === "Ship the checkout")?.links).toHaveLength(1);
+});
+
+const link = (kind: "thread" | "pr" | "task" | "page", text: string, extra: Partial<AskRow["links"][number]> = {}) =>
+  ({ kind, text, target: "", thread: "", title: "", state: "", pr: "", prState: "", ...extra });
+
+it("reads each link as a short chip: what it points at, and the state Organizations confirmed", () => {
+  expect(linkChip(link("thread", "t-0003", { thread: "t-0003", state: "waiting-on-you" }))).toEqual({ label: "t-0003", state: "needs you", tone: "waiting", thread: "t-0003" });
+  expect(linkChip(link("thread", "t-0004", { thread: "t-0004", state: "working" }))).toMatchObject({ state: "working", tone: "moving" });
+  expect(linkChip(link("thread", "t-0009", { state: "missing" }))).toEqual({ label: "t-0009", state: "missing", tone: "off" });
+  expect(linkChip(link("pr", "https://github.com/a/b/pull/12", { target: "https://github.com/a/b/pull/12", state: "merged" })))
+    .toEqual({ label: "#12", state: "merged", tone: "done", href: "https://github.com/a/b/pull/12" });
+  expect(linkChip(link("pr", "#12", { state: "open" }))).toEqual({ label: "#12", state: "open", tone: "moving" });
+  expect(linkChip(link("task", "task:AWA-569", { state: "missing" }))).toEqual({ label: "AWA-569", state: "missing", tone: "off" });
+  expect(linkChip(link("page", "https://example.com/vendors", { target: "https://example.com/vendors" })))
+    .toEqual({ label: "example.com", state: "", tone: "off", href: "https://example.com/vendors" });
+  // A target that is not a web address is never a link.
+  expect(linkChip(link("page", "javascript:alert(1)", { target: "javascript:alert(1)" }))).not.toHaveProperty("href");
+});
+
+const sectionsFor = (filter: Parameters<typeof askSections>[2]) => askSections(list, projects, filter);
+
+it("narrows to a project, then to one of its coordinators, and names what it narrowed to", () => {
+  expect(sectionsFor({ project: "research" }).flatMap((section) => section.entries.map((entry) => entry.text))).toEqual(["Compare two vendors"]);
+  expect(sectionsFor({ project: "shop", coordinator: "t-0002" }).map((section) => [section.label, section.entries.map((entry) => entry.text)])).toEqual([
+    ["Does not close", ["Land the copy fix"]],
+    ["In progress", ["Card tokens"]],
+  ]);
+  // A decision is its coordinator's too.
+  expect(sectionsFor({ project: "shop", coordinator: "root" })[0]!.entries.map((entry) => entry.text)).toEqual(["Pilot with batch 2", "Install the new binary : yes or later"]);
+  expect(asksHeadline(sectionsFor({ project: "shop", coordinator: "t-0002" }), "Shop · Payments area")).toBe("Shop · Payments area · 0 wait on you · 1 does not close · 1 in progress · 0 done");
+  // Only an ask has a line Organizations can answer on; a decision line has none.
+  const waiting = sectionsFor({ project: "shop" })[0]!.entries;
+  expect(waiting.map((entry) => entry.line)).toEqual([4, 0]);
 });
 
 it("hands a coordinator's card what waits on you and its other asks, and nothing without the list", () => {

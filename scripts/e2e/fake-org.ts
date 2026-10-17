@@ -26,6 +26,8 @@ interface FakeState {
   profiles: string[];
   /** `false` is an Organizations without `node move`. */
   moves?: boolean;
+  /** `false` is an Organizations without `asks answer`. */
+  answers?: boolean;
   /** `asks --json`'s rows; without them the fake answers `asks` as an Organizations that predates it. */
   asks?: Array<{ project: string; [key: string]: unknown }>;
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
@@ -88,6 +90,20 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
   console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: pane.pane_id }));
 }
 
+/**
+ * `asks answer`, as Organizations does it: the answer goes to the coordinator, and the line keeps what
+ * the coordinator wrote, state included, with `answered_at` until the coordinator changes it.
+ */
+function answer(slug: string, coordinator: string, line: number, text: string): void {
+  const row = state.asks!.find((candidate) => candidate.project === slug && (candidate.coordinator as { id: string }).id === coordinator && candidate.line === line)
+    ?? fail(`line ${line} is not an ask of ${coordinator}`);
+  if (!text) fail("the answer is empty");
+  if (!(row.actions as string[] | undefined)?.includes("answer")) fail(`${coordinator} takes no answer`);
+  row.answered_at = new Date().toISOString();
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+  console.log(JSON.stringify({ schema_version: 1, project: slug, coordinator, line, answered_at: new Date().toISOString() }));
+}
+
 /** `node move`: the node, with everything under it, under the project root or an open coordinator not under it. */
 function move(slug: string, id: string, parent: string): void {
   const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
@@ -121,9 +137,14 @@ function newer(slug: string | undefined, field: "tasks" | "detail" | "routines" 
 }
 
 const [command, sub] = argv;
-const { flags, positionals } = parse(argv.slice(["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") ? 2 : 1));
+const twoWords = ["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") || (command === "asks" && sub === "answer");
+const { flags, positionals } = parse(argv.slice(twoWords ? 2 : 1));
 if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, projects: state.projects }));
+} else if (command === "asks" && sub === "answer") {
+  if (state.answers === false || !state.asks) fail("unrecognized subcommand 'answer'");
+  if ("help" in flags) console.log("Usage: herdr-organizations asks answer <SLUG> <COORDINATOR> --line <N> --text-file <FILE>");
+  else answer(positionals[0]!, positionals[1]!, Number(flags.line), readFileSync(0, "utf8").trim());
 } else if (command === "asks" && "json" in flags) {
   if (!state.asks) fail("unrecognized subcommand 'asks'");
   console.log(JSON.stringify({ schema_version: 1, asks: state.asks.filter((row) => !flags.project || row.project === flags.project) }));

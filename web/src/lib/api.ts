@@ -807,6 +807,17 @@ export function resolveOrgNode(
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
+/** Organizations' `asks answer`: the person's answer to the ask on `line` of a coordinator's STATUS.md. */
+export function answerOrgAsk(
+  input: { project: string; coordinator: string; line: number; text: string },
+  session?: string,
+): Promise<{ ok: true; answered: { project: string; coordinator: string; line: number; answeredAt: string } }> {
+  return req(withSession("/api/org/asks/answer", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
 /** Organizations' `node move`: the node, with everything under it, hangs under `parent` (`root` or a coordinator). */
 export function moveOrgNode(
   input: { project: string; id: string; parent: string },

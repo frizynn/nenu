@@ -588,6 +588,55 @@ describe("ProjectRegistry: asks", () => {
     expect(JSON.stringify(project)).not.toContain("Pilot");
   });
 
+  test("an answered ask waits on no one: it is in progress and leaves the count", async () => {
+    const root = fixture();
+    const overview = overviewRun([overviewThread({})]);
+    const run: OrgRun = async (argv, opts) => argv[0] !== "asks" ? overview(argv, opts) : { code: 0, stderr: "", stdout: JSON.stringify({ schema_version: 1, asks: [
+      askRow(ROOT, "needs-decision", "Pilot with batch 2", { actions: ["answer"], answered_at: "2026-10-17T10:00:00Z" }),
+      askRow(ROOT, "needs-decision", "Which bank", { actions: ["answer"] }),
+    ] }) };
+    const registry = registryFor(root, { run });
+    await registry.refresh();
+    expect(registry.asks()!.asks.map((ask) => [ask.text, ask.group, ask.answeredAt ?? ""])).toEqual([
+      ["Pilot with batch 2", "progress", "2026-10-17T10:00:00Z"],
+      ["Which bank", "waiting", ""],
+    ]);
+    expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(1);
+  });
+
+  test("a line that is only a parenthesis is neither an ask nor a decision, and waits on no one", async () => {
+    const root = fixture();
+    const overview = overviewRun([overviewThread({})], [], { status_file: status(root, { needs_decision: ["(nada por ahora; nada para confirmar)", "Pilot : yes or no"] }) });
+    const run: OrgRun = async (argv, opts) => argv[0] !== "asks" ? overview(argv, opts) : {
+      code: 0, stderr: "", stdout: JSON.stringify({ schema_version: 1, asks: [askRow(ROOT, "unknown", "(nothing for now)"), askRow(ROOT, "needs-decision", "Pilot with batch 2")] }),
+    };
+    const registry = registryFor(root, { run });
+    await registry.refresh();
+    const asks = registry.asks()!;
+    expect(asks.asks.map((ask) => ask.text)).toEqual(["Pilot with batch 2"]);
+    expect(asks.decisions.map((decision) => decision.text)).toEqual(["Pilot : yes or no"]);
+    expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(2);
+  });
+
+  test("says whether this Organizations can answer an ask, by `asks answer --help`", async () => {
+    const root = fixture();
+    let help = 2;
+    const overview = overviewRun([]);
+    const run: OrgRun = async (argv, opts) => {
+      if (argv[0] === "asks" && argv[1] === "answer") return { code: help, stdout: "", stderr: "" };
+      if (argv[0] === "asks") return { code: 0, stdout: JSON.stringify({ schema_version: 1, asks: [] }), stderr: "" };
+      return overview(argv, opts);
+    };
+    let now = 1;
+    const registry = registryFor(root, { run, now: () => now });
+    await registry.refresh();
+    expect(registry.asks()!.answers).toBe(false);
+    help = 0;
+    now += 11 * 60_000;
+    await registry.refresh();
+    expect(registry.asks()!.answers).toBe(true);
+  });
+
   test("an Organizations without `asks` lists none, and the snapshot is as it was", async () => {
     const root = fixture();
     const registry = registryFor(root, { run: asksRun(root, null) });

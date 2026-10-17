@@ -236,13 +236,20 @@ export type AskState = "open" | "working" | "needs-decision" | "answered" | "don
 export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
 export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
 /** One line under a coordinator's `## Asked`. Its text and answer are the operator's and the coordinator's words: draw them as text. */
-export interface OrgAsk { line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string }
+export interface OrgAsk {
+  line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string;
+  /** RFC 3339, once the person answered this line, until the coordinator changes it. */
+  answeredAt?: string;
+  /** Organizations takes an answer on this row. */
+  answerable?: true;
+}
 export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
 export interface AskCoordinator { id: string; title: string }
 export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
 export interface AskDecision { project: string; coordinator: AskCoordinator; text: string }
 /** `asks` is null when this Organizations cannot list asks. */
-export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[] }
+/** `answers` is whether this Organizations can answer an ask (`asks answer`); absent from an older bridge. */
+export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[]; answers?: boolean }
 export interface TokenUsage {
   input: number; output: number; cacheRead: number; cacheWrite: number;
   context: number; peakContext: number; compactions: number; updated: string; overCap: string[];

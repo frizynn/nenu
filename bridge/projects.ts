@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  SLUG_RE, WAITING_ACTIVITY, canMoveNodes, defaultOrgRun, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { askGroup, readAsks, type OrgAskRow } from "./org-asks.ts";
@@ -16,8 +16,12 @@ const STAT_MS = 2_000;
 /** The fewest milliseconds between two `overview --json` spawns; a forced refresh skips it. */
 const MIN_REFRESH_MS = 5_000;
 const WATCH_DEBOUNCE_MS = 250;
-/** How long an Organizations without `node move` is believed before it is asked again: an upgrade adds it. */
-const MOVE_PROBE_MS = 10 * 60_000;
+/** How long an Organizations without a command (`node move`, `asks answer`) is believed before it is asked again: an upgrade adds it. */
+const PROBE_MS = 10 * 60_000;
+/** The commands Nenu offers only where Organizations has them. */
+const PROBED = { move: ["node", "move"], answer: ["asks", "answer"] } as const;
+type Probed = keyof typeof PROBED;
+interface Probe { value: boolean; at: number; asking?: Promise<boolean> }
 const MAX_PROJECTS = 100;
 const MAX_THREADS = 500;
 const MAX_METADATA_BYTES = 64 * 1024;
@@ -378,8 +382,9 @@ export class ProjectRegistry {
   private askRows: OrgAskRow[] | undefined;
   private nodeActions = true;
   private nodeMoves = false;
-  /** What `node move --help` last said, when it was asked, and the question in flight. */
-  private moveProbe: { value: boolean; at: number; asking?: Promise<boolean> } = { value: false, at: -Infinity };
+  private askAnswers = false;
+  /** What each probed command's help last said, when it was asked, and the question in flight. */
+  private probes: Record<Probed, Probe> = { move: { value: false, at: -Infinity }, answer: { value: false, at: -Infinity } };
   private loaded = false;
   private stamp = "";
   private nextStat = 0;
@@ -494,6 +499,7 @@ export class ProjectRegistry {
         return record ? [{ ...row, group: askGroup(row, resolvedCoordinator(record, row.coordinator.id)) }] : [];
       }),
       decisions: this.records.flatMap((record) => openDecisions(record)),
+      answers: this.askAnswers,
     };
   }
 
@@ -560,37 +566,39 @@ export class ProjectRegistry {
     this.stamp = this.fingerprint();
     const files = this.readFiles();
     // A failed read of the asks keeps the last one; an Organizations without them has none.
-    const [overview, asks, nodeMoves] = this.run
+    const [overview, asks, nodeMoves, askAnswers] = this.run
       ? await Promise.all([
         readOverview(this.run, this.root).catch(() => undefined),
         readAsks(this.run, this.root).then((rows) => rows ?? undefined, () => this.askRows),
-        this.movable(this.run),
+        this.has(this.run, "move"),
+        this.has(this.run, "answer"),
       ])
-      : [undefined, undefined, false];
+      : [undefined, undefined, false, false];
     const askRows = overview ? asks : undefined;
     const next = overview ? this.fromJson(overview, files, askRows) : files.map((project) => ({ ...project, source: "files" as const, prActions: false }));
     const nodeActions = !this.upstream();
-    const changed = nodeActions !== this.nodeActions || nodeMoves !== this.nodeMoves || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRows) !== JSON.stringify(this.askRows);
+    const changed = nodeActions !== this.nodeActions || nodeMoves !== this.nodeMoves || askAnswers !== this.askAnswers || JSON.stringify(next) !== JSON.stringify(this.records) || JSON.stringify(askRows) !== JSON.stringify(this.askRows);
     this.records = next;
     this.askRows = askRows;
     this.nodeActions = nodeActions;
     this.nodeMoves = nodeMoves;
+    this.askAnswers = askAnswers;
     this.loaded = true;
     this.rewatch();
     if (changed) for (const session of this.sessions) this.live?.publish({ session, topic: "org" });
   }
 
   /**
-   * `node move`'s help, asked once, and again only while it said no and a while has passed. Two
+   * A probed command's help, asked once, and again only while it said no and a while has passed. Two
    * refreshes at once share one question, so neither reads the other's stale answer.
    */
-  private movable(run: OrgRun): Promise<boolean> {
-    const probe = this.moveProbe;
+  private has(run: OrgRun, command: Probed): Promise<boolean> {
+    const probe = this.probes[command];
     if (this.upstream()) return Promise.resolve(false);
     if (probe.asking) return probe.asking;
-    if (probe.value || this.now() - probe.at < MOVE_PROBE_MS) return Promise.resolve(probe.value);
+    if (probe.value || this.now() - probe.at < PROBE_MS) return Promise.resolve(probe.value);
     probe.at = this.now();
-    probe.asking = canMoveNodes(run).then((value) => {
+    probe.asking = offers(run, PROBED[command]).then((value) => {
       probe.value = value;
       probe.asking = undefined;
       return value;
