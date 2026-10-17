@@ -548,7 +548,12 @@ export function pickName(value: unknown): string {
  */
 export async function readOverview(run: OrgRun, root: string): Promise<OrgOverviewProject[] | undefined> {
   const result = await run(["overview", "--json"], { env: { HERDR_PROJECTS_ROOT: root }, timeoutMs: 10_000 });
-  if (result.code !== 0) return undefined;
+  if (result.code !== 0) {
+    // An Organizations without the contract says so and stays that way; anything else (a timeout, a
+    // crash) is a read that failed, which the caller tries again.
+    if (/unrecognized subcommand|unexpected argument/i.test(result.stderr)) return undefined;
+    throw new OrgCliError(`overview --json failed (${result.code})`);
+  }
   let value: unknown;
   try {
     value = JSON.parse(result.stdout);
