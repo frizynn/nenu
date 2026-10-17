@@ -738,7 +738,7 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     const moved = herd.agents.map((agent) => agent.paneId === "hook" ? { ...agent, lastActiveAt: now } : agent);
     act(() => show({ ...herd, agents: [...moved, at("fresh", "w2", { lastActiveAt: now - MIN / 2 })] }));
     expect(rowNames("Today")).toEqual(["fresh", "Checkout flow", "Payments webhook"]);
-    expect(section("Today").getByRole("button", { name: "3 updates" })).toBeInTheDocument();
+    expect(section("Today").getByRole("button", { name: "1 update" })).toBeInTheDocument();
     act(() => { window.dispatchEvent(new Event("focus")); });
     expect(rowNames("Today")).toEqual(["Payments webhook", "fresh", "Checkout flow"]);
     expect(section("Today").queryByRole("button", { name: /update/ })).toBeNull();

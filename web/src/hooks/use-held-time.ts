@@ -15,7 +15,7 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
   at: (item: T) => number;
   /** `items` newest held time first, ties in the order they first came. */
   order: (items: readonly T[]) => T[];
-  /** How many of `items` sit somewhere else in the order their latest times give: what `reorder` would move. */
+  /** How many of `items` moved since the list drew them: the agents with news that `reorder` puts in order. */
   moved: (items: readonly T[]) => number;
   reorder: () => void;
 } {
@@ -48,9 +48,6 @@ export function useHeldTime<T>(key: (item: T) => string, at: (item: T) => number
     for (const item of items) entry(item);
     return [...items].sort((a, b) => heldAt(b) - heldAt(a) || entry(a).seq - entry(b).seq);
   };
-  const moved = (items: readonly T[]) => {
-    const live = order(items).sort((a, b) => at(b) - at(a) || entry(a).seq - entry(b).seq);
-    return order(items).filter((item, index) => live[index] !== item).length;
-  };
+  const moved = (items: readonly T[]) => items.filter((item) => at(item) !== heldAt(item)).length;
   return { at: heldAt, order, moved, reorder };
 }

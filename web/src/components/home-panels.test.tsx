@@ -43,7 +43,7 @@ it("leaves a session that turns New in its place, and reorders on N updates", as
   show([chat("c", 900, true), chat("a", 300), chat("b", 200)]);
   expect(rows()).toEqual(["/pane/a", "/pane/b", "/pane/c"]);
   expect(within(screen.getByRole("link", { name: /^c/ })).getByText("New")).toBeInTheDocument();
-  await userEvent.setup().click(screen.getByRole("button", { name: "3 updates" }));
+  await userEvent.setup().click(screen.getByRole("button", { name: "1 update" }));
   expect(rows()).toEqual(["/pane/c", "/pane/a", "/pane/b"]);
   expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
 });
