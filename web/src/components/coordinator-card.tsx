@@ -36,10 +36,12 @@ export function AskMark({ group }: { group: AskGroup }) {
  * print. The file starts closed only when the card already says what it says (the objective, the
  * asks, the decisions), and waits for the asks, so which read lands first never changes either.
  */
-export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode }: {
+export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, listsAgents = true }: {
   project: ProjectView;
   /** `root` for the project's own coordinator. */
   coordinatorId: string;
+  /** False where the tree beside the card already lists its agents: the project page. */
+  listsAgents?: boolean;
   status?: StatusFile;
   usage?: TokenUsage;
   asks: { list: AsksList | null; loaded: boolean };
@@ -54,24 +56,27 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   const agents = coordinatorId === "root" ? tree.open : flatten(tree.open).find((node) => node.thread.id === coordinatorId)?.children ?? [];
   const says = Boolean(status?.objective || mine?.waiting.length || mine?.asks.length);
   const printed = Boolean(asks.list?.asks || status?.objective || usage);
+  const listed = listsAgents ? agents : [];
+  const prs = agents.filter((node) => node.thread.pr);
   return <>
-    {printed && (says || usage || agents.length > 0) &&
-      <CoordinatorCard status={status} usage={usage} mine={mine} agents={agents} summaries={summaries} onOpenNode={onOpenNode} />}
+    {printed && (says || usage || listed.length > 0 || prs.length > 0) &&
+      <CoordinatorCard status={status} usage={usage} mine={mine} agents={listed} prs={prs} summaries={summaries} onOpenNode={onOpenNode} />}
     {status && asks.loaded && <CoordinatorStatus status={status} project={project} closed={says} onOpenNode={onOpenStatusNode} />}
   </>;
 }
 
-function CoordinatorCard({ status, usage, mine, agents, summaries, onOpenNode, now = Date.now() }: {
+function CoordinatorCard({ status, usage, mine, agents, prs, summaries, onOpenNode, now = Date.now() }: {
   status?: StatusFile;
   usage?: TokenUsage;
   mine: { waiting: string[]; asks: AskRow[] } | null;
-  /** Its open nodes, as the tree orders them. */
+  /** Its open nodes, as the tree orders them; none where the tree beside it lists them. */
   agents: OrgNode[];
+  /** Those of its open nodes with a pull request. */
+  prs: OrgNode[];
   summaries: ReadonlyMap<string, ThreadSummary>;
   onOpenNode: (node: OrgNode) => void;
   now?: number;
 }) {
-  const prs = agents.filter((node) => node.thread.pr);
   const updated = Date.parse(status?.updated ?? "");
 
   return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">

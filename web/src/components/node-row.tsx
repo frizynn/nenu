@@ -22,7 +22,7 @@ export interface Fold {
   onToggle: () => void;
 }
 
-/** Something a row does besides opening. Each one stops an agent (close, replace), and asks first. */
+/** Something a row does besides opening, asking first: Close and Replace stop an agent, Move asks where. */
 export interface RowAction {
   /** The word a desk shows on hover ("Close"). */
   label: string;
@@ -32,6 +32,8 @@ export interface RowAction {
   menuLabel: string;
   icon: IconComponent;
   run: () => void;
+  /** Whether its touch sheet row reads as destructive; it does unless the action stops nothing. */
+  destructive?: boolean;
 }
 
 /** One node's row; `children` hangs the nodes a coordinator runs inside the same list item. */
@@ -98,7 +100,7 @@ function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "
     <BottomSheet open={sheet} onClose={() => setSheet(false)} title={title}>
       <div className="flex flex-col gap-1">
         <ActionRow icon={<OpenIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />} label={opens === "chat" ? "Open chat" : "Open details"} onClick={() => run(onOpen)} />
-        {actions.map((action) => <ActionRow key={action.name} icon={<action.icon aria-hidden className="size-4 shrink-0" />} label={action.menuLabel} destructive onClick={() => run(action.run)} />)}
+        {actions.map((action) => <ActionRow key={action.name} icon={<action.icon aria-hidden className="size-4 shrink-0" />} label={action.menuLabel} destructive={action.destructive ?? true} onClick={() => run(action.run)} />)}
       </div>
     </BottomSheet>
   </>;
