@@ -77,7 +77,7 @@ describe("pane ownership", () => {
 describe("projectChat", () => {
   const pane = (paneId: string) => ({ paneId }) as AgentView;
   const worker = { id: "T1", title: "Build", parentId: "root", role: "worker", status: "open" } as const;
-  const hub: ProjectView = { slug: "hub", name: "Hub", goal: "", status: "active", coordinator: { paneId: "coord", agent: "claude" }, threads: [worker] };
+  const hub: ProjectView = { slug: "hub", name: "Hub", goal: "", status: "active", coordinator: { paneId: "coord", agent: "claude", liveStatus: "idle" }, threads: [worker] };
 
   it("is the project coordinator's chat while it runs, the page a back to the project lands on", () => {
     expect(projectChat(hub, [pane("coord")])).toBe("coord");
