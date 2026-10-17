@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-17
+
+### Added
+
+- On a desk, a thread's header goes up to its coordinator, named, and a node's to its parent (00fd14de).
+- `bun scripts/e2e/run.ts back` walks into a project's thread and back, counting the history (33f76be0).
+
+### Changed
+
+- On a phone a thread shows the Chat, Threads and PRs band its coordinator does, in place of the sibling chips and the Threads button (00fd14de).
+
+### Fixed
+
+- The back control goes back instead of pushing its parent: three backs from a thread leave three entries, not eight more, and the system's Back from Home leaves Nenu (00fd14de).
+- A sibling takes the thread's place in the history; a phone's tab lives in the URL, so a reload or a way back lands on it (00fd14de).
+- A coordinator's thread slides in as a push and back out as a pop; siblings cross-fade (00fd14de).
+- The motion bench waits for its row in the page, not the sidebar's hidden copy (33f76be0).
+
 ## [1.18.0] - 2026-10-16
 
 ### Added
