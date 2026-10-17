@@ -31,18 +31,24 @@ describe("useAgentTransitions", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { name: "codex", state: "done", title: "Codex finished", tone: "success" },
-    { name: "claude", state: "blocked", title: "Claude needs your input", tone: "warn" },
-  ] as const)("gives $name a concise title and workspace/tab description", ({ name, state, title, tone }) => {
-    const view = (status: AgentStatus) => agent("one", status, { agent: name, tabLabel: "Frontend" });
+  it("gives an agent asking for you a concise title and workspace/tab description", () => {
+    const view = (status: AgentStatus) => agent("one", status, { agent: "claude", tabLabel: "Frontend" });
     const { update } = setup([view("working")]);
-    act(() => update([view(state)]));
-    expect(notify).toHaveBeenCalledExactlyOnceWith(title, tone, undefined, {
+    act(() => update([view("blocked")]));
+    expect(notify).toHaveBeenCalledExactlyOnceWith("Claude needs your input", "warn", undefined, {
       description: "collie · Frontend", background: true, to: "/pane/one",
     });
-    act(() => update([view(state)]));
+    act(() => update([view("blocked")]));
     expect(notify).toHaveBeenCalledOnce();
+  });
+
+  // Its row says "New" instead; a toast per finish chained over the phone's header and took its taps.
+  it("raises nothing when agents finish, one or many", () => {
+    const views = [agent("one", "working"), agent("two", "working")];
+    const { update } = setup(views);
+    act(() => update([agent("one", "done"), agent("two", "working")]));
+    act(() => update([agent("one", "done"), agent("two", "done")]));
+    expect(notify).not.toHaveBeenCalled();
   });
 
   // On a desk the bar marks the chat's row ("+1"), so a toast over the page would say it twice.
@@ -65,7 +71,7 @@ describe("useAgentTransitions", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it("groups simultaneous attention events once and prioritizes blocked over completed agents", () => {
+  it("groups simultaneous asks once, and leaves out the agents that finished", () => {
     const views = [
       agent("one", "working", { workspaceLabel: "api" }),
       agent("two", "working", { workspaceLabel: "web" }),
@@ -80,22 +86,13 @@ describe("useAgentTransitions", () => {
     });
   });
 
-  it("groups completions without making snapshot order decide which agent gets announced", () => {
-    const views = [agent("one", "working"), agent("two", "working", { workspaceLabel: "docs" })];
-    const { update } = setup(views);
-    act(() => update(views.map((view) => ({ ...view, status: "done" }))));
-    expect(notify).toHaveBeenCalledExactlyOnceWith("2 agents finished", "success", undefined, {
-      description: "collie, docs", background: true, to: "/",
-    });
-  });
-
   it("resets the baseline on session changes when pane IDs are reused", () => {
     const { update } = setup([agent("one", "working")], "first");
     act(() => update([agent("one", "blocked")], "second"));
     expect(notify).not.toHaveBeenCalled();
     act(() => update([agent("one", "working")], "second"));
-    act(() => update([agent("one", "done")], "second"));
-    expect(notify).toHaveBeenCalledExactlyOnceWith("Codex finished", "success", undefined, {
+    act(() => update([agent("one", "blocked")], "second"));
+    expect(notify).toHaveBeenCalledExactlyOnceWith("Codex needs your input", "warn", undefined, {
       description: "collie", background: true, to: "/pane/one?s=second",
     });
     act(() => update([agent("one", "blocked")], "first"));
@@ -107,7 +104,7 @@ describe("useAgentTransitions", () => {
     act(() => update([agent("one", "idle")]));
     act(() => update([agent("one", "unknown")]));
     act(() => update([]));
-    act(() => update([agent("one", "done")]));
+    act(() => update([agent("one", "blocked")]));
     expect(notify).not.toHaveBeenCalled();
   });
 
@@ -126,8 +123,8 @@ describe("useAgentTransitions", () => {
       threads: [{ id: "t1", title: "Fix the toast", parentId: "", role: "worker", status: "open", paneId: "one" }],
     }];
     const { update } = setup([agent("one", "working")], undefined, null, projects);
-    act(() => update([agent("one", "done")]));
-    expect(notify).toHaveBeenCalledExactlyOnceWith("Fix the toast finished", "success", undefined, {
+    act(() => update([agent("one", "blocked")]));
+    expect(notify).toHaveBeenCalledExactlyOnceWith("Fix the toast needs your input", "warn", undefined, {
       description: "Nenu", background: true, to: "/pane/one",
     });
   });
