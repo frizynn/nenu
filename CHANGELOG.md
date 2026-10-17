@@ -13,8 +13,9 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - A question in Your asks and on a coordinator's card opens its context in place: the whole report of its thread, with tables, links, captures and documents, and Answer at its foot (37a6e23a).
-- An ask and the decisions about the same thread or task read as one question, each part with its own Answer (37a6e23a).
+- An ask and the decisions about the same thread or task read as one question, each part with its own Answer; rows that do not close stay apart (37a6e23a, 200ded52).
 - A row that does not close says what is still open and where, and can ask its coordinator to close it or update the line (37a6e23a).
+- A thread's page opens its whole report under the summary (Full report) (200ded52).
 - `bun scripts/e2e/asks-context.ts` captures a records folder outside the projects root, a long report, a folded question and a row that does not close at 390 and 1440 (37a6e23a).
 
 ### Fixed
