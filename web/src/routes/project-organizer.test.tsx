@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
@@ -6,6 +6,7 @@ import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
+import { __forgetSummaries } from "@/hooks/use-thread-summaries";
 import { ProjectRoute } from "./project";
 
 // A project that organizes coordinators (ADR 0092): each folds over its card and work, the project's
@@ -37,6 +38,7 @@ const ROOT_STATUS = { text: "# Status\nObjective: (none)\n\n## Asked\n\n## Decis
 
 beforeEach(() => {
   sessionStorage.clear();
+  __forgetSummaries();
   server.use(
     http.get("/api/org/summary", () => HttpResponse.json({
       ok: true, coordinator: null, usage: null,
@@ -209,5 +211,57 @@ describe("Move to…", () => {
     setup(home([{ ...project, nodeMoves: true, threads: fixed }]));
     expect(await screen.findByRole("button", { name: "Close Hotfix" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move Hotfix" })).not.toBeInTheDocument();
+  });
+});
+
+// The STATUS.md heads the page, so the list under it must not be drawn before it and then pushed down.
+describe("loading a project's page", () => {
+  const workers: ProjectView = { ...project, threads: [node("t-7", "Hotfix", "root", { group: "idle" }), node("t-8", "Docs", "root", { group: "working" })] };
+  const STATUS = { text: "# Status\nObjective: Ship wholesale", updated: "2026-10-17T10:00:00Z", objective: "Ship wholesale" };
+  const answer = () => HttpResponse.json({ ok: true, coordinator: null, usage: null, threads: [], status: STATUS });
+  const pending = () => new Promise<never>(() => {});
+
+  it("draws the list together with its STATUS.md, never before it", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((done) => { release = done; });
+    server.use(http.get("/api/org/summary", async () => { await gate; return answer(); }));
+    setup(home([workers]));
+    await screen.findByRole("heading", { name: "Hub" });
+    expect(screen.queryByRole("list", { name: "Open threads" })).not.toBeInTheDocument();
+    release();
+    const status = await screen.findByRole("region", { name: "Status" });
+    expect(status).toHaveTextContent("Ship wholesale");
+    expect(screen.getByRole("list", { name: "Open threads" })).toBeInTheDocument();
+  });
+
+  it("opened again with the same stamps, draws its STATUS.md in the first frame while it reads behind it", async () => {
+    server.use(http.get("/api/org/summary", answer));
+    setup(home([workers]));
+    await screen.findByRole("region", { name: "Status" });
+    cleanup();
+    server.use(http.get("/api/org/summary", pending));
+    setup(home([workers]));
+    await screen.findAllByRole("heading", { name: "Hub" });
+    expect(screen.getByRole("region", { name: "Status" })).toHaveTextContent("Ship wholesale");
+    expect(screen.getByRole("list", { name: "Open threads" })).toBeInTheDocument();
+  });
+
+  it("waits for a STATUS.md edited since, rather than draw the old one", async () => {
+    server.use(http.get("/api/org/summary", answer));
+    setup(home([workers]));
+    await screen.findByRole("region", { name: "Status" });
+    cleanup();
+    server.use(http.get("/api/org/summary", pending));
+    setup(home([{ ...workers, statusUpdated: "2026-10-17T11:00:00Z" }]));
+    await screen.findByRole("heading", { name: "Hub" });
+    expect(screen.queryByRole("region", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Open threads" })).not.toBeInTheDocument();
+  });
+
+  it("draws without it when the read takes over a second", async () => {
+    server.use(http.get("/api/org/summary", pending));
+    setup(home([workers]));
+    expect(await screen.findByRole("list", { name: "Open threads" }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Status" })).not.toBeInTheDocument();
   });
 });

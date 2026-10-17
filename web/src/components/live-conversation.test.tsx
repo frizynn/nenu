@@ -284,6 +284,18 @@ describe("LiveConversation", () => {
     expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toHaveTextContent("2 new");
   });
 
+  it("marks a remembered conversation as updating over the list, without moving it", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const view = (refreshing: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} refreshing={refreshing} /></MemoryRouter>;
+    const { rerender } = render(view(true));
+    const mark = screen.getByRole("status");
+    expect(mark).toHaveTextContent("Updating…");
+    expect(mark.parentElement).toHaveClass("absolute", "pointer-events-none");
+    rerender(view(false));
+    expect(screen.queryByText("Updating…")).not.toBeInTheDocument();
+    expect(screen.getByText("what changed today?")).toBeInTheDocument();
+  });
+
   // T42: on a slow link the pane showed a spinner in its upper third until the history came back.
   it("draws the thread's shape while the first load is slow, then the turns", () => {
     const view = (history: PaneHistoryResponse | null, loading: boolean) => <MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={loading} error={false} /></MemoryRouter>;

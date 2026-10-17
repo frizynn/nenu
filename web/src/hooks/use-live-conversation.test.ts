@@ -8,7 +8,7 @@ import { setLocked } from "@/lib/idle";
 import { resetLiveEvents } from "@/lib/live-events";
 import { fakeLiveStream } from "@/test/live-stream";
 import type { PaneHistoryResponse } from "@/lib/types";
-import { useLiveConversation } from "./use-live-conversation";
+import { __forgetConversations, REFRESHING_MS, useLiveConversation } from "./use-live-conversation";
 
 vi.mock("@/lib/api", async (original) => ({ ...await original<typeof import("@/lib/api")>(), fetchHistory: vi.fn() }));
 const fetchMock = vi.mocked(fetchHistory);
@@ -25,6 +25,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(history("w1:p1"));
+  __forgetConversations();
   Object.defineProperty(document, "hidden", { configurable: true, value: false });
   setLocked(false);
 });
@@ -278,6 +279,106 @@ it("keeps the last history while its view is paused and catches up on return", a
   await act(async () => hook.rerender({ paused: false }));
   expect(fetchMock).toHaveBeenCalledTimes(2);
   hook.unmount();
+});
+
+describe("a chat opened again", () => {
+  const seen = (paneId: string, total: number): PaneHistoryResponse => ({ paneId, available: true, entries: [], hasMore: false, total, fileTruncated: false });
+
+  it("paints the conversation it last read at once, then replaces it with the read behind it", async () => {
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "work", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    let release!: (value: PaneHistoryResponse) => void;
+    fetchMock.mockReturnValueOnce(new Promise((done) => { release = done; }));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "work", enabled: true }));
+    expect(again.result.current).toMatchObject({ history: { total: 1 }, loading: false, error: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await act(async () => release(seen("w1:p1", 2)));
+    expect(again.result.current.history).toMatchObject({ total: 2 });
+    again.unmount();
+  });
+
+  it("keeps each pane and session apart", async () => {
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "work", enabled: true })).unmount();
+    await act(async () => {});
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const other = renderHook(() => useLiveConversation({ paneId: "w1:p1", session: "home", enabled: true }));
+    expect(other.result.current).toMatchObject({ history: null, loading: true });
+    other.unmount();
+  });
+
+  it("says a remembered conversation could not be refreshed instead of passing it off as current", async () => {
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    expect(again.result.current).toMatchObject({ history: { total: 1 }, error: true });
+    again.unmount();
+  });
+
+  it("says it is refreshing a remembered conversation when the read behind it is slow", async () => {
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    let release!: (value: PaneHistoryResponse) => void;
+    const same = seen("w1:p1", 1);
+    fetchMock.mockReturnValueOnce(new Promise((done) => { release = done; }));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REFRESHING_MS - 1); });
+    expect(again.result.current.refreshing).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(again.result.current).toMatchObject({ history: { total: 1 }, refreshing: true });
+    // The read confirms the same conversation: the mark goes all the same.
+    await act(async () => release(same));
+    expect(again.result.current.refreshing).toBe(false);
+    again.unmount();
+  });
+
+  it("never marks a conversation it read itself", async () => {
+    const { result, unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REFRESHING_MS * 4); });
+    expect(result.current.refreshing).toBe(false);
+    unmount();
+  });
+
+  it("forgets every conversation once the device loses read authorization", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/skills$/, () => new HttpResponse("Forbidden", { status: 403 })));
+    let denied: unknown;
+    try { await fetchSkills("forbidden"); } catch (error) { denied = error; }
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    fetchMock.mockRejectedValueOnce(denied);
+    const other = renderHook(() => useLiveConversation({ paneId: "w1:p2", enabled: true }));
+    await act(async () => {});
+    other.unmount();
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    expect(again.result.current).toMatchObject({ history: null, loading: true });
+    again.unmount();
+  });
+
+  it("forgets a conversation the device can no longer read", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/skills$/, () => new HttpResponse("Forbidden", { status: 403 })));
+    let denied: unknown;
+    try { await fetchSkills("forbidden"); } catch (error) { denied = error; }
+    const first = renderHook(() => useLiveConversation({ paneId: "auth", enabled: true }));
+    await act(async () => {});
+    fetchMock.mockRejectedValueOnce(denied);
+    await act(async () => first.result.current.refresh());
+    first.unmount();
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const again = renderHook(() => useLiveConversation({ paneId: "auth", enabled: true }));
+    expect(again.result.current).toMatchObject({ history: null, loading: true });
+    again.unmount();
+  });
 });
 
 describe("live transcript updates", () => {

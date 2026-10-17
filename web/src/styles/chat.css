@@ -35,6 +35,7 @@
      selector still reaches it. */
   .chat-thread section[aria-label="Live conversation"] > .relative > .overflow-y-auto { padding-top: calc(var(--chat-chrome-height, 0px) + 1.5rem); scroll-padding-top: var(--chat-chrome-height, 0px); }
   .chat-thread section[aria-label="Live conversation"] > [role="status"] { margin-top: var(--chat-chrome-height, 0px); }
+  .chat-thread section[aria-label="Live conversation"] > .relative > [data-refreshing] { top: calc(var(--chat-chrome-height, 0px) + 0.5rem); }
   /* The list's own fade stood in for the chrome's edge; the chrome is that edge now. */
   .chat-thread section[aria-label="Live conversation"] > .relative > [aria-hidden].absolute.top-0 { display: none; }
   .chat-scroll-under { padding-top: calc(var(--chat-chrome-height, 0px) + 0.75rem); scroll-padding-top: var(--chat-chrome-height, 0px); }
