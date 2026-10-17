@@ -165,13 +165,19 @@ the unit name; the Herdr action runs from anywhere.
   The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
   by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
   only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
-  A coordinator's STATUS.md (`status_file`) heads its page and the project page, drawn as written through
+  A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
+  coordinators: only while it says something, ADR 0092), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
   ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
   **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's
   at `node/root`) draw only Organizations' fields: `asks --json` read beside the overview, grouped by its
   own rank, never parsed out of STATUS.md; an ask's text stays out of the snapshot and out of anything sent
   to an agent ([ADR 0091](./.adr/0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)).
+- **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
+  page, each a row folding over its card and work, the project's own first while it runs and otherwise a
+  small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
+  shows only where `node move --help` exits 0 and the node's `actions` list `move`
+  ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Routines, Your asks, projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk

@@ -62,6 +62,7 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", host = false }:
     children: [
       { path: "pane/:paneId", element: <p>Pane page</p> },
       { path: "project/:projectSlug", element: <p>Project page</p> },
+      { path: "project/:projectSlug/node/:nodeId", element: <p>Node page</p> },
       { path: "space/:spaceId", element: <p>Space page</p> },
     ],
   }], { initialEntries: [entry] });
@@ -81,36 +82,43 @@ function desktop() {
 /** The kind rows of the list, by the name each one starts with. */
 const kinds = (create: { getAllByRole: (role: "button") => HTMLElement[] }) => create.getAllByRole("button").map((row) => row.textContent);
 
-it("groups what it starts, naming the workspace on screen, and leaves the place picker to the Tab form", async () => {
+it("groups what it starts, naming the workspace on screen, then lists every project and a new one", async () => {
   setup();
   const create = within(await screen.findByRole("navigation", { name: "Create" }));
-  expect(create.getAllByRole("heading").map((h) => h.textContent)).toEqual(["Start an agent", "Organize"]);
+  expect(create.getAllByRole("heading").map((h) => h.textContent)).toEqual(["Start an agent", "Projects"]);
   expect(kinds(create)).toEqual([
     expect.stringMatching(/^Here in rediseño mobile/),
     expect.stringMatching(/^In a new folder/),
     expect.stringMatching(/^Quick question/),
-    expect.stringMatching(/^Project/),
-    expect.stringMatching(/^Thread/),
+    expect.stringMatching(/^Acme1 coordinator/),
+    expect.stringMatching(/^New project/),
   ]);
   expect(create.queryByLabelText("In")).toBeNull();
 });
 
-it("leaves Thread out until there is a project, and Here in until there is a workspace", async () => {
+it("lists no project until there is one, and Here in until there is a workspace", async () => {
   setup({ data: { ...base, projects: [], workspaces: [], agents: [] }, entry: "/?s=work" });
   const create = within(await screen.findByRole("navigation", { name: "Create" }));
-  expect(kinds(create)).toEqual([expect.stringMatching(/^In a new folder/), expect.stringMatching(/^Quick question/), expect.stringMatching(/^Project/)]);
+  expect(kinds(create)).toEqual([expect.stringMatching(/^In a new folder/), expect.stringMatching(/^Quick question/), expect.stringMatching(/^New project/)]);
 });
 
-it("offers Thread only for a project that can start one, and picks that project", async () => {
+it("opens a project on its step, offering New only where the project can start something", async () => {
   const paused: ProjectView = { ...project, slug: "old", name: "Old", status: "paused", workspaceIds: [] };
-  setup({ data: { ...base, projects: [paused] }, entry: "/space/w%3A1?s=work" });
-  const create = within(await screen.findByRole("navigation", { name: "Create" }));
-  expect(create.queryByRole("button", { name: /^Thread/ })).toBeNull();
-  document.body.innerHTML = "";
-
   const { user } = setup({ data: { ...base, projects: [paused, project] }, entry: "/space/w%3A1?s=work" });
-  await user.click(await screen.findByRole("button", { name: /^Thread/ }));
-  expect(screen.getByLabelText("Project")).toHaveValue("acme");
+  await user.click(await screen.findByRole("button", { name: /^Old/ }));
+  expect(screen.getByRole("dialog", { name: "Old" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^New thread/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^New coordinator/ })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: /^Acme/ }));
+  await user.click(screen.getByRole("button", { name: /^New thread/ }));
+  expect(screen.getByRole("dialog", { name: "New thread" })).toBeInTheDocument();
+  // The step chose the project and the role, so the form asks for neither again.
+  expect(screen.queryByLabelText("Project")).toBeNull();
+  expect(screen.queryByRole("radiogroup", { name: "Role" })).toBeNull();
+  // Back from the form returns to the project's step, not the list.
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("dialog", { name: "Acme" })).toBeInTheDocument();
 });
 
 it("names each step in the sheet's one title, and steps back from its header", async () => {
@@ -175,9 +183,10 @@ it("moves focus to each step as it opens, so a keyboard never drops out of the s
 it("puts the caret in the first thing to type on a desk", async () => {
   desktop();
   const { user } = setup({ entry: "/project/acme?s=work" });
-  expect(await screen.findByRole("heading", { name: "New thread" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Acme" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^New coordinator/ }));
   await waitFor(() => expect(screen.getByLabelText("Title")).toHaveFocus());
-  await user.click(screen.getByRole("button", { name: /^Project/ }));
+  await user.click(screen.getByRole("button", { name: /^New project/ }));
   expect(screen.getByLabelText("Name")).toHaveFocus();
   await user.click(screen.getByRole("button", { name: /^Quick question/ }));
   expect(screen.getByLabelText("Message")).toHaveFocus();
@@ -235,7 +244,7 @@ it("opens a tab with the chosen agent in the workspace on screen, then opens its
 
 it("creates a project, keeping the exact command it runs folded away until asked, and opens it", async () => {
   const { user, router, onClose } = setup();
-  await user.click(await screen.findByRole("button", { name: /^Project/ }));
+  await user.click(await screen.findByRole("button", { name: /^New project/ }));
   await user.type(await screen.findByLabelText("Name"), "Panel mayorista");
   await user.type(screen.getByLabelText("Goal"), "Stock by depot");
   expect(screen.getByLabelText("Command")).not.toBeVisible();
@@ -248,17 +257,20 @@ it("creates a project, keeping the exact command it runs folded away until asked
   expect(router.state.location.pathname).toBe("/project/panel-mayorista");
 });
 
-it("starts a coordinator in the project on screen, straight away on a desk", async () => {
+it("starts a coordinator in the project on screen, straight away on a desk, and says it is starting until it runs", async () => {
   desktop();
   const { user, router } = setup();
-  expect(await screen.findByRole("heading", { name: "New thread" })).toBeInTheDocument();
-  await user.click(screen.getByRole("radio", { name: "Coordinator" }));
+  expect(await screen.findByRole("heading", { name: "Acme" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /^New coordinator/ }));
   await user.type(screen.getByLabelText("Title"), "Filters");
   await user.selectOptions(screen.getByLabelText("Parent"), "t-1");
   await user.type(screen.getByLabelText("Task"), "Add a depot filter.");
   await user.click(screen.getByRole("button", { name: "Create coordinator" }));
-  await waitFor(() => expect(router.state.location.pathname).toBe("/project/acme"));
+  expect(await screen.findByRole("status")).toHaveTextContent("Filters is starting.");
   expect(posts["/api/org/node/start"]).toEqual([{ project: "acme", role: "coordinator", title: "Filters", parent: "t-1", task: "Add a depot filter." }]);
+  // Its page is one tap away while the chat is not up yet.
+  await user.click(screen.getByRole("button", { name: "Open its page" }));
+  expect(router.state.location.pathname).toBe("/project/acme/node/t-2");
 });
 
 it("makes the scratch workspace on the bridge's home for the first quick chat, then reuses it", async () => {
@@ -285,8 +297,10 @@ it("opens on Tab on a desk when nothing on screen belongs to a project, and show
   desktop();
   const { user } = setup({ entry: "/space/w%3A1?s=work" });
   expect(await screen.findByRole("heading", { name: "New tab" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /^Thread/ }));
-  expect(await screen.findByLabelText("Project")).toHaveValue("acme");
+  await user.click(screen.getByRole("button", { name: /^Acme/ }));
+  await user.click(await screen.findByRole("button", { name: /^New thread/ }));
+  expect(await screen.findByRole("heading", { name: "New thread" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Acme/ })).toHaveAttribute("aria-current", "true");
 });
 
 it("marks a create in flight as busy, not as unavailable", async () => {
@@ -297,7 +311,7 @@ it("marks a create in flight as busy, not as unavailable", async () => {
     http.post("/api/workspace", async () => { await held; return HttpResponse.json({ ok: false, error: "held" }); }),
   );
   const project = setup();
-  await project.user.click(await screen.findByRole("button", { name: /^Project/ }));
+  await project.user.click(await screen.findByRole("button", { name: /^New project/ }));
   await project.user.type(await screen.findByLabelText("Name"), "P");
   expect(screen.getByRole("button", { name: "Create project" })).not.toHaveAttribute("aria-busy");
   await project.user.click(screen.getByRole("button", { name: "Create project" }));
@@ -314,9 +328,108 @@ it("marks a create in flight as busy, not as unavailable", async () => {
 
 it("creates nothing from a read-only device", async () => {
   const { user } = setup({ data: { ...base, device: { enforced: true, authorized: false } as HomeData["device"] } });
-  await user.click(await screen.findByRole("button", { name: /^Project/ }));
+  await user.click(await screen.findByRole("button", { name: /^New project/ }));
   await user.type(await screen.findByLabelText("Name"), "x");
   expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
+});
+
+describe("+ → a project → a coordinator → its chat", () => {
+  // The project's own coordinator runs; Lead runs in a pane and Checkout under it has none; a closed
+  // coordinator and a thread are not coordinators to pick.
+  const organizer: ProjectView = {
+    slug: "acme", name: "Acme", status: "active", workspaceIds: ["w:2"], nodeActions: true,
+    coordinator: { paneId: "w:2:p1", agent: "codex", liveStatus: "idle" },
+    threads: [
+      { id: "t-1", title: "Lead", parentId: "root", role: "coordinator", status: "open", paneId: "w:2:p2", agent: "claude", liveStatus: "working" },
+      { id: "t-2", title: "Checkout", parentId: "t-1", role: "coordinator", status: "open", group: "waiting-on-you" },
+      { id: "t-3", title: "Old push", parentId: "root", role: "coordinator", status: "resolved" },
+      { id: "t-4", title: "Hotfix", parentId: "root", role: "worker", status: "open" },
+    ],
+  };
+  const pane = (paneId: string) => ({ ...base.agents[0]!, paneId, focused: false });
+  const data: HomeData = { ...base, agents: [pane("w:2:p1"), pane("w:2:p2")], projects: [organizer] };
+  const step = () => within(screen.getByRole("region", { name: "Coordinators" }));
+
+  it("lists the project's coordinators, its own first, each with its state, and opens the chat of the one picked", async () => {
+    const { user, router, onClose } = setup({ data, entry: "/?s=work" });
+    await user.click(await screen.findByRole("button", { name: /^Acme3 coordinators/ }));
+    expect(screen.getByRole("dialog", { name: "Acme" })).toBeInTheDocument();
+    expect(step().getAllByRole("button").map((row) => row.textContent)).toEqual([
+      "Project coordinatorIdle · codex",
+      "LeadWorking · claude",
+      "CheckoutNeeds you · under Lead",
+    ]);
+    await user.click(step().getByRole("button", { name: /^Lead/ }));
+    expect(router.state.location.pathname).toBe("/pane/w%3A2%3Ap2");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("puts New coordinator above the coordinators, so a long list never hides it", async () => {
+    const many: ProjectView = { ...organizer, threads: [...organizer.threads, ...Array.from({ length: 11 }, (_, index) =>
+      ({ id: `t-${100 + index}`, title: `coord-${index}`, parentId: "root", role: "coordinator" as const, status: "open" as const }))] };
+    const { user } = setup({ data: { ...data, projects: [many] }, entry: "/?s=work" });
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    const [start, coordinators] = ["Start or open", "Coordinators"].map((name) => screen.getByRole("region", { name }));
+    expect(start!.compareDocumentPosition(coordinators!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(start!).getByRole("button", { name: /^New coordinator/ })).toBeInTheDocument();
+  });
+
+  it("opens the project coordinator's chat, and a coordinator with no pane on its page", async () => {
+    const first = setup({ data, entry: "/?s=work" });
+    await first.user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    await first.user.click(step().getByRole("button", { name: /^Project coordinator/ }));
+    expect(first.router.state.location.pathname).toBe("/pane/w%3A2%3Ap1");
+    first.router.dispose();
+    document.body.innerHTML = "";
+
+    const second = setup({ data, entry: "/?s=work" });
+    await second.user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    await second.user.click(step().getByRole("button", { name: /^Checkout/ }));
+    expect(second.router.state.location.pathname).toBe("/project/acme/node/t-2");
+  });
+
+  it("creates a coordinator at the project's top level and opens its chat once it runs", async () => {
+    let started = false;
+    server.use(http.post("/api/org/node/start", async ({ request }) => {
+      (posts["/api/org/node/start"] ??= []).push(await request.json());
+      started = true;
+      return HttpResponse.json({ ok: true, node: { id: "t-9" } });
+    }));
+    const fresh: ProjectView = { ...organizer, threads: [...organizer.threads,
+      { id: "t-9", title: "Wholesale", parentId: "root", role: "coordinator", status: "open", paneId: "w:3:p1", agent: "claude", liveStatus: "idle" }] };
+    const onClose = vi.fn();
+    const router = createMemoryRouter([{
+      id: ROOT_ROUTE_ID, path: "/", loader: () => started ? { ...data, agents: [...data.agents, pane("w:3:p1")], projects: [fresh] } : data,
+      element: <><NewDialog onClose={onClose} /><Outlet /></>,
+      children: [{ index: true, element: <p>Home</p> }, { path: "pane/:paneId", element: <p>Pane page</p> }],
+    }], { initialEntries: ["/?s=work"] });
+    render(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    await user.click(screen.getByRole("button", { name: /^New coordinator/ }));
+    expect(screen.getByRole("dialog", { name: "New coordinator" })).toBeInTheDocument();
+    // A new coordinator is the project's: the form starts on the top level and names no thread role.
+    expect(screen.getByLabelText("Parent")).toHaveValue("root");
+    expect(screen.queryByRole("radiogroup", { name: "Role" })).toBeNull();
+    await user.type(screen.getByLabelText("Title"), "Wholesale");
+    await user.type(screen.getByLabelText("Task"), "Run the wholesale launch.");
+    await user.click(screen.getByRole("button", { name: "Create coordinator" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/pane/w%3A3%3Ap1"));
+    expect(onClose).toHaveBeenCalled();
+    expect(posts["/api/org/node/start"]).toEqual([{ project: "acme", role: "coordinator", title: "Wholesale", parent: "root", task: "Run the wholesale launch." }]);
+  });
+
+  it("with an Organizations that has no coordinators, offers a thread and the project's page, never a coordinator", async () => {
+    const old: ProjectView = { slug: "acme", name: "Acme", status: "active", nodeActions: false, threads: [{ id: "t-4", title: "Hotfix", parentId: "root", role: "worker", status: "open" }] };
+    const { user, router } = setup({ data: { ...base, projects: [old] }, entry: "/?s=work" });
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    expect(step().queryAllByRole("button")).toEqual([]);
+    expect(step().getByText("No coordinator runs here yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^New coordinator/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^New thread/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Open project/ }));
+    expect(router.state.location.pathname).toBe("/project/acme");
+  });
 });
 
 describe("projectCommand", () => {

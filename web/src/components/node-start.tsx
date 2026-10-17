@@ -44,11 +44,14 @@ export function useStartOptions(project: string, session: string | undefined): S
 }
 
 /**
- * "New thread" and "New coordinator" for a project, each opening the one New flow on that project
- * and role. The page that shows them refreshes through `onStarted`, so starting never navigates away.
+ * "New thread" and "New coordinator" for a project, or under one of its coordinators, each opening
+ * the one New flow on that project, role and parent. The page that shows them refreshes through
+ * `onStarted`, so starting never navigates away.
  */
-export function NewNodeActions({ project, onStarted }: {
+export function NewNodeActions({ project, under, onStarted }: {
   project: ProjectView;
+  /** The coordinator the new node goes under; the project's top level when omitted. */
+  under?: { id: string; title: string };
   /** The New flow starts in the snapshot's session, which is the page's. */
   session?: string;
   onStarted: () => void;
@@ -59,7 +62,8 @@ export function NewNodeActions({ project, onStarted }: {
     <div className="flex flex-wrap gap-1">
       {roles.map((role) => (
         <button key={role} type="button" className="quiet-action" aria-haspopup="dialog"
-          onClick={() => openNewDialog({ kind: "thread", project: project.slug, role, onStarted })}>
+          aria-label={under ? `New ${ROLE_NOUN[role]} under ${under.title}` : undefined}
+          onClick={() => openNewDialog({ kind: "thread", project: project.slug, role, parent: under?.id, onStarted })}>
           <Plus aria-hidden className="size-4" />New {ROLE_NOUN[role]}
         </button>
       ))}
@@ -72,18 +76,21 @@ export function NewNodeActions({ project, onStarted }: {
  * open coordinators (Organizations' `node start`), with a profile or from a template when the host
  * has them. `onRole` adds the Thread/Coordinator switch; without it the role is the caller's.
  */
-export function NodeStartForm({ project, session, role, onRole, onStarted, readOnly = false }: {
+export function NodeStartForm({ project, session, role, onRole, parent = "root", onStarted, readOnly = false }: {
   project: ProjectView;
   session?: string;
   role: NodeRole;
   onRole?: (role: NodeRole) => void;
-  onStarted: () => void;
+  /** The parent the form starts on: `root`, or the coordinator whose New was tapped. */
+  parent?: string;
+  /** Gets the new node's id and title. */
+  onStarted: (id: string, title: string) => void;
   readOnly?: boolean;
 }) {
   const options = useStartOptions(project.slug, session);
   const revalidator = useRevalidator();
   const onScreen = useOnScreen();
-  const [form, setForm] = useState<StartForm>({ title: "", parent: "root", task: "", profile: "", template: "" });
+  const [form, setForm] = useState<StartForm>({ title: "", parent, task: "", profile: "", template: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roles = startableRoles(project);
@@ -101,13 +108,13 @@ export function NodeStartForm({ project, session, role, onRole, onStarted, readO
     setError(null);
     try {
       const { title, parent, task, profile } = form;
-      await startOrgNode({ project: project.slug, role, title, parent, task, ...(template ? { template } : profile ? { profile } : {}) }, session);
+      const { node } = await startOrgNode({ project: project.slug, role, title, parent, task, ...(template ? { template } : profile ? { profile } : {}) }, session);
       if (!onScreen.current) {
         void revalidator.revalidate();
         return;
       }
       setSubmitting(false);
-      onStarted();
+      onStarted(node.id, title.trim());
     } catch (failure) {
       setError(errorMessage(failure));
       setSubmitting(false);

@@ -385,6 +385,50 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(live).toEqual([{ session: "default", topic: "org" }]);
   });
 
+  test("offers Move once node move's help exits 0, and asks an Organizations without it again only after a while", async () => {
+    let now = 1;
+    let help = 2;
+    const asked: string[][] = [];
+    const run: OrgRun = async (argv) => {
+      if (argv[1] === "move") {
+        asked.push(argv);
+        return { code: help, stdout: "", stderr: help ? "error: unrecognized subcommand 'move'" : "" };
+      }
+      return overviewRun([])(argv, { timeoutMs: 1 });
+    };
+    const registry = registryFor(fixture(), { run, now: () => now });
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.nodeMoves).toBe(false);
+    help = 0;
+    now += 60_000;
+    await registry.refresh();
+    expect(asked).toHaveLength(1);
+    now += 10 * 60_000;
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.nodeMoves).toBe(true);
+    await registry.refresh();
+    expect(asked).toEqual([["node", "move", "--help"], ["node", "move", "--help"]]);
+  });
+
+  test("a node is movable only where Organizations' actions list `move`", async () => {
+    const registry = registryFor(fixture(), { run: overviewRun([
+      overviewThread({ id: "t-0002", actions: ["move"] }),
+      overviewThread({ id: "t-0003", title: "Fixed", actions: ["create-pr"] }),
+    ]) });
+    await registry.refresh();
+    const [movable, fixed] = registry.list("default", true, [])[0]!.threads;
+    expect(movable).toMatchObject({ id: "t-0002", movable: true });
+    expect(fixed).not.toHaveProperty("movable");
+  });
+
+  test("never asks upstream herdr-projects for node move", async () => {
+    const calls: string[][] = [];
+    const registry = registryFor(fixture(), { run: overviewRun([], calls), upstream: () => true });
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.nodeMoves).toBe(false);
+    expect(calls.some((argv) => argv[1] === "move")).toBe(false);
+  });
+
   test("a changed record is noticed by stat on the next read after the interval", async () => {
     const root = fixture();
     let now = 1;
@@ -408,8 +452,8 @@ describe("ProjectRegistry: Organizations fields", () => {
   test("an invalidation during a refresh resolves only after a refresh that started after it", async () => {
     const gates: Array<() => void> = [];
     const run: OrgRun = async (argv) => {
-      // The asks a refresh reads beside the overview answer at once; the overview is what this holds.
-      if (argv[0] === "asks") return { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'asks'" };
+      // The asks and the move probe a refresh reads beside the overview answer at once; the overview is what this holds.
+      if (argv[0] === "asks" || argv[1] === "move") return { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'asks'" };
       await new Promise<void>((resolve) => gates.push(resolve));
       return { code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [] }), stderr: "" };
     };

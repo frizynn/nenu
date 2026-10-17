@@ -807,6 +807,17 @@ export function resolveOrgNode(
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
+/** Organizations' `node move`: the node, with everything under it, hangs under `parent` (`root` or a coordinator). */
+export function moveOrgNode(
+  input: { project: string; id: string; parent: string },
+  session?: string,
+): Promise<{ ok: true; moved: { id: string; parent: string } }> {
+  return req(withSession("/api/org/node/move", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
 export function createOrgProject(
   input: { name: string; goal?: string; repo?: string },
   session?: string,

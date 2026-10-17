@@ -42,6 +42,11 @@
 .task-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; padding-left: 4px; border-radius: var(--radius-md); background: inherit; opacity: 0; transition: opacity 150ms ease-out; }
 @media (hover: hover) { .task-row:hover .task-actions { opacity: 1; } }
 .task-row:has(:focus-visible) .task-actions { opacity: 1; }
+/* The fill is translucent, so the age the words cover steps aside while they show. */
+@media (hover: hover) { .task-row:has(> .task-actions):hover .task-age { visibility: hidden; } }
+.task-row:has(> .task-actions):has(:focus-visible) .task-age { visibility: hidden; }
+/* An open coordinator on the project page folds and has actions: the words stop short of its chevron. */
+.task-row:has(> .task-fold) .task-actions { right: 40px; }
 .task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
 .task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); }
 /* The ⋯ of a screen that cannot hover, always there: there is no hover to find it by. */
@@ -71,6 +76,7 @@
 @media (max-width: 1023px), (pointer: coarse) {
   .quiet-action, .task-main { min-height: 44px; }
   .task-fold { width: 44px; height: 44px; margin: 0; }
+  .task-row:has(> .task-fold) .task-actions { right: 48px; }
   .task-history-toggle { min-height: 44px; }
 }
 
@@ -104,3 +110,8 @@
 /* A note's second line: what its thread is doing, then who owns it, a dot between them. */
 .note-meta { display: flex; min-width: 0; flex-wrap: wrap; column-gap: 6px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 .note-meta > span + span::before { content: "·"; margin-right: 6px; }
+
+/* The project page's tree (ADR 0092): a heading over its coordinators and over the threads at its top level, and what an open coordinator holds. */
+.task-section { padding: 10px 10px 4px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
+.task-fold-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; padding-bottom: 8px; }
+.task-fold-body > section[aria-label="Coordinator card"] { margin-bottom: 0; }

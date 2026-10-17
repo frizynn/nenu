@@ -202,6 +202,8 @@ export interface ProjectThreadView {
   autoMerge?: boolean;
   /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
   prAction?: PrAction;
+  /** Organizations has another parent for it (`node move`): its `actions` lists `move`. Absent otherwise. */
+  movable?: true;
   /** The `Status:` line of the agent's last report; absent without one. */
   verdict?: ThreadVerdict;
   /** When a coordinator's STATUS.md last changed; its text comes with the summaries. */
@@ -344,6 +346,8 @@ export interface ProjectView {
   prActions?: boolean;
   /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
   nodeActions?: boolean;
+  /** Organizations can hang a node under another parent (`node move`); absent or false hides Move. */
+  nodeMoves?: boolean;
   /** Workspaces holding a live pane bound to this project, in this session. */
   workspaceIds?: string[];
   /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */
