@@ -260,6 +260,8 @@ export interface OrgSeed {
   moves?: boolean;
   /** `asks --json`'s rows, as Organizations prints them; without it the fake has no `asks` (fake-org.ts). */
   asks?: Array<Record<string, unknown>>;
+  /** `asks --json`'s decision rows, from the Organizations that answers them (fake-org.ts). */
+  decisions?: Array<Record<string, unknown>>;
   /** The operator's own profiles beside the built-ins (fake-org.ts). */
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
   projects: Array<{

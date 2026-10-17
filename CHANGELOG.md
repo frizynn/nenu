@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.20.0] - 2026-10-17
+## [1.22.0] - 2026-10-17
 
 ### Added
 
@@ -25,6 +25,29 @@ All notable changes to Nenu are recorded here. The format follows
 - A sibling takes the thread's place in the history; a phone's tab lives in the URL, so a reload or a way back lands on it (00fd14de).
 - A coordinator's thread slides in as a push and back out as a pop; siblings cross-fade (00fd14de).
 - The motion bench waits for its row in the page, not the sidebar's hidden copy (33f76be0).
+
+## [1.21.0] - 2026-10-17
+
+### Added
+
+- A decision waiting on you has its links as chips and Answer on its own line, where Organizations prints decision rows; answered, it waits on no one (ADR 0093) (fdd9dd55, 13bad973).
+- `bun scripts/e2e/asks-answer.ts` answers a decision too (97e68ace).
+
+## [1.20.0] - 2026-10-17
+
+### Added
+
+- Your asks narrows by project and coordinator, kept in its address; a coordinator's card lists its own the same way (ADR 0093) (33de679f, 4a7f3382).
+- Answer on an ask that waits on you, through `asks answer` where Organizations takes one; answered, it waits on no one (9fd50c9b, 33de679f, 92dadefa).
+- `bun scripts/e2e/asks-answer.ts [--before]` captures Your asks and a card at 390 and 1440 px (334de240).
+
+### Changed
+
+- An ask's links read as short chips with their state, not raw text (33de679f).
+
+### Fixed
+
+- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b, 92dadefa).
 
 ## [1.19.0] - 2026-10-17
 

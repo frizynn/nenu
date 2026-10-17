@@ -173,6 +173,9 @@ the unit name; the Herdr action runs from anywhere.
   at `node/root`) draw only Organizations' fields: `asks --json` read beside the overview, grouped by its
   own rank, never parsed out of STATUS.md; an ask's text stays out of the snapshot and out of anything sent
   to an agent ([ADR 0091](./.adr/0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)).
+  One component (`ask-list.tsx`) draws both, narrowed by project and coordinator, links as chips; a line that
+  is only a parenthesis is a placeholder, and Answer writes the person's words through `asks answer`, only
+  where its `--help` exits 0 ([ADR 0093](./.adr/0093-asks-are-answered-and-narrowed-where-they-are-read.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
   page, each a row folding over its card and work, the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move

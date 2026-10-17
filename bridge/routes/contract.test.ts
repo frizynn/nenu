@@ -35,6 +35,7 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/org/node/start", level: "write", session: true },
   { method: "POST", path: "/api/org/node/resolve", level: "write", session: true },
   { method: "POST", path: "/api/org/node/move", level: "write", session: true },
+  { method: "POST", path: "/api/org/asks/answer", level: "write", session: true },
   { method: "POST", path: "/api/org/project/open", level: "write", session: true },
   { method: "POST", path: "/api/org/coordinator/replace", level: "write", session: true },
   { method: "POST", path: "/api/org/project/create", level: "write", session: true },
@@ -377,7 +378,7 @@ describe("a project's library and summaries", () => {
 
   test("asks are none, not an error, while Organizations is read from its files", async () => {
     const response = await fetch(`${url}/api/org/asks`, { headers: { "x-device": "tablet" } });
-    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, asks: null, decisions: [] } });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: { ok: true, asks: null, decisions: [], answers: false } });
   });
 });
 
