@@ -13,7 +13,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - The model picker applies a model with one tap, checks the one running with its version, and keeps a failure in the sheet to retry (dca070f7).
-- Effort sits under the model list: the reported value opens the agent's picker, whose arrows then step it (dca070f7).
+- Effort sits under the model list: where the agent's picker has arrows beside it the value opens them, and tapping the running model confirms it; elsewhere it shows the value and when it is chosen (dca070f7, fa5e7c68).
 - A phone's Back closes the model picker (dca070f7).
 - `bun scripts/e2e/run.ts reading` captures tables, nested lists, the way back and the model picker on a phone and a desk (dbcdf59b).
 
