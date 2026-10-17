@@ -121,6 +121,21 @@ it("shows the tab bar off a pane with Home, New and Search, Home counting what n
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
 });
 
+it("closes the phone's Search sheet on Escape, clearing a typed query first", async () => {
+  const { user } = setup();
+  const openSearch = () => user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Search" }));
+  await openSearch();
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument());
+
+  await openSearch();
+  await user.type(screen.getByRole("searchbox"), "panel");
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument());
+});
+
 it("hides the tab bar on a pane and its History, where the composer owns the bottom edge", () => {
   for (const path of ["/pane/w%3A1%3Ap2?s=work", "/pane/w%3A1%3Ap2/history?s=work"]) {
     const { unmount } = setup(data, path);

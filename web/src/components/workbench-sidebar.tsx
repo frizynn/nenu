@@ -130,7 +130,12 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   }
 
   function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Escape") { event.stopPropagation(); closeSearch(); }
+    if (event.key === "Escape") {
+      // On the Search sheet an empty box is the whole sheet, so its Escape goes on to close it.
+      if (variant === "sheet" && !query) return;
+      event.stopPropagation();
+      closeSearch();
+    }
     if (event.key === "Enter" && !event.nativeEvent.isComposing) openPicked();
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && hits.length > 0) {
       event.preventDefault();
