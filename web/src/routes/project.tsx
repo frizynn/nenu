@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { ColumnPage } from "@/components/column-page";
@@ -31,6 +32,10 @@ export function ProjectRoute() {
   const read = useThreadSummaries(coordinator ? undefined : project, coordinators);
   // Only the cards read the asks, and only a project that organizes coordinators draws them.
   const asks = useAsks(organizer ? data.projects : undefined);
+  // Its STATUS.md and its coordinators' cards head the page, so the page waits for them (briefly) before
+  // drawing what they would push down; a project read again draws them at once (useThreadSummaries).
+  const waited = useWaited(projectSlug, HOLD_MS);
+  const held = !waited && !(read.ready && asks.loaded);
   if (coordinator) return <Navigate to={panePath(coordinator, data.session)} replace />;
 
   // The project coordinator's STATUS.md heads the page, except where the project organizes
@@ -50,11 +55,24 @@ export function ProjectRoute() {
     asks={asks} summaries={read.summaries} session={data.session} onOpenNode={openNode} onOpenStatusNode={(id) => navigate(nodePath(projectSlug, id, data.session))} />;
 
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
-    {!project ? <ProjectMissing session={data.session} />
+    {!project ? <ProjectMissing session={data.session} /> : held ? null
       // Keyed by project: its folds are its own, and node ids repeat across projects.
       : <ProjectTasks key={project.slug} project={project} status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
         organize={{ card }}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
         onChanged={() => revalidator.revalidate()} />}
   </ColumnPage>;
+}
+
+/** How long a project page waits for what heads it before it draws without it. */
+const HOLD_MS = 1_000;
+
+/** True once `ms` have passed since `key` was first shown. */
+function useWaited(key: string, ms: number): boolean {
+  const [waited, setWaited] = useState<string>();
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(key), ms);
+    return () => clearTimeout(timer);
+  }, [key, ms]);
+  return waited === key;
 }
