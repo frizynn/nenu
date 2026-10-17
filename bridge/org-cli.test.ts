@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  canMoveNodes,
+  answerAsk,
   coordinatorChoices,
   createProject,
   listProfiles,
@@ -10,6 +10,7 @@ import {
   mergeThread,
   moveNode,
   openProject,
+  offers,
   OrgCliError,
   orgEnv,
   OrgValidationError,
@@ -190,10 +191,41 @@ describe("herdr-organizations CLI adapter", () => {
     expect(calls).toEqual([]);
   });
 
-  it("knows node move is there only when its help exits 0", async () => {
-    expect(await canMoveNodes(fakeRun({ code: 0, stdout: "Usage: herdr-organizations node move", stderr: "" }).run)).toBe(true);
-    expect(await canMoveNodes(fakeRun({ code: 2, stdout: "", stderr: "error: unrecognized subcommand 'move'" }).run)).toBe(false);
-    expect(await canMoveNodes(async () => { throw new Error("spawn failed"); })).toBe(false);
+  it("knows a command is there only when its help exits 0", async () => {
+    const help = fakeRun({ code: 0, stdout: "Usage: herdr-organizations node move", stderr: "" });
+    expect(await offers(help.run, ["node", "move"])).toBe(true);
+    expect(help.calls[0]!.argv).toEqual(["node", "move", "--help"]);
+    expect(await offers(fakeRun({ code: 2, stdout: "", stderr: "error: unrecognized subcommand 'answer'" }).run, ["asks", "answer"])).toBe(false);
+    expect(await offers(async () => { throw new Error("spawn failed"); }, ["node", "move"])).toBe(false);
+  });
+
+  it("answers an ask with the person's words on stdin, and checks what Organizations says it did", async () => {
+    const reply = { schema_version: 1, project: "awam", coordinator: "t-0002", line: 5, answered_at: "2026-10-17T10:00:00Z" };
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify(reply), stderr: "" });
+
+    expect(await answerAsk(run, "/tmp/herdr.sock", { project: "awam", coordinator: "t-0002", line: 5, text: "  Prospectos primero  " }))
+      .toEqual({ project: "awam", coordinator: "t-0002", line: 5, answeredAt: "2026-10-17T10:00:00Z" });
+    expect(calls).toEqual([{
+      argv: ["asks", "answer", "awam", "t-0002", "--line=5", "--text-file", "-", "--json"],
+      opts: { stdin: "Prospectos primero", env: { HERDR_SOCKET_PATH: "/tmp/herdr.sock" }, timeoutMs: 30_000 },
+    }]);
+    await expect(answerAsk(fakeRun({ code: 0, stdout: JSON.stringify({ ...reply, line: 6 }), stderr: "" }).run, "/s", { project: "awam", coordinator: "t-0002", line: 5, text: "ok" }))
+      .rejects.toThrow("invalid answer response");
+    await expect(answerAsk(fakeRun({ code: 1, stdout: "", stderr: "error: line 5 is not an ask" }).run, "/s", { project: "awam", coordinator: "root", line: 5, text: "ok" }))
+      .rejects.toThrow("line 5 is not an ask");
+  });
+
+  it("refuses an answer it can tell is wrong before running the CLI", async () => {
+    const { run, calls } = fakeRun({ code: 0, stdout: "", stderr: "" });
+    const valid = { project: "awam", coordinator: "root", line: 5, text: "yes" };
+    await expect(answerAsk(run, "/s", { ...valid, text: "   " })).rejects.toThrow("Write an answer first");
+    await expect(answerAsk(run, "/s", { ...valid, text: "one\ntwo" })).rejects.toThrow("one line");
+    await expect(answerAsk(run, "/s", { ...valid, text: "x".repeat(2_001) })).rejects.toThrow("2,000 characters");
+    await expect(answerAsk(run, "/s", { ...valid, line: 0 })).rejects.toThrow("line number");
+    await expect(answerAsk(run, "/s", { ...valid, line: "5" })).rejects.toThrow("line number");
+    await expect(answerAsk(run, "/s", { ...valid, coordinator: "--yes" })).rejects.toThrow("Node ID must look like t-1234");
+    await expect(answerAsk(run, "/s", { ...valid, project: "../awam" })).rejects.toThrow("Project must use lowercase");
+    expect(calls).toEqual([]);
   });
 
   it("starts a top-level thread through upstream herdr-projects and refuses what it cannot do", async () => {

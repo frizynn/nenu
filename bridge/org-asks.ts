@@ -42,11 +42,20 @@ export async function readAsks(run: OrgRun, root: string): Promise<OrgAskRow[] |
   }).slice(0, MAX_ROWS);
 }
 
-/** One ask, from a status file's `asks` or a row of `asks --json`; null without a known state or text. */
+/**
+ * A line that is only a parenthesis, such as `(nothing for now; …)`: a coordinator's placeholder under a
+ * heading, neither an ask nor a decision, so it neither lists nor counts as waiting on the person.
+ */
+export function placeholder(text: string): boolean {
+  const line = text.trim();
+  return line.startsWith("(") && line.endsWith(")");
+}
+
+/** One ask, from a status file's `asks` or a row of `asks --json`; null without a known state or text, or for a placeholder. */
 export function parseAsk(value: unknown): Ask | null {
   if (!isRecord(value)) return null;
   const state = ASK_STATES.find((candidate) => candidate === value.state);
-  if (!state || typeof value.text !== "string") return null;
+  if (!state || typeof value.text !== "string" || placeholder(value.text)) return null;
   return {
     line: typeof value.line === "number" && Number.isSafeInteger(value.line) && value.line > 0 ? value.line : 0,
     state,
@@ -66,10 +75,10 @@ export function parseAsk(value: unknown): Ask | null {
   };
 }
 
-/** A status file's `needs_decision` lines; none when the field is missing or malformed. */
+/** A status file's `needs_decision` lines, placeholders left out; none when the field is missing or malformed. */
 export function parseDecisions(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((line) => typeof line === "string" && line.trim() ? [line.slice(0, MAX_TEXT)] : []).slice(0, MAX_DECISIONS);
+  return value.flatMap((line) => typeof line === "string" && line.trim() && !placeholder(line) ? [line.slice(0, MAX_TEXT)] : []).slice(0, MAX_DECISIONS);
 }
 
 /**

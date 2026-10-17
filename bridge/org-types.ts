@@ -79,6 +79,8 @@ export interface AskDecision {
 export interface AsksList {
   asks: AskRow[];
   decisions: AskDecision[];
+  /** This Organizations can answer an ask (`asks answer`). */
+  answers: boolean;
 }
 
 /** An agent's token use as Organizations read it from its transcripts. */
