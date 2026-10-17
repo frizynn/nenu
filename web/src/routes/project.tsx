@@ -51,7 +51,8 @@ export function ProjectRoute() {
 
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
     {!project ? <ProjectMissing session={data.session} />
-      : <ProjectTasks project={project} status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
+      // Keyed by project: its folds are its own, and node ids repeat across projects.
+      : <ProjectTasks key={project.slug} project={project} status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
         organize={{ card }}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
         onChanged={() => revalidator.revalidate()} />}

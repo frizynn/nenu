@@ -179,6 +179,8 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
     setBrowsing(false);
     setKind(next);
     setFrom(back);
+    // Picking something else on a desk's list stops waiting for a coordinator's chat.
+    setOpening(null);
   }
   function openProjectStep(slug: string) {
     setProject(slug);
@@ -192,8 +194,11 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   function threadStarted(slug: string, id: string, title: string) {
     void revalidator.revalidate();
     // The page that asked refreshes itself; a coordinator started here opens its chat; a thread opens its project.
+    if (nodeRole === "coordinator" && !(preset.onStarted && slug === preset.project)) {
+      setOpening({ slug, id, title });
+      return;
+    }
     if (preset.onStarted && slug === preset.project) preset.onStarted();
-    else if (nodeRole === "coordinator") return setOpening({ slug, id, title });
     else navigate(projectPath(slug, data?.session));
     onClose();
   }

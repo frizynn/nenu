@@ -222,7 +222,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
     const { thread, state } = node;
     const resolved = state === "resolved";
     // On the project page an open coordinator folds over its card and work, closed until opened.
-    const organized = Boolean(organize) && !resolved && thread.role === "coordinator";
+    const organized = !resolved && thread.role === "coordinator" ? organize : undefined;
     // Elsewhere open coordinators always show their work; a resolved one folds until opened.
     const open = organized ? folds[thread.id] ?? false : !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
     const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
@@ -232,12 +232,12 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
     ];
     const work = node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className={cn("task-list", !organized && "task-branch")}>{node.children.map(branch)}</ul>;
     return (
-      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, organized)} age={threadAge(thread, now)} current={onScreen(node)}
+      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, Boolean(organized))} age={threadAge(thread, now)} current={onScreen(node)}
         onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
         fold={organized || (resolved && node.children.length > 0) ? { open, onToggle: toggle } : undefined} actions={actions}>
         {open && (organized
           ? <div className="task-branch task-fold-body" aria-label={`Inside ${thread.title}`} role="group">
-            {organize!.card(thread.id)}
+            {organized.card(thread.id)}
             {work}
             {!readOnly && <NewNodeActions project={project} under={{ id: thread.id, title: thread.title }} session={session} onStarted={() => void onChanged()} />}
           </div>
