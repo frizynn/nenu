@@ -32,6 +32,7 @@ const project: OrgProjectView = {
   source: "json",
   prActions: true,
   nodeActions: true,
+  nodeMoves: false,
   workspaceIds: ["w9"],
 };
 
