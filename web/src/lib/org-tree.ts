@@ -20,13 +20,28 @@ export function liveState(status: AgentStatus): OpenState | undefined {
 }
 
 /**
+ * A coordinator's state from its agent's. A coordinator has nothing to review: a turn that ended
+ * (Herdr's `done`) leaves it idle at its prompt. Undefined while Herdr cannot tell.
+ */
+export function coordinatorState(status: AgentStatus): OpenState | undefined {
+  const live = liveState(status);
+  return live === "review" ? "idle" : live;
+}
+
+/**
  * Organizations' group decides, as its popup does (landing reads as review); the live pane is the
- * fresher reading of whether an agent is working, and a failed start needs you.
+ * fresher reading of whether an agent is working, and a failed start needs you. A coordinator is the
+ * exception: it never reads as ready for review, which Organizations groups it as once its report has
+ * a verdict and Herdr's `done` would say after every turn; it works, needs you, or is idle.
  */
 export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
   if (thread.status === "failed" || live === "needs" || thread.group === "waiting-on-you") return "needs";
+  if (thread.role === "coordinator") {
+    const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
+    return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");
+  }
   const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
   if (thread.group === "ready-for-review" || thread.group === "landing" || approved || live === "review") return "review";
   if (live) return live;

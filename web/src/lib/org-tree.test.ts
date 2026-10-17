@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -22,6 +22,30 @@ describe("nodeState", () => {
     expect(nodeState(node("a", "root", { status: "starting" }))).toBe("working");
     // A live status reported for a node with no pane is not evidence of anything.
     expect(nodeState(node("a", "root", { liveStatus: "working" }))).toBe("idle");
+  });
+});
+
+describe("a coordinator's state", () => {
+  const coordinator = (extra: Partial<ProjectThreadView>) => node("c", "root", { role: "coordinator", ...extra });
+  it("never reads as ready for review: it works, needs you, or is idle", () => {
+    // Organizations groups a coordinator whose report has a verdict as ready for review.
+    expect(nodeState(coordinator({ group: "ready-for-review", verdict: "done" }))).toBe("idle");
+    // Herdr's `done` is a turn that ended: the coordinator waits at its prompt.
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "done", group: "ready-for-review" }))).toBe("idle");
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "working", group: "ready-for-review" }))).toBe("working");
+    expect(nodeState(coordinator({ paneId: "p", liveStatus: "blocked", group: "idle" }))).toBe("needs");
+    expect(nodeState(coordinator({ group: "waiting-on-you" }))).toBe("needs");
+    expect(nodeState(coordinator({ status: "failed" }))).toBe("needs");
+    expect(nodeState(coordinator({ group: "working" }))).toBe("working");
+    expect(nodeState(coordinator({ status: "starting" }))).toBe("working");
+    expect(nodeState(coordinator({ status: "resolved", group: "resolved" }))).toBe("resolved");
+    // A thread keeps Organizations' reading.
+    expect(nodeState(node("t", "root", { group: "ready-for-review" }))).toBe("review");
+  });
+
+  it("reads the project's own coordinator the same way", () => {
+    expect([coordinatorState("done"), coordinatorState("working"), coordinatorState("blocked"), coordinatorState("idle"), coordinatorState("unknown")])
+      .toEqual(["idle", "working", "needs", "idle", undefined]);
   });
 });
 

@@ -22,6 +22,12 @@ All notable changes to Nenu are recorded here. The format follows
 - Opening a chat no longer folds its chips open and walks the conversation up (99cf86fe).
 - A project's chat keeps its chips' line height while it settles, so chips that land late move nothing (ca786daf).
 
+## [1.21.1] - 2026-10-17
+
+### Fixed
+
+- A coordinator reads as working, needs you or idle, never "Ready for review", on the project page, +, its page and for the project's own (c97249ae).
+
 ## [1.21.0] - 2026-10-17
 
 ### Added

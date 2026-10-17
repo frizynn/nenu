@@ -374,6 +374,18 @@ describe("+ → a project → a coordinator → its chat", () => {
     expect(within(start!).getByRole("button", { name: /^New coordinator/ })).toBeInTheDocument();
   });
 
+  it("names a coordinator's state as Nenu does everywhere: a turn that ended is idle, never ready for review", async () => {
+    const ended: ProjectView = { ...organizer, coordinator: { ...organizer.coordinator!, liveStatus: "done" },
+      threads: organizer.threads.map((thread) => thread.id === "t-1" ? { ...thread, liveStatus: "done" as const, group: "ready-for-review" } : thread) };
+    const { user } = setup({ data: { ...data, projects: [ended] }, entry: "/?s=work" });
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
+    expect(step().getAllByRole("button").map((row) => row.textContent)).toEqual([
+      "Project coordinatorIdle · codex",
+      "LeadIdle · claude",
+      "CheckoutNeeds you · under Lead",
+    ]);
+  });
+
   it("opens the project coordinator's chat, and a coordinator with no pane on its page", async () => {
     const first = setup({ data, entry: "/?s=work" });
     await first.user.click(await screen.findByRole("button", { name: /^Acme/ }));
