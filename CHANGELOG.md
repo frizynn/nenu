@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-17
+
+### Added
+
+- + lists the projects; a project's step lists its coordinators and New coordinator, and a pick opens that chat (ADR 0092) (d81fde80, 062bf383).
+- A project with coordinators under it is their page: each folds over its card and work, its own first while it runs (9b2d5632, 7792d023, 062bf383).
+- Move to…: an open node goes under another coordinator where Organizations has `node move` (a026e2fb, 9b2d5632).
+- `bun scripts/e2e/coordinators.ts` captures both at 390 and 1440 px (f2fd8b4d).
+
+### Changed
+
+- A coordinator started from Nenu names `--can-spawn --kind=tab` instead of leaning on defaults (a026e2fb).
+- New's Thread row moves into each project's step (d81fde80).
+
+### Fixed
+
+- A task row's age no longer shows through its actions (7792d023).
+
 ## [1.18.0] - 2026-10-16
 
 ### Added
