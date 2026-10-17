@@ -1,0 +1,35 @@
+import { act, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { expect, it } from "vitest";
+
+import type { RecentChat } from "@/lib/home-stats";
+import type { AgentView } from "@/lib/types";
+import { HomeSessions } from "./home-panels";
+
+const chat = (paneId: string, at: number): RecentChat => ({
+  agent: { paneId, status: "working", agent: "claude", workspaceId: "w1", workspaceLabel: "w1", workspaceNumber: 1, tabId: "t1", cwd: "/w", focused: false } as AgentView,
+  title: paneId, place: "w1", tab: null, at, unseen: false, review: false, detail: null,
+});
+
+function setup(first: RecentChat[]) {
+  let show: (recent: RecentChat[]) => void = () => undefined;
+  function Live() {
+    const [recent, setRecent] = useState(first);
+    show = setRecent;
+    return <HomeSessions recent={recent} workspaces={[]} reviews={[]} pullRequests={() => null} projects={[]} now={1_000} opening={null} />;
+  }
+  render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+  const rows = () => within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href"));
+  return { rows, show: (recent: RecentChat[]) => act(() => show(recent)) };
+}
+
+it("keeps Recents in the order it came on screen with while agents work, and reorders when the page comes back", () => {
+  const { rows, show } = setup([chat("a", 300), chat("b", 200), chat("c", 100)]);
+  expect(rows()).toEqual(["/pane/a", "/pane/b", "/pane/c"]);
+  // c moves last; a session that was not on screen arrives in its place.
+  show([chat("c", 900), chat("new", 400), chat("a", 300), chat("b", 200)]);
+  expect(rows()).toEqual(["/pane/new", "/pane/a", "/pane/b", "/pane/c"]);
+  act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+  expect(rows()).toEqual(["/pane/c", "/pane/new", "/pane/a", "/pane/b"]);
+});

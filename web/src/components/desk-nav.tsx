@@ -6,6 +6,7 @@ import { NodeDot } from "@/components/node-row";
 import { OpeningMark, PaneMark } from "@/components/nav-rows";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";
+import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, liveliest, projectActivity, projectAgents, type DeskChat } from "@/lib/desk-nav";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import type { HomeData } from "@/lib/loaders";
@@ -86,12 +87,14 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
   const [more, setMore] = useState(false);
   const isCurrent = (chat: DeskChat) =>
     (chat.paneId !== undefined && chat.paneId === paneId) || (chat.project === projectSlug && chat.thread?.id === nodeId && nodeId !== undefined);
-  const chats = deskChats(data).sort((a, b) => b.at - a.at);
+  // Each chat keeps the place it had when the bar drew it, so a row never moves under the pointer.
+  const at = useHeldTime((chat: DeskChat) => chat.key, (chat) => chat.at);
+  const chats = deskChats(data).sort((a, b) => at(b) - at(a));
   const { shown, hidden } = more ? { shown: chats, hidden: 0 } : preview(chats, CHATS_SHOWN, isCurrent);
   const revealed = new Set(more ? chats.slice(CHATS_SHOWN).map((chat) => chat.key) : []);
   return (
     <section aria-label="Chats" className="nav-desk nav-chats">
-      {groupByRecency(shown, (chat) => chat.at, now).map((group) => (
+      {groupByRecency(shown, at, now).map((group) => (
         <section key={group.key} aria-label={group.label} className="nav-group">
           <h3 className="nav-label">{group.label}</h3>
           {group.items.map((chat) => <ChatRow key={chat.key} chat={chat} session={data.session} current={isCurrent(chat)} revealed={revealed.has(chat.key)} />)}

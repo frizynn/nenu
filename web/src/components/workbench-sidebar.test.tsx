@@ -726,6 +726,22 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(home.querySelector(".nav-row-meta")).toHaveTextContent("1");
   });
 
+  it("keeps each chat where it was while its agent works, puts a new one where it belongs, and reorders on a return", () => {
+    let show: (data: HomeData) => void = () => undefined;
+    function Live() {
+      const [source, setSource] = useState(herd);
+      show = setSource;
+      return <WorkbenchSidebar data={source} />;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+    expect(rowNames("Today")).toEqual(["Checkout flow", "Payments webhook"]);
+    const moved = herd.agents.map((agent) => agent.paneId === "hook" ? { ...agent, lastActiveAt: now } : agent);
+    act(() => show({ ...herd, agents: [...moved, at("fresh", "w2", { lastActiveAt: now - MIN / 2 })] }));
+    expect(rowNames("Today")).toEqual(["fresh", "Checkout flow", "Payments webhook"]);
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(rowNames("Today")).toEqual(["Payments webhook", "fresh", "Checkout flow"]);
+  });
+
   it("marks a chat that finished or needs you since you last opened it with a quiet +1, and not the one on screen", () => {
     const finished = { ...herd, agents: herd.agents.map((agent) =>
       agent.paneId === "hook" || agent.paneId === "flow" ? { ...agent, status: agent.paneId === "flow" ? "done" as const : agent.status, lastActiveAt: now, lastSeenAt: now - MIN } : agent) };

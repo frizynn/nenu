@@ -6,6 +6,7 @@ import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
+import { useHeldTime } from "@/hooks/use-held-time";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
 import { timeAgo, timeAgoShort } from "@/lib/format";
@@ -299,11 +300,13 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
   // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
+  // Recents keeps the order it came on screen with, so a row never moves under the finger.
+  const at = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
   if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
-  const recent = everyRecent.filter(kept);
+  const recent = everyRecent.filter(kept).sort((a, b) => at(b) - at(a));
   const workspaces = everyWorkspace.map((group) => {
     const tabs = group.tabs.map((tab) => ({ ...tab, chats: tab.chats.filter(kept) })).filter((tab) => tab.chats.length > 0);
     // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
