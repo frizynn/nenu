@@ -742,6 +742,20 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(rowNames("Today")).toEqual(["Payments webhook", "fresh", "Checkout flow"]);
   });
 
+  it("moves a chat up into its period as it asks for you, however long ago it last moved", () => {
+    let show: (data: HomeData) => void = () => undefined;
+    function Live() {
+      const [source, setSource] = useState(herd);
+      show = setSource;
+      return <WorkbenchSidebar data={source} />;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
+    expect(rowNames("Last 30 days")).toEqual(["Docs pass"]);
+    act(() => show({ ...herd, agents: herd.agents.map((agent) => agent.paneId === "Docs pass" ? { ...agent, status: "blocked" as const, lastActiveAt: now, lastSeenAt: now - DAY } : agent) }));
+    expect(rowNames("Today")).toEqual(["Docs pass", "Checkout flow", "Payments webhook"]);
+    expect(section("Today").getByRole("link", { name: /^Docs pass/ }).querySelector("[data-unread]")).toHaveTextContent("+1");
+  });
+
   it("marks a chat that finished or needs you since you last opened it with a quiet +1, and not the one on screen", () => {
     const finished = { ...herd, agents: herd.agents.map((agent) =>
       agent.paneId === "hook" || agent.paneId === "flow" ? { ...agent, status: agent.paneId === "flow" ? "done" as const : agent.status, lastActiveAt: now, lastSeenAt: now - MIN } : agent) };

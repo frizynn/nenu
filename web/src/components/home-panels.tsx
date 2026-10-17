@@ -300,8 +300,9 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
   // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
-  // Recents keeps the order it came on screen with, so a row never moves under the finger.
-  const at = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
+  // Recents keeps the order it came on screen with, so a row never moves under the finger; one that
+  // turns New moves up to say so.
+  const at = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at, (chat) => chat.unseen);
   if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;

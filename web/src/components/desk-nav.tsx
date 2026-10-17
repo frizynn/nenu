@@ -87,8 +87,9 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
   const [more, setMore] = useState(false);
   const isCurrent = (chat: DeskChat) =>
     (chat.paneId !== undefined && chat.paneId === paneId) || (chat.project === projectSlug && chat.thread?.id === nodeId && nodeId !== undefined);
-  // Each chat keeps the place it had when the bar drew it, so a row never moves under the pointer.
-  const at = useHeldTime((chat: DeskChat) => chat.key, (chat) => chat.at);
+  // Each chat keeps the place it had when the bar drew it, so a row never moves under the pointer; one
+  // that turns +1 moves up to say so.
+  const at = useHeldTime((chat: DeskChat) => chat.key, (chat) => chat.at, (chat) => chat.unread);
   const chats = deskChats(data).sort((a, b) => at(b) - at(a));
   const { shown, hidden } = more ? { shown: chats, hidden: 0 } : preview(chats, CHATS_SHOWN, isCurrent);
   const revealed = new Set(more ? chats.slice(CHATS_SHOWN).map((chat) => chat.key) : []);

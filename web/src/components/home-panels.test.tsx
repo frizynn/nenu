@@ -7,9 +7,9 @@ import type { RecentChat } from "@/lib/home-stats";
 import type { AgentView } from "@/lib/types";
 import { HomeSessions } from "./home-panels";
 
-const chat = (paneId: string, at: number): RecentChat => ({
+const chat = (paneId: string, at: number, unseen = false): RecentChat => ({
   agent: { paneId, status: "working", agent: "claude", workspaceId: "w1", workspaceLabel: "w1", workspaceNumber: 1, tabId: "t1", cwd: "/w", focused: false } as AgentView,
-  title: paneId, place: "w1", tab: null, at, unseen: false, review: false, detail: null,
+  title: paneId, place: "w1", tab: null, at, unseen, review: false, detail: null,
 });
 
 function setup(first: RecentChat[]) {
@@ -32,4 +32,16 @@ it("keeps Recents in the order it came on screen with while agents work, and reo
   expect(rows()).toEqual(["/pane/new", "/pane/a", "/pane/b", "/pane/c"]);
   act(() => { document.dispatchEvent(new Event("visibilitychange")); });
   expect(rows()).toEqual(["/pane/c", "/pane/new", "/pane/a", "/pane/b"]);
+});
+
+// A finished agent raises no toast (ADR 0094), so its New must not wait below the fold for a return.
+it("moves a session up as it turns New, from below the fold too", () => {
+  const first = Array.from({ length: 8 }, (_, i) => chat(`p${i}`, 800 - i * 100));
+  const { rows, show } = setup(first);
+  expect(rows()).not.toContain("/pane/p7");
+  show([chat("p7", 900, true), ...first.slice(0, 7)]);
+  expect(rows()[0]).toBe("/pane/p7");
+  // Still New on the next read, it stays where it rose to.
+  show([chat("p7", 900, true), chat("p0", 1_000), ...first.slice(1, 7)]);
+  expect(rows().slice(0, 2)).toEqual(["/pane/p7", "/pane/p0"]);
 });
