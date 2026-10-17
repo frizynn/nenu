@@ -41,6 +41,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; what opening a panel moves
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
+//   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3496,6 +3497,177 @@ async function chat(): Promise<void> {
 }
 
 
+// The answer from the operator's phone captures (2026-10-17): a four-column table of long cells, a
+// short two-column one and a list with sub-items. Synthetic words in the same shape.
+const READING_ANSWER = [
+  "Listo. Esto es lo que pediste y en qué quedó:",
+  "",
+  "| Lo que dijiste | Qué se hizo | PR | En vivo |",
+  "|---|---|---|---|",
+  "| Atrás suma entradas al historial | El botón ‹ vuelve a la página anterior en vez de apilar otra | #209 | sí |",
+  "| Parpadeo y saltos de posición | Proyecto y chat cargan sin saltar, y el arranque muestra una sola pantalla en vez de dos | #212 | sí |",
+  "| La lista de chats se reordena sola | Home y la barra mantienen el orden mientras están en pantalla | #210 | sí |",
+  "| El aviso de actualización flota | Ahora es una fila dentro del flujo, sin animación | #211 | no, falta el release |",
+  "",
+  "| Paso | Estado |",
+  "|---|---|",
+  "| Merge | 4 de 4 |",
+  "| Release | 1.24.1 |",
+  "",
+  "Lo que medí:",
+  "",
+  "- **Atrás, en el sitio real a 390 de ancho:** fui Home → proyecto → coordinador → Threads y toqué ‹ dos veces. El historial quedó en la entrada más 2. Antes sumaba uno con cada ‹.",
+  "- **Parpadeo y saltos, en el banco de la auditoría con datos simulados:**",
+  "  - Las filas que se movían pasaron de 250 y 476 por minuto a 0.",
+  "  - El salto de layout del proyecto pasó de 0,30 a 0.",
+  "  - El esqueleto del chat dejó de aparecer (antes duraba unos 500 ms).",
+  "- **Pendiente:** el release de #211.",
+  "",
+  "Lo que vuelve a confirmar ahora: los 4 PRs figuran mergeados en GitHub y Nenu 1.24.1 está corriendo desde las 07:17.",
+].join("\n");
+
+/** Tables, nested lists, the way back to the tail and the model picker, read on a phone and a desk. */
+async function reading(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const folder = dirname(herd.journals.get(herd.idle)!);
+    const panes = { claude: "w1:read", codex: "w1:readcx" };
+    const session = "77777777-7777-4777-8777-777777777777";
+    await writeJournal(join(folder, `${session}.jsonl`), [["user", "¿En qué quedó lo que te pedí?"], ["assistant", READING_ANSWER]], bridge.now() - 60_000);
+    bridge.fake!.addTab("w1:t4", "reading");
+    bridge.fake!.addPane({ paneId: panes.claude, workspaceId: "w1", tabId: "w1:t4", agent: "claude", label: "Brief de coordinación", sessionId: session, cwd: bridge.dir, status: "done", lines: ["● Listo."] });
+    bridge.fake!.addPane({ paneId: panes.codex, workspaceId: "w1", tabId: "w1:t4", agent: "codex", label: "Codex", sessionId: "88888888-8888-4888-8888-888888888888", cwd: bridge.dir, status: "done", lines: ["• Listo."] });
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(panes.codex); tries++) {
+      if (tries > 60) throw new Error("the bridge never listed the reading panes");
+      await sleep(500);
+    }
+    const historyOf = (paneId: string) => `${bridge.url}/api/pane/${encodeURIComponent(paneId)}/history`;
+    // Claude's rows are the bridge's own, plus the one an account's cache adds; Codex's a models_cache.
+    const claudeRows = async () => [...((await (await fetch(`${bridge.url}/api/pane/${encodeURIComponent(panes.claude)}/models`)).json()) as { models: unknown[] }).models,
+      { name: "Fable", description: "Fable 5.1 · Most capable for your hardest and longest-running tasks" }];
+    const codexRows = [
+      { name: "gpt-5.5-codex", description: "Latest frontier agentic coding model." },
+      { name: "gpt-5.5", description: "Latest frontier model with improvements across knowledge, reasoning and coding." },
+      { name: "gpt-5.5-codex-mini", description: "Smaller, faster and cheaper." },
+    ];
+    const shots: string[] = [];
+    const seen: Record<string, unknown> = {};
+    for (const [deviceName, device] of [["390", PHONE], ["1440", DESKTOP]] as const) {
+      // No service worker: its fetches would pass the routes below by.
+      const context = await browser.newContext({ ...device, colorScheme: "dark", timezoneId: "UTC", locale: "en-US", serviceWorkers: "block" });
+      const page = await context.newPage();
+      await page.clock.install({ time: bridge.now() });
+      await page.route("**/api/pane/*/history*", async (route) => {
+        const url = new URL(route.request().url());
+        const codex = url.pathname.includes(encodeURIComponent(panes.codex));
+        url.searchParams.delete("session");
+        const json = await (await fetch(`${historyOf(panes.claude)}?${url.searchParams}`)).json() as Record<string, unknown>;
+        if (json.available) json.telemetry = codex
+          ? { source: "journal", model: "gpt-5.5-codex", effort: "high", context: { usedTokens: 40_000, windowTokens: 400_000, usedPercent: 10 } }
+          : { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 12_000, windowTokens: 200_000, usedPercent: 6 } };
+        await route.fulfill({ json });
+      });
+      const claude = await claudeRows();
+      await page.route("**/api/pane/*/models*", async (route) => route.fulfill({ json: { available: true, source: "bench",
+        models: route.request().url().includes(encodeURIComponent(panes.codex)) ? codexRows : claude } }));
+      const shoot = async (name: string) => {
+        const path = join(outDir, `${deviceName}-${name}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      const list = () => page.evaluate(() => {
+        const el = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+        return el ? { top: el.scrollTop, max: el.scrollHeight - el.clientHeight } : null;
+      }, null);
+      const scrollTo = (selector: string) => page.evaluate((sel: string) => {
+        const el = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+        const target = Array.from(document.querySelectorAll<HTMLElement>("p, li, div")).find((node) => node.textContent?.startsWith(sel) && node.children.length < 3);
+        if (el && target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24;
+      }, selector);
+      await page.goto(`${bridge.url}/pane/${encodeURIComponent(panes.claude)}`);
+      await page.getByText("Lo que vuelve a confirmar").waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1500);
+      // The four-column table: how tall each of its rows draws, and whether it kept its grid.
+      seen[`${deviceName}:table`] = await page.evaluate(() => {
+        const copies = Array.from(document.querySelectorAll<HTMLElement>('button[aria-label^="Copy table"], button')).filter((b) => /table/i.test(b.getAttribute("aria-label") ?? b.textContent ?? ""));
+        return copies.map((copy) => {
+          const table = copy.closest("div")!.parentElement!;
+          const own = table.querySelectorAll("[data-table-row]");
+          const rows = Array.from(own.length ? own : table.querySelectorAll("dl, tbody tr"));
+          return { grid: table.querySelector("table") !== null, rows: rows.map((row) => Math.round(row.getBoundingClientRect().height)), height: Math.round(table.getBoundingClientRect().height) };
+        });
+      }, null);
+      // The nested list: how far a sub-item stands in from the item it belongs to.
+      seen[`${deviceName}:list`] = await page.evaluate(() => {
+        const parent = Array.from(document.querySelectorAll("li")).find((li) => li.textContent?.startsWith("Parpadeo y saltos, en el banco"));
+        const child = Array.from(document.querySelectorAll("li")).find((li) => li.textContent?.startsWith("Las filas que se movían"));
+        return parent && child ? { indent: Math.round(child.getBoundingClientRect().left - parent.getBoundingClientRect().left), nested: parent.contains(child) } : null;
+      }, null);
+      await scrollTo("Listo. Esto es lo que pediste");
+      await page.waitForTimeout(400);
+      await shoot("table");
+      await scrollTo("Lo que medí");
+      await page.waitForTimeout(400);
+      await shoot("list");
+      // At the very end of the thread, then a little above it: what the way back covers.
+      const bounds = await list();
+      await page.evaluate((top: number) => { const el = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto'); if (el) el.scrollTop = top; }, Math.max(0, (bounds?.max ?? 0) - 90));
+      await page.waitForTimeout(600);
+      await shoot("near-end");
+      seen[`${deviceName}:near-end`] = await page.evaluate(() => {
+        const button = document.querySelector<HTMLElement>('button[aria-label^="Scroll to latest"]');
+        const scroller = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+        if (!button || !scroller) return { button: false };
+        const b = button.getBoundingClientRect();
+        const covered = Array.from(scroller.querySelectorAll<HTMLElement>("p, li")).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.bottom > b.top && r.top < b.bottom && r.right > b.left && r.left < b.right && el.children.length === 0;
+        }).map((el) => el.textContent?.slice(0, 40));
+        return { button: true, covered, maxScroll: scroller.scrollHeight - scroller.clientHeight, top: Math.round(scroller.scrollTop) };
+      }, null);
+      // At the very end: how far the last line stands above the list's bottom edge, where the way
+      // back floats (12 px up, 44 px tall on touch) whenever the follow pauses there.
+      seen[`${deviceName}:end-clearance`] = await page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>('section[aria-label="Live conversation"] .overflow-y-auto');
+        if (!scroller) return null;
+        scroller.scrollTop = scroller.scrollHeight;
+        const texts = Array.from(scroller.querySelectorAll<HTMLElement>("p, li")).filter((el) => el.innerText.trim() !== "");
+        const last = texts.at(-1)!;
+        return Math.round(scroller.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom);
+      }, null);
+      for (const [agent, paneId] of [["claude", panes.claude], ["codex", panes.codex]] as const) {
+        if (agent === "codex") {
+          await page.goto(`${bridge.url}/pane/${encodeURIComponent(paneId)}`);
+          await page.getByText("Lo que vuelve a confirmar").waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(1500);
+        }
+        const trigger = page.getByLabel("Choose model");
+        await trigger.click();
+        await page.waitForTimeout(800);
+        await shoot(`picker-${agent}`);
+        seen[`${deviceName}:picker-${agent}`] = await page.evaluate(() => {
+          const sheet = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model picker"]');
+          if (!sheet) return null;
+          const r = sheet.getBoundingClientRect();
+          const rows = Array.from(sheet.querySelectorAll<HTMLElement>('[role="radio"], [role="menuitemradio"], [role="option"]'));
+          const scrollers = Array.from(sheet.querySelectorAll<HTMLElement>("*")).filter((el) => el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY));
+          return { height: Math.round(r.height), top: Math.round(r.top), rows: rows.map((row) => Math.round(row.getBoundingClientRect().height)),
+            labels: rows.map((row) => row.innerText.replace(/\s+/g, " ").slice(0, 60)), scrolls: scrollers.length > 0 };
+        }, null);
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+        seen[`${deviceName}:picker-${agent}-escape`] = await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="Model picker"]') === null, null);
+      }
+      await context.close();
+    }
+    return { shots, seen, unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH);
+  await writeFile(join(outDir, "reading.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+}
+
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -3525,8 +3697,9 @@ else if (command === "chip-line") await chipLine();
 else if (command === "composer") await composerAround();
 else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
+else if (command === "reading") await reading();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
