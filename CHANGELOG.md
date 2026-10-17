@@ -8,6 +8,22 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-10-17
+
+### Added
+
+- Your asks narrows by project and coordinator, kept in its address; a coordinator's card lists its own the same way (ADR 0093) (33de679f, 4a7f3382).
+- Answer on an ask that waits on you, through `asks answer` where Organizations has it (9fd50c9b, 33de679f).
+- `bun scripts/e2e/asks-answer.ts [--before]` captures Your asks and a card at 390 and 1440 px (334de240).
+
+### Changed
+
+- An ask's links read as short chips with their state, not raw text (33de679f).
+
+### Fixed
+
+- A line that is only a parenthesis is no longer an ask or a decision, nor counted as waiting on you (9fd50c9b).
+
 ## [1.19.0] - 2026-10-17
 
 ### Added
