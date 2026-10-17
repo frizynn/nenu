@@ -29,11 +29,12 @@ const LIVE_BUSY_MS = 10_000;
 // The conversations last read, newest last, so a chat opened again paints at once while the read
 // behind it runs. Until that read lands, a failure says so at once: what is on screen is a memory.
 const REMEMBERED = 8;
+/** A remembered conversation still waiting for its read this long says it is refreshing. */
+export const REFRESHING_MS = 500;
 const remembered = new Map<string, PaneHistoryResponse>();
 
-function remember(scope: string, history: PaneHistoryResponse | null): void {
+function remember(scope: string, history: PaneHistoryResponse): void {
   remembered.delete(scope);
-  if (!history) return;
   remembered.set(scope, history);
   if (remembered.size > REMEMBERED) remembered.delete(remembered.keys().next().value!);
 }
@@ -61,6 +62,14 @@ export function useLiveConversation({
   stateRef.current = state;
   // The scope whose conversation this mount has read itself, not only remembered.
   const confirmed = useRef<string | null>(null);
+  // The scope whose remembered conversation has waited past REFRESHING_MS for its read.
+  const [late, setLate] = useState<string | null>(null);
+  const lateRef = useRef<string | null>(null);
+  const markLate = (next: string | null) => {
+    if (lateRef.current === next) return;
+    lateRef.current = next;
+    setLate(next);
+  };
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const refreshRef = useRef<(queueIfPending?: boolean) => void>(() => {});
@@ -75,6 +84,9 @@ export function useLiveConversation({
     let request: AbortController | undefined;
     let refreshQueued = false;
     let failedAt: number | null = null;
+    const drawn = stateRef.current.scope === scope ? stateRef.current.history : remembered.get(scope);
+    const lateTimer = drawn && confirmed.current !== scope
+      ? setTimeout(() => markLate(scope), REFRESHING_MS) : undefined;
 
     const schedule = () => {
       clearTimeout(timer);
@@ -102,6 +114,8 @@ export function useLiveConversation({
         if (!disposed && !controller.signal.aborted) {
           failedAt = null;
           confirmed.current = scope;
+          clearTimeout(lateTimer);
+          markLate(null);
           remember(scope, history);
           const previous = stateRef.current;
           if (previous.scope !== scope || previous.history !== history || previous.loading || previous.error) {
@@ -112,7 +126,8 @@ export function useLiveConversation({
         if (!disposed && !controller.signal.aborted) {
           const authError = isApiErrorStatus(error, 401) || isApiErrorStatus(error, 403);
           failedAt ??= Date.now();
-          if (authError) remember(scope, null);
+          // As fetchHistory's own cache: a device that lost read access forgets every conversation.
+          if (authError) remembered.clear();
           const visibleError = authError || !stateRef.current.history || confirmed.current !== scope || Date.now() - failedAt >= CONNECTION_LOST_MS;
           publish({ ...stateRef.current, history: authError ? null : stateRef.current.history, loading: false, error: visibleError });
         }
@@ -147,6 +162,7 @@ export function useLiveConversation({
     return () => {
       disposed = true;
       clearTimeout(timer);
+      clearTimeout(lateTimer);
       request?.abort();
       refreshRef.current = () => {};
       window.removeEventListener("focus", wake);
@@ -185,6 +201,8 @@ export function useLiveConversation({
     history: current ? state.history : null,
     loading: current && !locked && !paused ? state.loading : false,
     error: current ? state.error : false,
+    /** What is drawn is a remembered conversation whose read is slow to land. */
+    refreshing: current && late === scope && confirmed.current !== scope && state.history !== null && !state.error,
     refresh,
   };
 }

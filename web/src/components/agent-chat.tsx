@@ -1241,7 +1241,7 @@ export function AgentChat({
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="chat-thread min-h-0 min-w-0 flex-1 border-t border-border/40">
             <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
-              history={conversation.history} loading={conversation.loading} error={conversation.error && !error}
+              history={conversation.history} loading={conversation.loading} error={conversation.error && !error} refreshing={conversation.refreshing}
               recovery={agent?.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
               onRetry={conversation.refresh} followKey={followKey} historyRequest={historyRequest} searching={findOpen}
               query={findOpen ? findQuery : ""} currentMatch={currentMatch}

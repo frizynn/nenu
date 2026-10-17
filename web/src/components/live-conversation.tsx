@@ -22,6 +22,8 @@ interface LiveConversationProps {
   history: PaneHistoryResponse | null;
   loading: boolean;
   error: boolean;
+  /** The history drawn is a remembered one whose read is slow to land: say so over it. */
+  refreshing?: boolean;
   onRetry?: () => void;
   recovery?: ReactNode;
   /** Change after a successful send to release the reading window and follow the latest turn. */
@@ -161,7 +163,7 @@ export const LiveConversation = memo(function LiveConversation(props: LiveConver
 });
 
 /** Journal prose and tool calls; older pages stay inside this live, writable pane route. */
-function ScopedConversation({ paneId, session, activityStatus, history, loading, error, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
+function ScopedConversation({ paneId, session, activityStatus, history, loading, error, refreshing = false, onRetry, recovery, followKey, historyRequest = 0, searching = false, query = "", currentMatch = 0, onMatchCount, footer, waiting = false }: LiveConversationProps) {
   const [frozen, setFrozen] = useState<PaneHistoryResponse | null>(null);
   const [paused, setPaused] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -566,6 +568,13 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             sheets that open from inside the thread. In sRGB: Tailwind's default oklab toward
             `transparent` passes through grey in WebKit, a band across every light chat. */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-3 bg-linear-to-b/srgb from-background" />
+        {/* Over the list, never in its flow: the turns under it do not move when it comes and goes. Below
+            the chrome a phone draws over the list (styles/chat.css). */}
+        {refreshing && entries.length > 0 && <div data-refreshing className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
+          <span role="status" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/90 px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
+            <Pending aria-hidden="true" className="size-3" />Updating…
+          </span>
+        </div>}
         {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
           <div className="mx-auto max-w-(--chat-column)">
             <ScrollToLatest corner onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />

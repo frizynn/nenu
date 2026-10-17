@@ -8,7 +8,7 @@ import { setLocked } from "@/lib/idle";
 import { resetLiveEvents } from "@/lib/live-events";
 import { fakeLiveStream } from "@/test/live-stream";
 import type { PaneHistoryResponse } from "@/lib/types";
-import { __forgetConversations, useLiveConversation } from "./use-live-conversation";
+import { __forgetConversations, REFRESHING_MS, useLiveConversation } from "./use-live-conversation";
 
 vi.mock("@/lib/api", async (original) => ({ ...await original<typeof import("@/lib/api")>(), fetchHistory: vi.fn() }));
 const fetchMock = vi.mocked(fetchHistory);
@@ -318,6 +318,50 @@ describe("a chat opened again", () => {
     const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
     await act(async () => {});
     expect(again.result.current).toMatchObject({ history: { total: 1 }, error: true });
+    again.unmount();
+  });
+
+  it("says it is refreshing a remembered conversation when the read behind it is slow", async () => {
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    let release!: (value: PaneHistoryResponse) => void;
+    const same = seen("w1:p1", 1);
+    fetchMock.mockReturnValueOnce(new Promise((done) => { release = done; }));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REFRESHING_MS - 1); });
+    expect(again.result.current.refreshing).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(again.result.current).toMatchObject({ history: { total: 1 }, refreshing: true });
+    // The read confirms the same conversation: the mark goes all the same.
+    await act(async () => release(same));
+    expect(again.result.current.refreshing).toBe(false);
+    again.unmount();
+  });
+
+  it("never marks a conversation it read itself", async () => {
+    const { result, unmount } = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REFRESHING_MS * 4); });
+    expect(result.current.refreshing).toBe(false);
+    unmount();
+  });
+
+  it("forgets every conversation once the device loses read authorization", async () => {
+    server.use(http.get(/\/api\/pane\/[^/]+\/skills$/, () => new HttpResponse("Forbidden", { status: 403 })));
+    let denied: unknown;
+    try { await fetchSkills("forbidden"); } catch (error) { denied = error; }
+    fetchMock.mockResolvedValueOnce(seen("w1:p1", 1));
+    const first = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    await act(async () => {});
+    first.unmount();
+    fetchMock.mockRejectedValueOnce(denied);
+    const other = renderHook(() => useLiveConversation({ paneId: "w1:p2", enabled: true }));
+    await act(async () => {});
+    other.unmount();
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const again = renderHook(() => useLiveConversation({ paneId: "w1:p1", enabled: true }));
+    expect(again.result.current).toMatchObject({ history: null, loading: true });
     again.unmount();
   });
 
