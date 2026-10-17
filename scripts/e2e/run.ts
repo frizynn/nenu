@@ -2295,16 +2295,17 @@ async function motion(before: boolean): Promise<void> {
 }
 
 /**
- * The way back through a project (useGoUp in web/src/lib/motion.ts), phone and desk, two projects: one
- * that organizes coordinators (demoOrg: project → coordinator → its thread, a sibling, reloads) and one
- * that opens on its own coordinator's chat (projectChatSeed: a thread at its root). Each walk taps the
+ * The way back through a project (useGoUp in web/src/lib/motion.ts), phone and desk, three walks: a
+ * coordinator under a project that organizes them (demoOrg: project → coordinator → its thread, a
+ * sibling, reloads), a project that opens on its own coordinator's chat (projectChatSeed: a thread at its
+ * root), and the own coordinator of a project that organizes coordinators (orgTreeSeed: a thread at its root). Each walk taps the
  * app's back until there is none, reaches Home the way a person would (the back, or the desk's bar), and
  * then takes the browser's Back once. Logs path, `history.length` and motion per step, with a capture each.
  */
 async function back(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
-  type Walk = { coordinator?: string; thread: string; sibling?: string };
+  type Walk = { coordinator?: { pane: string; title: string }; thread: { pane: string; title: string }; sibling?: string };
   const walk = async (org: (herd: DemoHerd, now: number) => OrgSeed, name: string, route: (herd: DemoHerd) => Walk) => withBench(async (bridge, browser) => {
     const herd = bridge.herd!;
     const way = route(herd);
@@ -2361,8 +2362,8 @@ async function back(): Promise<void> {
       await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
       await log("project");
       if (way.coordinator) {
-        await open("Rediseño mobile");
-        await page.waitForURL(`**${paneHref(way.coordinator)}*`, { timeout: 10_000 });
+        await open(way.coordinator.title);
+        await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
         await log("coordinator");
         if (device === PHONE) {
           await page.getByRole("tab", { name: /^Threads/ }).click({ timeout: 5000 });
@@ -2371,15 +2372,15 @@ async function back(): Promise<void> {
           await log("threads-reload");
         }
       }
-      await open(way.thread === herd.working ? "Landing a 390 px" : "Panel depósito");
-      await page.waitForURL(`**${paneHref(way.thread)}*`, { timeout: 10_000 });
+      await open(way.thread.title);
+      await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
       await log("thread");
       if (device === PHONE && way.sibling) {
         await open("Panel depósito");
         await page.waitForURL(`**${paneHref(way.sibling)}*`, { timeout: 10_000 });
         await log("sibling");
-        await open("Landing a 390 px");
-        await page.waitForURL(`**${paneHref(way.thread)}*`, { timeout: 10_000 });
+        await open(way.thread.title);
+        await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
         await log("sibling-back");
         await page.reload();
         await page.locator("header").first().waitFor({ timeout: 10_000 });
@@ -2405,8 +2406,11 @@ async function back(): Promise<void> {
     return { phone: await run(PHONE, "phone"), desk: await run(DESKTOP, "desk"), unexpectedWrites: bridge.fake!.writes() };
   }, CAPTURE_EPOCH, org);
   const result = {
-    organizer: await walk(demoOrg, "organizer", (herd) => ({ coordinator: herd.idle, thread: herd.working, sibling: herd.blocked })),
-    rootThread: await walk(projectChatSeed, "root", (herd) => ({ thread: herd.blocked })),
+    organizer: await walk(demoOrg, "organizer", (herd) => ({
+      coordinator: { pane: herd.idle, title: "Rediseño mobile" }, thread: { pane: herd.working, title: "Landing a 390 px" }, sibling: herd.blocked })),
+    rootThread: await walk(projectChatSeed, "root", (herd) => ({ thread: { pane: herd.blocked, title: "Panel depósito" } })),
+    organizerRoot: await walk((herd, now) => orgTreeSeed(herd, now, { coordinator: true }), "organizer-root", (herd) => ({
+      coordinator: { pane: herd.codex, title: "Project coordinator" }, thread: { pane: herd.blocked, title: "Panel depósito" } })),
   };
   await writeFile(join(outDir, "back.json"), JSON.stringify({ ...result, shots }, null, 2));
   console.log(JSON.stringify(result, null, 2));
