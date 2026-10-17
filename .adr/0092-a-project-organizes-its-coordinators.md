@@ -34,8 +34,9 @@ chat.
    coordinators, the project's own first while it runs, then every open coordinator in the tree's order.
    A coordinator started there opens its chat once its pane runs, else its page. It starts with
    `--can-spawn --kind=tab`, never on Organizations' defaults.
-4. **Move is Organizations' `node move`, offered only where it exists.** Its help exiting 0 says so; the
-   targets are the top level and open coordinators outside the node, and Organizations judges the rest.
+4. **Move is Organizations' `node move`, offered only where Organizations offers it.** Its help exiting 0
+   says the binary has it, and a node's `actions` listing `move` says that node has another parent; the
+   dialog lists the top level and open coordinators outside the node, and Organizations judges the rest.
 
 ## Consequences
 
