@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-10-17
+
+### Fixed
+
+- A project page no longer jumps when its STATUS.md arrives: it waits up to a second for it, and draws it at once when opened again (40c2cb32).
+- A chat opened again paints its last conversation at once and refreshes behind it, no skeleton; a failed refresh says so (3951d4c1).
+- A direct load or reload shows one boot screen, the app's own frame, not the splash and then the frame (bbbda476).
+
+### Added
+
+- `bun scripts/e2e/load.ts` measures layout shift on a project, skeleton frames on a chat opened again and boot screens (3943d3d1).
+
 ## [1.23.0] - 2026-10-17
 
 ### Added
