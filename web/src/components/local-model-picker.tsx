@@ -9,8 +9,11 @@ interface Props {
   currentLabel?: string;
   disabled?: boolean;
   onApply: (name: string) => Promise<void>;
-  /** Tapping the model that already runs just closes the picker. */
+  /** Tapping the model that already runs just closes the picker… */
   onClose: () => void;
+  /** …unless the agent's own picker is open: there the tap confirms it, and with it the effort the
+   *  picker's arrows moved, which closing would discard. */
+  currentApplies?: boolean;
   /** Under the list: the effort row and the way to the agent's own settings. */
   more?: ReactNode;
 }
@@ -20,7 +23,7 @@ interface Props {
 // closes the picker once the agent took it. A failure stays here, said under the list, with every row
 // live again to retry. The parent owns fresh-menu validation and transport. The model that runs is
 // the one row with a check; while a row applies, its spinner stands where the check would.
-export function LocalModelPicker({ rows, currentModel, currentLabel, disabled, onApply, onClose, more }: Props) {
+export function LocalModelPicker({ rows, currentModel, currentLabel, disabled, onApply, onClose, currentApplies = false, more }: Props) {
   const id = useId();
   const [applying, setApplying] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +34,7 @@ export function LocalModelPicker({ rows, currentModel, currentLabel, disabled, o
 
   async function choose(name: string) {
     if (locked || inFlight.current) return;
-    if (name === current) {
+    if (name === current && !currentApplies) {
       onClose();
       return;
     }

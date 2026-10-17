@@ -6,6 +6,7 @@ import { ChevronRight, Pending } from "@/components/ui/icon";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import type { ModelCatalogRow } from "@/hooks/use-model-catalog";
 import type { MenuBlock } from "@/lib/blocks";
+import { adapterFor } from "@/lib/harness/registry";
 import { catalogRowFor, modelDisplayName } from "@/lib/model-display";
 import { parseNativeModelMenu } from "@/lib/native-model-menu";
 import { setStatus } from "@/lib/status";
@@ -56,6 +57,9 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
   // The agent's own picker, while it is open, says which model runs and offers its effort arrows.
   const live = parsed?.kind === "model" ? parsed : null;
   const effort = live ? menu?.menu.nav.leftRight : undefined;
+  // Where the agent sets effort (its adapter measured it): only arrows beside the list can be opened
+  // from here; a list after the model, or an agent nobody measured, shows the value it reports.
+  const effortIn = adapterFor(agent)?.modelEffort;
   const currentModel = live?.rows.find((row) => row.current)?.name ?? catalogRowFor(catalog.rows.map((row) => row.name), reportedModel);
 
   async function apply(name: string) {
@@ -86,17 +90,25 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
       : advanced ? <p role="status" className="p-3 text-footnote text-muted-foreground">Loading model settings…</p>
       : catalog.rows.length ?
         <LocalModelPicker rows={catalog.rows} currentModel={currentModel} currentLabel={reportedModel && modelDisplayName(reportedModel)}
-          disabled={locked} onApply={apply} onClose={onDismiss}
+          disabled={locked} onApply={apply} onClose={onDismiss} currentApplies={live !== null}
           more={<>
             {effort && menu ? <div className={ROW}>
               <span className="flex-1 text-body">Effort</span>
               <EffortStepper effort={effort} disabled={locked} onStep={(key) => onMenuAction?.({ keys: [key], nav: true }, menu.menu)} />
             </div>
-            : !modelPresent && reportedEffort && <button type="button" disabled={locked || loadingEffort} className={`${ROW} hover:bg-accent active:bg-accent disabled:text-disabled-foreground`} onClick={loadEffort}>
-              <span className="flex-1 text-body">Effort</span>
-              <span className="text-footnote capitalize text-muted-foreground">{reportedEffort}</span>
-              {loadingEffort ? <Pending aria-label="Opening the agent's picker" className="size-4 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-            </button>}
+            : reportedEffort && (!modelPresent && effortIn === "arrows"
+              ? <button type="button" disabled={locked || loadingEffort} className={`${ROW} hover:bg-accent active:bg-accent disabled:text-disabled-foreground`} onClick={loadEffort}>
+                <span className="flex-1 text-body">Effort</span>
+                <span className="text-footnote capitalize text-muted-foreground">{reportedEffort}</span>
+                {loadingEffort ? <Pending aria-label="Opening the agent's picker" className="size-4 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+              </button>
+              : <div className={ROW}>
+                <span className="flex-1">
+                  <span className="block text-body">Effort</span>
+                  {effortIn === "after-model" && <span className="block text-footnote text-muted-foreground">Chosen after the model</span>}
+                </span>
+                <span className="text-footnote capitalize text-muted-foreground">{reportedEffort}</span>
+              </div>)}
             <button type="button" disabled={locked} className="mb-1 min-h-11 w-full rounded-lg text-footnote text-muted-foreground hover:bg-accent"
               onClick={loadAdvanced}>More model settings</button>
           </>} />

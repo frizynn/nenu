@@ -13,7 +13,7 @@ interface Options {
   onLoaded?: () => void;
 }
 
-/** Local browsing owns no terminal input. Only explicit Apply starts a guarded CLI operation. */
+/** Browsing the list owns no terminal input. A tapped row is the explicit choice that starts a guarded CLI operation. */
 export function useLocalModelApply(options: Options) {
   const scope = JSON.stringify([options.paneId, options.session, options.agent]);
   const latest = useRef(options);

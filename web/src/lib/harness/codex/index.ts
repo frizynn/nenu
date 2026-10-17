@@ -105,4 +105,5 @@ export const codexAdapter: HarnessAdapter = {
   draftCarriesSend: codexDraftCarriesSend,
   // Measured on 0.162.1: Escape interrupts the turn, Herdr reads `done` within ~600 ms.
   interrupt: { keys: ["Escape"], read: readCodexTurn },
+  modelEffort: "after-model",
 };

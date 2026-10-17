@@ -56,4 +56,31 @@ it("with the agent's picker open, steps its effort through the arrows the picker
   await userEvent.click(screen.getByRole("button", { name: /^Right — adjust/ }));
   await waitFor(() => expect(handlers.onMenuAction).toHaveBeenCalledWith({ keys: ["Right"], nav: true }, menu.menu));
   expect(handlers.onLoad).not.toHaveBeenCalled();
+  // The model that runs, tapped after the arrows, confirms the effort with it rather than closing.
+  await userEvent.click(screen.getByRole("menuitemradio", { name: "Default (recommended)" }));
+  expect(handlers.onApply).toHaveBeenCalledExactlyOnceWith("Default (recommended)");
+  expect(handlers.onDismiss).not.toHaveBeenCalled();
+});
+
+it("without the agent's picker open, the model that runs just closes the sheet", async () => {
+  const handlers = panel({ reportedModel: "claude-opus-5-5" });
+  await userEvent.click(screen.getByRole("menuitemradio", { name: "Opus" }));
+  expect(handlers.onApply).not.toHaveBeenCalled();
+  expect(handlers.onDismiss).toHaveBeenCalledTimes(1);
+});
+
+// An agent that picks effort in a list after the model offers no arrows to open: the row says so.
+it("for an agent that sets effort after the model, shows the value and offers nothing to open", async () => {
+  const handlers = panel({ agent: "codex", reportedEffort: "high" });
+  expect(screen.queryByRole("button", { name: /Effort/ })).not.toBeInTheDocument();
+  expect(screen.getByText("Effort").parentElement).toHaveTextContent("EffortChosen after the model");
+  expect(screen.getByText("high")).toBeInTheDocument();
+  expect(handlers.onLoad).not.toHaveBeenCalled();
+});
+
+it("for an agent nobody measured, shows the reported effort and nothing more", () => {
+  panel({ agent: "pi", reportedEffort: "low" });
+  expect(screen.queryByRole("button", { name: /Effort/ })).not.toBeInTheDocument();
+  expect(screen.queryByText("Chosen after the model")).not.toBeInTheDocument();
+  expect(screen.getByText("low")).toBeInTheDocument();
 });

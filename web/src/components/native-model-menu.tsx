@@ -14,7 +14,7 @@ interface Props {
 }
 
 /** The value the picker's `←/→` row names, without its glyph or its trailing "effort". */
-export const effortValue = (label: string) => label.replace(/^[^\p{L}\p{N}]+/u, "").replace(/\s+effort$/i, "");
+const effortValue = (label: string) => label.replace(/^[^\p{L}\p{N}]+/u, "").replace(/\s+effort$/i, "");
 
 /** The picker's own `←/→` row as two arrows around the value it names; it sends only those two keys. */
 export function EffortStepper({ effort, disabled, onStep }: {

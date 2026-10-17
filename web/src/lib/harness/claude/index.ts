@@ -175,4 +175,5 @@ export const claudeAdapter: HarnessAdapter = {
   draftIsOpaque: isPastePlaceholderOnly,
   // Measured on 2.1.296: Escape stops a tool call or streamed text and the pane goes idle in ~300 ms.
   interrupt: { keys: ["Escape"], read: (text) => readClaudeTurn(splitLines(parseAnsi(text))) },
+  modelEffort: "arrows",
 };
