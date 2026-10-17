@@ -24,6 +24,8 @@ interface FakeProject {
  */
 interface FakeState {
   profiles: string[];
+  /** `false` is an Organizations without `node move`. */
+  moves?: boolean;
   /** `asks --json`'s rows; without them the fake answers `asks` as an Organizations that predates it. */
   asks?: Array<{ project: string; [key: string]: unknown }>;
   savedProfiles?: Array<{ name: string; harness: string; model: string; reasoning_effort: string; description: string }>;
@@ -74,13 +76,32 @@ function start(slug: string, flags: Record<string, string>, role: "worker" | "co
   if (flags.profile && !state.profiles.includes(flags.profile)) fail(`there is no profile \`${flags.profile}\``);
   const next = Math.max(0, ...state.projects.flatMap((p) => p.threads).map((t) => Number(t.id.slice(2)))) + 1;
   const id = `t-${String(next).padStart(4, "0")}`;
+  // `start_pane` stands for the tab Organizations opens: the new node runs in that pane of the FakeHerdr.
+  const pane = (project.start_pane ?? { workspace_id: "", tab_id: "", pane_id: "" }) as { workspace_id: string; tab_id: string; pane_id: string };
   project.threads.push({
-    id, title: flags.title, parent_id: parent, role, status: "starting", group: "working", group_label: "Working", note: "starting",
-    branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: new Date().toISOString(), report_unacked: false,
-    auto_fix_ci: false, auto_merge: false, pr: null,
+    id, title: flags.title, parent_id: parent, role, status: pane.pane_id ? "open" : "starting", group: "working", group_label: "Working", note: pane.pane_id ? "" : "starting",
+    branch: "", ...pane, cwd: "", updated: new Date().toISOString(), report_unacked: false,
+    auto_fix_ci: false, auto_merge: false, pr: null, can_spawn: role === "coordinator" && "can-spawn" in flags,
   });
+  delete project.start_pane;
   writeFileSync(file!, JSON.stringify(state, null, 2));
-  console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: "" }));
+  console.log(JSON.stringify({ id, parent_id: parent, role, profile: flags.profile ?? "", pane_id: pane.pane_id }));
+}
+
+/** `node move`: the node, with everything under it, under the project root or an open coordinator not under it. */
+function move(slug: string, id: string, parent: string): void {
+  const project = state.projects.find((candidate) => candidate.slug === slug) ?? fail(`no project ${slug}`);
+  const node = project.threads.find((thread) => thread.id === id) ?? fail(`no node ${id}`);
+  if (parent !== "root") {
+    const target = project.threads.find((thread) => thread.id === parent) ?? fail(`no node ${parent}`);
+    if (target.role !== "coordinator" || target.status === "resolved") fail(`node \`${parent}\` cannot take children`);
+    for (let at: FakeThread | undefined = target; at; at = project.threads.find((thread) => thread.id === at!.parent_id)) {
+      if (at.id === id) fail(`moving ${id} under ${parent} would make a cycle`);
+    }
+  }
+  node.parent_id = parent;
+  writeFileSync(file!, JSON.stringify(state, null, 2));
+  console.log(JSON.stringify({ schema_version: 1, id, parent_id: parent }));
 }
 
 /** `node resolve --close-view`: the node is resolved; its agent and view would stop. */
@@ -120,6 +141,10 @@ if (command === "overview") {
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, coordinator: role, thread: { ...role, last: null } }));
 } else if (command === "node" && sub === "start") {
   start(positionals[0]!, flags, flags.role === "coordinator" ? "coordinator" : "worker", flags.parent || "root");
+} else if (command === "node" && sub === "move") {
+  if (state.moves === false) fail("unrecognized subcommand 'move'");
+  if ("help" in flags) console.log("Usage: herdr-organizations node move <SLUG> <ID> --parent <PARENT>");
+  else move(positionals[0]!, positionals[1]!, flags.parent ?? fail("--parent is required"));
 } else if (command === "node" && sub === "resolve") {
   resolve(positionals[0]!, positionals[1]!);
 } else if (command === "coordinator" && sub === "replace") {

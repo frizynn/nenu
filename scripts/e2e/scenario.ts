@@ -256,6 +256,8 @@ export function tickWorkingTurn(file: string, parent: string, now: () => number,
  */
 export interface OrgSeed {
   profiles: string[];
+  /** `false` is an Organizations without `node move` (fake-org.ts). */
+  moves?: boolean;
   /** `asks --json`'s rows, as Organizations prints them; without it the fake has no `asks` (fake-org.ts). */
   asks?: Array<Record<string, unknown>>;
   /** The operator's own profiles beside the built-ins (fake-org.ts). */
@@ -264,6 +266,8 @@ export interface OrgSeed {
     /** What fake-org.ts's `open` does: fail with `open_error`, or record `open_pane` as the coordinator's pane. */
     open_error?: string;
     open_pane?: { pane_id: string; workspace_id: string; tab_id: string };
+    /** The pane fake-org.ts's next `node start` in this project runs in, as Organizations' new tab would. */
+    start_pane?: { pane_id: string; workspace_id: string; tab_id: string };
     slug: string; name: string; goal: string; status: "active" | "paused";
     /** The glyph and colour picked with `set <slug> icon|tone`, empty when none was picked. */
     icon?: string; tone?: string;
