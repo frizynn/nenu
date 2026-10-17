@@ -106,7 +106,7 @@ export function DetailRoute() {
       bridge={root.bridge}
       error={root.error}
       authError={root.authError || pane.authError}
-      // A project's page opens its coordinator, so leaving a project pane goes Home, not back into it.
+      // A pane outside any project, or the coordinator a project opens on: nothing above it but Home.
       onBack={() => goUp(homePath(session))}
       // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
       // the browser's back leaves the chat instead of walking back through every pane visited.

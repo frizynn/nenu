@@ -81,7 +81,7 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { projectChat, projectForPane } from "@/lib/projects";
+import { liveCoordinator, projectChat, projectForPane } from "@/lib/projects";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
@@ -97,18 +97,20 @@ import type {
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /**
- * Where a project thread's back leads, one level up as its node page's does: the coordinator it runs
- * under (its chat while that runs, else its page), else its project, named by the chat the project
- * opens on so the back can step back to it. The project's own coordinator has none: the project opens
- * on it, so its back stays Home.
+ * Where a project pane's back leads, one level up as its node page's does: the coordinator a thread
+ * runs under (its chat while that runs, else its page), the project's own coordinator for a thread at
+ * the root (likewise), and for that coordinator the project's page when the project organizes
+ * coordinators (ADR 0092). A project that opens on its coordinator's chat leaves it nothing above but
+ * Home, the caller's default.
  */
 function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], session?: string): HeaderBack | undefined {
   const owner = projectForPane(projects, paneId);
-  if (!owner?.thread) return undefined;
+  if (!owner) return undefined;
   const { project, thread } = owner;
+  if (!thread) return projectChat(project, panes) ? undefined : { label: project.name, to: projectPath(project.slug, session) };
   const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
   if (!parent) {
-    const chat = projectChat(project, panes);
+    const chat = liveCoordinator(project, panes);
     return { label: project.name, to: chat ? panePath(chat, session) : projectPath(project.slug, session) };
   }
   const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
