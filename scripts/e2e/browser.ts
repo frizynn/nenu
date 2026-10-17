@@ -25,6 +25,7 @@ export interface Locator {
   innerText(): Promise<string>;
   getAttribute(name: string, opts?: { timeout?: number }): Promise<string | null>;
   scrollIntoViewIfNeeded(): Promise<void>;
+  boundingBox(opts?: { timeout?: number }): Promise<{ x: number; y: number; width: number; height: number } | null>;
   evaluateAll<T>(fn: (elements: Element[]) => T): Promise<T>;
   evaluate<T>(fn: (element: Element) => T): Promise<T>;
   allTextContents(): Promise<string[]>;
@@ -52,6 +53,7 @@ export interface Page {
   clock: { install(opts: { time: number }): Promise<void> };
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
   keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void> };
+  touchscreen: { tap(x: number, y: number): Promise<void> };
   mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
   setViewportSize(size: { width: number; height: number }): Promise<void>;
   goBack(): Promise<unknown>;
