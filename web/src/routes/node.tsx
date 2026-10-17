@@ -69,7 +69,7 @@ export function NodeRoute() {
         {agent && <span>{agent}</span>}
       </p>}
       <CoordinatorHead project={project} coordinatorId={ROOT} status={read.status ?? undefined} usage={read.usage ?? undefined}
-        asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
+        asks={asks} summaries={summaries} session={data.session} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
       {pane && <Button type="button" size="lg" onClick={() => navigate(panePath(pane.paneId, data.session))}>
         <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
     </>;
@@ -95,7 +95,7 @@ export function NodeRoute() {
       </>} />
       {coordinator
         ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
-          asks={asks} summaries={summaries} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
+          asks={asks} summaries={summaries} session={data.session} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
         : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
         <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>

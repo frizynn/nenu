@@ -240,7 +240,8 @@ export interface AskCoordinator { id: string; title: string }
 export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
 export interface AskDecision { project: string; coordinator: AskCoordinator; text: string }
 /** `asks` is null when this Organizations cannot list asks. */
-export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[] }
+/** `answers` is whether this Organizations can answer an ask (`asks answer`); absent from an older bridge. */
+export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[]; answers?: boolean }
 export interface TokenUsage {
   input: number; output: number; cacheRead: number; cacheWrite: number;
   context: number; peakContext: number; compactions: number; updated: string; overCap: string[];

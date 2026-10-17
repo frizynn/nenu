@@ -85,10 +85,13 @@ it("lists every ask in the popup's groups, each with whose it is and where it st
   const waiting = await screen.findByRole("region", { name: "Wait on you" });
   expect(screen.getByText("all coordinators · 2 wait on you · 2 do not close · 1 in progress · 1 done")).toBeInTheDocument();
   expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Wait on you", "Does not close", "In progress", "Done"]);
-  expect(within(waiting).getAllByRole("link").map((link) => link.textContent)).toEqual([
+  expect(within(waiting).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
     "Pilot with batch 2Shop · Coordinator · yes or no",
     "Stock : list or cardsShop · Checkout · decision",
   ]);
+  // The words open the coordinator; an Organizations that cannot answer offers no Answer.
+  expect(within(waiting).getAllByRole("link").map((link) => link.textContent)).toEqual(["Pilot with batch 2", "Stock : list or cards"]);
+  expect(within(waiting).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
   const unclosed = screen.getByRole("region", { name: "Does not close" });
   expect(unclosed).toHaveTextContent("Ship the couponsShop · Coordinator · done · a linked PR is still open");
 
@@ -102,13 +105,17 @@ it("lists every ask in the popup's groups, each with whose it is and where it st
 it("opens a coordinator's page on its card: objective, what waits on you, its asks, agents, pull requests and tokens", async () => {
   setup("/project/shop/node/t-0010");
   const card = await screen.findByRole("region", { name: "Coordinator card" });
-  await waitFor(() => expect(card).toHaveTextContent("Waits on you1Stock : list or cards"));
+  await waitFor(() => expect(card).toHaveTextContent("Wait on you1Stock : list or cardsdecision"));
   const main = within(screen.getByRole("main"));
-  // The card heads the page; the STATUS.md it reads from folds under it.
-  expect(main.getAllByRole("region").map((region) => region.getAttribute("aria-label")).slice(0, 2)).toEqual(["Coordinator card", "Status"]);
+  // The card heads the page, its asks drawn as Your asks draws them; the STATUS.md it reads from folds under it.
+  const regions = main.getAllByRole("region").map((region) => region.getAttribute("aria-label"));
+  expect(regions.slice(0, regions.indexOf("Status") + 1)).toEqual(["Coordinator card", "Wait on you", "Does not close", "In progress", "Status"]);
   expect(main.getByRole("button", { name: "Show STATUS.md" })).toBeInTheDocument();
   expect(card).toHaveTextContent("Objectiveupdated 12m agothe checkout in six parts");
-  expect(card).toHaveTextContent("Asks2Land the copy fixworking · a linked thread is resolvedCard tokensnext after the copy fix");
+  expect(card).toHaveTextContent("Does not close1Land the copy fixworking · a linked thread is resolved");
+  expect(card).toHaveTextContent("In progress1Card tokensnext after the copy fix");
+  // Only its own: no project or coordinator named on its rows.
+  expect(within(card).queryByText(/^Shop · /)).not.toBeInTheDocument();
   // Its open agents only, each with its state, verdict and a cap it passed.
   expect(card).toHaveTextContent("Agents2Stock panelNeeds you · Asks for your decisionQR paymentsWorking · over cap");
   expect(card).toHaveTextContent("Pull requests1Stock panelPR #1352 · checks passed");
@@ -126,8 +133,9 @@ it("gives the project's own coordinator a page of its own: its agent, its card, 
   await waitFor(() => expect(main.getByText("claude · opus")).toBeInTheDocument());
   // What the ticker saw of it, without a live pane.
   expect(main.getByText("claude · opus").parentElement).toHaveTextContent("Idle·claude · opus");
-  await waitFor(() => expect(card).toHaveTextContent("Waits on you1Pilot with batch 2 : yes or no"));
-  expect(card).toHaveTextContent("Asks2Ship the couponsdone · a linked PR is still openDoes it cut cost?yes, measured twice");
+  await waitFor(() => expect(card).toHaveTextContent("Wait on you1Pilot with batch 2yes or no"));
+  expect(card).toHaveTextContent("Does not close1Ship the couponsdone · a linked PR is still open");
+  expect(card).toHaveTextContent("Done1Does it cut cost?yes, measured twice");
   expect(card).toHaveTextContent("Agents1CheckoutIdle");
   expect(card.querySelector("[data-over-cap]")).toHaveTextContent("Over cap: context");
 });
@@ -191,4 +199,78 @@ it("reads the tokens again when the snapshot says the reading moved, with the pa
   expect(summaries).toHaveLength(1);
   await next({ threads: threads.map((thread) => thread.id === "t-0010" ? { ...thread, usageStamp: "2026-10-16T21:00:00Z|context_warn" } : thread) });
   await waitFor(() => expect(summaries).toHaveLength(2));
+});
+
+describe("narrowing, chips and Answer (ADR 0093)", () => {
+  const link = (kind: "thread" | "pr" | "task" | "page", text: string, extra: Partial<AskRow["links"][number]> = {}) =>
+    ({ kind, text, target: "", thread: "", title: "", state: "", pr: "", prState: "", ...extra });
+  const linked: AsksList = { ...ASKS, answers: true, asks: [
+    ask(CHECKOUT, "waiting", "needs-decision", "Prospects or numbers first?", { line: 5, answer: "both are ready",
+      links: [link("thread", "t-0012", { thread: "t-0012", state: "working" }), link("task", "task:AWA-569", { state: "missing" }),
+        link("pr", "https://github.com/acme/shop/pull/1352", { target: "https://github.com/acme/shop/pull/1352", state: "open" })] }),
+    ...ASKS.asks!,
+  ] };
+
+  it("reads an ask's links as chips: a thread opens its node, a pull request its page, a task names its state", async () => {
+    const { router, user } = setup("/asks", { asks: linked });
+    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const chips = within(within(waiting).getAllByRole("list", { name: "Links" })[0]!);
+    expect(chips.getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["t-0012working", "AWA-569missing", "#1352open"]);
+    expect(chips.getByRole("link", { name: /#1352/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1352");
+    expect(waiting).not.toHaveTextContent("task:AWA-569");
+    await user.click(chips.getByRole("link", { name: /t-0012/ }));
+    expect(router.state.location.pathname).toBe("/project/shop/node/t-0012");
+  });
+
+  it("answers an ask that waits on you, then shows it answered; a decision line has no Answer", async () => {
+    let posted: unknown;
+    server.use(http.post("/api/org/asks/answer", async ({ request }) => {
+      posted = await request.json();
+      return HttpResponse.json({ ok: true, answered: { project: "shop", coordinator: "t-0010", line: 5, answeredAt: "2026-10-17T10:00:00Z" } });
+    }));
+    const { user } = setup("/asks", { asks: linked });
+    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    expect(within(waiting).getAllByRole("button", { name: /^Answer/ }).map((button) => button.getAttribute("aria-label")))
+      .toEqual(["Answer Prospects or numbers first?", "Answer Pilot with batch 2"]);
+    await user.click(within(waiting).getByRole("button", { name: "Answer Prospects or numbers first?" }));
+    // One line: a line break becomes a space.
+    await user.type(screen.getByLabelText("Your answer"), "Prospects first,{Enter}then numbers");
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    await waitFor(() => expect(posted).toEqual({ project: "shop", coordinator: "t-0010", line: 5, text: "Prospects first, then numbers" }));
+    const row = within(waiting).getByText("Prospects or numbers first?").closest("li")!;
+    expect(row).toHaveTextContent("Answered · Prospects first, then numbers");
+    expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the answer box open with the reason when Organizations refuses", async () => {
+    server.use(http.post("/api/org/asks/answer", () => HttpResponse.json({ ok: false, error: "line 5 is not an ask" }, { status: 502 })));
+    const { user } = setup("/asks", { asks: linked });
+    await user.click(await screen.findByRole("button", { name: "Answer Prospects or numbers first?" }));
+    await user.type(screen.getByLabelText("Your answer"), "yes");
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("line 5 is not an ask");
+    expect(screen.getByLabelText("Your answer")).toHaveValue("yes");
+  });
+
+  it("narrows to a project and then a coordinator, in the address, and a coordinator's card lists only its own", async () => {
+    const { router, user } = setup("/asks", { asks: linked });
+    await screen.findByRole("region", { name: "Wait on you" });
+    await user.selectOptions(screen.getByLabelText("Project"), "shop");
+    expect(router.state.location.search).toBe("?project=shop");
+    await user.selectOptions(screen.getByLabelText("Coordinator"), "t-0010");
+    expect(router.state.location.search).toBe("?project=shop&coordinator=t-0010");
+    expect(screen.getByText(/^Shop · Checkout · 2 wait on you/)).toBeInTheDocument();
+    const main = within(screen.getByRole("main"));
+    expect(main.queryByText("Pilot with batch 2")).not.toBeInTheDocument();
+    expect(main.getByText("Card tokens")).toBeInTheDocument();
+    // All projects clears the coordinator too.
+    await user.selectOptions(screen.getByLabelText("Project"), "");
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("opens narrowed from its address", async () => {
+    setup("/asks?project=shop&coordinator=root", { asks: linked });
+    expect(await screen.findByText(/^Shop · Coordinator · 1 waits on you/)).toBeInTheDocument();
+    expect(screen.queryByText("Card tokens")).not.toBeInTheDocument();
+  });
 });
