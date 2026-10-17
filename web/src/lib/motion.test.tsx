@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, Outlet, RouterProvider, type RouteObject } from "react-router";
+import { createMemoryRouter, Outlet, RouterProvider, useParams, type InitialEntry, type RouteObject } from "react-router";
 
 import { AppHeader } from "@/components/app-header";
 import { animateNavigations, MOTION_BUDGET_MS, useMotionSettle } from "@/lib/motion";
@@ -10,8 +10,11 @@ function Root() {
   return <Outlet />;
 }
 
+// Pane "t" is a thread under pane "a", its coordinator; every other pane sits under Home.
 function Pane() {
-  return <AppHeader bridge="connected" error={false} title="Pane" back={{ label: "Home", to: "/" }} />;
+  const { paneId } = useParams();
+  const back = paneId === "t" ? { label: "A", to: "/pane/a" } : { label: "Home", to: "/" };
+  return <AppHeader bridge="connected" error={false} title={`Pane ${paneId}`} back={back} />;
 }
 
 let slowPage: Promise<null> = Promise.resolve(null);
@@ -27,7 +30,7 @@ const routes: RouteObject[] = [{
   ],
 }];
 
-async function open(at: string) {
+async function open(at: InitialEntry) {
   const router = createMemoryRouter(routes, { initialEntries: [at] });
   animateNavigations(router);
   render(<RouterProvider router={router} />);
@@ -70,7 +73,7 @@ describe("page motion", () => {
     const router = await open("/");
     await act(() => router.navigate("/pane/a"));
     expect(vt.motions).toEqual(["push"]);
-    expect(await screen.findByText("Pane")).toBeInTheDocument();
+    expect(await screen.findByText("Pane a")).toBeInTheDocument();
   });
 
   it("slides the page out as a pop when the header's back control is the way out", async () => {
@@ -124,7 +127,7 @@ describe("page motion", () => {
   it("navigates exactly as before where the browser has no view transitions", async () => {
     const router = await open("/");
     await act(() => router.navigate("/pane/a"));
-    expect(await screen.findByText("Pane")).toBeInTheDocument();
+    expect(await screen.findByText("Pane a")).toBeInTheDocument();
     expect(document.documentElement.dataset.motion).toBeUndefined();
   });
 
@@ -138,5 +141,74 @@ describe("page motion", () => {
     expect(vt.skipped()).toBe(1);
     await act(async () => land(null));
     expect(await screen.findByText("Slow")).toBeInTheDocument();
+  });
+});
+
+describe("the back control", () => {
+  /** Where the history stands: its entries and the one shown. */
+  function stack(router: ReturnType<typeof createMemoryRouter>) {
+    return { action: router.state.historyAction, at: router.state.location.pathname + router.state.location.search };
+  }
+
+  it("steps back through the history when the entry before is its parent, so three backs leave three entries", async () => {
+    const router = await open("/");
+    await act(() => router.navigate("/pane/a"));
+    await act(() => router.navigate("/pane/a?view=threads", { replace: true }));
+    await act(() => router.navigate("/pane/t"));
+    await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
+    await screen.findByText("Pane a");
+    // Back where it was, on the tab it left.
+    expect(stack(router)).toEqual({ action: "POP", at: "/pane/a?view=threads" });
+    await userEvent.click(screen.getByRole("link", { name: "Back to Home" }));
+    await screen.findByText("Home");
+    expect(stack(router)).toEqual({ action: "POP", at: "/" });
+    // The pages above are still ahead, as after the browser's Back, and nothing was added.
+    await act(() => router.navigate(1));
+    expect(stack(router)).toEqual({ action: "POP", at: "/pane/a?view=threads" });
+  });
+
+  it("replaces the page with its parent when it came from elsewhere, so the history never grows", async () => {
+    const router = await open("/settings");
+    await act(() => router.navigate("/pane/t"));
+    await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
+    await screen.findByText("Pane a");
+    expect(stack(router)).toEqual({ action: "REPLACE", at: "/pane/a" });
+    // Its parent, Home, is not the page before it either (Settings), so it replaces again.
+    await userEvent.click(screen.getByRole("link", { name: "Back to Home" }));
+    await screen.findByText("Home");
+    expect(stack(router)).toEqual({ action: "REPLACE", at: "/" });
+    await act(() => router.navigate(-1));
+    expect(stack(router).at).toBe("/settings");
+  });
+
+  it("remembers where a page came from across a reload, in its history entry", async () => {
+    const router = await open({ pathname: "/pane/t", state: { nenuFrom: "/pane/a?view=threads" } });
+    expect(router.state.location.state).toEqual({ nenuFrom: "/pane/a?view=threads" });
+    // A replace keeps the entry's place, so it keeps the page before it too.
+    await act(() => router.navigate("/pane/t?view=prs", { replace: true }));
+    expect(router.state.location.state).toEqual({ nenuFrom: "/pane/a?view=threads" });
+    await act(() => router.navigate("/pane/u"));
+    expect(router.state.location.state).toEqual({ nenuFrom: "/pane/t?view=prs" });
+  });
+
+  it("slides out as a pop whether it steps back or replaces, and the browser's Back never moves", async () => {
+    const vt = fakeTransitions();
+    const router = await open("/");
+    await act(() => router.navigate("/pane/a"));
+    await act(() => router.navigate("/pane/t"));
+    await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
+    await screen.findByText("Pane a");
+    await act(() => router.navigate(1));
+    await act(() => router.navigate(-1));
+    expect(vt.motions).toEqual(["push", "fade", "pop"]);
+  });
+
+  it("lets a modified click open the parent's address as a link does", async () => {
+    const router = await open("/pane/t");
+    const back = await screen.findByRole("link", { name: "Back to A" });
+    expect(back).toHaveAttribute("href", "/pane/a");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
+    back.dispatchEvent(click);
+    expect(router.state.location.pathname).toBe("/pane/t");
   });
 });

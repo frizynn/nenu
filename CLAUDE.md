@@ -190,6 +190,11 @@ the unit name; the Herdr action runs from anywhere.
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped
   notification opens in place. `bun scripts/e2e/run.ts motion` must count 0 transitions while quiet
   ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
+- **The back control steps back, it never pushes its parent** (`useGoUp` in `web/src/lib/motion.ts`): each
+  entry remembers the page it came from, the back is `navigate(-1)` when that is its parent and a replace
+  otherwise; a sibling replaces, a coordinator's thread pushes, and a phone's tab is `?view=`, replaced.
+  `bun scripts/e2e/run.ts back` must end three backs at the entry length + 3
+  ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
   describe connection health. Brief failures retry quietly; only sustained outages show the

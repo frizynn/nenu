@@ -1,12 +1,13 @@
 import { useEffect } from "react";
-import { matchRoutes, useLocation, type DataRouter, type RouterNavigateOptions, type To } from "react-router";
+import { matchRoutes, useLocation, useNavigate, type DataRouter, type RouterNavigateOptions, type To } from "react-router";
 
 /**
  * How a page change moves, the way a phone's navigation does: a deeper page slides in from the right
  * over the one it leaves (push), the back control slides the page out to the right (pop), and any other
- * change (the tab bar's Home, a sibling pane, a pick in the sidebar) cross-fades in place. Reduced
- * motion, and a desk, where the sidebar must stay put beside the page, turn every change into the
- * cross-fade. index.css draws each one.
+ * change (the tab bar's Home, a sibling pane, a pick in the sidebar) cross-fades in place. Every pane
+ * sits at one route depth, so a move between a coordinator and its threads names its motion (armMotion).
+ * Reduced motion, and a desk, where the sidebar must stay put beside the page, turn every change into
+ * the cross-fade. index.css draws each one.
  */
 export type Motion = "push" | "pop" | "fade";
 
@@ -38,10 +39,57 @@ export function animateNavigations(router: DataRouter): void {
   active = router;
   const navigate = router.navigate;
   router.navigate = ((to: To | number | null, opts?: RouterNavigateOptions) => {
-    if (typeof to === "number") return navigate(to);
+    if (typeof to === "number") {
+      const motion = motionFor(router, to, opts);
+      return motion ? move(router, motion, () => navigate(to)) : navigate(to);
+    }
+    const stamped = { ...opts, state: stamp(router, to, opts) };
     const motion = motionFor(router, to, opts);
-    return motion ? move(router, motion, () => navigate(to, opts)) : navigate(to, opts);
+    return motion ? move(router, motion, () => navigate(to, stamped)) : navigate(to, stamped);
   }) as DataRouter["navigate"];
+}
+
+// The page an entry was pushed from, kept in its history state so it survives a reload. A replace keeps
+// the entry's place in the history, so it keeps the page before it too, and so does a navigation to the
+// page already shown, which React Router turns into a replace.
+const FROM = "nenuFrom";
+
+function stamp(router: DataRouter, to: To | null, opts: RouterNavigateOptions | undefined): unknown {
+  const here = router.state.location;
+  const path = here.pathname + here.search;
+  const there = typeof to === "string" ? new URL(to, new URL(path, "http://nenu.invalid")) : undefined;
+  const stays = opts?.replace || (there !== undefined && there.pathname + there.search === path);
+  const from = stays ? fromOf(here.state) : path;
+  if (from === undefined) return opts?.state;
+  const state: unknown = opts?.state;
+  return { ...(typeof state === "object" && state !== null ? state : {}), [FROM]: from };
+}
+
+function fromOf(state: unknown): string | undefined {
+  const from = typeof state === "object" && state !== null ? (state as Record<string, unknown>)[FROM] : undefined;
+  return typeof from === "string" ? from : undefined;
+}
+
+/** One screen, whatever it shows inside (a coordinator's tab, a docked thread): its path and session. */
+function sameScreen(a: string, b: string): boolean {
+  const [x, y] = [new URL(a, "http://nenu.invalid"), new URL(b, "http://nenu.invalid")];
+  return x.pathname === y.pathname && x.searchParams.get("s") === y.searchParams.get("s");
+}
+
+/**
+ * Go up to `parent`, sliding out as a pop. When the entry before this one is that parent, this is the
+ * browser's Back, so the app's back and the system's agree and the history never grows; otherwise the
+ * parent replaces this page, so the system's Back skips it as a pop would have.
+ */
+export function useGoUp(): (parent: string) => void {
+  const navigate = useNavigate();
+  const { state } = useLocation();
+  return (parent) => {
+    armMotion("pop");
+    const from = fromOf(state);
+    if (from !== undefined && sameScreen(from, parent)) void navigate(-1);
+    else void navigate(parent, { replace: true });
+  };
 }
 
 /** The very next navigation, started in this same task, moves this way: the back control's pop, a
@@ -65,11 +113,15 @@ export function useMotionSettle(): void {
   }, [key]);
 }
 
-function motionFor(router: DataRouter, to: To | null, opts: RouterNavigateOptions | undefined): Motion | undefined {
+function motionFor(router: DataRouter, to: To | number | null, opts: RouterNavigateOptions | undefined): Motion | undefined {
   const asked = armed;
   armed = undefined;
-  // A replace corrects where you are (a redirect, a closed pane, a tab switch inside a chat): no move.
-  if (opts?.replace || typeof document.startViewTransition !== "function") return undefined;
+  if (typeof document.startViewTransition !== "function") return undefined;
+  // A step through the history moves only when the app asked (its back control), never for the browser's.
+  if (typeof to === "number") return asked && (window.matchMedia?.(STILL).matches ? "fade" : asked);
+  // A replace corrects where you are (a redirect, a closed pane, a tab switch inside a chat): no move,
+  // unless the app asked for one (the back control, a sibling's chip).
+  if (opts?.replace && !asked) return undefined;
   const here = router.state.location.pathname;
   const there = typeof to === "string" ? new URL(to, new URL(here, "http://nenu.invalid")).pathname : (to?.pathname ?? here);
   if (there === here) return undefined;

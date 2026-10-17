@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { moveOrgNode, resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, openUnder, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, openUnder, organizes, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest } from "@/lib/types";
 
@@ -123,11 +123,6 @@ interface OrgTreeProps {
 export interface Organize {
   /** A coordinator's card, drawn when its row opens; the project's own is `root`. */
   card: (coordinatorId: string) => ReactNode;
-}
-
-/** Whether a project organizes coordinators: one open under it at least. A project with only its own coordinator is drawn as before. */
-export function organizes(tree: OrgTree): boolean {
-  return tree.open.some((node) => node.thread.role === "coordinator");
 }
 
 interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {

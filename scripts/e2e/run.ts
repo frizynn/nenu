@@ -32,6 +32,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
+//   bun scripts/e2e/run.ts back     [--port 8797] [--out DIR]   Into a project's threads and back, two projects: history length, motion, Back from Home
 //   bun scripts/e2e/run.ts surface  [--port 8797] [--out DIR] [--seconds 60]  Surfaces and project marks on every screen, idle CPU, memory and DOM
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
@@ -2129,7 +2130,7 @@ async function motion(before: boolean): Promise<void> {
       const page = await context.newPage();
       await page.addInitScript(instrument, null);
       await page.goto(bridge.url + path);
-      await page.getByText("Working Claude").first().waitFor({ timeout: 15_000 });
+      await page.locator("main").getByText("Working Claude").first().waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1200);
       return { page, close: () => context.close() };
     };
@@ -2292,6 +2293,128 @@ async function motion(before: boolean): Promise<void> {
   }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "motion.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ ...result, shots: `${result.shots.length} in ${outDir}` }, null, 2));
+}
+
+/**
+ * The way back through a project (useGoUp in web/src/lib/motion.ts), phone and desk, three walks: a
+ * coordinator under a project that organizes them (demoOrg: project → coordinator → its thread, a
+ * sibling, reloads), a project that opens on its own coordinator's chat (projectChatSeed: a thread at its
+ * root), and the own coordinator of a project that organizes coordinators (orgTreeSeed: a thread at its root). Each walk taps the
+ * app's back until there is none, reaches Home the way a person would (the back, or the desk's bar), and
+ * then takes the browser's Back once. Logs path, `history.length` and motion per step, with a capture each.
+ */
+async function back(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  type Walk = { coordinator?: { pane: string; title: string }; thread: { pane: string; title: string }; sibling?: string };
+  const walk = async (org: (herd: DemoHerd, now: number) => OrgSeed, name: string, route: (herd: DemoHerd) => Walk) => withBench(async (bridge, browser) => {
+    const herd = bridge.herd!;
+    const way = route(herd);
+    const paneHref = (id: string) => `/pane/${encodeURIComponent(id)}`;
+    const run = async (device: typeof PHONE | typeof DESKTOP, kind: string) => {
+      const context = await browser.newContext({ ...device, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
+      const page = await context.newPage();
+      // The motion each navigation asked for, read where lib/motion.ts sets it, before the transition starts.
+      await page.addInitScript(() => {
+        const w = window as unknown as { __moves: string[] };
+        w.__moves = [];
+        const native = Document.prototype.startViewTransition;
+        if (!native) return;
+        Document.prototype.startViewTransition = function (this: Document, arg?: ViewTransitionUpdateCallback | StartViewTransitionOptions) {
+          w.__moves.push(document.documentElement.dataset.motion ?? "?");
+          return native.call(this, arg as ViewTransitionUpdateCallback);
+        };
+      }, null);
+      const steps: Array<{ step: string; path: string; len: number; moves: string[]; tab?: string | null; back?: string | null }> = [];
+      const log = async (step: string) => {
+        await page.waitForTimeout(900);
+        const state = await page.evaluate(() => {
+          const w = window as unknown as { __moves?: string[] };
+          const moves = w.__moves ?? [];
+          w.__moves = [];
+          const tab = document.querySelector('[role="tablist"][aria-label="Project"] [aria-selected="true"]')?.textContent ?? null;
+          const back = Array.from(document.querySelectorAll('header [aria-label^="Back to"]')).find((el) => (el as HTMLElement).offsetParent !== null)?.getAttribute("aria-label") ?? null;
+          return { path: location.pathname + location.search, len: history.length, moves, tab, back };
+        }, null);
+        steps.push({ step, ...state });
+        const path = join(outDir, `${name}-${kind}-${String(steps.length).padStart(2, "0")}-${step}.png`);
+        await page.screenshot({ path, animations: "disabled" });
+        shots.push(path);
+      };
+      const visibleBack = () => page.locator('header [aria-label^="Back to"] >> visible=true').first();
+      // A row by its title where a person would tap it: the phone's Threads tab, else the page or the desk's bar.
+      const open = async (title: string) => {
+        if (device === PHONE && await page.getByRole("tab", { name: /^Threads/ }).first().isVisible()) {
+          await page.getByRole("tab", { name: /^Threads/ }).first().click({ timeout: 5000 });
+          await log("threads-tab");
+          await page.locator(".project-overlay").getByText(title).first().click({ timeout: 5000 });
+        } else {
+          const inMain = page.locator(`main >> text="${title}" >> visible=true`).first();
+          await (await inMain.isVisible() ? inMain : page.locator(`aside >> text="${title}" >> visible=true`).first()).click({ timeout: 5000 });
+        }
+      };
+      await page.goto(bridge.url + "/");
+      await page.locator('a[href="/project/acme"]').first().waitFor({ state: "attached", timeout: 15_000 });
+      await log("home");
+      const entry = steps[0]!.len;
+      // A phone reaches a project through the navigation the mark opens; a desk's bar lists it.
+      if (device === PHONE) await page.getByRole("button", { name: "Open navigation" }).first().click({ timeout: 5000 });
+      await page.locator('a[href="/project/acme"] >> visible=true').first().click({ timeout: 5000 });
+      await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
+      await log("project");
+      if (way.coordinator) {
+        await open(way.coordinator.title);
+        await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
+        await log("coordinator");
+        if (device === PHONE) {
+          await page.getByRole("tab", { name: /^Threads/ }).click({ timeout: 5000 });
+          await page.reload();
+          await page.locator('[role="tablist"][aria-label="Project"]').waitFor({ timeout: 10_000 });
+          await log("threads-reload");
+        }
+      }
+      await open(way.thread.title);
+      await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
+      await log("thread");
+      if (device === PHONE && way.sibling) {
+        await open("Panel depósito");
+        await page.waitForURL(`**${paneHref(way.sibling)}*`, { timeout: 10_000 });
+        await log("sibling");
+        await open(way.thread.title);
+        await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
+        await log("sibling-back");
+        await page.reload();
+        await page.locator("header").first().waitFor({ timeout: 10_000 });
+        await log("thread-reload");
+      }
+      for (let i = 1; i <= 4 && await visibleBack().isVisible(); i++) {
+        await visibleBack().click({ timeout: 5000 });
+        await log(`app-back-${i}`);
+      }
+      // A desk's back steps aside where the bar lists the parent: Home is the bar's.
+      if (steps.at(-1)!.path !== "/") {
+        await page.locator('aside a[href="/"] >> visible=true').first().click({ timeout: 5000 });
+        await page.waitForFunction(() => location.pathname === "/", null, { timeout: 10_000 });
+        await log("bar-home");
+      }
+      const home = steps.at(-1)!;
+      await page.evaluate(() => history.back(), null);
+      await page.waitForTimeout(1200);
+      const systemBackFromHome = page.url().replace(bridge.url, "");
+      await context.close();
+      return { entry, lenAtHome: home.len, entriesAdded: home.len - entry, systemBackFromHome, steps };
+    };
+    return { phone: await run(PHONE, "phone"), desk: await run(DESKTOP, "desk"), unexpectedWrites: bridge.fake!.writes() };
+  }, CAPTURE_EPOCH, org);
+  const result = {
+    organizer: await walk(demoOrg, "organizer", (herd) => ({
+      coordinator: { pane: herd.idle, title: "Rediseño mobile" }, thread: { pane: herd.working, title: "Landing a 390 px" }, sibling: herd.blocked })),
+    rootThread: await walk(projectChatSeed, "root", (herd) => ({ thread: { pane: herd.blocked, title: "Panel depósito" } })),
+    organizerRoot: await walk((herd, now) => orgTreeSeed(herd, now, { coordinator: true }), "organizer-root", (herd) => ({
+      coordinator: { pane: herd.codex, title: "Project coordinator" }, thread: { pane: herd.blocked, title: "Panel depósito" } })),
+  };
+  await writeFile(join(outDir, "back.json"), JSON.stringify({ ...result, shots }, null, 2));
+  console.log(JSON.stringify(result, null, 2));
 }
 
 /**
@@ -3393,6 +3516,7 @@ else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
 else if (command === "terminal") await terminal(values.before === true);
 else if (command === "motion") await motion(values.before === true);
+else if (command === "back") await back();
 else if (command === "surface") await surface();
 else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
@@ -3403,6 +3527,6 @@ else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
