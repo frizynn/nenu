@@ -65,7 +65,7 @@ it("opens a chip's panel over the row, lists its threads and opens the one tappe
   const needs = within(await row()).getByRole("button", { name: "Needs you, 1" });
   await user.click(needs);
   expect(needs).toHaveAttribute("aria-expanded", "true");
-  const panel = screen.getByRole("region", { name: "Needs you" });
+  const panel = screen.getByRole("dialog", { name: "Needs you" });
   const ask = within(panel).getByRole("button", { name: /^Payments webhook/ });
   expect(ask).toHaveTextContent("Asked you a question");
   expect(ask).toHaveTextContent("4m");
@@ -73,10 +73,10 @@ it("opens a chip's panel over the row, lists its threads and opens the one tappe
   expect(source.onOpenPane).toHaveBeenCalledWith("w9:p1");
 
   await user.click(within(await row()).getByRole("button", { name: "Working, 1" }));
-  const work = screen.getByRole("region", { name: "Working" });
+  const work = screen.getByRole("dialog", { name: "Working" });
   expect(within(work).getByRole("button", { name: /^Shipping estimates/ })).toHaveTextContent("Reading the carrier API");
   await user.click(within(work).getByRole("button", { name: "Close" }));
-  expect(screen.queryByRole("region", { name: "Working" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Working" })).not.toBeInTheDocument();
 });
 
 it("keeps everything the PR bar offered behind PRs: Merge with its confirmation, the checks and the automation", async () => {
@@ -87,7 +87,7 @@ it("keeps everything the PR bar offered behind PRs: Merge with its confirmation,
   }));
   const { user, source } = renderChat();
   await user.click(within(await row()).getByRole("button", { name: "PRs, 2" }));
-  const panel = screen.getByRole("region", { name: "Pull requests" });
+  const panel = screen.getByRole("dialog", { name: "Pull requests" });
   expect(within(panel).getByRole("link", { name: "#42" })).toHaveAttribute("href", own.pr!.url);
   expect(within(panel).getByText("checkout-coupon")).toBeInTheDocument();
   expect(within(panel).getByText("In progress").nextElementSibling).toHaveTextContent("2");
@@ -106,7 +106,7 @@ it("the PRs panel offers each PR's one button, and counts a pushed branch that w
   const withActions = [...threads.map((thread) => thread.id === own.id ? { ...thread, prAction: "fix-ci" as const } : thread.id === "t-14" ? { ...thread, prAction: "merge" as const } : thread), pushed];
   const { user } = renderChat({ threads: withActions, project: { ...project, threads: withActions } });
   await user.click(within(await row()).getByRole("button", { name: "PRs, 3" }));
-  const panel = screen.getByRole("region", { name: "Pull requests" });
+  const panel = screen.getByRole("dialog", { name: "Pull requests" });
   expect(within(panel).getByRole("button", { name: "Fix CI Checkout flow" })).toHaveTextContent(/^Fix CI$/);
   expect(within(panel).getByRole("button", { name: "Merge Cart badge" })).toHaveTextContent(/^Merge$/);
   expect(within(panel).getByRole("button", { name: "Create PR Login hotfix" })).toHaveTextContent(/^Create PR$/);
@@ -116,17 +116,148 @@ it("closes the panel with Escape and hands focus back to its chip", async () => 
   const { user } = renderChat();
   const prs = within(await row()).getByRole("button", { name: "PRs, 2" });
   await user.click(prs);
-  within(screen.getByRole("region", { name: "Pull requests" })).getByRole("button", { name: "Close" }).focus();
+  within(screen.getByRole("dialog", { name: "Pull requests" })).getByRole("button", { name: "Close" }).focus();
   await user.keyboard("{Escape}");
-  expect(screen.queryByRole("region", { name: "Pull requests" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Pull requests" })).not.toBeInTheDocument();
   expect(prs).toHaveFocus();
 });
 
-it("says under the box which branch and which machine the chat runs on", async () => {
+/** A viewport whose queries match the ones named, as a phone (none) or a desk ("(min-width: 768px)", …). */
+function setMedia(...matching: string[]) {
+  window.matchMedia = ((query: string) => ({ matches: matching.includes(query), media: query, onchange: null,
+    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+}
+const originalMatchMedia = window.matchMedia;
+afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+const LONG_BRANCH = "fix/meli-contracargos-reintentos-webhook";
+
+it("on a desk, says under the box which branch and which machine the chat runs on", async () => {
+  setMedia("(min-width: 768px)");
   renderChat();
   const place = await screen.findByRole("group", { name: "Message tools" });
   expect(within(place).getByText("checkout-coupon")).toBeInTheDocument();
   expect(within(place).getByText(window.location.hostname)).toBeInTheDocument();
+});
+
+// At 390px the branch and the machine were cut mid-word ("fix/meli-contr…  r."): the row gives its
+// width to the model and the context, and keeps where it runs one tap away, whole.
+it("on a phone, keeps a long branch and the machine behind one tap, never cut in the row", async () => {
+  setMedia("(pointer: coarse)");
+  const thread = { ...own, branch: LONG_BRANCH };
+  const { user } = renderChat({ thread, threads: threads.map((t) => (t.id === own.id ? thread : t)) });
+  const place = await screen.findByRole("group", { name: "Message tools" });
+  expect(within(place).queryByText(LONG_BRANCH)).not.toBeInTheDocument();
+  const where = within(place).getByRole("button", { name: `Where this runs: ${LONG_BRANCH} on ${window.location.hostname}` });
+  await user.click(where);
+  const detail = screen.getByRole("dialog", { name: "Where this runs" });
+  expect(within(detail).getByText(LONG_BRANCH)).toBeVisible();
+  expect(within(detail).getByText(window.location.hostname)).toBeVisible();
+});
+
+it("floats the panel over the thread: the box and the conversation stay where they were", async () => {
+  const { user } = renderChat();
+  const chips = await row();
+  const box = document.querySelector(".composer-box")!;
+  const scroller = screen.getByRole("region", { name: "Live conversation" }).querySelector<HTMLElement>(".overflow-y-auto")!;
+  scroller.scrollTop = 120;
+  const line = chips.parentElement!;
+  const before = line.previousElementSibling;
+  await user.click(within(chips).getByRole("button", { name: "Working, 1" }));
+  const panel = screen.getByRole("dialog", { name: "Working" });
+  // The panel is the line's own overlay, not a row of the composer: nothing is inserted above the line.
+  expect(panel.parentElement).toBe(line.parentElement);
+  expect(panel.parentElement).toHaveClass("composer-chips");
+  expect(line.previousElementSibling).toBe(panel);
+  expect(document.querySelector(".composer-box")).toBe(box);
+  expect(scroller.scrollTop).toBe(120);
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Working" })).not.toBeInTheDocument();
+  expect(line.previousElementSibling).toBe(before);
+  expect(document.querySelector(".composer-box")).toBe(box);
+  expect(scroller.scrollTop).toBe(120);
+});
+
+it("closes the panel on a press outside it, and leaves focus where the press put it", async () => {
+  const { user } = renderChat();
+  await user.click(within(await row()).getByRole("button", { name: "Needs you, 1" }));
+  expect(screen.getByRole("dialog", { name: "Needs you" })).toBeVisible();
+  await user.click(screen.getByRole("textbox"));
+  expect(screen.queryByRole("dialog", { name: "Needs you" })).not.toBeInTheDocument();
+  expect(screen.getByRole("textbox")).toHaveFocus();
+});
+
+it("takes focus into the open panel, keeps Tab inside it, and Escape from its chip closes it too", async () => {
+  const { user } = renderChat();
+  const prs = within(await row()).getByRole("button", { name: "PRs, 2" });
+  await user.click(prs);
+  const panel = screen.getByRole("dialog", { name: "Pull requests" });
+  expect(panel).toHaveFocus();
+  const stops = within(panel).getAllByRole("button").concat(within(panel).queryAllByRole("link"), within(panel).queryAllByRole("checkbox"));
+  for (let i = 0; i < stops.length + 2; i++) {
+    await user.tab();
+    expect(panel.contains(document.activeElement)).toBe(true);
+  }
+  await user.tab({ shift: true });
+  expect(panel.contains(document.activeElement)).toBe(true);
+  // Escape wherever focus sits, the chip included.
+  prs.focus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Pull requests" })).not.toBeInTheDocument();
+  expect(prs).toHaveFocus();
+});
+
+it("on a phone, Back closes the panel and stays on the chat; its own ✕ steps back over the entry it took", async () => {
+  setMedia("(pointer: coarse)");
+  const back = vi.spyOn(window.history, "back");
+  const { user } = renderChat();
+  const needs = within(await row()).getByRole("button", { name: "Needs you, 1" });
+  const depth = window.history.length;
+  await user.click(needs);
+  expect(window.history.length).toBe(depth + 1);
+  // The browser's Back: the entry under the panel's is the chat's own.
+  const { nenuChipPanel: _, ...chat } = window.history.state as Record<string, unknown>;
+  act(() => {
+    window.history.replaceState(chat, "");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: chat }));
+  });
+  expect(screen.queryByRole("dialog", { name: "Needs you" })).not.toBeInTheDocument();
+  expect(needs).toHaveFocus();
+  expect(screen.getByRole("textbox")).toBeInTheDocument();
+  expect(back).not.toHaveBeenCalled();
+  // Opened again and closed with ✕: the panel takes its entry back with it.
+  await user.click(needs);
+  back.mockImplementation(() => {});
+  await user.click(within(screen.getByRole("dialog", { name: "Needs you" })).getByRole("button", { name: "Close" }));
+  expect(back).toHaveBeenCalledTimes(1);
+  back.mockRestore();
+});
+
+it("folds the threads that ended under what still works, a step back from the live rows", async () => {
+  const done: ProjectThreadView = { id: "t-02", title: "Old cart page", parentId: "t-10", role: "worker", status: "resolved", group: "resolved", updated: minutesAgo(300) };
+  const all = [...threads, done];
+  const { user, source } = renderChat({ threads: all, project: { ...project, threads: all } });
+  await user.click(within(await row()).getByRole("button", { name: "Working, 1" }));
+  const panel = screen.getByRole("dialog", { name: "Working" });
+  // Live first; the resolved ones are not among them until their fold opens.
+  expect(within(panel).getByRole("button", { name: /^Shipping estimates/ })).toBeVisible();
+  expect(within(panel).queryByRole("button", { name: /^Old cart page/ })).not.toBeInTheDocument();
+  await user.click(within(panel).getByRole("button", { name: "Done (2)" }));
+  const ended = within(panel).getByRole("button", { name: /^Old cart page/ });
+  expect(ended).toHaveClass("text-muted-foreground");
+  expect(within(panel).getByRole("button", { name: /^Search index/ })).toHaveClass("text-muted-foreground");
+  // Newest first, and still one tap from its page.
+  expect(ended.compareDocumentPosition(within(panel).getByRole("button", { name: /^Search index/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(ended);
+  expect(source.onOpenNode).toHaveBeenCalledWith("t-02");
+});
+
+it("raises no chip for threads that ended alone, and draws a finished-only chip quietly", async () => {
+  const quietThreads = threads.filter((thread) => thread.id === own.id || thread.status === "resolved").map((thread) => ({ ...thread, pr: undefined }));
+  renderChat({ threads: quietThreads, thread: { ...own, pr: undefined }, project: { ...project, threads: quietThreads } });
+  await screen.findByRole("textbox");
+  await act(async () => {});
+  expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
 });
 
 it("keeps every chip still: nothing in the row animates on its own", async () => {
@@ -169,7 +300,7 @@ it("lists the project's routines behind Routines, read when the chat opens and a
   const chip = await within(await row()).findByRole("button", { name: "Routines, 2" });
   expect(reads).toEqual(["acme-shop"]);
   await user.click(chip);
-  const panel = screen.getByRole("region", { name: "Routines" });
+  const panel = screen.getByRole("dialog", { name: "Routines" });
   const item = (name: string) => within(panel).getByText(name).closest("li")!;
   expect(item("pr-followup")).toHaveTextContent("on checks-failed, review");
   expect(item("pr-followup")).toHaveTextContent(/on$/);
