@@ -9,10 +9,10 @@ import { homeOrg, seedDemoHerd } from "./scenario.ts";
 
 // What moves under a finger while a busy herd works, on the e2e bench with Google Chrome headless:
 // a fleet of agents finishing one after another. On a phone, a tap on a thread's ‹ and on a sibling
-// chip while they finish, whether they land at the first try; Escape on the Search sheet. Then the
-// fleet keeps working without finishing: Home and a desk's sidebar left alone, counting the rows that
-// move and the layout shifts; the row a click opened, whether it stays under the pointer; and an agent
-// below the fold that finishes, whether its row comes into view. Run it once per build to compare two.
+// chip while they finish, whether they land at the first try; Escape on the Search sheet; Home left
+// alone, counting the rows that move and the layout shifts. On a desk, the sidebar left alone, and the
+// row a click opened, whether it stays under the pointer. Last, on each, an agent off screen starts
+// asking for you: how long until it is on screen. Run it once per build to compare two.
 //
 //   bun scripts/e2e/calm.ts [--port 8796] [--out DIR] [--seconds 60] [--label after]
 
@@ -31,14 +31,14 @@ const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(
 
 const FLEET = Array.from({ length: 8 }, (_, i) => `w3:agent${i + 1}`);
 
-/** One fleet agent starts and comes to `rest` every `everyMs`, in turn, until stopped. */
-function churn(fake: FakeHerdr, rest: "done" | "idle", everyMs = 1200): () => void {
+/** One fleet agent starts and finishes every `everyMs`, in turn, until stopped. */
+function churn(fake: FakeHerdr, everyMs = 1200): () => void {
   let next = 0;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const tick = setInterval(() => {
     const pane = FLEET[next++ % FLEET.length]!;
     fake.setStatus(pane, "working");
-    const done = setTimeout(() => { timers.delete(done); fake.setStatus(pane, rest); }, everyMs / 2);
+    const done = setTimeout(() => { timers.delete(done); fake.setStatus(pane, "done"); }, everyMs / 2);
     timers.add(done);
   }, everyMs);
   return () => { clearInterval(tick); for (const timer of timers) clearTimeout(timer); };
@@ -106,19 +106,24 @@ async function tap(page: Page, selector: string): Promise<string | null> {
 }
 
 /**
- * The fleet agent whose row is lowest, or hidden under the fold, finishes: where its row is once the
- * list has read it (-1: still not on screen). A finished agent raises no toast, so its row is the notice.
+ * The first fleet agent with no row on screen starts asking for you: how many ms until a link to it is
+ * inside the viewport (null: not within 5 s). Nothing on screen may move to show it, which `quiet` counts.
  */
-async function finishBelowFold(page: Page, fake: FakeHerdr, selector: string, href: (paneId: string) => string): Promise<{ paneId: string; rowBefore: number; rowAfter: number }> {
-  const rows = () => page.evaluate((sel: string) => Array.from(document.querySelectorAll(sel), (el) => el.getAttribute("href") ?? ""), selector);
-  const shown = await rows();
-  const paneId = FLEET.find((id) => !shown.includes(href(id))) ?? FLEET.reduce((low, id) => shown.indexOf(href(id)) > shown.indexOf(href(low)) ? id : low);
-  const rowBefore = shown.indexOf(href(paneId));
-  fake.setStatus(paneId, "working");
-  await page.waitForTimeout(800);
-  fake.setStatus(paneId, "done");
-  await page.waitForTimeout(3000);
-  return { paneId, rowBefore, rowAfter: (await rows()).indexOf(href(paneId)) };
+async function needsYouOffScreen(page: Page, fake: FakeHerdr, selector: string): Promise<{ paneId: string; visibleMs: number | null }> {
+  const onScreen = (sel: string) => page.evaluate((s: string) => Array.from(document.querySelectorAll(s), (el) => {
+    const box = el.getBoundingClientRect();
+    return box.height > 0 && box.top >= 0 && box.bottom <= window.innerHeight ? el.getAttribute("href") ?? "" : "";
+  }).filter(Boolean), sel);
+  const shown = await onScreen(selector);
+  const paneId = FLEET.find((id) => !shown.some((href) => href.startsWith(`/pane/${encodeURIComponent(id)}`))) ?? FLEET[0]!;
+  const href = `/pane/${encodeURIComponent(paneId)}`;
+  fake.setStatus(paneId, "blocked");
+  const t0 = Date.now();
+  while (Date.now() - t0 < 5000) {
+    if ((await onScreen(`a[href^="${href}"]`)).length) return { paneId, visibleMs: Date.now() - t0 };
+    await page.waitForTimeout(100);
+  }
+  return { paneId, visibleMs: null };
 }
 
 const toastShown = (page: Page) => page.locator("[data-notification-viewport] [role=status], [data-notification-viewport] [role=alert]").count();
@@ -147,7 +152,7 @@ async function run(): Promise<void> {
     const page = await context.newPage();
     await page.addInitScript(LAYOUT_SHIFTS, null);
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
-    let stop = churn(fake, "done");
+    let stop = churn(fake);
     try {
       // A thread in a project: its ‹ goes up to the project, its chips to the coordinator and siblings.
       const taps: Array<Record<string, unknown>> = [];
@@ -175,17 +180,15 @@ async function run(): Promise<void> {
       await shoot(page, "phone-search-after-escape");
       if (out.searchOpenAfterEscape) await page.getByRole("dialog", { name: "Search" }).getByRole("button", { name: "Close" }).click();
 
-      // From here the fleet works and rests, and nothing finishes unless the bench says so.
-      stop();
-      stop = churn(fake, "idle");
       await page.goto(bridge.url + "/");
       await page.locator('[role="tab"]:has-text("Recents")').first().waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1500);
       out.phoneHomeQuiet = await quiet(page, '#home-list a[href^="/pane/"]', quietMs);
       await shoot(page, "phone-home");
       stop();
-      out.phoneFinishedBelowFold = await finishBelowFold(page, fake, '#home-list a[href^="/pane/"]', (paneId) => `/pane/${encodeURIComponent(paneId)}`);
-      stop = churn(fake, "idle");
+      out.phoneNeedsYouOffScreen = await needsYouOffScreen(page, fake, '#home-list a[href^="/pane/"]');
+      await shoot(page, "phone-home-needs-you");
+      stop = churn(fake);
       await context.close();
 
       const desk = await browser.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
@@ -195,8 +198,6 @@ async function run(): Promise<void> {
       await deskPage.locator(".nav-desk a.nav-row").first().waitFor({ timeout: 15_000 });
       await deskPage.waitForTimeout(1500);
       out.deskSidebarQuiet = await quiet(deskPage, ".nav-chats a.nav-row", quietMs);
-      stop();
-      out.deskFinishedBelowFold = await finishBelowFold(deskPage, fake, ".nav-chats a.nav-row", (paneId) => `/pane/${encodeURIComponent(paneId)}`);
       // A click on a fleet chat's row: does that row stay under the pointer once its chat opens?
       const row = deskPage.locator('.nav-chats a.nav-row:has-text("Fleet agent 3")').first();
       const before = (await row.boundingBox())?.y ?? null;
@@ -205,6 +206,10 @@ async function run(): Promise<void> {
       const after = (await row.boundingBox())?.y ?? null;
       out.deskClickedRow = { before, after, movedPx: before !== null && after !== null ? Math.round(Math.abs(after - before)) : null };
       await shoot(deskPage, "desk-sidebar");
+      // The phone's agent asks still; the next one off the bar's screen asks too.
+      stop();
+      out.deskNeedsYouOffScreen = await needsYouOffScreen(deskPage, fake, ".nav-chats a.nav-row");
+      await shoot(deskPage, "desk-needs-you");
       await desk.close();
     } finally {
       stop();
