@@ -13,7 +13,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - "N updates" on Recents and on the desk's chats counts the rows with news and puts them in order on a tap (8973e065, cf7f209a).
-- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search, rows that move while quiet and how long an off-screen ask takes to show (de51bf50, 53943310).
+- `bun scripts/e2e/calm.ts` measures taps while agents finish, Escape on Search, rows that move while quiet and how long an off-screen ask takes to show (de51bf50, 53943310, 0f74a2a7).
 
 ### Fixed
 
