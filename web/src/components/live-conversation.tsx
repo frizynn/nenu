@@ -523,7 +523,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) py-6" style={{ overflowAnchor: "none" }}>
+        <div ref={scrollRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { touch.current = null; }} className="h-full min-w-0 overflow-y-auto overflow-x-hidden px-(--page-gutter) pt-6 pb-16" style={{ overflowAnchor: "none" }}>
           <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && cn("flex min-h-full flex-col", waiting ? "justify-end" : "justify-center"))}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
@@ -575,6 +575,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
             <Pending aria-hidden="true" className="size-3" />Updating…
           </span>
         </div>}
+        {/* The list's foot (pb-16) outgrows this row, its offset and a touch-size circle, so at the end of
+            the thread the last line stands clear of it even while it stays up. */}
         {paused && <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-(--page-gutter)">
           <div className="mx-auto max-w-(--chat-column)">
             <ScrollToLatest corner onClick={followLatest} waiting={waiting} count={newCount} changed={Boolean(hasNew)} />
