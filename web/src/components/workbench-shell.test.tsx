@@ -121,7 +121,7 @@ it("shows the tab bar off a pane with Home, New and Search, Home counting what n
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
 });
 
-it("closes the phone's Search sheet on Escape, clearing a typed query first", async () => {
+it("closes the phone's Search sheet on Escape, clearing a typed query first and keeping its box", async () => {
   const { user } = setup();
   const openSearch = () => user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Search" }));
   await openSearch();
@@ -131,7 +131,10 @@ it("closes the phone's Search sheet on Escape, clearing a typed query first", as
   await openSearch();
   await user.type(screen.getByRole("searchbox"), "panel");
   await user.keyboard("{Escape}");
-  expect(screen.getByRole("dialog", { name: "Search" })).toBeInTheDocument();
+  // The sheet keeps its box, empty and still typed into.
+  const box = within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox");
+  expect(box).toHaveValue("");
+  expect(box).toHaveFocus();
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument());
 });

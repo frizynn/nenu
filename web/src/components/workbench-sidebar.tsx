@@ -103,10 +103,14 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
     return () => document.removeEventListener("pointerdown", onDown);
   }, [phone, searching, browsing]);
 
-  function closeSearch() {
+  function clearQuery() {
     setQuery("");
     setPicked(undefined);
     setAnswered(undefined);
+  }
+
+  function closeSearch() {
+    clearQuery();
     setSearching(false);
   }
 
@@ -131,10 +135,12 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
 
   function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
-      // On the Search sheet an empty box is the whole sheet, so its Escape goes on to close it.
+      // On the Search sheet the box is the whole sheet: Escape clears what was typed and keeps the box,
+      // and an empty box lets it go on to close the sheet.
       if (variant === "sheet" && !query) return;
       event.stopPropagation();
-      closeSearch();
+      if (variant === "sheet") clearQuery();
+      else closeSearch();
     }
     if (event.key === "Enter" && !event.nativeEvent.isComposing) openPicked();
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && hits.length > 0) {
