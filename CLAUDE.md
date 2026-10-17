@@ -176,6 +176,9 @@ the unit name; the Herdr action runs from anywhere.
   One component (`ask-list.tsx`) draws both, narrowed by project and coordinator, links as chips; a line that
   is only a parenthesis is a placeholder, and Answer writes the person's words through `asks answer`, only
   where its `--help` exits 0 ([ADR 0093](./.adr/0093-asks-are-answered-and-narrowed-where-they-are-read.md)).
+  A question folds the rows about the same thread or task, opens its thread's report in place
+  (`/api/org/report`, by thread id, never a path) and says what keeps it from closing; only ids reach
+  the coordinator ([ADR 0096](./.adr/0096-a-question-carries-its-context.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
   page, each a row folding over its card and work, the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
@@ -360,9 +363,11 @@ timer or under a file watch, keeps tokens and prices them at read time, and neve
 or calls a usage endpoint ([ADR 0085](./.adr/0085-usage-is-scanned-in-its-own-process-from-the-agents-logs.md)).
 
 A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pictures, HTML and PDFs
-whose real path is inside `<projects root>/<slug>/library`, itself a folder and not a link; anything else
-is 404. Bytes go through the preview's readers and HTML through its sandbox. The summaries and their paths
-come from `/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
+whose real path is inside `<records>/library`, itself a folder and not a link; anything else is 404.
+`<records>` is Organizations' records folder, read from each thread's `library`, else the project's
+folder; a thread's report comes from it by id, under the same rules (ADR 0096). Bytes go through the
+preview's readers and HTML through its sandbox. The summaries and their paths come from
+`/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
 ([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
