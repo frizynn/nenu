@@ -123,3 +123,42 @@ it("opens a capture large, its caption as its name, and steps to the next", asyn
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
+
+it("leads with the report in plain words once Organizations wrote them, and asks for them where it offers to", async () => {
+  const asked: unknown[] = [];
+  server.use(http.post("/api/org/thread/explain", async ({ request }) => {
+    asked.push(await request.json());
+    return HttpResponse.json({ ok: true, explained: { id: "t-11", text: "You have to pick how stock looks on a phone: a list or cards." } });
+  }));
+  const plain: ThreadSummary[] = [
+    { ...summaries[0]!, plain: { text: "Checkout is ready except one choice about stock, which is yours.", current: true } },
+    // A plain summary of an older report is not shown; the agent's words are, with the button.
+    { ...summaries[1]!, plain: { text: "Old words.", current: false }, explainable: true },
+    { ...summaries[2]! },
+  ];
+  const { user } = setup(reported, { threads: plain });
+  const main = within(await screen.findByRole("main"));
+  const own = main.getByRole("region", { name: "Node" });
+  expect(await within(own).findByText("Checkout is ready except one choice about stock, which is yours.")).toBeInTheDocument();
+  expect(within(own).queryByText("Checkout ships in three PRs; one needs your call on stock.")).toBeNull();
+  await user.click(within(own).getByRole("button", { name: "Agent's words" }));
+  expect(within(own).getByText("Checkout ships in three PRs; one needs your call on stock.")).toBeInTheDocument();
+
+  const card = main.getByRole("article", { name: "Stock panel" });
+  expect(within(card).queryByText("Old words.")).toBeNull();
+  expect(within(card).getByText("Two ways to show stock at 390 px. Pick one.")).toBeInTheDocument();
+  await user.click(within(card).getByRole("button", { name: "In plain words" }));
+  expect(await within(card).findByText("You have to pick how stock looks on a phone: a list or cards.")).toBeInTheDocument();
+  expect(asked).toEqual([{ project: "hub", id: "t-11" }]);
+  // Nothing offered, nothing to press.
+  expect(within(main.getByRole("article", { name: "Coupons" })).queryByRole("button", { name: "In plain words" })).toBeNull();
+});
+
+it("says why the summary agent could not explain a report, and keeps the agent's words", async () => {
+  server.use(http.post("/api/org/thread/explain", () => HttpResponse.json({ ok: false, error: "rate limited" }, { status: 400 })));
+  const { user } = setup(reported, { threads: [summaries[0]!, { ...summaries[1]!, explainable: true }] });
+  const card = within(await screen.findByRole("article", { name: "Stock panel" }));
+  await user.click(card.getByRole("button", { name: "In plain words" }));
+  expect(await card.findByRole("alert")).toHaveTextContent("Could not explain it: rate limited");
+  expect(card.getByText("Two ways to show stock at 390 px. Pick one.")).toBeInTheDocument();
+});

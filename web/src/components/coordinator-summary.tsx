@@ -1,15 +1,19 @@
 import { lazy, Suspense, useState, type ComponentProps } from "react";
-import { ChevronRight, ExternalLink, FileText, GitPullRequest, Globe, ImageIcon } from "@/components/ui/icon";
+import { useRouteLoaderData } from "react-router";
+import { ChevronRight, ExternalLink, FileText, GitPullRequest, Globe, ImageIcon, Sparkle } from "@/components/ui/icon";
 
 import { IMAGE_EDGE } from "@/components/message-images";
 import { NodeDot } from "@/components/node-row";
+import { BusyLabel } from "@/components/home-panels";
 import { FullReport } from "@/components/thread-report";
 import { OrgTreeList, prSummary, threadAge, threadDetail } from "@/components/project-tasks";
-import { orgLibraryUrl } from "@/lib/api";
+import { explainOrgThread, orgLibraryUrl } from "@/lib/api";
 import { summarySections, VERDICT_LABEL } from "@/lib/coordinator-summary";
+import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { nodeState, STATE_LABEL } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
-import type { AgentView, ProjectThreadView, ProjectView, ThreadCapture, ThreadDeliverable, ThreadPullRequest, ThreadSummary, ThreadVerdict } from "@/lib/types";
+import { useSession } from "@/lib/session";
+import { isReadOnly, type AgentView, type ProjectThreadView, type ProjectView, type ThreadCapture, type ThreadDeliverable, type ThreadPullRequest, type ThreadSummary, type ThreadVerdict } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CaptureViewer = lazy(() => import("./capture-viewer"));
@@ -132,10 +136,52 @@ export function OwnReport({ project, thread, summary }: { project: ProjectView; 
 
 function ReportContent({ project, summary, pr }: { project: ProjectView; summary?: ThreadSummary; pr?: ThreadPullRequest }) {
   return <>
-    {summary?.summary && <p className="mt-2 whitespace-pre-line break-words text-subhead">{summary.summary}</p>}
+    {summary && <ReportWords project={project} summary={summary} />}
     {pr && <div className="mt-2.5"><PrChip pr={pr} /></div>}
     {summary && summary.captures.length > 0 && <Captures project={project} captures={summary.captures} />}
     {summary && summary.deliverables.length > 0 && <Deliverables project={project} deliverables={summary.deliverables} />}
+  </>;
+}
+
+/**
+ * What the report says. Once Organizations' summary agent wrote it in plain words for this report,
+ * those lead and the agent's own words are a tap away; otherwise the agent's words, with a button
+ * that asks for plain ones where Organizations offers it. Both are model text, drawn as text.
+ */
+function ReportWords({ project, summary }: { project: ProjectView; summary: ThreadSummary }) {
+  const session = useSession();
+  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [own, setOwn] = useState(false);
+  const plain = answer ?? (summary.plain?.current && summary.plain.text ? summary.plain.text : null);
+  const words = summary.summary;
+  const explain = async () => {
+    setBusy(true);
+    setFailed(null);
+    try {
+      setAnswer((await explainOrgThread({ project: project.slug, id: summary.id }, session)).explained.text);
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : "Could not explain the report.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <>
+    {plain
+      ? <p className="mt-2 whitespace-pre-line break-words text-subhead">{plain}</p>
+      : words && <p className="mt-2 whitespace-pre-line break-words text-subhead">{words}</p>}
+    {plain && words && <>
+      <button type="button" className="quiet-action mt-1 -ml-2" aria-expanded={own} onClick={() => setOwn(!own)}>
+        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform", own && "rotate-90")} />Agent's words
+      </button>
+      {own && <p className="mt-1 whitespace-pre-line break-words text-footnote text-muted-foreground">{words}</p>}
+    </>}
+    {!plain && summary.explainable && !isReadOnly(data?.device) && <button type="button" className="quiet-action mt-1 -ml-2" disabled={busy} onClick={() => void explain()}>
+      <Sparkle aria-hidden className="size-3.5" /><BusyLabel busy={busy}>In plain words</BusyLabel>
+    </button>}
+    {failed && <p role="alert" className="mt-1 text-footnote text-muted-foreground">Could not explain it: {failed}</p>}
   </>;
 }
 

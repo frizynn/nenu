@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 
 import { parseDecisions } from "./org-asks.ts";
 import type { StatusFile, TokenUsage } from "./org-types.ts";
-import { THREAD_VERDICTS, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
+import { THREAD_VERDICTS, type PlainSummary, type ThreadCapture, type ThreadDeliverable, type ThreadVerdict } from "./types.ts";
 
 // What `overview --json` says of a thread's last report, and of a coordinator's STATUS.md, read
 // within the bounds Organizations writes them (docs/json.md). Every field is newer than the rest of
@@ -21,6 +21,8 @@ export interface OrgReport {
   /** The report's `Status:` line. */
   verdict: ThreadVerdict | null;
   summary: string | null;
+  /** The summary agent's plain summary of the report; null before one was asked for. */
+  plain_summary: PlainSummary | null;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
   /** A coordinator's STATUS.md; null for a worker and without one. */
@@ -32,6 +34,7 @@ export interface OrgReport {
 }
 
 const MAX_SUMMARY_CHARS = 600;
+const MAX_PLAIN_CHARS = 900;
 const MAX_CAPTURES = 24;
 const MAX_DELIVERABLES = 10;
 const MAX_STATUS_CHARS = 8_000;
@@ -42,6 +45,7 @@ export function parseReport(thread: Record<string, unknown>): OrgReport {
   return {
     verdict: THREAD_VERDICTS.find((verdict) => verdict === thread.verdict) ?? null,
     summary: typeof thread.summary === "string" && thread.summary.trim() ? thread.summary.slice(0, MAX_SUMMARY_CHARS) : null,
+    plain_summary: parsePlainSummary(thread.plain_summary),
     captures: libraryFiles(thread.captures, MAX_CAPTURES, (item) => ({ caption: typeof item.caption === "string" ? item.caption : "" })),
     deliverables: libraryFiles(thread.deliverables, MAX_DELIVERABLES, (item) => {
       const kind = DELIVERABLE_KINDS.find((candidate) => candidate === item.kind);
@@ -67,6 +71,15 @@ export function parseStatusFile(value: unknown): OrgStatusFile | null {
     ...(objective ? { objective } : {}),
     ...(needsDecision.length ? { needsDecision } : {}),
   };
+}
+
+/** A plain summary with text or an error; anything else reads as none. */
+export function parsePlainSummary(value: unknown): PlainSummary | null {
+  if (!isRecord(value) || typeof value.text !== "string" || typeof value.current !== "boolean") return null;
+  const text = value.text.trim().slice(0, MAX_PLAIN_CHARS);
+  const error = typeof value.error === "string" ? value.error.trim().slice(0, MAX_SUMMARY_CHARS) : "";
+  if (!text && !error) return null;
+  return { text, current: value.current, ...(error ? { error } : {}) };
 }
 
 /** Token use as Organizations last read it; null before a read, or when any count is not one. */

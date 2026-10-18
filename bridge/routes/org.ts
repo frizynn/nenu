@@ -1,5 +1,5 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
-import { answerAsk, coordinatorChoices, createProject, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
 import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -100,6 +100,11 @@ export const orgRoutes: Route[] = [
   orgWrite("/api/org/thread/pr-action", "org.thread.pr-action", "Could not ask the thread.", async ({ orgRun }, body) => {
     const asked = await prAction(orgRun, { project: body.project, id: body.id, action: body.action });
     return { response: { asked }, detail: { project: body.project, id: asked.id, action: asked.action, pr: asked.pr, sent: asked.sent } };
+  }),
+  // Spends a small model's call, so it is a write: a read-only device cannot run up the bill.
+  orgWrite("/api/org/thread/explain", "org.thread.explain", "Could not explain the report.", async ({ orgRun }, body) => {
+    const explained = await explainThread(orgRun, { project: body.project, id: body.id, force: body.force });
+    return { response: { explained }, detail: { project: body.project, id: explained.id } };
   }),
   orgWrite("/api/org/thread/pr-create", "org.thread.pr-create", "Could not open the pull request.", async ({ orgRun }, body) => {
     const created = await prCreate(orgRun, { project: body.project, id: body.id });

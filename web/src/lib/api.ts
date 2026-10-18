@@ -115,6 +115,8 @@ const ORG_MUTATION_TIMEOUT_MS = 35_000;
 //   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
 //     its 120 s idle timeout, so the client outlasts the CLI.
 const ORG_MERGE_TIMEOUT_MS = 100_000;
+/** Past the bridge's own 150 s wait for the summary agent. */
+const ORG_EXPLAIN_TIMEOUT_MS = 160_000;
 //   - Starting a coordinator waits for its shell and agent (the bridge gives `open` 60 s), then for
 //     the projects re-read, which can queue behind one already running (up to 10 s each).
 const ORG_OPEN_TIMEOUT_MS = 90_000;
@@ -1065,6 +1067,17 @@ export function askOrgThreadPr(
     method: "POST",
     body: JSON.stringify(input),
   }, undefined, ORG_MERGE_TIMEOUT_MS);
+}
+
+/** Ask Organizations' summary agent for the thread's report in plain words; `force` asks again for the same report. */
+export function explainOrgThread(
+  input: { project: string; id: string; force?: boolean },
+  session?: string,
+): Promise<{ ok: true; explained: { id: string; text: string } }> {
+  return req(withSession("/api/org/thread/explain", session), {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, undefined, ORG_EXPLAIN_TIMEOUT_MS);
 }
 
 /** Open the PR of a thread that pushed its branch without one, through GitHub like a merge. */

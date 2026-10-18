@@ -313,11 +313,12 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
 
 /** What the thread's report says and shows, and its token use, or undefined when it has none of it. */
 function threadSummary(record: OrgOverviewThread): ThreadSummary | undefined {
-  const { summary, captures, deliverables, status_file: status, usage } = record;
-  if (!summary && !captures.length && !deliverables.length && !status && !usage) return undefined;
+  const { summary, plain_summary: plain, captures, deliverables, status_file: status, usage } = record;
+  const explainable = record.actions?.includes("explain") === true;
+  if (!summary && !plain && !explainable && !captures.length && !deliverables.length && !status && !usage) return undefined;
   return {
-    id: record.id, ...(summary ? { summary } : {}), captures, deliverables,
-    ...(status ? { status: statusText(status) } : {}), ...(usage ? { usage } : {}),
+    id: record.id, ...(summary ? { summary } : {}), ...(plain ? { plain } : {}), ...(explainable ? { explainable: true as const } : {}),
+    captures, deliverables, ...(status ? { status: statusText(status) } : {}), ...(usage ? { usage } : {}),
   };
 }
 

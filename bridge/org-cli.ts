@@ -933,12 +933,28 @@ export async function prCreate(run: OrgRun, input: { project: unknown; id: unkno
 }
 
 /**
+ * `thread explain`: Organizations' summary agent rewrites the thread's report in plain words. Without
+ * `force`, one already written from the same report comes back as is. A small model answers in
+ * seconds, under the agent's own timeout (120 s unless config.toml says otherwise).
+ */
+export async function explainThread(run: OrgRun, input: { project: unknown; id: unknown; force?: unknown }): Promise<{ id: string; text: string }> {
+  const project = validateProjectSlug(input.project);
+  const id = validateNodeId(input.id);
+  const force = input.force === true ? ["--force"] : [];
+  const value = await prCommand(run, ["thread", "explain", project, id, ...force, "--json"], "explain", EXPLAIN_TIMEOUT_MS);
+  if (value.id !== id || typeof value.text !== "string" || !value.text.trim()) throw new OrgCliError("herdr-organizations returned an invalid explain response.");
+  return { id, text: value.text.trim() };
+}
+
+export const EXPLAIN_TIMEOUT_MS = 150_000;
+
+/**
  * A PR command's `ok: true` document. Its refusal prints the document with `ok: false` and exits 1;
  * the reason is then the error, word for word. Anything else that fails is the CLI's failure.
  * Both read the PR with `gh` first, as `thread merge` does, so they get its time.
  */
-async function prCommand(run: OrgRun, argv: string[], name: string): Promise<Record<string, unknown>> {
-  const result = await run(argv, { timeoutMs: 90_000 });
+async function prCommand(run: OrgRun, argv: string[], name: string, timeoutMs = 90_000): Promise<Record<string, unknown>> {
+  const result = await run(argv, { timeoutMs });
   let value: unknown;
   try {
     value = JSON.parse(result.stdout);

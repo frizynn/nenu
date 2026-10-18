@@ -269,6 +269,9 @@ export interface ProjectThreadView {
 
 /** What an agent's report says of its work, from the fixed `Status:` line Organizations reads. */
 export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
+/** A summary agent's answer: its text, or why it failed; `current` is false once the report changed. */
+export interface PlainSummary { text: string; current: boolean; error?: string }
+
 export const THREAD_VERDICTS: readonly ThreadVerdict[] = ["done", "needs-decision", "blocked", "failed"];
 
 /** A picture the agent left in the project's library, with what it shows. */
@@ -284,6 +287,10 @@ export interface ThreadDeliverable { path: string; kind: "html" | "pdf" }
 export interface ThreadSummary {
   id: string;
   summary?: string;
+  /** The report in plain words, from Organizations' summary agent (`thread explain`). Model-written: drawn as text. */
+  plain?: PlainSummary;
+  /** Organizations would write one on request: its `actions` list `explain`. */
+  explainable?: true;
   captures: ThreadCapture[];
   deliverables: ThreadDeliverable[];
   /** A coordinator's STATUS.md, and the agent's token use as Organizations last read it. */
