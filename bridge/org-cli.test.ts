@@ -7,6 +7,7 @@ import {
   listProfiles,
   listRoutines,
   listTemplates,
+  explainThread,
   mergeThread,
   moveNode,
   openProject,
@@ -475,6 +476,7 @@ describe("herdr-organizations --json contract", () => {
       ...overviewThread,
       verdict: "needs-decision",
       summary: "x".repeat(700),
+      plain_summary: { text: ` ${"y".repeat(1000)} `, current: false, error: "", at: "2026-10-19T10:00:00Z" },
       captures: [capture(0), { path: "relative.png", caption: "dropped" }, { path: "/p/demo/library/t-0002/no-caption.png" }, "junk", ...Array.from({ length: 30 }, (_, n) => capture(n + 1))],
       deliverables: [
         { path: "/p/demo/library/t-0002/report.html", kind: "html" },
@@ -483,19 +485,20 @@ describe("herdr-organizations --json contract", () => {
         ...Array.from({ length: 12 }, (_, n) => ({ path: `/p/demo/library/t-0002/r${n}.pdf`, kind: "pdf" })),
       ],
     };
-    const odd = { ...overviewThread, id: "t-0003", verdict: "shipped", summary: 7, captures: "none", deliverables: null };
+    const odd = { ...overviewThread, id: "t-0003", verdict: "shipped", summary: 7, captures: "none", deliverables: null, plain_summary: { text: 7, current: true } };
     const older = { ...overviewThread, id: "t-0004" };
     const { run } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, projects: [{ slug: "demo", name: "Demo", goal: "", status: "active", threads: [reported, odd, older] }] }), stderr: "" });
 
     const [thread, malformed, before] = (await readOverview(run, "/root"))![0]!.threads;
     expect(thread!.verdict).toBe("needs-decision");
     expect(thread!.summary).toBe("x".repeat(600));
+    expect(thread!.plain_summary).toEqual({ text: "y".repeat(900), current: false });
     expect(thread!.captures).toHaveLength(24);
     expect(thread!.captures.slice(0, 2)).toEqual([capture(0), { path: "/p/demo/library/t-0002/no-caption.png", caption: "" }]);
     expect(thread!.deliverables).toHaveLength(10);
     // Organizations prints only html and pdf; any other kind, a Markdown file included, is dropped.
     expect(thread!.deliverables.slice(0, 2)).toEqual([{ path: "/p/demo/library/t-0002/report.html", kind: "html" }, { path: "/p/demo/library/t-0002/r0.pdf", kind: "pdf" }]);
-    for (const empty of [malformed!, before!]) expect(empty).toMatchObject({ verdict: null, summary: null, captures: [], deliverables: [] });
+    for (const empty of [malformed!, before!]) expect(empty).toMatchObject({ verdict: null, summary: null, plain_summary: null, captures: [], deliverables: [] });
   });
 
   it("reads a coordinator's STATUS.md for the project and each thread, bounded, and none from an older Organizations or a malformed one", async () => {
@@ -647,6 +650,26 @@ describe("herdr-organizations PR actions and project creation", () => {
     const reason = "its agent is not idle (working)";
     const refused = { code: 1, stdout: JSON.stringify({ schema_version: 1, ok: false, id: "t-0007", pr: "", reason }), stderr: `error: ${reason}` };
     await expect(prCreate(fakeRun(refused).run, { project: "demo", id: "t-0007" })).rejects.toThrow(new OrgValidationError(reason));
+  });
+
+  it("asks Organizations' summary agent for a report in plain words, again only when forced, and says why it failed", async () => {
+    const answer = { schema_version: 1, ok: true, id: "t-0007", text: " Two people paying at once no longer lose their place. ", reason: "", at: "2026-10-19T10:00:00Z" };
+    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify(answer), stderr: "" });
+
+    expect(await explainThread(run, { project: "demo", id: "t-0007" })).toEqual({ id: "t-0007", text: "Two people paying at once no longer lose their place." });
+    await explainThread(run, { project: "demo", id: "t-0007", force: true });
+    expect(calls.map((call) => call.argv)).toEqual([
+      ["thread", "explain", "demo", "t-0007", "--json"],
+      ["thread", "explain", "demo", "t-0007", "--force", "--json"],
+    ]);
+    // A small model may take a while; the bridge waits past the agent's own 120 s timeout.
+    expect(calls[0]!.opts).toEqual({ timeoutMs: 150_000 });
+    await expect(explainThread(run, { project: "demo", id: "--help" })).rejects.toThrow("Node ID must");
+
+    const failed = { code: 1, stdout: JSON.stringify({ ...answer, ok: false, text: "", reason: "rate limited" }), stderr: "error: t-0007: the summary agent failed: rate limited" };
+    await expect(explainThread(fakeRun(failed).run, { project: "demo", id: "t-0007" })).rejects.toThrow(new OrgValidationError("rate limited"));
+    const empty = { code: 0, stdout: JSON.stringify({ ...answer, text: "  " }), stderr: "" };
+    await expect(explainThread(fakeRun(empty).run, { project: "demo", id: "t-0007" })).rejects.toThrow("invalid explain response");
   });
 
   it("sets only the named automation flags", async () => {

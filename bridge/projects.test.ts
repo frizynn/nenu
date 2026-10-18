@@ -287,6 +287,21 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(registry.summaries("other")).toBeNull();
   });
 
+  test("a report in plain words, and whether Organizations would write one, come with the summaries and never the snapshot", async () => {
+    const root = fixture();
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({ summary: "PR #7 green.", plain_summary: { text: "Checkout is done.", current: true, error: "", at: "2026-10-19T10:00:00Z" }, actions: ["explain"] }),
+      // Only the action: the thread has a report nobody asked about yet.
+      overviewThread({ id: "t-0002", actions: ["explain"] }),
+    ]) });
+    await registry.refresh();
+    expect(JSON.stringify(registry.list("default", true, [])[0]!.threads)).not.toContain("Checkout is done.");
+    expect(registry.summaries("demo")!.threads).toEqual([
+      { id: "t-0001", summary: "PR #7 green.", plain: { text: "Checkout is done.", current: true }, explainable: true, captures: [], deliverables: [] },
+      { id: "t-0002", explainable: true, captures: [], deliverables: [] },
+    ]);
+  });
+
   test("a coordinator's STATUS.md reaches the snapshot only as its stamp; its text is read apart, with the summaries", async () => {
     const root = fixture();
     const file = (text: string, updated = "2026-10-16T12:00:00Z") => ({ path: join(root, "STATUS.md"), text, updated });

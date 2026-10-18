@@ -43,6 +43,7 @@ const CASES: Case[] = [
   { method: "POST", path: "/api/org/thread/set", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/pr-action", level: "write", session: true },
   { method: "POST", path: "/api/org/thread/pr-create", level: "write", session: true },
+  { method: "POST", path: "/api/org/thread/explain", level: "write", session: true },
   { method: "GET", path: "/api/snapshot", level: "read", session: true },
   { method: "POST", path: "/api/snapshot", level: "read", session: true },
   { method: "GET", path: "/api/events", level: "read", session: true },

@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-10-19
+
+### Added
+
+- A report reads in plain words once Herdr Organizations' summary agent wrote them for it; the agent's own words are one tap away (361f2145).
+- "In plain words" asks the summary agent for them where Organizations offers it, on devices that may write (361f2145).
+
 ## [1.27.1] - 2026-10-18
 
 ### Fixed

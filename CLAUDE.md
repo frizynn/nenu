@@ -165,6 +165,9 @@ the unit name; the Herdr action runs from anywhere.
   The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
   by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
   only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
+  A report reads in plain words once Organizations' summary agent wrote them for it, the agent's words a
+  tap away, and "In plain words" asks for them where `actions` lists `explain`; Nenu never calls a model
+  itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
   coordinators: only while it says something, ADR 0092), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
