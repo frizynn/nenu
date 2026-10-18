@@ -25,6 +25,8 @@ describe("message images", () => {
   it("only lifts Nenu's own uploads out of a stored draft; a typed image path stays prose", () => {
     const typed = "/home/you/project/screenshot.png";
     expect(isUploadPath(a)).toBe(true);
+    // Where the bridge saves uploads now, beside the state dir (ADR 0098).
+    expect(isUploadPath("/home/you/.local/state/nenu/uploads/w1-p1-mabc125-1234abcf.png")).toBe(true);
     expect(isUploadPath(typed)).toBe(false);
     expect(splitDraftUploads(`compare ${typed} ${a}`)).toEqual({ text: `compare ${typed}`, uploads: [a] });
   });

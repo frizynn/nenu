@@ -5,7 +5,10 @@ import { basename, dirname, join } from "node:path";
 
 import { isChatUploadPath } from "./chat-upload-preview.ts";
 import { MAX_REQUEST_BODY_BYTES } from "./server.ts";
-import { filesToPrune, imageExtFromBytes, MAX_UPLOAD_BYTES, saveUpload, sweepUploads, type UploadFs } from "./uploads.ts";
+import { defaultStateDir } from "./config.ts";
+import {
+  filesToPrune, imageExtFromBytes, MAX_UPLOAD_BYTES, nenuDirs, saveUpload, sweepUploadDirs, sweepUploads, uploadDirs, type UploadFs,
+} from "./uploads.ts";
 
 // filesToPrune is the pure decision; sweepUploads is exercised with a fake fs so the stat/unlink
 // orchestration (and its best-effort error handling) is covered without touching disk.
@@ -123,6 +126,45 @@ describe("sweepUploads", () => {
   });
 });
 
+describe("uploadDirs", () => {
+  const home = "/home/op";
+
+  test("with the default state dir, uploads go to a Nenu folder beside it and the old folder is still read", () => {
+    expect(uploadDirs(defaultStateDir(home), home)).toEqual(["/home/op/.local/state/nenu/uploads", "/home/op/.local/state/collie/uploads"]);
+  });
+
+  test("a state dir the operator chose keeps its uploads inside it", () => {
+    expect(uploadDirs("/srv/nenu-state", home)).toEqual(["/srv/nenu-state/uploads"]);
+    expect(uploadDirs(`${defaultStateDir(home)}/`, home)[0]).toBe("/home/op/.local/state/nenu/uploads");
+  });
+
+  test("Nenu's own folders are its state and every uploads folder", () => {
+    expect(nenuDirs(defaultStateDir(home), home)).toEqual([
+      "/home/op/.local/state/collie", "/home/op/.local/state/nenu/uploads", "/home/op/.local/state/collie/uploads",
+    ]);
+  });
+});
+
+describe("sweepUploadDirs", () => {
+  test("sweeps the new uploads folder and the old one", async () => {
+    const now = 1_000_000_000_000;
+    const home = "/home/op";
+    const [current, legacy] = uploadDirs(defaultStateDir(home), home);
+    const files: Record<string, Record<string, number>> = {
+      [current!]: { "new-old.png": now - 72 * HOUR, "new-fresh.png": now - HOUR },
+      [legacy!]: { "legacy-old.png": now - 72 * HOUR, "legacy-fresh.png": now - HOUR },
+    };
+    const unlinked: string[] = [];
+    const fs: UploadFs = {
+      readdir: (dir) => files[dir] ? Promise.resolve(Object.keys(files[dir]!)) : Promise.reject(new Error("ENOENT")),
+      stat: (p) => Promise.resolve({ mtimeMs: files[dirname(p)]![basename(p)]! }),
+      unlink: (p) => { unlinked.push(p); return Promise.resolve(); },
+    };
+    expect(await sweepUploadDirs(uploadDirs(defaultStateDir(home), home), TTL, now, fs)).toEqual(["new-old.png", "legacy-old.png"]);
+    expect(unlinked).toEqual([join(current!, "new-old.png"), join(legacy!, "legacy-old.png")]);
+  });
+});
+
 describe("saveUpload", () => {
   const PNG = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d);
   // `<state>/uploads`, as the bridge lays it out.
@@ -131,10 +173,19 @@ describe("saveUpload", () => {
   afterEach(async () => { await rm(dirname(dir), { recursive: true, force: true }); });
 
   const save = async (name: string, body: BlobPart = "hello") => {
-    const result = await saveUpload(dir, "w1:p2", new File([body], name));
+    const result = await saveUpload(dirname(dir), "w1:p2", new File([body], name));
     if (!result.ok) throw new Error(result.error);
     return result.path;
   };
+
+  test("with the default state dir, the agent is handed a path in Nenu's uploads folder, not Collie's", async () => {
+    const home = dirname(dir);
+    const result = await saveUpload(defaultStateDir(home), "w1:p2", new File(["hello"], "notes.txt"), home);
+    if (!result.ok) throw new Error(result.error);
+    expect(dirname(result.path)).toBe(join(home, ".local", "state", "nenu", "uploads"));
+    expect(result.path).not.toContain("collie");
+    expect(await readFile(result.path, "utf8")).toBe("hello");
+  });
 
   test("takes any kind of file and keeps its extension, so the agent can open it", async () => {
     for (const [name, ext] of [["spec.pdf", ".pdf"], ["bundle.zip", ".zip"], ["cart.ts", ".ts"], ["c.tar.gz", ".tar.gz"]] as const) {
@@ -148,14 +199,14 @@ describe("saveUpload", () => {
   test("an image is named by its bytes, in the shape the chat preview accepts", async () => {
     const path = await save("IMG_2041.HEIC", PNG);
     expect(basename(path)).toMatch(/^w1_p2-[a-z0-9]+-[a-f0-9]{8}\.png$/);
-    expect(isChatUploadPath(dirname(dir), path)).toBe(true);
+    expect(isChatUploadPath([dir], path)).toBe(true);
   });
 
   test("a file named like an image that is not one never keeps an image extension", async () => {
     for (const name of ["fake.png", "deadbeef.jpg", "x.webp"]) {
       const path = await save(name, "<!doctype html><script>alert(1)</script>");
       expect(path).not.toMatch(/\.(?:png|jpe?g|gif|webp)$/i);
-      expect(isChatUploadPath(dirname(dir), path)).toBe(false);
+      expect(isChatUploadPath([dir], path)).toBe(false);
       expect(basename(path)).toEndWith(".bin");
     }
   });
@@ -187,10 +238,10 @@ describe("saveUpload", () => {
 
   test("refuses a file over 25 MB and writes nothing", async () => {
     expect(MAX_UPLOAD_BYTES).toBe(25 * 1024 * 1024);
-    const result = await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "big.zip"));
+    const result = await saveUpload(dirname(dir), "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "big.zip"));
     expect(result).toEqual({ ok: false, error: "File too large (max 25 MB)." });
     expect(await readdir(dir).catch(() => [])).toEqual([]);
-    expect((await saveUpload(dir, "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES)], "edge.zip"))).ok).toBe(true);
+    expect((await saveUpload(dirname(dir), "w1:p2", new File([new Uint8Array(MAX_UPLOAD_BYTES)], "edge.zip"))).ok).toBe(true);
   });
 });
 

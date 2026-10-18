@@ -11,6 +11,8 @@ import { renderedHtmlResponse } from "./html-preview.ts";
 import {
   FILE_STATE_HEADER, isPrivateProjectPath, MAX_PREVIEW_FILE_BYTES, MAX_TEXT_FILE_BYTES, OUTSIDE_PROJECT_MESSAGE, paneFileResponse,
 } from "./pane-files.ts";
+import { defaultStateDir } from "./config.ts";
+import { nenuDirs } from "./uploads.ts";
 
 describe("the private-path policy", () => {
   test("covers the credential files, secret stores and histories an agent's host holds", () => {
@@ -300,12 +302,12 @@ describe("pane project files", () => {
     const delivered = async () => [join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-notes.txt")];
     for (const path of [".local/nenu-state/uploads/w1_p1-mv8g-0a1b2c3d-notes.txt", ".local/nenu-state/audit.log",
       "linked-uploads/w1_p1-mv8g-0a1b2c3d-notes.txt", join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-notes.txt"), "w1_p1-mv8g-0a1b2c3d-notes.txt"]) {
-      const response = await paneFileResponse(root, path, { delivered, stateDir: state });
+      const response = await paneFileResponse(root, path, { delivered, nenuDirs: [state] });
       expect(response.status).toBe(404);
       expect(await response.text()).not.toContain("uploaded");
     }
     await writeFile(join(root, "readme.md"), "fine");
-    expect((await paneFileResponse(root, "readme.md", { stateDir: state })).status).toBe(200);
+    expect((await paneFileResponse(root, "readme.md", { nenuDirs: [state] })).status).toBe(200);
   });
 
   test("rejects missing panes, directories, filesystem root and malformed input", async () => {
@@ -427,14 +429,14 @@ describe("relative files in folders named by the conversation", () => {
     const metadata = await artifactMetadata(root, [name], {
       folders,
       openable: async (path) => {
-        const file = await checkOpenable(path, state);
+        const file = await checkOpenable(path, [state]);
         return "status" in file ? null : file.path;
       },
     });
     expect(metadata).toEqual([{ path: name, state: "preview", resolved: join(repo, name) }]);
     const inspected = metadata[0]!;
     if (!("resolved" in inspected)) throw new Error("inspection did not resolve the named file");
-    expect(await checkOpenable(inspected.resolved, state)).toMatchObject({ path: join(repo, name) });
+    expect(await checkOpenable(inspected.resolved, [state])).toMatchObject({ path: join(repo, name) });
   });
 
   test("uses the same newest-first named-folder order as artifact inspection", async () => {
@@ -471,6 +473,22 @@ describe("relative files in folders named by the conversation", () => {
     ]);
   });
 
+  test("never serves or opens a file in Nenu's uploads folder beside the state dir", async () => {
+    const home = await realpath(root);
+    const own = nenuDirs(defaultStateDir(home), home);
+    const uploads = join(home, ".local", "state", "nenu", "uploads");
+    const name = "w1_p1-mv8g-0a1b2c3d-notes.txt";
+    await mkdir(uploads, { recursive: true });
+    await writeFile(join(uploads, name), "uploaded");
+    const delivered = async () => [join(uploads, name)];
+    for (const path of [`.local/state/nenu/uploads/${name}`, join(uploads, name), name]) {
+      const response = await paneFileResponse(home, path, { delivered, nenuDirs: own });
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain("uploaded");
+    }
+    expect(await checkOpenable(join(uploads, name), own)).toMatchObject({ status: 403 });
+  });
+
   test("refuses an uploads folder even when the conversation names it", async () => {
     const uploads = join(state, "uploads");
     const name = "w1_p1-mv8g-0a1b2c3d-notes.txt";
@@ -478,7 +496,7 @@ describe("relative files in folders named by the conversation", () => {
     await writeFile(join(uploads, name), "uploaded");
     const folders = async () => mentionedFolders(prose(`The file is ${uploads}/${name}`));
 
-    const response = await paneFileResponse(root, name, { folders, stateDir: state });
+    const response = await paneFileResponse(root, name, { folders, nenuDirs: [state] });
     expect(response.status).toBe(404);
     expect(await response.text()).not.toContain("uploaded");
   });

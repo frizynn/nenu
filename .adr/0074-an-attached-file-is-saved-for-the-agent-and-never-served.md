@@ -3,8 +3,9 @@
 - **Status:** Accepted (2026-10-14). The operator chose any file type and 25 MB per file.
 - **Amends:** the upload half of [ADR 0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md),
   which only knew uploaded images. The chat preview of an uploaded image does not change.
+  Where uploads are saved is amended by [ADR 0098](./0098-uploads-live-beside-the-state-under-nenus-name.md).
 - **Trail:** `bridge/uploads.ts` (`saveUpload`) · `bridge/routes/files.ts` (`upload`) ·
-  `bridge/pane-files.ts` (`stateDir`) · `web/src/hooks/use-composer-attachments.ts` ·
+  `bridge/pane-files.ts` (`nenuDirs`) · `web/src/hooks/use-composer-attachments.ts` ·
   `web/src/components/file-drop.tsx`
 
 ## Context
@@ -30,9 +31,9 @@ from there (`pane-files.test.ts`, "never serves Nenu's own state").
    No client path, `..` segment or device name can become the file name. A non-image named like an
    image ends in `.bin`, because Claude attaches any path with an image extension as an image.
 3. **An upload is never served or run by Nenu.** Only an image keeps its chat preview, through the
-   journal-proved route of ADR 0059, which sniffs again. Nothing in the state directory, uploads
-   included, is served by `/file` or Render, even from a pane folder that holds it, and ADR 0063's
-   Open already refuses it.
+   journal-proved route of ADR 0059, which sniffs again. Nothing in the state directory or the
+   uploads folder (ADR 0098) is served by `/file` or Render, even from a pane folder that holds it,
+   and ADR 0063's Open already refuses it.
 4. **The 48 h sweep and the 0700 directory stay as they were.**
 
 ## Consequences

@@ -31,7 +31,7 @@ export interface MentionScope {
   /** What `~/` means: the bridge user's home. */
   home?: string;
   /** Nenu's own state, which the preview never serves (ADR 0074), so a name there finds nothing. */
-  stateDir?: string;
+  nenuDirs?: readonly string[];
 }
 
 /** Canvas templates put the embedded document within the first ~15 KB; the rest is artboards. */
@@ -107,7 +107,7 @@ async function locate(cwd: string | undefined, name: string, scope: MentionScope
   let outsideByName = false;
   for await (const candidate of candidates()) {
     const moved = candidate !== name;
-    const file = await openPaneFile(cwd, candidate, candidate === own ? scope.delivered : undefined, scope.stateDir);
+    const file = await openPaneFile(cwd, candidate, candidate === own ? scope.delivered : undefined, scope.nenuDirs);
     if (!(file instanceof Response)) return previewed(file, moved ? file.path : undefined);
     // Too large, or a type with no viewer: it is there, and the viewer offers the confirmed Open.
     if (file.status === 413 || file.status === 415) return { state: "preview", ...(moved && { resolved: candidate }) };

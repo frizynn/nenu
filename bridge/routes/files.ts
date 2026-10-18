@@ -1,4 +1,4 @@
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import { artifactMetadata, mentionedFolders } from "../artifact-metadata.ts";
 import type { AuditLog } from "../audit.ts";
 import { chatUploadPreviewResponse, isChatUploadPath } from "../chat-upload-preview.ts";
@@ -10,7 +10,7 @@ import { deliveredFilePaths } from "../journal/delivered.ts";
 import { paneFileResponse } from "../pane-files.ts";
 import { projectFiles } from "../project-files.ts";
 import type { UploadResponse } from "../types.ts";
-import { MAX_UPLOAD_BYTES, saveUpload } from "../uploads.ts";
+import { MAX_UPLOAD_BYTES, nenuDirs, saveUpload, uploadDirs } from "../uploads.ts";
 import type { TranscriptEntry } from "../journal/types.ts";
 import { deviceAuth } from "./access.ts";
 import type { PaneAction, PaneRouteRequest, Route, Services } from "./context.ts";
@@ -73,9 +73,9 @@ export const filePaneActions: Record<string, PaneAction> = {
       const { cwd, journalEntries, delivered, folders } = await paneFileScope(services, request);
       const requestedPath = url.searchParams.get("path");
       const ifNoneMatch = req.headers.get("if-none-match");
-      if (isChatUploadPath(services.cfg.stateDir, requestedPath))
-        return secure(await chatUploadPreviewResponse(services.cfg.stateDir, requestedPath, await journalEntries(), ifNoneMatch));
-      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, folders, stateDir: services.cfg.stateDir }));
+      if (isChatUploadPath(uploadDirs(services.cfg.stateDir), requestedPath))
+        return secure(await chatUploadPreviewResponse(uploadDirs(services.cfg.stateDir), requestedPath, await journalEntries(), ifNoneMatch));
+      return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, folders, nenuDirs: nenuDirs(services.cfg.stateDir) }));
     },
   },
   "html-preview": {
@@ -84,7 +84,7 @@ export const filePaneActions: Record<string, PaneAction> = {
     async handle(services, request) {
       const { cwd, delivered, folders } = await paneFileScope(services, request);
       return secure(await renderedHtmlResponse(cwd, request.url.searchParams.get("path"),
-        { delivered, folders, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, stateDir: services.cfg.stateDir }));
+        { delivered, folders, inlineAssets: services.cfg.htmlInlineAssets, host: request.req.headers.get("host") ?? undefined, nenuDirs: nenuDirs(services.cfg.stateDir) }));
     },
   },
   files: {
@@ -98,14 +98,14 @@ export const filePaneActions: Record<string, PaneAction> = {
         // Outside the pane's folder, only a device that could mint an Open link learns whether a file
         // is there: the same answer the grant would give it (ADR 0063).
         const openable = deviceAuth(req, cfg).authorized
-          ? async (path: string) => { const file = await checkOpenable(path, cfg.stateDir); return "status" in file ? null : file.path; }
+          ? async (path: string) => { const file = await checkOpenable(path, nenuDirs(cfg.stateDir)); return "status" in file ? null : file.path; }
           : undefined;
-        try { return json(await artifactMetadata(cwd, url.searchParams.getAll("inspect"), { delivered, folders, openable, stateDir: cfg.stateDir }), null); }
+        try { return json(await artifactMetadata(cwd, url.searchParams.getAll("inspect"), { delivered, folders, openable, nenuDirs: nenuDirs(cfg.stateDir) }), null); }
         catch { return jsonError("At most 20 artifact paths per request.", 400, null); }
       }
       const current = rt.engine.current();
       const pane = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId);
-      try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? ".", cfg.stateDir), null); }
+      try { return json(await projectFiles(pane?.cwd, url.searchParams.get("path") ?? ".", nenuDirs(cfg.stateDir)), null); }
       catch { return jsonError("Directory unavailable in this workspace.", 404, null); }
     },
   },
@@ -152,7 +152,7 @@ async function uploadPane(
     return json({ ok: false, error: "no file" } satisfies UploadResponse, ae);
   }
   try {
-    const result = await saveUpload(join(cfg.stateDir, "uploads"), paneId, file);
+    const result = await saveUpload(cfg.stateDir, paneId, file);
     if (result.ok) {
       audit.record({
         action: "upload",
@@ -185,7 +185,7 @@ export const fileOpenRoutes: Route[] = [
         const cwd = [...current.agents, ...current.shellPanes].find((pane) => pane.paneId === body.paneId)?.cwd;
         if (cwd && isAbsolute(cwd)) path = resolve(cwd, path);
       }
-      const file = await checkOpenable(path, cfg.stateDir);
+      const file = await checkOpenable(path, nenuDirs(cfg.stateDir));
       if ("status" in file) return jsonError(file.message, file.status, null);
       const device = deviceAuth(req, cfg).device;
       const token = fileGrants.issue(file.path, device);
@@ -205,7 +205,7 @@ export const fileOpenRoutes: Route[] = [
     async handle({ cfg, audit, fileGrants }, { req, url }) {
       const device = deviceAuth(req, cfg).device;
       const path = fileGrants.consume(url.searchParams.get("t"), device);
-      const response = await grantedFileResponse(path, cfg.stateDir);
+      const response = await grantedFileResponse(path, nenuDirs(cfg.stateDir));
       if (path) audit.record({ action: "file.open", device, detail: { path, status: response.status, size: Number(response.headers.get("content-length") ?? 0) } });
       return secure(response);
     },

@@ -12,26 +12,26 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const UPLOAD_NAME_SOURCE = "[A-Za-z0-9_-]+-[a-z0-9]+-[a-f0-9]{8}\\.(?:png|jpg|gif|webp)";
 const UPLOAD_NAME = new RegExp(`^${UPLOAD_NAME_SOURCE}$`);
 
-/** Only Nenu's generated upload filenames, directly in its configured upload directory. */
-export function isChatUploadPath(stateDir: string, path: string | null): path is string {
+/** Only Nenu's generated upload filenames, directly in one of its upload folders (`uploadDirs`). */
+export function isChatUploadPath(dirs: readonly string[], path: string | null): path is string {
   return !!path && path.length <= 4096 && isAbsolute(path) &&
     !/[\x00-\x1f]/.test(path) && path === resolve(path) &&
-    dirname(path) === resolve(stateDir, "uploads") && UPLOAD_NAME.test(basename(path));
+    dirs.some((dir) => dirname(path) === resolve(dir)) && UPLOAD_NAME.test(basename(path));
 }
 
-const referencedCache = new WeakMap<readonly TranscriptEntry[], { dir: string; paths: Set<string> }>();
+const referencedCache = new WeakMap<readonly TranscriptEntry[], { key: string; paths: Set<string> }>();
 
 /**
  * Every generated upload path a user message names as a whole token. The set is memoized per
  * parsed journal window, so a message with several photos scans the journal once, not per photo.
  */
-function referencedUploads(entries: readonly TranscriptEntry[], stateDir: string): Set<string> {
-  const dir = resolve(stateDir, "uploads");
+function referencedUploads(entries: readonly TranscriptEntry[], dirs: readonly string[]): Set<string> {
+  const key = dirs.map((dir) => resolve(dir)).join("\0");
   const cached = referencedCache.get(entries);
-  if (cached?.dir === dir) return cached.paths;
-  const escaped = dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (cached?.key === key) return cached.paths;
+  const escaped = dirs.map((dir) => resolve(dir).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const reference = new RegExp(
-    `(?:^|[\\s\\[('"\x60<])(${escaped}/${UPLOAD_NAME_SOURCE})(?=$|[\\s\\])'"\x60>]|[.,](?=\\s|$))`, "g");
+    `(?:^|[\\s\\[('"\x60<])((?:${escaped})/${UPLOAD_NAME_SOURCE})(?=$|[\\s\\])'"\x60>]|[.,](?=\\s|$))`, "g");
   const paths = new Set<string>();
   for (const entry of entries) {
     if (entry.role !== "user") continue;
@@ -39,7 +39,7 @@ function referencedUploads(entries: readonly TranscriptEntry[], stateDir: string
       if (part.kind === "text") for (const match of part.text.matchAll(reference)) paths.add(match[1]!);
     }
   }
-  referencedCache.set(entries, { dir, paths });
+  referencedCache.set(entries, { key, paths });
   return paths;
 }
 
@@ -49,7 +49,7 @@ function referencedUploads(entries: readonly TranscriptEntry[], stateDir: string
  * and does not alter project-file containment or the upload retention policy.
  */
 export async function chatUploadPreviewResponse(
-  stateDir: string,
+  dirs: readonly string[],
   path: string,
   entries: readonly TranscriptEntry[],
   ifNoneMatch: string | null = null,
@@ -57,8 +57,8 @@ export async function chatUploadPreviewResponse(
   const unavailable = () => new Response("Photo unavailable in this conversation.", {
     status: 404, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
-  if (!isChatUploadPath(stateDir, path) || !referencedUploads(entries, stateDir).has(path)) return unavailable();
-  const root = await realpath(join(stateDir, "uploads")).catch(() => null);
+  if (!isChatUploadPath(dirs, path) || !referencedUploads(entries, dirs).has(path)) return unavailable();
+  const root = await realpath(dirname(path)).catch(() => null);
   if (!root) return unavailable();
   const resolved = await containedRealpath(path, root);
   // A generated upload is a direct file, never a link to another upload or directory.

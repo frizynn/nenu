@@ -29,7 +29,7 @@ function notFound(): Response {
 export async function libraryFileResponse(
   library: string | undefined,
   requested: string | null,
-  options: { ifNoneMatch?: string | null; inlineAssets?: boolean; host?: string; stateDir: string },
+  options: { ifNoneMatch?: string | null; inlineAssets?: boolean; host?: string; nenuDirs: readonly string[] },
 ): Promise<Response> {
   if (!requested) return new Response("A file path is required.", { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } });
   const ext = extname(requested).toLowerCase();
@@ -40,8 +40,8 @@ export async function libraryFileResponse(
   const path = root && await containedRealpath(requested, root);
   // A link inside the library may lead only to a file of the kind its name says.
   if (!root || !path || path === root || extname(path).toLowerCase() !== ext) return notFound();
-  if (ext === ".html") return renderedHtmlResponse(root, path, { inlineAssets: options.inlineAssets, host: options.host, stateDir: options.stateDir });
-  const response = await paneFileResponse(root, path, { ifNoneMatch: options.ifNoneMatch, stateDir: options.stateDir });
+  if (ext === ".html") return renderedHtmlResponse(root, path, { inlineAssets: options.inlineAssets, host: options.host, nenuDirs: options.nenuDirs });
+  const response = await paneFileResponse(root, path, { ifNoneMatch: options.ifNoneMatch, nenuDirs: options.nenuDirs });
   // A sandboxed response blocks the browser's PDF viewer; a PDF keeps the viewer's own isolation (ADR 0063).
   if (response.headers.get("content-type") === "application/pdf") response.headers.delete("content-security-policy");
   return response;
@@ -74,14 +74,14 @@ export interface ThreadReport {
  */
 export async function reportResponse(
   found: ThreadReportSource | undefined,
-  options: { stateDir: string },
+  options: { nenuDirs: readonly string[] },
 ): Promise<Response> {
   const missing = new Response(JSON.stringify({ ok: false, error: "No report for this thread." }), { status: 404, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   if (!found || extname(found.path).toLowerCase() !== ".md") return missing;
   // Organizations copies a report home as a regular file: a link in its place is not one.
   const [folder, own] = await Promise.all([lstat(found.records).catch(() => null), lstat(found.path).catch(() => null)]);
   if (!folder?.isDirectory() || !own?.isFile()) return missing;
-  const file = await openPaneFile(found.records, found.path, undefined, options.stateDir);
+  const file = await openPaneFile(found.records, found.path, undefined, options.nenuDirs);
   if (file instanceof Response) return missing;
   try {
     if (file.kind !== "markdown") return missing;

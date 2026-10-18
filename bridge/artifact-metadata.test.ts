@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, writeFile, rm, symlink } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { artifactMetadata, mentionedFolders } from "./artifact-metadata.ts";
+import { nenuDirs } from "./uploads.ts";
 import { designboardTitle, designboardTitleFromHead, designboardPreview } from "./designboard.ts";
 const canvas =
   '<script id="canvas-doc" type="application/json">{"title":"Checkout study","files":{"Main.html":"<h1>Checkout</h1>"}}</script>';
@@ -145,9 +146,13 @@ describe("where a name in the conversation leads", () => {
       await mkdir(join(home, "Library", "Cookies"), { recursive: true });
       await writeFile(join(home, "Library", "Cookies", "notes.txt"), "cookie");
       await writeFile(join(home, "plan.md"), "fine");
+      await mkdir(join(home, ".local", "state", "nenu", "uploads"), { recursive: true });
+      await writeFile(join(home, ".local", "state", "nenu", "uploads", "w1_p1-mv8g-0a1b2c3e-board.html"), canvas);
       const upload = ".local/state/collie/uploads/w1_p1-mv8g-0a1b2c3d-board.html";
-      expect(await artifactMetadata(home, [upload, "Library/Cookies/notes.txt", "plan.md"], { stateDir: state })).toEqual([
+      const fresh = ".local/state/nenu/uploads/w1_p1-mv8g-0a1b2c3e-board.html";
+      expect(await artifactMetadata(home, [upload, fresh, "Library/Cookies/notes.txt", "plan.md"], { nenuDirs: nenuDirs(state, home) })).toEqual([
         { path: upload, state: "missing" },
+        { path: fresh, state: "missing" },
         { path: "Library/Cookies/notes.txt", state: "missing" },
         { path: "plan.md", state: "preview" },
       ]);

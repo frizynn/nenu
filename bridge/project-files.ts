@@ -1,13 +1,13 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { containedRealpath } from "./journal/files.ts";
-import { insideDir, isPrivateProjectPath } from "./pane-files.ts";
+import { insideNenuDirs, isPrivateProjectPath } from "./pane-files.ts";
 
 /**
  * One directory at a time, with the same containment and private-file policy as previews. Nenu's
- * own state (`stateDir`, uploads included) is never listed, as `/file` never serves it (ADR 0074).
+ * own folders (`nenuDirs`, its state and its uploads) is never listed, as `/file` never serves it (ADR 0074).
  */
-export async function projectFiles(cwd: string | undefined, directory = ".", stateDir?: string) {
+export async function projectFiles(cwd: string | undefined, directory = ".", nenuDirs?: readonly string[]) {
   if (
     !cwd ||
     !isAbsolute(cwd) ||
@@ -18,7 +18,7 @@ export async function projectFiles(cwd: string | undefined, directory = ".", sta
     throw new Error("Directory unavailable.");
   const root = await realpath(cwd);
   if (root === sep) throw new Error("Directory unavailable.");
-  const hidden = async (path: string) => isPrivateProjectPath(path) || (stateDir !== undefined && await insideDir(path, stateDir));
+  const hidden = async (path: string) => isPrivateProjectPath(path) || await insideNenuDirs(path, nenuDirs);
   const path = await containedRealpath(resolve(root, directory), root);
   if (!path || await hidden(path))
     throw new Error("Directory unavailable.");

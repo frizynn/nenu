@@ -19,11 +19,11 @@ describe("file open grants", () => {
 
   test("validates an absolute, existing, regular, public file under the cap", async () => {
     await writeFile(join(dir, "board.html"), "<h1>hi</h1>");
-    expect(await checkOpenable(join(dir, "board.html"), state)).toEqual({ path: join(dir, "board.html"), name: "board.html", size: 11, type: "text/html" });
-    expect(await checkOpenable("board.html", state)).toMatchObject({ status: 400 });
-    expect(await checkOpenable(42, state)).toMatchObject({ status: 400 });
-    expect(await checkOpenable(join(dir, "missing.html"), state)).toMatchObject({ status: 404 });
-    expect(await checkOpenable(dir, state)).toMatchObject({ status: 404 });
+    expect(await checkOpenable(join(dir, "board.html"), [state])).toEqual({ path: join(dir, "board.html"), name: "board.html", size: 11, type: "text/html" });
+    expect(await checkOpenable("board.html", [state])).toMatchObject({ status: 400 });
+    expect(await checkOpenable(42, [state])).toMatchObject({ status: 400 });
+    expect(await checkOpenable(join(dir, "missing.html"), [state])).toMatchObject({ status: 404 });
+    expect(await checkOpenable(dir, [state])).toMatchObject({ status: 404 });
   });
 
   test("refuses private paths by name, by symlink target, and Nenu's own state", async () => {
@@ -39,7 +39,7 @@ describe("file open grants", () => {
     await writeFile(join(dir, "Library", "Application Support", "Google", "Chrome", "Default", "Cookies.txt"), "c");
     for (const path of [join(dir, ".ssh", "config"), join(dir, ".env"), join(dir, "server.pem"), join(dir, "innocent.txt"), join(state, "audit.log"),
       join(dir, "Library", "Keychains", "login.keychain-db"), join(dir, "Library", "Application Support", "Google", "Chrome", "Default", "Cookies.txt")])
-      expect(await checkOpenable(path, state)).toMatchObject({ status: 403 });
+      expect(await checkOpenable(path, [state])).toMatchObject({ status: 403 });
   });
 
   test("refuses the credential files an agent's host holds, by name and by symlink target", async () => {
@@ -48,13 +48,13 @@ describe("file open grants", () => {
       await writeFile(join(dir, name), "secret");
     await symlink(join(dir, ".git-credentials"), join(dir, "notes.txt"));
     for (const name of [".claude.json", ".mcp.json", ".docker/config.json", ".yarnrc.yml", ".git-credentials", ".zsh_history", "vault.kdbx", "notes.txt"])
-      expect([name, await checkOpenable(join(dir, name), state)]).toMatchObject([name, { status: 403 }]);
+      expect([name, await checkOpenable(join(dir, name), [state])]).toMatchObject([name, { status: 403 }]);
   });
 
   test("refuses a file over the cap", async () => {
     await writeFile(join(dir, "big.bin"), "");
     await truncate(join(dir, "big.bin"), MAX_OPEN_FILE_BYTES + 1);
-    expect(await checkOpenable(join(dir, "big.bin"), state)).toMatchObject({ status: 413 });
+    expect(await checkOpenable(join(dir, "big.bin"), [state])).toMatchObject({ status: 413 });
   });
 
   test("a token is single-use, expires, and only works for the device that asked", () => {
@@ -85,7 +85,7 @@ describe("file open grants", () => {
   test("HTML and SVG open in an opaque, no-network sandbox", async () => {
     for (const [name, type] of [["board.html", "text/html; charset=utf-8"], ["logo.svg", "image/svg+xml"]] as const) {
       await writeFile(join(dir, name), "<svg></svg>");
-      const response = await grantedFileResponse(join(dir, name), state);
+      const response = await grantedFileResponse(join(dir, name), [state]);
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe(type);
       expect(response.headers.get("content-security-policy")).toBe(`${HTML_PREVIEW_CSP}; frame-ancestors 'none'; sandbox allow-scripts`);
@@ -111,7 +111,7 @@ describe("file open grants", () => {
       ["archive.zip", "application/octet-stream", "attachment"],
     ] as const;
     for (const [name, type, disposition] of cases) {
-      const response = await grantedFileResponse(join(dir, name), state);
+      const response = await grantedFileResponse(join(dir, name), [state]);
       expect(response.headers.get("content-type")).toBe(type);
       expect(response.headers.get("content-disposition")).toStartWith(`${disposition};`);
       expect(response.headers.get("content-security-policy") ?? "").not.toContain("allow-scripts");
@@ -121,15 +121,15 @@ describe("file open grants", () => {
   });
 
   test("opening re-checks the file: spent link, swapped symlink, private target, removed file", async () => {
-    expect(await grantedFileResponse(null, state).then(async (r) => [r.status, await r.text()])).toEqual([410, EXPIRED_MESSAGE]);
+    expect(await grantedFileResponse(null, [state]).then(async (r) => [r.status, await r.text()])).toEqual([410, EXPIRED_MESSAGE]);
     await writeFile(join(dir, "other.html"), "other");
     await writeFile(join(dir, ".env"), "TOKEN=1");
     // A grant stores the resolved name; a symlink put at that name later is not what was confirmed.
     await symlink(join(dir, "other.html"), join(dir, "granted.html"));
-    expect((await grantedFileResponse(join(dir, "granted.html"), state)).status).toBe(404);
+    expect((await grantedFileResponse(join(dir, "granted.html"), [state])).status).toBe(404);
     await rm(join(dir, "granted.html"));
     await symlink(join(dir, ".env"), join(dir, "granted.html"));
-    expect((await grantedFileResponse(join(dir, "granted.html"), state)).status).toBe(403);
-    expect((await grantedFileResponse(join(dir, "missing.html"), state)).status).toBe(404);
+    expect((await grantedFileResponse(join(dir, "granted.html"), [state])).status).toBe(403);
+    expect((await grantedFileResponse(join(dir, "missing.html"), [state])).status).toBe(404);
   });
 });

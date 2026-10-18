@@ -38,8 +38,8 @@ test("Render never runs an upload or anything else in Nenu's state, even from a 
     await mkdir(join(state, "uploads"), { recursive: true });
     await writeFile(join(state, "uploads", "w1_p1-mv8g-0a1b2c3d-page.html"), "<script>alert(1)</script>");
     await writeFile(join(root, "page.html"), '<img src="state/uploads/w1_p1-mv8g-0a1b2c3d-page.html">');
-    expect((await renderedHtmlResponse(root, "state/uploads/w1_p1-mv8g-0a1b2c3d-page.html", { stateDir: state })).status).toBe(404);
-    expect((await renderedHtmlResponse(root, "page.html", { stateDir: state })).status).toBe(200);
+    expect((await renderedHtmlResponse(root, "state/uploads/w1_p1-mv8g-0a1b2c3d-page.html", { nenuDirs: [state] })).status).toBe(404);
+    expect((await renderedHtmlResponse(root, "page.html", { nenuDirs: [state] })).status).toBe(200);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

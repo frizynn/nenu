@@ -28,7 +28,7 @@ import {
   UpdateStateStore,
 } from "./update.ts";
 import { createBridgeStampReader } from "./bridge-stamp.ts";
-import { SWEEP_INTERVAL_MS, sweepUploads } from "./uploads.ts";
+import { SWEEP_INTERVAL_MS, sweepUploadDirs, uploadDirs } from "./uploads.ts";
 import { Usage, usageRoots } from "./usage/runtime.ts";
 
 // How often the registry rescans the filesystem for sessions that appeared/disappeared after boot.
@@ -230,12 +230,12 @@ refreshTimer.unref();
 // Prune uploaded images past their TTL: once at startup, then on an interval. Uploads are single-use
 // (Herdr reads them by path when the message is sent), so nothing else reclaims them. unref() so the
 // timer never keeps the process alive; it's also cleared on shutdown.
-const uploadsDir = join(cfg.stateDir, "uploads");
-void sweepUploads(uploadsDir).then((removed) => {
+const uploadsDirs = uploadDirs(cfg.stateDir);
+void sweepUploadDirs(uploadsDirs).then((removed) => {
   if (removed.length) console.log(`[uploads] swept ${removed.length} expired image(s) at startup`);
 });
 const sweepTimer = setInterval(() => {
-  void sweepUploads(uploadsDir).then((removed) => {
+  void sweepUploadDirs(uploadsDirs).then((removed) => {
     if (removed.length) console.log(`[uploads] swept ${removed.length} expired image(s)`);
   });
 }, SWEEP_INTERVAL_MS);

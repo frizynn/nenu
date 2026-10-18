@@ -388,15 +388,19 @@ Agent permission flags come only from the allowlist in `bridge/agent-start.ts`; 
 choice and never sends argv.
 
 The chat gallery also previews Nenu-generated raster uploads outside cwd through
-`bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under the
-configured uploads directory and the exact path in a user message from the current pane's contained
+`bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under one of
+the uploads directories (`uploadDirs`) and the exact path in a user message from the current pane's contained
 journal. Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
 never generalize it to arbitrary transcript paths or all files under the state directory.
 The composer attaches any file up to 25 MB through `bridge/uploads.ts` `saveUpload`: the name is
 generated (an image by its bytes, anything else with a flat copy of its own name), only an image
-previews, and nothing in the state directory, uploads included, is served by `/file` or Render, even
-from a pane folder that holds it. Don't preview other uploads by widening either route
-([ADR 0074](./.adr/0074-an-attached-file-is-saved-for-the-agent-and-never-served.md)).
+previews, and nothing in Nenu's own folders (`nenuDirs`: the state directory and the uploads
+directories) is served by `/file` or Render, even from a pane folder that holds it. Don't preview
+other uploads by widening either route
+([ADR 0074](./.adr/0074-an-attached-file-is-saved-for-the-agent-and-never-served.md)). With the
+default state directory, uploads go to `~/.local/state/nenu/uploads`, beside it, and the old
+`<state>/uploads` is still previewed and swept; the rest of the state directory keeps its name
+([ADR 0098](./.adr/0098-uploads-live-beside-the-state-under-nenus-name.md)).
 
 ## Security posture (don't regress)
 

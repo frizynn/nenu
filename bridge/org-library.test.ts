@@ -40,7 +40,7 @@ function fixture() {
   return { root, library: join(project, "library"), thread, outside };
 }
 
-const serve = (library: string | undefined, path: string | null) => libraryFileResponse(library, path, { stateDir: join(tmpdir(), "nenu-library-state"), inlineAssets: true });
+const serve = (library: string | undefined, path: string | null) => libraryFileResponse(library, path, { nenuDirs: [join(tmpdir(), "nenu-library-state")], inlineAssets: true });
 
 describe("a project's library", () => {
   test("serves a picture inside it by its bytes", async () => {
@@ -164,7 +164,7 @@ async function recordsFixture() {
   return { registry, records, thread, root };
 }
 
-const state = { stateDir: join(tmpdir(), "nenu-library-state") };
+const state = { nenuDirs: [join(tmpdir(), "nenu-library-state")] };
 
 describe("a project whose records folder is outside the projects root", () => {
   test("serves a capture from the library there, by its bytes", async () => {
