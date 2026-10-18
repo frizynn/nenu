@@ -235,14 +235,19 @@ it("on a phone, Back closes the panel and stays on the chat; its own ✕ steps b
 
 it("folds the threads that ended under what still works, a step back from the live rows", async () => {
   const done: ProjectThreadView = { id: "t-02", title: "Old cart page", parentId: "t-10", role: "worker", status: "resolved", group: "resolved", updated: minutesAgo(300) };
-  const all = [...threads, done];
+  // Finished, its pull request waiting for the merge: nothing left to open, so it folds with them.
+  const merging: ProjectThreadView = { id: "t-03", title: "Coupon banner", parentId: "t-10", role: "worker", status: "open", group: "awaiting-merge", updated: minutesAgo(200),
+    pr: { number: 40, state: "open", checks: { passed: 2, failed: 0, pending: 0 }, mergeBlocker: "waiting for a review" } };
+  const all = [...threads, done, merging];
   const { user, source } = renderChat({ threads: all, project: { ...project, threads: all } });
   await user.click(within(await row()).getByRole("button", { name: "Working, 1" }));
   const panel = screen.getByRole("dialog", { name: "Working" });
   // Live first; the resolved ones are not among them until their fold opens.
   expect(within(panel).getByRole("button", { name: /^Shipping estimates/ })).toBeVisible();
   expect(within(panel).queryByRole("button", { name: /^Old cart page/ })).not.toBeInTheDocument();
-  await user.click(within(panel).getByRole("button", { name: "Done (2)" }));
+  expect(within(panel).queryByRole("button", { name: /^Coupon banner/ })).not.toBeInTheDocument();
+  await user.click(within(panel).getByRole("button", { name: "Done (3)" }));
+  expect(within(panel).getByRole("button", { name: /^Coupon banner/ })).toHaveClass("text-muted-foreground");
   const ended = within(panel).getByRole("button", { name: /^Old cart page/ });
   expect(ended).toHaveClass("text-muted-foreground");
   expect(within(panel).getByRole("button", { name: /^Search index/ })).toHaveClass("text-muted-foreground");

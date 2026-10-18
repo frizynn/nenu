@@ -6,11 +6,14 @@ import type { AgentStatus, ProjectThreadView } from "./types";
 
 /** What an open node waits on. */
 export type OpenState = "needs" | "review" | "working" | "idle";
-export type NodeState = OpenState | "resolved";
+/** `merging`: finished, its own pull request open and its pane gone, so only the merge is left. */
+export type NodeState = OpenState | "merging" | "resolved";
 /** Most urgent first: the order open nodes are listed in. */
-const URGENCY: Record<NodeState, number> = { needs: 0, review: 1, working: 2, idle: 3, resolved: 4 };
+const URGENCY: Record<NodeState, number> = { needs: 0, review: 1, working: 2, idle: 3, merging: 4, resolved: 5 };
 
-export const STATE_LABEL: Record<NodeState, string> = { needs: "Needs you", review: "Ready for review", working: "Working", idle: "Idle", resolved: "Resolved" };
+export const STATE_LABEL: Record<NodeState, string> = {
+  needs: "Needs you", review: "Ready for review", working: "Working", idle: "Idle", merging: "Awaiting merge", resolved: "Resolved",
+};
 
 /** A live agent's state in the tree's terms; undefined while Herdr cannot tell. */
 export function liveState(status: AgentStatus): OpenState | undefined {
@@ -38,6 +41,7 @@ export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
   if (thread.status === "failed" || live === "needs" || thread.group === "waiting-on-you") return "needs";
+  if (thread.group === "awaiting-merge") return "merging";
   if (thread.role === "coordinator") {
     const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
     return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");

@@ -18,6 +18,7 @@ export function outcome(thread: ProjectThreadView): Outcome {
   if (thread.status === "resolved" || thread.pr?.state === "merged") return "done";
   const state = nodeState(thread);
   if (state === "needs") return "decide";
+  if (state === "merging") return "done";
   if (state === "working") return "progress";
   if (thread.verdict && thread.verdict !== "done") return "decide";
   return thread.verdict === "done" || state === "review" ? "done" : "progress";
