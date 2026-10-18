@@ -90,7 +90,7 @@ herdr plugin action invoke start --plugin herdr.nenu
 Either way, `start` does four things:
 
 1. **builds** `web/dist` if it's missing (typechecked, staged, swapped in atomically),
-2. **starts the bridge** as the `systemd --user` service `collie` (`nohup` fallback without systemd),
+2. **starts the bridge** as the `systemd --user` service `nenu` (`nohup` fallback without systemd),
 3. **publishes it on the tailnet** with `tailscale serve`: HTTPS on the host's MagicDNS name,
    `:443 → 127.0.0.1:8787`, tailnet-only,
 4. **prints the banner** with the URL to open — walked through line by line in
@@ -109,11 +109,11 @@ Herdr's JSON envelope instead** — the same text is the action's *captured stdo
 $ scripts/collie-ctl.sh start
 building web UI (first run)…                    # linked clone only; a GitHub install already built
 …bun install · typecheck · vite build output…
-bridge started (systemd --user: collie)
+bridge started (systemd --user: nenu)
 tailscale serve (https) → tailnet :443 -> 127.0.0.1:8787
 
   ✓ Nenu is running  ·  vX.Y.Z+174c4e4
-    service   systemd --user (collie) · active
+    service   systemd --user (nenu) · active
     local     http://127.0.0.1:8787
     tailnet   https://myhost.tail1234.ts.net
 ```
@@ -127,7 +127,7 @@ The `✓` is a real probe — the script connected to the bridge's port and got 
 `start` left three durable things on the host:
 
 1. **`web/dist`** — the built UI, served from disk, so later rebuilds go live without a restart.
-2. **A supervised user service** — a `systemd --user` unit named `collie`, or a launchd agent on
+2. **A supervised user service** — a `systemd --user` unit named `nenu`, or a launchd agent on
    macOS ([Surviving reboots](#surviving-reboots) has the details of both).
 3. **A tailnet-only `tailscale serve` mapping** — HTTPS on the host's MagicDNS name,
    `:443 → 127.0.0.1:8787`, TLS terminated by Tailscale. Inspect with `tailscale serve status`;
@@ -156,7 +156,7 @@ A sixty-second check, host side then phone side:
 $ scripts/collie-ctl.sh status
 
   ✓ Nenu is running  ·  vX.Y.Z+174c4e4
-    service   systemd --user (collie) · active
+    service   systemd --user (nenu) · active
     local     http://127.0.0.1:8787
     tailnet   https://myhost.tail1234.ts.net
 

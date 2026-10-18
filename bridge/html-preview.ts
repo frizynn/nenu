@@ -105,11 +105,11 @@ export function frameAncestors(host: string | undefined): string {
 export async function renderedHtmlResponse(
   cwd: string | undefined,
   path: string | null,
-  options: { delivered?: () => Promise<readonly string[]>; folders?: () => Promise<readonly string[]>; inlineAssets?: boolean; host?: string; stateDir?: string } = {},
+  options: { delivered?: () => Promise<readonly string[]>; folders?: () => Promise<readonly string[]>; inlineAssets?: boolean; host?: string; nenuDirs?: readonly string[] } = {},
 ): Promise<Response> {
   if (!path || !/\.html?$/i.test(path))
     return new Response("An HTML file is required.", { status: 400 });
-  const file = await openPaneFile(cwd, path, options.delivered, options.stateDir, options.folders);
+  const file = await openPaneFile(cwd, path, options.delivered, options.nenuDirs, options.folders);
   if (file instanceof Response) return file;
   let source: string | null;
   try {
@@ -120,7 +120,7 @@ export async function renderedHtmlResponse(
   if (source === null) return new Response("Binary files cannot be displayed as text.", { status: 415 });
   let document = designboardPreview(source);
   if (options.inlineAssets)
-    document = await inlineSiblingAssets(document, dirname(file.path), (asset) => openPaneFile(cwd, asset, options.delivered, options.stateDir));
+    document = await inlineSiblingAssets(document, dirname(file.path), (asset) => openPaneFile(cwd, asset, options.delivered, options.nenuDirs));
   return new Response(document, {
     headers: {
       "content-type": "text/html; charset=utf-8",

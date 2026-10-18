@@ -1,6 +1,7 @@
 # 0068. The plugin is herdr.nenu; internal names stay collie
 
-- **Status:** Accepted (2026-10-13). Lands with 1.0.0.
+- **Status:** Accepted (2026-10-13). Lands with 1.0.0. Point 3 amended for uploads by
+  [ADR 0098](./0098-uploads-live-beside-the-state-under-nenus-name.md).
 - **Trail:** `herdr-plugin.toml` · `scripts/collie-ctl.sh` (`migrate_legacy_config`,
   `retire_legacy_service`, `refresh_registry`, `unit_tailscale_hosts`) · `scripts/collie-ctl.test.sh`
   (`test_renamed_plugin_takes_over_from_herdr_collie`) · `contrib/windows/collie-ctl.ps1`

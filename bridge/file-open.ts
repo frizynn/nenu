@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { open, realpath, type FileHandle } from "node:fs/promises";
-import { basename, extname, isAbsolute, sep } from "node:path";
+import { basename, extname, isAbsolute } from "node:path";
 import { HTML_PREVIEW_CSP } from "../web/src/lib/html-preview.ts";
 import { FILE_SECURITY_HEADERS, fileStream } from "./media-preview.ts";
-import { binaryMime, isPrivateProjectPath, isTextPath } from "./pane-files.ts";
+import { binaryMime, insideNenuDirs, isPrivateProjectPath, isTextPath } from "./pane-files.ts";
 
 // The operator-confirmed way out for a file Nenu refuses to preview (ADR 0063): outside the
 // agent's folder, or past a preview size cap. A write-level device asks for a grant naming one
@@ -58,17 +58,17 @@ const MISSING = refuse(404, "File not found.");
 /**
  * The checks a path passes both when it is granted and again when its link is opened: absolute,
  * resolved, not private (the preview's own policy, on the given and the resolved name), not inside
- * Nenu's state directory (push keys, audit log), a regular file, and within the size cap. Returns an
+ * Nenu's own folders (its state, push keys and audit log included, and its uploads), a regular file,
+ * and within the size cap. Returns an
  * open descriptor on the resolved file so the bytes served are the bytes checked.
  */
-async function openChecked(requested: unknown, stateDir: string): Promise<{ handle: FileHandle; path: string; size: number } | Refusal> {
+async function openChecked(requested: unknown, nenuDirs: readonly string[]): Promise<{ handle: FileHandle; path: string; size: number } | Refusal> {
   if (typeof requested !== "string" || !isAbsolute(requested) || requested.length > 4096 || /[\x00-\x1f]/.test(requested))
     return refuse(400, "An absolute file path is required.");
   if (isPrivateProjectPath(requested)) return PRIVATE;
   const path = await realpath(requested).catch(() => null);
   if (!path) return MISSING;
-  const state = await realpath(stateDir).catch(() => stateDir);
-  if (isPrivateProjectPath(path) || path === state || path.startsWith(state + sep)) return PRIVATE;
+  if (isPrivateProjectPath(path) || await insideNenuDirs(path, nenuDirs)) return PRIVATE;
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
   if (!handle) return MISSING;
   try {
@@ -101,8 +101,8 @@ function disposition(kind: "inline" | "attachment", name: string): string {
 }
 
 /** Validate a grant request; on success the caller issues a link for `path`. */
-export async function checkOpenable(requested: unknown, stateDir: string): Promise<OpenableFile | Refusal> {
-  const file = await openChecked(requested, stateDir);
+export async function checkOpenable(requested: unknown, nenuDirs: readonly string[]): Promise<OpenableFile | Refusal> {
+  const file = await openChecked(requested, nenuDirs);
   if ("status" in file) return file;
   await file.handle.close();
   return { path: file.path, name: basename(file.path), size: file.size, type: namedType(file.path).split(";")[0]! };
@@ -123,9 +123,9 @@ export const EXPIRED_MESSAGE = "This link expired or was already used. Go back t
  * cannot reach Nenu or the network. Text is plain text, images and PDFs are served only when their
  * bytes match the name, and anything else downloads.
  */
-export async function grantedFileResponse(path: string | null, stateDir: string): Promise<Response> {
+export async function grantedFileResponse(path: string | null, nenuDirs: readonly string[]): Promise<Response> {
   if (!path) return errorPage(refuse(410, EXPIRED_MESSAGE));
-  const file = await openChecked(path, stateDir);
+  const file = await openChecked(path, nenuDirs);
   if ("status" in file) return errorPage(file);
   let streaming = false;
   try {

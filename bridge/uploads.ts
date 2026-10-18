@@ -1,11 +1,29 @@
 import { mkdir, readdir, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { defaultStateDir } from "./config.ts";
 import type { UploadResponse } from "./types.ts";
 
-// Uploaded files (routes/files.ts → saveUpload → `<stateDir>/uploads/`) are referenced by path in a
-// message and then never needed again, so nothing deletes them. This sweep prunes anything older
+// Uploaded files (routes/files.ts → saveUpload → the first of `uploadDirs`) are referenced by path in
+// a message and then never needed again, so nothing deletes them. This sweep prunes anything older
 // than the TTL. The decision — which names are stale — is a pure, tested function; the runner that
 // stats the dir and unlinks takes an injectable fs surface so it too can be exercised without disk.
+
+/**
+ * Where uploads go, first, then where older ones still wait to be previewed and swept. The agent is
+ * handed the path, so with the default state dir they go to a Nenu folder beside it rather than under
+ * Collie's name; a state dir the operator chose keeps its uploads inside it (ADR 0098).
+ */
+export function uploadDirs(stateDir: string, home: string = homedir()): readonly [string, ...string[]] {
+  const inside = join(stateDir, "uploads");
+  const fallback = defaultStateDir(home);
+  return resolve(stateDir) === fallback ? [join(dirname(fallback), "nenu", "uploads"), inside] : [inside];
+}
+
+/** Nenu's own folders, its state and its uploads: never served, listed or opened (ADR 0074). */
+export function nenuDirs(stateDir: string, home: string = homedir()): readonly string[] {
+  return [stateDir, ...uploadDirs(stateDir, home)];
+}
 
 /** Uploads older than this are swept (Herdr already read them by path; they're single-use). */
 export const UPLOAD_TTL_MS = 48 * 60 * 60 * 1000; // 48 h
@@ -83,10 +101,11 @@ function clientTail(name: string): string {
  * shape the chat preview accepts (chat-upload-preview.ts); anything else keeps its sanitized name
  * after the generated part, so no client name can choose a path, a dot segment or a device name.
  */
-export async function saveUpload(dir: string, paneId: string, file: File): Promise<UploadResponse> {
+export async function saveUpload(stateDir: string, paneId: string, file: File, home: string = homedir()): Promise<UploadResponse> {
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: TOO_LARGE };
+  const dir = uploadDirs(stateDir, home)[0];
   const ext = imageExtFromBytes(new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer()));
-  // 0700 — uploads (and the state dir they live under) may hold sensitive files; keep them
+  // 0700 — uploads may hold sensitive files; keep them
   // owner-only. recursive:true applies the mode to any intermediate dirs it creates too.
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const generated = `${paneId.replace(/[^A-Za-z0-9_-]/g, "_")}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
@@ -149,5 +168,17 @@ export async function sweepUploads(
       /* already gone / unlink failed — skip */
     }
   }
+  return removed;
+}
+
+/** {@link sweepUploads} over every folder uploads live in, one after another. */
+export async function sweepUploadDirs(
+  dirs: readonly string[],
+  ttlMs: number = UPLOAD_TTL_MS,
+  now: number = Date.now(),
+  fs: UploadFs = realFs,
+): Promise<string[]> {
+  const removed: string[] = [];
+  for (const dir of dirs) removed.push(...await sweepUploads(dir, ttlMs, now, fs));
   return removed;
 }

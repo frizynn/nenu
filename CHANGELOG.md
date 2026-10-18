@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-10-18
+
+### Fixed
+
+- A file attached from the phone is saved to `~/.local/state/nenu/uploads`, so the path the agent gets no longer says collie; uploads already in `~/.local/state/collie/uploads` still preview and expire as before (c8dd64fb).
+- `/file`, Render, the file tree and Open refuse the new uploads folder as they refuse the state dir (c8dd64fb).
+- History's "off" notice, `collie-ctl.sh` hints, the Windows refresh hint and the user guide no longer say Collie where the operator reads them (63b25d49).
+
 ## [1.27.0] - 2026-10-18
 
 ### Added

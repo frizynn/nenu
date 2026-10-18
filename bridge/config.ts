@@ -275,11 +275,16 @@ export function defaultSocketPath(
   return join(home, ".config", "herdr", "herdr.sock");
 }
 
+/** The state directory when no setting names one. It keeps Collie's name (ADR 0068); uploads do not (ADR 0098). */
+export function defaultStateDir(home: string = homedir()): string {
+  return join(home, ".local", "state", "collie");
+}
+
 export function loadConfig(): Config {
   const stateDir =
     process.env.HERDR_PLUGIN_STATE_DIR ??
     process.env.COLLIE_STATE_DIR ??
-    join(homedir(), ".local", "state", "collie");
+    defaultStateDir();
 
   const submitKeys = envList("COLLIE_SUBMIT_KEYS");
 

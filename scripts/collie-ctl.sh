@@ -515,7 +515,7 @@ print_status_banner() {
   if [ "$ready" = 0 ]; then
     echo "  ✓ Nenu is running  ·  v${ver}"
   else
-    echo "  ⚠ Nenu isn't answering on :${PORT} yet (v${ver}) — check 'collie-ctl.sh logs'"
+    echo "  ⚠ Nenu isn't answering on :${PORT} yet (v${ver}) — check its log: $(logs_hint)"
   fi
   echo "    service   ${svc}"
   echo "    local     http://127.0.0.1:${PORT}"
@@ -1431,17 +1431,23 @@ cmd_qr() {
     url="$(bridge_url)"
     case "$url" in
       *"(Tailscale name unavailable)"*)
-        echo "no URL to encode: the tailnet front door isn't up (run 'collie-ctl.sh serve')" >&2
+        echo "no URL to encode: the tailnet front door isn't up (run 'herdr plugin action invoke restart --plugin ${PLUGIN_ID}')" >&2
         exit 1 ;;
     esac
     # A QR for a URL nothing can reach is just a prettier dead end — it scans perfectly and then
     # hangs. Say so before drawing it, but still draw it: the ACL is the thing to fix, not the URL.
     if tailnet_inbound_blocked; then
       echo "⚠ this node's packet filter admits no peer — scanning this will hang until your tailnet" >&2
-      echo "  policy grants access, or another device joins the tailnet. See 'collie-ctl.sh status'." >&2
+      echo "  policy grants access, or another device joins the tailnet. See 'herdr plugin action invoke status --plugin ${PLUGIN_ID}'." >&2
     fi
   fi
   "$BUN" run "${PLUGIN_ROOT}/scripts/qr.ts" "$url"
+}
+
+# The command that shows what cmd_logs shows, for a hint: no plugin action reads the log.
+logs_hint() {
+  if have_systemd; then echo "journalctl --user -u ${UNIT} -n 50"
+  else echo "tail -n 50 ${CONFIG_DIR}/collie.log"; fi
 }
 
 cmd_logs() {

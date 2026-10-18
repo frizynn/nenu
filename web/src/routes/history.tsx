@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 function unavailableCopy(reason: NonNullable<HistoryData["unavailable"]>, name: string, shell: boolean, problem: LinkProblem | null) {
   switch (reason) {
     case "disabled":
-      return { title: "History is off", body: "Transcript history is switched off on this bridge (COLLIE_TRANSCRIPT)." };
+      return { title: "History is off", body: "Transcript history is switched off in this Nenu's .env file." };
     case "no-session":
       return shell
         ? { title: "Shells keep no transcript", body: `History shows an agent's conversation, and ${name} is a shell.` }

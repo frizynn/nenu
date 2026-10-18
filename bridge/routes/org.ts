@@ -1,5 +1,6 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
 import { answerAsk, coordinatorChoices, createProject, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
 import { json, secure } from "./http.ts";
@@ -33,7 +34,7 @@ export const orgRoutes: Route[] = [
     session: false,
     async handle({ cfg, projects }, { req, url }) {
       return secure(await libraryFileResponse(projects.library(url.searchParams.get("project") ?? ""), url.searchParams.get("path"), {
-        ifNoneMatch: req.headers.get("if-none-match"), inlineAssets: cfg.htmlInlineAssets, host: req.headers.get("host") ?? undefined, stateDir: cfg.stateDir,
+        ifNoneMatch: req.headers.get("if-none-match"), inlineAssets: cfg.htmlInlineAssets, host: req.headers.get("host") ?? undefined, nenuDirs: nenuDirs(cfg.stateDir),
       }));
     },
   },
@@ -45,7 +46,7 @@ export const orgRoutes: Route[] = [
     access: "read",
     session: false,
     async handle({ cfg, projects }, { url }) {
-      return secure(await reportResponse(projects.report(url.searchParams.get("project") ?? "", url.searchParams.get("thread") ?? ""), { stateDir: cfg.stateDir }));
+      return secure(await reportResponse(projects.report(url.searchParams.get("project") ?? "", url.searchParams.get("thread") ?? ""), { nenuDirs: nenuDirs(cfg.stateDir) }));
     },
   },
   // Read when the window that starts or replaces the coordinator opens, never on a poll.

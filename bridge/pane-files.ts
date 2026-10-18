@@ -42,9 +42,15 @@ const PRIVATE_EXTENSION = /\.(?:pem|key|p12|pfx|keystore|jks|kdbx|ppk)$/i;
 const MAC_SECRETS = /(?:^|\/)Library\/(?:Keychains|Cookies|Application Support\/(?:Google\/Chrome|BraveSoftware|Firefox|Arc|Microsoft Edge)|Safari|Containers\/com\.apple\.Safari)(?:\/|$)|\.keychain(?:-db)?$/i;
 
 /** Whether a resolved path sits in `dir`, compared on real paths so a link into it is caught too. */
-export async function insideDir(path: string, dir: string): Promise<boolean> {
+async function insideDir(path: string, dir: string): Promise<boolean> {
   const root = await realpath(dir).catch(() => resolve(dir));
   return path === root || path.startsWith(root + sep);
+}
+
+/** Whether a resolved path is inside any of Nenu's own folders (`nenuDirs`). */
+export async function insideNenuDirs(path: string, dirs: readonly string[] = []): Promise<boolean> {
+  for (const dir of dirs) if (await insideDir(path, dir)) return true;
+  return false;
 }
 
 /** Apply the same policy to the supplied name and the resolved target of an in-project symlink. */
@@ -92,15 +98,15 @@ export async function openPaneFile(
   cwd: string | undefined,
   requestedPath: string | null,
   delivered: () => Promise<readonly string[]> = async () => [],
-  stateDir?: string,
+  nenuDirs?: readonly string[],
   folders?: () => Promise<readonly string[]>,
 ): Promise<PaneFile | Response> {
-  const file = await openNamedFile(cwd, requestedPath, delivered, stateDir);
+  const file = await openNamedFile(cwd, requestedPath, delivered, nenuDirs);
   if (!folders || !(file instanceof Response) || file.status !== 404 || !requestedPath || isAbsolute(requestedPath)) return file;
   for (const folder of await folders().catch(() => [])) {
     const candidate = resolve(folder, requestedPath);
     if (!candidate.startsWith(folder + sep)) continue;
-    const found = await openNamedFile(cwd, candidate, undefined, stateDir);
+    const found = await openNamedFile(cwd, candidate, undefined, nenuDirs);
     if (!(found instanceof Response)) return found;
   }
   return file;
@@ -118,7 +124,7 @@ async function openNamedFile(
   cwd: string | undefined,
   requestedPath: string | null,
   delivered: () => Promise<readonly string[]> = async () => [],
-  stateDir?: string,
+  nenuDirs?: readonly string[],
 ): Promise<PaneFile | Response> {
   if (!requestedPath || requestedPath.length > 4096 || /[\x00-\x1f]/.test(requestedPath)) {
     return fileError("A valid project file path is required.", 400);
@@ -147,7 +153,7 @@ async function openNamedFile(
       ? unavailable()
       : fileError(OUTSIDE_PROJECT_MESSAGE, 404, { [FILE_STATE_HEADER]: "outside-project" });
   }
-  if (isPrivateProjectPath(path) || (stateDir && await insideDir(path, stateDir))) return unavailable();
+  if (isPrivateProjectPath(path) || await insideNenuDirs(path, nenuDirs)) return unavailable();
   const kind = fileKind(path);
   if (!kind) return fileError("This file type cannot be previewed.", 415);
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
@@ -204,11 +210,11 @@ export async function paneFileResponse(
     delivered?: () => Promise<readonly string[]>;
     /** Folders the conversation names, where a relative name the pane's folder lacks may live. */
     folders?: () => Promise<readonly string[]>;
-    /** Nenu's own state, uploads included: never served, even from a folder that holds it (ADR 0074). */
-    stateDir?: string;
+    /** Nenu's own folders, its state and its uploads: never served, even from a folder that holds them (ADR 0074). */
+    nenuDirs?: readonly string[];
   } = {},
 ): Promise<Response> {
-  const file = await openPaneFile(cwd, requestedPath, options.delivered, options.stateDir, options.folders);
+  const file = await openPaneFile(cwd, requestedPath, options.delivered, options.nenuDirs, options.folders);
   if (file instanceof Response) return file;
   let streaming = false;
   try {
