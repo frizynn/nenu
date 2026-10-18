@@ -149,25 +149,10 @@ function ReportContent({ project, summary, pr }: { project: ProjectView; summary
  * that asks for plain ones where Organizations offers it. Both are model text, drawn as text.
  */
 function ReportWords({ project, summary }: { project: ProjectView; summary: ThreadSummary }) {
-  const session = useSession();
-  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const [answer, setAnswer] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
   const [own, setOwn] = useState(false);
   const plain = answer ?? (summary.plain?.current && summary.plain.text ? summary.plain.text : null);
   const words = summary.summary;
-  const explain = async () => {
-    setBusy(true);
-    setFailed(null);
-    try {
-      setAnswer((await explainOrgThread({ project: project.slug, id: summary.id }, session)).explained.text);
-    } catch (error) {
-      setFailed(error instanceof Error ? error.message : "Could not explain the report.");
-    } finally {
-      setBusy(false);
-    }
-  };
   return <>
     {plain
       ? <p className="mt-2 whitespace-pre-line break-words text-subhead">{plain}</p>
@@ -178,9 +163,31 @@ function ReportWords({ project, summary }: { project: ProjectView; summary: Thre
       </button>
       {own && <p className="mt-1 whitespace-pre-line break-words text-footnote text-muted-foreground">{words}</p>}
     </>}
-    {!plain && summary.explainable && !isReadOnly(data?.device) && <button type="button" className="quiet-action mt-1 -ml-2" disabled={busy} onClick={() => void explain()}>
+    {!plain && summary.explainable && <ExplainButton project={project.slug} id={summary.id} onAnswer={setAnswer} />}
+  </>;
+}
+
+/** Asks the summary agent for one report in plain words; a device that may not write sees nothing. */
+function ExplainButton({ project, id, onAnswer }: { project: string; id: string; onAnswer: (text: string) => void }) {
+  const session = useSession();
+  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (isReadOnly(data?.device)) return null;
+  const explain = async () => {
+    setBusy(true);
+    setFailed(null);
+    try {
+      onAnswer((await explainOrgThread({ project, id }, session)).explained.text);
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : "Could not explain the report.");
+      setBusy(false);
+    }
+  };
+  return <>
+    <button type="button" className="quiet-action mt-1 -ml-2" disabled={busy} onClick={() => void explain()}>
       <Sparkle aria-hidden className="size-3.5" /><BusyLabel busy={busy}>In plain words</BusyLabel>
-    </button>}
+    </button>
     {failed && <p role="alert" className="mt-1 text-footnote text-muted-foreground">Could not explain it: {failed}</p>}
   </>;
 }
