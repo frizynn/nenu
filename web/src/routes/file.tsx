@@ -5,6 +5,7 @@ import { paneRootsOf } from "@/lib/file-links";
 import { FilePreviewContext } from "@/lib/file-preview-context";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { filePagePath, panePath } from "@/lib/nav";
+import { useGoUp } from "@/lib/motion";
 import { useSession } from "@/lib/session";
 import { NotFound } from "./not-found";
 
@@ -21,13 +22,14 @@ export function FileRoute() {
   const path = search.get("path") ?? "";
   const session = useSession();
   const navigate = useNavigate();
+  const goUp = useGoUp();
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const panes = useMemo(() => paneRootsOf(data), [data.agents, data.shellPanes]);
   if (!paneId || !path) return <NotFound />;
   return (
     <FilePreviewContext.Provider value={(next) => navigate(filePagePath(paneId, next, session))}>
       <Suspense fallback={<div role="status" className="p-10 text-center text-sm text-muted-foreground">Opening document…</div>}>
-        <FilePreview key={path} page paneId={paneId} session={session} path={path} panes={panes} onClose={() => navigate(panePath(paneId, session))} />
+        <FilePreview key={path} page paneId={paneId} session={session} path={path} panes={panes} onClose={() => goUp(panePath(paneId, session))} />
       </Suspense>
     </FilePreviewContext.Provider>
   );

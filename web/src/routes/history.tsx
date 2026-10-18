@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useLoaderData, useParams, useRouteLoaderData } from "react-router";
+import { useLoaderData, useParams, useRouteLoaderData } from "react-router";
 import { ArrowUpToLine, ChevronDown, ChevronUp, Pending, ScrollText, Search, X } from "@/components/ui/icon";
 
-import { AppHeader } from "@/components/app-header";
+import { AppHeader, StepLink } from "@/components/app-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,6 +12,7 @@ import { fetchHistory } from "@/lib/api";
 import { linkPhrase, linkProblemOf, type LinkProblem } from "@/lib/connection";
 import { displayName } from "@/lib/display-name";
 import { HISTORY_PAGE_SIZE, ROOT_ROUTE_ID, type HistoryData, type HomeData } from "@/lib/loaders";
+import { useGoUp } from "@/lib/motion";
 import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
 import { matchingEntries, step, userTurnIndices } from "@/lib/transcript-search";
@@ -64,6 +65,7 @@ export function HistoryRoute() {
   const root = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { paneId = "" } = useParams();
   const session = data.session;
+  const goUp = useGoUp();
 
   const pane =
     root.agents.find((a) => a.paneId === paneId) ??
@@ -249,9 +251,9 @@ export function HistoryRoute() {
         // view you chose to open, so the desk gets its own way out, and each width has exactly one.
         rightTrail={
           <div className="flex max-lg:hidden">
-            <Link to={back.to} aria-label="Close history" className="workbench-icon-button">
+            <StepLink to={back.to} go={goUp} aria-label="Close history" className="workbench-icon-button">
               <X aria-hidden="true" size={17} />
-            </Link>
+            </StepLink>
           </div>
         }
       />
@@ -267,9 +269,9 @@ export function HistoryRoute() {
             className="h-full justify-center"
             // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
             action={
-              <Link to={back.to} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
+              <StepLink to={back.to} go={goUp} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
                 <span className="truncate">{back.action}</span>
-              </Link>
+              </StepLink>
             }
           >
             {empty.body}

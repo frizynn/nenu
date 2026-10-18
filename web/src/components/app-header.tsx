@@ -1,16 +1,28 @@
 import { useContext, type ReactNode } from "react";
 import { ChevronLeft, Settings2 } from "@/components/ui/icon";
-import { Link, matchPath, useLocation, useNavigate } from "react-router";
+import { Link, matchPath, useLocation, useNavigate, type LinkProps } from "react-router";
 
 import { isConnecting } from "@/lib/connection";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
-import { armMotion, useGoUp } from "@/lib/motion";
+import { armMotion, useGoBack } from "@/lib/motion";
 import { homePath, settingsPath } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { CollieHome } from "@/components/collie-home";
 import type { BridgeStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
+
+/**
+ * A link to `to` whose plain tap runs `go` instead, a step back or up through the history (lib/motion.ts);
+ * a modified click and a long-press still open the address as a link does.
+ */
+export function StepLink({ to, go, ...props }: Omit<LinkProps, "to" | "onClick"> & { to: string; go: (to: string) => void }) {
+  return <Link {...props} to={to} onClick={(event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    go(to);
+  }} />;
+}
 
 /** Where a screen's back control leads: the parent and its name, read out as "Back to <label>". */
 export interface HeaderBack {
@@ -80,7 +92,7 @@ export function AppHeader({
   const navigation = useContext(WorkbenchNavigationContext);
   const { pathname } = useLocation();
   const session = useSession();
-  const goUp = useGoUp();
+  const goBack = useGoBack();
   const lost = useConnectionLost(isConnecting({ bridge, error }));
   // Home's bar is the brand: the page's headline sits right under it, so it carries no title of its own.
   const home = matchPath(HOME_ROUTE, pathname) !== null;
@@ -111,14 +123,10 @@ export function AppHeader({
               {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
             </button>
           ) : (
-            // A link for its address and a long-press, but a tap goes up through the history (useGoUp).
-            <Link to={parent} onClick={(event) => {
-              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              goUp(parent);
-            }} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>
+            // A tap goes back to where you came from (useGoBack).
+            <StepLink to={parent} go={goBack} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>
               {icon}{unlisted && <span className="hidden max-w-48 truncate text-body lg:inline">{back?.label}</span>}
-            </Link>
+            </StepLink>
           )}
           {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that
               pushes the right cluster to the edge. min-w-0 so a long title truncates when tight. */}

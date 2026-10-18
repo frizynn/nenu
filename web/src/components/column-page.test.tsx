@@ -1,7 +1,7 @@
-import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 
-import { ColumnPage } from "./column-page";
+import { ColumnPage, PageBody } from "./column-page";
 import type { HomeData } from "@/lib/loaders";
 
 const data: HomeData = {
@@ -111,5 +111,36 @@ describe("ColumnPage — the column", () => {
     renderPage("/");
     const column = screen.getByRole("main").firstElementChild!;
     expect(column).toHaveClass("page-column", "mx-auto");
+  });
+});
+
+describe("the page's scroll", () => {
+  // Two pages that scroll in PageBody, as Your asks and a thread's page do: each route its own page.
+  const page = (name: string) => <PageBody key={name}><p>{name}</p></PageBody>;
+  const scroller = () => document.querySelector("main.page-body") as HTMLElement;
+  async function open() {
+    const router = createMemoryRouter([{ path: "/asks", element: page("Asks") }, { path: "/node", element: page("Node") }], { initialEntries: ["/asks?project=acme"] });
+    render(<RouterProvider router={router} />);
+    await screen.findByText("Asks");
+    return router;
+  }
+
+  it("comes back where it was when the history steps back to it", async () => {
+    const router = await open();
+    act(() => { scroller().scrollTop = 600; fireEvent.scroll(scroller()); });
+    await act(() => router.navigate("/node"));
+    expect(scroller().scrollTop).toBe(0);
+    await act(() => router.navigate(-1));
+    await screen.findByText("Asks");
+    expect(scroller().scrollTop).toBe(600);
+  });
+
+  it("opens a page it pushes at the top, even one seen before", async () => {
+    const router = await open();
+    act(() => { scroller().scrollTop = 600; fireEvent.scroll(scroller()); });
+    await act(() => router.navigate("/node"));
+    await act(() => router.navigate("/asks?project=acme"));
+    await screen.findByText("Asks");
+    expect(scroller().scrollTop).toBe(0);
   });
 });

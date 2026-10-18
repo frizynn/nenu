@@ -206,10 +206,10 @@ export interface LinkChip {
 }
 
 const TONE: Record<string, ChipTone> = {
-  "waiting-on-you": "waiting", working: "moving", landing: "moving", open: "moving", todo: "moving", "ready-for-review": "review",
+  "waiting-on-you": "waiting", working: "moving", landing: "moving", "awaiting-merge": "moving", open: "moving", todo: "moving", "ready-for-review": "review",
   idle: "off", resolved: "done", done: "done", merged: "done", failed: "off", closed: "off", missing: "off",
 };
-const STATE_WORD: Record<string, string> = { "waiting-on-you": "needs you", "ready-for-review": "review" };
+const STATE_WORD: Record<string, string> = { "waiting-on-you": "needs you", "ready-for-review": "review", "awaiting-merge": "awaiting merge" };
 
 /** `t-0007 · working`, `#12 · merged`, `AWA-569 · missing`, a page's host. */
 export function linkChip(link: AskLink): LinkChip {

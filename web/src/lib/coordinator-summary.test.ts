@@ -25,6 +25,10 @@ describe("where a thread's work stands in its coordinator's Summary", () => {
     ] as const) expect(outcome(thread("t", extra)), JSON.stringify(extra)).toBe("progress");
   });
 
+  it("is done once only the merge is left, whatever its report said", () => {
+    expect(outcome(thread("t", { group: "awaiting-merge", verdict: "blocked" }))).toBe("done");
+  });
+
   it("still asks you while the agent waits on you, even after a report that said done", () => {
     expect(outcome(thread("t", { group: "waiting-on-you", verdict: "done" }))).toBe("decide");
   });

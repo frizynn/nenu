@@ -20,6 +20,9 @@ describe("nodeState", () => {
     expect(nodeState(node("a", "root", { paneId: "p", liveStatus: "idle", group: "working" }))).toBe("idle");
     expect(nodeState(node("a", "root", { paneId: "p", liveStatus: "unknown", group: "working" }))).toBe("working");
     expect(nodeState(node("a", "root", { status: "starting" }))).toBe("working");
+    // Finished with its pull request open and its pane gone: only the merge is left, nothing to open.
+    expect(nodeState(node("a", "root", { group: "awaiting-merge", pr: { state: "open", review: "approved" } }))).toBe("merging");
+    expect(nodeState(node("a", "root", { status: "failed", group: "awaiting-merge" }))).toBe("needs");
     // A live status reported for a node with no pane is not evidence of anything.
     expect(nodeState(node("a", "root", { liveStatus: "working" }))).toBe("idle");
   });

@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-10-18
+
+### Added
+
+- A thread whose pull request only waits for its merge reads Awaiting merge, folds with what ended around a chat and counts as done in a coordinator's Summary (fe945637).
+- `bun scripts/e2e/origin.ts` walks twelve ways into a thread, a coordinator and a project in WebKit at 390 and writes where ‹ lands (b4faa5ce).
+
+### Fixed
+
+- ‹ returns to the screen you came from (Your asks with its filter, Home, Search, a thread's page) with its scroll, as the iPhone's swipe back does, instead of jumping to the coordinator or the project; only a screen opened from outside Nenu goes to its parent, once (b4faa5ce).
+
 ## [1.26.0] - 2026-10-17
 
 ### Added

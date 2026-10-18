@@ -25,6 +25,7 @@ const routes: RouteObject[] = [{
   children: [
     { index: true, handle: { depth: 0 }, element: <p>Home</p> },
     { path: "settings", handle: { depth: 1 }, element: <p>Settings</p> },
+    { path: "asks", handle: { depth: 1 }, element: <p>Asks</p> },
     { path: "slow", handle: { depth: 1 }, loader: () => slowPage, element: <p>Slow</p> },
     { path: "pane/:paneId", handle: { depth: 3 }, element: <Pane /> },
   ],
@@ -34,7 +35,7 @@ async function open(at: InitialEntry) {
   const router = createMemoryRouter(routes, { initialEntries: [at] });
   animateNavigations(router);
   render(<RouterProvider router={router} />);
-  await screen.findByText(/Home|Settings|Pane/);
+  await screen.findByText(/Home|Settings|Asks|Pane/);
   return router;
 }
 
@@ -167,18 +168,36 @@ describe("the back control", () => {
     expect(stack(router)).toEqual({ action: "POP", at: "/pane/a?view=threads" });
   });
 
-  it("replaces the page with its parent when it came from elsewhere, so the history never grows", async () => {
+  it("goes back to the screen it was opened from, whatever it is, with its filter", async () => {
     const router = await open("/settings");
+    await act(() => router.navigate("/asks?project=acme&coordinator=t-0002"));
     await act(() => router.navigate("/pane/t"));
+    await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
+    await screen.findByText("Asks");
+    // Not its coordinator: the screen before it, as the system's Back would show it.
+    expect(stack(router)).toEqual({ action: "POP", at: "/asks?project=acme&coordinator=t-0002" });
+    await act(() => router.navigate(-1));
+    expect(stack(router).at).toBe("/settings");
+  });
+
+  it("keeps the screen it was opened from when a sibling replaces it", async () => {
+    const router = await open("/");
+    await act(() => router.navigate("/pane/t"));
+    await act(() => router.navigate("/pane/u", { replace: true }));
+    await userEvent.click(await screen.findByRole("link", { name: "Back to Home" }));
+    await screen.findByText("Home");
+    expect(stack(router)).toEqual({ action: "POP", at: "/" });
+  });
+
+  it("goes once to its parent when nothing in the app opened it (a link, a launch), so the history never grows", async () => {
+    const router = await open("/pane/t");
     await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
     await screen.findByText("Pane a");
     expect(stack(router)).toEqual({ action: "REPLACE", at: "/pane/a" });
-    // Its parent, Home, is not the page before it either (Settings), so it replaces again.
     await userEvent.click(screen.getByRole("link", { name: "Back to Home" }));
     await screen.findByText("Home");
     expect(stack(router)).toEqual({ action: "REPLACE", at: "/" });
-    await act(() => router.navigate(-1));
-    expect(stack(router).at).toBe("/settings");
+    expect(router.state.location.key).toBeDefined();
   });
 
   it("remembers where a page came from across a reload, in its history entry", async () => {

@@ -1,6 +1,6 @@
 # 0095. The back control steps back through the history
 
-- **Status:** Accepted (2026-10-17). Amends [ADR 0078](./0078-page-motion-runs-only-on-navigations-the-app-starts.md), point 3.
+- **Status:** Accepted (2026-10-17); point 2 amended by [ADR 0097](./0097-the-back-control-returns-to-the-screen-you-came-from.md). Amends [ADR 0078](./0078-page-motion-runs-only-on-navigations-the-app-starts.md), point 3.
 - **Trail:** `web/src/lib/motion.ts` (`useGoUp`, the `nenuFrom` stamp) · `web/src/components/app-header.tsx` ·
   `web/src/components/project-frame.tsx` · `web/src/router.tsx` (`keepInPlace`) · `scripts/e2e/run.ts back`
 

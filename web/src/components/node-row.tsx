@@ -10,10 +10,12 @@ import { cn } from "@/lib/utils";
 
 const DOT_STATUS = { needs: "blocked", working: "working", idle: "idle" } as const;
 
-/** A node's mark: red when it needs you, blue for review, the agent's dot otherwise, a grey check once resolved. */
+/** A node's mark: red when it needs you, blue for review, a green ring while only its merge is left, the
+ *  agent's dot otherwise, a grey check once resolved. */
 export function NodeDot({ state, className = "size-2" }: { state: NodeState; className?: string }) {
   if (state === "resolved") return <Check aria-hidden data-node-state="resolved" className={cn("shrink-0 text-muted-foreground", className, "size-3")} />;
   if (state === "review") return <span aria-hidden className={cn("inline-flex shrink-0 rounded-full bg-primary", className)} />;
+  if (state === "merging") return <span aria-hidden data-node-state="merging" className={cn("inline-flex shrink-0 rounded-full border border-status-done", className)} />;
   return <StatusDot status={DOT_STATUS[state]} surface="bg-transparent" className={className} />;
 }
 

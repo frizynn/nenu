@@ -6,7 +6,7 @@ import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame"
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { currentMachine } from "@/lib/machines";
-import { useGoUp } from "@/lib/motion";
+import { useGoBack } from "@/lib/motion";
 import { homePath, panePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { displayName } from "@/lib/display-name";
@@ -28,7 +28,7 @@ export function DetailRoute() {
   // navigation and write below stays scoped to it.
   const session = pane.session;
   const navigate = useNavigate();
-  const goUp = useGoUp();
+  const goBack = useGoBack();
   const location = useLocation();
   const { revalidate } = useRevalidator();
   // Kept here, above the frames, so a switch between sessions leaves the desk's panel as it was.
@@ -107,7 +107,7 @@ export function DetailRoute() {
       error={root.error}
       authError={root.authError || pane.authError}
       // A pane outside any project, or the coordinator a project opens on: nothing above it but Home.
-      onBack={() => goUp(homePath(session))}
+      onBack={() => goBack(homePath(session))}
       // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
       // the browser's back leaves the chat instead of walking back through every pane visited.
       onSelect={(id) => navigate(panePath(id, session), { replace: true })}

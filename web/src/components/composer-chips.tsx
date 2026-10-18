@@ -8,7 +8,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { threadAge, threadDetail } from "@/components/project-tasks";
 import { fetchOrgRoutines } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { nodeState } from "@/lib/org-tree";
+import { nodeState, type NodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView, RoutineView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,21 +47,23 @@ export interface ChipView {
   content: ReactNode;
 }
 
+const ENDED: ReadonlySet<NodeState> = new Set(["merging", "resolved"]);
+
 /** The threads around a chat, the chat's own left out: it is on screen already. */
 export function threadsAround(source: ProjectChipsSource, paneId: string) {
   const others = source.threads.filter((thread) => thread.id !== source.thread?.id && thread.paneId !== paneId);
   return {
     needs: others.filter((thread) => nodeState(thread) === "needs"),
     working: others.filter((thread) => nodeState(thread) === "working"),
-    /** History, newest first: never a chip of its own, only folded under what still works. */
-    resolved: others.filter((thread) => nodeState(thread) === "resolved").sort((a, b) => (Date.parse(b.updated ?? "") || 0) - (Date.parse(a.updated ?? "") || 0)),
+    /** What ended, newest first (resolved, or only its merge left): never a chip of its own, only
+     *  folded under what still works. */
+    resolved: others.filter((thread) => ENDED.has(nodeState(thread))).sort((a, b) => (Date.parse(b.updated ?? "") || 0) - (Date.parse(a.updated ?? "") || 0)),
   };
 }
 
 export const NEEDS_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
 export const WORKING_MARK = <StatusDot status="working" className="size-1.5" />;
-const RESOLVED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
-const MARKS = { needs: NEEDS_MARK, resolved: RESOLVED_MARK } as const;
+const ENDED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
 
 /** One row per thread: its mark, its name, what it is doing and since when. A tap opens it. */
 export function ThreadRows({ threads, panes, now, onOpen }: {
@@ -74,9 +76,10 @@ export function ThreadRows({ threads, panes, now, onOpen }: {
     <ul className="flex flex-col">
       {threads.map((thread) => {
         const state = nodeState(thread);
+        const ended = ENDED.has(state);
         return <li key={thread.id}>
-          <button type="button" className={cn("composer-chip-item", state === "resolved" && "text-muted-foreground")} onClick={() => onOpen(thread)}>
-            <span className="flex w-3.5 shrink-0 justify-center">{state === "needs" || state === "resolved" ? MARKS[state] : WORKING_MARK}</span>
+          <button type="button" className={cn("composer-chip-item", ended && "text-muted-foreground")} onClick={() => onOpen(thread)}>
+            <span className="flex w-3.5 shrink-0 justify-center">{state === "needs" ? NEEDS_MARK : ended ? ENDED_MARK : WORKING_MARK}</span>
             <span className="min-w-0 flex-1 truncate">{thread.title} <span className="text-muted-foreground">{threadDetail(thread, panes)}</span></span>
             <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{threadAge(thread, now)}</span>
           </button>
