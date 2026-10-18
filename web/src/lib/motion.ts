@@ -92,6 +92,21 @@ export function useGoUp(): (parent: string) => void {
   };
 }
 
+/**
+ * The back control: back to the screen this one was opened from, as it was, which is the browser's Back,
+ * so the app's back and the system's agree. A screen nothing in the app opened (a link, a reload with no
+ * history, a launch from a notification) has none: `parent` replaces it, once, so the history never grows.
+ */
+export function useGoBack(): (parent: string) => void {
+  const navigate = useNavigate();
+  const { state } = useLocation();
+  return (parent) => {
+    armMotion("pop");
+    if (fromOf(state) !== undefined) void navigate(-1);
+    else void navigate(parent, { replace: true });
+  };
+}
+
 /** The very next navigation, started in this same task, moves this way: the back control's pop, a
  *  notification's push. Gone by the next microtask, so a click that ends up not navigating leaves nothing. */
 export function armMotion(motion: Motion): void {
