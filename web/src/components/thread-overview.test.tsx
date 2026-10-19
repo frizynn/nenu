@@ -35,7 +35,7 @@ beforeEach(() => {
 function setup(overrides: Partial<ThreadOverviewProps> = {}) {
   const parent = { title: "Checkout redesign", open: vi.fn() };
   const props: ThreadOverviewProps = {
-    thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22.4 }, parent, coordinating: false,
+    thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22 }, parent, coordinating: false,
     threads: siblings, onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW, ...overrides,
   };
   render(<ThreadOverview {...props} />);
@@ -120,9 +120,10 @@ it("on a coordinator's own pane, lists its threads with no way to open itself", 
 
 it("on the project coordinator's pane, names no coordinator above it", () => {
   setup({ thread: undefined, parent: undefined, coordinating: true,
-    pane: { paneId: "w1:p1", agent: "codex", status: "idle" } as ThreadOverviewProps["pane"] });
+    pane: { paneId: "w1:p1", agent: "codex", status: "idle" } as ThreadOverviewProps["pane"], reading: { model: "gpt-5.5" } });
   const card = screen.getByRole("region", { name: "This coordinator" });
   expect(within(card).queryByText("Coordinator")).not.toBeInTheDocument();
   expect(within(card).getByText("Idle")).toBeInTheDocument();
-  expect(within(card).getByText("Codex · Opus 5.5")).toBeInTheDocument();
+  expect(within(card).getByText("Codex · gpt-5.5")).toBeInTheDocument();
+  expect(within(card).queryByText("Pull request")).not.toBeInTheDocument();
 });

@@ -59,8 +59,8 @@ export interface SessionPanelLink {
   terminal: TerminalSlots | null;
   /** Open the panel on its Terminal tab. */
   showTerminal: () => void;
-  /** What the chat read of its agent's session, for the panel's Overview. */
-  report: (reading: SessionReading) => void;
+  /** What the chat read of its agent's session, for the Overview; given only where there is one. */
+  report?: (reading: SessionReading) => void;
 }
 
 /** The model and how full the context is, as the agent last reported them; absent while unknown. */
@@ -190,7 +190,6 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
       inspector.setOpen(true);
       inspector.setTab("terminal");
     },
-    report: inspector.setReading,
   };
 }
 

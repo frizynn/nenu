@@ -82,7 +82,7 @@ function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Dat
   const agent = thread?.agent ?? pane?.agent;
   const agentName = agent && agentLabel(agent);
   const model = reading.model && modelDisplayName(reading.model);
-  const percent = reading.contextPercent === undefined ? undefined : Math.round(Math.min(100, Math.max(0, reading.contextPercent)));
+  const percent = reading.contextPercent;
   return (
     <Card label={coordinating ? "This coordinator" : "This thread"}>
       <dl className="overview-body">
@@ -92,11 +92,12 @@ function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Dat
             <span className="truncate">{parent.title}</span><ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
         </Row>}
-        <Row name="Pull request">
+        {/* The project coordinator opens no pull request of its own. */}
+        {thread && <Row name="Pull request">
           {!pr ? <span className="text-muted-foreground">Not opened yet</span>
             : pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" className="overview-link">{prName(pr)}</a>
             : <span>{prName(pr)}</span>}
-        </Row>
+        </Row>}
         {agentName && <Row name="Agent"><span className="truncate">{[agentName, model].filter(Boolean).join(" · ")}</span></Row>}
         {percent !== undefined && <Row name="Context">
           <span className="text-xs tabular-nums text-muted-foreground">{percent}%</span>

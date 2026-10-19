@@ -133,12 +133,12 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
   const pr = sessionPr(data, paneId, thread);
-  // Who this pane answers to, a step up the tree: its parent coordinator, else the project's.
+  // Who this pane answers to, a step up the tree: its parent coordinator, else (as coordinatedThreads
+  // reads a parent it cannot find) the project's.
+  const live = (id?: string): id is string => id !== undefined && data.agents.some((pane) => pane.paneId === id);
+  const up = (title: string, nodeId: string, paneId?: string) => ({ title, open: () => goUp(live(paneId) ? panePath(paneId, data.session) : nodePath(project.slug, nodeId, data.session)) });
   const parentNode = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
-  const live = (id?: string) => id !== undefined && data.agents.some((pane) => pane.paneId === id);
-  const parent = !thread ? undefined : parentNode
-    ? { title: parentNode.title, open: () => goUp(live(parentNode.paneId) ? panePath(parentNode.paneId!, data.session) : nodePath(project.slug, parentNode.id, data.session)) }
-    : { title: project.name, open: () => goUp(live(project.coordinator?.paneId) ? panePath(project.coordinator!.paneId!, data.session) : nodePath(project.slug, "root", data.session)) };
+  const parent = !thread ? undefined : parentNode ? up(parentNode.title, parentNode.id, parentNode.paneId) : up(project.name, "root", project.coordinator?.paneId);
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
   const phoneTabs = !desk ? (
@@ -176,7 +176,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
         // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
         strip: phoneTabs ?? chips ?? (desk ? null : undefined),
         projectChips: { project, thread, threads: scope.threads, session: data.session, readOnly, onOpenPane: openPane, onOpenNode: openNode, onChanged: refresh },
-        sessionPanel: desk && !docked ? panelLink(inspector) : undefined,
+        sessionPanel: desk && !docked ? { ...panelLink(inspector), report: inspector.setReading } : undefined,
       })}
       {docked && (
         <DockedThread thread={docked} project={project} siblings={coordinatedThreads(project, docked.parentId === "root" ? undefined : docked.parentId)} data={data}
