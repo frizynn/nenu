@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ChatCircle, ChatCircleText, type IconComponent } from "@/components/ui/icon";
+import { Check, ChevronRight, CircleCheck, CircleDashed, CircleX, Eye, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ChatCircle, ChatCircleText, type IconComponent } from "@/components/ui/icon";
 
-import { ActivityPanel } from "@/components/activity/activity-panel";
-import { ProcessDetailView, type ProcessDetail } from "@/components/activity/processes";
 import { DiffStat } from "@/components/diff-stat";
 import { MergeDialog } from "@/components/merge-dialog";
 import { errorMessage } from "@/components/node-start";
 import { canMerge, threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
-import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { askOrgThreadPr, createOrgThreadPr } from "@/lib/api";
 import { setStatus } from "@/lib/status";
 import type { PrAction, ProjectThreadView, ProjectView } from "@/lib/types";
@@ -203,30 +200,5 @@ function PrActionButton({ project, thread, action, session, onMerge, onChanged }
       disabled={answer !== null} onClick={() => void press()}>
       {answer?.text ?? label}
     </Button>
-  );
-}
-
-/**
- * A Claude pane's background work: the Activity list, and a workflow or a command's output opened in
- * its place with Back. Reads only while mounted, so a closed tab costs nothing.
- */
-export function PaneActivity({ paneId, session, className }: { paneId: string; session?: string; className?: string }) {
-  const activity = useActivity(paneId, session);
-  const now = useActivityClock(activity.data);
-  const [detail, setDetail] = useState<ProcessDetail | null>(null);
-  if (detail) {
-    return (
-      <div className={cn("flex flex-col gap-3", className)}>
-        <button type="button" onClick={() => setDetail(null)} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 self-start rounded-md px-2 text-sm text-muted-foreground hover:text-foreground lg:min-h-8">
-          <ArrowLeft aria-hidden="true" className="size-4" />Back
-        </button>
-        <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={detail} now={now} onChange={setDetail} />
-      </div>
-    );
-  }
-  return (
-    <ActivityPanel className={className} data={activity.data} stale={activity.stale} now={now} onRetry={activity.refresh}
-      onOpenWorkflow={(runId, agentId) => setDetail({ kind: "workflow", runId, agentId: agentId ?? null })}
-      onOpenTask={(taskId) => setDetail({ kind: "task", taskId, title: activity.data?.available ? activity.data.tasks.find((t) => t.id === taskId)?.title ?? "Output" : "Output" })} />
   );
 }

@@ -157,7 +157,7 @@ the unit name; the Herdr action runs from anywhere.
   each read only while on screen, folded with ⌘⌥B
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
-  cards; model and context come from the chat's own reading, and the project's own views stay on its page
+  cards; model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0100](./.adr/0100-a-threads-panel-opens-on-its-overview.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside

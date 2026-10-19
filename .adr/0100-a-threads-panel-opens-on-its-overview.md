@@ -1,4 +1,4 @@
-# 0100. A thread's panel opens on its Overview; the project's views live on its page
+# 0100. A thread's panel opens on its Overview; the project's views leave it
 
 - **Status:** Accepted (2026-10-20). Supersedes [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md)
   and the Artifacts tab of [0075](./0075-a-desk-session-opens-with-its-own-panel.md) point 1.
@@ -26,14 +26,16 @@ as cards, one question each, under four tabs.
    above it.
 3. Model and context come from what the chat beside it already reads (`SessionPanelLink.report`);
    the panel reads nothing of its own for them. A value the agent has not reported is left out.
-4. The project's Notes, Agents, PRs and Context leave the panel; they belong on the project's page.
+4. The project's Notes, Agents, PRs and Context leave the panel. They belong on the project's page,
+   which does not draw Notes or Context yet; until it does, the bridge keeps `/api/org/tasks`,
+   `/api/org/status` and `/api/org/context` and their readers in `lib/api.ts` for it.
 5. Artifacts becomes a view of Files (Folder · Artifacts), still offered only where the pane has a
    conversation.
 
 ## Consequences
 
-- Beside a thread the person sees that thread first. The project's task list and context are one
-  step further away, on the project page.
+- Beside a thread the person sees that thread first. The project's task list and context have no desk
+  view until the project page draws them; its threads and PRs are already there.
 - No ids, history, New thread or New coordinator in the panel: those are the project page's.
 - Revisit point 4 only if the person keeps leaving a thread for the project page to read its task
   list as a habit.

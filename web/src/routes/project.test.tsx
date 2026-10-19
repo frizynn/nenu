@@ -140,7 +140,7 @@ it("merges a thread's PR from a phone's PRs tab only after confirming", async ()
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
 });
 
-/** The project's Agents, the first tab of a desk's session panel. */
+/** The pane's Overview, the first tab of a desk's session panel. */
 async function overviewPanel(user: ReturnType<typeof userEvent.setup>) {
   const panel = within(await screen.findByRole("complementary", { name: "Session panel" }));
   await user.click(panel.getByRole("tab", { name: "Overview" }));
@@ -173,7 +173,7 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
 describe("a wide screen, the thread's overview as the session panel's first tab", () => {
   beforeEach(() => { wide = true; });
 
-  it("draws no thread cards under the coordinator's chat, with the panel open or put away", async () => {
+  it("lists the coordinator's threads only in its panel, never as cards under its chat", async () => {
     const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
     const panel = await overviewPanel(user);
     expect(panel.getByRole("button", { name: /^Build/ })).toBeInTheDocument();

@@ -104,7 +104,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted |
 | [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md) | On a desk, the project is the session panel's first tab (supersedes 0075 point 2) | Superseded by 0100 |
 | [0082](./0082-a-codex-with-no-turn-has-nothing-to-link.md) | A Codex with no turn has nothing to link; one holding its rollout is that conversation (narrows 0022, adds to 0028) | Accepted |
-| [0100](./0100-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views live on its page (supersedes 0081) | Accepted |
+| [0100](./0100-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

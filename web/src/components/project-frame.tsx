@@ -187,8 +187,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       )}
       {panelShown && (
         <SessionInspector inspector={inspector} paneId={paneId} session={data.session} artifacts={data.agents.some((pane) => pane.paneId === paneId)} pr={pr}
-          overview={<Suspense fallback={null}><ThreadOverview thread={thread} pane={data.agents.find((pane) => pane.paneId === paneId)} paneId={paneId}
-            session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinator={scope.coordinating ? undefined : parent}
+          overview={<Suspense fallback={null}><ThreadOverview key={paneId} thread={thread} pane={data.agents.find((pane) => pane.paneId === paneId)} paneId={paneId}
+            session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinating={scope.coordinating}
             onShowChanges={() => inspector.setTab("changes")}
             onOpenThread={(candidate) => {
               if (!candidate.paneId) openNode(candidate.id);

@@ -35,7 +35,7 @@ beforeEach(() => {
 function setup(overrides: Partial<ThreadOverviewProps> = {}) {
   const parent = { title: "Checkout redesign", open: vi.fn() };
   const props: ThreadOverviewProps = {
-    thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22.4 }, parent, coordinator: parent,
+    thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22.4 }, parent, coordinating: false,
     threads: siblings, onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW, ...overrides,
   };
   render(<ThreadOverview {...props} />);
@@ -75,6 +75,19 @@ it("sums up the branch with its first files, and sends every tap to the Changes 
   expect(onShowChanges).toHaveBeenCalledTimes(3);
 });
 
+it("reads the branch again when the thread moves, keeping the last read on screen meanwhile", async () => {
+  const props: ThreadOverviewProps = { thread: flow, paneId: "w1:p1", reading: {}, coordinating: false, threads: [], onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW };
+  const { rerender } = render(<ThreadOverview {...props} />);
+  const card = () => screen.getByRole("region", { name: "Changes" });
+  expect(await within(card()).findByText("2 more files")).toBeInTheDocument();
+  diff = { ...diff, files: files(6), totals: { files: 6, additions: 21, deletions: 6 } } as PaneDiff;
+  rerender(<ThreadOverview {...props} thread={{ ...flow, updated: ago(1) }} />);
+  // The last read stays while the next is on its way, never "Reading the branch…".
+  expect(within(card()).getByText("2 more files")).toBeInTheDocument();
+  expect(await within(card()).findByText("1 more file")).toBeInTheDocument();
+  expect(reads).toEqual(["branch", "branch"]);
+});
+
 it("says when the branch changed nothing, and why it could not be read", async () => {
   diff = { ok: true, base: "main", head: "feat", source: "worktree", files: [], totals: { files: 0, additions: 0, deletions: 0 } };
   setup();
@@ -98,7 +111,7 @@ it("lists the coordinator's open threads, this one marked, each opening its own"
 });
 
 it("on a coordinator's own pane, lists its threads with no way to open itself", () => {
-  setup({ thread: { ...flow, id: "t-10", role: "coordinator" }, coordinator: undefined, threads: siblings });
+  setup({ thread: { ...flow, id: "t-10", role: "coordinator" }, coordinating: true, threads: siblings });
   expect(screen.getByRole("region", { name: "This coordinator" })).toBeInTheDocument();
   const card = screen.getByRole("region", { name: "Threads" });
   expect(within(card).queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
@@ -106,7 +119,7 @@ it("on a coordinator's own pane, lists its threads with no way to open itself", 
 });
 
 it("on the project coordinator's pane, names no coordinator above it", () => {
-  setup({ thread: undefined, parent: undefined, coordinator: undefined,
+  setup({ thread: undefined, parent: undefined, coordinating: true,
     pane: { paneId: "w1:p1", agent: "codex", status: "idle" } as ThreadOverviewProps["pane"] });
   const card = screen.getByRole("region", { name: "This coordinator" });
   expect(within(card).queryByText("Coordinator")).not.toBeInTheDocument();

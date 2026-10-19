@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ChevronRight, FileCode } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
-import { useDiffRead } from "@/components/diff-viewer";
+import { useDiffRead, type DiffRead } from "@/components/diff-viewer";
 import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import type { SessionPr, SessionReading } from "@/components/session-inspector";
@@ -10,7 +10,7 @@ import { fetchSessionDiff } from "@/lib/api";
 import { modelDisplayName } from "@/lib/model-display";
 import { coordinatorState, nodeState, STATE_LABEL, type NodeState } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
-import { SPAWN_AGENTS } from "@/lib/spawn";
+import { agentLabel } from "@/lib/spawn";
 import type { AgentView, ProjectThreadView } from "@/lib/types";
 
 /** The files the Changes card names before it sends the rest to the Changes tab. */
@@ -35,8 +35,8 @@ export interface ThreadOverviewProps {
   parent?: CoordinatorLink;
   /** The threads of the coordinator in the last card: this one's siblings, or a coordinator's own. */
   threads: readonly ProjectThreadView[];
-  /** The last card's coordinator; absent when the pane is that coordinator, so the threads are its own. */
-  coordinator?: CoordinatorLink;
+  /** The pane is a coordinator: the last card lists its own threads, not its parent's. */
+  coordinating: boolean;
   onShowChanges: () => void;
   onOpenThread: (thread: ProjectThreadView) => void;
   now?: number;
@@ -51,7 +51,8 @@ export function ThreadOverview(props: ThreadOverviewProps) {
   return (
     <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
       <ThisThread {...props} />
-      <ChangesCard paneId={props.paneId} session={props.session} onShow={props.onShowChanges} />
+      {/* Read again when the thread or its agent moves: a turn that ends has usually changed files. */}
+      <ChangesCard paneId={props.paneId} session={props.session} stamp={`${props.thread?.updated ?? ""}\0${props.pane?.status ?? ""}`} onShow={props.onShowChanges} />
       <CoordinatorCard {...props} />
     </div>
   );
@@ -75,15 +76,15 @@ function Row({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-function ThisThread({ thread, pane, pr, reading, parent, now = Date.now() }: ThreadOverviewProps) {
+function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Date.now() }: ThreadOverviewProps) {
   const state: NodeState = thread ? nodeState(thread) : (pane && coordinatorState(pane.status)) ?? "idle";
   const age = thread && threadAge(thread, now);
   const agent = thread?.agent ?? pane?.agent;
-  const agentName = agent && (SPAWN_AGENTS.find((candidate) => candidate.id === agent)?.label ?? agent);
+  const agentName = agent && agentLabel(agent);
   const model = reading.model && modelDisplayName(reading.model);
   const percent = reading.contextPercent === undefined ? undefined : Math.round(Math.min(100, Math.max(0, reading.contextPercent)));
   return (
-    <Card label={thread?.role === "coordinator" || !thread ? "This coordinator" : "This thread"}>
+    <Card label={coordinating ? "This coordinator" : "This thread"}>
       <dl className="overview-body">
         <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
         {parent && <Row name="Coordinator">
@@ -114,8 +115,12 @@ function prName(pr: SessionPr): string {
 }
 
 /** What the branch changed against where it started: the total and the first files, the diff a tap away. */
-function ChangesCard({ paneId, session, onShow }: { paneId: string; session?: string; onShow: () => void }) {
-  const read = useDiffRead(`${paneId}\0${session ?? ""}`, true, (signal) => fetchSessionDiff(paneId, "branch", session, signal));
+function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; session?: string; stamp: string; onShow: () => void }) {
+  const latest = useDiffRead(`${paneId}\0${session ?? ""}\0${stamp}`, true, (signal) => fetchSessionDiff(paneId, "branch", session, signal));
+  // A read again keeps the last one on screen until it lands, so the card does not blink on every turn.
+  const settled = useRef<DiffRead>(latest);
+  if (latest.state !== "loading") settled.current = latest;
+  const read = settled.current;
   const diff = read.state === "read" && read.diff.ok ? read.diff : undefined;
   const files = diff?.files ?? [];
   const rest = (diff?.totals.files ?? 0) - Math.min(files.length, FILES_SHOWN);
@@ -147,9 +152,10 @@ function ChangesCard({ paneId, session, onShow }: { paneId: string; session?: st
 }
 
 /** The coordinator this thread belongs to and its other open threads, this one marked. */
-function CoordinatorCard({ thread, threads, coordinator, paneId, onOpenThread, now = Date.now() }: ThreadOverviewProps) {
+function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpenThread, now = Date.now() }: ThreadOverviewProps) {
   const open = threads.filter(isOpenThread);
   if (open.length === 0) return null;
+  const coordinator = coordinating ? undefined : parent;
   return (
     <Card label={coordinator ? `Coordinator ${coordinator.title}` : "Threads"} head={coordinator ? <>
       <span className="flex min-w-0 flex-1 flex-col">

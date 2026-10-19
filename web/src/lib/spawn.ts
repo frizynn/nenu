@@ -15,7 +15,8 @@ export const SPAWN_AGENTS: ReadonlyArray<{ id: SpawnAgent; label: string }> = [
   { id: "codex", label: "Codex" },
   { id: "shell", label: "Shell" },
 ];
-export const agentLabel = (agent: SpawnAgent) => SPAWN_AGENTS.find((a) => a.id === agent)!.label;
+/** How an agent is named to the person; one Nenu cannot start keeps the name Herdr gave it. */
+export const agentLabel = (agent: string) => SPAWN_AGENTS.find((a) => a.id === agent)?.label ?? agent;
 
 /** `message` prefills the first message, e.g. from the prompt on Home. */
 export type SpawnTarget = { kind: "tab"; workspaceId: string; message?: string } | { kind: "workspace"; message?: string };
