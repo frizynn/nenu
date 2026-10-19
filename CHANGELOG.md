@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-10-20
+
+### Added
+
+- On a desk, a project pane's panel opens on Overview: this thread's state, coordinator, pull request, agent and context, its changes, and its coordinator's open threads (53c833d6, ef1c9bda).
+
+### Changed
+
+- The panel's tabs are Overview, Changes, Files and Terminal; Artifacts is a view inside Files (53c833d6).
+- The project's Notes, Agents, PRs and Context are no longer in the panel (53c833d6).
+- The Overview's changes refresh when the thread or its agent moves (98b173da).
+
 ## [1.28.0] - 2026-10-19
 
 ### Added
