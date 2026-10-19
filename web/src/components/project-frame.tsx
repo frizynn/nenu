@@ -13,8 +13,8 @@ import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
-// The Project tab is a desk's alone: a phone never loads it.
-const ProjectPanel = lazy(() => import("./project-panel").then((module) => ({ default: module.ProjectPanel })));
+// The Overview tab is a desk's alone: a phone never loads it.
+const ThreadOverview = lazy(() => import("./thread-overview").then((module) => ({ default: module.ThreadOverview })));
 
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {
@@ -58,7 +58,7 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
 
 /**
  * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
- * the chat, with the project as its first tab, or docks a thread there (`?thread=`); the
+ * the chat, with the thread's overview as its first tab, or docks a thread there (`?thread=`); the
  * sidebar lists the threads, so the chat carries none of them. On a phone a coordinator and its threads
  * switch between Chat, Threads and PRs in place, in the same band under the title, keeping the chat
  * mounted so its draft and scroll survive; every chat counts the threads around it, their pull requests
@@ -133,6 +133,12 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
   const pr = sessionPr(data, paneId, thread);
+  // Who this pane answers to, a step up the tree: its parent coordinator, else the project's.
+  const parentNode = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
+  const live = (id?: string) => id !== undefined && data.agents.some((pane) => pane.paneId === id);
+  const parent = !thread ? undefined : parentNode
+    ? { title: parentNode.title, open: () => goUp(live(parentNode.paneId) ? panePath(parentNode.paneId!, data.session) : nodePath(project.slug, parentNode.id, data.session)) }
+    : { title: project.name, open: () => goUp(live(project.coordinator?.paneId) ? panePath(project.coordinator!.paneId!, data.session) : nodePath(project.slug, "root", data.session)) };
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
   const phoneTabs = !desk ? (
@@ -181,11 +187,14 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       )}
       {panelShown && (
         <SessionInspector inspector={inspector} paneId={paneId} session={data.session} artifacts={data.agents.some((pane) => pane.paneId === paneId)} pr={pr}
-          project={<Suspense fallback={null}><ProjectPanel project={project} threads={scope.threads} coordinator={scope.coordinator}
-            activityPaneId={scope.coordinatorPane} panes={data.agents} session={data.session} currentPaneId={paneId} readOnly={readOnly}
-            section={inspector.section} onSection={inspector.setSection}
-            onOpenPane={(id) => { if (scope.coordinating && scope.threads.some((candidate) => candidate.paneId === id)) setDocked(id); else openPane(id); }}
-            onOpenNode={openNode} onChanged={refresh} /></Suspense>} />
+          overview={<Suspense fallback={null}><ThreadOverview thread={thread} pane={data.agents.find((pane) => pane.paneId === paneId)} paneId={paneId}
+            session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinator={scope.coordinating ? undefined : parent}
+            onShowChanges={() => inspector.setTab("changes")}
+            onOpenThread={(candidate) => {
+              if (!candidate.paneId) openNode(candidate.id);
+              else if (scope.coordinating && live(candidate.paneId)) setDocked(candidate.paneId);
+              else openPane(candidate.paneId);
+            }} /></Suspense>} />
       )}
     </div>
   );

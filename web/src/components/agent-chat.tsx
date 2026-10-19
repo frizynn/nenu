@@ -933,6 +933,10 @@ export function AgentChat({
 
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
+  const report = sessionPanel?.report;
+  const reportedModel = telemetry?.model;
+  const contextPercent = telemetry?.context?.usedPercent;
+  useEffect(() => report?.({ model: reportedModel, contextPercent }), [report, reportedModel, contextPercent]);
   const telemetryProps = {
     telemetry,
     stale: conversation.error || connecting,

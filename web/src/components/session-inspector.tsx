@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { PanelRightOpen } from "@/components/ui/icon";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -10,21 +10,17 @@ import { cn } from "@/lib/utils";
 // The panel is its own chunk: a phone never loads it, a desk on first open.
 const SessionPanel = lazy(() => import("./inspector-panels"));
 
-/** The panel's tabs; Project only for a pane that belongs to one. */
-export type InspectorTab = "project" | "changes" | "files" | "artifacts" | "terminal";
-export const INSPECTOR_TABS: readonly InspectorTab[] = ["project", "changes", "files", "artifacts", "terminal"];
-
-/** The views of the Project tab (project-panel.tsx). */
-export type ProjectSection = "notes" | "agents" | "prs" | "context";
-export const PROJECT_SECTIONS: readonly ProjectSection[] = ["notes", "agents", "prs", "context"];
+/** The panel's tabs; Overview only for a pane that belongs to a project. */
+export type InspectorTab = "overview" | "changes" | "files" | "terminal";
+export const INSPECTOR_TABS: readonly InspectorTab[] = ["overview", "changes", "files", "terminal"];
 
 /** The breakpoint where the workbench shows its sidebar; the panel exists only from there. */
 const DESK = "(min-width: 1024px)";
 const STORE_KEY = "nenu:session-panel:v1";
 export const PANEL_WIDTH = { min: 320, initial: 460, max: 760, step: 16 } as const;
 
-interface Stored { open: boolean; width: number; tab: InspectorTab; section: ProjectSection }
-const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "project", section: "notes" };
+interface Stored { open: boolean; width: number; tab: InspectorTab }
+const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "overview" };
 export const clampWidth = (width: number) => Math.round(Math.min(PANEL_WIDTH.max, Math.max(PANEL_WIDTH.min, width)));
 
 function readStored(): Stored {
@@ -34,7 +30,6 @@ function readStored(): Stored {
       open: typeof raw?.open === "boolean" ? raw.open : INITIAL.open,
       width: typeof raw?.width === "number" ? clampWidth(raw.width) : INITIAL.width,
       tab: INSPECTOR_TABS.includes(raw?.tab as InspectorTab) ? raw!.tab! : INITIAL.tab,
-      section: PROJECT_SECTIONS.includes(raw?.section as ProjectSection) ? raw!.section! : INITIAL.section,
     };
   } catch {
     return INITIAL;
@@ -64,6 +59,14 @@ export interface SessionPanelLink {
   terminal: TerminalSlots | null;
   /** Open the panel on its Terminal tab. */
   showTerminal: () => void;
+  /** What the chat read of its agent's session, for the panel's Overview. */
+  report: (reading: SessionReading) => void;
+}
+
+/** The model and how full the context is, as the agent last reported them; absent while unknown. */
+export interface SessionReading {
+  model?: string;
+  contextPercent?: number;
 }
 
 export interface SessionInspectorState {
@@ -73,10 +76,8 @@ export interface SessionInspectorState {
   width: number;
   /** The tab last picked; the panel shows Changes instead where it is not offered. */
   tab: InspectorTab;
-  section: ProjectSection;
   setOpen: (open: boolean) => void;
   setTab: (tab: InspectorTab) => void;
-  setSection: (section: ProjectSection) => void;
   setWidth: (width: number) => void;
   /** The panel's element, which folding slides out before it unmounts. */
   panelRef: React.RefObject<HTMLElement | null>;
@@ -87,6 +88,9 @@ export interface SessionInspectorState {
   /** The Terminal tab's places, published by the tab while it is on screen. */
   terminal: TerminalSlots | null;
   setTerminal: (slots: TerminalSlots | null) => void;
+  /** The chat's reading of its session, published through `panelLink`. */
+  reading: SessionReading;
+  setReading: (reading: SessionReading) => void;
 }
 
 /**
@@ -102,6 +106,10 @@ export function useSessionInspector(): SessionInspectorState {
   /** The fold under way, cancelled by an open that comes before it ends. */
   const folding = useRef<Animation | null>(null);
   const [terminal, setTerminal] = useState<TerminalSlots | null>(null);
+  const [reading, setReadingState] = useState<SessionReading>({});
+  // Every poll hands over a fresh object; only a changed value renders the panel again.
+  const setReading = useCallback((next: SessionReading) => setReadingState((current) =>
+    current.model === next.model && current.contextPercent === next.contextPercent ? current : next), []);
   const pressed = useRef(false);
   const update = (patch: Partial<Stored>) => setStored((current) => {
     const next = { ...current, ...patch };
@@ -160,16 +168,16 @@ export function useSessionInspector(): SessionInspectorState {
     open: stored.open,
     width: stored.width,
     tab: stored.tab,
-    section: stored.section,
     setOpen,
     setTab: (tab) => update({ tab }),
-    setSection: (section) => update({ section }),
     setWidth: (width) => update({ width: clampWidth(width) }),
     panelRef,
     entering,
     toggleRef,
     terminal,
     setTerminal,
+    reading,
+    setReading,
   };
 }
 
@@ -182,6 +190,7 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
       inspector.setOpen(true);
       inspector.setTab("terminal");
     },
+    report: inspector.setReading,
   };
 }
 
