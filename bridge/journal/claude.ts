@@ -267,7 +267,7 @@ function toolDetails(name: string, input: unknown): Pick<ToolPart, "description"
   const text = (value: unknown) => typeof value === "string" ? value : "";
   if (name === "Bash") {
     const description = stripAnsi(text(o.description)).replace(/\s+/g, " ").trim();
-    return description ? { description: description.slice(0, 200) } : {};
+    return description ? { description: [...description].slice(0, 200).join("") } : {};
   }
   // One occurrence's lines would undercount an edit applied everywhere.
   if (name === "Edit" && o.replace_all !== true) return { diff: editDiff(text(o.old_string), text(o.new_string)) };

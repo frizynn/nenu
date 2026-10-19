@@ -54,9 +54,12 @@ describe("a desk's work log", () => {
     expect(within(body).queryByText(/Exit code/)).not.toBeInTheDocument();
   });
 
-  it("opens the run that holds find's hit", () => {
+  it("opens the run that holds find's hit, and one tap closes it", async () => {
     render(<TranscriptView entries={entries} activityStatus="done" query="requireRole" />);
-    expect(screen.getByRole("button", { name: /^Ran 1 command, read 1 file/ })).toHaveAttribute("aria-expanded", "true");
+    const run = screen.getByRole("button", { name: /^Ran 1 command, read 1 file/ });
+    expect(run).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(run);
+    expect(run).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps the step in progress outside every fold", () => {

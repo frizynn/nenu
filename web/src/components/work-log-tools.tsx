@@ -31,7 +31,7 @@ export function containsQuery(text: string, query: string): boolean {
 }
 
 function matches(part: ToolPart, query: string) {
-  return [part.name, part.summary, part.description ?? "", part.result?.text ?? ""].some((text) => containsQuery(text, query));
+  return [part.name, part.summary, part.result?.text ?? ""].some((text) => containsQuery(text, query));
 }
 
 /** `text` with find's hits marked; `current` when it belongs to find's current match, whose hits go solid. */
@@ -302,9 +302,10 @@ const ROW_CHEVRON = "size-3.5 shrink-0 text-subtle-foreground transition-transfo
 
 /** One step as a row of its run's table; it opens onto its command and output, a thought onto its words. */
 function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; query: string; focused: boolean; active: boolean; waiting: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+  // A tap wins over opening on its own (find's hit, the focused entry), so a row a search opened closes on one tap.
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const contentId = useId();
-  const open = expanded || focused || stepMatches(step, query);
+  const open = expanded ?? (focused || stepMatches(step, query));
   const { part } = step;
   const tool = part.kind === "tool" ? part : null;
   const thought = part.kind === "thinking" ? part : null;
@@ -314,7 +315,7 @@ function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; qu
   const failed = !!tool?.result?.isError;
   const diff = tool?.diff && !failed ? { additions: tool.diff.added, deletions: tool.diff.removed } : null;
   return <div data-step-row data-tool={tool ? `${step.entry}:${step.index}` : undefined} className="min-w-0">
-    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)} className={ROW}>
+    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded(!open)} className={ROW}>
       <span className="min-w-14 shrink-0 whitespace-nowrap text-muted-foreground">{verb}</span>
       {tool ? <RowTarget part={tool} query={query} focused={focused} />
         : <span className="min-w-0 flex-1 truncate italic text-muted-foreground"><Highlight text={firstLine(thought!.text)} query={query} current={focused} /></span>}
@@ -336,9 +337,9 @@ function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; qu
  * or the focused entry is inside.
  */
 export function WorkSteps({ steps, query, focusedUuid, active, asked }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const contentId = useId();
-  const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query));
+  const open = expanded ?? steps.some((step) => step.entry === focusedUuid || stepMatches(step, query));
   const diff = stepsDiff(steps);
   const failures = steps.filter(({ part }) => part.kind === "tool" && part.result?.isError).length;
   // An entry's scroll marker sits on its first row, wherever its run is.
