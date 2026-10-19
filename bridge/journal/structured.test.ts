@@ -38,7 +38,7 @@ describe("Claude structured rows", () => {
     ] } }]).entries()[0]!.parts;
     expect(parts.map((part) => part.kind === "tool" ? [part.description, part.diff] : null)).toEqual([
       ["Run the tests", undefined], [undefined, { added: 2, removed: 1 }], [undefined, { added: 1, removed: 3 }],
-      [undefined, { added: 2, removed: 0 }], [undefined, undefined],
+      [undefined, undefined], [undefined, undefined],
     ]);
   });
 

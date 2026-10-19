@@ -245,7 +245,6 @@ function sentFiles(row: RawRow): Array<{ kind: "file"; path: string }> {
   });
 }
 
-/** The hint a pending AskUserQuestion or ExitPlanMode gives a dialog the screen detects. */
 const lines = (text: string) => text === "" ? [] : text.replace(/\n$/, "").split("\n");
 
 /** What an edit changes, in lines: the common head and tail of old and new are the lines it keeps. */
@@ -258,24 +257,28 @@ function editDiff(before: string, after: string): { added: number; removed: numb
   return { added: next.length - head - tail, removed: old.length - head - tail };
 }
 
-/** A call's own account of itself: a command's description, an edit's lines added and removed. */
+/**
+ * A call's own account of itself: a command's description, an edit's lines added and removed. A Write
+ * gets no count: its input cannot say what it replaced.
+ */
 function toolDetails(name: string, input: unknown): Pick<ToolPart, "description" | "diff"> {
   if (input === null || typeof input !== "object") return {};
   const o = input as Record<string, unknown>;
   const text = (value: unknown) => typeof value === "string" ? value : "";
   if (name === "Bash") {
-    const description = text(o.description).replace(/\s+/g, " ").trim();
+    const description = stripAnsi(text(o.description)).replace(/\s+/g, " ").trim();
     return description ? { description: description.slice(0, 200) } : {};
   }
-  if (name === "Edit") return { diff: editDiff(text(o.old_string), text(o.new_string)) };
+  // One occurrence's lines would undercount an edit applied everywhere.
+  if (name === "Edit" && o.replace_all !== true) return { diff: editDiff(text(o.old_string), text(o.new_string)) };
   if (name === "MultiEdit" && Array.isArray(o.edits)) return { diff: o.edits.reduce<{ added: number; removed: number }>((sum, edit) => {
     const one = edit !== null && typeof edit === "object" ? editDiff(text(edit.old_string), text(edit.new_string)) : { added: 0, removed: 0 };
     return { added: sum.added + one.added, removed: sum.removed + one.removed };
   }, { added: 0, removed: 0 }) };
-  if (name === "Write") return { diff: { added: lines(text(o.content)).length, removed: 0 } };
   return {};
 }
 
+/** The hint a pending AskUserQuestion or ExitPlanMode gives a dialog the screen detects. */
 function questionHint(name: string, input: unknown, ts: string): InteractionHint | undefined {
   const observedAt = Date.parse(ts) || 0;
   const questions = askUserQuestions(name, input);

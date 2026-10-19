@@ -249,11 +249,11 @@ function ActivityLog({ entries, query, focusedUuid, active, asked, live, classNa
  * A desk's turn: the agent's words between its runs of steps, each run one fold, and the step in
  * progress below them all. Nothing folds the turn as a whole, so what the agent said stays in reach.
  */
-function DeskWork({ turn, query, focusedUuid, asked, live, liveMarker }: { turn: WorkTurn; query: string; focusedUuid?: string; asked?: string; live: LiveStep | null; liveMarker?: string }) {
+function DeskWork({ turn, query, focusedUuid, waiting, asked, live, liveMarker }: { turn: WorkTurn; query: string; focusedUuid?: string; waiting: boolean; asked?: string; live: LiveStep | null; liveMarker?: string }) {
   const duration = turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
   return <>
     {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
-      ? <WorkSteps key={segment.id} steps={segment.steps} query={query} focusedUuid={focusedUuid} active={turn.active || !!asked} asked={asked} />
+      ? <WorkSteps key={segment.id} steps={segment.steps} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
       : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
           className={cn("space-y-1.5 px-0.5 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
           {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
@@ -316,7 +316,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk 
   </div>;
   if (desk) return <div className="space-y-3" data-work-turn={turn.id}>
     {questions}
-    <DeskWork turn={turn} query={query} focusedUuid={focusedUuid} asked={asked} live={live} liveMarker={liveMarker} />
+    <DeskWork turn={turn} query={query} focusedUuid={focusedUuid} waiting={waiting} asked={asked} live={live} liveMarker={liveMarker} />
     {answer}
     {endTime && !turn.answer && <p className="text-footnote text-muted-foreground"><time dateTime={end}>{endTime}</time></p>}
     <ArtifactCards paths={delivered} />

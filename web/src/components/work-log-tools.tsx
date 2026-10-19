@@ -31,7 +31,7 @@ export function containsQuery(text: string, query: string): boolean {
 }
 
 function matches(part: ToolPart, query: string) {
-  return [part.name, part.summary, part.result?.text ?? ""].some((text) => containsQuery(text, query));
+  return [part.name, part.summary, part.description ?? "", part.result?.text ?? ""].some((text) => containsQuery(text, query));
 }
 
 /** `text` with find's hits marked; `current` when it belongs to find's current match, whose hits go solid. */
@@ -315,14 +315,14 @@ function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; qu
   const diff = tool?.diff && !failed ? { additions: tool.diff.added, deletions: tool.diff.removed } : null;
   return <div data-step-row data-tool={tool ? `${step.entry}:${step.index}` : undefined} className="min-w-0">
     <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)} className={ROW}>
-      <span className="w-14 shrink-0 text-muted-foreground">{verb}</span>
+      <span className="min-w-14 shrink-0 whitespace-nowrap text-muted-foreground">{verb}</span>
       {tool ? <RowTarget part={tool} query={query} focused={focused} />
         : <span className="min-w-0 flex-1 truncate italic text-muted-foreground"><Highlight text={firstLine(thought!.text)} query={query} current={focused} /></span>}
       {failed ? <FailureChip code={commandOutput(tool!.result!.text).code} /> : asking ? <WaitingChip /> : diff && <DiffStat diff={diff} className="text-caption" />}
       {tool?.result?.truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
       {open ? <ChevronDown aria-hidden="true" className={ROW_CHEVRON} /> : <ChevronRight aria-hidden="true" className={ROW_CHEVRON} />}
     </button>
-    {open && <div id={contentId} className="min-w-0 px-3.5 pb-3.5 pl-[5.25rem]">
+    {open && <div id={contentId} className="min-w-0 px-3.5 pb-3.5 pl-[5.125rem]">
       {tool ? <StepBody part={tool} query={query} focused={focused} waiting={asking} active={active} />
         : <div className="text-footnote text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={thought!.text} query={query} current={focused} />
           {thought!.truncated && <p>… truncated</p>}</div>}
