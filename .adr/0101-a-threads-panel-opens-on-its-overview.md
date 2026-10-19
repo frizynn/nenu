@@ -1,4 +1,4 @@
-# 0100. A thread's panel opens on its Overview; the project's views leave it
+# 0101. A thread's panel opens on its Overview; the project's views leave it
 
 - **Status:** Accepted (2026-10-20). Supersedes [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md)
   and the Artifacts tab of [0075](./0075-a-desk-session-opens-with-its-own-panel.md) point 1.

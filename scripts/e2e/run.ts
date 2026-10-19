@@ -1896,7 +1896,7 @@ async function inspector(before: boolean): Promise<void> {
     if (!before) {
       const { page, close } = await open(DESKTOP, herd.working);
       steps["desktop-changes-open"] = log;
-      // A project's session opens its panel on Overview (ADR 0100); Changes is the next tab.
+      // A project's session opens its panel on Overview (ADR 0101); Changes is the next tab.
       await panel(page).getByRole("tab", { name: /Changes/ }).click();
       await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
       await step("desktop-changes", page);

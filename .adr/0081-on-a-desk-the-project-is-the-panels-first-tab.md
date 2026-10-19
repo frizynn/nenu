@@ -1,6 +1,6 @@
 # 0081. On a desk, the project is the session panel's first tab
 
-- **Status:** Superseded by [0100](./0100-a-threads-panel-opens-on-its-overview.md). Accepted (2026-10-15).
+- **Status:** Superseded by [0101](./0101-a-threads-panel-opens-on-its-overview.md). Accepted (2026-10-15).
   Supersedes point 2 of ADR 0075, whose own condition for revisiting it was met.
 - **Trail:** `web/src/components/session-inspector.tsx` · `web/src/components/inspector-panels.tsx` ·
   `web/src/components/project-panel.tsx` · `bridge/org-cli.ts` · `bridge/routes/org.ts`
