@@ -1,5 +1,5 @@
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import { Sparkle, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, ChatCircleDots, Search, SquareTerminal, Wrench, type IconComponent } from "@/components/ui/icon";
+import { Sparkle, ChevronDown, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, ChatCircleDots, Search, SquareTerminal, Wrench, type IconComponent } from "@/components/ui/icon";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -7,7 +7,8 @@ import { IMAGE_EXTENSION, imageLabel } from "@/lib/message-images";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { describeTool, firstLine, QUESTION_STEP, type LiveStep, type StepKind, type ToolStepDescription } from "@/lib/work-timeline";
+import { commandOutput, describeTool, firstLine, QUESTION_STEP, stepsDiff, stepsSummary, type LiveStep, type StepKind, type ToolStepDescription, type WorkStep } from "@/lib/work-timeline";
+import { DiffStat } from "./diff-stat";
 import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
@@ -247,5 +248,147 @@ export function LiveStepRow({ step, query, focused, marker, waiting = false }: {
     {step.part.kind === "tool"
       ? <ToolStep id={`${step.entry}:${step.index}`} part={step.part} owner={step.entry} query={query} active focused={focused} live={step} waiting={waiting} />
       : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} live={step} />}
+  </div>;
+}
+
+// On a desk, a turn reads as Claude Code's does: the agent's words at prose size, and between two of
+// them one quiet line for the steps it took. Open, the line is a table, one row per step: its verb in
+// grey, what it touched in small monospace (or the call's own description), and a row opens onto its
+// command and its output, in blocks of their own. Nothing of a step is ever drawn at prose size.
+
+/** Whether a step holds the searched words: its fold opens, so find's hit is on screen. */
+function stepMatches(step: WorkStep, query: string) {
+  return step.part.kind === "tool" ? matches(step.part, query) : containsQuery(step.part.text, query);
+}
+
+/** A failed step's code, else that it failed, in the destructive tint. */
+function FailureChip({ code }: { code?: number }) {
+  return <span className="shrink-0 rounded-full bg-destructive/15 px-2 text-caption font-medium text-destructive">{code !== undefined ? `exit ${code}` : "Failed"}</span>;
+}
+
+const BLOCK = "min-w-0 overflow-hidden rounded-lg border bg-background";
+const BLOCK_TEXT = "max-h-96 overflow-y-auto px-3 py-2 font-mono text-caption leading-5 text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]";
+
+/** What a call ran and what it answered, verbatim: never Markdown (the XSS boundary), never at prose size. */
+function StepBody({ part, query, focused, waiting, active }: { part: ToolPart; query: string; focused: boolean; waiting: boolean; active: boolean }) {
+  const step = describeCall(part);
+  const { code, output } = commandOutput(part.result?.text ?? "");
+  const pending = waiting ? "Waiting on you" : active ? "Running…" : "No output recorded";
+  return <div className="min-w-0 space-y-2">
+    {part.summary && <pre className={cn(BLOCK, BLOCK_TEXT)}>{step.kind === "terminal" && <span aria-hidden="true" className="text-subtle-foreground">$ </span>}<Highlight text={part.summary} query={query} current={focused} /></pre>}
+    <div className={BLOCK}>
+      <div className="flex items-center justify-between border-b px-3 py-1 text-caption text-muted-foreground">
+        <span>Output</span>{code !== undefined && <span>exit {code}</span>}
+      </div>
+      {part.result ? <pre className={BLOCK_TEXT}><Highlight text={output} query={query} current={focused} />{part.result.truncated && <span className="text-subtle-foreground">{"\n… output truncated"}</span>}</pre>
+        : <p className="px-3 py-2 text-caption text-muted-foreground">{pending}</p>}
+    </div>
+  </div>;
+}
+
+/** What a desk's row says it acted on: the call's description, else its target in small monospace. */
+function RowTarget({ part, query, focused }: { part: ToolPart; query: string; focused: boolean }) {
+  const cwd = useContext(PaneCwdContext);
+  const step = describeCall(part);
+  if (part.description) return <span className="min-w-0 flex-1 truncate text-foreground"><Highlight text={part.description} query={query} current={focused} /></span>;
+  const text = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
+  return <span className={cn("min-w-0 flex-1 truncate", step.target === "text" || step.target === "title" ? "text-foreground" : "font-mono text-caption text-muted-foreground")}>
+    <Highlight text={text} query={query} current={focused} />
+  </span>;
+}
+
+const ROW = "group flex w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-footnote";
+const ROW_CHEVRON = "size-3.5 shrink-0 text-subtle-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none";
+
+/** One step as a row of its run's table; it opens onto its command and output, a thought onto its words. */
+function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; query: string; focused: boolean; active: boolean; waiting: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const open = expanded || focused || stepMatches(step, query);
+  const { part } = step;
+  const tool = part.kind === "tool" ? part : null;
+  const thought = part.kind === "thinking" ? part : null;
+  const call = tool && describeCall(tool);
+  const asking = waiting && !tool?.result;
+  const verb = !call ? "Thought" : asking ? call.ask : !tool!.result && active ? call.doing : call.done;
+  const failed = !!tool?.result?.isError;
+  const diff = tool?.diff && !failed ? { additions: tool.diff.added, deletions: tool.diff.removed } : null;
+  return <div data-step-row data-tool={tool ? `${step.entry}:${step.index}` : undefined} className="min-w-0">
+    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)} className={ROW}>
+      <span className="w-14 shrink-0 text-muted-foreground">{verb}</span>
+      {tool ? <RowTarget part={tool} query={query} focused={focused} />
+        : <span className="min-w-0 flex-1 truncate italic text-muted-foreground"><Highlight text={firstLine(thought!.text)} query={query} current={focused} /></span>}
+      {failed ? <FailureChip code={commandOutput(tool!.result!.text).code} /> : asking ? <WaitingChip /> : diff && <DiffStat diff={diff} className="text-caption" />}
+      {tool?.result?.truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
+      {open ? <ChevronDown aria-hidden="true" className={ROW_CHEVRON} /> : <ChevronRight aria-hidden="true" className={ROW_CHEVRON} />}
+    </button>
+    {open && <div id={contentId} className="min-w-0 px-3.5 pb-3.5 pl-[5.25rem]">
+      {tool ? <StepBody part={tool} query={query} focused={focused} waiting={asking} active={active} />
+        : <div className="text-footnote text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={thought!.text} query={query} current={focused} />
+          {thought!.truncated && <p>… truncated</p>}</div>}
+    </div>}
+  </div>;
+}
+
+/**
+ * The steps between two of the agent's texts, as one grey line ("Ran 4 commands, read 2 files" and
+ * the lines its edits changed). It opens onto the table of its steps, and on its own when find's hit
+ * or the focused entry is inside.
+ */
+export function WorkSteps({ steps, query, focusedUuid, active, asked }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query));
+  const diff = stepsDiff(steps);
+  const failures = steps.filter(({ part }) => part.kind === "tool" && part.result?.isError).length;
+  // An entry's scroll marker sits on its first row, wherever its run is.
+  const marked = new Set<string>();
+  return <div data-work-steps className="min-w-0 space-y-2">
+    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded(!open)}
+      className="group flex min-h-8 w-fit max-w-full min-w-0 items-center gap-1.5 text-left text-footnote text-muted-foreground hover:text-foreground">
+      <span className="min-w-0 truncate">{stepsSummary(steps)}</span>
+      {diff && <DiffStat diff={diff} className="rounded-md bg-muted px-1.5 text-caption" />}
+      {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
+      {open ? <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />}
+    </button>
+    {open && <ol id={contentId} data-work-log className="min-w-0 divide-y overflow-hidden rounded-xl border bg-card/40 select-text">
+      {steps.map((step) => {
+        const first = !marked.has(step.entry);
+        marked.add(step.entry);
+        const focused = step.entry === focusedUuid;
+        return <li key={`${step.entry}:${step.index}`} data-turn={first ? step.entry : undefined} className={focused ? "ring-2 ring-inset ring-primary/60" : undefined}>
+          <StepRow step={step} query={query} focused={focused} active={active} waiting={asked === `${step.entry}:${step.index}`} />
+        </li>;
+      })}
+    </ol>}
+  </div>;
+}
+
+/**
+ * A desk's running step, below every fold: the live glyph, its verb, what it does (the call's own
+ * description when it has one) and how long it has run. It opens onto its command while it runs.
+ */
+export function DeskLiveStep({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const { part } = step;
+  const call = part.kind === "tool" ? describeCall(part) : null;
+  const open = expanded || focused;
+  const described = part.kind === "tool" && !!part.description;
+  const what = part.kind === "tool" ? part.description || call!.text : firstLine(part.text);
+  return <div data-live-step data-turn={marker} className={cn("min-w-0", focused && marker && "rounded ring-2 ring-primary/60")}>
+    <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)}
+      className="flex min-h-8 w-full min-w-0 items-center gap-2 text-left text-footnote text-muted-foreground hover:text-foreground">
+      {waiting ? <StepIcon kind={call?.kind ?? "thinking"} /> : <LiveGlyph />}
+      <span className="shrink-0 text-foreground">{!call ? "Thinking" : waiting ? call.ask : call.doing}</span>
+      <span className={cn("min-w-0 truncate", !call && "italic", call && !described && call.target !== "text" && call.target !== "title" && "font-mono text-caption")}>
+        <Highlight text={what} query={query} current={focused} />
+      </span>
+      {waiting ? <WaitingChip /> : step.since && <span className="shrink-0 text-subtle-foreground">· <Elapsed since={step.since} /></span>}
+    </button>
+    {open && <div id={contentId} className="min-w-0 pt-1 pl-6">
+      {part.kind === "tool" ? <StepBody part={part} query={query} focused={focused} waiting={waiting} active />
+        : <div className="text-footnote text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={part.text} query={query} current={focused} /></div>}
+    </div>}
   </div>;
 }

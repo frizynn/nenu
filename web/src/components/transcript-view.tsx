@@ -14,9 +14,10 @@ import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { searchableText } from "@/lib/transcript-search";
-import { containsQuery, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages } from "@/components/work-log-tools";
+import { containsQuery, DeskLiveStep, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages, WorkSteps } from "@/components/work-log-tools";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
-import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
+import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, workSegments, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // Renders an agent transcript — the conversation history a Claude pane's terminal structurally
@@ -244,7 +245,26 @@ function ActivityLog({ entries, query, focusedUuid, active, asked, live, classNa
   </ol>;
 }
 
-function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean }) {
+/**
+ * A desk's turn: the agent's words between its runs of steps, each run one fold, and the step in
+ * progress below them all. Nothing folds the turn as a whole, so what the agent said stays in reach.
+ */
+function DeskWork({ turn, query, focusedUuid, asked, live, liveMarker }: { turn: WorkTurn; query: string; focusedUuid?: string; asked?: string; live: LiveStep | null; liveMarker?: string }) {
+  const duration = turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
+  return <>
+    {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
+      ? <WorkSteps key={segment.id} steps={segment.steps} query={query} focusedUuid={focusedUuid} active={turn.active || !!asked} asked={asked} />
+      : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
+          className={cn("space-y-1.5 px-0.5 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
+          {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
+        </div>)}
+    {live && <DeskLiveStep step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
+    {turn.active && !live && <p className="min-h-8 text-footnote text-muted-foreground"><Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" /></p>}
+    {turn.interrupted && <p className="text-footnote text-muted-foreground">{duration ? `Stopped after ${duration}` : "Stopped"}</p>}
+  </>;
+}
+
+function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean; desk: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const needle = query.trim().toLowerCase();
   const searching = turn.activity.some((entry) => entry.uuid === focusedUuid || (needle !== "" && searchableText(entry).toLowerCase().includes(needle)));
@@ -268,8 +288,9 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const liveMarker = liveEntry && !stepParts(liveEntry, live).length && !journalImages(liveEntry).length ? liveEntry.uuid : undefined;
   const viewer = useContext(MediaViewerContext);
   const toolImages = useToolImages();
-  // Folded work still shows what the agent looked at, as one gallery for the turn.
-  const turnImages: StripImage[] = open ? [] : relabel(turn.activity.flatMap((entry) => [
+  // Folded work still shows what the agent looked at, as one gallery for the turn; a desk's runs never
+  // draw their images, so its gallery stays.
+  const turnImages: StripImage[] = open && !desk ? [] : relabel(turn.activity.flatMap((entry) => [
     ...entry.parts.flatMap((part) => part.kind === "tool" ? toolImages(part, entry.uuid) : []),
     ...journalImages(entry).map(({ index }) => ({ src: viewer?.journalUrl(entry.uuid, index), label: imageLabel(0), item: { kind: "journal" as const, entry: entry.uuid, index, label: imageLabel(0) } })),
   ]));
@@ -287,12 +308,25 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     {hasDetails && <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-150 ease-out motion-reduce:transition-none",
       open ? "rotate-90" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
   </button>;
+  const questions = tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
+    <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />));
+  const answer = turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
+    className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
+    <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} stamp={endTime} />
+  </div>;
+  if (desk) return <div className="space-y-3" data-work-turn={turn.id}>
+    {questions}
+    <DeskWork turn={turn} query={query} focusedUuid={focusedUuid} asked={asked} live={live} liveMarker={liveMarker} />
+    {answer}
+    {endTime && !turn.answer && <p className="text-footnote text-muted-foreground"><time dateTime={end}>{endTime}</time></p>}
+    <ArtifactCards paths={delivered} />
+    <ImageStrip images={turnImages} max={3} label="Images from this turn" />
+  </div>;
   return <div className="space-y-2" data-work-turn={turn.id}>
     {endTime && !turn.answer ? <div className="flex max-w-full flex-wrap items-center gap-x-1.5 text-footnote text-muted-foreground">
       {line}<span className="whitespace-nowrap">· <time dateTime={end}>{endTime}</time></span>
     </div> : line}
-    {tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
-      <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />))}
+    {questions}
     {/* While the turn runs, its steps are part of the conversation: they flow under its line, no rail
         and no indent, its live row last. Finished, they fold away; opened again, the rail under the
         line ties them to it. */}
@@ -303,10 +337,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
         className={expanded ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out motion-reduce:animate-none" : undefined} />}
       {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     </div>}
-    {turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
-      className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
-      <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} stamp={endTime} />
-    </div>}
+    {answer}
     <ArtifactCards paths={delivered} />
     <ImageStrip images={turnImages} max={3} label="Images from this turn" />
   </div>;
@@ -327,6 +358,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   const questionOpen = entries[questionIndex]?.parts.some((part) => part.kind === "tool" && !!part.questions?.length && !part.result);
   const pendingQuestion = questionOpen && questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
   const rows = useMemo(() => buildWorkTimeline(entries, activityStatus), [entries, activityStatus]);
+  const desk = useMediaQuery("(min-width: 1024px)");
   // While a dialog waits on the operator, the newest turn, if it has not ended, is the one it holds up.
   const dialogLive = useContext(QuestionLiveContext) !== null;
   const tail = rows.at(-1);
@@ -351,7 +383,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
         {newDay && <div className="pt-1 text-center text-footnote text-muted-foreground"><time dateTime={entry.ts}>{day}</time></div>}
         {row.kind === "message" ? <Turn entry={entry} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
-          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
+          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} desk={desk} />}
       </div>;
     })}
     {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
