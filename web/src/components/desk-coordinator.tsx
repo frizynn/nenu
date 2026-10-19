@@ -5,7 +5,7 @@ import { ChatCircle, ChevronRight, GitPullRequest, Plus } from "@/components/ui/
 import { AskSections } from "@/components/ask-list";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
-import { DeskHead, DeskTabs, useDeskTab, type DeskTab } from "@/components/desk-pages";
+import { DeskHead, DeskTabs, useDeskTab, useOpenNode, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -17,7 +17,7 @@ import { useAsks } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { askSections } from "@/lib/asks";
-import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
+import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState } from "@/lib/org-tree";
 import { routinesFor, waitingGroups } from "@/lib/project-work";
 import { nodePath, panePath, projectPath } from "@/lib/nav";
 import { isOpenThread } from "@/lib/projects";
@@ -68,8 +68,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   const working = work.filter((candidate) => nodeState(candidate) === "working").length;
   const pr = thread?.pr && (thread.pr.state === "open" || thread.pr.state === "draft") ? thread.pr : undefined;
   const canStart = !readOnly && startableRoles(project).includes("worker") && state !== "resolved";
-  const openNode = ({ thread: node }: OrgNode) =>
-    navigate(node.paneId && live(node.paneId) ? panePath(node.paneId, session) : nodePath(project.slug, node.id, session));
+  const openNode = useOpenNode(project, panes, session);
   const parent = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
   // Close refuses a coordinator with open work under it, which the open tree holds.
   const closable = thread && flatten(orgTree(project.threads).open).find((candidate) => candidate.thread.id === thread.id);

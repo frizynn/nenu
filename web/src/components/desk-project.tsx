@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronDown, Plus, Workflow } from "@/components/ui/icon";
 
-import { CoordinatorWorkCard, DeskHead, DeskTabs, useDeskTab, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
+import { CoordinatorWorkCard, DeskHead, DeskTabs, useDeskTab, useOpenNode, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -48,9 +48,7 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
   ];
   const [tab, setTab] = useDeskTab(tabs);
   const coordinator = runningCoordinator(project);
-  const live = (paneId: string | undefined) => paneId !== undefined && panes.some((pane) => pane.paneId === paneId);
-  const openNode = ({ thread }: OrgNode) =>
-    navigate(thread.paneId && live(thread.paneId) ? panePath(thread.paneId, session) : nodePath(project.slug, thread.id, session));
+  const openNode = useOpenNode(project, panes, session);
   const roles = readOnly ? [] : startableRoles(project);
 
   return <>
@@ -65,7 +63,7 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
     <DeskTabs label={project.name} tabs={tabs} tab={tab} onChange={setTab} />
     <div role="tabpanel" aria-label={tabs.find((candidate) => candidate.id === tab)!.label}>
       {tab === "work" && <Work project={project} waiting={(id) => waiting.find((group) => group.coordinator.id === id)?.count ?? 0}
-        canStart={roles.includes("worker")} onOpenNode={openNode} onChanged={onChanged}
+        coordinator={coordinator} canStart={roles.includes("worker")} onOpenNode={openNode} onChanged={onChanged}
         onOpenCoordinator={(id) => navigate(nodePath(project.slug, id, session))} />}
       {tab === "waiting" && (asks.list
         ? <WaitingByCoordinator list={asks.list} project={project} session={session} readOnly={readOnly} />
@@ -77,8 +75,9 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
 }
 
 /** Open or Finished, in the address (`?work=finished`), and the cards for it. */
-function Work({ project, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
+function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
   project: ProjectView;
+  coordinator: ReturnType<typeof runningCoordinator>;
   waiting: (coordinatorId: string) => number;
   canStart: boolean;
   onOpenNode: (node: OrgNode) => void;
@@ -96,7 +95,6 @@ function Work({ project, waiting, canStart, onOpenNode, onOpenCoordinator, onCha
   // Open cards start open and finished ones closed; a fold the person changed lasts while the page does.
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   const cards = workCards(project, filter);
-  const coordinator = runningCoordinator(project);
   const rootState = coordinator && coordinatorState(coordinator.liveStatus);
   const newThread = (parent: string) => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent, onStarted: onChanged });
 

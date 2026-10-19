@@ -26,7 +26,8 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
 }) {
   const [params, setParams] = useSearchParams();
   const [failed, setFailed] = useState<string>();
-  const [busy, setBusy] = useState<string>();
+  // One change at a time: each answer is the whole list, so two in flight would let the older one win.
+  const [busy, setBusy] = useState(false);
   const { list, error } = routines;
   const listed = list ? shown(list.routines) : [];
   const open = listed.find((routine) => routine.name === params.get("routine"));
@@ -37,14 +38,14 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
     return kept;
   }, { replace: true });
   const toggle = async (routine: RoutineView, on: boolean) => {
-    setBusy(routine.name);
+    setBusy(true);
     setFailed(undefined);
     try {
       await routines.toggle(routine.name, on);
     } catch (failure) {
       setFailed(errorMessage(failure));
     } finally {
-      setBusy(undefined);
+      setBusy(false);
     }
   };
   const line = (text: string) => <p className="px-1 text-subhead text-muted-foreground">{text}</p>;
@@ -65,7 +66,7 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
               <span className="block truncate text-subhead font-medium">{routine.name}</span>
               <span className="block truncate text-footnote text-muted-foreground">{routineWhen(routine)} · {routineRecipientShort(routine, threads)}</span>
             </button>
-            <Switch checked={routine.enabled} disabled={readOnly || busy === routine.name} aria-label={`${routine.name} on`}
+            <Switch checked={routine.enabled} disabled={readOnly || busy} aria-label={`${routine.name} on`}
               onCheckedChange={(on) => void toggle(routine, on)} />
             <ChevronRight aria-hidden className="size-4 shrink-0 text-subtle-foreground" />
           </li>;

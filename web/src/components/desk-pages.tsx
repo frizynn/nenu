@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronRight, GitPullRequest, Plus, Workflow } from "@/components/ui/icon";
 
 import { AskSections } from "@/components/ask-list";
@@ -8,12 +8,19 @@ import { threadAge } from "@/components/project-tasks";
 import { coordinatorName } from "@/lib/asks";
 import type { OrgNode } from "@/lib/org-tree";
 import { cardSummary, waitingGroups, type WorkCard } from "@/lib/project-work";
-import { nodePath } from "@/lib/nav";
-import type { AsksList, ProjectView } from "@/lib/types";
+import { nodePath, panePath } from "@/lib/nav";
+import type { AgentView, AsksList, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // The parts a desk's project page and coordinator page share (ADR 0100): the heading, the tabs kept in
 // the address, a coordinator's card over its threads, and what waits on you by coordinator.
+
+/** Opens a node inside Nenu (ADR 0064): its chat while it runs in a live pane, its page otherwise. */
+export function useOpenNode(project: ProjectView, panes: readonly AgentView[], session?: string): (node: OrgNode) => void {
+  const navigate = useNavigate();
+  return ({ thread }) => navigate(thread.paneId && panes.some((pane) => pane.paneId === thread.paneId)
+    ? panePath(thread.paneId, session) : nodePath(project.slug, thread.id, session));
+}
 
 /** A page's crumb, title, second line and actions. */
 export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb: ReactNode; title: string; mark?: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
