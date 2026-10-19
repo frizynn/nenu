@@ -6,6 +6,7 @@ import {
   createProject,
   listProfiles,
   listRoutines,
+  toggleRoutine,
   listTemplates,
   explainThread,
   mergeThread,
@@ -539,7 +540,7 @@ const routineRecord = {
 };
 const prRoutineRecord = {
   ...routineRecord, name: "pr-follow-up", trigger: "pr", schedule: "", events: ["checks-failed", "review"],
-  command: "", command_status: "none", last_run: "", next_run: "",
+  command: "", command_status: "none", last_run: "", next_run: "", to: "node:t-0007", parent: "", prompt: "Fix the checks.",
 };
 
 describe("herdr-organizations routine list", () => {
@@ -554,8 +555,10 @@ describe("herdr-organizations routine list", () => {
       available: true,
       broken: 1,
       routines: [
-        { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: "2026-10-09T03:00:00Z", nextRun: "2026-10-10T03:00:00Z" },
-        { name: "pr-follow-up", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, lastRun: "", nextRun: "" },
+        { name: "nightly-deps", trigger: "schedule", to: "", parent: "", prompt: "Check the dependencies.", schedule: "daily 03:00", events: [], enabled: true,
+          lastRun: "2026-10-09T03:00:00Z", nextRun: "2026-10-10T03:00:00Z" },
+        { name: "pr-follow-up", trigger: "pr", to: "node:t-0007", parent: "", prompt: "Fix the checks.", schedule: "", events: ["checks-failed", "review"], enabled: true,
+          lastRun: "", nextRun: "" },
       ],
     });
     expect(calls).toEqual([{ argv: ["routine", "list", "demo", "--json"], opts: { timeoutMs: 10_000 } }]);
@@ -587,6 +590,30 @@ describe("herdr-organizations routine list", () => {
     await expect(listRoutines(run, "../etc")).rejects.toThrow("Project must use lowercase");
     expect(calls).toHaveLength(0);
     await expect(listRoutines(run, "demo")).rejects.toThrow("herdr-organizations failed (1): error: no project demo");
+  });
+});
+
+describe("herdr-organizations routine toggle", () => {
+  const listed = { code: 0, stdout: JSON.stringify({ schema_version: 1, routines: [routineRecord], broken: [] }), stderr: "" };
+
+  it("toggles only a routine the list names, then reads the list again", async () => {
+    const { run, calls } = fakeRun(listed);
+
+    expect((await toggleRoutine(run, { project: "demo", name: "nightly-deps", on: false })).routines.map((routine) => routine.name)).toEqual(["nightly-deps"]);
+    expect(calls.map((call) => call.argv)).toEqual([
+      ["routine", "list", "demo", "--json"],
+      ["routine", "toggle", "demo", "nightly-deps", "--off"],
+      ["routine", "list", "demo", "--json"],
+    ]);
+  });
+
+  it("refuses a name the list does not hold, or one that reads as a flag, before toggling", async () => {
+    const { run, calls } = fakeRun(listed);
+
+    await expect(toggleRoutine(run, { project: "demo", name: "other", on: true })).rejects.toThrow("Name a routine this project lists.");
+    await expect(toggleRoutine(run, { project: "demo", name: "--root=/", on: true })).rejects.toThrow("Name a routine this project lists.");
+    await expect(toggleRoutine(run, { project: "demo", name: "nightly-deps", on: "yes" })).rejects.toThrow("turned on or off");
+    expect(calls.map((call) => call.argv[1])).toEqual(["list"]);
   });
 });
 

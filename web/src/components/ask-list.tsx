@@ -36,7 +36,7 @@ const TONE_CLASS: Record<ChipTone, string> = {
   waiting: "bg-status-blocked", moving: "bg-status-working", review: "bg-primary", done: "bg-status-done", off: "bg-muted-foreground/60",
 };
 
-export function AskSections({ sections, session, whose, answers, readOnly, compact = false }: {
+export function AskSections({ sections, session, whose, answers, readOnly, compact = false, headings = true }: {
   sections: Sections;
   session?: string;
   /** Name each row's project and coordinator, and link the row to that coordinator: Your asks does, a coordinator's own card does not. */
@@ -47,6 +47,8 @@ export function AskSections({ sections, session, whose, answers, readOnly, compa
   readOnly: boolean;
   /** A card's lighter headings. */
   compact?: boolean;
+  /** False where the page around already names the one group drawn. */
+  headings?: boolean;
 }) {
   // Answered here, until the next read of the asks moves the row where Organizations puts it.
   const [answered, setAnswered] = useState<Record<string, string>>({});
@@ -59,9 +61,9 @@ export function AskSections({ sections, session, whose, answers, readOnly, compa
   return <div className={cn("flex flex-col", compact ? "gap-3" : "gap-6")}>
     {sections.map((section) => (
       <section key={section.group} aria-label={section.label}>
-        <h2 className={cn("flex items-center gap-2 pb-1 text-footnote font-medium text-muted-foreground", !compact && "px-2.5", compact && "font-semibold")}>
+        {headings && <h2 className={cn("flex items-center gap-2 pb-1 text-footnote font-medium text-muted-foreground", !compact && "px-2.5", compact && "font-semibold")}>
           <span className={compact ? undefined : "text-foreground"}>{section.label}</span><span className="font-normal tabular-nums">{section.entries.length}</span>
-        </h2>
+        </h2>}
         <ul className="flex flex-col">
           {section.entries.map((entry) => <AskItem key={entry.key} entry={entry} session={session} whose={whose} compact={compact} readOnly={readOnly}
             answering={answer(entry, section.group)} parts={entry.parts.map((part) => answer(part, section.group))} />)}

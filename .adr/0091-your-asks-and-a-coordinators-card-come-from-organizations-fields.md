@@ -6,7 +6,7 @@
   rows about the same thread or task fold into one question, which opens its report in place. Requested by the operator. Amends
   [ADR 0090](./0090-a-coordinators-status-file-is-drawn-as-written.md) point 2: under a card, the
   STATUS.md starts closed. Meets 0090's own condition for revisiting it: Organizations now publishes
-  the asks as data.
+  the asks as data. Point 4 is amended on a desk by [ADR 0100](./0100-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): asks are read on each project and coordinator.
 - **Trail:** `bridge/org-asks.ts` · `bridge/projects.ts` (`asks`, `waitingAsks`) · `web/src/lib/asks.ts` ·
   `web/src/routes/asks.tsx` · `web/src/components/coordinator-card.tsx` · `web/src/routes/node.tsx` ·
   `scripts/e2e/asks.ts` · Organizations `docs/json.md` (Asks, Status file, Usage) and `src/ui.rs`

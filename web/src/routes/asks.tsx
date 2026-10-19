@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { useSearchParams, useRouteLoaderData } from "react-router";
+import { Navigate, useSearchParams, useRouteLoaderData } from "react-router";
 import { ListChecks } from "@/components/ui/icon";
 
 import { AskSections } from "@/components/ask-list";
@@ -7,8 +7,10 @@ import { ColumnPage } from "@/components/column-page";
 import { selectField } from "@/components/new-agent-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { asksAvailable, useAsks } from "@/hooks/use-asks";
+import { useDesk } from "@/hooks/use-desk";
 import { askSections, asksHeadline, coordinatorName, type AskFilter } from "@/lib/asks";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { nodePath, projectPath, projectsPath } from "@/lib/nav";
 import { isReadOnly, type AskCoordinator, type AsksList, type ProjectView } from "@/lib/types";
 
 /**
@@ -16,9 +18,25 @@ import { isReadOnly, type AskCoordinator, type AsksList, type ProjectView } from
  * Organizations' popup groups it, each row saying whose it is and where it stands, its links as chips,
  * and Answer where one waits on you (ADR 0093). A project and a coordinator narrow it, kept in the
  * address so a link can open it narrowed. Read when the page opens and again when the organization
- * moves; never polled.
+ * moves; never polled. A desk reads them on each project's and coordinator's Waiting on you (ADR 0100),
+ * so an old link lands there.
  */
 export function AsksRoute() {
+  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  const [params] = useSearchParams();
+  if (!useDesk()) return <PhoneAsks />;
+  const project = params.get("project");
+  const coordinator = params.get("coordinator");
+  const to = !project ? projectsPath(data.session) : coordinator ? nodePath(project, coordinator, data.session) : projectPath(project, data.session);
+  return <Navigate replace to={project ? withTab(to, "waiting") : to} />;
+}
+
+/** `path` with `?tab=` added beside the session it may carry. */
+function withTab(path: string, tab: string): string {
+  return `${path}${path.includes("?") ? "&" : "?"}tab=${tab}`;
+}
+
+function PhoneAsks() {
   // SAFETY: this route is a child of the root route, whose loader returns HomeData (router.tsx).
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const projects = data.projects ?? [];

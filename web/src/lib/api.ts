@@ -702,6 +702,11 @@ export function fetchOrgRoutines(project: string, session?: string): Promise<{ o
   return req(withSession(`/api/org/routines?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
+/** Organizations' `routine toggle`: turns one routine on or off, and answers the routines as they then read. */
+export function toggleOrgRoutine(input: { project: string; name: string; on: boolean }, session?: string): Promise<{ ok: true; routines: RoutineList }> {
+  return req(withSession("/api/org/routine/toggle", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
 /** The coordinator's task list; `tasks` is null when this Organizations has no `task list`. */
 export function fetchOrgTasks(project: string, signal?: AbortSignal): Promise<{ ok: true; tasks: OrgTask[] | null }> {
   return req(`/api/org/tasks?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);

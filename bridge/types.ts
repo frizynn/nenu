@@ -186,10 +186,16 @@ export interface TemplateView {
   updated: string;
 }
 
-/** A project's routine as `routine list --json` reports it, without its prompt or command. */
+/** A project's routine as `routine list --json` reports it, without its command. */
 export interface RoutineView {
   name: string;
   trigger: "schedule" | "pr";
+  /** Who gets it: `root`, `owner`, `node:<id or title>` or `new`; empty from an Organizations that predates the field. */
+  to: string;
+  /** For `new`: the node the thread starts under. */
+  parent: string;
+  /** What it asks, as written in its file. */
+  prompt: string;
   /** As written, such as `daily 09:00`; empty for a `pr` routine. */
   schedule: string;
   /** The pull request events a `pr` routine fires on; empty for a scheduled one. */

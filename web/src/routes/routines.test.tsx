@@ -13,7 +13,7 @@ const root = (projects: ProjectView[]): HomeData => ({
   sessions: [], session: "work", snoozedUntil: null, update: undefined, error: false, authError: false,
 });
 const routine = (name: string, extra: Partial<RoutineView> = {}): RoutineView =>
-  ({ name, trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, lastRun: "", nextRun: "", ...extra });
+  ({ name, trigger: "schedule", to: "", parent: "", prompt: "", schedule: "daily 03:00", events: [], enabled: true, lastRun: "", nextRun: "", ...extra });
 
 function serve(lists: Record<string, unknown>) {
   const asked: string[] = [];

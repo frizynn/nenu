@@ -635,11 +635,12 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   const section = (name: string) => within(screen.getByRole("region", { name }));
   const rowNames = (name: string) => section(name).queryAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
 
-  it("leads with New chat, Search, Home and Routines", () => {
+  it("leads with New chat, Search, Home and Projects, and leaves Routines and Your asks to each project", () => {
     open("/", herd, vi.fn());
     const top = [...document.querySelectorAll(".nav-top > .nav-row")].map((row) => row.querySelector(".nav-row-text")?.textContent);
-    expect(top).toEqual(["New chat", "Search", "Home", "Routines"]);
-    expect(screen.getByRole("link", { name: "Routines" })).toHaveAttribute("href", "/routines");
+    expect(top).toEqual(["New chat", "Search", "Home", "Projects"]);
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
+    expect(screen.queryByRole("link", { name: /^Routines|^Your asks/ })).toBeNull();
   });
 
   it("lists projects flat, each one row to its project with its glyph, its state and when it last moved", () => {

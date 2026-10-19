@@ -65,7 +65,7 @@ export function ProjectPanel(props: ProjectPanelProps) {
         {section === "notes" && <Notes {...props} />}
         {section === "agents" && <Agents {...props} />}
         {section === "prs" && <Prs {...props} />}
-        {section === "context" && <Context project={project} threads={threads} />}
+        {section === "context" && <ProjectContext project={project} threads={threads} />}
       </div>
     </div>
   );
@@ -398,7 +398,7 @@ function routineWhen(routine: OrgRoutine): string {
 }
 
 /** The goal, what every thread receives, where they work, the routines and the agents. */
-function Context({ project, threads }: { project: ProjectView; threads: readonly ProjectThreadView[] }) {
+export function ProjectContext({ project, threads }: { project: ProjectView; threads: readonly ProjectThreadView[] }) {
   const [read, setRead] = useState<{ detail: OrgProjectDetail | null; routines: OrgRoutine[] | null } | undefined>(undefined);
   useEffect(() => {
     const controller = new AbortController();

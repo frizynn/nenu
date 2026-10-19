@@ -182,13 +182,17 @@ the unit name; the Herdr action runs from anywhere.
   A question folds the rows about the same thread or task, opens its thread's report in place
   (`/api/org/report`, by thread id, never a path) and says what keeps it from closing; only ids reach
   the coordinator ([ADR 0096](./.adr/0096-a-question-carries-its-context.md)).
+- **On a desk a project and a coordinator are pages with tabs** (ADR 0100, `desk-project.tsx`,
+  `desk-coordinator.tsx`, `lib/project-work.ts`): Work as a card per coordinator with its threads (Open or
+  Finished), Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch,
+  Context; never a redirect to a chat. On a desk `/asks` and `/routines` land there; a phone is unchanged.
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
   page, each a row folding over its card and work, the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
   shows only where `node move --help` exits 0 and the node's `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
-  Home, Routines, Your asks, projects as flat rows and chats by when they last moved; the tree is Search's. An
+  Home, Projects (ADR 0100), projects as flat rows and chats by when they last moved; the tree is Search's. An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
   ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
   is New on its Home row, and only an agent that asks raises a toast
