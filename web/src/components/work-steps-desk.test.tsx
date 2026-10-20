@@ -82,7 +82,9 @@ describe("a desk's work log", () => {
   });
 
   it("draws a description unmarked, since find does not count it", async () => {
-    render(<TranscriptView entries={entries} activityStatus="done" query="Integration" />);
+    const live = says("d", [call("Bash", "bun test", { description: "Integration tests", result: undefined })]);
+    render(<TranscriptView entries={[...entries.slice(0, 3), live]} activityStatus="working" query="Integration" />);
+    expect(document.querySelector("[data-live-step] button mark")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /^Edited 1 file, ran 1 command/ }));
     expect(screen.getByRole("button", { name: /^Ran\s*Integration tests/ }).querySelector("mark")).toBeNull();
   });

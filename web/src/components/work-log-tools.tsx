@@ -286,15 +286,22 @@ function StepBody({ part, query, focused, waiting, active }: { part: ToolPart; q
   </div>;
 }
 
-/** What a desk's row says it acted on: the call's description, else its target in small monospace. */
-function RowTarget({ part, query, focused }: { part: ToolPart; query: string; focused: boolean }) {
-  const cwd = useContext(PaneCwdContext);
+/**
+ * What a desk's step says it acted on, running or done: the call's description, unmarked since find
+ * does not search it (only a desk draws one), else its target, a path relative to the pane's folder.
+ */
+function deskTarget(part: ToolPart, cwd: string): { text: string; marked: boolean; mono: boolean } {
+  if (part.description) return { text: part.description, marked: false, mono: false };
   const step = describeCall(part);
-  // Find does not search a description (only a desk draws one), so it is drawn unmarked.
-  if (part.description) return <span className="min-w-0 flex-1 truncate text-foreground">{part.description}</span>;
   const text = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
-  return <span className={cn("min-w-0 flex-1 truncate", step.target === "text" || step.target === "title" ? "text-foreground" : "font-mono text-caption text-muted-foreground")}>
-    <Highlight text={text} query={query} current={focused} />
+  return { text, marked: true, mono: step.target !== "text" && step.target !== "title" };
+}
+
+/** A finished row's target fills the row in its own colour; the running step's takes the line's. */
+function DeskTarget({ part, query, focused, row = false }: { part: ToolPart; query: string; focused: boolean; row?: boolean }) {
+  const target = deskTarget(part, useContext(PaneCwdContext));
+  return <span className={cn("min-w-0 truncate", target.mono && "font-mono text-caption", row && "flex-1", row && (target.mono ? "text-muted-foreground" : "text-foreground"))}>
+    {target.marked ? <Highlight text={target.text} query={query} current={focused} /> : target.text}
   </span>;
 }
 
@@ -317,7 +324,7 @@ function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; qu
   return <div data-step-row data-tool={tool ? `${step.entry}:${step.index}` : undefined} className="min-w-0">
     <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)} className={ROW}>
       <span className="min-w-14 shrink-0 whitespace-nowrap text-muted-foreground">{verb}</span>
-      {tool ? <RowTarget part={tool} query={query} focused={focused} />
+      {tool ? <DeskTarget part={tool} query={query} focused={focused} row />
         : <span className="min-w-0 flex-1 truncate italic text-muted-foreground"><Highlight text={firstLine(thought!.text)} query={query} current={focused} /></span>}
       {failed ? <FailureChip code={commandOutput(tool!.result!.text).code} /> : asking ? <WaitingChip /> : diff && <DiffStat diff={diff} className="text-caption" />}
       {tool?.result?.truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
@@ -372,20 +379,16 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked }: { steps:
 export function DeskLiveStep({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
-  const cwd = useContext(PaneCwdContext);
   const { part } = step;
   const call = part.kind === "tool" ? describeCall(part) : null;
   const open = expanded || focused;
-  const described = part.kind === "tool" && !!part.description;
-  const what = part.kind !== "tool" ? firstLine(part.text) : call!.target === "path" && call!.text ? spokenPath(call!.text, cwd) : call!.text;
   return <div data-live-step data-turn={marker} className={cn("min-w-0", focused && marker && "rounded ring-2 ring-primary/60")}>
     <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)}
       className="flex min-h-8 w-full min-w-0 items-center gap-2 text-left text-footnote text-muted-foreground hover:text-foreground">
       {waiting ? <StepIcon kind={call?.kind ?? "thinking"} /> : <LiveGlyph />}
       <span className="shrink-0 text-foreground">{!call ? "Thinking" : waiting ? call.ask : call.doing}</span>
-      <span className={cn("min-w-0 truncate", !call && "italic", call && !described && call.target !== "text" && call.target !== "title" && "font-mono text-caption")}>
-        {described ? part.description : <Highlight text={what} query={query} current={focused} />}
-      </span>
+      {part.kind === "tool" ? <DeskTarget part={part} query={query} focused={focused} />
+        : <span className="min-w-0 truncate italic"><Highlight text={firstLine(part.text)} query={query} current={focused} /></span>}
       {waiting ? <WaitingChip /> : step.since && <span className="shrink-0 text-subtle-foreground">· <Elapsed since={step.since} /></span>}
     </button>
     {open && <div id={contentId} className="min-w-0 pt-1 pl-6">
