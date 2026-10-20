@@ -1,5 +1,5 @@
-import { copyFile, cp, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, cp, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { join, sep } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
@@ -50,17 +50,20 @@ const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(
 async function copyProject(root: string, { socketPath }: { socketPath: string }) {
   const dest = join(root, slug);
   await cp(join(source, slug), dest, { recursive: true, verbatimSymlinks: true });
+  // The one way a file in the copy is written: never through a link, at the file or in a folder above
+  // it, which may lead back to the operator's own registry.
+  const inside = (await realpath(dest)) + sep;
   const rewrite = async (file: string, edit: (text: string) => string) => {
+    if (!(await realpath(file)).startsWith(inside)) return;
     const text = await readFile(file, "utf8");
     const edited = edit(text);
     if (edited !== text) await writeFile(file, edited);
   };
   const sockets = (text: string) => text.replace(/"socket":\s*"[^"]*"/g, `"socket": ${JSON.stringify(socketPath)}`).replace(/^socket = ".*"$/gm, `socket = ${JSON.stringify(socketPath)}`);
-  // Every file Organizations may read a binding from, wherever it sits in the copy. A link is never
-  // written through (it may lead back to the operator's own file); then no file, link or not, may name
-  // any socket but the bench's, in whatever form the rewrite did not know.
+  // Every file Organizations may read a binding from, wherever it sits in the copy; then no file, one
+  // behind a link included, may name any socket but the bench's, in whatever form the rewrite did not know.
   const files = (await readdir(dest, { recursive: true })).filter((name) => /\.(json|toml)$/.test(name)).map((name) => join(dest, name));
-  for (const file of files) if (!(await lstat(file)).isSymbolicLink()) await rewrite(file, sockets);
+  for (const file of files) await rewrite(file, sockets);
   for (const file of files) {
     const named = (await readFile(file, "utf8")).match(/[^\s"'=:,[\]{}]+\.sock\b/g) ?? [];
     if (named.some((path) => path !== socketPath)) throw new Error(`${file} still names a Herdr socket other than the bench's`);

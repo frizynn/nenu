@@ -440,7 +440,7 @@ export function AgentChat({
   // (and sometimes before its status leaves `unknown`). Treat the harness classification itself as
   // enough to mount the workbench; otherwise a newly launched Codex stays in the raw terminal until
   // a later navigation remounts this view.
-  const conversationCapable = !isShell && Boolean(adapterFor(agent?.agent)) &&
+  const conversationCapable = readsConversation(agent) &&
     Boolean(
       agent?.agent === "codex" || (agent?.agent === "claude" && agent.status === "unknown") ||
       agent?.hasSession ||
