@@ -8,10 +8,11 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 
 // Your asks shaped like a real registry on 2026-10-17 (ADR 0093), captured with Google Chrome headless at
 // 390 and 1440 px: a decision line that is only a parenthesis, an ask whose links read as raw text, and
-// asks in two projects and three coordinators. It checks the placeholder is gone from the list and the
-// count, the links read as chips, a desk's old /asks link narrowed to one coordinator lands on that
+// asks in two projects and three coordinators. It checks the placeholder is gone from the list, the links
+// read as chips, a desk's old /asks link narrowed to one coordinator lands on that
 // coordinator's Waiting on you and lists only its own (ADR 0102), and Answer writes through
-// `asks answer` and shows the row answered. `--before` only captures.
+// `asks answer` and shows the row answered; it prints each project's waiting count without checking it.
+// `--before` only captures.
 //
 //   bun scripts/e2e/asks-answer.ts [--before] [--port 8863] [--out DIR]
 
