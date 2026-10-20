@@ -119,7 +119,7 @@ describe("a desk's project page", () => {
     expect(router.state.location.search).toBe("?tab=routines&routine=lead-daily");
     await user.click(within(await screen.findByRole("complementary", { name: "Routine lead-daily" })).getByRole("button", { name: "Close routine" }));
     expect(router.state.location.search).toBe("?tab=routines&routine=");
-    expect(screen.queryByRole("complementary")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
     await user.click(screen.getByRole("button", { name: /pr-followup/ }));
     const detail = within(await screen.findByRole("complementary", { name: "Routine pr-followup" }));
     expect(detail.getByText("The thread that owns the pull request")).toBeInTheDocument();
