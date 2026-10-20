@@ -509,3 +509,40 @@ describe("a file on another machine", () => {
     expect(await grantFileOpen("w1:p1", "a.txt")).toMatchObject({ url: "/api/files/open?t=abc" });
   });
 });
+
+describe("a conversation warmed before its chat mounts", () => {
+  const page = { available: true, entries: [], hasMore: false, total: 0, fileTruncated: false };
+
+  it("is taken over once, by the chat's first read; every other read asks again", async () => {
+    const { CONVERSATION_WINDOW, fetchHistory, takeWarmConversation, warmConversation } = await import("./api");
+    let reads = 0;
+    server.use(http.get("/api/pane/:id/history", () => { reads++; return HttpResponse.json(page); }));
+    warmConversation("w9:warm", "work");
+    warmConversation("w9:warm", "work");
+    await expect(takeWarmConversation("w9:warm", "work")).resolves.toMatchObject({ available: true });
+    expect(reads).toBe(1);
+    expect(takeWarmConversation("w9:warm", "work")).toBeUndefined();
+    await fetchHistory("w9:warm", { limit: CONVERSATION_WINDOW }, "work");
+    expect(reads).toBe(2);
+  });
+
+  it("lets a chat that leaves give up on the read", async () => {
+    const { takeWarmConversation, warmConversation } = await import("./api");
+    warmConversation("w9:gone");
+    const controller = new AbortController();
+    const read = takeWarmConversation("w9:gone", undefined, controller.signal);
+    controller.abort();
+    await expect(read).rejects.toBeDefined();
+  });
+
+  it("is dropped when read access changes before the chat takes it", async () => {
+    const { fetchHistory, takeWarmConversation, warmConversation } = await import("./api");
+    server.use(
+      http.get("/api/pane/w9%3Akept/history", () => HttpResponse.json(page)),
+      http.get("/api/pane/w9%3Adenied/history", () => HttpResponse.json({ ok: false, error: "denied" }, { status: 403 })),
+    );
+    warmConversation("w9:kept");
+    await expect(fetchHistory("w9:denied", { limit: 60 })).rejects.toBeDefined();
+    expect(takeWarmConversation("w9:kept", undefined)).toBeUndefined();
+  });
+});

@@ -13,10 +13,13 @@
 // no flag, no race — and because a navigation aborts any in-flight revalidation, the nav is instant
 // even while a poll's doomed fetch is still hanging.
 
-import { fetchHistory, fetchPane, fetchSnapshot, isApiErrorStatus } from "@/lib/api";
+import { fetchHistory, fetchPane, fetchSnapshot, isApiErrorStatus, warmConversation } from "@/lib/api";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { isLostLatched } from "@/lib/connection-health";
+import { preloadDeskChunks } from "@/lib/desk-chunks";
+import { readsConversation } from "@/lib/harness/registry";
+import { loadRawTerminal, paneDisplayScope } from "@/lib/raw-terminal";
 import {
   dropLastPaneText,
   loadLastPaneText,
@@ -474,6 +477,7 @@ export async function paneLoader({
   // a non-pane URL, so opening a pane (even one just left) reads as a navigation, and polling within it
   // (same URL) reads as a revalidation.
   const url = request?.url;
+  const previousPaneUrl = lastPaneUrl;
   const isNavigation = lastPaneUrl !== url;
   lastPaneUrl = url;
 
@@ -489,6 +493,10 @@ export async function paneLoader({
   if (isNavigation) {
     rethrowIfSuperseded(request);
     const read = sharedRead(paneId, session, lines);
+    // What the chat reads right after its first render, asked for beside the pane's read: only on the
+    // way into another pane, and only where the chat will read a conversation.
+    if (enteringPane(previousPaneUrl, url) && chatReads(paneId, session)) warmConversation(paneId, session);
+    preloadDeskChunks();
     const landed = await Promise.race([read, new Promise<null>((resolve) => setTimeout(() => resolve(null), PANE_FIRST_PAINT_MS))]);
     rethrowIfSuperseded(request);
     return landed ?? pendingPane(paneId, session, lines);
@@ -500,6 +508,19 @@ export async function paneLoader({
   const pane = await loadPane(paneId, session, lines, request?.signal);
   rememberPaneData(key, pane);
   return pane;
+}
+
+/** A navigation into a pane other than the one shown: a changed search (a tab, a filter) is not one. */
+function enteringPane(previous: string | undefined, next: string | undefined): boolean {
+  if (!previous || !next) return true;
+  const [from, to] = [new URL(previous, "http://nenu.invalid"), new URL(next, "http://nenu.invalid")];
+  return from.pathname !== to.pathname || from.searchParams.get(SESSION_PARAM) !== to.searchParams.get(SESSION_PARAM);
+}
+
+/** Whether the pane's chat reads its conversation on open: an agent Nenu can read, not shown as its raw terminal. */
+function chatReads(paneId: string, session: string | undefined): boolean {
+  const agent = lastSnapshot.get(session ?? "")?.agents.find((candidate) => candidate.paneId === paneId);
+  return readsConversation(agent) && !loadRawTerminal(paneDisplayScope(session, paneId));
 }
 
 // What paneLoader last returned per pane, bounded like the text cache.

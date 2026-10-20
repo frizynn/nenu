@@ -42,7 +42,7 @@ describe("ChatFilesBrowser", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Scanning the full conversation");
     resolveOlder(available([entry("old", "docs/guide.md and shots/demo.png")], false, 2));
     await waitFor(() => expect(screen.getByRole("button", { name: /Files · 1/ })).toBeInTheDocument());
-    expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 120, before: "new" }, undefined, expect.any(AbortSignal));
+    expect(fetchHistory).toHaveBeenCalledWith("w1:p1", { limit: 1_000, before: "new" }, undefined, expect.any(AbortSignal));
     await userEvent.click(screen.getByRole("button", { name: /Files · 1/ }));
     expect(screen.getByText("guide.md")).toBeInTheDocument();
   });
@@ -74,7 +74,7 @@ describe("ChatFilesBrowser", () => {
     await userEvent.click(screen.getByRole("button", { name: "Project" }));
     await userEvent.click(screen.getByRole("button", { name: /^Files/ }));
     await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(3));
-    expect(fetchHistory).toHaveBeenLastCalledWith("w1:p1", { limit: 120, before: "middle" }, undefined, expect.any(AbortSignal));
+    expect(fetchHistory).toHaveBeenLastCalledWith("w1:p1", { limit: 1_000, before: "middle" }, undefined, expect.any(AbortSignal));
     resolveOldest(available([entry("old", "docs/old.md")], false, 3));
     await waitFor(() => expect(screen.getByRole("button", { name: /Files · 3/ })).toBeInTheDocument());
     expect(screen.queryByText(/conversation changed/i)).not.toBeInTheDocument();

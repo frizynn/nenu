@@ -199,6 +199,8 @@ export async function startTestBridge(opts: {
   seed?: (fake: FakeHerdr, ctx: { claudeRoot: string; cwd: string; shift: number }) => Promise<DemoHerd>;
   /** Extra variables for the bridge process (machines.ts reads NENU_E2E_MACHINES and NENU_E2E_SSH_HOSTS through the stubs). */
   env?: Record<string, string>;
+  /** Fills the registry's root before the bridge starts, for `orgBin` over projects of the bench's own. */
+  projects?: (root: string, ctx: { socketPath: string; cwd: string }) => Promise<void>;
 }): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.herdr && !opts.socketPath) throw new Error("pass --fake, --herdr or --socket <disposable herdr socket>");
@@ -294,6 +296,8 @@ export async function startTestBridge(opts: {
       }
     }
   }
+
+  await opts.projects?.(paths.projects, { socketPath, cwd: dir });
 
   // Inherit nothing Nenu- or Herdr-specific: HERDR_PLUGIN_STATE_DIR alone would point the bridge at
   // the live service's state. Every agent home goes under the temporary HOME: CODEX_HOME would

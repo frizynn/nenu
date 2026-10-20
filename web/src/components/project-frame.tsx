@@ -6,6 +6,7 @@ import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/proje
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { PrList, prLists } from "@/components/threads-panel";
+import { loadThreadOverview } from "@/lib/desk-chunks";
 import type { HomeData } from "@/lib/loaders";
 import { armMotion, useGoUp } from "@/lib/motion";
 import { nodePath, panePath } from "@/lib/nav";
@@ -13,7 +14,7 @@ import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 
 // The Overview tab is a desk's alone: a phone never loads it.
-const ThreadOverview = lazy(() => import("./thread-overview").then((module) => ({ default: module.ThreadOverview })));
+const ThreadOverview = lazy(() => loadThreadOverview().then((module) => ({ default: module.ThreadOverview })));
 
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {

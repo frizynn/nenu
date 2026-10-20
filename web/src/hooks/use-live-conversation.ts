@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchHistory, isApiErrorStatus } from "@/lib/api";
+import { CONVERSATION_WINDOW, fetchHistory, isApiErrorStatus, takeWarmConversation } from "@/lib/api";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent, useLiveHealthy } from "@/lib/live-events";
@@ -110,7 +110,9 @@ export function useLiveConversation({
         publish({ scope, history: kept, loading: kept === null, error: false });
       }
       try {
-        const history = await fetchHistory(paneId, { limit: 60 }, session, controller.signal);
+        // Only this mount's first read may take over the one its pane's loader started.
+        const warm = confirmed.current !== scope ? takeWarmConversation(paneId, session, controller.signal) : undefined;
+        const history = await (warm ?? fetchHistory(paneId, { limit: CONVERSATION_WINDOW }, session, controller.signal));
         if (!disposed && !controller.signal.aborted) {
           failedAt = null;
           confirmed.current = scope;

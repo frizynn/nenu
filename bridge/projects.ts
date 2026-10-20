@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readRoutines, readStatus, readTasks, upstreamOnly, validateProjectSlug,
-  type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRoutine, type OrgRun, type OrgStatus, type OrgTask,
+  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
 import { askGroup, decisionGroup, readAsks, type OrgAskRow, type OrgDecisionRow } from "./org-asks.ts";
 import type { ThreadReportSource } from "./org-library.ts";
@@ -574,12 +574,10 @@ export class ProjectRegistry {
     return this.run ? readStatus(this.run, this.root, slug) : null;
   }
 
-  /** What a project's threads receive and its routines, each null when Organizations has none to give. */
-  async context(project: string): Promise<{ detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
+  /** What a project's threads receive, null when Organizations has none to give. Its routines are `/api/org/routines`'s. */
+  async context(project: string): Promise<{ detail: OrgProjectDetail | null }> {
     const slug = validateProjectSlug(project);
-    if (!this.run) return { detail: null, routines: null };
-    const [detail, routines] = await Promise.all([readProjectDetail(this.run, this.root, slug), readRoutines(this.run, this.root, slug)]);
-    return { detail, routines };
+    return { detail: this.run ? await readProjectDetail(this.run, this.root, slug) : null };
   }
 
   /** Re-read now, ignoring the spawn throttle: after a write the person is waiting for the result. */

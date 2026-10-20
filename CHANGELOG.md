@@ -20,6 +20,19 @@ All notable changes to Nenu are recorded here. The format follows
 - The desk's chats no longer show empty "Last 7 days / Last 30 days / Older" headings: only periods with a chat on screen, named Today, Yesterday, Previous 7 days, Previous 30 days and Older; "Show N more" folds and unfolds with motion; period names stay on top while scrolling (6a22aac1).
 - A chat's pull request glyph says what it asks: a draft's own glyph, red while checks fail, green once approved; rows take an inset focus ring and a 120 ms hover fill (6a22aac1, cc81f7c6).
 
+## [1.34.1] - 2026-10-21
+
+### Fixed
+
+- Opening a chat asks for its conversation beside the pane, and a desk's panel code with it, instead of after the first render; only the chat's first read takes it, and only where the chat reads one (6f18064a, c50028d4, 555c6e0a).
+- Artifacts reads the conversation in one or two requests, checks its files together, and no longer flashes "No artifacts" before and between them; three checks at a time (6067f081, 3848c844, d1303fa1).
+- Context draws the last read at once on a return, starts reading when the pointer comes over the tab, and shows each file as its own card with its Markdown drawn, hanging from the file's name (2b3dd41a, 9ef22c34).
+- Files draws a folder's last listing at once when it opens again, instead of "Loading files…" (4a7df066).
+
+### Added
+
+- `bun scripts/e2e/perf.ts`: tap to content on Context, Work, a thread, the project chat, Files and Artifacts, over a copy of a real project and real conversations, with each tap's reads in order; the copy's Herdr sockets all point at the bench's and nothing is written outside it (3c66e021, c94be377, 7dc8c70e, f5885ff5, 6d9b3736, 18517701).
+
 ## [1.34.0] - 2026-10-20
 
 ### Added

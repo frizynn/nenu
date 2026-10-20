@@ -769,18 +769,6 @@ export interface OrgProjectDetail {
   maxParallelThreads: number;
 }
 
-export interface OrgRoutine {
-  name: string;
-  trigger: "schedule" | "pr";
-  /** As written (`daily 03:00`); empty for `pr`. */
-  schedule: string;
-  /** For `pr`, the pull request events it fires on. */
-  events: string[];
-  enabled: boolean;
-  /** RFC 3339, empty for `pr` and a disabled routine. */
-  nextRun: string;
-}
-
 const OWNER_KINDS = new Set(["unassigned", "me", "agent", "person"]);
 
 /** One `--json` document about one project, or null when this Organizations cannot give it. */
@@ -829,18 +817,6 @@ export async function readProjectDetail(run: OrgRun, root: string, project: stri
     threadProfile: text(detail.thread_profile),
     maxParallelThreads: isCharCount(detail.max_parallel_threads) ? detail.max_parallel_threads : 0,
   };
-}
-
-/** `routine list --json`: what the coordinator does on a schedule or on a pull request's events. */
-export async function readRoutines(run: OrgRun, root: string, project: string): Promise<OrgRoutine[] | null> {
-  const slug = validateProjectSlug(project);
-  const value = await readProjectDocument(run, root, ["routine", "list", slug, "--json"]);
-  if (!value || !Array.isArray(value.routines)) return null;
-  return value.routines.flatMap((item): OrgRoutine[] => {
-    if (!isRecord(item) || typeof item.name !== "string" || (item.trigger !== "schedule" && item.trigger !== "pr") || typeof item.enabled !== "boolean") return [];
-    const events = Array.isArray(item.events) ? item.events.filter((event): event is string => typeof event === "string") : [];
-    return [{ name: item.name, trigger: item.trigger, schedule: text(item.schedule), events, enabled: item.enabled, nextRun: text(item.next_run) }];
-  });
 }
 
 // ── `project status`: the project's work in one document, for Notes (docs/json.md, Project status) ──
