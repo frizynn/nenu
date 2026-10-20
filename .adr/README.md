@@ -94,7 +94,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0060](./0060-codex-panes-stay-off-the-daemon.md) | Codex panes stay off the daemon (launching Codex daemon-backed was rejected) | Rejected |
 | [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Accepted |
 | [0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md) | A refused file opens only through a confirmed, single-use link (amends 0021, 0059) | Accepted |
-| [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted |
+| [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted; amended by 0080, 0089, 0092, 0102, 0103 |
 | [0065](./0065-a-workspace-opens-on-its-pane.md) | A workspace opens on its pane, not on a page | Accepted |
 | [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
 | [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted |
@@ -106,6 +106,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0082](./0082-a-codex-with-no-turn-has-nothing-to-link.md) | A Codex with no turn has nothing to link; one holding its rollout is that conversation (narrows 0022, adds to 0028) | Accepted |
 | [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted |
 | [0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) | On a desk, projects and coordinators are pages with tabs; asks and routines live on them (amends 0064, 0080, 0090, 0091, 0092 on a desk) | Accepted |
+| [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

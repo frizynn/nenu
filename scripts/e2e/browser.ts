@@ -67,6 +67,8 @@ export interface Context {
   close(): Promise<void>;
   waitForEvent(event: "page", opts?: { timeout?: number }): Promise<Page>;
   request: APIRequest;
+  /** Chromium only. */
+  newCDPSession(page: Page): Promise<{ send(method: string, params?: Record<string, unknown>): Promise<unknown> }>;
 }
 export interface Browser {
   newContext(opts: Record<string, unknown>): Promise<Context>;
@@ -116,7 +118,11 @@ export async function launchChrome(): Promise<Browser> {
 // NENU_E2E_BROWSER=chromium runs the same flows when the cached WebKit misbehaves on a host. It is a
 // fallback for a broken machine, not a substitute: Safari-only bugs only show up under WebKit.
 export async function launchWebkit(): Promise<Browser> {
-  const engine = process.env.NENU_E2E_BROWSER === "chromium" ? "chromium" : "webkit";
+  return launchEngine(process.env.NENU_E2E_BROWSER === "chromium" ? "chromium" : "webkit");
+}
+
+/** The cached WebKit or Chromium, for a bench that compares the two engines on the same flow. */
+export async function launchEngine(engine: "webkit" | "chromium"): Promise<Browser> {
   const cache = browsersCache();
   const prefix = engine === "chromium" ? "chromium" : "webkit-";
   if (!existsSync(cache) || !readdirSync(cache).some((d) => d.startsWith(prefix))) {

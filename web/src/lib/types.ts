@@ -187,6 +187,8 @@ export interface ProjectThreadView {
   group?: string;
   /** The agent itself reported it is waiting for you (its `Waiting for you` activity); absent otherwise. */
   selfWaiting?: true;
+  /** A conversation with a person (Organizations' `keep_open`): its ended turn waits on nobody. */
+  conversation?: true;
   branch?: string;
   /** The thread's pull request. Numbers appear only when Organizations reported them. */
   pr?: ThreadPullRequest;

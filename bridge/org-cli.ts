@@ -519,6 +519,8 @@ export interface OrgOverviewThread extends OrgReport {
   cwd: string;
   updated: string;
   report_unacked: boolean;
+  /** A conversation with a person (`--keep-open`); absent from an Organizations that predates it. */
+  keep_open?: boolean;
   /** Present only when Organizations has PR actions (`thread merge`, `thread set`). */
   auto_fix_ci?: boolean;
   auto_merge?: boolean;
@@ -640,6 +642,7 @@ function parseThread(value: unknown): OrgOverviewThread | undefined {
     cwd: text("cwd"),
     updated: text("updated"),
     report_unacked: value.report_unacked === true,
+    ...(value.keep_open === true ? { keep_open: true } : {}),
     ...(typeof value.auto_fix_ci === "boolean" ? { auto_fix_ci: value.auto_fix_ci } : {}),
     ...(typeof value.auto_merge === "boolean" ? { auto_merge: value.auto_merge } : {}),
     pr,

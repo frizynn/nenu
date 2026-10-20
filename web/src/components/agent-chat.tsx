@@ -1091,10 +1091,12 @@ export function AgentChat({
     </span>
   </span>;
 
+  // `overflow-clip`, never `overflow-x-hidden`: hidden makes the chat a vertical scroller too, and the
+  // meta row's touch reach (5px past its edge) let a drag move the whole chat, box and all, on a phone.
   return (
     <div
       ref={chatRef}
-      className="workbench-chat relative flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-x-hidden"
+      className="workbench-chat relative flex min-h-0 w-full min-w-0 max-w-[100dvw] flex-1 flex-col overflow-clip"
       data-keyboard-open={keyboardOpen || undefined}
       data-view={showConversation ? "chat" : "terminal"}
     >

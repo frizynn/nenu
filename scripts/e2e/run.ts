@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { browsersCache, DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
@@ -42,6 +42,8 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
+//   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
+//   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3675,6 +3677,206 @@ async function reading(): Promise<void> {
   console.log(JSON.stringify(result, null, 2));
 }
 
+/**
+ * The box stays put on a phone: a project coordinator's long chat at 390x844 in WebKit and Chromium,
+ * dark and light, with the keyboard closed and open (the viewport cut to 390x470, as the keyboard
+ * leaves it). Each lists what a finger can scroll (only the thread may), the root's overscroll, and
+ * where the box and the header sit before and after a drag that starts on the box and one on the
+ * header: a wheel in WebKit, a touch scroll gesture in Chromium. Then the Threads tab's scrollers.
+ */
+async function pin(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const seen: Record<string, unknown> = {};
+  const failures: string[] = [];
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => projectChatSeed(herd, now) });
+  try {
+    const herd = bridge.herd!;
+    await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        for (const scheme of ["dark", "light"] as const) {
+          const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+          const page = await context.newPage();
+          await page.clock.install({ time: bridge.now() });
+          await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.working)}`);
+          await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(2000);
+          const shoot = async (name: string) => {
+            const path = join(outDir, `pin-${name}-${engine}-${scheme}.png`);
+            await page.screenshot({ path, animations: "disabled" });
+            shots.push(path);
+          };
+          const scrollers = () => page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("body *"))
+            .filter((el) => el.tagName !== "TEXTAREA" && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight)
+            .map((el) => `${el.closest(".chat-thread") === el.parentElement?.closest(".chat-thread") && el.closest(".chat-thread") ? "thread" : String(el.className).split(" ")[0]} +${el.scrollHeight - el.clientHeight}px`), null);
+          const places = () => page.evaluate(() => {
+            const top = (selector: string) => Math.round(document.querySelector(selector)?.getBoundingClientRect().top ?? NaN);
+            const box = document.querySelector(".workbench-composer")!.getBoundingClientRect();
+            return { header: top(".workbench-app-header"), box: Math.round(box.top), boxBottom: Math.round(box.bottom), height: window.visualViewport?.height ?? innerHeight };
+          }, null);
+          // A finger pushing 300px from (195, y), up unless `down`. Chromium gets raw touch events (its synthesized
+          // scroll gesture scrolls nothing headless). Mobile WebKit takes no wheel and Playwright drives
+          // no touch scroll there, so it scrolls what the engine would: the nearest box under the
+          // finger that can still go down, chaining outward.
+          const drag = async (y: number, down = false) => {
+            const by = down ? -300 : 300;
+            if (engine === "chromium") {
+              const cdp = await context.newCDPSession(page);
+              await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y }] });
+              for (let step = 1; step <= 15; step++) {
+                await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - step * by / 15 }] });
+                await page.waitForTimeout(16);
+              }
+              await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+            } else {
+              await page.evaluate(([at, by]: readonly [number, number]) => {
+                const down = by < 0;
+                for (let el = document.elementFromPoint(195, at); el; el = el.parentElement) {
+                  const style = getComputedStyle(el);
+                  if (el !== document.documentElement && !/auto|scroll/.test(style.overflowY)) continue;
+                  if (down ? el.scrollTop <= 0 : el.scrollTop + el.clientHeight >= el.scrollHeight) continue;
+                  el.scrollTop += by;
+                  return;
+                }
+              }, [y, by] as const);
+            }
+            await page.waitForTimeout(400);
+          };
+          const probe = async (moment: string) => {
+            const at = await places();
+            const list = await scrollers();
+            const moved: Record<string, unknown> = {};
+            await shoot(moment);
+            for (const [from, y] of [["box", at.boxBottom - 12], ["header", at.header + 20], ["thread", Math.round((at.header + at.box) / 2)]] as const) {
+              // Each drag starts from the page as it loaded: whatever an earlier one scrolled outside the thread goes back.
+              await page.evaluate(() => { for (const el of Array.from(document.querySelectorAll<HTMLElement>(".workbench-chat, .workbench-chat > *"))) el.scrollTop = 0; }, null);
+              await drag(y);
+              const after = await places();
+              moved[from] = { box: after.box - at.box, header: after.header - at.header };
+              if (after.box !== at.box || after.header !== at.header) failures.push(`${engine} ${scheme} ${moment}: a drag on the ${from} moved the box ${after.box - at.box}px, the header ${after.header - at.header}px`);
+            }
+            // The control: a finger pulling down on the thread still reads back through it.
+            const reading = () => page.evaluate(() => document.querySelector(".chat-thread [class*='overflow-y-auto']")?.scrollTop ?? NaN, null);
+            const from = await reading();
+            await drag(Math.round((at.header + at.box) / 2), true);
+            moved.threadScrolled = from - await reading();
+            if (!(Number(moved.threadScrolled) > 0)) failures.push(`${engine} ${scheme} ${moment}: a drag down on the thread did not scroll it`);
+            if (list.length !== 1 || !list[0]!.startsWith("thread")) failures.push(`${engine} ${scheme} ${moment}: scrollers ${JSON.stringify(list)}`);
+            if (at.boxBottom > at.height) failures.push(`${engine} ${scheme} ${moment}: the box ends at ${at.boxBottom}, under the viewport's ${at.height}`);
+            seen[`${engine}-${scheme}-${moment}`] = { ...at, scrollers: list, moved };
+            await shoot(`${moment}-dragged`);
+          };
+          const overscroll = await page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorY, null);
+          seen[`${engine}-${scheme}-root-overscroll`] = overscroll;
+          if (overscroll !== "none") failures.push(`${engine} ${scheme}: the root's overscroll is ${overscroll}`);
+          await probe("closed");
+          await page.getByPlaceholder("Ask the coordinator…").click();
+          await page.setViewportSize({ width: 390, height: 470 });
+          await page.waitForTimeout(600);
+          await probe("keyboard");
+          await page.setViewportSize(PHONE.viewport);
+          await page.getByRole("tab", { name: /^Threads/ }).click();
+          await page.locator(".project-overlay").waitFor({ timeout: 5000 });
+          await page.waitForTimeout(400);
+          const threads = await scrollers();
+          seen[`${engine}-${scheme}-threads`] = threads;
+          if (threads.length > 1) failures.push(`${engine} ${scheme} threads: scrollers ${JSON.stringify(threads)}`);
+          await shoot("threads");
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await bridge.stop();
+  }
+  const result = { shots, seen, failures };
+  await writeFile(join(outDir, "pin.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
+}
+
+/**
+ * A conversation that ended its turn is no ask: Home on a phone, WebKit and Chromium, dark and light,
+ * with its Workspaces list, beside a thread stopped on a real dialog. The conversation (`keep_open`)
+ * said `Waiting for you`, as it does before every answer, so Organizations groups it Waiting on you;
+ * only the dialog may count in the headline, Needs you, the Home tab's badge and a workspace's state.
+ */
+async function atRestBench(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const seen: Record<string, unknown> = {};
+  const failures: string[] = [];
+  const talk = { paneId: "w3:talk", workspaceId: "w3", tabId: "w3:t1", session: "77777777-7777-4777-8777-777777777777" };
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
+    const seed = needsYouSeed(herd, now);
+    const ago = new Date(now - 60_000).toISOString();
+    seed.projects[0]!.threads = [
+      { id: "t-0360", title: "Charla de mejoras", parent_id: "root", role: "worker", status: "open", group: "waiting-on-you", group_label: "Waiting on you",
+        note: "done", branch: "", workspace_id: talk.workspaceId, tab_id: talk.tabId, pane_id: talk.paneId, cwd: "", updated: ago, report_unacked: true,
+        auto_fix_ci: false, auto_merge: false, pr: null, activity: "Waiting for you", percent: null, keep_open: true },
+      ...seed.projects[0]!.threads.filter((thread) => thread.id === "t-0002"),
+    ];
+    return seed;
+  } });
+  try {
+    const herd = bridge.herd!;
+    bridge.fake!.addWorkspace(talk.workspaceId, "Charla de mejoras").addTab(talk.tabId, "charla");
+    await writeJournal(join(dirname(herd.journals.get(herd.idle)!), `${talk.session}.jsonl`), [["user", "¿Qué mejoramos hoy?"], ["assistant", "Dos cosas: el composer en el celular y la charla que figura como pedido."]], bridge.now());
+    bridge.fake!.addPane({ paneId: talk.paneId, workspaceId: talk.workspaceId, tabId: talk.tabId, agent: "claude", label: "Charla de mejoras", sessionId: talk.session,
+      cwd: bridge.dir, status: "done", lines: ["● Dos cosas: el composer en el celular y la charla que figura como pedido.", "", "❯ "] });
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(talk.paneId); tries++) {
+      if (tries > 60) throw new Error("the bridge never listed the conversation's pane");
+      await sleep(500);
+    }
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        for (const scheme of ["dark", "light"] as const) {
+          const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+          const page = await context.newPage();
+          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v1", "workspaces"); }, null);
+          await page.clock.install({ time: bridge.now() });
+          await page.goto(bridge.url + "/");
+          await page.locator("h1.text-large-title").waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(2500);
+          const read = await page.evaluate(() => {
+            const text = (el: Element | null | undefined) => (el as HTMLElement | null)?.innerText.replace(/\s+/g, " ").trim() ?? null;
+            const needs = document.querySelector('section[aria-label="Needs you"]');
+            const row = Array.from(document.querySelectorAll("li")).find((li) => /Charla de mejoras/.test(li.textContent ?? "") && !needs?.contains(li));
+            return {
+              headline: text(document.querySelector("h1.text-large-title")),
+              needsYou: needs ? Array.from(needs.querySelectorAll("a")).map(text) : [],
+              badge: text(document.querySelector(".bottom-tab-badge")),
+              talkRow: text(row),
+            };
+          }, null);
+          seen[`${engine}-${scheme}`] = read;
+          const fail = (what: string) => failures.push(`${engine} ${scheme}: ${what}`);
+          if (read.headline !== "1 needs you") fail(`headline ${read.headline}`);
+          if (read.needsYou.some((row) => /Charla/.test(row ?? ""))) fail(`Needs you lists the conversation: ${JSON.stringify(read.needsYou)}`);
+          if (read.badge !== "1") fail(`the Home tab's badge says ${read.badge}`);
+          if (!read.talkRow || /Needs you|Waiting for your reply/.test(read.talkRow)) fail(`the conversation's workspace reads ${read.talkRow}`);
+          const path = join(outDir, `at-rest-home-${engine}-${scheme}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await bridge.stop();
+  }
+  const result = { shots, seen, failures };
+  await writeFile(join(outDir, "at-rest.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
+}
 
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
@@ -3706,8 +3908,10 @@ else if (command === "composer") await composerAround();
 else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "reading") await reading();
+else if (command === "pin") await pin();
+else if (command === "at-rest") await atRestBench();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
