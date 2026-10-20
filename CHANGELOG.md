@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.34.0] - 2026-10-20
+## [1.34.0] - 2026-10-21
 
 ### Added
 
