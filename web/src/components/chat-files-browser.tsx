@@ -27,7 +27,9 @@ type ScanState = {
   pagingBoundary: boolean;
 };
 
-const PAGE_SIZE = 120;
+// A long conversation in one or two reads instead of a walk of small pages, each waiting on the last:
+// the bridge parses the journal once either way, and a page this size is still well under its ceiling.
+const PAGE_SIZE = 1_000;
 /** Pause after each bounded batch; the user can continue without losing already-found references. */
 export const MAX_SCANNED_ENTRIES = 6_000;
 
@@ -52,7 +54,8 @@ function mergeEntries(older: TranscriptEntry[], newer: TranscriptEntry[]): Trans
  */
 export function useConversationScan(paneId: string, session: string | undefined, active: boolean, seedHistory?: PaneHistoryResponse | null) {
   const [runKey, setRunKey] = useState(0);
-  const [scan, setScan] = useState<ScanState>(EMPTY_SCAN);
+  // An active scan starts loading, so its first frame never claims the conversation names no file.
+  const [scan, setScan] = useState<ScanState>(() => ({ ...EMPTY_SCAN, loading: active }));
   const seed = useRef<PaneHistoryResponse | null>(seedHistory ?? null);
   const accumulated = useRef<TranscriptEntry[]>([]);
   const cursor = useRef<AvailableHistory | null>(null);
