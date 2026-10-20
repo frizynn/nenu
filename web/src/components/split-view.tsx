@@ -5,6 +5,7 @@ import { Maximize2, ChatCircle, SquareTerminal, X } from "@/components/ui/icon";
 import { AgentChat, type DockedHeaderView } from "@/components/agent-chat";
 import { threadTree } from "@/components/project-tasks";
 import { NodeDot } from "@/components/node-row";
+import { ColumnEdge, ICON_BUTTON, type SessionInspectorState } from "@/components/session-inspector";
 import { Chip, ChipStrip } from "@/components/ui/chip";
 import { isLocked, useLocked } from "@/lib/idle";
 import { concerns, isLiveHealthy, onLiveEvent } from "@/lib/live-events";
@@ -13,7 +14,6 @@ import { getRequestedLines, type HomeData, type PaneData } from "@/lib/loaders";
 import { nodePath } from "@/lib/nav";
 import { nodeState } from "@/lib/org-tree";
 import { isReadOnly, type ProjectThreadView, type ProjectView } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 /**
  * Poll cadence of a docked mirror. The stream names only the route's own pane to the bridge watcher
@@ -136,12 +136,14 @@ export function ThreadChips({ threads, coordinator, currentPaneId, onOpen }: {
  * A thread docked beside its coordinator on a wide screen: its own conversation (or terminal) and
  * composer, its siblings as tabs, and its pull request above the composer.
  */
-export function DockedThread({ thread, project, siblings, data, subtitle, onSwitch, onExpand, onClose }: {
+export function DockedThread({ thread, project, siblings, data, subtitle, inspector, onSwitch, onExpand, onClose }: {
   thread: ProjectThreadView & { paneId: string };
   project: ProjectView;
   siblings: readonly ProjectThreadView[];
   data: HomeData;
   subtitle: string;
+  /** The right column it takes, at the session panel's width. */
+  inspector: SessionInspectorState;
   onSwitch: (paneId: string) => void;
   onExpand: () => void;
   onClose: () => void;
@@ -156,29 +158,31 @@ export function DockedThread({ thread, project, siblings, data, subtitle, onSwit
   const header = ({ terminal, canToggle, setTerminal, find, menu }: DockedHeaderView) => find
     ? <div className="flex min-h-13 shrink-0 items-center border-b border-border/60 px-3">{find}</div>
     : (
-    <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+    <div className="@container flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 pl-3 pr-2">
       <NodeDot state={nodeState(thread)} />
-      <span className="shrink-0 text-sm font-semibold">{thread.title}</span>
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{subtitle}</span>
-      {canToggle && <div role="group" aria-label="View" className="flex shrink-0 rounded-lg bg-muted/50 p-0.5">
+      {/* The title comes first: a narrow column drops the subtitle, then Chat and Terminal keep only their icons. */}
+      <span className="ml-1 min-w-0 shrink truncate text-sm font-semibold">{thread.title}</span>
+      <span className="ml-1 min-w-0 flex-1 truncate text-xs text-muted-foreground @max-[34rem]:hidden">{subtitle}</span>
+      <span className="hidden flex-1 @max-[34rem]:block" />
+      {canToggle && <div role="group" aria-label="View" className="flex shrink-0 items-center gap-0.5">
         {([[false, "Chat", ChatCircle], [true, "Terminal", SquareTerminal]] as const).map(([value, label, Icon]) => (
-          <button key={label} type="button" aria-pressed={terminal === value} onClick={() => setTerminal(value)}
-            className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs", terminal === value ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}>
-            <Icon aria-hidden className="size-3.5" />{label}
+          <button key={label} type="button" aria-pressed={terminal === value} aria-label={label} title={label} onClick={() => setTerminal(value)} className="panel-tab shrink-0 px-1.5">
+            <Icon aria-hidden className="size-3.5" /><span className="@max-[26rem]:sr-only">{label}</span>
           </button>
         ))}
       </div>}
       {menu}
-      <button type="button" aria-label="Open full view" title="Open full view" onClick={onExpand} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent">
+      <button type="button" aria-label="Open full view" title="Open full view" onClick={onExpand} className={ICON_BUTTON}>
         <Maximize2 aria-hidden className="size-3.5" />
       </button>
-      <button type="button" aria-label="Close thread" title="Close" onClick={onClose} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent">
+      <button type="button" aria-label="Close thread" title="Close" onClick={onClose} className={ICON_BUTTON}>
         <X aria-hidden className="size-4" />
       </button>
     </div>
   );
   return (
-    <aside aria-label={thread.title} className="flex min-h-0 w-[min(44rem,50%)] shrink-0 flex-col border-l border-border">
+    <aside aria-label={thread.title} className="session-panel" data-docked="" style={{ width: inspector.width }}>
+      <ColumnEdge inspector={inspector} label="Resize thread" />
       <AgentChat
         key={thread.paneId}
         paneId={thread.paneId}

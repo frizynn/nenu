@@ -7,6 +7,7 @@ import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import type { SessionPr, SessionReading } from "@/components/session-inspector";
 import { fetchSessionDiff } from "@/lib/api";
+import { shortCwd } from "@/lib/format";
 import { modelDisplayName } from "@/lib/model-display";
 import { coordinatorState, nodeState, STATE_LABEL, type NodeState } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
@@ -134,6 +135,7 @@ function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; sessi
     </button>}>
       <div className="overview-body">
         {read.state === "loading" && <p role="status" className="overview-note">Reading the branch…</p>}
+        {diff?.repo && <p className="overview-note">In the project's repository, <code className="font-mono">{shortCwd(diff.repo)}</code>.</p>}
         {failure && <p className="overview-note">{failure}</p>}
         {diff && diff.totals.files === 0 && <p className="overview-note">Nothing changed on this branch.</p>}
         {files.length > 0 && <ul aria-label="Changed files">

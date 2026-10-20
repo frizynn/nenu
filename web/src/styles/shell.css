@@ -56,3 +56,15 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   .workbench-main:has(:is(input, textarea, [contenteditable="true"]):focus) > .bottom-tab-bar { display: none; }
 }
+
+/* A desk column's edge (ui/resize-handle): an 8px grip centred on its border. The seam shows under a
+   pointer after a beat, so crossing it on the way elsewhere draws nothing, and in the ring's colour
+   while held or focused. While one is held the whole page keeps its cursor and selects no text. */
+.resize-handle { position: absolute; inset-block: 0; z-index: 2; width: 8px; cursor: col-resize; touch-action: none; outline: none; }
+.resize-handle[data-edge="end"] { right: -4px; }
+.resize-handle[data-edge="start"] { left: -4px; }
+.resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 3px; width: 2px; background: transparent; transition: background-color 120ms ease-out; }
+@media (hover: hover) { .resize-handle:hover::after { background: color-mix(in srgb, var(--foreground) 22%, transparent); transition-delay: 150ms; } }
+.resize-handle[data-dragging]::after, .resize-handle:focus-visible::after { background: var(--ring); transition-delay: 0ms; }
+:root[data-resizing], :root[data-resizing] * { cursor: col-resize !important; user-select: none; }
+@media (prefers-reduced-motion: reduce) { .resize-handle::after { transition: none; } }

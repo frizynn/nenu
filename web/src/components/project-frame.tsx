@@ -1,4 +1,4 @@
-import { lazy, Suspense, useContext, useEffect, type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 
 import type { ProjectChipsSource } from "@/components/composer-chips";
@@ -11,7 +11,6 @@ import { armMotion, useGoUp } from "@/lib/motion";
 import { nodePath, panePath } from "@/lib/nav";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
-import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // The Overview tab is a desk's alone: a phone never loads it.
 const ThreadOverview = lazy(() => import("./thread-overview").then((module) => ({ default: module.ThreadOverview })));
@@ -122,13 +121,6 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     return next;
   }, { replace: true });
   const panelShown = desk && inspector.open && !docked;
-  const onDock = useContext(WorkbenchNavigationContext)?.onDock;
-  const isDocked = docked !== undefined;
-  useEffect(() => {
-    if (!onDock || !isDocked) return;
-    onDock(true);
-    return () => onDock(false);
-  }, [onDock, isDocked]);
 
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
@@ -180,7 +172,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       })}
       {docked && (
         <DockedThread thread={docked} project={project} siblings={coordinatedThreads(project, docked.parentId === "root" ? undefined : docked.parentId)} data={data}
-          subtitle={[scope.panelTitle, docked.agent].filter(Boolean).join(" · ")}
+          subtitle={[scope.panelTitle, docked.agent].filter(Boolean).join(" · ")} inspector={inspector}
           onSwitch={(id) => setDocked(id)}
           onExpand={() => navigate(panePath(docked.paneId, data.session))}
           onClose={() => setDocked(null)} />

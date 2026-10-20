@@ -358,6 +358,8 @@ interface FileProject extends Picks {
   status: "active" | "paused";
   session: string;
   roots: string[];
+  /** The repositories PROJECT.md names, in its order: the code the project works on. */
+  repos: string[];
   coordinator: Binding;
   /** `summary` stays out of the snapshot: up to 600 characters, 34 paths and a STATUS.md a thread, read only by the page that shows them. */
   threads: Array<{ view: OrgThreadView; binding: Binding; summary?: ThreadSummary; report?: string }>;
@@ -464,6 +466,16 @@ export class ProjectRegistry {
           workspaceIds: [...workspaceIds],
         };
       });
+  }
+
+  /**
+   * The repositories PROJECT.md names for the project whose coordinator or thread is pane `paneId`,
+   * bound as `list` binds them; empty for a pane no project holds.
+   */
+  repos(sessionName: string, isPrimary: boolean, panes: readonly AgentView[], paneId: string): string[] {
+    const project = this.list(sessionName, isPrimary, panes)
+      .find((candidate) => candidate.coordinator?.paneId === paneId || candidate.threads.some((thread) => thread.paneId === paneId));
+    return project ? this.records.find((record) => record.slug === project.slug)?.repos ?? [] : [];
   }
 
   /** The records as last read: the first read paints from the files at once, and the `--json` view follows as an `org` event. */
@@ -793,6 +805,7 @@ export class ProjectRegistry {
         ...picks(settings.icon, settings.tone),
         session: string(coordinator.session),
         roots: [...settings.roots, string(coordinator.cwd)].filter((root) => isAbsolute(root)),
+        repos: settings.roots,
         coordinator: binding(coordinator),
         threads,
       }];
@@ -818,6 +831,7 @@ export class ProjectRegistry {
         // Neither the session nor the coordinator's pane is in the contract yet; the files supply them.
         session: local?.session ?? "",
         roots: local?.roots ?? [],
+        repos: local?.repos ?? [],
         coordinator: local?.coordinator ?? { paneId: "", workspaceId: "", tabId: "", cwd: "" },
         threads,
         source: "json" as const,

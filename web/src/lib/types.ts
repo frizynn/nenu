@@ -335,8 +335,10 @@ export type PaneDiff =
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
+    /** The project's repository, read because the pane's own folder is not in one. */
+    repo?: string;
   }
-  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed" | "no-repo" | "no-default"; message: string };
+  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed" | "no-repo" | "no-default"; message: string; repo?: string };
 
 /**
  * An open pull request of the person's, read with `gh` in a repo an agent works in
