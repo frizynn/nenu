@@ -471,7 +471,7 @@ export const CONVERSATION_WINDOW = 60;
 // A chat's first read started before the chat mounts (its pane's loader), so the chat's first read takes
 // it over instead of asking only after its first render. Taken once, only while fresh, and never across a
 // change of read access.
-const warmHistory = new Map<string, { at: number; epoch: number; read: Promise<PaneHistoryResponse> }>();
+const warmHistory = new Map<string, { at: number; read: Promise<PaneHistoryResponse> }>();
 const WARM_MS = 4_000;
 
 /** Start reading a pane's newest conversation window now, for its chat's first read to take over. */
@@ -479,23 +479,22 @@ export function warmConversation(paneId: string, session?: string): void {
   const url = historyUrl(paneId, { limit: CONVERSATION_WINDOW }, session);
   const warm = warmHistory.get(url);
   if (warm && Date.now() - warm.at < WARM_MS) return;
-  const epoch = historyAuthEpoch;
   const read = fetchHistory(paneId, { limit: CONVERSATION_WINDOW }, session);
   read.catch(() => {});
   warmHistory.delete(url);
-  warmHistory.set(url, { at: Date.now(), epoch, read });
+  warmHistory.set(url, { at: Date.now(), read });
   if (warmHistory.size > 8) warmHistory.delete(warmHistory.keys().next().value!);
 }
 
 /**
  * The read `warmConversation` started for this pane, for a chat's first read only: undefined when there
- * is none, it is older than WARM_MS, or read access changed since. Given up when `signal` aborts.
+ * is none or it is older than WARM_MS (a change of read access clears them all). Given up when `signal` aborts.
  */
 export function takeWarmConversation(paneId: string, session: string | undefined, signal?: AbortSignal): Promise<PaneHistoryResponse> | undefined {
   const url = historyUrl(paneId, { limit: CONVERSATION_WINDOW }, session);
   const warm = warmHistory.get(url);
   warmHistory.delete(url);
-  if (!warm || Date.now() - warm.at >= WARM_MS || warm.epoch !== historyAuthEpoch) return undefined;
+  if (!warm || Date.now() - warm.at >= WARM_MS) return undefined;
   return untilAborted(warm.read, signal);
 }
 

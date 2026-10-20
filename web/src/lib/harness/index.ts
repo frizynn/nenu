@@ -6,7 +6,7 @@
 // (and any future agent's) run; every non-adapter agent keeps the pure raw mirror.
 
 import type { Block, StyledLine } from "../blocks";
-import { adapterFor, hasBlockGrammar } from "./registry";
+import { adapterFor, hasBlockGrammar, readsConversation } from "./registry";
 
 /**
  * Group lines into semantic blocks by routing through the agent's adapter. With no `ctx` (or an agent
@@ -17,5 +17,5 @@ export function buildBlocks(lines: StyledLine[], ctx?: { agent?: string }): Bloc
   return adapterFor(ctx?.agent)?.buildBlocks(lines) ?? [{ kind: "raw", lines }];
 }
 
-export { adapterFor, hasBlockGrammar };
+export { adapterFor, hasBlockGrammar, readsConversation };
 export type { HarnessAdapter } from "./types";

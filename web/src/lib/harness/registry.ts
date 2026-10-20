@@ -43,6 +43,12 @@ export function adapterFor(agent: string | undefined): HarnessAdapter | undefine
   return agent !== undefined && Object.hasOwn(ADAPTERS, agent) ? ADAPTERS[agent] : undefined;
 }
 
+/** Whether a pane's chat reads its conversation: an agent, not a shell, that has an adapter. The gate
+ *  agent-chat opens its conversation with, and the one the pane's loader reads ahead on. */
+export function readsConversation(pane: { kind?: string; agent?: string } | undefined): boolean {
+  return pane?.kind !== "shell" && adapterFor(pane?.agent) !== undefined;
+}
+
 /** Whether `agent` has block grammars (an adapter). The gate agent-chat's status strip shares with
  *  the render pipeline, so the two can't diverge. */
 export function hasBlockGrammar(agent: string | undefined): boolean {

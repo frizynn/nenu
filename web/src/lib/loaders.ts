@@ -18,7 +18,7 @@ import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { isLostLatched } from "@/lib/connection-health";
 import { preloadDeskChunks } from "@/lib/desk-chunks";
-import { adapterFor } from "@/lib/harness/registry";
+import { readsConversation } from "@/lib/harness/registry";
 import { loadRawTerminal, paneDisplayScope } from "@/lib/raw-terminal";
 import {
   dropLastPaneText,
@@ -520,7 +520,7 @@ function enteringPane(previous: string | undefined, next: string | undefined): b
 /** Whether the pane's chat reads its conversation on open: an agent Nenu can read, not shown as its raw terminal. */
 function chatReads(paneId: string, session: string | undefined): boolean {
   const agent = lastSnapshot.get(session ?? "")?.agents.find((candidate) => candidate.paneId === paneId);
-  return Boolean(adapterFor(agent?.agent)) && !loadRawTerminal(paneDisplayScope(session, paneId));
+  return readsConversation(agent) && !loadRawTerminal(paneDisplayScope(session, paneId));
 }
 
 // What paneLoader last returned per pane, bounded like the text cache.

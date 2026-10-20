@@ -40,7 +40,7 @@ import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space
 import { cn } from "@/lib/utils";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
-import { adapterFor } from "@/lib/harness";
+import { adapterFor, readsConversation } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { terminalWait } from "@/lib/terminal-wait";
 import { FindBar, thirdScrollTop } from "@/components/find-bar";
@@ -294,7 +294,7 @@ export function AgentChat({
     if (next) setRawTerminal(false);
   }, [setRawTerminal]);
   const conversation = useLiveConversation({
-    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), paused: prefs.rawTerminal || Boolean(subagent), busy: agent?.status === "working",
+    paneId, session, enabled: readsConversation(agent), paused: prefs.rawTerminal || Boolean(subagent), busy: agent?.status === "working",
   });
   const hasConversation = Boolean(agent?.hasSession || conversation.history?.available);
   const operatorCommands = useOperatorCommands();

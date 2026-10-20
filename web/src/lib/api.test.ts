@@ -543,6 +543,6 @@ describe("a conversation warmed before its chat mounts", () => {
     );
     warmConversation("w9:kept");
     await expect(fetchHistory("w9:denied", { limit: 60 })).rejects.toBeDefined();
-    expect(takeWarmConversation("w9:kept")).toBeUndefined();
+    expect(takeWarmConversation("w9:kept", undefined)).toBeUndefined();
   });
 });
