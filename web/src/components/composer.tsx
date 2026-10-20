@@ -57,7 +57,7 @@ import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
-import { draftChips, draftFromWire, draftWords, isSlashCommand, insertImageChips, keepChipsWhole, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
+import { draftChips, draftFromWire, draftWords, editChips, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
   addLocalSend,
   listLocalSends,
@@ -1196,7 +1196,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (note) setStatus(note, "info");
     if (!result.images) return focusInputEnd();
     const text = inputValueRef.current;
-    const at = Math.min(caretRef.current ?? text.length, text.length);
+    const el = inputRef.current;
+    const at = el && document.activeElement === el ? el.selectionEnd : caretRef.current ?? text.length;
     const placed = insertImageChips(text, at, Array.from({ length: result.images }, (_, i) => before + i + 1));
     updateInput(placed.text);
     placeCaret(placed.caret);
@@ -1205,18 +1206,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   /** Take an attachment out; a picture takes its chip with it, and the pictures after it renumber. */
   function removeAttachment(id: string) {
     const n = pictures(attachments.current()).findIndex((item) => item.id === id) + 1;
-    if (n > 0) updateInput((text) => withoutImages(text, [n]));
+    // The list first, so the draft saved with the new text is saved against the list it numbers.
     attachments.remove(id);
+    if (n > 0) updateInput((text) => withoutImages(text, [n]));
   }
 
-  /** One edit of the box, with every chip kept whole: one the edit touched leaves with its picture. */
+  /** One edit of the box, with every chip kept whole and naming one picture: one the edit touched
+   *  leaves with its picture, and chip text pasted or brought back by undo leaves on its own. */
   function editDraft(value: string, caret: number) {
-    const kept = keepChipsWhole(inputValueRef.current, value, caret);
-    if (kept.removed.length) {
-      const gone = pictures(attachments.current()).filter((_item, i) => kept.removed.includes(i + 1));
-      gone.forEach((item) => attachments.remove(item.id));
-      placeCaret(kept.caret);
-    }
+    const shown = pictures(attachments.current());
+    const kept = editChips(inputValueRef.current, value, caret, shown.length);
+    shown.filter((_item, i) => kept.removed.includes(i + 1)).forEach((item) => attachments.remove(item.id));
+    if (kept.text !== value) placeCaret(kept.caret);
     caretRef.current = kept.caret;
     skills.onChange(kept.text, kept.caret);
   }

@@ -2414,6 +2414,17 @@ describe("Composer — images and the pending bubble", () => {
     expect(box).toHaveValue("see");
   });
 
+  it("taking out picture #1 of two renumbers the other's chip, and the stored draft keeps it in place", async () => {
+    const second = "/home/you/.local/state/collie/uploads/w1-p1-mabc124-1234abce.png";
+    saveDraft(undefined, "w1:p1", `a ${UPLOAD} b ${second} c`);
+    renderComposer({ nativeWorkbench: true });
+    const box = screen.getByRole("textbox");
+    expect(box).toHaveValue(`a ${imageChip(1)} b ${imageChip(2)} c`);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Image #1" }));
+    expect(box).toHaveValue(`a b ${imageChip(1)} c`);
+    expect(loadDraft(undefined, "w1:p1")).toBe(`a b ${second} c`);
+  });
+
   it("restores a saved draft's upload as a chip, not as text", () => {
     saveDraft(undefined, "w1:p1", `half a thought ${UPLOAD}`);
     renderComposer({ nativeWorkbench: true });

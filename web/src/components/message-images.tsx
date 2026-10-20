@@ -60,21 +60,13 @@ export function ImageStrip({ images, size = "md", className, label = "Images", m
  */
 export function MessageImages({ paths, size = "md", className }: { paths: readonly string[]; size?: "sm" | "md"; className?: string }) {
   const url = useContext(FileMediaContext);
-  return <ImageStrip size={size} className={className} images={paths.map((path, index) => ({
-    src: localImageUrl(path) ?? url?.(path),
-    label: imageLabel(index),
-    item: { kind: "file", path },
-  }))} />;
+  return <ImageStrip size={size} className={className} images={pathImages(paths, url)} />;
 }
 
 /** Images the journal holds inline for one entry (a pasted screenshot, what a tool showed the agent). */
 export function JournalImages({ entry, images, size = "md", className, label }: { entry: string; images: readonly Pick<TranscriptImagePart, "index">[]; size?: "sm" | "md"; className?: string; label?: string }) {
   const viewer = useContext(MediaViewerContext);
-  return <ImageStrip size={size} className={className} label={label} images={images.map(({ index }, i) => ({
-    src: viewer?.journalUrl(entry, index),
-    label: imageLabel(i),
-    item: { kind: "journal", entry, index, label: imageLabel(i) },
-  }))} />;
+  return <ImageStrip size={size} className={className} label={label} images={journalStripImages(entry, images, viewer?.journalUrl)} />;
 }
 
 function Thumbnail({ src, label, size, onOpen }: { src?: string; label: string; size: "sm" | "md"; onOpen?: () => void }) {

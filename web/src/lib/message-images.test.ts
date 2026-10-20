@@ -1,4 +1,4 @@
-import { draftFromWire, imageChip, imageLabel, insertImageChips, isUploadPath, keepChipsWhole, messageMatchKey, pathPieces, serializeDraft, serializeMessage, splitDraftUploads, splitMessageImages, tokenPieces, uploadName, withoutImages } from "./message-images";
+import { draftFromWire, dropStrayChips, editChips, imageChip, imageLabel, insertImageChips, isUploadPath, keepChipsWhole, messageMatchKey, pathPieces, serializeDraft, serializeMessage, splitDraftUploads, splitMessageImages, tokenPieces, uploadName, withoutImages } from "./message-images";
 
 const UP = "/home/you/.local/state/collie/uploads";
 const a = `${UP}/w1-p1-mabc123-1234abcd.png`;
@@ -92,6 +92,28 @@ describe("pictures in their places", () => {
     expect(keepChipsWhole(before, "a z c", 3)).toEqual({ text: "a z c", removed: [1, 2], caret: 3 });
   });
 
+  it("lets chip text that names no picture leave: pasted back, brought back by undo, or past the count", () => {
+    const draft = `A ${chip(1)} B ${chip(2)} C`;
+    // Cut "chip 1 B": picture 1 goes, chip 2 becomes 1.
+    const cutAt = draft.indexOf(chip(1));
+    const cutEnd = draft.indexOf(chip(2));
+    const cut = editChips(draft, draft.slice(0, cutAt) + draft.slice(cutEnd), cutAt, 2);
+    expect(cut.removed).toEqual([1]);
+    expect(cut.text).toBe(`A ${chip(1)} C`);
+    // Paste the cut text back at the end: its chip names a picture that is gone, so it leaves.
+    const pasted = `${cut.text} ${chip(1)} B`;
+    expect(editChips(cut.text, pasted, pasted.length, 1)).toEqual({ text: `A ${chip(1)} C  B`, removed: [], caret: `A ${chip(1)} C  B`.length });
+    expect(dropStrayChips(`x ${chip(3)} y`, 2, 0)).toEqual({ text: "x  y", caret: 0 });
+  });
+
+  it("keeps the cursor with its words when a removal turns #10 into #9", () => {
+    const draft = Array.from({ length: 10 }, (_v, i) => chip(i + 1)).join("") + "z";
+    const end1 = chip(1).length;
+    const after = editChips(draft, draft.slice(0, end1 - 1) + draft.slice(end1), draft.length - 1, 10);
+    expect(after.removed).toEqual([1]);
+    expect(after.caret).toBe(after.text.length);
+  });
+
   it("takes pictures out by number and renumbers the rest", () => {
     expect(withoutImages(`${chip(1)} ${chip(2)} ${chip(3)}`, [2])).toBe(`${chip(1)} ${chip(2)}`);
     expect(withoutImages(`x ${chip(1)} y`, [1])).toBe("x y");
@@ -101,6 +123,8 @@ describe("pictures in their places", () => {
     expect(insertImageChips("look here.", 9, [1])).toEqual({ text: `look here${chip(1)}.`, caret: 9 + chip(1).length });
     expect(insertImageChips("", 0, [1, 2])).toEqual({ text: `${chip(1)} ${chip(2)}`, caret: chip(1).length * 2 + 1 });
     expect(serializeDraft(`look here${chip(1)}.`, [a])).toBe(`look here ${a} .`);
+    // A stale cursor inside a chip puts the new one after it, never into it.
+    expect(insertImageChips(`see ${chip(1)}`, 8, [2]).text).toBe(`see ${chip(1)}${chip(2)}`);
   });
 
   it("cuts a logged message at its tokens, the k-th token the k-th picture whatever its number", () => {

@@ -245,7 +245,10 @@ class Send {
 
   carries(seen: Seen): boolean {
     const { text } = this.request;
-    if (draftCarriesSend(text, seen.draft)) return true;
+    // With pictures in place the whole message always shows their tokens, which the text never holds,
+    // so a slice of its words is a part of it typed, never all of it: only the adapter's reading counts.
+    const placed = this.adapter?.pastesImagePaths === true && hasPlacedPictures(text);
+    if (!placed && draftCarriesSend(text, seen.draft)) return true;
     return seen.draft !== null && this.adapter?.draftCarriesSend?.(text, seen.draft) === true;
   }
 

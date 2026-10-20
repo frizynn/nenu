@@ -14,21 +14,16 @@
 // them), and Claude attaches a picture a beat after its paste (150 ms measured): text sent on its heels
 // lands before the token. So the bridge types the message piece by piece and waits for each token.
 
-import { isUploadPath, uploadName } from "../upload-path";
+import { isPicturePath } from "../upload-path";
 
 export type SendPiece = { kind: "text"; text: string } | { kind: "image"; path: string };
-
-/** A picture Nenu uploaded: an upload whose generated name is its image bytes' (bridge/uploads.ts). */
-function isPicture(word: string): boolean {
-  return isUploadPath(word) && uploadName(word) === null;
-}
 
 /** The message cut at its pictures' paths, in order; one text piece when it holds none. */
 export function sendPieces(text: string): SendPiece[] {
   const pieces: SendPiece[] = [];
   let words = "";
   for (const part of text.split(/(\s+)/)) {
-    if (!isPicture(part)) {
+    if (!isPicturePath(part)) {
       words += part;
       continue;
     }

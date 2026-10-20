@@ -1,7 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageQueueStrip } from "./message-queue-strip";
 import { PendingTurns } from "./pending-turns";
+import { imageChip } from "@/lib/message-images";
 
 /** Opens row n's ⋯ and returns the menu it shows. */
 async function menuOf(user: ReturnType<typeof userEvent.setup>, n: number) {
@@ -127,4 +128,23 @@ it("draws a row queued on another device exactly as this device draws its own", 
   );
   expect(within(own.container).getByRole("status").textContent).toBe(elsewhere);
   expect(elsewhere).toBe("Queued Waiting for Claude to finish this turn.");
+});
+
+it("edits a queued message's words with each picture kept in its place; a chip the edit breaks takes its picture", async () => {
+  const user = userEvent.setup();
+  const change = vi.fn().mockResolvedValue(true);
+  const up = "/home/you/.local/state/nenu/uploads";
+  const red = `${up}/w1_p1-mv8g-0a1b2c3d.png`;
+  const blue = `${up}/w1_p1-mv8g-0a1b2c3e.png`;
+  const item = { id: "q", text: `first ${red} then ${blue} end`, state: "queued" as const, createdAt: 1, revision: 2 };
+  render(<MessageQueueStrip messages={[item]} busy={false} error="" change={change} />);
+  await user.click(within(await menuOf(user, 1)).getByRole("button", { name: "Edit" }));
+  const input = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Edit queued message" });
+  expect(input).toHaveValue(`first ${imageChip(1)} then ${imageChip(2)} end`);
+  // A Backspace into chip 1: picture 1 leaves with all of its chip, and blue becomes picture 1.
+  const end = `first ${imageChip(1)}`.length;
+  fireEvent.change(input, { target: { value: input.value.slice(0, end - 1) + input.value.slice(end), selectionStart: end - 1, selectionEnd: end - 1 } });
+  expect(input).toHaveValue(`first  then ${imageChip(1)} end`);
+  await user.click(screen.getByRole("button", { name: "Save queued message" }));
+  expect(change).toHaveBeenLastCalledWith("edit", `first  then ${blue} end`, item);
 });

@@ -16,3 +16,8 @@ export function isUploadPath(path: string): boolean {
 export function uploadName(path: string): string | null {
   return UPLOAD_PATH.exec(path)?.[1] ?? null;
 }
+
+/** A picture Nenu uploaded: an upload named by its image bytes. The one rule for which paths travel in place (ADR 0104). */
+export function isPicturePath(path: string): boolean {
+  return isUploadPath(path) && uploadName(path) === null;
+}

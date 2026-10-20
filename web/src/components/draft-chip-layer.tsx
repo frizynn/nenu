@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ImageIcon } from "@/components/ui/icon";
 
 import { draftChips } from "@/lib/message-images";
@@ -20,21 +20,27 @@ export function DraftChipLayer({ text, field }: { text: string; field: RefObject
   const layer = useRef<HTMLDivElement>(null);
   const chips = draftChips(text);
 
-  useLayoutEffect(() => {
+  // Follow the textarea's metrics, size and scroll: on every change of the text (cheap: one style
+  // read), and whenever it resizes or scrolls without one.
+  const follow = useCallback(() => {
     const el = field.current;
     const back = layer.current;
     if (!el || !back) return;
-    const follow = () => {
-      const style = getComputedStyle(el);
-      for (const key of METRICS) back.style[key] = style[key];
-      back.style.borderStyle = "solid";
-      back.style.borderColor = "transparent";
-      // The textarea's own width less its scrollbar, so a line wraps where the textarea wraps it.
-      back.style.width = `${el.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)}px`;
-      back.style.height = `${el.offsetHeight}px`;
-      back.scrollTop = el.scrollTop;
-    };
-    follow();
+    const style = getComputedStyle(el);
+    for (const key of METRICS) back.style[key] = style[key];
+    back.style.borderStyle = "solid";
+    back.style.borderColor = "transparent";
+    // The textarea's own width less its scrollbar, so a line wraps where the textarea wraps it.
+    back.style.width = `${el.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)}px`;
+    back.style.height = `${el.offsetHeight}px`;
+    back.scrollTop = el.scrollTop;
+  }, [field]);
+  const drawn = chips.length > 0;
+
+  useLayoutEffect(follow, [follow, text]);
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el || !drawn) return;
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(follow);
     resize?.observe(el);
     el.addEventListener("scroll", follow, { passive: true });
@@ -42,7 +48,7 @@ export function DraftChipLayer({ text, field }: { text: string; field: RefObject
       resize?.disconnect();
       el.removeEventListener("scroll", follow);
     };
-  }, [field, text]);
+  }, [field, follow, drawn]);
 
   if (!chips.length) return null;
   const parts: ReactNode[] = [];

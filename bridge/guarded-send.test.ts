@@ -297,6 +297,30 @@ describe("guardedSend", () => {
     expect(term.keys()).toEqual([]);
   });
 
+  test("a write that fails after the first piece says the text may be in the box", async () => {
+    const term = new Term();
+    let writes = 0;
+    const send = term.sendPaneText;
+    term.sendPaneText = async (paneId, text) => {
+      if (++writes === 2) throw new Error("herdr pane.send_text: internal: lost");
+      return send(paneId, text);
+    };
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: true });
+    expect(term.keys()).toEqual([]);
+  });
+
+  test("a retry after a picture that never showed types nothing: part of it is already in the box", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    await run(term, { text: placed });
+    const typed = term.count("pane.send_text");
+    const { outcome } = await run(term, { text: placed }, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(typed);
+    expect(term.keys()).toEqual([]);
+  });
+
   test("an agent with no adapter gets the message in one write, its paths in place", async () => {
     const term = new Term();
     term.agent = null;

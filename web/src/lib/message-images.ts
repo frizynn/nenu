@@ -1,8 +1,8 @@
 import { filePathsInText } from "./chat-files";
 import type { TranscriptEntry, TranscriptImagePart } from "./types";
-import { isUploadPath, uploadName } from "./upload-path";
+import { isPicturePath, isUploadPath, uploadName } from "./upload-path";
 
-export { isUploadPath, uploadName };
+export { isPicturePath, isUploadPath, uploadName };
 
 // A message that carries images is plain text on the wire: the agent CLIs (Claude Code, Codex) read
 // an image by its absolute path, so each uploaded picture's path sits in the text where the operator
@@ -119,10 +119,23 @@ export function withoutImages(text: string, gone: readonly number[]): string {
 export function keepChipsWhole(before: string, after: string, caret: number): { text: string; removed: number[]; caret: number } {
   const chips = draftChips(before);
   if (!chips.length) return { text: after, removed: [], caret };
-  let start = 0;
-  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  // The smallest edit that turns `before` into `after`, placed where the cursor says it ended. Two chips
+  // share their first characters, so a plain prefix/suffix diff can place a deletion inside the wrong
+  // one; the cursor tells them apart. A cursor that would make the edit any larger is ignored.
+  const span = (start: number, tail: number) => before.length - tail - start;
+  const prefix = (limit: number) => {
+    let n = 0;
+    while (n < limit && before[n] === after[n]) n++;
+    return n;
+  };
   let tail = 0;
-  while (tail < before.length - start && tail < after.length - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  while (tail < before.length && tail < after.length && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  let start = prefix(Math.min(before.length, after.length) - tail);
+  const anchored = after.length - caret;
+  if (anchored >= 0 && anchored <= Math.min(before.length, after.length) && before.endsWith(after.slice(caret))) {
+    const at = prefix(Math.min(before.length, after.length) - anchored);
+    if (span(at, anchored) === span(start, tail)) [start, tail] = [at, anchored];
+  }
   const end = before.length - tail; // the edit replaced before[start, end) …
   const inserted = after.length - tail; // … with after[start, inserted)
   const touched = chips.filter((chip) => (end > start ? chip.start < end && chip.end > start : chip.start < start && start < chip.end));
@@ -140,13 +153,47 @@ export function keepChipsWhole(before: string, after: string, caret: number): { 
     if (caret > from) moved -= Math.min(caret, to) - from;
   }
   const removed = touched.map((chip) => chip.number);
-  // Renumber what stays: the cut chips are gone already, so only the numbers after them shift.
-  return { text: withoutImages(text, removed), removed, caret: moved };
+  // Renumber what stays: the cut chips are gone already, so only the numbers after them shift (and
+  // "#10" turning "#9" moves the cursor with it).
+  return { text: withoutImages(text, removed), removed, caret: withoutImages(text.slice(0, moved), removed).length };
+}
+
+/**
+ * Chips that name no picture leave the text: a number past the `count` pictures, or a second chip
+ * for the same picture (chip text pasted back in, or brought back by undo). The first chip for a
+ * number keeps it.
+ */
+export function dropStrayChips(text: string, count: number, caret: number): { text: string; caret: number } {
+  let out = "";
+  let at = 0;
+  let moved = caret;
+  const seen = new Set<number>();
+  for (const chip of draftChips(text)) {
+    out += text.slice(at, chip.start);
+    at = chip.end;
+    if (chip.number <= count && !seen.has(chip.number)) {
+      seen.add(chip.number);
+      out += text.slice(chip.start, chip.end);
+    } else if (caret > chip.start) moved -= Math.min(caret, chip.end) - chip.start;
+  }
+  return at ? { text: out + text.slice(at), caret: moved } : { text, caret };
+}
+
+/**
+ * One edit of a draft holding `count` pictures, with every chip kept whole and naming exactly one
+ * picture: `removed` are the pictures whose chips the edit took (renumbered already in `text`).
+ */
+export function editChips(before: string, after: string, caret: number, count: number): { text: string; removed: number[]; caret: number } {
+  const kept = keepChipsWhole(before, after, caret);
+  const clean = dropStrayChips(kept.text, count - kept.removed.length, kept.caret);
+  return { ...clean, removed: kept.removed };
 }
 
 /** Chips for newly attached pictures, put into `text` at `at`. A chip pads itself on screen, and the
  *  wire sets each path off by whitespace (serializeDraft), so no space is added around them. */
 export function insertImageChips(text: string, at: number, numbers: readonly number[]): { text: string; caret: number } {
+  // A stale cursor inside a chip goes to its end, so a chip never splits another.
+  at = draftChips(text).find((chip) => chip.start < at && at < chip.end)?.end ?? Math.min(at, text.length);
   const chips = numbers.map(imageChip).join(" ");
   return { text: text.slice(0, at) + chips + text.slice(at), caret: at + chips.length };
 }
@@ -180,7 +227,7 @@ export function draftFromWire(wire: string, known: readonly string[] = []): { te
   const files: string[] = [];
   const parts = wire.split(/(\s+)/).map((part) => {
     if (!isUploadPath(part)) return part;
-    if (uploadName(part) !== null) {
+    if (!isPicturePath(part)) {
       if (!files.includes(part)) files.push(part);
       return "";
     }
@@ -221,12 +268,12 @@ export function tokenPieces(text: string, images: number): MessagePiece[] {
   return cut(text, marks);
 }
 
-/** A wire text cut at its picture paths, and those paths in order (`image` indexes them). */
+/** A wire text cut at the paths of Nenu's picture uploads (what the bridge pastes in place), and those paths in order. */
 export function pathPieces(text: string): { pieces: MessagePiece[]; paths: string[] } {
   const paths: string[] = [];
   const marks: Array<{ start: number; end: number }> = [];
   for (const m of text.matchAll(/\S+/g)) {
-    if (!IMAGE_EXTENSION.test(m[0]) || !filePathsInText(m[0]).includes(m[0])) continue;
+    if (!isPicturePath(m[0])) continue;
     paths.push(m[0]);
     marks.push({ start: m.index, end: m.index + m[0].length });
   }
