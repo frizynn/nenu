@@ -13,10 +13,11 @@
 // no flag, no race — and because a navigation aborts any in-flight revalidation, the nav is instant
 // even while a poll's doomed fetch is still hanging.
 
-import { fetchHistory, fetchPane, fetchSnapshot, isApiErrorStatus } from "@/lib/api";
+import { fetchHistory, fetchPane, fetchSnapshot, isApiErrorStatus, warmConversation } from "@/lib/api";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { isLostLatched } from "@/lib/connection-health";
+import { preloadDeskChunks } from "@/lib/desk-chunks";
 import {
   dropLastPaneText,
   loadLastPaneText,
@@ -489,6 +490,9 @@ export async function paneLoader({
   if (isNavigation) {
     rethrowIfSuperseded(request);
     const read = sharedRead(paneId, session, lines);
+    // What the chat reads right after its first render, asked for beside the pane's read.
+    warmConversation(paneId, session);
+    preloadDeskChunks();
     const landed = await Promise.race([read, new Promise<null>((resolve) => setTimeout(() => resolve(null), PANE_FIRST_PAINT_MS))]);
     rethrowIfSuperseded(request);
     return landed ?? pendingPane(paneId, session, lines);

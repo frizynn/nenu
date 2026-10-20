@@ -2,13 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type Componen
 import { PanelRightOpen } from "@/components/ui/icon";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { loadSessionPanel } from "@/lib/desk-chunks";
 import { isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
 import type { ProjectThreadView, ThreadPullRequest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // The panel is its own chunk: a phone never loads it, a desk on first open.
-const SessionPanel = lazy(() => import("./inspector-panels"));
+const SessionPanel = lazy(loadSessionPanel);
 
 /** The panel's tabs; Overview only for a pane that belongs to a project. */
 export type InspectorTab = "overview" | "changes" | "files" | "terminal";

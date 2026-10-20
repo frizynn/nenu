@@ -467,19 +467,53 @@ const historyCache = new Map<string, { etag: string | null; response: PaneHistor
 let historySequence = 0;
 let historyAuthEpoch = 0;
 
+/** The newest turns a chat reads on open and on every poll after (use-live-conversation.ts). */
+export const CONVERSATION_WINDOW = 60;
+// A chat's first read started before the chat mounts (its pane's loader), so the chat joins it instead
+// of asking only after its first render. One join per read, and only while it is fresh.
+const warmHistory = new Map<string, { at: number; read: Promise<PaneHistoryResponse> }>();
+const WARM_MS = 4_000;
+
+/** Start reading a pane's newest conversation window now; the chat's own first read takes it over. */
+export function warmConversation(paneId: string, session?: string): void {
+  const url = historyUrl(paneId, { limit: CONVERSATION_WINDOW }, session);
+  const warm = warmHistory.get(url);
+  if (warm && Date.now() - warm.at < WARM_MS) return;
+  const read = fetchHistory(paneId, { limit: CONVERSATION_WINDOW }, session);
+  read.catch(() => {});
+  warmHistory.delete(url);
+  warmHistory.set(url, { at: Date.now(), read });
+  if (warmHistory.size > 8) warmHistory.delete(warmHistory.keys().next().value!);
+}
+
+function historyUrl(paneId: string, opts: { limit?: number; before?: string }, session: string | undefined): string {
+  const q = new URLSearchParams();
+  if (opts.limit) q.set("limit", String(opts.limit));
+  if (opts.before) q.set("before", opts.before);
+  const qs = q.toString();
+  return withSession(`/api/pane/${encodeURIComponent(paneId)}/history${qs ? `?${qs}` : ""}`, session);
+}
+
+/** `read`, given up as soon as `signal` aborts; the read itself runs on for whoever else holds it. */
+function untilAborted<T>(read: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return read;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return Promise.race([read, new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))]);
+}
+
 export async function fetchHistory(
   paneId: string,
   opts: { limit?: number; before?: string } = {},
   session?: string,
   signal?: AbortSignal,
 ): Promise<PaneHistoryResponse> {
-  const q = new URLSearchParams();
-  if (opts.limit) q.set("limit", String(opts.limit));
-  if (opts.before) q.set("before", opts.before);
-  const qs = q.toString();
-  const path = `/api/pane/${encodeURIComponent(paneId)}/history${qs ? `?${qs}` : ""}`;
-  const url = withSession(path, session);
+  const url = historyUrl(paneId, opts, session);
   const cacheable = opts.limit !== undefined && opts.limit > 0 && opts.limit <= 120 && !opts.before;
+  const warm = cacheable ? warmHistory.get(url) : undefined;
+  if (warm) {
+    warmHistory.delete(url);
+    if (Date.now() - warm.at < WARM_MS) return untilAborted(warm.read, signal);
+  }
   const sequence = ++historySequence;
   const authEpoch = historyAuthEpoch;
   const assertCurrentAuthorization = () => {
