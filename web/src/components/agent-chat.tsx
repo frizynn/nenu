@@ -1,6 +1,7 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
+import { paneDisplayScope } from "@/lib/raw-terminal";
 import { agentBusy, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation, SubagentSubtitle } from "@/components/subagent-conversation";
@@ -249,7 +250,7 @@ export function AgentChat({
   const unavailable = bridge !== "connected" || lost;
   const spawning = useSpawnState(paneId);
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
-  const displayScope = JSON.stringify([session ?? "default", paneId]);
+  const displayScope = paneDisplayScope(session, paneId);
   const { prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus } = useDisplayPrefs(displayScope);
   // Raw-terminal escape hatch: when on, every Claude grammar is bypassed and the plain mirror shows,
   // so a mis-detected/mis-rendered dialog can always be driven by hand with the keys pad.
