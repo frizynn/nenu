@@ -8,12 +8,11 @@ import { NodeDot } from "@/components/node-row";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { projectActivity } from "@/lib/desk-nav";
+import { projectPulse } from "@/lib/desk-nav";
 import { timeAgoShort } from "@/lib/format";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { projectPath } from "@/lib/nav";
-import { flatten, openCoordinators, orgTree } from "@/lib/org-tree";
-import { canCreate, type ProjectView } from "@/lib/types";
+import { canCreate, type AgentView, type ProjectView } from "@/lib/types";
 
 /**
  * Every project as a card (ADR 0102), the desk's way into them from the bar: its goal, what waits on
@@ -44,19 +43,15 @@ export function ProjectsRoute() {
           {shown.length === 0
             ? <p className="px-1 text-subhead text-muted-foreground">No project matches “{query.trim()}”.</p>
             : <ul className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3">
-              {shown.map((project) => <li key={project.slug}><ProjectCard project={project} at={projectActivity(project, data.agents)} now={now} session={data.session} /></li>)}
+              {shown.map((project) => <li key={project.slug}><ProjectCard project={project} agents={data.agents} projects={projects} now={now} session={data.session} /></li>)}
             </ul>}
         </>}
     </ColumnPage>
   );
 }
 
-function ProjectCard({ project, at, now, session }: { project: ProjectView; at: number; now: number; session?: string }) {
-  const tree = orgTree(project.threads);
-  const open = flatten(tree.open);
-  const coordinators = openCoordinators(tree).length;
-  const working = open.filter((node) => node.state === "working").length;
-  const waiting = project.waitingAsks ?? open.filter((node) => node.state === "needs").length;
+function ProjectCard({ project, agents, projects, now, session }: { project: ProjectView; agents: readonly AgentView[]; projects: readonly ProjectView[]; now: number; session?: string }) {
+  const { waiting, working, coordinators, threads, at } = projectPulse(project, agents, projects);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
     <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-accent/40">
@@ -70,7 +65,7 @@ function ProjectCard({ project, at, now, session }: { project: ProjectView; at: 
       </span>
       <span aria-hidden className="flex-1" />
       <span className="mt-3 flex items-center gap-2 border-t border-border pt-3 text-caption text-muted-foreground">
-        <span className="flex-1">{plural(coordinators, "coordinator")} · {plural(open.length - coordinators, "thread")}</span>
+        <span className="flex-1">{plural(coordinators, "coordinator")} · {plural(threads, "thread")}</span>
         {at > 0 && <span className="tabular-nums">{timeAgoShort(at, now)}</span>}
       </span>
     </Link>

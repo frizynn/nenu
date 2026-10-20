@@ -206,7 +206,11 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
   is New on its Home row, and only an agent that asks raises a toast
   ([ADR 0094](./.adr/0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md)). The bar's chats and
-  Home's Recents keep their order while on screen (`hooks/use-held-time.ts`).
+  Home's Recents keep their order while on screen (`hooks/use-held-time.ts`). The bar's chats sit
+  only under periods that hold one on screen, and More folds them with motion, mounted.
+- **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
+  works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
+  which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

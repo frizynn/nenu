@@ -20,6 +20,8 @@
 .nav-top .nav-row > svg { margin-inline: 1px; }
 /* Hover only where a pointer hovers: on a phone a tap would leave the row under it lit. */
 @media (hover: hover) {
+  /* The fill follows the pointer on Ovis's curve, short enough that a sweep down the list never trails. */
+  :is(.nav-row, .nav-pane) { transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1); }
   :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); }
   .nav-row:disabled:hover, button.nav-pane:disabled:hover { background: none; }
 }
@@ -30,6 +32,8 @@
   :is(.nav-row, .nav-pane):active:not(:disabled, [aria-current="page"], [aria-selected="true"]) { background: var(--workbench-row-hover); transition-duration: 0ms; }
 }
 .nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
+/* The ring sits inside the row: the bar's scroller and a folding row would clip one drawn outside. */
+.nav-row:focus-visible { outline-offset: -2px; }
 /* One fill at a time: while the list shows Needs you or a search, that is the sidebar's place, not Home. */
 .workbench-navigation:not([data-list="browse"]) > .nav-top > .nav-row[aria-current="page"]:not(:hover) { background: none; }
 /* The workspace holding the open chat, while folded; open, the chat's own row carries the mark. */
@@ -142,6 +146,19 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
 @media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 .nav-more { color: var(--subtle-foreground); }
+@media (hover: hover) { .nav-more:hover { color: var(--muted-foreground); } }
+.nav-more-chevron { transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
+.nav-more[aria-expanded="true"] .nav-more-chevron { transform: rotate(180deg); }
+/* Rows More folds: the height closes to nothing and the row fades with it, both ways, on one curve. The
+   inner box clips (never hides) so a period's sticky heading still sticks to the bar's scroller. */
+.nav-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 220ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms ease-out; }
+.nav-reveal[data-folded] { grid-template-rows: 0fr; opacity: 0; }
+.nav-reveal-inner { min-height: 0; overflow: clip; }
+/* A period's name stays on top of its chats while they scroll under it, so a row deep in the list still says when it moved. */
+.nav-chats .nav-group > .nav-label { position: sticky; top: 0; z-index: 1; background: var(--workbench-sidebar); }
+/* A pull request that asks for something takes its colour; one that only waits stays grey. */
+.nav-row-end[data-pr="failing"] { color: var(--status-blocked); }
+.nav-row-end[data-pr="approved"] { color: var(--status-done); }
 /* The bar's chats held in place: a quiet text button that puts them in order. Its height stays inside the label's. */
 .nav-label-updates { height: 22px; margin-right: -6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; cursor: pointer; }
 @media (hover: hover) { .nav-label-updates:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -164,18 +181,19 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row > svg { color: var(--subtle-foreground); }
   .nav-desk.nav-group { padding-top: 18px; }
   .nav-desk .nav-group { padding-top: 10px; }
-  .nav-desk .nav-group:first-child { padding-top: 18px; }
+  .nav-chats > .nav-reveal:first-child .nav-group { padding-top: 18px; }
   .nav-desk .nav-label { min-height: 26px; padding: 0 10px; color: var(--subtle-foreground); font-size: var(--text-caption); font-weight: 400; }
   .workbench-navigation[data-variant="sidebar"] .nav-host { border-top: 0; }
 }
 
-/* Motion answers a press only: the tree Search opens and the rows More brings in fade down into place. */
+/* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
+   poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */
 @keyframes nav-enter { from { opacity: 0; transform: translateY(-3px); } }
-.nav-enter, .nav-desk [data-revealed] { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
+.nav-enter { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg, .nav-tab-fold { transition: none; }
-  .nav-enter, .nav-desk [data-revealed] { animation: none; }
+  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg, .nav-tab-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
+  .nav-enter { animation: none; }
   .nav-kbd { transition: none; }
 }
 

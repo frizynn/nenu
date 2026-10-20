@@ -109,6 +109,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Accepted |
 | [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted |
 | [0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md) | On a desk, finished work is a History by day, and a routine is edited where it is read (amends 0102) | Accepted |
+| [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

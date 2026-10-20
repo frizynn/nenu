@@ -5,6 +5,7 @@ import { ChatsCircle, Wifi } from "@/components/ui/icon";
 import { ColumnPage } from "@/components/column-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MachinesSlot } from "@/components/machines-slot";
+import { HomeProjects } from "@/components/home-projects";
 import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
@@ -23,8 +24,9 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
 // (answered in place), then one list of every session that reads as Recents or by Workspace, each row
 // carrying its pull request, with every pull request (ready to merge first) as that list's PRs tab,
-// and the workflows still running. Starting something is New's; writing to a coordinator is its own chat's.
-// Projects live in the sidebar (Search on a phone). Figures come from the snapshot, the bridge's
+// and the workflows still running. Above that list, every project with what waits on you there, what
+// works, what is ready to review and when it last moved. Starting something is New's; writing to a
+// coordinator is its own chat's. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
 // When the link fails, the connection banner (root.tsx) is the one place that names the problem and
@@ -83,6 +85,7 @@ export function HomeRoute() {
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
+        <HomeProjects projects={data.projects ?? []} agents={data.agents} session={data.session} now={now} />
         <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} reviews={reviews}
           pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
           projects={data.projects ?? []} session={data.session} now={now} opening={opening} />

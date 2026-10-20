@@ -2,6 +2,7 @@
 // flat row each, and every conversation in a project or outside one as a chat, dated by when it last
 // moved. Kept free of React so the rows' rules stay unit-testable.
 import { displayName } from "./display-name";
+import { flatten, openCoordinators, orgTree, type NodeState } from "./org-tree";
 import { chatRecency, isOpenThread, looseChats, projectForPane } from "./projects";
 import type { AgentStatus, AgentView, ProjectThreadView, ProjectView } from "./types";
 
@@ -55,6 +56,37 @@ export function projectAgents(project: ProjectView, agents: readonly AgentView[]
 export function projectActivity(project: ProjectView, agents: readonly AgentView[]): number {
   const coordinator = agents.find((pane) => pane.paneId === project.coordinator?.paneId);
   return Math.max(0, ...project.threads.map(updatedAt), coordinator ? chatRecency(coordinator) : 0);
+}
+
+/** A project at a glance: what waits on you there, what works, what is ready to review, how much is open and when it last moved. */
+export interface ProjectPulse {
+  waiting: number;
+  working: number;
+  review: number;
+  coordinators: number;
+  threads: number;
+  /** Open coordinators and threads together. */
+  open: number;
+  /** `waiting` is Organizations' asks count; false when it lists none and the tree's waiting nodes stand in. */
+  asks: boolean;
+  at: number;
+}
+
+/**
+ * What waits on you is Organizations' own asks count when it has one, else the tree's nodes that need
+ * you; what is ready to review is the tree's. Working counts the project's agents at work, the unit
+ * Home's headline counts, never threads whose last group said working.
+ */
+export function projectPulse(project: ProjectView, agents: readonly AgentView[], projects: readonly ProjectView[] | undefined): ProjectPulse {
+  const tree = orgTree(project.threads);
+  const open = flatten(tree.open);
+  const coordinators = openCoordinators(tree).length;
+  const count = (state: NodeState) => open.filter((node) => node.state === state).length;
+  return {
+    waiting: project.waitingAsks ?? count("needs"), review: count("review"),
+    working: projectAgents(project, agents, projects).filter((pane) => pane.status === "working").length,
+    coordinators, threads: open.length - coordinators, open: open.length, asks: project.waitingAsks !== undefined, at: projectActivity(project, agents),
+  };
 }
 
 /** The most pressing state among `panes`, for a project's dot. Resting agents draw none. */

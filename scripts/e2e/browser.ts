@@ -30,6 +30,7 @@ export interface Locator {
   waitFor(opts?: { state?: "visible" | "attached" | "hidden"; timeout?: number }): Promise<void>;
   first(): Locator;
   last(): Locator;
+  nth(index: number): Locator;
   innerText(): Promise<string>;
   getAttribute(name: string, opts?: { timeout?: number }): Promise<string | null>;
   scrollIntoViewIfNeeded(): Promise<void>;
@@ -46,7 +47,7 @@ export interface Locator {
 export interface Page {
   goto(url: string, opts?: { waitUntil?: "load" | "domcontentloaded" }): Promise<unknown>;
   on(event: "request", fn: (req: Request) => void): void;
-  screenshot(opts: { path?: string; fullPage?: boolean; animations?: "disabled"; clip?: { x: number; y: number; width: number; height: number } }): Promise<Uint8Array>;
+  screenshot(opts: { path?: string; fullPage?: boolean; animations?: "disabled" | "allow"; clip?: { x: number; y: number; width: number; height: number } }): Promise<Uint8Array>;
   getByText(text: string | RegExp, opts?: { exact?: boolean }): Locator;
   getByRole(role: string, opts?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByPlaceholder(text: string | RegExp): Locator;

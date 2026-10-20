@@ -663,22 +663,24 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(glyph.style.color).toBe("var(--glyph-red)");
   });
 
-  it("shows five projects and the rest behind More, keeping the one on screen in view", async () => {
+  it("shows five projects and folds the rest behind a count, keeping the one on screen in view", async () => {
     const many = [acme, ...["b", "c", "d", "e", "f", "g"].map((slug) => project(slug, slug.toUpperCase()))];
     const user = open("/", { ...herd, projects: many });
     expect(rowNames("Projects")).toEqual(["Acme", "B", "C", "D", "E"]);
-    await user.click(section("Projects").getByRole("button", { name: "More" }));
+    // Folded rows stay mounted to animate, out of the tab order and the accessibility tree.
+    expect(document.querySelectorAll("[inert] a.nav-row")).toHaveLength(2);
+    await user.click(section("Projects").getByRole("button", { name: "Show 2 more" }));
     expect(rowNames("Projects")).toEqual(["Acme", "B", "C", "D", "E", "F", "G"]);
-    expect(section("Projects").getByRole("button", { name: "Less" })).toHaveAttribute("aria-expanded", "true");
+    expect(section("Projects").getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("groups the chats by their last real activity under Today, Last 7 days, Last 30 days and Older", () => {
+  it("groups the chats by their last real activity, under periods named for what they hold", () => {
     open();
     const groups = screen.getByRole("region", { name: "Chats" });
-    expect(within(groups).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Today", "Last 7 days", "Last 30 days", "Older"]);
+    expect(within(groups).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Today", "Previous 7 days", "Previous 30 days", "Older"]);
     expect(rowNames("Today")).toEqual(["Checkout flow", "Payments webhook"]);
-    expect(rowNames("Last 7 days")).toEqual(["Cart badge"]);
-    expect(rowNames("Last 30 days")).toEqual(["Docs pass"]);
+    expect(rowNames("Previous 7 days")).toEqual(["Cart badge"]);
+    expect(rowNames("Previous 30 days")).toEqual(["Docs pass"]);
     expect(rowNames("Older")).toEqual(["Old spike"]);
     // A resolved thread, the project's coordinator and a bare shell are not chats.
     expect(within(groups).queryByText("Search index")).toBeNull();
@@ -690,10 +692,33 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     open("/pane/hook");
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAttribute("aria-current", "page");
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAccessibleName("Payments webhook, needs you");
-    const badge = section("Last 7 days").getByRole("link", { name: /^Cart badge/ });
+    const badge = section("Previous 7 days").getByRole("link", { name: /^Cart badge/ });
     expect(badge).toHaveAttribute("href", "/project/acme/node/t-3");
-    expect(badge).toHaveAccessibleName("Cart badge, ready for review, pull request #41");
+    expect(badge).toHaveAccessibleName("Cart badge, ready for review, pull request #41, approved");
+    expect(badge.querySelector(".nav-row-end")).toHaveAttribute("data-pr", "approved");
     expect(badge.querySelector(".nav-row-end svg")).toBeInTheDocument();
+  });
+
+  it("draws a pull request's glyph for what it asks: a draft first, then failing checks or asked changes in red", () => {
+    const pr = (number: number, extra: object) => ({ url: `https://github.com/acme/shop/pull/${number}`, number, state: "open" as const, ...extra });
+    const updated = new Date(now - 10 * MIN).toISOString();
+    const prs = { ...acme, threads: [...acme.threads,
+      thread("t-5", "Draft work", { updated, pr: pr(50, { state: "draft", checks: { passed: 0, failed: 2, pending: 0 } }) }),
+      thread("t-6", "Red checks", { updated, pr: pr(51, { review: "approved", checks: { passed: 3, failed: 1, pending: 0 } }) }),
+      thread("t-7", "Asked changes", { updated, pr: pr(52, { review: "changes_requested" }) }),
+      thread("t-8", "Waiting review", { updated, pr: pr(53, { review: "review_required" }) }),
+    ] };
+    open("/", { ...herd, projects: [prs] } as unknown as HomeData);
+    const end = (name: string) => section("Today").getByRole("link", { name: new RegExp(`^${name}`) });
+    expect(end("Draft work")).toHaveAccessibleName(/pull request #50, draft$/);
+    expect(end("Draft work").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
+    expect(end("Draft work").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request-draft");
+    expect(end("Red checks").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request");
+    expect(end("Red checks")).toHaveAccessibleName(/pull request #51, checks failing$/);
+    expect(end("Red checks").querySelector(".nav-row-end")).toHaveAttribute("data-pr", "failing");
+    expect(end("Asked changes")).toHaveAccessibleName(/pull request #52, changes requested$/);
+    expect(end("Waiting review")).toHaveAccessibleName(/pull request #53$/);
+    expect(end("Waiting review").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
   });
 
   it("keeps the workspace tree out of the bar until Search opens, then browses it under the box", async () => {
@@ -743,6 +768,17 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     act(() => { window.dispatchEvent(new Event("focus")); });
     expect(rowNames("Today")).toEqual(["Payments webhook", "fresh", "Checkout flow"]);
     expect(section("Today").queryByRole("button", { name: /update/ })).toBeNull();
+  });
+
+  it("folds the chats past twelve, and a period with none on screen draws no heading until they open", async () => {
+    const fleet = Array.from({ length: 12 }, (_, i) => at(`fleet${i}`, "w2", { lastActiveAt: now - (10 + i) * MIN }));
+    const user = open("/", { ...herd, agents: [...herd.agents, ...fleet] });
+    const headings = () => within(screen.getByRole("region", { name: "Chats" })).queryAllByRole("heading").map((heading) => heading.textContent);
+    expect(headings()).toEqual(["Today"]);
+    await user.click(screen.getByRole("button", { name: /^Show \d+ more$/ }));
+    expect(headings()).toEqual(["Today", "Previous 7 days", "Previous 30 days", "Older"]);
+    await user.click(screen.getByRole("button", { name: "Show less" }));
+    expect(headings()).toEqual(["Today"]);
   });
 
   it("shows a chat that asks for you past More after the rows on screen, and moves none of them", () => {
