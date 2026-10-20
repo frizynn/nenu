@@ -14,9 +14,9 @@ The redesign's last polish pass (#101), ported onto the desk redesign. Parts mai
 
 ### Fixed
 
-- A Herdr outage is named once in a thread: the banner, else the question card, else one line above the box; the header keeps the pane's place (80e79104, 3d97ace0, 4e50db8e).
+- A Herdr outage is named once in a thread: the banner, else the question card, else one line above the box; the header keeps the pane's place (80e79104, 3d97ace0, 4e50db8e, 79023bec).
 - Safari: the composer's placeholder no longer cuts in half at 375 px, and the box grows with a draft where the browser has no `field-sizing` (4e50db8e, e3d36a74).
-- Settings in an iPhone's Safari tab says to add Nenu to the Home Screen for notifications (d9ec7579, 7f1fe748).
+- Settings in an iPhone's Safari tab says to add Nenu to the Home Screen for notifications, or that push needs HTTPS first over plain HTTP (d9ec7579, 7f1fe748, 07d58223).
 - Native selects draw one field with a chevron in WebKit (56e550de).
 - The model chip says Choose model until a model is known; the phone's Model sheet has a sheet's title, its rows on the same gutter (2474ae96, 31f2cd34).
 - Docks and popovers share one header, named by the row that opens them: Quick replies, Model (dbd70f36).
