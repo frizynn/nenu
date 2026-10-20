@@ -37,8 +37,11 @@ export function coordinatorState(status: AgentStatus): OpenState | undefined {
  * on nobody (ADR 0103).
  */
 function atRest(thread: ProjectThreadView, live: OpenState | undefined): boolean {
-  return thread.conversation === true && thread.selfWaiting === true && live !== undefined;
+  return talks(thread) && thread.selfWaiting === true && live !== undefined;
 }
+
+/** A conversation that is not a coordinator: a coordinator kept open reads as any coordinator does. */
+const talks = (thread: ProjectThreadView) => thread.conversation === true && thread.role !== "coordinator";
 
 /**
  * Organizations' group decides, as its popup does (landing reads as review); the live pane is the
@@ -54,8 +57,8 @@ export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "failed" || live === "needs" || (thread.group === "waiting-on-you" && !atRest(thread, live))) return "needs";
   if (thread.group === "awaiting-merge") return "merging";
   const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
-  if (thread.conversation && (approved || thread.group === "landing")) return "review";
-  if (thread.role === "coordinator" || thread.conversation) {
+  if (talks(thread) && (approved || thread.group === "landing")) return "review";
+  if (thread.role === "coordinator" || talks(thread)) {
     const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
     return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");
   }

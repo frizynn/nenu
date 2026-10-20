@@ -79,6 +79,16 @@ describe("awaits", () => {
     // Its own pull request, approved or landing, is still something to review.
     expect(nodeState({ ...resting, group: "landing", selfWaiting: undefined })).toBe("review");
     expect(nodeState({ ...resting, group: "idle", selfWaiting: undefined, pr: { state: "open", review: "approved" } })).toBe("review");
+    expect(nodeState({ ...resting, liveStatus: "working", group: "working", selfWaiting: undefined, pr: { state: "open", review: "approved" } })).toBe("review");
+    // A pane Herdr cannot read is not known to be at rest.
+    expect(nodeState({ ...resting, liveStatus: "unknown" })).toBe("needs");
+  });
+
+  it("leaves a coordinator as it was, kept open or not", () => {
+    const coordinator = node("c", "root", { role: "coordinator", paneId: "p", liveStatus: "done", group: "landing", pr: { state: "open", review: "approved" } });
+    expect(nodeState(coordinator)).toBe("idle");
+    expect(nodeState({ ...coordinator, conversation: true })).toBe("idle");
+    expect(nodeState({ ...coordinator, conversation: true, group: "waiting-on-you", selfWaiting: true })).toBe("needs");
   });
 
   it("still says a conversation needs you when it is stopped on a dialog, failed, or lost its pane", () => {

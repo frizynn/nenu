@@ -332,8 +332,8 @@
     -webkit-tap-highlight-color: transparent;
     height: 100%;
     overflow: hidden;
-    /* The viewport takes its overscroll from here, never from body: without it a drag past an end
-       rubber-bands the whole page in Safari. */
+    /* The viewport takes its overscroll from here, never from body: without it a vertical drag past
+       an end rubber-bands the whole page in Safari. The x axis keeps the browser's back swipe. */
     overscroll-behavior-y: none;
   }
   /* One focus ring for every control: 2px of the accent, 2px out. A full-bleed row draws it inset
