@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.31.3] - 2026-10-20
+
+### Changed
+
+- `bun scripts/e2e/run.ts phone-scroll`: every phone screen and two sheets scroll one box, and a drag moves nothing else, in Safari and the home-screen app; red on 1.31.1 (172fb86e).
+
 ## [1.31.2] - 2026-10-20
 
 ### Fixed
