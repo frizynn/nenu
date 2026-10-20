@@ -83,8 +83,9 @@ async function main(): Promise<void> {
   let browser: Browser | null = null;
   try {
     browser = await launchChrome();
+    // DESKTOP and PHONE ask for reduced motion, which stills the fold; the bar is captured as most people see it.
     const open = async (device: Record<string, unknown>, scheme: "dark" | "light" = "dark") => {
-      const context = await browser!.newContext({ ...device, colorScheme: scheme, timezoneId: "America/Argentina/Buenos_Aires", locale: "en-US" });
+      const context = await browser!.newContext({ ...device, reducedMotion: "no-preference", colorScheme: scheme, timezoneId: "America/Argentina/Buenos_Aires", locale: "en-US" });
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
       await page.goto(bridge.url + "/");
@@ -117,10 +118,12 @@ async function main(): Promise<void> {
         for (const group of folded) if (group.visible && group.rows === 0) failures.push(`folded: "${group.label}" is drawn with no chat under it`);
         const more = nav.locator("section[aria-label=Chats] button[aria-expanded]").last();
         seen.moreLabel = await more.innerText();
-        // A press starts the fold's transitions at once; counted on the next frame, before a screenshot's latency hides them.
+        // A press starts the fold's transitions at once; counted two frames later (the first runs before the style
+        // pass that creates them), well inside their 220 ms and before a screenshot's latency hides them.
         const pressAndCount = () => more.evaluate((button) => {
           (button as HTMLElement).click();
-          return new Promise<number>((done) => requestAnimationFrame(() => done(document.getAnimations().filter((motion) => motion instanceof CSSTransition).length)));
+          return new Promise<number>((done) => requestAnimationFrame(() => requestAnimationFrame(() =>
+            done(document.getAnimations().filter((motion) => motion instanceof CSSTransition).length))));
         });
         seen.transitionsUnfolding = await pressAndCount();
         if (!seen.transitionsUnfolding) failures.push("unfolding ran no transition");
