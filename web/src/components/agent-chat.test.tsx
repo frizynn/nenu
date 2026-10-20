@@ -1385,6 +1385,23 @@ describe("AgentChat — why the composer is locked", () => {
     expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 
+  // A card whose terminal box has focus says typing is under way, not why answers stopped, so the
+  // outage is the box's to name.
+  it("names Herdr's outage above the box while the question card only says typing is under way", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true, typing: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8"), bridge: "disconnected" });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Answers come back when typing ends")).toBeVisible();
+    expect(within(card).queryByText(/Herdr/)).not.toBeInTheDocument();
+    expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+  });
+
   // Before the banner, one quiet line above the box names the outage, empty or with a draft, and
   // only one surface names it at a time. The placeholder only says what the box keeps: the outage in
   // it took two lines at 375 px, which Safari cuts at the box's one-line height.
