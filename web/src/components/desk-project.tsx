@@ -6,7 +6,7 @@ import { CoordinatorWorkCard, DeskHead, DeskTabs, useDeskTab, useOpenNode, Waiti
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
-import { ProjectContext } from "@/components/project-context";
+import { prefetchContext, ProjectContext } from "@/components/project-context";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StartProjectCoordinator } from "@/components/project-coordinator";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
     { id: "work", label: "Work" },
     { id: "waiting", label: "Waiting on you", count: waitingCount, waiting: true },
     { id: "routines", label: "Routines", count: routines.list?.routines.length },
-    { id: "context", label: "Context" },
+    { id: "context", label: "Context", prefetch: () => prefetchContext(project.slug) },
   ];
   const [tab, setTab] = useDeskTab(tabs);
   const coordinator = runningCoordinator(project);

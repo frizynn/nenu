@@ -411,16 +411,6 @@ export interface OrgProjectDetail {
   maxParallelThreads: number;
 }
 
-/** A project routine (`routine list --json`). Mirrors bridge/org-cli.ts. */
-export interface OrgRoutine {
-  name: string;
-  trigger: "schedule" | "pr";
-  schedule: string;
-  events: string[];
-  enabled: boolean;
-  nextRun: string;
-}
-
 export interface TemplateView {
   name: string;
   scope: "global" | "project";

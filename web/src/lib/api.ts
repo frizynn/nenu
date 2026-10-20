@@ -33,7 +33,6 @@ import type {
   SnapshotResponse,
   TemplateView,
   OrgProjectDetail,
-  OrgRoutine,
   OrgTask,
   StatusFile,
   ThreadReport,
@@ -762,8 +761,8 @@ export function fetchOrgStatus(project: string, signal?: AbortSignal): Promise<{
   return req(`/api/org/status?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
-/** What the project's threads receive and its routines; each null when this Organizations has none. */
-export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
+/** What the project's threads receive; null when this Organizations has none. */
+export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null }> {
   return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 

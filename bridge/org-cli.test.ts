@@ -20,7 +20,6 @@ import {
   prCreate,
   readOverview,
   readProjectDetail,
-  readRoutines,
   readStatus,
   readTasks,
   replaceCoordinator,
@@ -746,7 +745,6 @@ describe("herdr-organizations project documents (task list, project show, routin
     for (const result of [missing, { code: 0, stdout: "not json", stderr: "" }, { code: 0, stdout: JSON.stringify({ schema_version: 2, tasks: [] }), stderr: "" }, { code: 0, stdout: JSON.stringify({ schema_version: 1 }), stderr: "" }]) {
       expect(await readTasks(fakeRun(result).run, "/root", "acme")).toBeNull();
       expect(await readProjectDetail(fakeRun(result).run, "/root", "acme")).toBeNull();
-      expect(await readRoutines(fakeRun(result).run, "/root", "acme")).toBeNull();
     }
   });
 
@@ -771,18 +769,6 @@ describe("herdr-organizations project documents (task list, project show, routin
       coordinatorProfile: "claude", threadProfile: "codex", maxParallelThreads: 10,
     });
     expect(calls[0]!.argv).toEqual(["project", "show", "acme", "--json"]);
-  });
-
-  it("lists routines with their trigger and whether they are on", async () => {
-    const routine = { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, command: "", command_status: "none", prompt: "Check.", last_run: "", next_run: "2026-10-11T03:00:00Z", skipped_unhandled: 0, skipped_no_coordinator: 0 };
-    const { run, calls } = fakeRun({ code: 0, stdout: JSON.stringify({ schema_version: 1, project: "acme", routine_commands: false, broken: [], routines: [
-      routine, { ...routine, name: "pr-followup", trigger: "pr", schedule: "", events: ["opened", "merged"], enabled: false, next_run: "" }, { ...routine, trigger: "cron" },
-    ] }), stderr: "" });
-    expect(await readRoutines(run, "/root", "acme")).toEqual([
-      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true, nextRun: "2026-10-11T03:00:00Z" },
-      { name: "pr-followup", trigger: "pr", schedule: "", events: ["opened", "merged"], enabled: false, nextRun: "" },
-    ]);
-    expect(calls[0]!.argv).toEqual(["routine", "list", "acme", "--json"]);
   });
 });
 

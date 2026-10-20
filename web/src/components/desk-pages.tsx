@@ -34,7 +34,11 @@ export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb: Rea
   </header>;
 }
 
-export interface DeskTab<T extends string> { id: T; label: string; count?: number; waiting?: boolean }
+export interface DeskTab<T extends string> {
+  id: T; label: string; count?: number; waiting?: boolean;
+  /** Starts the tab's read when a pointer comes over it or it takes focus, before the tap. */
+  prefetch?: () => void;
+}
 
 /** The page's tab, in the address (`?tab=`) so a reload and Back keep it; the first tab is the bare address. */
 export function useDeskTab<T extends string>(tabs: ReadonlyArray<DeskTab<T>>): [T, (tab: T) => void] {
@@ -53,7 +57,8 @@ export function useDeskTab<T extends string>(tabs: ReadonlyArray<DeskTab<T>>): [
 export function DeskTabs<T extends string>({ label, tabs, tab, onChange }: { label: string; tabs: ReadonlyArray<DeskTab<T>>; tab: T; onChange: (tab: T) => void }) {
   return <div role="tablist" aria-label={label} className="desk-tabs">
     {tabs.map((candidate) => (
-      <button key={candidate.id} type="button" role="tab" className="desk-tab" aria-selected={candidate.id === tab} onClick={() => onChange(candidate.id)}>
+      <button key={candidate.id} type="button" role="tab" className="desk-tab" aria-selected={candidate.id === tab} onClick={() => onChange(candidate.id)}
+        onPointerEnter={candidate.prefetch} onFocus={candidate.prefetch}>
         {candidate.label}
         {candidate.count !== undefined && candidate.count > 0 && <span className="desk-tab-count" data-waiting={candidate.waiting ? "" : undefined}>{candidate.count}</span>}
       </button>
