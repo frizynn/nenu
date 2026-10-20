@@ -210,6 +210,8 @@ export interface RoutineView {
 /** `available` is false when this Organizations has no `routine list --json`, so the list says nothing. */
 export interface RoutineList {
   available: boolean;
+  /** This Organizations edits a routine (`routine set`). */
+  editable: boolean;
   routines: RoutineView[];
   /** Routine files that do not parse. */
   broken: number;

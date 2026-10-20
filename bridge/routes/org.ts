@@ -1,5 +1,5 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
-import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions, toggleRoutine } from "../org-cli.ts";
+import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, setRoutine, startNode, startOptions, toggleRoutine } from "../org-cli.ts";
 import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -95,6 +95,11 @@ export const orgRoutes: Route[] = [
   orgWrite("/api/org/routine/toggle", "org.routine.toggle", "Could not change the routine.", async ({ orgRun }, body) => {
     const routines = await toggleRoutine(orgRun, { project: body.project, name: body.name, on: body.on });
     return { response: { routines }, detail: { project: body.project, name: body.name, on: body.on } };
+  }),
+  orgWrite("/api/org/routine/set", "org.routine.set", "Could not change the routine.", async ({ orgRun }, body) => {
+    const routines = await setRoutine(orgRun, { project: body.project, name: body.name, schedule: body.schedule, events: body.events, to: body.to, parent: body.parent, prompt: body.prompt });
+    // The audit names what changed, never the prompt's words.
+    return { response: { routines }, detail: { project: body.project, name: body.name, fields: ["schedule", "events", "to", "parent", "prompt"].filter((key) => body[key] !== undefined) } };
   }),
   orgWrite("/api/org/thread/set", "org.thread.set", "Could not change the thread's automation.", async ({ orgRun }, body) => {
     const flags = await setThreadFlags(orgRun, { project: body.project, id: body.id, autoFixCi: body.autoFixCi, autoMerge: body.autoMerge });

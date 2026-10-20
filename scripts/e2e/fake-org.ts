@@ -139,6 +139,19 @@ function newer(slug: string | undefined, field: "tasks" | "detail" | "routines" 
   return project;
 }
 
+/** `routine set`, as Organizations writes it: only the fields given, a new trigger clearing the other. */
+function setRoutine(slug: string | undefined, name: string | undefined, flags: Record<string, string>): void {
+  const project = newer(slug, "routines");
+  const routine = (project.routines as Array<Record<string, unknown>>).find((candidate) => candidate.name === name) ?? fail(`no routine ${name}`);
+  if (flags.schedule !== undefined) Object.assign(routine, { trigger: "schedule", schedule: flags.schedule, events: [] });
+  if (flags["on-pr"] !== undefined) Object.assign(routine, { trigger: "pr", schedule: "", events: flags["on-pr"].split(","), last_run: "", next_run: "" });
+  if (flags.to !== undefined) Object.assign(routine, { to: flags.to, ...(flags.to === "new" ? {} : { parent: "" }) });
+  if (flags.parent !== undefined) routine.parent = flags.parent;
+  if (flags.prompt !== undefined) routine.prompt = flags.prompt;
+  writeFileSync(file!, JSON.stringify(state));
+  console.log(`routine \`${name}\` saved`);
+}
+
 const [command, sub] = argv;
 const twoWords = ["node", "thread", "profile", "coordinator", "task", "project", "routine"].includes(command ?? "") || (command === "asks" && sub === "answer");
 const { flags, positionals } = parse(argv.slice(twoWords ? 2 : 1));
@@ -192,6 +205,9 @@ if (command === "overview") {
 } else if (command === "routine" && sub === "list" && "json" in flags) {
   const project = newer(positionals[0], "routines");
   console.log(JSON.stringify({ schema_version: 1, project: project.slug, routine_commands: false, routines: project.routines, broken: [] }));
+} else if (command === "routine" && sub === "set") {
+  if ("help" in flags) console.log("Usage: herdr-organizations routine set <SLUG> <NAME>");
+  else setRoutine(positionals[0], positionals[1], flags);
 } else if (command === "open") {
   const project = state.projects.find((candidate) => candidate.slug === positionals[0]) ?? fail(`no project ${positionals[0]}`);
   if (typeof project.open_error === "string") fail(project.open_error);
