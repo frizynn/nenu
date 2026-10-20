@@ -3655,7 +3655,7 @@ async function reading(): Promise<void> {
         await page.waitForTimeout(800);
         await shoot(`picker-${agent}`);
         seen[`${deviceName}:picker-${agent}`] = await page.evaluate(() => {
-          const sheet = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model picker"]');
+          const sheet = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Model"]');
           if (!sheet) return null;
           const r = sheet.getBoundingClientRect();
           const rows = Array.from(sheet.querySelectorAll<HTMLElement>('[role="radio"], [role="menuitemradio"], [role="option"]'));
@@ -3665,7 +3665,7 @@ async function reading(): Promise<void> {
         }, null);
         await page.keyboard.press("Escape");
         await page.waitForTimeout(300);
-        seen[`${deviceName}:picker-${agent}-escape`] = await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="Model picker"]') === null, null);
+        seen[`${deviceName}:picker-${agent}-escape`] = await page.evaluate(() => document.querySelector('[role="dialog"][aria-label="Model"]') === null, null);
       }
       await context.close();
     }
