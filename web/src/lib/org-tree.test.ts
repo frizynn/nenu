@@ -76,6 +76,9 @@ describe("awaits", () => {
     expect(nodeState({ ...resting, liveStatus: "working", group: "working", selfWaiting: undefined })).toBe("working");
     // Herdr's `done` after a turn is no review for a conversation either.
     expect(nodeState({ ...resting, group: "ready-for-review", selfWaiting: undefined })).toBe("idle");
+    // Its own pull request, approved or landing, is still something to review.
+    expect(nodeState({ ...resting, group: "landing", selfWaiting: undefined })).toBe("review");
+    expect(nodeState({ ...resting, group: "idle", selfWaiting: undefined, pr: { state: "open", review: "approved" } })).toBe("review");
   });
 
   it("still says a conversation needs you when it is stopped on a dialog, failed, or lost its pane", () => {

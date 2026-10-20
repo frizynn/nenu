@@ -33,10 +33,11 @@ export function coordinatorState(status: AgentStatus): OpenState | undefined {
 
 /**
  * A conversation whose turn ended: it said `Waiting for you`, as it does before every answer, on a live
- * pane Herdr does not read blocked. Organizations groups it Waiting on you; it waits on nobody.
+ * pane (a blocked one needs you before this is asked). Organizations groups it Waiting on you; it waits
+ * on nobody (ADR 0103).
  */
 function atRest(thread: ProjectThreadView, live: OpenState | undefined): boolean {
-  return thread.conversation === true && thread.selfWaiting === true && live !== undefined && live !== "needs";
+  return thread.conversation === true && thread.selfWaiting === true && live !== undefined;
 }
 
 /**
@@ -44,18 +45,20 @@ function atRest(thread: ProjectThreadView, live: OpenState | undefined): boolean
  * fresher reading of whether an agent is working, and a failed start needs you. A coordinator and a
  * conversation are the exception: neither reads as ready for review, which Organizations groups them
  * as once a report has a verdict and Herdr's `done` would say after every turn; each works, needs you
- * (a dialog, a failed start, a lost pane), or is idle.
+ * (a dialog, a failed start, a lost pane), or is idle. A conversation's own pull request, approved or
+ * landing, still reads as review.
  */
 export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
   if (thread.status === "failed" || live === "needs" || (thread.group === "waiting-on-you" && !atRest(thread, live))) return "needs";
   if (thread.group === "awaiting-merge") return "merging";
+  const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
+  if (thread.conversation && (approved || thread.group === "landing")) return "review";
   if (thread.role === "coordinator" || thread.conversation) {
     const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
     return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");
   }
-  const approved = thread.pr?.state === "open" && thread.pr.review === "approved";
   if (thread.group === "ready-for-review" || thread.group === "landing" || approved || live === "review") return "review";
   if (live) return live;
   return thread.group === "working" || thread.status === "starting" ? "working" : "idle";
