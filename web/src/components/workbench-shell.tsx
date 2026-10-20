@@ -4,6 +4,7 @@ import { PanelLeft, Search, SquarePen } from "@/components/ui/icon";
 
 import { BottomTabBar, type TabBarTab } from "@/components/bottom-tab-bar";
 import { SidebarRail } from "@/components/sidebar-rail";
+import { clampTo, ResizeHandle, type WidthRange } from "@/components/ui/resize-handle";
 import { WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
@@ -28,39 +29,48 @@ const DESKTOP = "(min-width: 1024px)";
 const isDesktop = () => typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
 
 const COLLAPSED_KEY = "nenu:sidebar-collapsed:v1";
-function readCollapsed(): boolean {
+const WIDTH_KEY = "nenu:sidebar-width:v1";
+/** The sidebar's widths; nav.css keeps it under 40% of the window whatever was chosen. */
+export const SIDEBAR_WIDTH: WidthRange = { min: 220, initial: 272, max: 420, step: 16 };
+
+function readStored<T>(key: string, parse: (raw: string | null) => T): T {
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === "1";
+    return parse(localStorage.getItem(key));
   } catch {
-    return false;
+    return parse(null);
   }
 }
 
-/**
- * Whether the desktop sidebar shows as the rail. The operator's choice persists; a docked thread
- * folds it too, to give the split its width, until the operator expands it during that dock.
- */
-function useSidebarCollapse() {
-  const [chosen, setChosen] = useState(readCollapsed);
-  const [docked, setDocked] = useState(false);
-  const [expandedInDock, setExpandedInDock] = useState(false);
-  if (!docked && expandedInDock) setExpandedInDock(false);
-  const choose = (next: boolean) => {
-    setChosen(next);
-    if (!next && docked) setExpandedInDock(true);
-    try {
-      localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
-    } catch {
-      // A blocked store only forgets the choice.
-    }
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // A blocked store only forgets the choice.
+  }
+}
+
+/** The desktop sidebar's state, kept per device: shown as the rail or not, and its width. */
+function useSidebar() {
+  const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY, (raw) => raw === "1"));
+  const [width, setWidth] = useState(() => readStored(WIDTH_KEY, (raw) => raw && Number.isFinite(Number(raw)) ? clampTo(SIDEBAR_WIDTH, Number(raw)) : SIDEBAR_WIDTH.initial));
+  return {
+    collapsed,
+    width,
+    collapse: (next: boolean) => {
+      setCollapsed(next);
+      store(COLLAPSED_KEY, next ? "1" : "0");
+    },
+    resize: (next: number) => {
+      setWidth(next);
+      store(WIDTH_KEY, String(next));
+    },
   };
-  return { collapsed: chosen || (docked && !expandedInDock), choose, setDocked };
 }
 
 // Layout adapted from T3 Code AppSidebarLayout / SidebarChrome at 191a4ef.
 // Routing, session selection and pane lifecycle remain owned by Nenu.
 export function WorkbenchShell({ data, children }: { data: HomeData; children: ReactNode }) {
-  const { collapsed, choose: setCollapsed, setDocked } = useSidebarCollapse();
+  const { collapsed, collapse: setCollapsed, width: sidebarWidth, resize: setSidebarWidth } = useSidebar();
   // The phone's Search sheet, which the tab bar opens.
   const [searchSheet, setSearchSheet] = useState(false);
   // The drawer the header's Nenu mark opens; its Search bumps `drawerSearch`.
@@ -73,7 +83,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
   const collapseButton = useRef<HTMLButtonElement>(null);
-  // Only a press moves focus to the counterpart button; a dock folding the sidebar leaves it alone.
+  // Only a press moves focus to the counterpart button.
   const toggled = useRef(false);
   useEffect(() => {
     if (!toggled.current) return;
@@ -130,7 +140,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
 
   return (
     <div className="workbench-shell" data-sidebar-collapsed={collapsed}>
-      <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar">
+      <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
         <div className="workbench-brand-row">
           <Link to={homePath(data.session)} className="workbench-brand">
             <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" />
@@ -141,13 +151,15 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
           </button>
         </div>
         <WorkbenchSidebar data={data} onNewChat={newChat} request={request} />
+        <ResizeHandle label="Resize sidebar" edge="end" width={sidebarWidth} range={SIDEBAR_WIDTH} onChange={setSidebarWidth}
+          limit={() => Math.floor(window.innerWidth * 0.4)} />
       </aside>
 
       {collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
         onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} />}
 
       <div className="workbench-main">
-        <WorkbenchNavigationContext value={{ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat, onDock: setDocked }}>
+        <WorkbenchNavigationContext value={{ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat }}>
           {children}
         </WorkbenchNavigationContext>
         {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat} onSearch={() => setSearchSheet(true)} />}

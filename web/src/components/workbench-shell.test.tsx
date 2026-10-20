@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useMatch } from "react-router";
@@ -281,37 +281,26 @@ it("remembers a collapsed sidebar across a reload", async () => {
   expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
 });
 
-/** Stands in for a project frame: a button docks or undocks a thread. */
-function DockProbe() {
-  const onDock = useContext(WorkbenchNavigationContext)?.onDock;
-  const [docked, setDocked] = useState(false);
-  useEffect(() => {
-    if (!docked) return;
-    onDock?.(true);
-    return () => onDock?.(false);
-  }, [docked, onDock]);
-  return <button type="button" onClick={() => setDocked(!docked)}>{docked ? "Undock" : "Dock"}</button>;
-}
-
-it("folds to the rail while a thread is docked, unless expanded during that dock, without moving focus", async () => {
-  const router = createMemoryRouter([{ path: "*", element: <WorkbenchShell data={data}><DockProbe /></WorkbenchShell> }]);
-  render(<RouterProvider router={router} />);
-  const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: "Dock" }));
-  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Undock" })).toHaveFocus();
-
-  await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
-  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Undock" }));
-  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
-
-  // The next dock folds it again, and undocking brings back the operator's own choice.
-  await user.click(screen.getByRole("button", { name: "Dock" }));
-  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Undock" }));
-  expect(screen.queryByRole("button", { name: "Expand sidebar" })).not.toBeInTheDocument();
-  expect(localStorage.getItem("nenu:sidebar-collapsed:v1")).toBe("0");
+it("resizes the sidebar from its edge by keys and a double-click, and remembers the width", async () => {
+  const first = setup();
+  const edge = screen.getByRole("separator", { name: "Resize sidebar" });
+  expect(edge).toHaveAttribute("aria-valuenow", "272");
+  edge.focus();
+  await first.user.keyboard("{ArrowRight}");
+  expect(edge).toHaveAttribute("aria-valuenow", "288");
+  await first.user.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+  expect(edge).toHaveAttribute("aria-valuenow", "224");
+  await first.user.keyboard("{Home}");
+  expect(edge).toHaveAttribute("aria-valuenow", "220");
+  expect(edge.parentElement).toHaveStyle({ width: "220px" });
+  fireEvent.doubleClick(edge);
+  expect(edge).toHaveAttribute("aria-valuenow", "272");
+  await first.user.keyboard("{End}");
+  first.router.dispose();
+  document.body.innerHTML = "";
+  setup();
+  // jsdom's window is 1024 wide: End stops at 40% of it.
+  expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "409");
 });
 
 it("can reopen the mobile workspace drawer from the chat title after navigation and Escape", async () => {
