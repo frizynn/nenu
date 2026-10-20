@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronDown, ChevronLeft, History, Plus, Search, Workflow } from "@/components/ui/icon";
 
@@ -99,10 +99,11 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   }, { replace: true });
   // Cards start open; a fold the person changed lasts while the page does.
   const [folds, setFolds] = useState<Record<string, boolean>>({});
-  const finished = finishedCount(project);
+  // A fold re-renders Work; the tree is read again only when a poll brings new threads.
+  const finished = useMemo(() => finishedCount(project), [project]);
+  const cards = useMemo(() => workCards(project), [project]);
   if (history) return <WorkHistory project={project} count={finished} onBack={() => showHistory(false)} onOpenNode={onOpenNode} />;
 
-  const cards = workCards(project);
   const rootState = coordinator && coordinatorState(coordinator.liveStatus);
   const newThread = (parent: string) => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent, onStarted: onChanged });
   const threads = cards.reduce((sum, card) => sum + card.rows.length, 0);
@@ -132,7 +133,7 @@ const HISTORY_ROWS = 100;
 function WorkHistory({ project, count, onBack, onOpenNode }: { project: ProjectView; count: number; onBack: () => void; onOpenNode: (node: OrgNode) => void }) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(HISTORY_ROWS);
-  const days = historyDays(project, query);
+  const days = useMemo(() => historyDays(project, query), [project, query]);
   const shown = days.reduce((sum, day) => sum + day.rows.length, 0);
   let left = limit;
   return <>
