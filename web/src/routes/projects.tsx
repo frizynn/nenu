@@ -16,7 +16,7 @@ import { flatten, openCoordinators, orgTree } from "@/lib/org-tree";
 import { canCreate, type ProjectView } from "@/lib/types";
 
 /**
- * Every project as a card (ADR 0101), the desk's way into them from the bar: its goal, what waits on
+ * Every project as a card (ADR 0102), the desk's way into them from the bar: its goal, what waits on
  * you there, what is working, and how many coordinators and threads it holds open.
  */
 export function ProjectsRoute() {

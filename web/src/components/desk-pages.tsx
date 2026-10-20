@@ -12,7 +12,7 @@ import { nodePath, panePath } from "@/lib/nav";
 import type { AgentView, AsksList, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// The parts a desk's project page and coordinator page share (ADR 0101): the heading, the tabs kept in
+// The parts a desk's project page and coordinator page share (ADR 0102): the heading, the tabs kept in
 // the address, a coordinator's card over its threads, and what waits on you by coordinator.
 
 /** Opens a node inside Nenu (ADR 0064): its chat while it runs in a live pane, its page otherwise. */

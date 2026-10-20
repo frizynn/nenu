@@ -1,4 +1,4 @@
-# 0101. On a desk, projects and coordinators are pages with tabs; asks and routines live on them
+# 0102. On a desk, projects and coordinators are pages with tabs; asks and routines live on them
 
 - **Status:** Accepted (2026-10-20). Requested by the operator, with the approved design
   (designboard `nenu-desktop`, artboards Projects, Project, ProjectAsks, ProjectRoutines, Coordinator).

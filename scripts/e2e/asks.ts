@@ -231,7 +231,7 @@ async function main(): Promise<void> {
     for (const [name, path, heading, device] of [
       ["card-root-phone", "/project/acme/node/root", "Coordinator", tall],
       ["card-node-phone", "/project/acme/node/t-0010", "Rediseño del checkout", tall],
-      // A desk draws the card on the coordinator's Status tab (ADR 0101).
+      // A desk draws the card on the coordinator's Status tab (ADR 0102).
       ["card-node-desktop", "/project/acme/node/t-0010?tab=status", "Rediseño del checkout", DESKTOP],
       // Home's heading is its headline, whatever it says.
       ["home-desktop", "/", /./, DESKTOP],
@@ -243,7 +243,7 @@ async function main(): Promise<void> {
       if (quiet && await card.count()) failures.push(`${name}: a card without the fields`);
       if (!quiet && name.startsWith("card") && !await card.count()) failures.push(`${name}: no card`);
       const entry = await page.getByRole("link", { name: /^Your asks/ }).count();
-      // A desk reads asks on each project, so its bar has no Your asks (ADR 0101).
+      // A desk reads asks on each project, so its bar has no Your asks (ADR 0102).
       if (name === "home-desktop" && entry > 0) failures.push("home-desktop: Your asks shows in the desk's bar");
       await shoot(page, name);
       await context.close();

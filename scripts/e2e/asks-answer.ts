@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     const tallDesk = { ...DESKTOP, viewport: { width: 1440, height: 1000 } };
 
     // A desk reads asks on each coordinator's Waiting on you, where an old /asks link narrowed to one
-    // lands (ADR 0101); a phone keeps the page with its selectors.
+    // lands (ADR 0102); a phone keeps the page with its selectors.
     const GESTION_ASKS = "/asks?project=awam&coordinator=t-0002";
     for (const [width, device] of [["390", tallPhone], ["1440", tallDesk]] as const) {
       const { page, context } = await open(width === "1440" ? GESTION_ASKS : "/asks", device);

@@ -1,4 +1,4 @@
-// What a desk's project and coordinator pages list (ADR 0101): every coordinator as a card holding the
+// What a desk's project and coordinator pages list (ADR 0102): every coordinator as a card holding the
 // threads it runs, the project coordinator's card last with the threads started from the project, and
 // the routines by whom they reach. It reads the one tree (org-tree.ts) and never re-judges a node's state.
 import { askSections, type AskEntry } from "./asks";

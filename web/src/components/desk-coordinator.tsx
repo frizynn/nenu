@@ -26,7 +26,7 @@ import { isReadOnly, type AgentView, type DeviceAuth, type ProjectThreadView, ty
 type Tab = "threads" | "waiting" | "routines" | "status";
 
 /**
- * A coordinator on a desk (ADR 0101): its name, state, threads working and pull request, Open chat and
+ * A coordinator on a desk (ADR 0102): its name, state, threads working and pull request, Open chat and
  * New thread, then Threads (its work, as Summary and tree), what waits on you there, the routines that
  * reach it, and Status (its card and STATUS.md). `thread` is undefined for the project's own coordinator.
  */

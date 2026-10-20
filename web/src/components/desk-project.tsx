@@ -23,7 +23,7 @@ import { isReadOnly, type AgentView, type DeviceAuth, type NodeRole, type Projec
 type Tab = "work" | "waiting" | "routines" | "context";
 
 /**
- * A project on a desk (ADR 0101): its name and goal, Project chat and New, then Work (a card per
+ * A project on a desk (ADR 0102): its name and goal, Project chat and New, then Work (a card per
  * coordinator with its threads, the project coordinator's last), Waiting on you by coordinator,
  * Routines and Context. It never redirects to the coordinator's chat: Project chat opens it.
  */

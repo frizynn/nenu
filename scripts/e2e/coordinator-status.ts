@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
     const layout: Record<string, unknown> = {};
     // A desk reads a coordinator's STATUS.md on its page's Status tab, the project coordinator's at
-    // node/root, and its project page draws none (ADR 0101).
+    // node/root, and its project page draws none (ADR 0102).
     for (const [name, path, device] of [
       ["project-phone", PROJECT, PHONE], ["node-phone", NODE, PHONE],
       ["project-desktop", `${PROJECT}/node/root?tab=status`, DESKTOP], ["node-desktop", `${NODE}?tab=status`, DESKTOP],

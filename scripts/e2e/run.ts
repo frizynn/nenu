@@ -2365,7 +2365,7 @@ async function back(): Promise<void> {
       await log("project");
       if (way.coordinator) {
         // A desk's project folds a coordinator's card on its name; its › opens the coordinator's page,
-        // and Open chat its chat (ADR 0101).
+        // and Open chat its chat (ADR 0102).
         if (device === DESKTOP) {
           await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
           await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });
@@ -2828,7 +2828,7 @@ async function sidebar(before: boolean): Promise<void> {
         seen[`animationsAtRest-${deviceName}-${scheme}`] = await page.evaluate(() => document.getAnimations().length, null);
         if (deviceName === "desktop") {
           if (!before) {
-            // A desk reads routines on each project's Routines tab (ADR 0101).
+            // A desk reads routines on each project's Routines tab (ADR 0102).
             await visit("/project/acme-shop?tab=routines", 'main >> text="nightly-dependency-check"');
             await shoot("routines");
           }

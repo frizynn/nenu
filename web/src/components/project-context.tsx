@@ -4,7 +4,7 @@ import { BookText, FileText, FolderGit2 } from "@/components/ui/icon";
 import { fetchOrgContext } from "@/lib/api";
 import type { OrgProjectDetail, ProjectThreadView, ProjectView } from "@/lib/types";
 
-// A desk project's Context tab (ADR 0101): what the project panel's Context showed, now on the project's page.
+// A desk project's Context tab (ADR 0102): what the project panel's Context showed, now on the project's page.
 
 const size = (text: string) => text.length < 1000 ? String(text.length) : `${(text.length / 1000).toFixed(1)}k`;
 

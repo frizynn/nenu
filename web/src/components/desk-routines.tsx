@@ -11,7 +11,7 @@ import type { ProjectThreadView, RoutineView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
- * A page's routines (ADR 0101): each one's trigger, when it runs and whom it reaches, a switch that turns
+ * A page's routines (ADR 0102): each one's trigger, when it runs and whom it reaches, a switch that turns
  * it on or off through Organizations' `routine toggle`, and its detail beside the list: when, whom, the
  * last run and what it asks, as its file says. A routine is created and its command approved at a
  * terminal, where approving a command is the person's own step.

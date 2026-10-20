@@ -50,7 +50,7 @@ export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;
 }
 
-/** Every project as a card, the desk's way into them (ADR 0101). */
+/** Every project as a card, the desk's way into them (ADR 0102). */
 export function projectsPath(session?: string): string {
   return `/projects${sessionSearch(session)}`;
 }

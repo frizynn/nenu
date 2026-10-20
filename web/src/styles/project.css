@@ -116,7 +116,7 @@
 .task-fold-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; padding-bottom: 8px; }
 .task-fold-body > section[aria-label="Coordinator card"] { margin-bottom: 0; }
 
-/* A desk's project and coordinator pages (ADR 0101): underlined tabs, and a card per coordinator. */
+/* A desk's project and coordinator pages (ADR 0102): underlined tabs, and a card per coordinator. */
 .desk-tabs { display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
 .desk-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; color: var(--muted-foreground); font-size: var(--text-subhead); cursor: pointer; transition: color 150ms ease-out; }
 .desk-tab[aria-selected="true"] { color: var(--foreground); font-weight: 500; }

@@ -24,7 +24,7 @@ import { isReadOnly } from "@/lib/types";
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
 
-// On a desk a coordinator's page has tabs (ADR 0101); a thread's page, and a phone's, are as before.
+// On a desk a coordinator's page has tabs (ADR 0102); a thread's page, and a phone's, are as before.
 export function NodeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "", nodeId = "" } = useParams();

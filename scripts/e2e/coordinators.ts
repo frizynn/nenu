@@ -144,7 +144,7 @@ async function main(): Promise<void> {
       await context.close();
     }
     // A desk's project is a card per coordinator holding its threads, the project coordinator's last
-    // with the threads started from the project, each card folding (ADR 0101).
+    // with the threads started from the project, each card folding (ADR 0102).
     {
       const name = "proyecto-1440";
       const { page, context } = await open("/project/acme", tallDesk);
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
     }
 
     // Move: a thread at the top level goes under a coordinator. A desk moves it from the project
-    // coordinator's tree, its Threads tab (ADR 0101).
+    // coordinator's tree, its Threads tab (ADR 0102).
     {
       const { page, context } = await open("/project/acme/node/root", DESKTOP);
       // A desk names a row's actions while the pointer rests on it.
