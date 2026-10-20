@@ -1,6 +1,6 @@
 import { modelDisplayName } from "@/lib/model-display";
 import { Fragment, useState, type RefObject } from "react";
-import { formatContextTokens, WorkbenchContextMeter } from "@/components/workbench-context-meter";
+import { contextPercent, formatContextTokens, WorkbenchContextMeter } from "@/components/workbench-context-meter";
 import type { SessionTelemetry } from "@/lib/types";
 
 export type WorkbenchPanel = "model" | "usage" | "context" | null;
@@ -50,7 +50,7 @@ function UsageDetails({ telemetry, stale }: { telemetry?: SessionTelemetry; stal
   const reported = values.filter((entry): entry is [string, number] => entry[1] !== undefined);
   const used = context?.usedTokens;
   const max = context?.windowTokens;
-  const percent = context?.usedPercent ?? (used !== undefined && max ? Math.min(100, (used / max) * 100) : undefined);
+  const percent = contextPercent(context) ?? undefined;
   const limits = telemetry?.rateLimits ?? [];
   const contextSize = used !== undefined ? `${formatContextTokens(used)}${max ? ` / ${formatContextTokens(max)}` : ""}` : max ? `${formatContextTokens(max)} window` : null;
   if (percent === undefined && contextSize === null && !reported.length && !limits.length) {

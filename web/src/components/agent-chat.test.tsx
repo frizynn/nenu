@@ -1685,7 +1685,7 @@ describe("AgentChat — the desk's Terminal tab", () => {
         <button type="button" onClick={() => setShown((on) => !on)}>toggle tab</button>
         {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
         <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={"$ bun test\n3 pass"} onBack={vi.fn()} onSelect={vi.fn()}
-          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal }} />
+          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal, report: vi.fn() }} />
         <MirrorShown />
       </>;
     }
@@ -1703,5 +1703,21 @@ describe("AgentChat — the desk's Terminal tab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "toggle tab" }));
     await waitFor(() => expect(screen.getByTestId("mirror-shown")).toHaveTextContent("false"));
+  });
+
+  it("tells the panel its model and how full its context is, from tokens when no share is reported", async () => {
+    const paneId = "reported";
+    server.use(http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
+      paneId, available: true, entries: [{ uuid: "a", ts: "", role: "assistant", parts: [{ kind: "text", text: "Conversation turn" }] }],
+      total: 1, hasMore: false, fileTruncated: false,
+      telemetry: { source: "journal", model: "gpt-5.5", fileTruncated: false, context: { usedTokens: 82_000, windowTokens: 200_000 } },
+    })));
+    const agent = { ...fixtureAgents[0]!, paneId, agent: "codex", status: "idle" as const, hasSession: true };
+    const report = vi.fn();
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]}
+      text="" onBack={vi.fn()} onSelect={vi.fn()} sessionPanel={{ terminal: null, showTerminal: vi.fn(), report }} /> }], { initialEntries: [`/pane/${paneId}`] });
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByText("Conversation turn")).toBeInTheDocument();
+    await waitFor(() => expect(report).toHaveBeenLastCalledWith({ model: "gpt-5.5", contextPercent: 41 }));
   });
 });

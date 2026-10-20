@@ -140,12 +140,12 @@ it("merges a thread's PR from a phone's PRs tab only after confirming", async ()
   await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
 });
 
-/** The project's Agents, the first tab of a desk's session panel. */
-async function projectPanel(user: ReturnType<typeof userEvent.setup>) {
+/** The pane's Overview, the first tab of a desk's session panel. */
+async function overviewPanel(user: ReturnType<typeof userEvent.setup>) {
   const panel = within(await screen.findByRole("complementary", { name: "Session panel" }));
-  await user.click(panel.getByRole("tab", { name: "Project" }));
-  // The Project tab is a lazy chunk: under load it lands a beat after the tab is picked.
-  await user.click(await panel.findByRole("tab", { name: /^Agents/ }));
+  await user.click(panel.getByRole("tab", { name: "Overview" }));
+  // The Overview is a lazy chunk: under load it lands a beat after the tab is picked.
+  await panel.findByRole("region", { name: /^This (thread|coordinator)$/ });
   return panel;
 }
 
@@ -153,8 +153,7 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   wide = true;
   server.use(http.get("/api/pane/:id", () => HttpResponse.json({ paneId: "worker", text: "", truncated: false, revision: 1 })));
   const { router, user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-  const panel = await projectPanel(user);
-  expect(panel.getByRole("tablist", { name: "Project sections" })).toBeInTheDocument();
+  const panel = await overviewPanel(user);
   expect(screen.queryByRole("tablist", { name: "Project" })).not.toBeInTheDocument();
   await user.click(panel.getByRole("button", { name: /^Build/ }));
   expect(router.state.location.search).toBe("?thread=worker");
@@ -165,20 +164,20 @@ it("docks a thread beside its coordinator on a wide screen and closes it again",
   // The docked header keeps the chat's own menu (keys, find, files and the rest).
   expect(docked.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   // The panel steps aside for the docked thread.
-  expect(screen.queryByRole("tablist", { name: "Project sections" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: "Session panel" })).not.toBeInTheDocument();
   await user.click(docked.getByRole("button", { name: "Close thread" }));
   expect(router.state.location.search).toBe("");
-  expect(await screen.findByRole("tablist", { name: "Project sections" })).toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "This coordinator" })).toBeInTheDocument();
 });
 
-describe("a wide screen, the project as the session panel's first tab", () => {
+describe("a wide screen, the thread's overview as the session panel's first tab", () => {
   beforeEach(() => { wide = true; });
 
-  it("draws no thread cards under the coordinator's chat, with the panel open or put away", async () => {
+  it("lists the coordinator's threads only in its panel, never as cards under its chat", async () => {
     const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-    const panel = await projectPanel(user);
+    const panel = await overviewPanel(user);
     expect(panel.getByRole("button", { name: /^Build/ })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("region", { name: "Threads" })).toHaveLength(1);
     await user.click(panel.getByRole("button", { name: "Hide session panel" }));
     expect(await screen.findByRole("button", { name: "Show session panel" })).toBeInTheDocument();
     expect(screen.getByTestId("conversation")).toHaveTextContent("conversation:coord");
@@ -188,45 +187,21 @@ describe("a wide screen, the project as the session panel's first tab", () => {
 
   it("lists a thread's siblings once: the panel, not chips above the chat as well", async () => {
     const { user } = setup("/pane/worker", home([pane("coord"), pane("worker"), pane("docs")]));
-    const panel = await projectPanel(user);
+    const panel = await overviewPanel(user);
     expect(panel.getByRole("button", { name: /^Docs/ })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: "Hide session panel" }));
     expect(within(screen.getByRole("navigation", { name: "Threads" })).getByRole("button", { name: /Docs/ })).toBeInTheDocument();
   });
 
-  it("merges from the panel's PRs, only after confirming", async () => {
-    let posted: unknown;
-    server.use(http.post("/api/org/thread/merge", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true, merged: { id: "T2", pr: "9" } }); }));
-    const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-    const panel = await projectPanel(user);
-    await user.click(panel.getByRole("tab", { name: /^PRs/ }));
-    // Merge only where Organizations says nothing blocks it.
-    expect(panel.queryByRole("button", { name: "Merge Build" })).not.toBeInTheDocument();
-    expect(panel.getByRole("button", { name: "Merge Docs" })).toHaveTextContent(/^Merge$/);
-    await user.click(panel.getByRole("button", { name: "Merge Docs" }));
-    expect(posted).toBeUndefined();
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Merge" }));
-    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "T2" }));
-  });
-
-  it("names every section of the project, not only the open one", async () => {
-    const { user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-    const tabs = within((await projectPanel(user)).getByRole("tablist", { name: "Project sections" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Notes", "Agents2", "PRs2", "Context"]);
-  });
-
-  it("a pull request opens its diff in the panel, and its thread from a second action", async () => {
-    server.use(http.get("/api/pane/:id/diff", () => HttpResponse.json({ ok: true, base: "main", head: "docs", source: "worktree",
-      totals: { files: 1, additions: 1, deletions: 0 }, files: [{ path: "docs/readme.md", status: "modified", additions: 1, deletions: 0, hunks: [] }] })));
-    const { router, user } = setup("/pane/coord", home([pane("coord"), pane("worker"), pane("docs")]));
-    const panel = await projectPanel(user);
-    await user.click(panel.getByRole("tab", { name: /^PRs/ }));
-    await user.click(panel.getByRole("button", { name: /^Docs/ }));
-    expect(await panel.findByRole("button", { name: /docs\/readme\.md/ })).toBeInTheDocument();
-    expect(router.state.location.search).toBe("");
-    await user.click(panel.getByRole("button", { name: "Open thread" }));
-    expect(router.state.location.search).toBe("?thread=docs");
+  it("names the thread's coordinator and its pull request, and goes up to that coordinator from its name", async () => {
+    const { router, user } = setup("/pane/worker", home([pane("coord"), pane("worker"), pane("docs")]));
+    const panel = await overviewPanel(user);
+    const own = within(panel.getByRole("region", { name: "This thread" }));
+    expect(own.getByText("#12")).toBeInTheDocument();
+    expect(panel.queryByRole("tablist", { name: "Project sections" })).not.toBeInTheDocument();
+    await user.click(own.getByRole("button", { name: /^Hub/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/pane/coord"));
   });
 });
 
@@ -286,12 +261,14 @@ describe("a coordinator under the project", () => {
     expect(router.state.location.search).toBe("?view=threads");
   });
 
-  it("lists its own row in the panel beside it on a wide screen", async () => {
+  it("names the project above it and its own threads in the panel beside it on a wide screen", async () => {
     wide = true;
     const { user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));
-    const panel = await projectPanel(user);
+    const panel = await overviewPanel(user);
     expect(panel.queryByRole("button", { name: "Start coordinator" })).not.toBeInTheDocument();
-    expect(panel.getByRole("button", { name: /^Coordinator/ })).toHaveTextContent("You're here");
+    // It answers to the project, and lists the threads it runs as its own.
+    expect(within(panel.getByRole("region", { name: "This coordinator" })).getByRole("button", { name: /^Hub/ })).toBeInTheDocument();
+    expect(within(panel.getByRole("region", { name: "Threads" })).getByRole("button", { name: /^Build/ })).toBeInTheDocument();
   });
 });
 
