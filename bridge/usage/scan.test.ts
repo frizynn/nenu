@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
-import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AccountBook, accountHash } from "./accounts.ts";
@@ -136,6 +136,10 @@ describe("Claude transcripts", () => {
     saveStore(state, { totals: t.totals, state: t.state, seen: t.seen }, Date.parse("2026-01-10T13:00:00Z"));
     const store = loadStore(state, "2026-01-10", "UTC");
     writeFileSync(join(t.project, "s2.jsonl"), `${row}\n`);
+    // A folder is listed again only once its mtime moves; two writes inside one tick of the file
+    // system's clock would leave s2 unlisted, so the folder is dated as a later scan would find it.
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(t.project, later, later);
     const r = scan({
       roots: { claude: [{ configDir: t.claude }], codex: [] }, ...store, book: new AccountBook([]), repoOf: (cwd) => repoOf(cwd, home),
     });
