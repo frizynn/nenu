@@ -71,10 +71,10 @@ export default function DiffViewer({ open, onClose, paneId, pr, session, url }: 
 function sourceLine(diff: Extract<PaneDiff, { ok: true }>): ReactNode {
   const code = (text: string) => <code className="font-mono">{text}</code>;
   // A coordinator works in its project's folder: what it reads is the project's repository.
-  const where = diff.repo && <>The project's repository, {code(tildeHome(diff.repo))}, since this pane's folder is not in one. </>;
-  if (diff.source === "uncommitted") return <>{where}What is not committed on {code(diff.head)} yet, against its last commit.</>;
+  const where = diff.repo && <>This pane's folder is not a git repository, so these are its project's changes, in {code(tildeHome(diff.repo))}: </>;
+  if (diff.source === "uncommitted") return <>{where}{where ? "what" : "What"} is not committed on {code(diff.head)} yet, against its last commit.</>;
   if (diff.source === "branch") return <>The pushed branch {code(diff.head)}, against {code(diff.base)}.</>;
-  return <>{where}{where ? "Its" : diff.pr === undefined ? "This session's" : "This thread's"} worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
+  return <>{where}{where ? "the" : diff.pr === undefined ? "This session's" : "This thread's"} worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
 }
 
 /** The pane a diff was read from, whose composer its line comments wait on. */

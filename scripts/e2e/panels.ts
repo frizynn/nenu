@@ -142,6 +142,9 @@ try {
   const coordinator = `/pane/${encodeURIComponent(herd.idle)}`;
   await page.goto(bridge.url + coordinator);
   await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
+  // The panel is its own chunk: shoot once it is drawn, not while its place holds empty.
+  await page.getByRole("tab", { name: /^Overview/ }).waitFor({ timeout: 15_000 });
+  await page.locator(".overview-thread", { hasText: "Checkout flow" }).waitFor({ timeout: 15_000 });
   await shoot(page, "1-coordinator");
   result.coordinator = await columns(page);
 
@@ -191,6 +194,13 @@ try {
   await page.waitForTimeout(600);
   result.dockedGrip = await grip(page, /thread|session panel|right/i, -1, "docked");
   await shoot(page, "8-docked-after-grip");
+  // The docked header at the column's narrowest: the title keeps its room.
+  const edge = page.getByRole("separator", { name: "Resize thread" });
+  await edge.focus();
+  await page.keyboard.press("Home");
+  await shoot(page, "8b-docked-narrowest-header", { x: 1440 - 340, y: 0, width: 340, height: 60 });
+  await page.keyboard.press("End");
+  await shoot(page, "8c-docked-widest");
 
   // The same fold beside a long conversation (200 turns), with motion and without: each frame's
   // length, the second the one reflow an instant fold costs.

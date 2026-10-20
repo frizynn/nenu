@@ -158,15 +158,16 @@ export function DockedThread({ thread, project, siblings, data, subtitle, inspec
   const header = ({ terminal, canToggle, setTerminal, find, menu }: DockedHeaderView) => find
     ? <div className="flex min-h-13 shrink-0 items-center border-b border-border/60 px-3">{find}</div>
     : (
-    <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 pl-3 pr-2">
+    <div className="@container flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 pl-3 pr-2">
       <NodeDot state={nodeState(thread)} />
-      {/* A narrow column cuts the title and drops the subtitle before any control. */}
+      {/* The title comes first: a narrow column drops the subtitle, then Chat and Terminal keep only their icons. */}
       <span className="ml-1 min-w-0 shrink truncate text-sm font-semibold">{thread.title}</span>
-      <span className="ml-1 min-w-0 flex-1 truncate text-xs text-muted-foreground">{subtitle}</span>
+      <span className="ml-1 min-w-0 flex-1 truncate text-xs text-muted-foreground @max-[34rem]:hidden">{subtitle}</span>
+      <span className="hidden flex-1 @max-[34rem]:block" />
       {canToggle && <div role="group" aria-label="View" className="flex shrink-0 items-center gap-0.5">
         {([[false, "Chat", ChatCircle], [true, "Terminal", SquareTerminal]] as const).map(([value, label, Icon]) => (
-          <button key={label} type="button" aria-pressed={terminal === value} onClick={() => setTerminal(value)} className="panel-tab shrink-0 px-1.5">
-            <Icon aria-hidden className="size-3.5" />{label}
+          <button key={label} type="button" aria-pressed={terminal === value} aria-label={label} title={label} onClick={() => setTerminal(value)} className="panel-tab shrink-0 px-1.5">
+            <Icon aria-hidden className="size-3.5" /><span className="@max-[26rem]:sr-only">{label}</span>
           </button>
         ))}
       </div>}
