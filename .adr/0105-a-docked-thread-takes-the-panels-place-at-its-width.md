@@ -22,8 +22,9 @@ but the panel's could be dragged, and the panel's grip had no double-click, Home
    device), and the chat beside it keeps 22rem. With the panel open, docking and closing a thread
    move nothing; the thread only fades in. With it folded, the thread opens the column as the panel
    would.
-2. **Nothing folds to make room.** The sidebar stays as the person left it. A narrow column cuts
-   the thread's title and drops its subtitle before any control.
+2. **Nothing folds to make room.** The sidebar stays as the person left it. The thread's title
+   keeps its room in a narrow column: its subtitle shows only from 34rem, and below 26rem Chat and
+   Terminal keep only their icons.
 3. **Every desk column edge is one grip** (`ResizeHandle`): the sidebar's (220–420 px, at most 40%
    of the window) and the right column's. Drag, arrows (Shift four steps), Home and End, a
    double-click back to the default; each width kept per device.

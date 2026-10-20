@@ -22,7 +22,9 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- Changes beside a coordinator read its project's repository instead of saying its folder is not one; with none, it names the folder (537562e3).
+- Changes beside a coordinator read its project's repository instead of saying its folder is not one; with none, it names the folder; a private-named folder is never read (537562e3, 44ff5dba).
+- Desk: a narrow docked thread keeps its title whole (a3b9771f).
+- Desk: a column that leaves mid-drag no longer leaves the page unable to select text (44ff5dba).
 
 ## [1.32.1] - 2026-10-20
 
