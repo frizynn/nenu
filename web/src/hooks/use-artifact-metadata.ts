@@ -27,10 +27,19 @@ export function useArtifactMetadata(
     setError(false);
     void (async () => {
       try {
-        // The bridge takes 20 names a request; the batches go together, as it reads the journal once for all.
+        // The bridge takes 20 names a request; up to three go at once, as it reads the journal once for all.
         const batches: string[][] = [];
         for (let index = 0; index < candidates.length; index += 20) batches.push(candidates.slice(index, index + 20));
-        const result = (await Promise.all(batches.map((batch) => fetchArtifactMetadata(paneId, batch, session, controller.signal)))).flat();
+        const answers: ArtifactMetadata[][] = [];
+        let next = 0;
+        const worker = async () => {
+          while (next < batches.length) {
+            const index = next++;
+            answers[index] = await fetchArtifactMetadata(paneId, batches[index]!, session, controller.signal);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(3, batches.length) }, worker));
+        const result = answers.flat();
         if (controller.signal.aborted) return;
         setFound(result);
       } catch {
