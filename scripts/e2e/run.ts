@@ -3715,29 +3715,31 @@ async function pin(): Promise<void> {
             const box = document.querySelector(".workbench-composer")!.getBoundingClientRect();
             return { header: top(".workbench-app-header"), box: Math.round(box.top), boxBottom: Math.round(box.bottom), height: window.visualViewport?.height ?? innerHeight };
           }, null);
-          // A finger pushing up 300px from (195, y). Chromium gets raw touch events (its synthesized
+          // A finger pushing 300px from (195, y), up unless `down`. Chromium gets raw touch events (its synthesized
           // scroll gesture scrolls nothing headless). Mobile WebKit takes no wheel and Playwright drives
           // no touch scroll there, so it scrolls what the engine would: the nearest box under the
           // finger that can still go down, chaining outward.
-          const drag = async (y: number) => {
+          const drag = async (y: number, down = false) => {
+            const by = down ? -300 : 300;
             if (engine === "chromium") {
               const cdp = await context.newCDPSession(page);
               await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y }] });
               for (let step = 1; step <= 15; step++) {
-                await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - step * 20 }] });
+                await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - step * by / 15 }] });
                 await page.waitForTimeout(16);
               }
               await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
             } else {
-              await page.evaluate((at: number) => {
+              await page.evaluate(([at, by]: readonly [number, number]) => {
+                const down = by < 0;
                 for (let el = document.elementFromPoint(195, at); el; el = el.parentElement) {
                   const style = getComputedStyle(el);
                   if (el !== document.documentElement && !/auto|scroll/.test(style.overflowY)) continue;
-                  if (el.scrollTop + el.clientHeight >= el.scrollHeight) continue;
-                  el.scrollTop += 300;
+                  if (down ? el.scrollTop <= 0 : el.scrollTop + el.clientHeight >= el.scrollHeight) continue;
+                  el.scrollTop += by;
                   return;
                 }
-              }, y);
+              }, [y, by] as const);
             }
             await page.waitForTimeout(400);
           };
@@ -3754,6 +3756,12 @@ async function pin(): Promise<void> {
               moved[from] = { box: after.box - at.box, header: after.header - at.header };
               if (after.box !== at.box || after.header !== at.header) failures.push(`${engine} ${scheme} ${moment}: a drag on the ${from} moved the box ${after.box - at.box}px, the header ${after.header - at.header}px`);
             }
+            // The control: a finger pulling down on the thread still reads back through it.
+            const reading = () => page.evaluate(() => document.querySelector(".chat-thread [class*='overflow-y-auto']")?.scrollTop ?? NaN, null);
+            const from = await reading();
+            await drag(Math.round((at.header + at.box) / 2), true);
+            moved.threadScrolled = from - await reading();
+            if (!(Number(moved.threadScrolled) > 0)) failures.push(`${engine} ${scheme} ${moment}: a drag down on the thread did not scroll it`);
             if (list.length !== 1 || !list[0]!.startsWith("thread")) failures.push(`${engine} ${scheme} ${moment}: scrollers ${JSON.stringify(list)}`);
             if (at.boxBottom > at.height) failures.push(`${engine} ${scheme} ${moment}: the box ends at ${at.boxBottom}, under the viewport's ${at.height}`);
             seen[`${engine}-${scheme}-${moment}`] = { ...at, scrollers: list, moved };
