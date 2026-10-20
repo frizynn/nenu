@@ -43,6 +43,13 @@ const contrast = (a: string, b: string) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
+/** An `rgb(R G B / A%)` tint laid over a hex ground, as the hex a reader sees. */
+function over(tint: string, ground: string): string {
+  const [r, g, b, a] = tint.match(/[\d.]+/g)!.map(Number) as [number, number, number, number];
+  const base = [1, 3, 5].map((i) => parseInt(ground.slice(i, i + 2), 16));
+  return `#${[r, g, b].map((c, i) => Math.round(c * a / 100 + base[i]! * (1 - a / 100)).toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** `--name: light-dark(<light>, <dark>)` from index.css, either half hex or `oklch(L C H)`, both as hex. */
 function themedColor(name: string): [string, string] {
   const match = root[`--${name}`]?.match(/^light-dark\((#[0-9a-f]{3,6}|oklch\([^)]*\)), (#[0-9a-f]{3,6}|oklch\([^)]*\))\)$/i);
@@ -127,13 +134,14 @@ describe("surfaces", () => {
 
 describe("the drawer's selected row", () => {
   // A chat's age took the tertiary tone, which clears 4.5:1 on the page but measured 4.43:1 on the
-  // light selected row's fill.
+  // light selected row's fill. The fill is a tint over the sidebar, so it is measured composited.
   it("keeps a chat's age at 4.5:1 on its fill in both themes", () => {
     const nav = read("styles/nav.css");
     const layer = ["@layer components"];
     const tone = declarations(nav, '.nav-pane[aria-current="page"] .nav-chat-time', layer).color ?? declarations(nav, ".nav-chat-time", layer).color;
     const ink = themed(/^var\(--([\w-]+)\)$/.exec(tone ?? "")![1]!);
-    const row = themed("workbench-row-selected");
+    const tints = /^light-dark\((rgb\([^)]*\)), (rgb\([^)]*\))\)$/.exec(root["--workbench-row-selected"] ?? "")!;
+    const row = themed("workbench-sidebar").map((ground, i) => over(tints[i + 1]!, ground));
     ink.forEach((colour, i) => expect(contrast(colour, row[i]!), i ? "dark" : "light").toBeGreaterThanOrEqual(4.5));
   });
 });

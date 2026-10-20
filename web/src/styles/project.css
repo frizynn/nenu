@@ -83,7 +83,8 @@
    beside it keeps 22rem. The resize grip straddles the panel's left border. */
 .session-panel { position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-width: calc(100% - 22rem); border-left: 1px solid var(--border); }
 .session-panel-resize { position: absolute; inset-block: 0; left: -3px; z-index: 1; width: 6px; cursor: col-resize; touch-action: none; }
-.session-panel-resize:hover, .session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }
+.session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }
+@media (hover: hover) { .session-panel-resize:hover { background: color-mix(in srgb, var(--ring) 45%, transparent); } }
 
 /* A group's name over its rows in a panel's list (threads-panel). */
 .panel-group-heading { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; padding: 0 8px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
