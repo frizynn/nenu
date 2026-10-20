@@ -2,7 +2,6 @@ import { useState } from "react";
 import { File as FileIcon, FileArchive, FileCode, FileImage, FileText, Pending, RotateCw, X, type IconComponent } from "@/components/ui/icon";
 
 import type { Attachment } from "@/hooks/use-composer-attachments";
-import { imageLabel } from "@/lib/message-images";
 import { cn } from "@/lib/utils";
 
 const ARCHIVE = /^(?:zip|gz|tgz|tar|bz2|xz|7z|rar|zst)$/;
@@ -29,8 +28,9 @@ function formatSize(bytes: number): string {
 }
 
 /**
- * The draft's files, above the text: a 26px tile (an image's thumbnail, any other file's icon), its
- * name, its kind and size, and a small remove control that a touch screen reaches at 44px through
+ * The draft's files, inside the box above the text. A picture is a thumbnail with its number, "#N", the
+ * one its chip in the text carries, and a round remove control at its corner; any other file is a 26px
+ * tile with its icon, name, kind and size. Each remove control reaches 44px on a touch screen through
  * the shared .hit-area. One row; it scrolls sideways when it overflows.
  */
 export function AttachmentChips({
@@ -45,19 +45,74 @@ export function AttachmentChips({
   disabled?: boolean;
 }) {
   if (!items.length) return null;
+  let pictures = 0;
   return (
-    <ul aria-label="Attached files" className="flex gap-1.5 overflow-x-auto px-1.5 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {items.map((item, index) => (
+    <ul aria-label="Attached files" className="composer-attachments flex gap-2.5 overflow-x-auto px-2.5 pb-0.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {items.map((item) => item.image ? (
+        <PictureTile key={item.id} item={item} number={++pictures} onRemove={() => onRemove(item.id)} onRetry={() => onRetry(item.id)} disabled={disabled} />
+      ) : (
         <AttachmentChip
           key={item.id}
           item={item}
-          label={item.name ?? imageLabel(index)}
+          label={item.name ?? "File"}
           onRemove={() => onRemove(item.id)}
           onRetry={() => onRetry(item.id)}
           disabled={disabled}
         />
       ))}
     </ul>
+  );
+}
+
+/** A picture: its thumbnail, its number at the bottom left, remove at the top right. */
+function PictureTile({ item, number, onRemove, onRetry, disabled }: { item: Attachment; number: number; onRemove: () => void; onRetry: () => void; disabled: boolean }) {
+  const [broken, setBroken] = useState(false);
+  const failed = item.status === "error";
+  const label = `Image #${number}`;
+  const frame = (
+    <span className={cn("relative grid size-14 place-items-center overflow-hidden rounded-lg border bg-muted text-muted-foreground", failed ? "border-destructive/60" : "border-border/70")}>
+      {item.url && !broken ? (
+        <img src={item.url} alt="" className="size-full object-cover" onError={() => setBroken(true)} />
+      ) : (
+        <FileImage aria-hidden="true" className="size-4" />
+      )}
+      {item.status === "uploading" && (
+        <span className="absolute inset-0 grid place-items-center bg-background/60">
+          <Pending aria-hidden="true" className="size-4" />
+        </span>
+      )}
+      {failed && (
+        <span className="absolute inset-0 grid place-items-center bg-background/75 text-destructive">
+          <RotateCw aria-hidden="true" className="size-4" />
+        </span>
+      )}
+      <span aria-hidden="true" className="absolute bottom-1 left-1 rounded-sm bg-background/85 px-1 text-micro font-medium leading-4 text-foreground tabular-nums">#{number}</span>
+    </span>
+  );
+  return (
+    <li className="relative shrink-0" title={failed ? item.error : undefined}>
+      {failed ? (
+        <button type="button" className="block rounded-lg" onClick={onRetry} disabled={disabled} aria-label={`Retry ${label}${item.error ? `: ${item.error}` : ""}`}>
+          {frame}
+        </button>
+      ) : (
+        <span className="block" role="img" aria-label={item.status === "uploading" ? `${label}, uploading` : label} aria-busy={item.status === "uploading"}>
+          {frame}
+        </span>
+      )}
+      {/* .hit-area positions the button itself, so the corner is its wrapper's. */}
+      <span className="absolute -right-1.5 -top-1.5">
+        <button
+          type="button"
+          className="hit-area grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:text-foreground"
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={onRemove}
+          aria-label={`Remove ${label}`}
+        >
+          <X aria-hidden="true" className="size-3" />
+        </button>
+      </span>
+    </li>
   );
 }
 

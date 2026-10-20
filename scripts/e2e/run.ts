@@ -8,6 +8,7 @@ import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } fr
 import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
+import { inlineImagesBench } from "./inline-images.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
@@ -44,6 +45,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
 //   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
+//   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3878,6 +3880,16 @@ async function atRestBench(): Promise<void> {
   if (failures.length) process.exit(1);
 }
 
+/** Two pictures between a message's words, phone and desk: the composer, what the terminal got, the conversation. */
+async function inlineImages(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench((bridge, browser) => inlineImagesBench(bridge, browser, outDir, before), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "inline-images.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result.sent, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -3910,8 +3922,9 @@ else if (command === "scroll") await scrollProbe();
 else if (command === "reading") await reading();
 else if (command === "pin") await pin();
 else if (command === "at-rest") await atRestBench();
+else if (command === "inline-images") await inlineImages(values.before === true);
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

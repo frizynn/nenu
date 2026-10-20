@@ -1,4 +1,4 @@
-import { imageLabel, isUploadPath, uploadName, messageMatchKey, serializeMessage, splitDraftUploads, splitMessageImages } from "./message-images";
+import { draftFromWire, imageChip, imageLabel, insertImageChips, isUploadPath, keepChipsWhole, messageMatchKey, pathPieces, serializeDraft, serializeMessage, splitDraftUploads, splitMessageImages, tokenPieces, uploadName, withoutImages } from "./message-images";
 
 const UP = "/home/you/.local/state/collie/uploads";
 const a = `${UP}/w1-p1-mabc123-1234abcd.png`;
@@ -50,5 +50,75 @@ describe("message images", () => {
 
   it("labels images from one", () => {
     expect([0, 1, 2].map(imageLabel)).toEqual(["Image 1", "Image 2", "Image 3"]);
+  });
+});
+
+describe("pictures in their places", () => {
+  const chip = (n: number) => imageChip(n);
+
+  it("a draft goes on the wire with each picture's path where its chip is, files after the prose", () => {
+    const pdf = `${UP}/w1_p1-mv8g-0a1b2c3d-spec.pdf`;
+    const draft = `first the red one ${chip(1)} then the blue one ${chip(2)}and that is all`;
+    expect(serializeDraft(draft, [a, b], [pdf])).toBe(`first the red one ${a} then the blue one ${b} and that is all ${pdf}`);
+    expect(serializeDraft(`${chip(1)}look`, [a])).toBe(`${a} look`);
+    // Still uploading: no path yet, so nothing goes; a picture no chip names goes after the prose.
+    expect(serializeDraft(`x ${chip(1)} y`, [null, b])).toBe(`x  y ${b}`);
+  });
+
+  it("comes back from the wire as the same chips, numbered after what the box already holds", () => {
+    const pdf = `${UP}/w1_p1-mv8g-0a1b2c3d-spec.pdf`;
+    const wire = `first ${a} then ${b} end ${pdf}`;
+    expect(draftFromWire(wire)).toEqual({ text: `first ${chip(1)} then ${chip(2)} end`, images: [a, b], files: [pdf] });
+    expect(draftFromWire(wire, [b]).text).toBe(`first ${chip(2)} then ${chip(1)} end`);
+    // An old draft, every path after the prose.
+    expect(draftFromWire(`look ${a} ${b}`).text).toBe(`look ${chip(1)} ${chip(2)}`);
+    expect(serializeDraft(draftFromWire(wire).text, [a, b], [pdf])).toBe(wire);
+  });
+
+  it("an edit that touches a chip takes the whole chip and its picture, and renumbers the rest", () => {
+    const before = `a ${chip(1)} b ${chip(2)} c`;
+    // Backspace at the end of chip 1.
+    const end1 = before.indexOf(chip(1)) + chip(1).length;
+    const bs = keepChipsWhole(before, before.slice(0, end1 - 1) + before.slice(end1), end1 - 1);
+    expect(bs).toEqual({ text: `a  b ${chip(1)} c`, removed: [1], caret: 2 });
+    // A letter typed inside chip 2.
+    const mid = before.indexOf(chip(2)) + 4;
+    expect(keepChipsWhole(before, before.slice(0, mid) + "x" + before.slice(mid), mid + 1).removed).toEqual([2]);
+    // Typing right after a chip, or right before it, leaves it alone.
+    expect(keepChipsWhole(before, before.slice(0, end1) + "x" + before.slice(end1), end1 + 1)).toEqual({ text: before.slice(0, end1) + "x" + before.slice(end1), removed: [], caret: end1 + 1 });
+    const start2 = before.indexOf(chip(2));
+    expect(keepChipsWhole(before, before.slice(0, start2) + "x" + before.slice(start2), start2 + 1).removed).toEqual([]);
+    // A selection across both, replaced.
+    expect(keepChipsWhole(before, "a z c", 3)).toEqual({ text: "a z c", removed: [1, 2], caret: 3 });
+  });
+
+  it("takes pictures out by number and renumbers the rest", () => {
+    expect(withoutImages(`${chip(1)} ${chip(2)} ${chip(3)}`, [2])).toBe(`${chip(1)}  ${chip(2)}`);
+  });
+
+  it("inserts chips at the caret, as they are", () => {
+    expect(insertImageChips("look here.", 9, [1])).toEqual({ text: `look here${chip(1)}.`, caret: 9 + chip(1).length });
+    expect(insertImageChips("", 0, [1, 2])).toEqual({ text: `${chip(1)} ${chip(2)}`, caret: chip(1).length * 2 + 1 });
+    expect(serializeDraft(`look here${chip(1)}.`, [a])).toBe(`look here ${a} .`);
+  });
+
+  it("cuts a logged message at its tokens, the k-th token the k-th picture whatever its number", () => {
+    expect(tokenPieces("first [Image #7] then [Image #8] end", 2)).toEqual([
+      { kind: "text", text: "first" }, { kind: "image", image: 0 }, { kind: "text", text: "then" }, { kind: "image", image: 1 }, { kind: "text", text: "end" },
+    ]);
+    expect(tokenPieces("certifi[Image #7] cado", 1)).toEqual([{ kind: "text", text: "certifi" }, { kind: "image", image: 0 }, { kind: "text", text: "cado" }]);
+    // A token with no picture behind it stays words.
+    expect(tokenPieces("a [Image #1] b [Image #2]", 1)).toEqual([{ kind: "text", text: "a" }, { kind: "image", image: 0 }, { kind: "text", text: "b [Image #2]" }]);
+  });
+
+  it("cuts a wire text at its picture paths", () => {
+    expect(pathPieces(`first ${a} then ${b}`)).toEqual({
+      pieces: [{ kind: "text", text: "first" }, { kind: "image", image: 0 }, { kind: "text", text: "then" }, { kind: "image", image: 1 }],
+      paths: [a, b],
+    });
+  });
+
+  it("matches a journal turn sent with pictures in place", () => {
+    expect(messageMatchKey(`first ${a} then ${b} end`)).toBe(messageMatchKey("first [Image #3] then [Image #4]  end"));
   });
 });

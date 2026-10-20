@@ -51,7 +51,7 @@ describe("useComposerAttachments", () => {
     const big = new File([new Uint8Array(MAX_ATTACHMENT_BYTES + 1)], "too-big.bin");
     let refused: ReturnType<typeof result.current.add> | undefined;
     act(() => { refused = result.current.add([new File(["%PDF"], "spec.pdf", { type: "application/pdf" }), big, ...Array.from({ length: MAX_ATTACHMENTS }, (_, i) => png(`${i}.png`))]); });
-    expect(refused).toEqual({ tooLarge: ["too-big.bin"], overLimit: 1 });
+    expect(refused).toEqual({ images: MAX_ATTACHMENTS - 1, tooLarge: ["too-big.bin"], overLimit: 1 });
     expect(result.current.items).toHaveLength(MAX_ATTACHMENTS);
     expect(result.current.items[0]).toEqual(expect.objectContaining({ name: "spec.pdf", size: 4, image: false, url: undefined }));
     // Only an image gets a local preview; a PDF or an archive is never read into the page.

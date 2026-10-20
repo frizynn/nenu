@@ -1,9 +1,9 @@
-import { useContext, useState } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { ImageIcon } from "@/components/ui/icon";
 
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localImageUrl } from "@/lib/local-sends";
-import { imageLabel } from "@/lib/message-images";
+import { imageLabel, type MessagePiece } from "@/lib/message-images";
 import type { TranscriptImagePart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { MediaViewerContext, type PreviewItem } from "./file-preview-provider";
@@ -19,13 +19,16 @@ export const IMAGE_EDGE = "outline outline-1 -outline-offset-1 outline-black/10 
 const BOX = { sm: "size-10", md: "size-20" } as const;
 
 /** Thumbnails that open together as one gallery, so previous and next walk the same set. */
-export function ImageStrip({ images, size = "md", className, label = "Images", max }: {
+export function ImageStrip({ images, size = "md", className, label = "Images", max, gallery = images, start = 0 }: {
   images: readonly StripImage[];
   size?: "sm" | "md";
   className?: string;
   label?: string;
   /** Show this many and a "+N" tile that opens the rest, so a long turn stays one row. */
   max?: number;
+  /** The set the viewer walks, when these are a run of it starting at `start` (a message's pictures in their places). */
+  gallery?: readonly StripImage[];
+  start?: number;
 }) {
   const viewer = useContext(MediaViewerContext);
   const openFile = useContext(FilePreviewContext);
@@ -33,7 +36,7 @@ export function ImageStrip({ images, size = "md", className, label = "Images", m
   const shown = max !== undefined && images.length > max + 1 ? images.slice(0, max) : images;
   const more = images.length - shown.length;
   const open = (index: number) => {
-    if (viewer) return () => viewer.open(images.map((image) => image.item), index);
+    if (viewer) return () => viewer.open(gallery.map((image) => image.item), start + index);
     const item = images[index]!.item;
     return item.kind === "file" && openFile ? () => openFile(item.path) : undefined;
   };
@@ -90,4 +93,47 @@ function Thumbnail({ src, label, size, onOpen }: { src?: string; label: string; 
       {frame}
     </button>
   ) : frame;
+}
+
+/**
+ * A message with each picture where it was in it (ADR 0104): its words, a row of thumbnails wherever
+ * pictures sat together, and its words again. The viewer walks every picture of the message, in order.
+ * A picture the words never placed follows them.
+ */
+export function PlacedMessage({ pieces, images, words }: {
+  pieces: readonly MessagePiece[];
+  images: readonly StripImage[];
+  words: (text: string, key: number) => ReactNode;
+}) {
+  const rows: ReactNode[] = [];
+  let run: number[] = [];
+  const flush = () => {
+    if (run.length) rows.push(<ImageStrip key={`images-${run[0]}`} images={run.map((i) => images[i]!)} gallery={images} start={run[0]} />);
+    run = [];
+  };
+  const placed = new Set<number>();
+  pieces.forEach((piece, key) => {
+    if (piece.kind === "image") {
+      // A run is consecutive pictures; anything else starts a new row.
+      if (run.length && run.at(-1)! + 1 !== piece.image) flush();
+      run.push(piece.image);
+      placed.add(piece.image);
+    } else {
+      flush();
+      rows.push(words(piece.text, key));
+    }
+  });
+  flush();
+  images.forEach((_image, i) => { if (!placed.has(i)) run.push(i); });
+  flush();
+  return <>{rows}</>;
+}
+
+/** A message's pictures as the strip and viewer label them: by path (wire text), or by journal entry and index. */
+export function pathImages(paths: readonly string[], url: ((path: string) => string) | null | undefined): StripImage[] {
+  return paths.map((path, index) => ({ src: localImageUrl(path) ?? url?.(path), label: imageLabel(index), item: { kind: "file", path } }));
+}
+
+export function journalStripImages(entry: string, images: readonly Pick<TranscriptImagePart, "index">[], journalUrl: ((entry: string, index: number) => string) | undefined): StripImage[] {
+  return images.map(({ index }, i) => ({ src: journalUrl?.(entry, index), label: imageLabel(i), item: { kind: "journal", entry, index, label: imageLabel(i) } }));
 }

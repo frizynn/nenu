@@ -2,10 +2,12 @@ import { filePathsInText } from "./chat-files";
 import type { TranscriptEntry, TranscriptImagePart } from "./types";
 
 // A message that carries images is plain text on the wire: the agent CLIs (Claude Code, Codex) read
-// an image by its absolute path, so the composer appends each uploaded path to the text it sends.
-// Everything the operator LOOKS at, though, shows the images as images, never as paths, each named
-// "Image 1", "Image 2", … in its alt text and in the viewer. These helpers are the one place that
-// converts between the two shapes.
+// an image by its absolute path, so each uploaded picture's path sits in the text where the operator
+// put it, and every other attached file's path goes after the prose. The bridge pastes each picture's
+// path on its own, where the CLI draws its `[Image #N]` (ADR 0104). Everything the operator LOOKS at
+// shows the images as images, never as paths: a numbered chip in the draft, a picture in its place in
+// the conversation, "Image 1", "Image 2", … in alt text and the viewer. These helpers are the one
+// place that converts between the shapes.
 
 export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
 /**
@@ -14,11 +16,16 @@ export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
  * under after the generated part (group 1).
  */
 const UPLOAD_PATH = /\/uploads\/[A-Za-z0-9_-]+-[a-z0-9]+-[a-f0-9]{8}(?:\.(?:png|jpg|gif|webp)|-([A-Za-z0-9._-]+))$/;
-/** Claude Code's own placeholder when it turns a pasted image path into an attachment. */
+/** The CLI's own placeholder (Claude Code, Codex) where it attached a pasted image path. */
 const IMAGE_TOKEN = /\[Image #\d+\]/g;
 
 export function isUploadPath(path: string): boolean {
   return UPLOAD_PATH.test(path);
+}
+
+/** A slash command: a message that starts with "/", unless that is the path of a picture it opens with. */
+export function isSlashCommand(text: string): boolean {
+  return text.startsWith("/") && !isUploadPath(text.split(/\s/, 1)[0]!);
 }
 
 /** The name a non-image upload was attached under; null for an image (named by its bytes) or any other path. */
@@ -72,4 +79,162 @@ export function imageLabel(index: number): string {
 /** The images an entry holds inline, in journal order (what journal-image numbers by `index`). */
 export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
   return entry.parts.filter((part): part is TranscriptImagePart => part.kind === "image");
+}
+
+// ── The draft ─────────────────────────────────────────────────────────────────────────────────────
+//
+// In the composer's text a picture is a chip: two blank Braille cells (the slot its icon is drawn in),
+// "Image #N" and one more cell, none of them a character anyone types, none a place a line breaks, and
+// none whitespace, so no trim() can take a piece of a chip at either end of the draft.
+// N counts the draft's pictures in the order they were attached, as the thumbnails above the text do.
+
+const CHIP = /\u2800\u2800Image\u00a0#(\d+)\u2800/g;
+
+/** The chip for the draft's picture number `n` (from 1). */
+export function imageChip(n: number): string {
+  return `\u2800\u2800Image\u00a0#${n}\u2800`;
+}
+
+export interface DraftChip { number: number; start: number; end: number }
+
+/** Every chip in a draft's text, in reading order. */
+export function draftChips(text: string): DraftChip[] {
+  return [...text.matchAll(CHIP)].map((m) => ({ number: Number(m[1]), start: m.index, end: m.index + m[0].length }));
+}
+
+/** The words of a draft, without its chips: what was typed. */
+export function draftWords(text: string): string {
+  return text.replace(CHIP, "");
+}
+
+/** The text with the pictures numbered in `gone` taken out, and the ones after them renumbered. */
+export function withoutImages(text: string, gone: readonly number[]): string {
+  if (!gone.length) return text;
+  return text.replace(CHIP, (_chip, n: string) => {
+    const number = Number(n);
+    return gone.includes(number) ? "" : imageChip(number - gone.filter((g) => g < number).length);
+  });
+}
+
+/**
+ * Keep every chip whole across one edit of the box. An edit that touches a chip anywhere (a Backspace
+ * at its end, a selection across it, a letter typed inside it) takes the chip out entirely, and its
+ * picture with it: the remnant leaves the text, `removed` names the picture and the caller drops it
+ * from the attachments and renumbers. `caret` is where the edit left the cursor, moved for what left.
+ */
+export function keepChipsWhole(before: string, after: string, caret: number): { text: string; removed: number[]; caret: number } {
+  const chips = draftChips(before);
+  if (!chips.length) return { text: after, removed: [], caret };
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let tail = 0;
+  while (tail < before.length - start && tail < after.length - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  const end = before.length - tail; // the edit replaced before[start, end) …
+  const inserted = after.length - tail; // … with after[start, inserted)
+  const touched = chips.filter((chip) => (end > start ? chip.start < end && chip.end > start : chip.start < start && start < chip.end));
+  if (!touched.length) return { text: after, removed: [], caret };
+  // Cut what is left of each touched chip, back to front so earlier offsets hold.
+  const cuts: Array<[number, number]> = [];
+  for (const chip of touched) {
+    if (chip.start < start) cuts.push([chip.start, Math.min(chip.end, start)]);
+    if (chip.end > end) cuts.push([inserted + Math.max(0, chip.start - end), inserted + (chip.end - end)]);
+  }
+  let text = after;
+  let moved = caret;
+  for (const [from, to] of cuts.sort((x, y) => y[0] - x[0])) {
+    text = text.slice(0, from) + text.slice(to);
+    if (caret > from) moved -= Math.min(caret, to) - from;
+  }
+  const removed = touched.map((chip) => chip.number);
+  // Renumber what stays: the cut chips are gone already, so only the numbers after them shift.
+  return { text: withoutImages(text, removed), removed, caret: moved };
+}
+
+/** Chips for newly attached pictures, put into `text` at `at`. A chip pads itself on screen, and the
+ *  wire sets each path off by whitespace (serializeDraft), so no space is added around them. */
+export function insertImageChips(text: string, at: number, numbers: readonly number[]): { text: string; caret: number } {
+  const chips = numbers.map(imageChip).join(" ");
+  return { text: text.slice(0, at) + chips + text.slice(at), caret: at + chips.length };
+}
+
+/**
+ * The draft as the wire text: each chip becomes its picture's path where it sits, set off by
+ * whitespace; a chip whose picture has no path yet (still uploading) leaves nothing. A picture no
+ * chip names, and every other file, goes after the prose. `images[n - 1]` is picture n's path.
+ */
+export function serializeDraft(text: string, images: readonly (string | null)[], files: readonly string[] = []): string {
+  const placed = new Set<number>();
+  const body = text.replace(CHIP, (_chip, n: string, offset: number) => {
+    const path = images[Number(n) - 1];
+    if (!path) return "";
+    placed.add(Number(n));
+    const lead = offset === 0 || /\s/.test(text[offset - 1]!) ? "" : " ";
+    const next = text[offset + _chip.length];
+    return lead + path + (next === undefined || /\s/.test(next) ? "" : " ");
+  });
+  const loose = images.filter((path, i): path is string => !!path && !placed.has(i + 1));
+  return serializeMessage(body, [...loose, ...files]);
+}
+
+/**
+ * A wire text back into a draft: each of Nenu's picture uploads becomes a chip where it sits, and
+ * every other upload leaves the text. A picture already in `known` keeps its number; a new one is
+ * numbered after them. `images` is `known` plus the new pictures, in number order.
+ */
+export function draftFromWire(wire: string, known: readonly string[] = []): { text: string; images: string[]; files: string[] } {
+  const images = [...known];
+  const files: string[] = [];
+  const parts = wire.split(/(\s+)/).map((part) => {
+    if (!isUploadPath(part)) return part;
+    if (uploadName(part) !== null) {
+      if (!files.includes(part)) files.push(part);
+      return "";
+    }
+    let n = images.indexOf(part) + 1;
+    if (n === 0) n = images.push(part);
+    return imageChip(n);
+  });
+  const text = files.length ? removePaths(parts.join(""), []) : parts.join("").trim();
+  return { text, images, files };
+}
+
+// ── A sent message, in its places ─────────────────────────────────────────────────────────────────
+
+/** A message cut where its pictures are: words, or the message's picture at `image` (from 0). */
+export type MessagePiece = { kind: "text"; text: string } | { kind: "image"; image: number };
+
+function cut(text: string, marks: ReadonlyArray<{ start: number; end: number }>): MessagePiece[] {
+  const pieces: MessagePiece[] = [];
+  let at = 0;
+  marks.forEach((mark, image) => {
+    const words = text.slice(at, mark.start);
+    if (words.trim()) pieces.push({ kind: "text", text: words.trim() });
+    pieces.push({ kind: "image", image });
+    at = mark.end;
+  });
+  const rest = text.slice(at);
+  if (rest.trim()) pieces.push({ kind: "text", text: rest.trim() });
+  return pieces;
+}
+
+/**
+ * A message as the CLI logged it, cut at its `[Image #N]` tokens: the k-th token is the message's
+ * k-th picture, whatever N says (Claude numbers per session, Codex per message). Tokens past the
+ * pictures stay words; pictures past the tokens are the caller's to show after.
+ */
+export function tokenPieces(text: string, images: number): MessagePiece[] {
+  const marks = [...text.matchAll(IMAGE_TOKEN)].slice(0, images).map((m) => ({ start: m.index, end: m.index + m[0].length }));
+  return cut(text, marks);
+}
+
+/** A wire text cut at its picture paths, and those paths in order (`image` indexes them). */
+export function pathPieces(text: string): { pieces: MessagePiece[]; paths: string[] } {
+  const paths: string[] = [];
+  const marks: Array<{ start: number; end: number }> = [];
+  for (const m of text.matchAll(/\S+/g)) {
+    if (!IMAGE_EXTENSION.test(m[0]) || !filePathsInText(m[0]).includes(m[0])) continue;
+    paths.push(m[0]);
+    marks.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return { pieces: cut(text, marks), paths };
 }

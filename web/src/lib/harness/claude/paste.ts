@@ -35,6 +35,7 @@
 //     whitespace-STRIPPED normalisation — never on the space-joined raw, which would miss the wrap.
 
 import { draftCarriesSend } from "../../guarded-reply";
+import { placedPicturesCarrySend } from "../inline-images";
 
 /** The token as it appears AFTER all whitespace is stripped — the only form we ever match against. */
 const PLACEHOLDER = /\[Pastedtext#\d+(?:\+(\d+)lines)?\]/g;
@@ -249,7 +250,10 @@ function imagePasteCarriesSend(sent: string, draft: string): boolean {
   return draftCarriesSend(prose, rest) && stripWhitespace(rest) === stripWhitespace(prose);
 }
 
-/** The Claude adapter's supplemental send evidence: a paste token, or attached images. */
+/** A text piece of a message with pictures in place, as Claude may collapse it: one bracketed paste past the threshold. */
+const collapsedPiece = (piece: string) => (sendsAsOnePaste(piece) ? "\\[Pastedtext#\\d+(?:\\+\\d+lines)?\\]" : null);
+
+/** The Claude adapter's supplemental send evidence: a paste token, attached images, or pictures in their places. */
 export function claudeDraftCarriesSend(sent: string, draft: string): boolean {
-  return pasteCarriesSend(sent, draft) || imagePasteCarriesSend(sent, draft);
+  return pasteCarriesSend(sent, draft) || imagePasteCarriesSend(sent, draft) || placedPicturesCarrySend(sent, draft, collapsedPiece);
 }

@@ -2,7 +2,7 @@ import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-mes
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { useOutageNoticeShown } from "@/lib/connection-health";
 import { MessageQueueStrip } from "./message-queue-strip";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
@@ -49,14 +49,15 @@ import { DirectTypingStrip } from "@/components/direct-typing-strip";
 import { NoEchoNotice } from "@/components/no-echo-notice";
 import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
+import { DraftChipLayer } from "@/components/draft-chip-layer";
 import { DiffCommentChips } from "@/components/diff-comment-chips";
 import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
 import { WorkActivityLabel } from "@/components/work-activity-label";
-import { MAX_ATTACHMENTS, readyPaths, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
-import { serializeMessage, splitDraftUploads, splitMessageImages } from "@/lib/message-images";
+import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
+import { draftChips, draftFromWire, draftWords, isSlashCommand, insertImageChips, keepChipsWhole, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
   addLocalSend,
   listLocalSends,
@@ -354,8 +355,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The phone-owned draft, restored from (and written through to) the per-pane draft store — the
   // pane view is keyed by paneId, so without this, stepping over to another tab mid-reply ate the
   // message. Lazy initialiser so the restore happens on the mount, before first paint.
-  // A stored draft is the wire text; Nenu's own upload paths come back out of it as attachments.
-  const [restoredDraft] = useState(() => splitDraftUploads(loadDraft(session, paneId) ?? ""));
+  // A stored draft is the wire text; Nenu's own upload paths come back out of it as attachments, each
+  // picture as a chip where its path was.
+  const [restoredDraft] = useState(() => draftFromWire(loadDraft(session, paneId) ?? ""));
   const [input, setInput] = useState(restoredDraft.text);
   // Mirror of `input` for the write-through path: updateInput needs the previous value to apply a
   // functional update AND to persist the result, without either reading stale state or doing the
@@ -394,31 +396,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     inputValueRef.current = value;
     setInput(value);
     setFailure(null);
-    persistDraft(value, readyPaths(attachments.current()));
+    persistDraft(value);
   }
 
   /** The one writer of the stored draft: text plus attached upload paths, as they would be sent. */
-  function persistDraft(text: string, paths: readonly string[]) {
+  function persistDraft(text: string) {
     if (noEchoRef.current !== null) return;
-    saveDraft(session, paneId, paths.length ? serializeMessage(text, paths) : text);
+    saveDraft(session, paneId, draftWire(text, attachments.current()));
   }
 
   const attachments = useComposerAttachments({
     upload: (file) => api.uploadImage(paneId, file, session),
     previewUrl: (path) => api.paneFileUrl(paneId, path, session),
-    onPathsChange: (paths) => {
+    onPathsChange: () => {
       setFailure(null);
-      persistDraft(inputValueRef.current, paths);
+      persistDraft(inputValueRef.current);
     },
-    initialPaths: restoredDraft.uploads,
+    initialPaths: [...restoredDraft.images, ...restoredDraft.files],
   });
   // Comments made on a diff for this pane (lib/diff-comments.ts): chips over the box, first in Send's message.
   const diffComments = useDiffComments(paneId, session);
-  const hasDraft = input.trim() !== "" || attachments.paths.length > 0 || diffComments.length > 0;
+  // A chip whose picture failed to upload is not something to send, nor work to keep the page for.
+  const hasDraft = draftWords(input).trim() !== "" || attachments.paths.length > 0 || diffComments.length > 0;
 
   /** The composer's content as the wire text — what Send would put on the line right now. */
   function draftMessage(): string {
-    return serializeMessage(inputValueRef.current, readyPaths(attachments.current())).trim();
+    return draftWire(inputValueRef.current, attachments.current()).trim();
   }
 
   /** What Send sends: the diff comments waiting for this pane, then the draft. */
@@ -437,25 +440,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   /** Put a message back into the composer — after a failed send, or to edit a queued one. Anything
-   *  already typed is kept: the message's prose goes on a new line and its images join the chips. */
+   *  already typed is kept: the message's prose goes on a new line, each picture a chip in its place
+   *  numbered after the ones already there, and its other files join the chips above. */
   function restoreIntoComposer(message: string) {
     // Comments still waiting as chips are not put back a second time, as text.
     const comments = withDiffComments(diffCommentsFor(paneId, session), "");
-    const { text, uploads } = splitDraftUploads(comments && message.startsWith(comments) ? message.slice(comments.length).trim() : message);
+    const known = pictureKeys(attachments.current());
+    const { text, images, files } = draftFromWire(comments && message.startsWith(comments) ? message.slice(comments.length).trim() : message, known);
     updateInput((prev) => (prev.trim() && text ? `${prev.trimEnd()}\n${text}` : prev.trim() ? prev : text));
-    attachments.append(uploads);
+    attachments.append([...images.slice(known.length), ...files]);
   }
 
   useEffect(() => {
     const prev = draftPaneRef.current;
     if (prev.paneId === paneId && prev.session === session) return;
-    const outgoing = readyPaths(attachments.current());
-    if (noEchoRef.current === null) saveDraft(prev.session, prev.paneId, outgoing.length ? serializeMessage(inputValueRef.current, outgoing) : inputValueRef.current);
+    if (noEchoRef.current === null) saveDraft(prev.session, prev.paneId, draftWire(inputValueRef.current, attachments.current()));
     draftPaneRef.current = { session, paneId };
-    const restored = splitDraftUploads(loadDraft(session, paneId) ?? "");
+    const restored = draftFromWire(loadDraft(session, paneId) ?? "");
     inputValueRef.current = restored.text;
     setInput(restored.text);
-    attachments.reset(restored.uploads);
+    attachments.reset([...restored.images, ...restored.files]);
     noticeNoEcho(null); // it described the pane we just left
     setFailure(null);
   }, [session, paneId]);
@@ -552,7 +556,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const t = value.trim();
     if (!t || sending || queue.busy) return false;
     if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
-    const started = beginSend(t, isDraft, !t.startsWith("/"));
+    const started = beginSend(t, isDraft, !isSlashCommand(t));
     const rowId = await queue.add(t, mode);
     if (rowId) {
       if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued", queueId: rowId, deliveryMode: mode });
@@ -669,6 +673,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Where a picked, pasted or dropped picture's chip goes: the box's cursor as it last stood.
+  const caretRef = useRef<number | null>(null);
+  const pendingCaretRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const at = pendingCaretRef.current;
+    const el = inputRef.current;
+    if (at === null || !el) return;
+    pendingCaretRef.current = null;
+    if (document.activeElement === el) el.setSelectionRange(at, at);
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const direct = useDirectTyping({
     paneKey: `${session ?? ""}\0${paneId}`,
@@ -889,7 +903,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     }
     setSending(true);
     // Slash commands are not conversation turns, so they get no bubble.
-    const started = beginSend(t, isDraft, !action && nativeWorkbench && !t.startsWith("/"));
+    const started = beginSend(t, isDraft, !action && nativeWorkbench && !isSlashCommand(t));
     const previous = pendingDeliveryRef.current;
     // The same request id only while the bridge can still act on the earlier try (retryKeepsRequestId).
     const delivery = previous?.paneId === paneId && previous.text === t && previous.keep
@@ -925,7 +939,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         const unverified = !adapter;
         if (started.id) updateLocalSend(sendScope, started.id, { state: "sent", unverified: unverified || undefined });
         // A message starts a turn; a slash command or a picker action may not.
-        if (!action && !t.startsWith("/")) stop.turnSent();
+        if (!action && !isSlashCommand(t)) stop.turnSent();
         // Remember what/when we sent, so the next few polls recognise this text echoing on the "❯"
         // line as our own in-flight reply rather than a stranded draft (suppressEcho above).
         lastSentRef.current = { text: t, at: Date.now() };
@@ -1171,14 +1185,58 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   // Attach files of any kind: picker (multi-select), clipboard paste and drag-and-drop all land here.
-  // Each one uploads straight away and shows as a chip; the paths join the text only when the message
-  // is sent.
+  // Each one uploads straight away; a picture is also a chip in the text where the cursor was, which
+  // is where its path goes when the message is sent (ADR 0104). Other files go after the prose.
   function attachFiles(files: Iterable<File>) {
     if (locked || direct.active) return;
     setFailure(null); // the draft changed, so the refusal no longer describes it
-    const note = refusalNote(attachments.add(files));
+    const before = pictures(attachments.current()).length;
+    const result = attachments.add(files);
+    const note = refusalNote(result);
     if (note) setStatus(note, "info");
-    focusInputEnd();
+    if (!result.images) return focusInputEnd();
+    const text = inputValueRef.current;
+    const at = Math.min(caretRef.current ?? text.length, text.length);
+    const placed = insertImageChips(text, at, Array.from({ length: result.images }, (_, i) => before + i + 1));
+    updateInput(placed.text);
+    placeCaret(placed.caret);
+  }
+
+  /** Take an attachment out; a picture takes its chip with it, and the pictures after it renumber. */
+  function removeAttachment(id: string) {
+    const n = pictures(attachments.current()).findIndex((item) => item.id === id) + 1;
+    if (n > 0) updateInput((text) => withoutImages(text, [n]));
+    attachments.remove(id);
+  }
+
+  /** One edit of the box, with every chip kept whole: one the edit touched leaves with its picture. */
+  function editDraft(value: string, caret: number) {
+    const kept = keepChipsWhole(inputValueRef.current, value, caret);
+    if (kept.removed.length) {
+      const gone = pictures(attachments.current()).filter((_item, i) => kept.removed.includes(i + 1));
+      gone.forEach((item) => attachments.remove(item.id));
+      placeCaret(kept.caret);
+    }
+    caretRef.current = kept.caret;
+    skills.onChange(kept.text, kept.caret);
+  }
+
+  /** The cursor inside a chip goes to its end, so nothing is typed into one. */
+  function selectDraft(el: HTMLTextAreaElement) {
+    const { selectionStart: start, selectionEnd: end } = el;
+    caretRef.current = end;
+    const inside = start === end ? draftChips(el.value).find((chip) => chip.start < start && start < chip.end) : undefined;
+    if (inside) {
+      el.setSelectionRange(inside.end, inside.end);
+      caretRef.current = inside.end;
+    }
+    skills.onSelect(el.selectionStart);
+  }
+
+  /** Put the cursor at `at` once React has written the value it belongs to. */
+  function placeCaret(at: number) {
+    caretRef.current = at;
+    pendingCaretRef.current = at;
   }
 
   function onPickFiles(e: ChangeEvent<HTMLInputElement>) {
@@ -1474,7 +1532,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           )} />
         )}</Fold>}
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
-        <AttachmentChips items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} disabled={locked} />
+
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
             it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
             below it. */}
@@ -1486,6 +1544,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : <SkillPicker id={skills.id} skills={skills.skills} total={skills.total} activeIndex={skills.activeIndex} onSelect={skills.select}
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
+            <AttachmentChips items={attachments.items} onRemove={removeAttachment} onRetry={attachments.retry} disabled={locked} />
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
               <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message actions" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onClick={toggleMenu}>
@@ -1499,11 +1558,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 <div ref={menuRowsRef}><ActionGroups groups={menuGroups} onRun={(run) => { closeMenu(true); run(); }} /></div>
               </WorkbenchPopover>
             </div>}
+            <div className="composer-field">
+            {!direct.active && <DraftChipLayer text={input} field={inputRef} />}
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}
-              onChange={direct.active ? direct.onChange : (e) => skills.onChange(e.target.value, e.target.selectionStart)}
-              onSelect={(e) => skills.onSelect(e.currentTarget.selectionStart)}
+              onChange={direct.active ? direct.onChange : (e) => editDraft(e.target.value, e.target.selectionStart)}
+              onSelect={(e) => direct.active ? skills.onSelect(e.currentTarget.selectionStart) : selectDraft(e.currentTarget)}
               onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
               onBlur={skills.onBlur}
               aria-autocomplete={skills.open ? "list" : undefined}
@@ -1564,6 +1625,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               disabled={gone || readOnly}
               rows={1}
             />
+            </div>
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
             {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
             {!direct.active && forcingSend ? (

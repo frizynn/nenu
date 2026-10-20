@@ -33,7 +33,7 @@ import { detectApprovalRegion } from "./approval";
 import { detectAskRegion } from "./ask";
 import { detectTrustRegion } from "./trust";
 import { detectHooksReviewRegion } from "./hooks";
-import { codexDraftCarriesSend } from "./paste";
+import { codexCarriesSend } from "./paste";
 import { detectModelMenuRegion } from "./model-menu";
 import { readCodexTurn } from "./interrupt";
 
@@ -97,12 +97,13 @@ export { extractStatusLines, extractInputDraft };
 export const codexAdapter: HarnessAdapter = {
   agent: "codex",
   bracketedPaste: true,
+  pastesImagePaths: true,
   buildBlocks: codexBuildBlocks,
   extractStatusLines,
   extractInputDraft,
   composerReady,
   composerPrompt,
-  draftCarriesSend: codexDraftCarriesSend,
+  draftCarriesSend: codexCarriesSend,
   // Measured on 0.162.1: Escape interrupts the turn, Herdr reads `done` within ~600 ms.
   interrupt: { keys: ["Escape"], read: readCodexTurn },
   modelEffort: "after-model",

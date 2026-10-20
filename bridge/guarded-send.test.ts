@@ -41,6 +41,11 @@ class Term {
   failKeys = false;
   waitError: string | null = null;
   missing = false;
+  /** The CLI attaches a picture pasted alone: its token lands `pictureReads` reads later (-1: never). */
+  drawsPictures = true;
+  pictureReads = 1;
+  pictures = 0;
+  lateTokens: Array<{ token: string; reads: number }> = [];
   /** Runs before each read with its index, to change the screen between the send's reads. */
   onRead: ((n: number, term: Term) => void) | null = null;
   readonly calls: Call[] = [];
@@ -70,12 +75,20 @@ class Term {
     this.calls.push({ method: "pane.read", arg: [source, lines, format] });
     this.onRead?.(this.reads++, this);
     if (this.echo === "immediate") this.land();
+    for (const late of this.lateTokens) if (late.reads-- === 0) this.draft += late.token;
+    this.lateTokens = this.lateTokens.filter((late) => late.reads >= 0);
     return { pane_id: paneId, text: this.screen(), truncated: false, revision: 0 };
   };
 
   sendPaneText = async (_paneId: string, text: string) => {
     this.calls.push({ method: "pane.send_text", arg: text });
     if (this.failText === "before") throw new Error("herdr pane.send_text: internal: lost");
+    if (!this.dialog && this.drawsPictures && /^\x1b\[200~\/\S+\.png\x1b\[201~$/.test(text)) {
+      // Like Claude: the token shows a beat (a read) after the paste, unless it never does.
+      this.land();
+      if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
+      return;
+    }
     if (!this.dialog) this.pending += text.replace(/\x1b\[20[01]~/g, "");
     if (this.failText === "after") throw new Error("herdr request timed out");
   };
@@ -246,6 +259,50 @@ describe("guardedSend", () => {
     const typed = new Term();
     await run(typed, { text: short });
     expect(typed.calls.find((c) => c.method === "pane.send_text")?.arg).toBe(short);
+  });
+
+  const UP = "/home/you/.local/state/nenu/uploads";
+  const red = `${UP}/w1_p1-mv8g-0a1b2c3d.png`;
+  const blue = `${UP}/w1_p1-mv8g-0a1b2c3e.png`;
+  const placed = `first the red one ${red} then the blue one ${blue} and that is all`;
+
+  test("pictures in their places go piece by piece, each path pasted alone after the last one showed (ADR 0104)", async () => {
+    const term = new Term();
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    expect(term.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([
+      "first the red one ", `\x1b[200~${red}\x1b[201~`, " then the blue one ", `\x1b[200~${blue}\x1b[201~`, " and that is all",
+    ]);
+    // Each piece after a picture waits for a read that shows its token.
+    const texts = term.calls.flatMap((c, i) => (c.method === "pane.send_text" ? [i] : []));
+    expect(term.calls.slice(texts[1]! + 1, texts[2]!).some((c) => c.method === "pane.read")).toBe(true);
+    expect(term.lines.at(-1)).toBe("> first the red one [Image #1] then the blue one [Image #2] and that is all");
+  });
+
+  test("Codex gets each text piece as a paste and each picture's path alone, its tokens spaced as it draws them", async () => {
+    const term = new Term();
+    term.agent = "codex";
+    term.pictureReads = 0;
+    const { outcome } = await run(term, { text: `${red} what is this?` });
+    expect(term.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([`\x1b[200~${red}\x1b[201~`, "\x1b[200~ what is this?\x1b[201~"]);
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("a picture that never shows stops the send before the next piece, with nothing submitted", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(2);
+    expect(term.keys()).toEqual([]);
+  });
+
+  test("an agent with no adapter gets the message in one write, its paths in place", async () => {
+    const term = new Term();
+    term.agent = null;
+    term.drawsPictures = false;
+    await run(term, { text: placed });
+    expect(term.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([placed]);
   });
 
   test("a paste carrying an escape sequence is refused before typing", async () => {
@@ -475,7 +532,8 @@ describe("guardedSend: a message with images on Claude", () => {
     "then in the projects the strip under the chat shows up all the time and should not, it belongs in another tab, and the diffs that were never implemented are still missing",
     "for that open one tab per agent with its own task, debug everything first at a low level and only then implement it",
   ];
-  const images = ["/home/u/.local/state/collie/uploads/shot-mf3k2a-0a1b2c3d.png", "/home/u/.local/state/collie/uploads/shot-mf3k2b-4e5f6a7b.png"];
+  // Paths the operator typed into a long message, not Nenu's uploads: those go piece by piece (ADR 0104).
+  const images = ["/home/u/project/shots/before.png", "/home/u/project/shots/after.png"];
   const sent = `${paragraphs.join("\n\n")} ${images.join(" ")}`;
 
   /** The box's rows for `text`: word-wrapped to the box's width, continuation rows indented. */

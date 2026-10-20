@@ -36,6 +36,8 @@ interface FakePane extends Required<Omit<FakePaneInit, "label" | "sessionId">> {
   draft: string;
   /** Dialog text shown instead of the composer; keys answer it, text is swallowed. */
   dialog: string | null;
+  /** `[Image #N]` tokens drawn so far, numbered per session as Claude does. */
+  images: number;
   /** A shell's foreground command; null while the shell sits at its prompt. */
   foreground: string | null;
   revision: number;
@@ -133,7 +135,7 @@ export class FakeHerdr {
     this.noteTab(init.tabId);
     this.panes.set(init.paneId, {
       status: "idle", cwd: "/tmp", lines: [], ...init,
-      draft: "", dialog: null, foreground: null, revision: 1, workingSince: Date.now(),
+      draft: "", dialog: null, images: 0, foreground: null, revision: 1, workingSince: Date.now(),
     });
     return this;
   }
@@ -406,6 +408,15 @@ export class FakeHerdr {
     const pane = this.pane(paneId);
     if (pane.dialog) return; // a focused dialog swallows typed text, as Claude's does
     const text = raw.replace(/\x1b\[20[01]~/g, "");
+    // An agent attaches a picture pasted alone and draws its token a beat later than typed text
+    // shows, as Claude Code does (ADR 0104): text sent on its heels would land first.
+    if (pane.agent !== null && /^\x1b\[200~\/\S+\.(?:png|jpe?g|gif|webp)\x1b\[201~$/i.test(raw)) {
+      setTimeout(() => {
+        pane.draft += `[Image #${++pane.images}]`;
+        pane.revision++;
+      }, this.echoMs * 4);
+      return;
+    }
     setTimeout(() => {
       pane.draft += text;
       pane.revision++;

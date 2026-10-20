@@ -179,7 +179,7 @@ it("puts one + at the start of the box and Send at its end; the row beneath hold
   setup({ modelControl: <button>Choose model</button>, place: <span>main</span> });
   expect(screen.queryByText("Controls")).not.toBeInTheDocument();
   const input = screen.getByRole("textbox");
-  const box = input.parentElement!;
+  const box = input.closest<HTMLElement>(".composer-box")!;
   // One box: the + leads, the draft grows in the middle, Send closes it. No second menu anywhere.
   expect(within(box).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Message actions", "Send"]);
   const plus = within(box).getByRole("button", { name: "Message actions" });
@@ -294,7 +294,7 @@ it("gives a draft the + column's width while the phone keyboard is up, so it wra
   // Measured on the bench: with the + inside the box a four-line draft wrapped to six lines and the
   // thread lost 48px; folding the + while typing under the keyboard keeps it at four.
   const { user } = setup();
-  const box = screen.getByRole("textbox").parentElement!;
+  const box = screen.getByRole("textbox").closest<HTMLElement>(".composer-box")!;
   expect(box).not.toHaveClass("composer-box-typing");
   await user.type(screen.getByRole("textbox"), "a");
   expect(box).toHaveClass("composer-box-typing");

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Check, Pencil, Send, Trash2, X, Zap } from "@/components/ui/icon";
 import type { QueueMessage } from "@/lib/api";
 import { queueRowStatus, type DeliveredRow } from "@/hooks/use-message-queue";
-import { serializeMessage, splitMessageImages } from "@/lib/message-images";
+import { draftFromWire, serializeDraft } from "@/lib/message-images";
 import { QueuedMessage, type QueuedAction } from "./queued-message";
 
 /**
@@ -52,8 +52,8 @@ export function MessageQueueStrip({
       )}
       <ol className="space-y-3">
         {messages.map((item, index) => {
-          // The prose is what gets edited; the images ride along unchanged.
-          const { text: prose, images } = splitMessageImages(item.text);
+          // The words are what gets edited, each picture a chip where it is; the files ride along unchanged.
+          const { text: prose, images, files } = draftFromWire(item.text);
           const status = queueRowStatus(agent, item);
           const can = (action: (typeof status.actions)[number]) => status.actions.includes(action);
           const locked = busy || item.state === "sending";
@@ -73,8 +73,8 @@ export function MessageQueueStrip({
                   label: "Save",
                   name: "Save queued message",
                   icon: Check,
-                  disabled: busy || (!text.trim() && !images.length),
-                  run: () => void change("edit", serializeMessage(text, images), item).then((saved) => { if (saved) setEditing(null); }),
+                  disabled: busy || (!text.trim() && !images.length && !files.length),
+                  run: () => void change("edit", serializeDraft(text, images, files), item).then((saved) => { if (saved) setEditing(null); }),
                 },
               ]
             : [];

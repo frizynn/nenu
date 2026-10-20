@@ -19,6 +19,7 @@ import type { SendOutcome, SendRequest, SendStage } from "@/lib/types";
 import { Composer, type ComposerControl } from "./composer";
 import { pendingStatus } from "./pending-turns";
 import { ActionGroups } from "./conversation-actions";
+import { imageChip } from "@/lib/message-images";
 
 // The composer's secondary controls are reached from the pane header's ⋯ menu. These tests render
 // the same menu rows beside the composer, without the popover, so every control is one tap away.
@@ -1816,9 +1817,10 @@ describe("Composer — clipboard image paste", () => {
 
     fireEvent.paste(box, { clipboardData: { items: [item] } });
 
-    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
-    expect(box).toHaveValue("");
+    expect(await screen.findByRole("button", { name: "Remove Image #1" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("img", { name: "Image #1" })).toBeInTheDocument());
+    // The text holds the picture's chip where the cursor was, never its path.
+    expect(box).toHaveValue(imageChip(1));
   });
 
   it("leaves a plain-text paste alone — no upload, nothing written by the paste handler", () => {
@@ -2333,8 +2335,8 @@ describe("Composer — images and the pending bubble", () => {
     fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
     });
-    await screen.findByRole("button", { name: "Remove shot.png" });
-    await waitFor(() => expect(screen.queryByText("Uploading…")).not.toBeInTheDocument());
+    await screen.findByRole("button", { name: "Remove Image #1" });
+    await waitFor(() => expect(screen.getByRole("img", { name: "Image #1" })).toBeInTheDocument());
     await userEvent.type(box, text);
     return box;
   }
@@ -2345,15 +2347,15 @@ describe("Composer — images and the pending bubble", () => {
     serveQueue(() => HttpResponse.json({ available: true, scope: "scope", messages: [] }));
     renderComposer({ nativeWorkbench: true });
     const box = await attachAndType("see the edge");
-    // The path never appears in the textarea; it is only on the wire.
-    expect(box).toHaveValue("see the edge");
+    // The path never appears in the textarea, only the picture's chip where it went; the path is on the wire, in that place.
+    expect(box).toHaveValue(`${imageChip(1)}see the edge`);
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(sends.map((send) => send.text)).toEqual([`see the edge ${UPLOAD}`]));
+    await waitFor(() => expect(sends.map((send) => send.text)).toEqual([`${UPLOAD} see the edge`]));
     expect(box).toHaveValue("");
-    expect(screen.queryByRole("button", { name: "Remove shot.png" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Image #1" })).not.toBeInTheDocument();
     const scope = localSendScope("w1:p1", undefined);
-    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ text: `see the edge ${UPLOAD}`, state: "sending" })]);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ text: `${UPLOAD} see the edge`, state: "sending" })]);
 
     await act(async () => accept());
     await waitFor(() => expect(listLocalSends(scope)).toEqual([expect.objectContaining({ state: "sent" })]));
@@ -2370,7 +2372,7 @@ describe("Composer — images and the pending bubble", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
     await userEvent.click(await screen.findByRole("button", { name: /queue for later/i }));
 
-    await waitFor(() => expect(adds).toEqual([`see the edge ${UPLOAD}`]));
+    await waitFor(() => expect(adds).toEqual([`${UPLOAD} see the edge`]));
     expect(box).toHaveValue("");
     const scope = localSendScope("w1:p1", undefined);
     await act(async () => accept());
@@ -2387,18 +2389,36 @@ describe("Composer — images and the pending bubble", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
     await userEvent.click(await screen.findByRole("button", { name: /queue for later/i }));
 
-    await waitFor(() => expect(box).toHaveValue("keep me"));
-    expect(screen.getByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+    await waitFor(() => expect(box).toHaveValue(`${imageChip(1)} keep me`));
+    expect(screen.getByRole("button", { name: "Remove Image #1" })).toBeInTheDocument();
     // Back in the box, so no "Not sent" bubble doubles it.
     expect(listLocalSends(localSendScope("w1:p1", undefined))).toEqual([]);
-    expect(loadDraft(undefined, "w1:p1")).toBe(`keep me ${UPLOAD}`);
+    expect(loadDraft(undefined, "w1:p1")).toBe(`${UPLOAD} keep me`);
+  });
+
+  it("a Backspace into a picture's chip takes the chip and the picture, and the thumbnail's X takes both too", async () => {
+    serveQueue(() => HttpResponse.json({ available: true, scope: "scope", messages: [] }));
+    renderComposer({ nativeWorkbench: true });
+    const box = await attachAndType("see");
+    // The chip is the text's first characters; a Backspace at its end deletes its last cell.
+    const value = (box as HTMLTextAreaElement).value;
+    const end = imageChip(1).length;
+    fireEvent.change(box, { target: { value: value.slice(0, end - 1) + value.slice(end), selectionStart: end - 1, selectionEnd: end - 1 } });
+    expect(box).toHaveValue("see");
+    expect(screen.queryByRole("button", { name: "Remove Image #1" })).not.toBeInTheDocument();
+
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Remove Image #1" }));
+    expect(box).toHaveValue("see");
   });
 
   it("restores a saved draft's upload as a chip, not as text", () => {
     saveDraft(undefined, "w1:p1", `half a thought ${UPLOAD}`);
     renderComposer({ nativeWorkbench: true });
-    expect(screen.getByRole("textbox")).toHaveValue("half a thought");
-    expect(screen.getByRole("button", { name: "Remove Image 1" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue(`half a thought ${imageChip(1)}`);
+    expect(screen.getByRole("button", { name: "Remove Image #1" })).toBeInTheDocument();
   });
 
   it("will not send while an image is still uploading", async () => {
@@ -2408,7 +2428,7 @@ describe("Composer — images and the pending bubble", () => {
     fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
     });
-    expect(await screen.findByText("Uploading…")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Image #1, uploading" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 });

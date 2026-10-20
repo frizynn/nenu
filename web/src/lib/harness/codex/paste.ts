@@ -1,3 +1,5 @@
+import { placedPicturesCarrySend } from "../inline-images";
+
 // Codex replaces a sufficiently large paste with one atomic token while keeping the full payload
 // internally: `[Pasted Content N chars]` (optionally suffixed ` #2`, ` #3`, … when equal-sized
 // placeholders coexist). This is public, documented Codex TUI behavior. The reply guard cannot find
@@ -13,4 +15,15 @@ export function codexDraftCarriesSend(sent: string, draft: string): boolean {
   if (match === null) return false;
   const count = Number(match[1]);
   return count > LARGE_PASTE_CHAR_THRESHOLD && count === [...sent].length;
+}
+
+/** A text piece of a message with pictures in place, as Codex may collapse it (every piece goes as a paste). */
+function collapsedPiece(piece: string): string | null {
+  const count = [...piece].length;
+  return count > LARGE_PASTE_CHAR_THRESHOLD ? `\\[PastedContent${count}chars\\](?:#\\d+)?` : null;
+}
+
+/** The Codex adapter's supplemental send evidence: a paste token, or pictures in their places. */
+export function codexCarriesSend(sent: string, draft: string): boolean {
+  return codexDraftCarriesSend(sent, draft) || placedPicturesCarrySend(sent, draft, collapsedPiece);
 }

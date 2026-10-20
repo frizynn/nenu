@@ -1,11 +1,11 @@
 import { QuestionLiveContext, TranscriptQuestion } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { filePathsInText, sentFiles } from "@/lib/chat-files";
-import { IMAGE_EXTENSION, imageLabel, journalImages, splitMessageImages } from "@/lib/message-images";
+import { IMAGE_EXTENSION, imageLabel, journalImages, pathPieces, splitMessageImages, tokenPieces } from "@/lib/message-images";
 import { ArtifactCards } from "./artifact-card";
 import { ChatMedia } from "./chat-media";
 import { MediaViewerContext } from "./file-preview-provider";
-import { ImageStrip, JournalImages, type StripImage } from "./message-images";
+import { ImageStrip, JournalImages, journalStripImages, pathImages, PlacedMessage, type StripImage } from "./message-images";
 import { useContext, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "@/components/ui/icon";
 
@@ -140,6 +140,41 @@ function EntryImages({ entry }: { entry: TranscriptEntry }) {
   return images.length ? <JournalImages entry={entry.uuid} images={images} className="pt-1" /> : null;
 }
 
+/**
+ * Your message's words with each picture where you put it (ADR 0104): at the CLI's `[Image #N]`
+ * tokens over the pictures its log holds, else at the picture paths left in the text (a CLI that read
+ * them as text). A message with neither draws as before: its words, then its pictures.
+ */
+function UserWords({ entry, query, focused, inline }: { entry: TranscriptEntry; query: string; focused: boolean; inline: boolean }) {
+  const viewer = useContext(MediaViewerContext);
+  const url = useContext(FileMediaContext);
+  const texts = entry.parts.flatMap((part) => (part.kind === "text" ? [part] : []));
+  const text = texts.map((part) => part.text).join("\n\n");
+  const placed = useMemo(() => {
+    const logged = journalImages(entry);
+    if (logged.length) {
+      const pieces = tokenPieces(text, logged.length);
+      return pieces.some((piece) => piece.kind === "image") ? { pieces, images: journalStripImages(entry.uuid, logged, viewer?.journalUrl) } : null;
+    }
+    const { pieces, paths } = pathPieces(text);
+    return paths.length && url ? { pieces, images: pathImages(paths, url) } : null;
+  }, [entry, text, viewer, url]);
+  if (!placed || texts.some((part) => part.truncated)) {
+    return <>
+      {entry.parts.map((part, i) => part.kind === "context" ? null : (
+        <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
+      ))}
+      <EntryImages entry={entry} />
+    </>;
+  }
+  return <>
+    <PlacedMessage pieces={placed.pieces} images={placed.images}
+      words={(words, key) => <MarkdownText key={key} text={words} query={query} current={focused} />} />
+    {/* Whatever else the words name (a page, a picture beyond the folder), as any message offers it. */}
+    <ChatMedia text={text} compact uploads={false} />
+  </>;
+}
+
 function Turn({
   entry,
   showHeader,
@@ -184,10 +219,7 @@ function Turn({
     return (
       <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
         <div className="max-w-[min(85%,28rem)] min-w-0 space-y-1.5 rounded-xl border bg-card px-3.5 py-2.5 [overflow-wrap:anywhere] select-text">
-          {entry.parts.map((part, i) => part.kind === "context" ? null : (
-            <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
-          ))}
-          <EntryImages entry={entry} />
+          <UserWords entry={entry} query={query} focused={focused} inline={inline} />
         </div>
         {showHeader && time && <time dateTime={entry.ts} className="mt-1 px-1 text-footnote leading-none text-muted-foreground">{time}</time>}
         {loaded.map((part, i) => <div key={i} className="max-w-[85%] min-w-0"><ContextLine {...part} query={query} focused={focused} /></div>)}

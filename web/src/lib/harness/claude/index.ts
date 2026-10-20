@@ -159,6 +159,7 @@ export { extractStatusLines, extractAgentsFooter, extractInputDraft };
 export const claudeAdapter: HarnessAdapter = {
   agent: "claude",
   bracketedPaste: sendsAsOnePaste,
+  pastesImagePaths: true,
   buildBlocks: claudeBuildBlocks,
   extractStatusLines,
   extractAgentsFooter,
