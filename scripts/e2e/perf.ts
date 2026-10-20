@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -13,7 +13,7 @@ import { seedDemoHerd } from "./scenario.ts";
 // stops. Nothing is printed from the journal or the project: only times, sizes and counts.
 //
 //   bun scripts/e2e/perf.ts --projects ~/.herdr-projects --project awam-org --thread t-0451 \
-//     --journal <a Claude .jsonl> [--coordinator-journal <another>] --cwd <that thread's worktree> [--runs 5] [--port 8798] [--out DIR] [--serve]
+//     --journal <a Claude .jsonl> [--coordinator-journal <another>] --cwd <that thread's worktree> [--runs 5] [--only a,b] [--port 8798] [--out DIR] [--serve]
 //
 // Each run starts from a fresh page; times are from the tap to the frame that shows the content.
 
@@ -30,6 +30,8 @@ const { values } = parseArgs({
     cwd: { type: "string" },
     label: { type: "string", default: "run" },
     serve: { type: "boolean", default: false },
+    /** Comma-separated surface names, to measure a few with more runs. */
+    only: { type: "string" },
   },
 });
 const need = (key: "projects" | "project" | "thread" | "journal" | "cwd") => {
@@ -54,11 +56,13 @@ async function copyProject(root: string, { socketPath }: { socketPath: string })
     if (edited !== text) await writeFile(file, edited);
   };
   const sockets = (text: string) => text.replace(/"socket":\s*"[^"]*"/g, `"socket": ${JSON.stringify(socketPath)}`).replace(/^socket = ".*"$/gm, `socket = ${JSON.stringify(socketPath)}`);
-  // Every file Organizations may read a binding from, wherever it sits in the copy; then none may name another socket.
+  // Every file Organizations may read a binding from, wherever it sits in the copy. A link is never
+  // written through (it may lead back to the operator's own file); then no file, link or not, may name
+  // any socket but the bench's, in whatever form the rewrite did not know.
   const files = (await readdir(dest, { recursive: true })).filter((name) => /\.(json|toml)$/.test(name)).map((name) => join(dest, name));
-  for (const file of files) await rewrite(file, sockets);
+  for (const file of files) if (!(await lstat(file)).isSymbolicLink()) await rewrite(file, sockets);
   for (const file of files) {
-    const named = [...(await readFile(file, "utf8")).matchAll(/(?:"socket":\s*|^socket = )"([^"]*)"/gm)].map((match) => match[1]);
+    const named = (await readFile(file, "utf8")).match(/[^\s"'=:,[\]{}]+\.sock\b/g) ?? [];
     if (named.some((path) => path !== socketPath)) throw new Error(`${file} still names a Herdr socket other than the bench's`);
   }
   const bind = (pane: string, workspace: string, tab: string) => (text: string) => text
@@ -202,7 +206,8 @@ const surfaces = (desk: boolean): Surface[] => desk ? [
 
 async function measure(browser: Browser, url: string, title: string, form: "desk" | "phone") {
   const results: Record<string, ReturnType<typeof stats>> = {};
-  for (const surface of surfaces(form === "desk")) {
+  const only = values.only?.split(",");
+  for (const surface of surfaces(form === "desk").filter((candidate) => !only || only.includes(candidate.name))) {
     const times: Tap[] = [];
     for (let run = 0; run < runs; run++) {
       // The probes are strings evaluated in the page, which the strict CSP would refuse.
