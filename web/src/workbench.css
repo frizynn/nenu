@@ -37,7 +37,9 @@
 :root { --page-gutter: 16px; --page-column: clamp(760px, 50vw, 960px); --chat-column: 48rem; }
 @media (min-width: 640px) { :root { --page-gutter: 32px; } }
 .workbench-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
-.workbench-icon-button:hover { color: var(--foreground); background: var(--workbench-row-hover); }
+/* Hover only where a pointer hovers: a touch browser keeps :hover on what a finger tapped, so the
+   drawer's Search stayed filled after it opened. */
+@media (hover: hover) { .workbench-icon-button:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
 
 /* New surfaces live in the components layer so Tailwind utilities on the same element still win. */
 @layer components {

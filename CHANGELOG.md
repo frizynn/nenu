@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.31.1] - 2026-10-20
+
+The redesign's last polish pass (#101), ported onto the desk redesign. Parts main had already redone are left as main draws them.
+
+### Fixed
+
+- A Herdr outage is named once in a thread: the banner, else the question card, else one line above the box; the header keeps the pane's place (80e79104, 3d97ace0, 4e50db8e, 79023bec).
+- Safari: the composer's placeholder no longer cuts in half at 375 px, and the box grows with a draft where the browser has no `field-sizing` (4e50db8e, e3d36a74).
+- Settings in an iPhone's Safari tab says to add Nenu to the Home Screen for notifications, or that push needs HTTPS first over plain HTTP (d9ec7579, 7f1fe748, 07d58223).
+- Native selects draw one field with a chevron in WebKit (56e550de).
+- The model chip says Choose model until a model is known; the phone's Model sheet has a sheet's title, its rows on the same gutter (2474ae96, 31f2cd34).
+- Docks and popovers share one header, named by the row that opens them: Quick replies, Model (dbd70f36).
+- The send-while-working choice uses the cards' option list (b346a299, 1e3ea2ed).
+- Project, Node, the activity views, the PR checks, the menus and the palette read on the type scale (15a667f7, bf51f75e, 508dc48b, 190f5d18, 482986e4).
+- An empty Codex pane, Project not found and Thread not found use the shared empty state and button sizes; previews close on Done (a3f5a7f4, b3757f8f, 2c24d1f5).
+- Touch targets reach 44 px (drawer home, Take over, the PR number, the PR toggles), and hovers fill only where a pointer hovers (cf61df37, 5374e8a5, 0e13adc3, 8d2e984c, c910cce5).
+- A selected chat's age clears 4.5:1 in light (0a0c603b).
+
 ## [1.31.0] - 2026-10-20
 
 ### Added

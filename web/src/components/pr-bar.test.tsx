@@ -31,6 +31,20 @@ it("shows the PR and its checks, and toggles Organizations' automation", async (
   expect(posted).toEqual({ project: "hub", id: "T1", autoMerge: true });
 });
 
+it("lets a finger reach the PR number's link at 44 px", () => {
+  render(<PrChecks project={project(true)} thread={{ ...thread, pr: { ...thread.pr!, url: "https://github.com/awam/hub/pull/1345" } }} readOnly={false} onChanged={vi.fn()} />);
+  // A 38 px wide "#n" on the bench; the shared .hit-area gives it the touch floor.
+  expect(screen.getByRole("link", { name: /^#\d+$/ })).toHaveClass("hit-area");
+});
+
+// The checkbox is 16px; its label is the row a finger hits, and on a touch screen that row is 44px.
+it("lets a finger reach each automation toggle at 44 px", async () => {
+  render(<PrChecks project={project(true)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
+  for (const name of ["Auto-fix CI & address comments", "Auto-merge when ready"]) {
+    expect(screen.getByRole("checkbox", { name }).closest("label")).toHaveClass("coarse:min-h-11");
+  }
+});
+
 it("keeps the checks read-only when Organizations has no PR actions", async () => {
   render(<PrChecks project={project(false)} thread={thread} readOnly={false} onChanged={vi.fn()} />);
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();

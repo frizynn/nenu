@@ -47,7 +47,7 @@
 /* An open coordinator on the project page folds and has actions: the words stop short of its chevron. */
 .task-row:has(> .task-fold) .task-actions { right: 40px; }
 .task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
-.task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); }
+@media (hover: hover) { .task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); } }
 /* The ⋯ of a screen that cannot hover, always there: there is no hover to find it by. */
 .task-more { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-md); color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
 .task-more:active { background: var(--workbench-row-selected); }
@@ -83,7 +83,8 @@
    beside it keeps 22rem. The resize grip straddles the panel's left border. */
 .session-panel { position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-width: calc(100% - 22rem); border-left: 1px solid var(--border); }
 .session-panel-resize { position: absolute; inset-block: 0; left: -3px; z-index: 1; width: 6px; cursor: col-resize; touch-action: none; }
-.session-panel-resize:hover, .session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }
+.session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }
+@media (hover: hover) { .session-panel-resize:hover { background: color-mix(in srgb, var(--ring) 45%, transparent); } }
 
 /* A group's name over its rows in a panel's list (threads-panel). */
 .panel-group-heading { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; padding: 0 8px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }

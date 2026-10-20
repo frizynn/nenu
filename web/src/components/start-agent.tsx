@@ -83,8 +83,8 @@ export function StartAgent({ paneId, session, disabled, ready }: { paneId: strin
       <Segmented label="Agent" options={AGENTS} value={agent} onChange={setAgent} />
       <PermissionPicker agent={agent} value={permissions[agent]} onChange={(id) => setPermissions((p) => ({ ...p, [agent]: id }))} />
     </div>}
-    {starting && <p role="status" className="mt-1.5 text-sm text-muted-foreground">Starting the agent…</p>}
-    {!ready && <p role="status" className="mt-1.5 text-sm text-muted-foreground">Preparing the terminal…</p>}
-    {error && <p role="alert" className="mt-1.5 text-sm text-destructive">{error} Check the terminal before retrying.</p>}
+    {starting && <p role="status" className="mt-1.5 text-subhead text-muted-foreground">Starting the agent…</p>}
+    {!ready && <p role="status" className="mt-1.5 text-subhead text-muted-foreground">Preparing the terminal…</p>}
+    {error && <p role="alert" className="mt-1.5 text-subhead text-destructive">{error} Check the terminal before retrying.</p>}
   </section>;
 }

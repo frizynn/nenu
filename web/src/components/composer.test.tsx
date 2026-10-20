@@ -8,6 +8,7 @@ import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { clearStatus, useStatus } from "@/lib/status";
+import { setOutageNoticeShown } from "@/lib/connection-health";
 import { isReloadHeld, __resetReloadGuard } from "@/lib/reload-guard";
 import { loadDraft, saveDraft } from "@/lib/drafts";
 import { listLocalSends, localSendScope } from "@/lib/local-sends";
@@ -1936,7 +1937,7 @@ describe("Composer — quick dock (in-flow, matches the keys dock)", () => {
     await user.click(control("Quick replies"));
     expect(screen.getByRole("button", { name: "yes" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close Quick" }));
+    await user.click(screen.getByRole("button", { name: "Close Quick replies" }));
     expect(screen.queryByRole("button", { name: "yes" })).not.toBeInTheDocument();
   });
 
@@ -2673,7 +2674,10 @@ describe("Composer — placeholder", () => {
   it.each([
     ["access was refused", { readOnly: true, lockReason: "refused" }, "Sign in again to reply", true],
     ["the device is read-only", { readOnly: true, lockReason: "read-only" }, "Read-only — device not authorised", true],
-    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr" }, "Herdr isn't responding. Drafts are kept.", false],
+    // The outage itself is named in the line above (below); the box keeps to what a 375 px phone fits.
+    ["Herdr isn't responding", { disconnected: true, lockReason: "herdr", herdrDown: true }, "Drafts are kept.", false],
+    // A question card on screen already says it; the screen names the outage once.
+    ["Herdr isn't responding and the card says so", { disconnected: true, lockReason: "herdr", herdrDown: true, lockOnCard: true }, "Drafts are kept.", false],
     ["Nenu is reconnecting", { disconnected: true, lockReason: "offline" }, "Write a draft while reconnecting…", false],
     ["the pane is gone", { gone: true, lockReason: "herdr" }, "Pane is gone", true],
   ] as const)("names the real reason when %s", (_name, props, placeholder, disabled) => {
@@ -2681,6 +2685,25 @@ describe("Composer — placeholder", () => {
     const box = screen.getByPlaceholderText(placeholder);
     if (disabled) expect(box).toBeDisabled();
     else expect(box).toBeEnabled();
+  });
+
+  // One surface names Herdr's outage: the banner while it is up, else a card whose lock is the outage,
+  // else one line above the box. Never the placeholder: at 375 px the outage and "Drafts are kept."
+  // take two lines, and Safari cuts a placeholder at the box's one-line height.
+  it.each([
+    ["an empty box", { disconnected: true, lockReason: "herdr" }, "", false, "Herdr isn't responding."],
+    ["a typed draft", { disconnected: true, lockReason: "herdr" }, "keep this", false, "Herdr isn't responding. Drafts are kept."],
+    ["a read-only device", { readOnly: true, disconnected: true, lockReason: "read-only" }, "", false, "Herdr isn't responding."],
+    ["a read-only device under a card", { readOnly: true, disconnected: true, lockReason: "read-only", lockOnCard: true }, "", false, "Herdr isn't responding."],
+    ["a draft under a card that names it", { disconnected: true, lockReason: "herdr", lockOnCard: true }, "keep this", false, null],
+    ["a typed draft under the banner", { disconnected: true, lockReason: "herdr" }, "keep this", true, null],
+    ["a read-only device under the banner", { readOnly: true, disconnected: true, lockReason: "read-only" }, "", true, null],
+  ] as const)("names Herdr's outage in one line above %s only when nothing else does", (_name, props, draft, banner, line) => {
+    if (banner) setOutageNoticeShown(true);
+    renderComposer({ ...props, herdrDown: true });
+    if (draft) fireEvent.change(screen.getByRole("textbox"), { target: { value: draft } });
+    if (line) expect(screen.getByText(line)).toBeVisible();
+    expect(screen.queryAllByText(/Herdr/)).toHaveLength(line ? 1 : 0);
   });
 
   it("draws no + where nothing can be written, Send only as a disabled slot, and keeps both while a draft can wait", () => {

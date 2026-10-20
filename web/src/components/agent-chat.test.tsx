@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
-import { __resetConnectionHealth } from "@/lib/connection-health";
+import { __resetConnectionHealth, CONNECTION_LOST_MS, markLive } from "@/lib/connection-health";
 
 // Mock the race guard at AgentChat's seam so the frozen-revision tests can observe exactly what
 // `detectedRevision` the tap handler passes (the guard's own behaviour is covered in
@@ -27,6 +27,7 @@ import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
 import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
 import { AgentChat } from "./agent-chat";
+import { ConnectionBanner } from "./connection-banner";
 import { StatusArea } from "./status-area";
 
 it.each(["codex", "claude"])("recovers %s history without a SessionStart hook", async (kind) => {
@@ -70,7 +71,7 @@ async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name }));
 }
 
-function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation) {
+function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, navigation?: WorkbenchNavigation, { banner = false } = {}) {
   const agent = fixtureAgents[0]!; // a blocked claude agent
   const props: ComponentProps<typeof AgentChat> = {
     paneId: agent.paneId,
@@ -83,8 +84,10 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}, n
     onSelect: vi.fn(),
     ...overrides,
   };
-  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar.
-  const element = <><AgentChat {...props} /><StatusArea /></>;
+  // The chat's own route, so the shared header draws what a pane gets rather than Home's bar. The
+  // outage notice sits above it, as RootLayout mounts it, where a case is about who names an outage.
+  const notice = banner && <ConnectionBanner bridge={props.bridge ?? "connected"} error={props.error ?? false} authError={props.authError ?? false} />;
+  const element = <>{notice}<AgentChat {...props} /><StatusArea /></>;
   const router = createMemoryRouter([{ path: "/pane/:paneId", element: navigation ? <WorkbenchNavigationContext value={navigation}>{element}</WorkbenchNavigationContext> : element }],
     { initialEntries: [`/pane/${encodeURIComponent(props.paneId)}`] });
   render(<RouterProvider router={router} />);
@@ -173,9 +176,14 @@ describe("AgentChat — header title block", () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it("says under the title that Herdr isn't responding as soon as Herdr reports disconnected", () => {
+  // The outage is named by the banner, or before it by the card or the composer; the header keeps
+  // saying where the pane lives, so the screen never names the same outage twice.
+  it("keeps the pane's place under the title while Herdr isn't responding", () => {
     renderChat({ agent: named, agents: [named], bridge: "disconnected" });
-    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("webapp")).toBeInTheDocument();
+    expect(within(header).getByText("review")).toBeInTheDocument();
+    expect(within(header).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 
   it("keeps the folder one tap away in the ⋯ menu", async () => {
@@ -892,7 +900,7 @@ describe("AgentChat — native workbench interactions", () => {
     const menu = readFileSync("src/lib/harness/codex/fixtures/model-picker.txt", "utf8");
     renderChat({ paneId: agent.paneId, agent, agents: [agent], text: `Old terminal output that must not become the conversation\n${menu}` });
     expect(screen.getByRole("region", { name: "Live conversation" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Model picker" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Model" })).toBeVisible();
     // The chip stays in the input row as the picker's anchor.
     expect(screen.getByRole("button", { name: "Choose model" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeVisible();
@@ -902,7 +910,7 @@ describe("AgentChat — native workbench interactions", () => {
     const input = screen.getByRole("textbox");
     await userEvent.type(input, "My next message");
     expect(input).toHaveValue("My next message");
-    expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
     expect(dismissModelPicker).toHaveBeenCalledWith(expect.objectContaining({ paneId: agent.paneId, agent: "codex" }));
   });
 });
@@ -928,8 +936,8 @@ it("preloads once and opens and closes models without terminal requests", async 
   const option = await screen.findByRole("menuitemradio", { name: "gpt-5.6-sol" });
   expect(option).toBeEnabled();
   expect(writes).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Close model picker" }));
-  expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close Model" }));
+  expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(screen.getByRole("menuitemradio", { name: "gpt-6-astra" })).toBeEnabled();
   expect(catalogs).toBe(1);
@@ -966,7 +974,7 @@ it("waits for reasoning selection and confirmation repaints before enabling the 
   expect(screen.queryByText("Model settings applied")).not.toBeInTheDocument();
   text = idle;
   await screen.findByText("Model settings applied");
-  expect(screen.queryByRole("dialog", { name: "Model picker" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Model" })).not.toBeInTheDocument();
   expect(dismissModelPicker).not.toHaveBeenCalled();
   expect(writes).toEqual([["Down", "Down"], ["Enter"]]);
 });
@@ -1317,7 +1325,8 @@ describe("AgentChat — why the composer is locked", () => {
 
   it("says Herdr isn't responding as soon as Herdr reports disconnected", () => {
     renderChat({ bridge: "disconnected" });
-    expect(screen.getByPlaceholderText("Herdr isn't responding. Drafts are kept.")).toBeInTheDocument();
+    expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+    expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
   });
 
   // DetailRoute passes the pane's own refusal as authError while the snapshot may still answer.
@@ -1326,9 +1335,119 @@ describe("AgentChat — why the composer is locked", () => {
     expect(screen.getByPlaceholderText("Sign in again to reply")).toBeDisabled();
   });
 
-  it("says under the title that Herdr isn't responding on a device that cannot write, too", () => {
+  // Once the outage is sustained the connection banner names it, so the box only says what it keeps.
+  it("leaves naming a sustained Herdr outage to the banner", () => {
+    vi.useFakeTimers();
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+      expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A pane read that answers stamps the connection live while the snapshot still says Herdr is down.
+  // The banner stays up until the snapshot recovers, so the box must keep leaving the outage to it.
+  it("keeps leaving the outage to the banner while a live pane read leaves the banner up", () => {
+    vi.useFakeTimers();
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      act(() => { markLive(); vi.advanceTimersByTime(1_000); });
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+      expect(screen.getByPlaceholderText("Drafts are kept.")).toBeEnabled();
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Before the banner, a question card on screen is the one place that says why answers stopped.
+  it("leaves naming Herdr's outage to the question card when one is on screen", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8"), bridge: "disconnected" });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Herdr isn't responding. Answers are paused.")).toBeVisible();
+    expect(screen.getByPlaceholderText("Drafts are kept.")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
+  });
+
+  // A card whose terminal box has focus says typing is under way, not why answers stopped, so the
+  // outage is the box's to name.
+  it("names Herdr's outage above the box while the question card only says typing is under way", async () => {
+    const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+    server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [{
+      paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question: "Do you want to proceed?",
+      context: "Bash command\nmkfifo fixture-fifo", subject: { tool: "Bash", command: "mkfifo fixture-fifo" },
+      signature: "sig-1", revision: 1, detectedAt: 0, detailComplete: true, typing: true,
+      options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+    }] })));
+    renderChat({ agent, agents: [agent], text: readFileSync("src/fixtures/panes/claude--permission-bash.txt", "utf8"), bridge: "disconnected" });
+    const card = await screen.findByRole("region", { name: "Do you want to proceed?" });
+    expect(within(card).getByText("Answers come back when typing ends")).toBeVisible();
+    expect(within(card).queryByText(/Herdr/)).not.toBeInTheDocument();
+    expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+  });
+
+  // Before the banner, one quiet line above the box names the outage, empty or with a draft, and
+  // only one surface names it at a time. The placeholder only says what the box keeps: the outage in
+  // it took two lines at 375 px, which Safari cuts at the box's one-line height.
+  it("names Herdr's outage once, above the box, until the banner takes it over", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected" }, undefined, { banner: true });
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+      const box = screen.getByPlaceholderText("Drafts are kept.");
+      fireEvent.change(box, { target: { value: "keep this for later" } });
+      expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding. Drafts are kept.")).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+      fireEvent.change(box, { target: { value: "" } });
+      expect(screen.queryByPlaceholderText(/Herdr/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A read-only device's box and card say read-only, which is the lock that holds, so the outage
+  // needs its own line there until the banner names it.
+  it("names Herdr's outage once on a device that cannot write, until the banner takes it over", () => {
+    vi.useFakeTimers();
+    try {
+      __resetConnectionHealth();
+      renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } }, undefined, { banner: true });
+      expect(screen.getByPlaceholderText("Read-only — device not authorised")).toBeDisabled();
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn't responding.")).toBeVisible();
+      act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+      expect(screen.getAllByText(/Herdr isn.t responding/)).toHaveLength(1);
+      expect(screen.getByText("Herdr isn’t responding.")).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the pane's place under the title on a device that cannot write, too", () => {
     renderChat({ bridge: "disconnected", device: { enforced: true, device: "spare-phone", authorized: false } });
-    expect(within(screen.getByRole("banner")).getByText("Herdr isn't responding")).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).queryByText(/Herdr/)).not.toBeInTheDocument();
   });
 });
 

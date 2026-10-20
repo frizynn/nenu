@@ -176,6 +176,23 @@ it("refuses a model that is not one name before anything is sent", async () => {
   expect(open.posted).toEqual([]);
 });
 
+it("offers Start as the page's large primary, and says it is busy while the coordinator starts", async () => {
+  const open = holdOpen();
+  const { onChanged, user } = setup();
+
+  const start = within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: "Start coordinator" });
+  // The shared Button at the page tier (44 high, 16 px, auto width), the 404's Go to Home's size.
+  expect(start).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+  const window = await openWindow(user);
+  await window.findByRole("radio", { name: "Claude Code" });
+  await user.click(window.getByRole("button", { name: "Start" }));
+  const starting = within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: "Starting coordinator…" });
+  expect(starting).toHaveAttribute("aria-busy", "true");
+  expect(starting).toBeDisabled();
+  open.answer({ ok: true, message: "" });
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+});
+
 it("shows why the coordinator did not start and lets the person try again", async () => {
   const open = holdOpen();
   const { onChanged, user } = setup();

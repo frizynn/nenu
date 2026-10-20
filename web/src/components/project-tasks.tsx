@@ -262,7 +262,7 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
         </button>}
       </>}
     </>}
-    {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No threads yet.</p>}
+    {tree.open.length === 0 && tree.history.length === 0 && <p className="mb-2 px-2 py-1 text-subhead text-muted-foreground">No threads yet.</p>}
     <CloseNodeDialog project={project} node={closing} session={session} onCancel={() => setClosing(null)}
       onClosed={() => { setClosing(null); void onChanged(); }} />
     {moving && <MoveNodeDialog project={project} tree={whole} node={moving} session={session} onCancel={() => setMoving(null)}
@@ -348,11 +348,11 @@ function MoveNodeDialog({ project, tree, node, session, onMoved, onCancel }: {
         {options.map((option) => (
           <label key={option.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 hover:bg-accent/60" style={{ paddingLeft: `${0.5 + option.depth}rem` }}>
             <input type="radio" name="parent" value={option.id} checked={parent === option.id} onChange={() => setParent(option.id)} />
-            <span className="min-w-0 flex-1 break-words text-sm">{option.title}</span>
+            <span className="min-w-0 flex-1 break-words text-body">{option.title}</span>
           </label>
         ))}
       </div>
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-subhead text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button type="button" size="lg" onClick={() => void move()} disabled={busy || !parent} aria-busy={busy || undefined}>{busy ? "Moving…" : "Move"}</Button>
@@ -367,10 +367,10 @@ export function TasksHeader({ title, subtitle, paused = false, mark }: { title: 
     <header className="mb-4">
       <div className="flex items-start gap-2">
         {mark}
-        <h2 className="min-w-0 flex-1 break-words text-lg font-semibold tracking-tight">{title}</h2>
-        {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Paused</span>}
+        <h2 className="min-w-0 flex-1 break-words text-title">{title}</h2>
+        {paused && <span className="mt-1 rounded-md bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">Paused</span>}
       </div>
-      {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-subhead text-muted-foreground">{subtitle}</p>}
     </header>
   );
 }

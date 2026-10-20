@@ -20,6 +20,7 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, STATE_LABEL, awaits, coordinatorState, flatten, orgTree, type OrgNode } from "@/lib/org-tree";
 import { isReadOnly } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
@@ -81,7 +82,7 @@ function NodePage() {
       <TasksHeader title="Coordinator" paused={project.status === "paused"} subtitle={<>
         Project coordinator of <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline" to={projectPath(project.slug, data.session)}>{project.name}</Link>
       </>} />
-      {(state || agent) && <p className="-mt-2 mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+      {(state || agent) && <p className="-mt-2 mb-4 flex items-center gap-2 text-subhead text-muted-foreground">
         {state && <><NodeDot state={state} /><span className="font-medium text-foreground">{STATE_LABEL[state]}</span></>}
         {state && agent && <span aria-hidden>·</span>}
         {agent && <span>{agent}</span>}
@@ -93,8 +94,8 @@ function NodePage() {
     </>;
   } else if (!node) {
     body = <EmptyState icon={ChatCircleSlash} title="Thread not found" action={<div className="flex flex-wrap justify-center gap-3">
-      <Link to={projectPath(project.slug, data.session)} className={buttonVariants()}>Open project</Link>
-      <Link to={homePath(data.session)} className={buttonVariants({ variant: "outline" })}>Go to Home</Link>
+      <Link to={projectPath(project.slug, data.session)} className={cn(buttonVariants({ size: "lg" }))}>Open project</Link>
+      <Link to={homePath(data.session)} className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>Go to Home</Link>
     </div>}>{project.name} no longer lists it.</EmptyState>;
   } else {
     const { thread, state } = node;
@@ -115,14 +116,14 @@ function NodePage() {
         ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
           asks={asks} summaries={summaries} session={data.session} readOnly={readOnly} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
         : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
-      <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
-        <p className="flex items-center gap-2"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
+      <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-subhead">
+        <p className="flex items-center gap-2 text-body"><NodeDot state={state} /><span className="font-medium">{STATE_LABEL[state]}</span>
           {age && <span className="text-muted-foreground">· {age}</span>}</p>
         {note && <p className="mt-1.5 text-muted-foreground">{note}</p>}
         {thread.pr && <p className="mt-1.5 flex items-center gap-1.5">{prSummary(thread.pr)}
           {thread.pr.url && <a className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" href={thread.pr.url} target="_blank" rel="noreferrer">
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
-        {thread.branch && <p className="mt-1.5 truncate font-mono text-xs text-muted-foreground">{thread.branch}</p>}
+        {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
         {(running || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {running && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>

@@ -6,8 +6,8 @@ import { cssRules, declarations } from "@/test/css-rules";
 // Text sizes in the navigation, the shell's chrome, the composer, the project pages and the strips.
 // Their stylesheets and these components draw no fixed px size: it ignores the browser's text size,
 // and a half pixel is a step the scale doesn't have. The components that are fully on the scale also
-// draw none of Tailwind's stock sizes (text-sm is 14px, which the scale has no step for). The palette,
-// the files sheet and the two pages whose comments name text-sm are held to the px rule only. No
+// draw none of Tailwind's stock sizes (text-sm is 14px, which the scale has no step for). The files
+// sheet and the two pages whose comments name text-sm are held to the px rule only. No
 // label anywhere is set in tracked capitals: the app's labels are sentence case.
 // jsdom lays nothing out; the bench measures the rendered sizes (redesign-shots/labels-type-reach,
 // redesign-shots/glue-cleanup).
@@ -34,8 +34,18 @@ const ON_SCALE = [
   "components/message-queue-strip.tsx",
   "components/message-images.tsx",
   "components/pane-gone.tsx",
+  "components/composer.tsx",
+  "components/conversation-actions.tsx",
+  "components/command-palette.tsx",
+  "components/ui/workbench-popover.tsx",
+  "components/ui/panel-header.tsx",
+  "components/workbench-model-panel.tsx",
+  "components/local-model-picker.tsx",
+  "components/workbench-telemetry.tsx",
+  "components/agent-chat.tsx",
+  "components/home-panels.tsx",
 ];
-const COMPONENTS = [...ON_SCALE, "components/command-palette.tsx", "components/chat-files-browser.tsx", "routes/not-found.tsx", "routes/history.tsx"];
+const COMPONENTS = [...ON_SCALE, "components/chat-files-browser.tsx", "routes/not-found.tsx", "routes/history.tsx"];
 
 describe("text sizes and labels in the navigation, the shell, the composer, the project pages and the strips", () => {
   it("takes every font size in their stylesheets from the scale", () => {

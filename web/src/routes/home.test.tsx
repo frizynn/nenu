@@ -66,14 +66,18 @@ const projectData: HomeData = {
   projects: [hub],
 };
 
-function Shell() {
+/** The app's frame; `banner` also draws the connection banner above it, as RootLayout does. */
+function Shell({ banner = false }: { banner?: boolean }) {
   const value = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
-  return <WorkbenchShell data={value}><Outlet /></WorkbenchShell>;
+  return <>
+    {banner && <ConnectionBanner bridge={value.bridge} error={value.error} authError={value.authError} lastSeenAt={value.lastSeenAt} />}
+    <WorkbenchShell data={value}><Outlet /></WorkbenchShell>
+  </>;
 }
 
-async function setup(value = data, { paneLoader }: { paneLoader?: () => Promise<unknown> } = {}) {
+async function setup(value = data, { paneLoader, banner = false }: { paneLoader?: () => Promise<unknown>; banner?: boolean } = {}) {
   let current: HomeData | Promise<HomeData> = value;
-  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell />, children: [
+  const router = createMemoryRouter([{ id: ROOT_ROUTE_ID, loader: () => current, element: <Shell banner={banner} />, children: [
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
     { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
@@ -672,11 +676,12 @@ describe("an outage", () => {
   // Home keeps saying what the work is, greyed, and its composer says what it is waiting for.
   it("keeps its work headline through a sustained Herdr outage, and leaves naming it to the banner", async () => {
     server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: [permission] })));
-    const { update, main } = await setup();
+    const { update, main } = await setup(data, { banner: true });
     const needs = within(main.getByRole("region", { name: /^Needs you/ }));
     await needs.findByRole("button", { name: "Yes" });
     sustained();
     await update({ ...data, bridge: "disconnected" });
+    expect(await screen.findByText("Herdr isn’t responding.")).toBeVisible();
     expect(headline()).toBe("1 needs you");
     expect(main.queryByText(/Can.t reach|Last synced|Showing the last herd|Nenu keeps trying/)).not.toBeInTheDocument();
     // The herd stays to look at and open; what it cannot vouch for is paused.

@@ -19,8 +19,8 @@ export function ArtifactRow({ artifact, className }: { artifact: ActivityArtifac
         <ExternalLink aria-hidden="true" className="size-3.5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col leading-snug">
-        <span className="truncate text-[12.5px] text-foreground">{artifact.title}</span>
-        <span className="truncate text-[11.5px] text-muted-foreground">
+        <span className="truncate text-footnote text-foreground">{artifact.title}</span>
+        <span className="truncate text-footnote text-muted-foreground">
           claude.ai artifact · opens in claude.ai{artifact.at !== undefined ? ` · ${formatClock(artifact.at)}` : ""}
         </span>
       </span>

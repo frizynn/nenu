@@ -4,11 +4,13 @@ import { useRevalidator } from "react-router";
 import { ChevronDown } from "@/components/ui/icon";
 import { connectConversation, fetchConversations } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { SelectField } from "@/components/ui/select-field";
 import { cn } from "@/lib/utils";
 
 /**
  * True where the recovery is the surface's one way forward (the empty pane's card): Find is then the
- * primary action. Elsewhere, as inside the ⋯ menu, it stays outlined among the menu's plain rows.
+ * large action every empty state offers. Elsewhere, as inside the ⋯ menu, it stays a full-width
+ * outlined row among the menu's plain rows.
  */
 export const RecoveryLeads = createContext(false);
 
@@ -68,7 +70,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
   // One primary at a time: Find, or Connect once a list or the typed ID is open. Next to Connect, a
   // line says linking only brings the history in.
   const connectButton = <>
-    <Button className="w-full" disabled={disabled || busy !== null || !id.trim()} aria-busy={busy === "connect" || undefined} onClick={() => void connect()}>Connect history</Button>
+    <Button size="block" disabled={disabled || busy !== null || !id.trim()} aria-busy={busy === "connect" || undefined} onClick={() => void connect()}>Connect history</Button>
     <p className="text-center text-footnote text-muted-foreground">Messages still go to this terminal.</p>
   </>;
   return <div className="flex w-full flex-col gap-3 text-left">
@@ -78,12 +80,13 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
           <label htmlFor={listId} className="text-footnote text-muted-foreground">Running in this folder</label>
           <button type="button" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()} className={cn(quiet, "-mr-2 px-2 disabled:not-aria-busy:text-disabled-foreground")}>Search again</button>
         </div>
-        <select id={listId} aria-label="Conversation to connect" className={field} value={id} onChange={(event) => setId(event.target.value)}>
+        <SelectField id={listId} aria-label="Conversation to connect" value={id} onChange={(event) => setId(event.target.value)}>
           <option value="">Choose a conversation</option>
           {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.title} ({choice.id.slice(0, 8)})</option>)}
-        </select>
+        </SelectField>
       </div>
-      : <Button variant={leads && !manual ? "default" : "outline"} className="w-full" disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}
+      : <Button variant={leads && !manual ? "default" : "outline"} size={leads ? "lg" : "default"} className={leads ? "self-center" : "w-full"}
+        disabled={busy !== null} aria-busy={busy === "find" || undefined} onClick={() => void load()}>Find Codex conversations</Button>}
     {choices?.length === 0 && <p role="status" className="text-center text-footnote text-muted-foreground">No Codex conversation is running in this folder.</p>}
     {listed && connectButton}
     <button type="button" aria-expanded={manual} aria-controls={regionId} onClick={toggleManual} className={cn(quiet, "w-full")}>

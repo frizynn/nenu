@@ -30,7 +30,7 @@ export function TranscriptQuestion({ title, options, descriptions, active }: { t
             {text}
             {recommended && <RecommendedBadge />}
           </span>
-          {description && <span className="text-[13px] leading-[18px] text-muted-foreground">{description}</span>}
+          {description && <span className="text-footnote text-muted-foreground">{description}</span>}
         </button>;
       })}
     </div>}
