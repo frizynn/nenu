@@ -28,12 +28,13 @@ the same `Waiting for you` report.
    `done` after an answer, or a report Organizations groups Ready for review, leaves it idle; its
    pull request still reads as review once approved or landing.
 4. A worker that is not a conversation and says `Waiting for you` stopped to ask: it still needs you.
-5. A coordinator kept open reads as any coordinator does: this rule is for the threads that talk.
+5. A coordinator kept open reads as any coordinator does. Organizations gives the conversation's brief
+   only to threads (`src/thread.rs`), so a coordinator's `Waiting for you` is still a stop to ask.
 
 ## Consequences
 
 Nenu and Organizations' popup and sidebar disagree on a conversation at rest until Organizations
-groups it the same way; the fix belongs there (`group()` row 4, `self_waiting() && !keep_open`), and
+groups it the same way; the fix belongs there (`group()` row 4: `self_waiting()` unless the thread is kept open and not a coordinator), and
 Nenu's rule then agrees with it instead of overriding it. An ask linked to such a thread still reads
 Organizations' raw state (`asks --json`) and says "needs you" until then.
 

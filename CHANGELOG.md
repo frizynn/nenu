@@ -13,7 +13,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - On a phone only the thread scrolls: a drag on the box, the header or the thread no longer moves the chat, and the root opts out of the vertical rubber-band (9678c138, c02574ca).
-- A conversation (`keep_open`) that ended its turn reads as a chat at rest, not as Needs you: off Home's headline, its list, the tab's badge and its workspace's state. A dialog on its screen still needs you; its own approved PR still reads as review (89006a72, c02574ca).
+- A conversation (`keep_open` thread) that ended its turn reads as a chat at rest, not as Needs you: off Home's headline, its list, the tab's badge and its workspace's state. A dialog on its screen still needs you; its own approved PR still reads as review, and a coordinator kept open reads as any coordinator (89006a72, c02574ca, 931327ec).
 
 ## [1.31.1] - 2026-10-20
 
