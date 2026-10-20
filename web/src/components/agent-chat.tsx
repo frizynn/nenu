@@ -939,7 +939,7 @@ export function AgentChat({
   // Whole percents, as the panel shows them: a token more is no reason to draw it again.
   const contextUsed = contextPercent(telemetry?.context);
   const contextShown = contextUsed === null ? undefined : Math.round(contextUsed);
-  useEffect(() => report?.({ model: reportedModel, contextPercent: contextShown }), [report, reportedModel, contextShown]);
+  useEffect(() => { report?.({ model: reportedModel, contextPercent: contextShown }); }, [report, reportedModel, contextShown]);
   const telemetryProps = {
     telemetry,
     stale: conversation.error || connecting,

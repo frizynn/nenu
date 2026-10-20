@@ -191,8 +191,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
             session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinating={scope.coordinating}
             onShowChanges={() => inspector.setTab("changes")}
             onOpenThread={(candidate) => {
-              if (!candidate.paneId) openNode(candidate.id);
-              else if (scope.coordinating && live(candidate.paneId)) setDocked(candidate.paneId);
+              if (!live(candidate.paneId)) openNode(candidate.id);
+              else if (scope.coordinating) setDocked(candidate.paneId);
               else openPane(candidate.paneId);
             }} /></Suspense>} />
       )}

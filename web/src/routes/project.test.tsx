@@ -194,6 +194,13 @@ describe("a wide screen, the thread's overview as the session panel's first tab"
     expect(within(screen.getByRole("navigation", { name: "Threads" })).getByRole("button", { name: /Docs/ })).toBeInTheDocument();
   });
 
+  it("opens a sibling whose pane is gone on its node, never on the closed pane", async () => {
+    const { router, user } = setup("/pane/worker", home([pane("coord"), pane("worker")]));
+    const panel = await overviewPanel(user);
+    await user.click(panel.getByRole("button", { name: /^Docs/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/project/hub/node/T2"));
+  });
+
   it("names the thread's coordinator and its pull request, and goes up to that coordinator from its name", async () => {
     const { router, user } = setup("/pane/worker", home([pane("coord"), pane("worker"), pane("docs")]));
     const panel = await overviewPanel(user);
