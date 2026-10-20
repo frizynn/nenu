@@ -195,16 +195,14 @@ export async function listRoutines(run: OrgRun, project: string): Promise<Routin
   };
 }
 
-/** A routine's name as `routine list` prints it: its file name without `.md`. */
-const ROUTINE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-
 /**
  * Turns one of a project's routines on or off (`routine toggle --on/--off`), only one `routine list`
  * names, and answers the list as it then reads.
  */
 export async function toggleRoutine(run: OrgRun, input: { project: unknown; name: unknown; on: unknown }): Promise<RoutineList> {
   const project = validateProjectSlug(input.project);
-  if (typeof input.name !== "string" || !ROUTINE_RE.test(input.name)) throw new OrgValidationError("Name a routine this project lists.");
+  // Organizations names a routine by the slug rule, as it does a project.
+  if (typeof input.name !== "string" || !SLUG_RE.test(input.name)) throw new OrgValidationError("Name a routine this project lists.");
   if (typeof input.on !== "boolean") throw new OrgValidationError("A routine is turned on or off.");
   const before = await listRoutines(run, project);
   if (!before.routines.some((routine) => routine.name === input.name)) throw new OrgValidationError("Name a routine this project lists.");

@@ -335,7 +335,6 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
     {projects.length > 0 && (
       <section aria-label="Projects" className="nav-group">
         <h3 className="nav-label">Projects</h3>
-        {/* The desk lists it at the top of its bar. */}
         {folded && <AsksRow data={data} current={false} />}
         {projects.map((project) => (
           <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded}

@@ -4,11 +4,13 @@
   (designboard `nenu-desktop`, artboards Projects, Project, ProjectAsks, ProjectRoutines, Coordinator).
   Amends [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md) point 1,
   [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md) point 4,
-  [ADR 0092](./0092-a-project-organizes-its-coordinators.md) point 1 and
-  [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) point 2, all on a desk only.
+  [ADR 0092](./0092-a-project-organizes-its-coordinators.md) point 1,
+  [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) point 2 and
+  [ADR 0090](./0090-a-coordinators-status-file-is-drawn-as-written.md) point 2, all on a desk only.
 - **Trail:** `web/src/components/desk-project.tsx` · `web/src/components/desk-coordinator.tsx` ·
   `web/src/components/desk-pages.tsx` · `web/src/components/desk-routines.tsx` · `web/src/lib/project-work.ts` ·
-  `web/src/routes/projects.tsx` · `web/src/hooks/use-desk.ts` · `bridge/org-cli.ts` (`toggleRoutine`)
+  `web/src/routes/projects.tsx` · `web/src/hooks/use-desk.ts` · `bridge/org-cli.ts` (`toggleRoutine`) ·
+  `scripts/e2e/coordinators.ts` · `scripts/e2e/coordinator-status.ts`
 
 ## Context
 
@@ -40,7 +42,8 @@ to read all of it: who works on what, what waits on you, and what runs on its ow
    terminal.
 6. **A coordinator's page has Threads, Waiting on you, Routines and Status.** Threads is its work as
    Summary and tree (ADR 0089); Routines lists those whose `to` names it (`root` for the project's own);
-   Status is its card and STATUS.md.
+   Status is its card and STATUS.md. The project page draws no STATUS.md: the project coordinator's
+   is on its own page (`node/root`), as the approved Project artboard has it.
 
 ## Consequences
 

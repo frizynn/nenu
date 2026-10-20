@@ -257,7 +257,10 @@ async function main(): Promise<void> {
 
     for (const [width, device] of [["390", TALL_PHONE], ["1440", TALL_DESKTOP]] as const) {
       {
-        const { page, context } = await open("/asks", device, "Your asks");
+        // A desk reads asks on each coordinator's Waiting on you, where /asks narrowed to it lands (ADR 0101).
+        const { page, context } = width === "1440"
+          ? await open(`/asks?project=acme&coordinator=${COORDINATOR.id}`, device, COORDINATOR.title)
+          : await open("/asks", device, "Your asks");
         pages[`asks-${width}`] = { rows: await page.locator("main li").count() };
         await shoot(page, `asks-${width}`);
         const context_ = page.getByRole("button", { name: /^Context/ }).first();
@@ -274,7 +277,8 @@ async function main(): Promise<void> {
         await context.close();
       }
       {
-        const { page, context } = await open(`/project/acme/node/${COORDINATOR.id}`, device, COORDINATOR.title);
+        // A desk's coordinator lists its asks, and what keeps one from closing, on Waiting on you (ADR 0101).
+        const { page, context } = await open(`/project/acme/node/${COORDINATOR.id}${width === "1440" ? "?tab=waiting" : ""}`, device, COORDINATOR.title);
         await shoot(page, `coordinator-${width}`);
         const unclosed = page.locator('section[aria-label="Does not close"]').first();
         if (await unclosed.count()) {

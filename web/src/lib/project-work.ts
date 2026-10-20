@@ -2,7 +2,7 @@
 // threads it runs, the project coordinator's card last with the threads started from the project, and
 // the routines by whom they reach. It reads the one tree (org-tree.ts) and never re-judges a node's state.
 import { askSections, type AskEntry } from "./asks";
-import { openCoordinators, orgTree, type NodeState, type OrgNode } from "./org-tree";
+import { flatten, openCoordinators, orgTree, type NodeState, type OrgNode } from "./org-tree";
 import type { AskCoordinator, AsksList, ProjectThreadView, ProjectView, RoutineView } from "./types";
 
 export type WorkFilter = "open" | "finished";
@@ -31,15 +31,15 @@ export function workCards(project: ProjectView, filter: WorkFilter): WorkCard[] 
     ];
   }
   const ids = new Set(project.threads.map((thread) => thread.id));
-  const nodes = new Map([...tree.open, ...tree.history].flatMap(function all(node): Array<[string, OrgNode]> {
-    return [[node.thread.id, node], ...node.children.flatMap(all)];
-  }));
+  const nodes = new Map(flatten([...tree.open, ...tree.history]).map((node) => [node.thread.id, node]));
   const finished = [...nodes.values()].filter((node) => node.state === "resolved" && !isCoordinator(node))
     .sort((a, b) => updatedAt(b.thread) - updatedAt(a.thread));
   const byParent = new Map<string, OrgNode[]>();
   for (const node of finished) {
     const parent = ids.has(node.thread.parentId) ? node.thread.parentId : "root";
-    byParent.set(parent, [...(byParent.get(parent) ?? []), node]);
+    const rows = byParent.get(parent);
+    if (rows) rows.push(node);
+    else byParent.set(parent, [node]);
   }
   const coordinators = [...nodes.values()].filter((node) => isCoordinator(node) && (node.state === "resolved" || byParent.has(node.thread.id)))
     .sort((a, b) => Number(a.state === "resolved") - Number(b.state === "resolved") || updatedAt(b.thread) - updatedAt(a.thread));

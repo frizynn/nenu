@@ -169,7 +169,8 @@ the unit name; the Herdr action runs from anywhere.
   tap away, and "In plain words" asks for them where `actions` lists `explain`; Nenu never calls a model
   itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
-  coordinators: only while it says something, ADR 0092), drawn as written through
+  coordinators: only while it says something, ADR 0092; on a desk, its page's Status tab and never the
+  project page, ADR 0101), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
   ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
   **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's

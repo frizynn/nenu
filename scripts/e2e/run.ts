@@ -2364,7 +2364,14 @@ async function back(): Promise<void> {
       await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
       await log("project");
       if (way.coordinator) {
-        await open(way.coordinator.title);
+        // A desk's project folds a coordinator's card on its name; its › opens the coordinator's page,
+        // and Open chat its chat (ADR 0101).
+        if (device === DESKTOP) {
+          await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
+          await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });
+          await log("coordinator-page");
+          await page.locator("main").getByRole("button", { name: "Open chat" }).click({ timeout: 5000 });
+        } else await open(way.coordinator.title);
         await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
         await log("coordinator");
         if (device === PHONE) {
@@ -2780,7 +2787,7 @@ async function idleCost(bridge: TestBridge, views: ReadonlyArray<readonly [strin
 }
 
 /**
- * The desk's bar drawn as Cursor's, its Routines page and Home's Needs you, on a desk and a phone in
+ * The desk's bar drawn as Cursor's, a project's Routines tab and Home's Needs you, on a desk and a phone in
  * light and dark; then, with a chat open on the desk, another agent finishing, which shows what the
  * app raises for it. Then the idle cost of Home and a chat (`--seconds`, 0 skips it). With `--before`
  * it skips Routines, which origin/main does not have.
@@ -2821,7 +2828,8 @@ async function sidebar(before: boolean): Promise<void> {
         seen[`animationsAtRest-${deviceName}-${scheme}`] = await page.evaluate(() => document.getAnimations().length, null);
         if (deviceName === "desktop") {
           if (!before) {
-            await visit("/routines", 'main >> text="nightly-dependency-check"');
+            // A desk reads routines on each project's Routines tab (ADR 0101).
+            await visit("/project/acme-shop?tab=routines", 'main >> text="nightly-dependency-check"');
             await shoot("routines");
           }
           await visit(chat, "textarea");

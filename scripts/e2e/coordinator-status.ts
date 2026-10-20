@@ -126,7 +126,7 @@ async function main(): Promise<void> {
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
       await page.goto(bridge.url + path);
-      await page.getByRole("heading", { name: path === NODE ? "Rediseño del checkout" : "Acme Shop" }).first().waitFor({ timeout: 15_000 });
+      await page.getByRole("heading", { name: path.startsWith(NODE) ? "Rediseño del checkout" : path.includes("/node/root") ? /coordinator/i : "Acme Shop" }).first().waitFor({ timeout: 15_000 });
       await page.waitForTimeout(1200);
       return { page, context };
     };
@@ -150,9 +150,11 @@ async function main(): Promise<void> {
     }, null);
 
     const layout: Record<string, unknown> = {};
+    // A desk reads a coordinator's STATUS.md on its page's Status tab, the project coordinator's at
+    // node/root, and its project page draws none (ADR 0101).
     for (const [name, path, device] of [
       ["project-phone", PROJECT, PHONE], ["node-phone", NODE, PHONE],
-      ["project-desktop", PROJECT, DESKTOP], ["node-desktop", NODE, DESKTOP],
+      ["project-desktop", `${PROJECT}/node/root?tab=status`, DESKTOP], ["node-desktop", `${NODE}?tab=status`, DESKTOP],
     ] as const) {
       const { page, context } = await open(path, device);
       const block = await measure(page);
@@ -166,7 +168,7 @@ async function main(): Promise<void> {
       if (!block) failures.push(`${name}: no Status block`);
       else {
         if (block.top >= block.viewport) failures.push(`${name}: the block starts below the first screen`);
-        if (path === NODE && block.first !== "Status") failures.push(`${name}: the block does not head the page`);
+        if (name.startsWith("node") && block.first !== "Status") failures.push(`${name}: the block does not head the page`);
       }
       if (name === "project-phone") {
         // The page scrolls inside its column, so the whole file is shot on a phone as tall as it.
@@ -181,6 +183,11 @@ async function main(): Promise<void> {
         await page.waitForTimeout(600);
         if (!page.url().endsWith("/project/acme/node/t-0011")) failures.push(`node-phone: a thread id opened ${page.url()}`);
       }
+      await context.close();
+    }
+    {
+      const { page, context } = await open(PROJECT, DESKTOP);
+      if (await measure(page)) failures.push("project page on a desk: a Status block");
       await context.close();
     }
     if (!quiet) {
