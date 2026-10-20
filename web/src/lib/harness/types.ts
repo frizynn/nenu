@@ -17,6 +17,10 @@ export interface HarnessAdapter {
   /** The native TUI accepts bracketed paste, preserving newlines as text until verified submit:
    *  for every message, or for the ones the predicate names. */
   bracketedPaste?: true | ((text: string) => boolean);
+  /** The CLI attaches a picture whose path arrives as a bracketed paste of its own and draws
+   *  `[Image #N]` at the cursor, so a message holding Nenu's picture uploads is typed piece by piece,
+   *  each path pasted alone where it sits (bridge/guarded-send.ts, ADR 0104). */
+  pastesImagePaths?: true;
   /** The adapter's OWN full block pipeline over the pane's styled lines — for Claude that is the
    *  raw-or-dialog result (dialog lift + chrome strip, else a single raw block). */
   buildBlocks(lines: StyledLine[]): Block[];

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Pencil, Send, Trash2, X, Zap } from "@/components/ui/icon";
 import type { QueueMessage } from "@/lib/api";
 import { queueRowStatus, type DeliveredRow } from "@/hooks/use-message-queue";
-import { serializeMessage, splitMessageImages } from "@/lib/message-images";
+import { draftFromWire, serializeDraft } from "@/lib/message-images";
+import { useDraftChips } from "@/hooks/use-draft-chips";
+import { DraftChipLayer } from "./draft-chip-layer";
 import { QueuedMessage, type QueuedAction } from "./queued-message";
 
 /**
@@ -37,7 +39,11 @@ export function MessageQueueStrip({
   readNowArmed?: string | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
-  const [text, setText] = useState("");
+  // The row being edited, as a draft: its words with each picture a chip in place, kept whole as in
+  // the composer (ADR 0104); a chip the edit takes leaves with its picture. Files ride along.
+  const [draft, setDraft] = useState<ReturnType<typeof draftFromWire>>({ text: "", images: [], files: [] });
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const chips = useDraftChips(editor);
   if (!messages.length && !delivered.length && !error) return null;
   // The strip sits in the composer, so every px it takes comes off the conversation: rows show three
   // lines (Edit has the rest) and the strip stops at 13rem, less on a short screen. Below the desk
@@ -52,8 +58,7 @@ export function MessageQueueStrip({
       )}
       <ol className="space-y-3">
         {messages.map((item, index) => {
-          // The prose is what gets edited; the images ride along unchanged.
-          const { text: prose, images } = splitMessageImages(item.text);
+          // The words are what gets edited, each picture a chip where it is; the files ride along unchanged.
           const status = queueRowStatus(agent, item);
           const can = (action: (typeof status.actions)[number]) => status.actions.includes(action);
           const locked = busy || item.state === "sending";
@@ -62,7 +67,7 @@ export function MessageQueueStrip({
           if (!isEditing) {
             if (can("sendNow")) menu.push({ id: "send", label: item.stranded ? "Send here" : "Send now", icon: Send, disabled: locked, run: () => void change("send", undefined, item) });
             // A paused row's delivery is uncertain: it is removed, not edited in place.
-            if (can("edit") && item.state !== "paused") menu.push({ id: "edit", label: "Edit", icon: Pencil, disabled: locked, run: () => { setEditing(item.id); setText(prose); } });
+            if (can("edit") && item.state !== "paused") menu.push({ id: "edit", label: "Edit", icon: Pencil, disabled: locked, run: () => { setEditing(item.id); setDraft(draftFromWire(item.text)); } });
             menu.push({ id: "remove", label: "Remove", icon: Trash2, disabled: locked, run: () => void change("remove", undefined, item) });
           }
           const remedies: QueuedAction[] = isEditing
@@ -73,8 +78,8 @@ export function MessageQueueStrip({
                   label: "Save",
                   name: "Save queued message",
                   icon: Check,
-                  disabled: busy || (!text.trim() && !images.length),
-                  run: () => void change("edit", serializeMessage(text, images), item).then((saved) => { if (saved) setEditing(null); }),
+                  disabled: busy || (!draft.text.trim() && !draft.images.length && !draft.files.length),
+                  run: () => void change("edit", serializeDraft(draft.text, draft.images, draft.files), item).then((saved) => { if (saved) setEditing(null); }),
                 },
               ]
             : [];
@@ -90,12 +95,20 @@ export function MessageQueueStrip({
                 remedies={remedies}
                 clamp
                 editor={isEditing ? (
-                  <textarea
-                    aria-label="Edit queued message"
-                    className="block w-full resize-y rounded-lg bg-background p-2 text-body text-foreground"
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                  />
+                  <div className="composer-field rounded-lg bg-background">
+                    <DraftChipLayer text={draft.text} field={editor} />
+                    <textarea
+                      aria-label="Edit queued message"
+                      ref={editor}
+                      className="block w-full resize-y rounded-lg bg-transparent p-2 text-body text-foreground"
+                      value={draft.text}
+                      onSelect={(e) => chips.select(e.currentTarget)}
+                      onChange={(e) => {
+                        const kept = chips.edit(draft.text, e.target.value, e.target.selectionStart, draft.images.length);
+                        setDraft({ ...draft, text: kept.text, images: draft.images.filter((_path, i) => !kept.removed.includes(i + 1)) });
+                      }}
+                    />
+                  </div>
                 ) : undefined}
               />
             </li>

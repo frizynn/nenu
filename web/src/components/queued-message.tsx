@@ -1,12 +1,13 @@
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useContext, useId, useRef, useState, type ReactNode } from "react";
 import { CircleAlert, Check, Clock, Pending, Ellipsis, type IconComponent } from "@/components/ui/icon";
 
 import { ActionGroups } from "@/components/conversation-actions";
 import { MarkdownText } from "@/components/markdown-text";
-import { MessageImages } from "@/components/message-images";
+import { PlacedMessage, pathImages } from "@/components/message-images";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import type { queueRowStatus } from "@/hooks/use-message-queue";
-import { splitMessageImages } from "@/lib/message-images";
+import { pathPieces } from "@/lib/message-images";
+import { FileMediaContext } from "@/lib/file-preview-context";
 import { cn } from "@/lib/utils";
 
 // One tone vocabulary for both devices: the queue's own status decides it (hooks/use-message-queue.ts).
@@ -66,7 +67,8 @@ export function QueuedMessage({
   /** Shows the first three lines only, where the rows share a short strip above the composer. */
   clamp?: boolean;
 }) {
-  const { text: prose, images } = splitMessageImages(text);
+  const { pieces, paths } = pathPieces(text);
+  const media = useContext(FileMediaContext);
   const [open, setOpen] = useState(false);
   // The message started going (or went) while its menu was open: the ⋯ is gone, so is its menu, and
   // it stays closed if the ⋯ comes back.
@@ -88,8 +90,8 @@ export function QueuedMessage({
       >
         {editor ?? (
           <>
-            {prose && <MarkdownText text={prose} query="" className={clamp ? "line-clamp-3" : undefined} />}
-            <MessageImages paths={images} className="pt-1" />
+            <PlacedMessage pieces={pieces} images={pathImages(paths, media)}
+              words={(words, key) => <MarkdownText key={key} text={words} query="" className={clamp ? "line-clamp-3" : undefined} />} />
           </>
         )}
       </div>

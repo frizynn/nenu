@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { downscaleImage } from "@/lib/image-downscale";
 import { isLocalImageUrl, localImageUrl, rememberLocalImage } from "@/lib/local-sends";
-import { uploadName } from "@/lib/message-images";
+import { serializeDraft, uploadName } from "@/lib/message-images";
 import type { UploadResponse } from "@/lib/types";
 
 // Files attached to the draft, kept as structured state beside the text — the textarea never shows
-// a path. Each one is uploaded as soon as it is picked; the message only carries the server paths
-// (lib/message-images.ts serializeMessage) when it is sent. Only an image gets a preview.
+// a path, only a numbered chip where each picture goes. Each one is uploaded as soon as it is picked;
+// the message only carries the server paths (lib/message-images.ts serializeDraft) when it is sent.
+// Only an image gets a preview. A picture's number is its place among the pictures here, from 1.
 
 export type AttachmentStatus = "uploading" | "ready" | "error";
 
@@ -37,6 +38,11 @@ export interface AttachRefusal {
   overLimit: number;
 }
 
+/** What `add` took: how many of the files were pictures, numbered after the ones already there. */
+export interface AttachResult extends AttachRefusal {
+  images: number;
+}
+
 function isImageFile(file: File): boolean {
   return file.type.startsWith("image/");
 }
@@ -53,6 +59,23 @@ interface Options {
 
 export function readyPaths(list: readonly Attachment[]): string[] {
   return list.flatMap((item) => (item.status === "ready" && item.path ? [item.path] : []));
+}
+
+/** The pictures, in number order: picture n is `pictures(list)[n - 1]`. */
+export function pictures(list: readonly Attachment[]): Attachment[] {
+  return list.filter((item) => item.image);
+}
+
+/** The draft's wire text: each chip its picture's path, the other files after the prose. */
+export function draftWire(text: string, list: readonly Attachment[]): string {
+  if (!list.length) return text;
+  const path = (item: Attachment) => (item.status === "ready" && item.path ? item.path : null);
+  return serializeDraft(text, pictures(list).map(path), list.filter((item) => !item.image).flatMap((item) => path(item) ?? []));
+}
+
+/** What tells each picture apart for draftFromWire: its path once uploaded, else its id (never a path). */
+export function pictureKeys(list: readonly Attachment[]): string[] {
+  return pictures(list).map((item) => item.path ?? item.id);
 }
 
 function restored(path: string, previewUrl: (path: string) => string): Attachment {
@@ -101,8 +124,8 @@ export function useComposerAttachments({ upload, previewUrl, onPathsChange, init
     } else patch(id, { status: "error", error: result.error });
   }
 
-  /** Attach and upload. Returns what was refused: too large, or past the count limit. */
-  function add(files: Iterable<File>): AttachRefusal {
+  /** Attach and upload. Returns how many pictures went in, and what was refused: too large, or past the count limit. */
+  function add(files: Iterable<File>): AttachResult {
     const list = [...files];
     const fitting = list.filter((file) => file.size <= MAX_ATTACHMENT_BYTES);
     const accepted = fitting.slice(0, Math.max(0, MAX_ATTACHMENTS - itemsRef.current.length));
@@ -113,7 +136,11 @@ export function useComposerAttachments({ upload, previewUrl, onPathsChange, init
     });
     if (added.length) commit([...itemsRef.current, ...added]);
     added.forEach((item) => void start(item.id, item.file));
-    return { tooLarge: list.filter((file) => file.size > MAX_ATTACHMENT_BYTES).map((file) => file.name), overLimit: fitting.length - accepted.length };
+    return {
+      images: added.filter((item) => item.image).length,
+      tooLarge: list.filter((file) => file.size > MAX_ATTACHMENT_BYTES).map((file) => file.name),
+      overLimit: fitting.length - accepted.length,
+    };
   }
 
   function retry(id: string) {

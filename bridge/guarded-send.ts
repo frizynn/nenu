@@ -16,6 +16,7 @@ import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "../web/src/lib/blocks.ts";
 import { draftCarriesSend } from "../web/src/lib/guarded-reply.ts";
 import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts";
+import { hasPlacedPictures, imageTokens, sendPieces } from "../web/src/lib/harness/inline-images.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
 import { deliveryVerdict } from "./delivery-check.ts";
@@ -93,6 +94,8 @@ const MAYBE_SENT =
   "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 const NOT_SUBMITTED = "Typed into the pane but not submitted — check the pane before resending.";
 const ESCAPES = "The message contains terminal escape sequences, which a paste cannot carry. Nothing was typed.";
+const PICTURE_UNSEEN =
+  "A picture didn't show in the agent's input box where it goes. Nothing was submitted; part of the message may be typed, so check Terminal before retrying.";
 const incomplete = (sent: number, received: number) =>
   `Your message reached the agent incomplete: it logged ${received} of ${sent} characters. The agent may be answering that part; send the whole message again if it needs it.`;
 
@@ -146,7 +149,8 @@ export function triggerHead(text: string): string {
  */
 export function triggerPattern(text: string): string {
   const head = triggerHead(text).replace(META, "\\$&").replaceAll(" ", "[ \u00a0]");
-  const placeholder = "\\[Pasted ";
+  // A message that opens with a picture shows the CLI's `[Image #N]` first, not its words.
+  const placeholder = hasPlacedPictures(text) ? "\\[(?:Pasted |Image #)" : "\\[Pasted ";
   return head ? `(?m)(?:^.{0,8}?[❯›>][  ]+${head}|${placeholder})` : `(?m)${placeholder}`;
 }
 
@@ -241,7 +245,10 @@ class Send {
 
   carries(seen: Seen): boolean {
     const { text } = this.request;
-    if (draftCarriesSend(text, seen.draft)) return true;
+    // With pictures in place the whole message always shows their tokens, which the text never holds,
+    // so a slice of its words is a part of it typed, never all of it: only the adapter's reading counts.
+    const placed = this.adapter?.pastesImagePaths === true && hasPlacedPictures(text);
+    if (!placed && draftCarriesSend(text, seen.draft)) return true;
     return seen.draft !== null && this.adapter?.draftCarriesSend?.(text, seen.draft) === true;
   }
 
@@ -274,9 +281,12 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const adapter = adapterFor(agent ?? undefined);
   const send = new Send(deps, request, adapter, prior);
   const paste = adapter?.bracketedPaste;
-  const bracketed = request.paste === true || paste === true || (typeof paste === "function" && paste(request.text));
+  const pasted = (text: string) => request.paste === true || paste === true || (typeof paste === "function" && paste(text));
+  // Pictures in their places go piece by piece, each path pasted alone (ADR 0104); else one write.
+  const pieces = adapter?.pastesImagePaths && hasPlacedPictures(request.text) ? sendPieces(request.text) : null;
+  const bracketed = pieces !== null || pasted(request.text);
   if (bracketed && /[\x1b\x9b]/.test(request.text)) return send.fail(ESCAPES, false);
-  const wire = bracketed ? `\x1b[200~${request.text}\x1b[201~` : request.text;
+  const wire = bracketed && pieces === null ? `\x1b[200~${request.text}\x1b[201~` : request.text;
 
   // PRE-FLIGHT: one live read decides whether anything may be typed at all. A read that fails lets
   // the message through without the sweep, as the browser guard did: Enter still waits for a read
@@ -314,11 +324,16 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   if (!alreadyTyped) {
     send.trace.phase = "type";
     send.trace.typeAttempted = true;
-    try {
-      await deps.herdr.sendPaneText(deps.paneId, wire);
-    } catch (err) {
-      // The ack can fail after the bytes landed. Look before deciding the text is not there.
-      if (!(await send.check())) return send.fail(`herdr send_text failed: ${message(err)}`, false);
+    if (pieces !== null) {
+      const typed = await typePieces(send, deps, pieces, pasted);
+      if (typed) return typed;
+    } else {
+      try {
+        await deps.herdr.sendPaneText(deps.paneId, wire);
+      } catch (err) {
+        // The ack can fail after the bytes landed. Look before deciding the text is not there.
+        if (!(await send.check())) return send.fail(`herdr send_text failed: ${message(err)}`, false);
+      }
     }
   }
 
@@ -357,6 +372,44 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     }
   }
   return send.fail(UNCONFIRMED, true);
+}
+
+/**
+ * Type a message with pictures in its places (ADR 0104): each text piece as the adapter types any
+ * text, each picture's path as a bracketed paste of its own, and before the next piece a read that
+ * shows the CLI drew that picture's `[Image #N]` — Claude attaches it a beat after the paste, so text
+ * sent on its heels would land before the token. Returns a failure, or null once every piece is in.
+ */
+async function typePieces(send: Send, deps: GuardedSendDeps, pieces: ReturnType<typeof sendPieces>, pasted: (text: string) => boolean): Promise<GuardedSendResult | null> {
+  let pictures = 0;
+  let wrote = false;
+  for (const piece of pieces) {
+    const text = piece.kind === "image" ? `\x1b[200~${piece.path}\x1b[201~` : pasted(piece.text) ? `\x1b[200~${piece.text}\x1b[201~` : piece.text;
+    try {
+      await deps.herdr.sendPaneText(deps.paneId, text);
+    } catch (err) {
+      // A failed ack may still have landed its bytes: only the first write can know nothing did.
+      return send.fail(`herdr send_text failed: ${message(err)}`, wrote);
+    }
+    wrote = true;
+    if (piece.kind !== "image") continue;
+    pictures++;
+    if (!(await pictureDrawn(send, pictures))) return send.fail(PICTURE_UNSEEN, true);
+  }
+  return null;
+}
+
+/** Wait, within the verify window, for the box to show `count` `[Image #N]` tokens. */
+async function pictureDrawn(send: Send, count: number): Promise<boolean> {
+  for (const delay of LOCAL_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    try {
+      if (imageTokens((await send.read()).draft) >= count) return true;
+    } catch {
+      // A failed read shows nothing; the bounded loop is the timeout.
+    }
+  }
+  return false;
 }
 
 /**
