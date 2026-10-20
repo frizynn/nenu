@@ -49,7 +49,9 @@ to read all of it: who works on what, what waits on you, and what runs on its ow
 
 The phone draws everything as before; the split is one `useDesk()` at each route, so the phone's reads
 never run on a desk and the other way round. Your asks and Routines as cross-project pages remain only on
-a phone. A project with no coordinator under it no longer opens on its chat on a desk.
+a phone. A project with no coordinator under it no longer opens on its chat on a desk. Its Context tab
+is where [ADR 0101](./0101-a-threads-panel-opens-on-its-overview.md) point 4 sent the project's Context;
+Notes has no desk view yet, so the bridge keeps `/api/org/tasks` and `/api/org/status`.
 
 Revisit if the phone takes the same tabs (then the phone's pages and the redirects go), or if
 Organizations publishes a routine field that a client may edit (then Routines gains a form).

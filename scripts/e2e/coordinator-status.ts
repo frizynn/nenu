@@ -168,7 +168,7 @@ async function main(): Promise<void> {
       if (!block) failures.push(`${name}: no Status block`);
       else {
         if (block.top >= block.viewport) failures.push(`${name}: the block starts below the first screen`);
-        if (name.startsWith("node") && block.first !== "Status") failures.push(`${name}: the block does not head the page`);
+        if (path.includes("/node/") && block.first !== "Status") failures.push(`${name}: the block does not head the page`);
       }
       if (name === "project-phone") {
         // The page scrolls inside its column, so the whole file is shot on a phone as tall as it.
