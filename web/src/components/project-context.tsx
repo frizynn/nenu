@@ -86,7 +86,7 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
       {/* The files' rows before they arrive, so nothing under them moves when they do. */}
       <ul aria-hidden className="desk-context-files">
         {[44, 28, 36].map((width) => <li key={width} className="desk-context-file"><span className="desk-context-row">
-          <span className="h-3 animate-pulse rounded bg-muted motion-reduce:animate-none" style={{ width: `${width}%` }} />
+          <span className="h-3 rounded bg-muted" style={{ width: `${width}%` }} />
         </span></li>)}
       </ul>
     </>)}
