@@ -911,3 +911,44 @@ describe("loaders — a pane opens before its read lands", () => {
     expect(data.text).toBe(paneTextWithDraft());
   });
 });
+
+// Opening a pane asks for its chat's conversation beside the pane's own read, and only where the chat
+// will read one: on the way into the pane, for an agent Nenu reads, not shown as its raw terminal.
+describe("paneLoader's conversation read", () => {
+  const counted = () => {
+    const reads: string[] = [];
+    server.use(http.get("/api/pane/:id/history", ({ params }) => {
+      reads.push(String(params.id));
+      return HttpResponse.json({ available: true, entries: [], hasMore: false, total: 0, fileTruncated: false });
+    }));
+    return reads;
+  };
+  const open = async (paneId: string, search = "") => {
+    const { paneLoader } = await import("./loaders");
+    await paneLoader({ params: { paneId }, request: new Request(`http://localhost/pane/${encodeURIComponent(paneId)}${search}`) });
+  };
+
+  it("starts on the way into an agent's pane, and not when only the search changes", async () => {
+    const reads = counted();
+    const { rootLoader } = await import("./loaders");
+    await rootLoader();
+    await open("w1:p1");
+    await vi.waitFor(() => expect(reads).toEqual(["w1:p1"]));
+    await open("w1:p1", "?view=changes");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reads).toEqual(["w1:p1"]);
+  });
+
+  it("does not start for a shell, nor for a pane shown as its raw terminal", async () => {
+    const reads = counted();
+    const { rootLoader } = await import("./loaders");
+    const { paneDisplayScope, saveRawTerminal } = await import("./raw-terminal");
+    await rootLoader();
+    saveRawTerminal(paneDisplayScope(undefined, "w1:p1"), true);
+    onTestFinished(() => saveRawTerminal(paneDisplayScope(undefined, "w1:p1"), false));
+    await open("w2:p2");
+    await open("w1:p1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reads).toEqual([]);
+  });
+});

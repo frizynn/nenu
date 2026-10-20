@@ -34,7 +34,6 @@ import type {
   SnapshotResponse,
   TemplateView,
   OrgProjectDetail,
-  OrgRoutine,
   OrgTask,
   StatusFile,
   ThreadReport,
@@ -468,18 +467,60 @@ const historyCache = new Map<string, { etag: string | null; response: PaneHistor
 let historySequence = 0;
 let historyAuthEpoch = 0;
 
+/** The newest turns a chat reads on open and on every poll after (use-live-conversation.ts). */
+export const CONVERSATION_WINDOW = 60;
+// A chat's first read started before the chat mounts (its pane's loader), so the chat's first read takes
+// it over instead of asking only after its first render. Taken once, only while fresh, and never across a
+// change of read access.
+const warmHistory = new Map<string, { at: number; read: Promise<PaneHistoryResponse> }>();
+const WARM_MS = 4_000;
+
+/** Start reading a pane's newest conversation window now, for its chat's first read to take over. */
+export function warmConversation(paneId: string, session?: string): void {
+  const url = historyUrl(paneId, { limit: CONVERSATION_WINDOW }, session);
+  const warm = warmHistory.get(url);
+  if (warm && Date.now() - warm.at < WARM_MS) return;
+  const read = fetchHistory(paneId, { limit: CONVERSATION_WINDOW }, session);
+  read.catch(() => {});
+  warmHistory.delete(url);
+  warmHistory.set(url, { at: Date.now(), read });
+  if (warmHistory.size > 8) warmHistory.delete(warmHistory.keys().next().value!);
+}
+
+/**
+ * The read `warmConversation` started for this pane, for a chat's first read only: undefined when there
+ * is none or it is older than WARM_MS (a change of read access clears them all). Given up when `signal` aborts.
+ */
+export function takeWarmConversation(paneId: string, session: string | undefined, signal?: AbortSignal): Promise<PaneHistoryResponse> | undefined {
+  const url = historyUrl(paneId, { limit: CONVERSATION_WINDOW }, session);
+  const warm = warmHistory.get(url);
+  warmHistory.delete(url);
+  if (!warm || Date.now() - warm.at >= WARM_MS) return undefined;
+  return untilAborted(warm.read, signal);
+}
+
+function historyUrl(paneId: string, opts: { limit?: number; before?: string }, session: string | undefined): string {
+  const q = new URLSearchParams();
+  if (opts.limit) q.set("limit", String(opts.limit));
+  if (opts.before) q.set("before", opts.before);
+  const qs = q.toString();
+  return withSession(`/api/pane/${encodeURIComponent(paneId)}/history${qs ? `?${qs}` : ""}`, session);
+}
+
+/** `read`, given up as soon as `signal` aborts; the read itself runs on for whoever else holds it. */
+function untilAborted<T>(read: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return read;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return Promise.race([read, new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))]);
+}
+
 export async function fetchHistory(
   paneId: string,
   opts: { limit?: number; before?: string } = {},
   session?: string,
   signal?: AbortSignal,
 ): Promise<PaneHistoryResponse> {
-  const q = new URLSearchParams();
-  if (opts.limit) q.set("limit", String(opts.limit));
-  if (opts.before) q.set("before", opts.before);
-  const qs = q.toString();
-  const path = `/api/pane/${encodeURIComponent(paneId)}/history${qs ? `?${qs}` : ""}`;
-  const url = withSession(path, session);
+  const url = historyUrl(paneId, opts, session);
   const cacheable = opts.limit !== undefined && opts.limit > 0 && opts.limit <= 120 && !opts.before;
   const sequence = ++historySequence;
   const authEpoch = historyAuthEpoch;
@@ -502,6 +543,7 @@ export async function fetchHistory(
     if (res.status === 401 || res.status === 403) {
       historyAuthEpoch++;
       historyCache.clear();
+      warmHistory.clear();
     } else assertCurrentAuthorization();
     throw await apiError(res);
   }
@@ -734,8 +776,8 @@ export function fetchOrgStatus(project: string, signal?: AbortSignal): Promise<{
   return req(`/api/org/status?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 
-/** What the project's threads receive and its routines; each null when this Organizations has none. */
-export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null; routines: OrgRoutine[] | null }> {
+/** What the project's threads receive; null when this Organizations has none. */
+export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null }> {
   return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
 }
 

@@ -1,6 +1,7 @@
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
+import { paneDisplayScope } from "@/lib/raw-terminal";
 import { agentBusy, turnRunning } from "@/lib/turn";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation, SubagentSubtitle } from "@/components/subagent-conversation";
@@ -39,7 +40,7 @@ import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space
 import { cn } from "@/lib/utils";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
-import { adapterFor } from "@/lib/harness";
+import { adapterFor, readsConversation } from "@/lib/harness";
 import { blockOwnsKeyboard } from "@/lib/harness/dialog-contract";
 import { terminalWait } from "@/lib/terminal-wait";
 import { FindBar, thirdScrollTop } from "@/components/find-bar";
@@ -249,7 +250,7 @@ export function AgentChat({
   const unavailable = bridge !== "connected" || lost;
   const spawning = useSpawnState(paneId);
   // Single display-prefs instance: the View controls (in <Composer>) write it, the mirror reads it.
-  const displayScope = JSON.stringify([session ?? "default", paneId]);
+  const displayScope = paneDisplayScope(session, paneId);
   const { prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus } = useDisplayPrefs(displayScope);
   // Raw-terminal escape hatch: when on, every Claude grammar is bypassed and the plain mirror shows,
   // so a mis-detected/mis-rendered dialog can always be driven by hand with the keys pad.
@@ -293,7 +294,7 @@ export function AgentChat({
     if (next) setRawTerminal(false);
   }, [setRawTerminal]);
   const conversation = useLiveConversation({
-    paneId, session, enabled: !isShell && Boolean(adapterFor(agent?.agent)), paused: prefs.rawTerminal || Boolean(subagent), busy: agent?.status === "working",
+    paneId, session, enabled: readsConversation(agent), paused: prefs.rawTerminal || Boolean(subagent), busy: agent?.status === "working",
   });
   const hasConversation = Boolean(agent?.hasSession || conversation.history?.available);
   const operatorCommands = useOperatorCommands();
@@ -439,7 +440,7 @@ export function AgentChat({
   // (and sometimes before its status leaves `unknown`). Treat the harness classification itself as
   // enough to mount the workbench; otherwise a newly launched Codex stays in the raw terminal until
   // a later navigation remounts this view.
-  const conversationCapable = !isShell && Boolean(adapterFor(agent?.agent)) &&
+  const conversationCapable = readsConversation(agent) &&
     Boolean(
       agent?.agent === "codex" || (agent?.agent === "claude" && agent.status === "unknown") ||
       agent?.hasSession ||

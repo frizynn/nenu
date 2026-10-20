@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { loadRawTerminal, saveRawTerminal } from "@/lib/raw-terminal";
+
 // Terminal mirror display preferences, persisted in localStorage.
 // Safe to call in SSR contexts (localStorage guarded throughout).
 
@@ -37,27 +39,13 @@ export interface DisplayPrefs {
 // and is scoped to one Herdr session + pane.
 const STORAGE_KEY = "collie:display-prefs:v5";
 const LEGACY_STORAGE_KEY = "collie:display-prefs:v4";
-const RAW_STORAGE_KEY = "collie:raw-terminal-scopes:v1";
 const DEFAULT_SCOPE = "global";
-const MAX_RAW_SCOPES = 32;
 export const FONT_MIN = 9;
 export const FONT_MAX = 16;
 const DEFAULTS: DisplayPrefs = { wrap: true, fontSize: 12, rawTerminal: false, tapToFocus: true };
 
 function clampFont(n: number): number {
   return Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(n)));
-}
-
-function loadRawTerminal(scope: string): boolean {
-  try {
-    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(RAW_STORAGE_KEY) : null;
-    if (!raw) return false;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return false;
-    return (parsed as Record<string, unknown>)[scope] === true;
-  } catch {
-    return false;
-  }
 }
 
 function loadPrefs(scope: string): DisplayPrefs {
@@ -88,22 +76,6 @@ function savePrefs(prefs: DisplayPrefs): void {
     }
   } catch {
     // Ignore quota / SSR write errors.
-  }
-}
-
-function saveRawTerminal(scope: string, rawTerminal: boolean): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    const stored = localStorage.getItem(RAW_STORAGE_KEY);
-    const parsed: unknown = stored ? JSON.parse(stored) : {};
-    const previous = typeof parsed === "object" && parsed !== null
-      ? parsed as Record<string, unknown>
-      : {};
-    const entries = Object.entries(previous).filter(([key, value]) => key !== scope && value === true);
-    if (rawTerminal) entries.push([scope, true]);
-    localStorage.setItem(RAW_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries.slice(-MAX_RAW_SCOPES))));
-  } catch {
-    // Ignore quota / malformed previous payload / SSR write errors.
   }
 }
 

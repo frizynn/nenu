@@ -4,6 +4,20 @@ import { ChevronRight, Folder, FolderOpen, RefreshCw } from "@/components/ui/ico
 import { fetchProjectFiles, type ProjectFilesPage } from "@/lib/api";
 import { FileLink } from "./file-link";
 
+// Each folder's last listing, drawn at once when it opens again while a fresh one is read behind it.
+const listed = new Map<string, ProjectFilesPage>();
+const LISTED_MAX = 64;
+
+function remember(key: string, page: ProjectFilesPage): void {
+  listed.delete(key);
+  listed.set(key, page);
+  if (listed.size > LISTED_MAX) listed.delete(listed.keys().next().value!);
+}
+
+export function __forgetListings(): void {
+  listed.clear();
+}
+
 type Props = {
   paneId: string;
   session?: string;
@@ -43,7 +57,8 @@ function Directory({
   path,
   depth,
 }: Props & { path: string; depth: number }) {
-  const [page, setPage] = useState<ProjectFilesPage | null>(null);
+  const key = JSON.stringify([paneId, session ?? null, path]);
+  const [page, setPage] = useState<ProjectFilesPage | null>(() => listed.get(key) ?? null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -51,13 +66,15 @@ function Directory({
     setError(false);
     void fetchProjectFiles(paneId, path, session, controller.signal)
       .then((next) => {
-        if (!controller.signal.aborted) setPage(next);
+        if (controller.signal.aborted) return;
+        remember(key, next);
+        setPage(next);
       })
       .catch(() => {
         if (!controller.signal.aborted) setError(true);
       });
     return () => controller.abort();
-  }, [paneId, session, path, attempt]);
+  }, [paneId, session, path, attempt, key]);
   if (error)
     return (
       <div role="alert" className="text-xs">

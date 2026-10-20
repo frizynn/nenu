@@ -187,6 +187,11 @@
 .desk-context-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .desk-context-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 @media (hover: hover) { button.desk-context-row:hover { background: var(--workbench-row-hover); } }
-.desk-context-text { max-height: 320px; margin: 0 12px 10px 36px; overflow: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--text-code); line-height: var(--text-code--line-height); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Each file a card of its own: its header, then its Markdown drawn under a rule, scrolling inside past a screenful. */
+.desk-context-files { display: flex; flex-direction: column; gap: 8px; }
+.desk-context-file { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.desk-context-file > .desk-context-row { min-height: 44px; padding: 8px 14px; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); }
+/* The text hangs from the file's name: the row's padding, chevron, icon and their gaps (14 + 14 + 10 + 14 + 10). */
+.desk-context-body { max-height: min(60vh, 560px); overflow: auto; padding: 14px 20px 18px 62px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
 .desk-context-chip { display: inline-flex; padding: 3px 10px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 @media (prefers-reduced-motion: reduce) { .desk-tab { transition: none; } }
