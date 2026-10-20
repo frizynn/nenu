@@ -201,6 +201,12 @@ export class FakeHerdr {
   }
 
   /** Put a dialog on screen (the pane reads `blocked`) or clear it with null. */
+  /** Moves a pane to another folder, as a `cd` in its shell would. */
+  setCwd(paneId: string, cwd: string): void {
+    const pane = this.panes.get(paneId);
+    if (pane) pane.cwd = cwd;
+  }
+
   setDialog(paneId: string, text: string | null): void {
     const pane = this.pane(paneId);
     pane.dialog = text;

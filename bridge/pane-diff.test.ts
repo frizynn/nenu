@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { paneDiff, sessionDiff, type DiffTarget, type GitRun } from "./pane-diff.ts";
+import { paneDiff, projectSessionDiff, sessionDiff, type DiffTarget, type GitRun } from "./pane-diff.ts";
 
 // Real git in a temporary repo: the parser's job is to agree with git, so git writes the fixtures.
 const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
@@ -258,6 +258,42 @@ describe("a session's changes, with or without a pull request", () => {
     } finally {
       rmSync(plain, { recursive: true, force: true });
       rmSync(lone, { recursive: true, force: true });
+    }
+  });
+
+  test("a folder in no repository reads its project's repository, and says which", async () => {
+    const coordinator = realpathSync(mkdtempSync(join(tmpdir(), "nenu-coordinator-")));
+    const missing = join(coordinator, "gone");
+    const bases: string[] = [];
+    const base = (folder: string) => {
+      bases.push(folder);
+      return undefined;
+    };
+    try {
+      const diff = await projectSessionDiff(coordinator, "branch", [missing, coordinator, repo], { base });
+      if (!diff.ok) throw new Error(diff.message);
+      expect(diff.repo).toBe(repo);
+      expect(diff.base).toBe("main");
+      expect(diff.files.map((file) => file.path)).toContain("src/a.ts");
+      // Each folder's PR base is asked of that folder, the pane's own first.
+      expect(bases).toEqual([coordinator, missing, coordinator, repo]);
+      // A worktree is read as itself: its project's repository is never asked.
+      expect(await projectSessionDiff(repo, "branch", [coordinator], { base: () => undefined })).not.toHaveProperty("repo");
+    } finally {
+      rmSync(coordinator, { recursive: true, force: true });
+    }
+  });
+
+  test("a folder in no repository, with none to read instead, says where it is", async () => {
+    const plain = realpathSync(mkdtempSync(join(tmpdir(), "nenu-plain-")));
+    try {
+      const alone = await projectSessionDiff(plain, "branch", [], { base: () => undefined });
+      expect(alone).toMatchObject({ ok: false, reason: "no-repo" });
+      expect(alone.ok ? "" : alone.message).toBe(`This pane works in ${plain}, which is not in a git repository, so there are no changes to read.`);
+      const named = await projectSessionDiff(plain, "branch", [join(plain, "gone")], { base: () => undefined });
+      expect(named.ok ? "" : named.message).toContain("no repository its project names could be read");
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
     }
   });
 

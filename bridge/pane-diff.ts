@@ -8,7 +8,8 @@
 // external diff, no textconv, no fsmonitor. The read is bounded: bytes git may print, files listed,
 // lines kept per file, and a timeout. What a bound cut is said in the answer, never silently dropped.
 import { realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, sep } from "node:path";
 
 import { servicePath } from "./claude-sessions.ts";
 import { isPrivateProjectPath } from "./pane-files.ts";
@@ -83,8 +84,10 @@ export type PaneDiff =
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
+    /** The project's repository, read because the pane's own folder is not in one (`projectSessionDiff`). */
+    repo?: string;
   }
-  | { ok: false; reason: keyof typeof MESSAGES; message: string };
+  | { ok: false; reason: keyof typeof MESSAGES; message: string; repo?: string };
 
 const MESSAGES = {
   "no-folder": "This pane's folder is not available, so there is no worktree to read.",
@@ -285,6 +288,35 @@ export async function sessionDiff(
   if (mergeBase.code !== 0 || !/^[0-9a-f]{40,64}$/.test(forkPoint)) return refuse("failed");
   const read = await readRange(git, [forkPoint], limits, true);
   return read ? { ok: true, base, head, source: "worktree", ...read } : refuse("failed");
+}
+
+/**
+ * What a session changed where its work is: its own folder, else, when that is in no repository (a
+ * coordinator works in its project's folder), the first repository its project names that is one,
+ * named as `repo`. `base` gives the PR's base for a folder. The client never names either folder.
+ */
+export async function projectSessionDiff(
+  cwd: string | undefined,
+  scope: DiffScope,
+  repos: readonly string[],
+  { base, run, limits }: { base: (folder: string) => string | undefined; run?: GitRun; limits?: Partial<DiffLimits> },
+): Promise<PaneDiff> {
+  const own = await sessionDiff(cwd, scope, { base: cwd ? base(cwd) : undefined, run, limits });
+  if (own.ok || own.reason !== "no-repo") return own;
+  for (const repo of repos) {
+    const read = await sessionDiff(repo, scope, { base: base(repo), run, limits });
+    // A repository that is gone, or no longer one, gives way to the next.
+    if (read.ok || (read.reason !== "no-repo" && read.reason !== "no-folder")) return { ...read, repo };
+  }
+  const folder = homeLabel(cwd!);
+  return { ...own, message: repos.length
+    ? `This pane works in ${folder}, which is not a git repository, and no repository its project names could be read.`
+    : `This pane works in ${folder}, which is not in a git repository, so there are no changes to read.` };
+}
+
+/** A path with the home folder written as `~`. */
+function homeLabel(path: string, home = homedir()): string {
+  return path === home ? "~" : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
 /** The pane's folder as its real path, or undefined when it is not an absolute path to a directory. */
