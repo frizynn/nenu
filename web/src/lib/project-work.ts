@@ -65,13 +65,13 @@ const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, 
 
 const dayKey = (at: Date) => `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
 
-/** A day as History heads it: Today, Yesterday, a weekday within the week, then the date. */
+/** A day as History heads it: Today, Yesterday, a weekday with its date within the week, then the date. */
 export function dayLabel(at: Date, now: Date): string {
   const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
     - new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime()) / 86_400_000);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
-  if (days > 1 && days < 7) return at.toLocaleDateString(undefined, { weekday: "long" });
+  if (days > 1 && days < 7) return at.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   return at.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
 }
 

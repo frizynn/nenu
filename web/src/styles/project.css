@@ -149,7 +149,7 @@
 .desk-search:focus-within { border-color: var(--ring); }
 .desk-search input { min-width: 0; flex: 1; background: transparent; color: var(--foreground); font-size: var(--text-footnote); outline: none; }
 .desk-history-day + .desk-history-day { margin-top: 20px; }
-.desk-history-label { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px 4px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
+.desk-history-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px 8px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
 .desk-history-label > span { color: var(--subtle-foreground); font-weight: 400; }
 .desk-row-by { margin-left: 8px; color: var(--subtle-foreground); font-size: var(--text-footnote); }
 @media (prefers-reduced-motion: reduce) {
@@ -168,15 +168,13 @@
 @media (hover: hover) { .routine-row:not([data-chosen]):hover { background: var(--workbench-row-hover); } }
 .desk-card.routine-row + .routine-row { margin-top: 0; }
 .routine-off { padding: 0 6px; border-radius: var(--radius-sm); background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
-.routine-pick { display: none; }
-@media (min-width: 1024px) { .routine-pick { display: flex; align-items: center; justify-content: center; min-height: 160px; padding: 24px; border: 1px dashed var(--border); border-radius: var(--radius-xl); color: var(--subtle-foreground); font-size: var(--text-footnote); text-align: center; } }
 @keyframes routine-in { from { opacity: 0; transform: translateX(8px); } }
 .routine-detail { animation: routine-in 180ms cubic-bezier(0.2, 0, 0, 1) both; }
 .routine-state { padding: 1px 8px; border-radius: 9999px; background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
 .routine-state-on { background: color-mix(in srgb, var(--status-done) 16%, transparent); color: var(--status-done); }
 .routine-label { color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
 .routine-event { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1); }
-.routine-event[aria-checked="true"] { border-color: transparent; background: var(--foreground); color: var(--background); }
+.routine-event[aria-checked="true"] { border-color: color-mix(in srgb, var(--foreground) 35%, transparent); background: var(--workbench-row-selected); color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) {
   .routine-detail { animation: task-row-fade 120ms ease-out both; }
   .routine-row, .routine-event { transition: none; }

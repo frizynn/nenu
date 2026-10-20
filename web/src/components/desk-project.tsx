@@ -118,7 +118,7 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
       const id = card.coordinator?.thread.id ?? "root";
       const open = folds[id] ?? true;
       const own = card.coordinator ? (card.coordinator.state === "working" ? "working" : undefined)
-        : rootState ? STATE_LABEL[rootState].toLowerCase() : undefined;
+        : rootState ? `coordinator ${STATE_LABEL[rootState].toLowerCase()}` : undefined;
       return <CoordinatorWorkCard key={id} card={card} waiting={waiting(id)} open={open} ownState={own}
         onToggle={() => setFolds((current) => ({ ...current, [id]: !open }))}
         onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
@@ -152,7 +152,7 @@ function WorkHistory({ project, count, onBack, onOpenNode }: { project: ProjectV
       const rows = day.rows.slice(0, left);
       left -= rows.length;
       return <section key={day.key} aria-label={day.label} className="desk-history-day">
-        <h2 className="desk-history-label">{day.label}<span className="tabular-nums">{day.rows.length}</span></h2>
+        <h2 className="desk-history-label">{day.label}<span className="tabular-nums">{day.rows.length} finished</span></h2>
         <div className="desk-card">{rows.map((row) => <HistoryItem key={row.node.thread.id} row={row} onOpen={onOpenNode} />)}</div>
       </section>;
     })}

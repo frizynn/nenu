@@ -100,7 +100,10 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
   // A row with nothing behind it (no thread, task or page) has no context to open.
   const explained = [entry, ...entry.parts].some((part) => part.links.length > 0);
   // What waits on you reads as a question: its kind, what it asks, what its coordinator says, then what to do.
-  const { title, body } = kind ? askHeadline(entry) : { title: entry.text, body: answer === undefined ? entry.detail : "" };
+  const { title, body } = kind ? askHeadline(entry) : { title: entry.text, body: "" };
+  // Once answered here, an ask's old answer from its coordinator no longer says anything.
+  const said = kind === "ask" && answer !== undefined ? "" : body;
+  const line = kind ? "" : [owner, answer === undefined && entry.detail].filter(Boolean).join(" · ");
   const words = whose
     ? <Link to={coordinator} className={cn("block break-words text-subhead hover:underline underline-offset-2", kind && "font-medium")}>{title}</Link>
     : <p className={cn("break-words text-subhead", kind && "font-medium")}>{title}</p>;
@@ -112,8 +115,8 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
           {answer !== undefined ? "Answered" : ASK_KIND_LABEL[kind]}{owner && <span className="ask-kind-owner">{owner}</span>}
         </p>}
         {words}
-        {body && <p className={cn("break-words", kind ? "mt-0.5 text-subhead text-muted-foreground" : "text-footnote text-muted-foreground")}>{body}</p>}
-        {!kind && owner && <p className="break-words text-footnote text-muted-foreground">{owner}</p>}
+        {said && <p className="mt-0.5 break-words text-subhead text-muted-foreground">{said}</p>}
+        {line && <p className="break-words text-footnote text-muted-foreground">{line}</p>}
         <Answered answer={answer} at={entry.answeredAt} />
         {why && <Why why={why} entry={entry} session={session} readOnly={readOnly} />}
         {entry.links.length > 0 && <Chips entry={entry} links={entry.links} session={session} />}
@@ -152,7 +155,7 @@ function Part({ head, part, session, answering }: { head: AskEntry; part: AskEnt
 function AnswerControl({ entry, session, answering }: { entry: AskEntry; session?: string; answering: Answering }) {
   const [writing, setWriting] = useState(false);
   if (!answering.answerable || answering.answer !== undefined) return null;
-  if (!writing) return <Button type="button" size="sm" variant="outline" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>
+  if (!writing) return <Button type="button" size="sm" variant="secondary" className="desk-head-action-quiet" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>
     <ChatCircle aria-hidden className="size-3.5" />Answer</Button>;
   return <AnswerForm entry={entry} session={session} onCancel={() => setWriting(false)} onAnswered={(text) => { setWriting(false); answering.onAnswered(text); }} />;
 }
@@ -270,7 +273,7 @@ function AnswerForm({ entry, session, onCancel, onAnswered }: {
     <form className="mt-2 flex w-full flex-col gap-2" onSubmit={(event) => void submit(event)}>
       <label htmlFor={id} className="sr-only">Your answer</label>
       {/* STATUS.md keeps an ask on one line, so a line break becomes a space. */}
-      <textarea id={id} rows={2} value={text} maxLength={2_000} autoFocus disabled={busy}
+      <textarea id={id} rows={2} value={text} maxLength={2_000} autoFocus disabled={busy} placeholder="Your answer"
         onChange={(event) => setText(event.target.value.replace(/[\r\n]+/g, " "))}
         className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-subhead" />
       {error && <p role="alert" className="text-footnote text-destructive">{error}</p>}

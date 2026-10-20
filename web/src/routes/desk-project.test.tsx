@@ -112,10 +112,15 @@ describe("a desk's project page", () => {
     expect(lead.getByRole("link", { name: /Open coordinator/ })).toHaveAttribute("href", "/project/hub/node/t-3");
   });
 
-  it("opens a routine beside the list, says whom it reaches, and turns it off through Organizations", async () => {
+  it("opens the first routine beside the list, another on a tap, says whom it reaches, and turns it off through Organizations", async () => {
     const { user, router } = setup("/project/hub?tab=routines");
-    await user.click(await screen.findByRole("button", { name: /pr-followup/ }));
-    expect(router.state.location.search).toBe("?tab=routines&routine=pr-followup");
+    expect(await screen.findByRole("complementary", { name: "Routine pr-followup" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /lead-daily/ }));
+    expect(router.state.location.search).toBe("?tab=routines&routine=lead-daily");
+    await user.click(within(await screen.findByRole("complementary", { name: "Routine lead-daily" })).getByRole("button", { name: "Close routine" }));
+    expect(router.state.location.search).toBe("?tab=routines&routine=");
+    expect(screen.queryByRole("complementary")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /pr-followup/ }));
     const detail = within(await screen.findByRole("complementary", { name: "Routine pr-followup" }));
     expect(detail.getByText("The thread that owns the pull request")).toBeInTheDocument();
     expect(detail.getByText("Fix the checks.")).toBeInTheDocument();

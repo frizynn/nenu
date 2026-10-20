@@ -178,7 +178,8 @@ export async function listTemplates(run: OrgRun, project: string): Promise<Templ
 export async function listRoutines(run: OrgRun, project: string): Promise<RoutineList> {
   const slug = validateProjectSlug(project);
   const unavailable: RoutineList = { available: false, editable: false, routines: [], broken: 0 };
-  const result = await run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 });
+  // `routine set` edits one (docs/json.md, Routines); an Organizations that predates it refuses its --help.
+  const [result, editable] = await Promise.all([run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 }), offers(run, ["routine", "set"])]);
   if (result.code !== 0) {
     if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return unavailable;
     throw commandError(result);
@@ -187,8 +188,7 @@ export async function listRoutines(run: OrgRun, project: string): Promise<Routin
   if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.routines)) return unavailable;
   return {
     available: true,
-    // `routine set` edits one (docs/json.md, Routines); an Organizations that predates it refuses its --help.
-    editable: (await run(["routine", "set", "--help"], { timeoutMs: 10_000 })).code === 0,
+    editable,
     routines: value.routines.flatMap((item) => {
       const routine = parseRoutine(item);
       return routine ? [routine] : [];

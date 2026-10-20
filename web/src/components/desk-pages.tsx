@@ -82,11 +82,13 @@ function rowEnd(node: OrgNode, now: number): string | undefined {
 /** A thread in a card: its state as a dot, its name, its open pull request, and its end. */
 export function WorkRow({ node, onOpen, now = Date.now() }: { node: OrgNode; onOpen: (node: OrgNode) => void; now?: number }) {
   const { thread } = node;
-  const pr = thread.pr && (thread.pr.state === "open" || thread.pr.state === "draft") ? thread.pr : undefined;
+  // A pull request that merged or closed still shows, with its state: without it the row read as work left to do.
+  const pr = thread.pr;
+  const settled = pr && pr.state !== "open" && pr.state !== "draft" ? pr.state : undefined;
   return <button type="button" className="desk-row" onClick={() => onOpen(node)}>
     <NodeDot state={node.state} className="size-1.5" />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-    {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}</span>}
+    {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
     <span className="desk-row-end">{rowEnd(node, now)}</span>
   </button>;
 }

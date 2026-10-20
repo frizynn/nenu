@@ -56,7 +56,7 @@ describe("workCards", () => {
 
   it("heads a day by how far back it is", () => {
     const now = new Date("2026-10-20T09:00:00");
-    expect(dayLabel(new Date("2026-10-18T23:00:00"), now)).toBe("Sunday");
+    expect(dayLabel(new Date("2026-10-18T23:00:00"), now)).toBe("Sunday, Oct 18");
     expect(dayLabel(new Date("2026-10-13T23:00:00"), now)).toBe("Oct 13");
     expect(dayLabel(new Date("2025-10-13T23:00:00"), now)).toBe("Oct 13, 2025");
   });

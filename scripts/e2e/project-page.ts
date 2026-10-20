@@ -176,10 +176,15 @@ async function main(): Promise<void> {
     {
       const { page, context } = await open(`/project/${slug}?tab=routines`, desk);
       await shoot(page, "routines-1440");
+      // The first routine opens on its own; closed, a tap opens it again and its detail slides in.
+      const close = page.getByRole("button", { name: "Close routine" });
       const first = page.locator("main li button[aria-expanded]").first();
-      if (await first.count()) {
+      if (await close.count()) {
+        await close.click();
+        await page.waitForTimeout(300);
+        await shoot(page, "routines-closed-1440");
         await first.click();
-        await page.waitForTimeout(120);
+        await page.waitForTimeout(60);
         await shoot(page, "routines-opening-1440");
         await page.waitForTimeout(600);
         await shoot(page, "routines-detail-1440");

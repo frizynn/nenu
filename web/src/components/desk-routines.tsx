@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { ChevronRight, Clock, FileText, GitPullRequest, Pencil, X } from "@/components/ui/icon";
 
@@ -36,11 +36,12 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
   const [busy, setBusy] = useState(false);
   const { list, error } = routines;
   const listed = list ? shown(list.routines) : [];
-  const open = listed.find((routine) => routine.name === params.get("routine"));
+  // The first routine opens beside the list until another is picked; closing it leaves `routine=` empty.
+  const asked = params.get("routine");
+  const open = asked === null ? listed[0] : listed.find((routine) => routine.name === asked);
   const select = (name?: string) => setParams((current) => {
     const kept = new URLSearchParams(current);
-    if (name) kept.set("routine", name);
-    else kept.delete("routine");
+    kept.set("routine", name ?? "");
     return kept;
   }, { replace: true });
   const toggle = async (routine: RoutineView, on: boolean) => {
@@ -57,7 +58,7 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
   const line = (text: string) => <p className="px-1 text-subhead text-muted-foreground">{text}</p>;
   const editable = !readOnly && list?.editable === true;
 
-  return <div className={cn("grid items-start gap-5", listed.length > 0 && "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]")}>
+  return <div className={cn("grid items-start gap-5", open && "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]")}>
     <div className="min-w-0">
       <p className="mb-3 px-1 text-footnote text-muted-foreground">What runs on its own: on a schedule, or when a pull request changes. Each one sends its prompt to whom it names.</p>
       {failed && <p role="alert" className="mb-3 px-1 text-footnote text-destructive">{failed}</p>}
@@ -80,14 +81,12 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
             </button>
             <Switch checked={routine.enabled} disabled={readOnly || busy} aria-label={`${routine.name} on`}
               onCheckedChange={(on) => void toggle(routine, on)} />
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-subtle-foreground" />
+            {!chosen && <ChevronRight aria-hidden className="size-4 shrink-0 text-subtle-foreground" />}
           </li>;
         })}</ul>}
       {list?.broken ? <p className="mt-3 px-1 text-footnote text-muted-foreground">{list.broken} routine {list.broken === 1 ? "file does" : "files do"} not parse.</p> : null}
     </div>
-    {open
-      ? <RoutineDetail key={open.name} routine={open} threads={threads} editable={editable} onSave={(edit) => routines.save(open.name, edit)} onClose={() => select()} />
-      : listed.length > 0 && <p className="routine-pick">Pick a routine to read what it asks{editable ? " and change it" : ""}.</p>}
+    {open && <RoutineDetail key={open.name} routine={open} threads={threads} editable={editable} onSave={(edit) => routines.save(open.name, edit)} onClose={() => select()} />}
   </div>;
 }
 
@@ -108,7 +107,7 @@ function RoutineDetail({ routine, threads, editable, onSave, onClose }: {
     ["Last run", routine.trigger === "pr" ? "Not recorded for pull-request routines" : Number.isNaN(last) ? "Not yet" : timeAgo(last, now)],
   ];
   return <aside aria-label={`Routine ${routine.name}`} className="desk-card routine-detail min-w-0 p-4">
-    <div className="mb-3 flex items-center gap-2">
+    <div className="mb-3 flex min-h-8 items-center gap-2">
       <h2 className="min-w-0 flex-1 truncate text-headline">{routine.name}</h2>
       <span className={cn("routine-state", routine.enabled && "routine-state-on")}>{routine.enabled ? "On" : "Off"}</span>
       {editable && !editing && <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)}><Pencil aria-hidden className="size-3.5" />Edit</Button>}
@@ -130,8 +129,8 @@ function RoutineDetail({ routine, threads, editable, onSave, onClose }: {
 }
 
 /** Whom a routine can reach: the project coordinator, the pull request's thread, an open coordinator, the node it names now, or a new thread. */
-function destinations(routine: RoutineDraft, threads: readonly ProjectThreadView[], current: string): Array<{ value: string; label: string }> {
-  const coordinators = openCoordinators(orgTree(threads)).map(({ node }) => ({ value: `node:${node.thread.id}`, label: node.thread.title }));
+function destinations(routine: RoutineDraft, open: ReadonlyArray<{ value: string; label: string }>, threads: readonly ProjectThreadView[], current: string): Array<{ value: string; label: string }> {
+  const coordinators = open.map((option) => ({ value: `node:${option.value}`, label: option.label }));
   const named = current.startsWith("node:") && !coordinators.some((option) => option.value === current)
     ? [{ value: current, label: threads.find((thread) => `node:${thread.id}` === current)?.title ?? current.slice("node:".length) }] : [];
   return [
@@ -149,7 +148,7 @@ function RoutineForm({ routine, threads, onSave, onDone }: {
   onDone: () => void;
 }) {
   const id = useId();
-  const initial = routineDraft(routine, threads);
+  const initial = useMemo(() => routineDraft(routine, threads), [routine, threads]);
   const [draft, setDraft] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -161,7 +160,11 @@ function RoutineForm({ routine, threads, onSave, onDone }: {
   });
   const edit = routineChanges(routine, threads, draft);
   const changed = Object.keys(edit).length > 0;
-  const parents = [{ value: "root", label: "the project" }, ...openCoordinators(orgTree(threads)).map(({ node }) => ({ value: node.thread.id, label: node.thread.title }))];
+  const coordinators = useMemo(() => openCoordinators(orgTree(threads)).map(({ node }) => ({ value: node.thread.id, label: node.thread.title })), [threads]);
+  // The node a new thread starts under now, even when it is no open coordinator, so the editor says what the file says.
+  const parents = [{ value: "root", label: "the project" }, ...coordinators,
+    ...(initial.parent !== "root" && !coordinators.some((option) => option.value === initial.parent)
+      ? [{ value: initial.parent, label: threads.find((thread) => thread.id === initial.parent)?.title ?? initial.parent }] : [])];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -201,7 +204,7 @@ function RoutineForm({ routine, threads, onSave, onDone }: {
     <div className="flex flex-col gap-1.5">
       <label htmlFor={`${id}-to`} className="routine-label">Goes to</label>
       <SelectField id={`${id}-to`} value={draft.to} onChange={(event) => set({ to: event.target.value })}>
-        {destinations(draft, threads, initial.to).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {destinations(draft, coordinators, threads, initial.to).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </SelectField>
       {draft.to === "new" && <>
         <label htmlFor={`${id}-parent`} className="sr-only">Under</label>
