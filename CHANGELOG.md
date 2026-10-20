@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.33.1] - 2026-10-21
+## [1.34.1] - 2026-10-21
 
 ### Fixed
 
@@ -20,6 +20,19 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - `bun scripts/e2e/perf.ts`: tap to content on Context, Work, a thread, the project chat, Files and Artifacts, over a copy of a real project and real conversations, with each tap's reads in order; the copy's Herdr sockets all point at the bench's and nothing is written outside it (3c66e021, c94be377, 7dc8c70e, f5885ff5, 6d9b3736, 18517701).
+
+## [1.34.0] - 2026-10-20
+
+### Added
+
+- Edit a routine from its project's Routines: when it runs, whom it reaches and what it asks, through Organizations' `routine set`; the first routine opens beside the list (05a641bc, 27a2ad10, 6d4fe864).
+- History on a project's Work: everything finished by day, with a search; `bun scripts/e2e/project-page.ts` captures the page at a real project's size (27a2ad10, e56e58a1, 6d4fe864).
+
+### Changed
+
+- Work shows only the open work; coordinators that never ran a thread no longer show, so no name repeats; a row keeps its merged or closed pull request; a fold no longer re-reads the tree (27a2ad10, b3448861, 6d4fe864).
+- Waiting on you reads as questions: the kind in red, what it asks, the recommendation, then Answer as a button; Your asks on a phone too (27a2ad10, 6d4fe864).
+- A project's and a coordinator's header buttons share one size and centre on the title; tab counts are pills (27a2ad10).
 
 ## [1.33.0] - 2026-10-20
 

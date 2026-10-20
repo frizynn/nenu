@@ -125,8 +125,12 @@
 .desk-tab[aria-selected="true"] { color: var(--foreground); font-weight: 500; }
 .desk-tab[aria-selected="true"]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 2px; background: var(--foreground); }
 @media (hover: hover) { .desk-tab[aria-selected="false"]:hover { color: var(--foreground); } }
-.desk-tab-count { color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-.desk-tab-count[data-waiting] { color: var(--status-blocked); }
+.desk-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+.desk-tab-count[data-waiting] { background: color-mix(in srgb, var(--status-blocked) 16%, transparent); color: var(--status-blocked); }
+/* A page's header actions (DeskAction): one box for all of them, the primary in ink, the rest on a quiet fill. */
+.desk-head-action { padding-inline: 14px; gap: 8px; }
+.desk-head-action-quiet { background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--foreground); }
+@media (hover: hover) { .desk-head-action-quiet:hover { background: color-mix(in srgb, var(--foreground) 12%, transparent); } }
 .desk-card { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); overflow: hidden; }
 .desk-card + .desk-card { margin-top: 12px; }
 .desk-card-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; }
@@ -139,6 +143,46 @@
 @media (hover: hover) { .desk-row:hover { background: var(--workbench-row-hover); } }
 .desk-row-end { flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .desk-chip { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--radius-sm); background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+/* A desk's fold: the chevron turns and what it opens fades down into place, as the tree's History does. */
+.desk-fold { transition: transform 150ms cubic-bezier(0.2, 0, 0, 1); }
+@keyframes desk-reveal { from { opacity: 0; transform: translateY(-4px); } }
+.desk-reveal { animation: desk-reveal 180ms cubic-bezier(0.2, 0, 0, 1) both; }
+/* Work's line over its cards, and History's: what is open or the way back on the left, History or its search on the right. */
+.desk-toolbar { display: flex; align-items: center; gap: 12px; min-height: 32px; margin-bottom: 12px; padding-left: 4px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
+.desk-search { display: flex; align-items: center; gap: 8px; width: min(320px, 100%); height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: var(--muted-foreground); }
+.desk-search:focus-within { border-color: var(--ring); }
+.desk-search input { min-width: 0; flex: 1; background: transparent; color: var(--foreground); font-size: var(--text-footnote); outline: none; }
+.desk-history-day + .desk-history-day { margin-top: 20px; }
+.desk-history-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px 8px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
+.desk-history-label > span { color: var(--subtle-foreground); font-weight: 400; }
+.desk-row-by { margin-left: 8px; color: var(--subtle-foreground); font-size: var(--text-footnote); }
+@media (prefers-reduced-motion: reduce) {
+  .desk-fold { transition: none; }
+  .desk-reveal { animation: task-row-fade 120ms ease-out both; }
+}
+/* What waits on you (ask-list.tsx): each a question apart from the next, its kind in the one red above what it asks. */
+.ask-waiting { padding-block: 14px; }
+.ask-waiting + .ask-waiting { border-top: 1px solid var(--border); }
+.ask-kind { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-bottom: 2px; color: var(--status-blocked); font-size: var(--text-caption); font-weight: 600; letter-spacing: 0.01em; }
+.ask-kind[data-answered] { color: var(--status-done); }
+.ask-kind-owner { color: var(--muted-foreground); font-weight: 400; letter-spacing: 0; }
+/* Routines (desk-routines.tsx): a row says when, to whom and what; its detail slides in beside the list, which never moves. */
+.routine-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1); }
+.routine-row[data-chosen] { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); background: var(--workbench-row-selected); }
+@media (hover: hover) { .routine-row:not([data-chosen]):hover { background: var(--workbench-row-hover); } }
+.desk-card.routine-row + .routine-row { margin-top: 0; }
+.routine-off { padding: 0 6px; border-radius: var(--radius-sm); background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
+@keyframes routine-in { from { opacity: 0; transform: translateX(8px); } }
+.routine-detail { animation: routine-in 180ms cubic-bezier(0.2, 0, 0, 1) both; }
+.routine-state { padding: 1px 8px; border-radius: 9999px; background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
+.routine-state-on { background: color-mix(in srgb, var(--status-done) 16%, transparent); color: var(--status-done); }
+.routine-label { color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
+.routine-event { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1); }
+.routine-event[aria-checked="true"] { border-color: color-mix(in srgb, var(--foreground) 35%, transparent); background: var(--workbench-row-selected); color: var(--foreground); }
+@media (prefers-reduced-motion: reduce) {
+  .routine-detail { animation: task-row-fade 120ms ease-out both; }
+  .routine-row, .routine-event { transition: none; }
+}
 /* A desk project's Context tab: the files every thread receives and the project's links. */
 .desk-context-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .desk-context-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }

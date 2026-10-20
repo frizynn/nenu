@@ -6,6 +6,7 @@ import {
   createProject,
   listProfiles,
   listRoutines,
+  setRoutine,
   toggleRoutine,
   listTemplates,
   explainThread,
@@ -552,6 +553,7 @@ describe("herdr-organizations routine list", () => {
 
     expect(await listRoutines(run, "demo")).toEqual({
       available: true,
+      editable: true,
       broken: 1,
       routines: [
         { name: "nightly-deps", trigger: "schedule", to: "", parent: "", prompt: "Check the dependencies.", schedule: "daily 03:00", events: [], enabled: true,
@@ -560,7 +562,16 @@ describe("herdr-organizations routine list", () => {
           lastRun: "", nextRun: "" },
       ],
     });
-    expect(calls).toEqual([{ argv: ["routine", "list", "demo", "--json"], opts: { timeoutMs: 10_000 } }]);
+    expect(calls).toEqual([
+      { argv: ["routine", "list", "demo", "--json"], opts: { timeoutMs: 10_000 } },
+      { argv: ["routine", "set", "--help"], opts: { timeoutMs: 10_000 } },
+    ]);
+  });
+
+  it("says a routine is not editable when the installed CLI has no routine set", async () => {
+    const listed = JSON.stringify({ schema_version: 1, routines: [routineRecord], broken: [] });
+    const run: OrgRun = async (argv) => argv[1] === "set" ? { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'set'" } : { code: 0, stdout: listed, stderr: "" };
+    expect((await listRoutines(run, "demo")).editable).toBe(false);
   });
 
   it("drops a malformed routine rather than showing a half-read one", async () => {
@@ -579,7 +590,7 @@ describe("herdr-organizations routine list", () => {
       { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'routine'" },
       { code: 0, stdout: JSON.stringify({ schema_version: 2, routines: [] }), stderr: "" },
     ]) {
-      expect(await listRoutines(fakeRun(result).run, "demo")).toEqual({ available: false, routines: [], broken: 0 });
+      expect(await listRoutines(fakeRun(result).run, "demo")).toEqual({ available: false, editable: false, routines: [], broken: 0 });
     }
   });
 
@@ -601,8 +612,10 @@ describe("herdr-organizations routine toggle", () => {
     expect((await toggleRoutine(run, { project: "demo", name: "nightly-deps", on: false })).routines.map((routine) => routine.name)).toEqual(["nightly-deps"]);
     expect(calls.map((call) => call.argv)).toEqual([
       ["routine", "list", "demo", "--json"],
+      ["routine", "set", "--help"],
       ["routine", "toggle", "demo", "nightly-deps", "--off"],
       ["routine", "list", "demo", "--json"],
+      ["routine", "set", "--help"],
     ]);
   });
 
@@ -612,7 +625,54 @@ describe("herdr-organizations routine toggle", () => {
     await expect(toggleRoutine(run, { project: "demo", name: "other", on: true })).rejects.toThrow("Name a routine this project lists.");
     await expect(toggleRoutine(run, { project: "demo", name: "--root=/", on: true })).rejects.toThrow("Name a routine this project lists.");
     await expect(toggleRoutine(run, { project: "demo", name: "nightly-deps", on: "yes" })).rejects.toThrow("turned on or off");
-    expect(calls.map((call) => call.argv[1])).toEqual(["list"]);
+    expect(calls.map((call) => call.argv[1])).toEqual(["list", "set"]);
+  });
+});
+
+describe("herdr-organizations routine set", () => {
+  const listed = { code: 0, stdout: JSON.stringify({ schema_version: 1, routines: [routineRecord, prRoutineRecord], broken: [] }), stderr: "" };
+  const sets = (calls: Array<{ argv: string[] }>) => calls.map((call) => call.argv).filter((argv) => argv[1] === "set" && argv[2] !== "--help");
+
+  it("passes only the fields given, each as one --flag=value, then reads the list again", async () => {
+    const { run, calls } = fakeRun(listed);
+
+    await setRoutine(run, { project: "demo", name: "nightly-deps", schedule: " every 2h ", prompt: "Check the deps.\nThen say so.", to: "node:t-0007" });
+    await setRoutine(run, { project: "demo", name: "pr-follow-up", events: ["review", "opened"], to: "owner" });
+    await setRoutine(run, { project: "demo", name: "nightly-deps", to: "new", parent: "t-0003" });
+    expect(sets(calls)).toEqual([
+      ["routine", "set", "demo", "nightly-deps", "--schedule=every 2h", "--to=node:t-0007", "--prompt=Check the deps.\nThen say so."],
+      ["routine", "set", "demo", "pr-follow-up", "--on-pr=opened,review", "--to=owner"],
+      ["routine", "set", "demo", "nightly-deps", "--to=new", "--parent=t-0003"],
+    ]);
+  });
+
+  it("refuses what Organizations would not take before running anything that writes", async () => {
+    const { run, calls } = fakeRun(listed);
+    const refused = [
+      [{ name: "other", prompt: "x" }, "Name a routine this project lists."],
+      [{ name: "--root=/", prompt: "x" }, "Name a routine this project lists."],
+      [{ name: "nightly-deps", schedule: "at noon" }, "every 30m"],
+      [{ name: "nightly-deps", schedule: "daily 9:00" }, "every 30m"],
+      [{ name: "nightly-deps", schedule: "every 1h", events: ["review"] }, "not both"],
+      [{ name: "pr-follow-up", events: [] }, "Pick the pull request events"],
+      [{ name: "pr-follow-up", events: ["pushed"] }, "Pick the pull request events"],
+      [{ name: "nightly-deps", to: "node:Billing" }, "goes to the project coordinator"],
+      [{ name: "nightly-deps", to: "--root=/" }, "goes to the project coordinator"],
+      [{ name: "nightly-deps", to: "owner" }, "Only a pull request routine"],
+      [{ name: "nightly-deps", parent: "t-0003" }, "Only a routine that starts a new thread"],
+      [{ name: "nightly-deps", to: "new", parent: "../x" }, "starts under the project or a node"],
+      [{ name: "nightly-deps", prompt: "  " }, "Write what it asks"],
+      [{ name: "nightly-deps", prompt: "x".repeat(8_001) }, "Write what it asks"],
+      [{ name: "nightly-deps" }, "Nothing to change."],
+    ] as const;
+    for (const [input, message] of refused) await expect(setRoutine(run, { project: "demo", ...input })).rejects.toThrow(message);
+    expect(sets(calls)).toEqual([]);
+  });
+
+  it("refuses to edit where the installed CLI has no routine set", async () => {
+    const records = JSON.stringify({ schema_version: 1, routines: [routineRecord], broken: [] });
+    const run: OrgRun = async (argv) => argv[1] === "set" ? { code: 2, stdout: "", stderr: "error: unrecognized subcommand 'set'" } : { code: 0, stdout: records, stderr: "" };
+    await expect(setRoutine(run, { project: "demo", name: "nightly-deps", prompt: "x" })).rejects.toThrow("can't edit routines");
   });
 });
 

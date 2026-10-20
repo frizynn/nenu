@@ -177,8 +177,9 @@ export async function listTemplates(run: OrgRun, project: string): Promise<Templ
  */
 export async function listRoutines(run: OrgRun, project: string): Promise<RoutineList> {
   const slug = validateProjectSlug(project);
-  const unavailable: RoutineList = { available: false, routines: [], broken: 0 };
-  const result = await run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 });
+  const unavailable: RoutineList = { available: false, editable: false, routines: [], broken: 0 };
+  // `routine set` edits one (docs/json.md, Routines); an Organizations that predates it refuses its --help.
+  const [result, editable] = await Promise.all([run(["routine", "list", slug, "--json"], { timeoutMs: 10_000 }), offers(run, ["routine", "set"])]);
   if (result.code !== 0) {
     if (/unexpected argument|unrecognized subcommand/i.test(result.stderr)) return unavailable;
     throw commandError(result);
@@ -187,6 +188,7 @@ export async function listRoutines(run: OrgRun, project: string): Promise<Routin
   if (!isRecord(value) || value.schema_version !== SCHEMA_VERSION || !Array.isArray(value.routines)) return unavailable;
   return {
     available: true,
+    editable,
     routines: value.routines.flatMap((item) => {
       const routine = parseRoutine(item);
       return routine ? [routine] : [];
@@ -207,6 +209,63 @@ export async function toggleRoutine(run: OrgRun, input: { project: unknown; name
   const before = await listRoutines(run, project);
   if (!before.routines.some((routine) => routine.name === input.name)) throw new OrgValidationError("Name a routine this project lists.");
   const result = await run(["routine", "toggle", project, input.name, input.on ? "--on" : "--off"], { timeoutMs: 15_000 });
+  if (result.code !== 0) throw commandError(result);
+  return listRoutines(run, project);
+}
+
+const ROUTINE_EVENTS = ["opened", "checks-failed", "review", "merged"] as const;
+// Organizations' own grammar (`routine set --help`): `every <N>m|h|d` or `daily HH:MM`.
+const SCHEDULE_RE = /^(every [1-9]\d{0,3}[mhd]|daily ([01]\d|2[0-3]):[0-5]\d)$/;
+const ROUTINE_PROMPT_MAX = 8_000;
+
+/**
+ * Edits one of a project's routines (`routine set`), only one `routine list` names and only the fields
+ * given: its schedule or the pull request events it fires on, whom it reaches (`root`, `owner`, `new`
+ * or `node:<id>`), where a new thread starts, and its prompt. Organizations checks the node exists and
+ * writes the file; approving a command stays a person's step at a terminal. Answers the list as it then reads.
+ */
+export async function setRoutine(run: OrgRun, input: {
+  project: unknown; name: unknown; schedule?: unknown; events?: unknown; to?: unknown; parent?: unknown; prompt?: unknown;
+}): Promise<RoutineList> {
+  const project = validateProjectSlug(input.project);
+  if (typeof input.name !== "string" || !SLUG_RE.test(input.name)) throw new OrgValidationError("Name a routine this project lists.");
+  const flags: string[] = [];
+  if (input.schedule !== undefined && input.events !== undefined) throw new OrgValidationError("A routine runs on a schedule or on pull request events, not both.");
+  if (input.schedule !== undefined) {
+    if (typeof input.schedule !== "string" || !SCHEDULE_RE.test(input.schedule.trim())) throw new OrgValidationError("Write the schedule as `every 30m`, `every 2h`, `every 1d` or `daily 09:00`.");
+    flags.push(`--schedule=${input.schedule.trim()}`);
+  }
+  if (input.events !== undefined) {
+    const events = Array.isArray(input.events) ? input.events : [];
+    if (!events.length || !events.every((event) => ROUTINE_EVENTS.includes(event as never))) throw new OrgValidationError("Pick the pull request events it runs on.");
+    flags.push(`--on-pr=${ROUTINE_EVENTS.filter((event) => events.includes(event)).join(",")}`);
+  }
+  if (input.to !== undefined) {
+    const to = input.to;
+    if (typeof to !== "string" || !(to === "root" || to === "owner" || to === "new" || (to.startsWith("node:") && NODE_ID_RE.test(to.slice(5))))) {
+      throw new OrgValidationError("A routine goes to the project coordinator, the pull request's thread, a node or a new thread.");
+    }
+    flags.push(`--to=${to}`);
+  }
+  if (input.parent !== undefined) {
+    if (typeof input.parent !== "string" || !(input.parent === "root" || NODE_ID_RE.test(input.parent))) throw new OrgValidationError("A new thread starts under the project or a node.");
+    flags.push(`--parent=${input.parent}`);
+  }
+  if (input.prompt !== undefined) {
+    if (typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > ROUTINE_PROMPT_MAX || input.prompt.includes("\0")) {
+      throw new OrgValidationError(`Write what it asks, up to ${ROUTINE_PROMPT_MAX} characters.`);
+    }
+    flags.push(`--prompt=${input.prompt.trim()}`);
+  }
+  if (!flags.length) throw new OrgValidationError("Nothing to change.");
+  const before = await listRoutines(run, project);
+  const routine = before.routines.find((candidate) => candidate.name === input.name);
+  if (!routine) throw new OrgValidationError("Name a routine this project lists.");
+  if (!before.editable) throw new OrgValidationError("This Herdr Organizations can't edit routines; update it, or edit the file at a terminal.");
+  const trigger = input.schedule !== undefined ? "schedule" : input.events !== undefined ? "pr" : routine.trigger;
+  if (input.to === "owner" && trigger !== "pr") throw new OrgValidationError("Only a pull request routine goes to the pull request's thread.");
+  if (input.parent !== undefined && (input.to ?? routine.to) !== "new") throw new OrgValidationError("Only a routine that starts a new thread has a parent.");
+  const result = await run(["routine", "set", project, input.name, ...flags], { timeoutMs: 15_000 });
   if (result.code !== 0) throw commandError(result);
   return listRoutines(run, project);
 }

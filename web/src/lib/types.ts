@@ -448,9 +448,22 @@ export interface RoutineView {
   nextRun: string;
 }
 
+/** What an edit changes (`routine set`): only the fields given, a schedule or pull request events, never both. */
+export interface RoutineEdit {
+  schedule?: string;
+  events?: string[];
+  /** `root`, `owner`, `new` or `node:<id>`. */
+  to?: string;
+  /** For `new`: `root` or a node id. */
+  parent?: string;
+  prompt?: string;
+}
+
 /** `available` is false when the host's Organizations has no `routine list --json`, so the list says nothing. */
 export interface RoutineList {
   available: boolean;
+  /** This Organizations edits a routine (`routine set`); absent from an older bridge. */
+  editable?: boolean;
   routines: RoutineView[];
   /** Routine files that do not parse. */
   broken: number;
