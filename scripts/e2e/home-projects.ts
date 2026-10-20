@@ -135,6 +135,7 @@ async function main(): Promise<void> {
         await shoot(page, "sidebar-1440-folding", sidebar);
         await page.waitForTimeout(600);
         seen.refoldedPeriods = await periods(page);
+        if (JSON.stringify(seen.refoldedPeriods) !== JSON.stringify(folded)) failures.push("folding back left the bar unlike it was before More");
         await more.click();
         await page.waitForTimeout(600);
         // Hover and keyboard focus on a chat, the way a mouse and Tab reach it.

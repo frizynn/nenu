@@ -712,6 +712,8 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     const end = (name: string) => section("Today").getByRole("link", { name: new RegExp(`^${name}`) });
     expect(end("Draft work")).toHaveAccessibleName(/pull request #50, draft$/);
     expect(end("Draft work").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
+    expect(end("Draft work").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request-draft");
+    expect(end("Red checks").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request");
     expect(end("Red checks")).toHaveAccessibleName(/pull request #51, checks failing$/);
     expect(end("Red checks").querySelector(".nav-row-end")).toHaveAttribute("data-pr", "failing");
     expect(end("Asked changes")).toHaveAccessibleName(/pull request #52, changes requested$/);

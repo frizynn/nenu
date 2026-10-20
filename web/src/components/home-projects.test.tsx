@@ -32,13 +32,14 @@ describe("Home's projects", () => {
     expect(region.getByRole("link", { name: "See all" }).closest("h2")).toBeNull();
   });
 
-  it("says what waits on you, what works and what to review, each in words", () => {
+  it("says what waits on you, what works and what to review, each in words; working counts agents, not threads", () => {
+    // Three threads whose last group says working, two agents at work: the row says two, as the headline would.
     const busy = project("a", 1, { waitingAsks: 2, threads: [
       { id: "t-1", title: "Flow", parentId: "root", role: "worker", status: "open", group: "ready-for-review", updated: ago(1) },
-      { id: "t-2", title: "Hook", parentId: "root", role: "worker", status: "open", group: "working", updated: ago(2) },
+      ...["t-2", "t-3", "t-4"].map((id) => ({ id, title: id, parentId: "root", role: "worker" as const, status: "open" as const, group: "working", updated: ago(2) })),
     ] });
-    const { region } = show([busy], [agent("p1", "w-a", "working"), agent("p2", "w-a", "idle")]);
-    expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 waiting1 working1 to review");
+    const { region } = show([busy], [agent("p1", "w-a", "working"), agent("p2", "w-a", "working"), agent("p3", "w-a", "idle"), agent("p4", "w-other", "working")]);
+    expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 waiting2 working1 to review");
   });
 
   it("says what a quiet project is: paused, nothing running, or nothing open", () => {

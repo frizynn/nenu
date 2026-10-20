@@ -35,8 +35,8 @@ answer behind a tap, which is what the operator complained about.
    and how many threads it holds open. Five rows, then Show all; See all opens Projects.
 2. **The counts are `projectPulse`**, the same numbers Projects' cards draw, and nothing new is read.
    "Waiting" is Organizations' asks count (the project's own Waiting on you tab), never the headline's
-   "needs you", which counts dialogs. "Working" counts the project's agents at work, as the headline
-   counts every agent: a review caught the headline saying 1 working above a row saying 11, when the
+   "needs you", which counts dialogs. "Working" counts the project's agents at work, the unit the
+   headline counts (an agent outside every project counts only there): a review caught the headline saying 1 working above a row saying 11, when the
    row counted threads whose last group said working.
 3. **Rows keep their place while on screen** (`useHeldTime`, ADR 0094): last activity first, paused
    ones last. The order comes back on a return to the page; with a handful of projects there is no

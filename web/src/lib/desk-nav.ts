@@ -72,8 +72,8 @@ export interface ProjectPulse {
 
 /**
  * What waits on you is Organizations' own asks count when it has one, else the tree's nodes that need
- * you; what is ready to review is the tree's. Working counts the project's agents at work, as Home's
- * headline counts every agent, so the two never disagree about the same herd.
+ * you; what is ready to review is the tree's. Working counts the project's agents at work, the unit
+ * Home's headline counts, never threads whose last group said working.
  */
 export function projectPulse(project: ProjectView, agents: readonly AgentView[], projects: readonly ProjectView[] | undefined): ProjectPulse {
   const tree = orgTree(project.threads);
