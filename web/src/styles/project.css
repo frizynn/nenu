@@ -17,8 +17,8 @@
 /* The project panel's named tabs. 32px to the eye in a 52px row; a touch tablet wide enough for the
    panel reaches 44px through the band above and below. */
 .panel-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
-.panel-tab[aria-selected="true"] { background: var(--workbench-row-selected); color: var(--foreground); }
-@media (hover: hover) { .panel-tab[aria-selected="false"]:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
+.panel-tab:is([aria-selected="true"], [aria-pressed="true"]) { background: var(--workbench-row-selected); color: var(--foreground); }
+@media (hover: hover) { .panel-tab:is([aria-selected="false"], [aria-pressed="false"]):hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 @media (pointer: coarse) { .panel-tab::after { content: ""; position: absolute; inset: -6px 0; } }
 .quiet-action { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
 .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
@@ -79,12 +79,15 @@
   .task-history-toggle { min-height: 44px; }
 }
 
-/* The desk's session panel (components/session-inspector): its width is the operator's, but the chat
-   beside it keeps 22rem. The resize grip straddles the panel's left border. */
+/* A desk's right column (components/session-inspector): the session panel, or a thread docked in its
+   place at the same width, so docking moves nothing. Its width is the operator's, but the chat beside
+   it keeps 22rem. While it opens or folds its width moves and its content keeps the width it ends at,
+   cut at the column's edge (slidePanel). A docked thread fades in where the panel was. */
 .session-panel { position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-width: calc(100% - 22rem); border-left: 1px solid var(--border); }
-.session-panel-resize { position: absolute; inset-block: 0; left: -3px; z-index: 1; width: 6px; cursor: col-resize; touch-action: none; }
-.session-panel-resize:focus-visible { background: color-mix(in srgb, var(--ring) 45%, transparent); outline: none; }
-@media (hover: hover) { .session-panel-resize:hover { background: color-mix(in srgb, var(--ring) 45%, transparent); } }
+.session-panel[data-sliding] { overflow: clip; }
+.session-panel[data-sliding] > :not(.resize-handle) { min-width: var(--slide-width); }
+.session-panel[data-docked] { animation: column-in 150ms ease-out; }
+@keyframes column-in { from { opacity: 0; } }
 
 /* A group's name over its rows in a panel's list (threads-panel). */
 .panel-group-heading { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; padding: 0 8px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }

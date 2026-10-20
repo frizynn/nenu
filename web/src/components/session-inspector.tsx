@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { PanelRightOpen } from "@/components/ui/icon";
+import { clampTo, ResizeHandle, type WidthRange } from "@/components/ui/resize-handle";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { isLocked } from "@/lib/idle";
@@ -17,11 +18,12 @@ export const INSPECTOR_TABS: readonly InspectorTab[] = ["overview", "changes", "
 /** The breakpoint where the workbench shows its sidebar; the panel exists only from there. */
 const DESK = "(min-width: 1024px)";
 const STORE_KEY = "nenu:session-panel:v1";
-export const PANEL_WIDTH = { min: 320, initial: 460, max: 760, step: 16 } as const;
+/** The right column's widths, the session panel's and a docked thread's alike. */
+export const PANEL_WIDTH: WidthRange = { min: 320, initial: 460, max: 960, step: 16 };
 
 interface Stored { open: boolean; width: number; tab: InspectorTab }
 const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "overview" };
-export const clampWidth = (width: number) => Math.round(Math.min(PANEL_WIDTH.max, Math.max(PANEL_WIDTH.min, width)));
+export const clampWidth = (width: number) => clampTo(PANEL_WIDTH, width);
 
 function readStored(): Stored {
   try {
@@ -116,30 +118,33 @@ export function useSessionInspector(): SessionInspectorState {
     writeStored(next);
     return next;
   });
-  /** Open slides in once mounted; folding slides out first, and unmounts when that ends. */
-  const show = (open: boolean) => {
+  /**
+   * Open slides in once mounted; folding slides out first, and unmounts when that ends. Only a press
+   * moves it: the shortcut opens and folds at once, as a key does.
+   */
+  const show = (open: boolean, slide: boolean) => {
     if (open) {
       const fold = folding.current;
       folding.current = null;
       // Still mounted mid-fold: the panel just stays, without sliding in again.
       if (fold) fold.cancel();
-      else entering.current = true;
+      else entering.current = slide;
       update({ open });
       return;
     }
     if (folding.current) return;
-    const slide = panelRef.current && slidePanel(panelRef.current, "out");
-    if (!slide) return update({ open: false });
-    folding.current = slide;
-    slide.finished.then(() => {
-      if (folding.current !== slide) return;
+    const out = slide && panelRef.current && slidePanel(panelRef.current, "out");
+    if (!out) return update({ open: false });
+    folding.current = out;
+    out.finished.then(() => {
+      if (folding.current !== out) return;
       folding.current = null;
       update({ open: false });
     }, () => {});
   };
   const setOpen = (open: boolean) => {
     pressed.current = true;
-    show(open);
+    show(open, true);
   };
 
   useEffect(() => {
@@ -157,7 +162,7 @@ export function useSessionInspector(): SessionInspectorState {
       if (!latest.current.desk || isLocked()) return;
       event.preventDefault();
       // Mid-fold the panel reads as folded already, so the shortcut brings it back.
-      latest.current.show(!latest.current.open || folding.current !== null);
+      latest.current.show(!latest.current.open || folding.current !== null, false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -194,16 +199,37 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
 }
 
 /**
- * The panel's slide when the person opens or folds it: transform and opacity only, 200 ms in and
- * 160 ms out. Null, so the change is instant, under reduced motion or without Web Animations.
+ * The right column's slide when the person opens or folds it: its width moves, so the chat beside it
+ * follows instead of jumping, while what it holds keeps its full width and fades (project.css
+ * `data-sliding`). 200 ms in, 160 ms out, both decelerating. Null, so the change is instant, under
+ * reduced motion or without Web Animations.
  */
 export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animation | null {
   if (typeof panel.animate !== "function" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return null;
-  const hidden = { opacity: 0, transform: "translateX(16px)" };
-  const shown = { opacity: 1, transform: "none" };
-  return direction === "in"
+  const width = panel.getBoundingClientRect().width;
+  const hidden = { width: "0px", opacity: 0 };
+  const shown = { width: `${width}px`, opacity: 1 };
+  panel.style.setProperty("--slide-width", `${width}px`);
+  panel.dataset.sliding = "";
+  const slide = direction === "in"
     ? panel.animate([hidden, shown], { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    : panel.animate([shown, hidden], { duration: 160, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" });
+    : panel.animate([shown, hidden], { duration: 160, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "forwards" });
+  const done = () => { delete panel.dataset.sliding; };
+  slide.finished.then(done, done);
+  return slide;
+}
+
+/** The chat keeps 22rem beside the right column (project.css `.session-panel`). */
+const CHAT_MIN = 352;
+
+/** The right column's left edge, the session panel's or a docked thread's: one width for both. */
+export function ColumnEdge({ inspector, label }: { inspector: SessionInspectorState; label: string }) {
+  return <ResizeHandle label={label} edge="start" width={inspector.width} range={PANEL_WIDTH} onChange={inspector.setWidth}
+    limit={(column) => {
+      // A frame not laid out yet measures nothing: the range alone bounds the width then.
+      const room = column.parentElement?.getBoundingClientRect().width;
+      return room ? room - CHAT_MIN : Infinity;
+    }} />;
 }
 
 /** A session's pull request as the panel's Changes shows it, from GitHub or from Organizations. */
