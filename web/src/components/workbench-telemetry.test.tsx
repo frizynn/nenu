@@ -63,13 +63,13 @@ it("lets the parent own model toggling and one active inspection panel", async (
       <WorkbenchTelemetry mode="model" telemetry={telemetry} panel={panel} modelOpen={panel === "model"} modelAvailable disabled={panel === "model"}
         onChooseModel={() => { choose(); setPanel((value) => value === "model" ? null : "model"); }}
         onPanelChange={(value) => { panelChange(value); setPanel(value); }} />
-      {panel === "model" && <div role="dialog" aria-label="Model picker" />}
+      {panel === "model" && <div role="dialog" aria-label="Model" />}
     </>;
   }
   render(<Controlled />);
   await userEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(panelChange).not.toHaveBeenCalled();
-  expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Model" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Choose model" })).toBeEnabled();
   await userEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(choose).toHaveBeenCalledTimes(2);
@@ -77,7 +77,7 @@ it("lets the parent own model toggling and one active inspection panel", async (
   await userEvent.click(screen.getByRole("button", { name: "Context window 40% used" }));
   await userEvent.click(screen.getByRole("button", { name: "Choose model" }));
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  expect(screen.getByRole("dialog", { name: "Model picker" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Model" })).toBeInTheDocument();
 });
 
 // A bare "Model" read as a caption for nothing: with no model known the chip says what a tap does, and
