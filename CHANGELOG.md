@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- Home lists your projects: what waits on you there, how many agents work, how many to review and when each last moved; rows chosen over cards and chips by a readers' test (8fcb8247, 5d430fff, cc81f7c6).
+- Home lists your projects: what waits on you there, how many agents work, how many to review and when each last moved; a row with asks opens where they are answered; rows chosen over cards and chips by a readers' test (8fcb8247, 5d430fff, cc81f7c6, 0d92303e).
 - `bun scripts/e2e/home-projects.ts`: Home and the desk's chats over a busy herd, folded and unfolded, phone and desk (6a22aac1).
 
 ### Fixed

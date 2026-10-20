@@ -192,13 +192,15 @@ async function main(): Promise<void> {
       await context.close();
     }
     // A project with asks opens where they are answered: its Waiting on you on a desk, the list with Answer on a phone.
-    for (const [name, device] of [["1440", DESKTOP], ["390", PHONE]] as const) {
+    for (const [name, device, want] of [["1440", DESKTOP, "/project/acme-shop?tab=waiting"], ["390", PHONE, "/asks?project=acme-shop"]] as const) {
       const { page, context } = await open(device);
       await page.locator("section[aria-labelledby=home-projects]").getByRole("link", { name: /^Acme Shop/ }).click();
       await page.getByText("¿Publicamos variantes nuevas antes del lunes?").first().waitFor({ timeout: 15_000 })
         .catch(() => failures.push(`${name}: the asks row opened no ask`));
       await page.waitForTimeout(800);
-      seen[`asksOpen-${name}`] = new URL(page.url()).pathname + new URL(page.url()).search;
+      const landed = new URL(page.url()).pathname + new URL(page.url()).search;
+      seen[`asksOpen-${name}`] = landed;
+      if (landed !== want) failures.push(`${name}: the asks row landed on ${landed}, not ${want}`);
       await shoot(page, `asks-from-home-${name}`);
       await context.close();
     }
