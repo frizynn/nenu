@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-10-20
+
+### Added
+
+- Desk: Projects in the bar, every project as a card; a project's page has Work (a card per coordinator with its threads, Open or Finished), Waiting on you by coordinator, Routines and Context (37f386af).
+- Desk: a coordinator's page has Threads, Waiting on you, Routines and Status (37f386af).
+- Routines say whom they reach and what they ask, and turn on and off from Nenu through `routine toggle` (37f386af).
+
+### Changed
+
+- Desk: Routines and Your asks leave the bar; their old links land on Projects and on each project's tabs. A project no longer opens on its coordinator's chat; Project chat does. The phone is unchanged (37f386af).
+
 ## [1.30.0] - 2026-10-20
 
 ### Added

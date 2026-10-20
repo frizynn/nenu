@@ -7,12 +7,14 @@ import { ColumnPage } from "@/components/column-page";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorStatus } from "@/components/coordinator-status";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
+import { DeskCoordinator } from "@/components/desk-coordinator";
 import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
 import { CloseNodeDialog, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAsks } from "@/hooks/use-asks";
+import { useDesk } from "@/hooks/use-desk";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
@@ -22,10 +24,26 @@ import { isReadOnly } from "@/lib/types";
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
 
+// On a desk a coordinator's page has tabs (ADR 0102); a thread's page, and a phone's, are as before.
+export function NodeRoute() {
+  const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  const { projectSlug = "", nodeId = "" } = useParams();
+  const revalidator = useRevalidator();
+  const desk = useDesk();
+  const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
+  const thread = project?.threads.find((candidate) => candidate.id === nodeId);
+  if (!desk || !project || (nodeId !== ROOT && thread?.role !== "coordinator")) return <NodePage />;
+  const parent = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
+  const back: HeaderBack = parent ? { to: nodePath(project.slug, parent.id, data.session), label: parent.title } : { to: projectPath(project.slug, data.session), label: project.name };
+  return <ColumnPage data={data} title={thread?.title ?? "Project coordinator"} back={back}>
+    <DeskCoordinator key={nodeId} project={project} thread={thread} panes={data.agents} device={data.device} session={data.session} onChanged={() => void revalidator.revalidate()} />
+  </ColumnPage>;
+}
+
 // What a tap on a node with no live pane opens: the node itself, inside Nenu. A coordinator lists
 // the work it runs the way every organization view does, under its card (ADR 0091); a live node
 // offers its chat, never a jump. `root` is the project's own coordinator: its card and its chat.
-export function NodeRoute() {
+function NodePage() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "", nodeId = "" } = useParams();
   const navigate = useNavigate();

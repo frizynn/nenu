@@ -3,7 +3,9 @@
 - **Status:** Accepted (2026-10-16). Amended by [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md):
   under a coordinator's card the file starts closed. Amended by [ADR 0092](./0092-a-project-organizes-its-coordinators.md):
   on a project that organizes coordinators, the project coordinator's file heads the page only while it
-  says something. Requested by the operator. Builds on
+  says something. Point 2 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md):
+  a coordinator's file is its page's Status tab, the project coordinator's at `node/root`, and the
+  project page draws none. Requested by the operator. Builds on
   [ADR 0088](./0088-a-projects-library-is-read-through-one-contained-route.md) (what the snapshot leaves
   out) and [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md) (the coordinator's page).
 - **Trail:** `bridge/org-report.ts` (`status_file`) · `bridge/projects.ts` · `web/src/components/coordinator-status.tsx` ·

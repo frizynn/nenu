@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { Clock, House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { House, LayoutGrid, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StatusDot } from "@/components/status-badge";
@@ -9,7 +9,7 @@ import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { liveliest, projectAgents } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { homePath, projectPath, routinesPath, settingsPath, workspacePath } from "@/lib/nav";
+import { homePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { workspaceName } from "@/lib/spaces";
 import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
@@ -204,7 +204,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
       <Link className="workbench-icon-button rail-attention" to={homePath(data.session)} aria-label={attention ? `Home, ${needYou(attention)}` : "Home"} data-rail-tip="Home">
         <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </Link>
-      <Link className="workbench-icon-button" to={routinesPath(data.session)} aria-label="Routines" data-rail-tip="Routines"><Clock aria-hidden size={16} /></Link>
+      <Link className="workbench-icon-button" to={projectsPath(data.session)} aria-label="Projects" data-rail-tip="Projects"><LayoutGrid aria-hidden size={16} /></Link>
       <span className="rail-divider" aria-hidden />
       {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} pick={data.projects?.[i]} />} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}

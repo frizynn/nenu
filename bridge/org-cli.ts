@@ -195,6 +195,22 @@ export async function listRoutines(run: OrgRun, project: string): Promise<Routin
   };
 }
 
+/**
+ * Turns one of a project's routines on or off (`routine toggle --on/--off`), only one `routine list`
+ * names, and answers the list as it then reads.
+ */
+export async function toggleRoutine(run: OrgRun, input: { project: unknown; name: unknown; on: unknown }): Promise<RoutineList> {
+  const project = validateProjectSlug(input.project);
+  // Organizations names a routine by the slug rule, as it does a project.
+  if (typeof input.name !== "string" || !SLUG_RE.test(input.name)) throw new OrgValidationError("Name a routine this project lists.");
+  if (typeof input.on !== "boolean") throw new OrgValidationError("A routine is turned on or off.");
+  const before = await listRoutines(run, project);
+  if (!before.routines.some((routine) => routine.name === input.name)) throw new OrgValidationError("Name a routine this project lists.");
+  const result = await run(["routine", "toggle", project, input.name, input.on ? "--on" : "--off"], { timeoutMs: 15_000 });
+  if (result.code !== 0) throw commandError(result);
+  return listRoutines(run, project);
+}
+
 /** The profiles this host can launch, by name (`profile list --names`); none when the CLI cannot say. */
 export async function listProfiles(run: OrgRun): Promise<string[]> {
   const result = await run(["profile", "list", "--names"], { timeoutMs: 10_000 });
@@ -1042,6 +1058,9 @@ function parseRoutine(value: unknown): RoutineView | undefined {
   return {
     name: value.name,
     trigger: value.trigger,
+    to: text("to"),
+    parent: text("parent"),
+    prompt: text("prompt"),
     schedule: text("schedule"),
     events: Array.isArray(value.events) ? value.events.filter((event): event is string => typeof event === "string") : [],
     enabled: value.enabled,

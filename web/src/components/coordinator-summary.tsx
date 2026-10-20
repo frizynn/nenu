@@ -33,7 +33,8 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 type TreeProps = ComponentProps<typeof OrgTreeList>;
 
 interface WorkProps extends TreeProps {
-  coordinator: ProjectThreadView;
+  /** The coordinator, or the project's own as `{ id: "root" }`. */
+  coordinator: Pick<ProjectThreadView, "id" | "verdict">;
   summaries: ReadonlyMap<string, ThreadSummary>;
   /** Why the reports could not be read; what was read before stays. */
   failed: string | null;

@@ -1,23 +1,30 @@
 import { useEffect, useState } from "react";
-import { useRouteLoaderData } from "react-router";
+import { Navigate, useRouteLoaderData } from "react-router";
 import { Clock, GitPullRequest } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useDesk } from "@/hooks/use-desk";
 import { fetchOrgRoutines } from "@/lib/api";
 import { timeUntilShort } from "@/lib/format";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
+import { projectsPath } from "@/lib/nav";
 import type { ProjectView, RoutineList, RoutineView } from "@/lib/types";
 
 /**
  * Every project's routines, read once when the page opens and never polled: what each one runs on,
  * and whether it is on. Read only: a routine is changed with `herdr-organizations routine` at a
- * terminal, where approving a command is the person's own step.
+ * terminal, where approving a command is the person's own step. A desk reads them on each project's
+ * Routines tab (ADR 0102), so an old link lands on Projects.
  */
 export function RoutinesRoute() {
   // SAFETY: this route is a child of the root route, whose loader returns HomeData (router.tsx).
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
+  return useDesk() ? <Navigate replace to={projectsPath(data.session)} /> : <PhoneRoutines data={data} />;
+}
+
+function PhoneRoutines({ data }: { data: HomeData }) {
   const projects = data.projects ?? [];
   return (
     <ColumnPage data={data} title="Routines">

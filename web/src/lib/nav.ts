@@ -50,6 +50,11 @@ export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;
 }
 
+/** Every project as a card, the desk's way into them (ADR 0102). */
+export function projectsPath(session?: string): string {
+  return `/projects${sessionSearch(session)}`;
+}
+
 /** The routines route: every project's routines, read only. */
 export function routinesPath(session?: string): string {
   return `/routines${sessionSearch(session)}`;

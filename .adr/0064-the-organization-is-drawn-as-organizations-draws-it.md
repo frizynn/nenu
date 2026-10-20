@@ -5,7 +5,7 @@
   [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md): a coordinator's Summary tab
   groups its work by outcome, beside the tree. Amended by
   [ADR 0092](./0092-a-project-organizes-its-coordinators.md): on a project that organizes coordinators,
-  each open coordinator folds over its card and work, and the project coordinator is optional.
+  each open coordinator folds over its card and work, and the project coordinator is optional. Point 2 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): Open or Finished replaces History on the project page.
 - **Trail:** `web/src/lib/org-tree.ts` · `web/src/components/project-tasks.tsx` ·
   `web/src/components/workbench-sidebar.tsx` · `web/src/routes/node.tsx` · Organizations `src/ui.rs`
   (`open_tree`, `history`, `start_close`)

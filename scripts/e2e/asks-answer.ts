@@ -8,9 +8,11 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 
 // Your asks shaped like a real registry on 2026-10-17 (ADR 0093), captured with Google Chrome headless at
 // 390 and 1440 px: a decision line that is only a parenthesis, an ask whose links read as raw text, and
-// asks in two projects and three coordinators. It checks the placeholder is gone from the list and the
-// count, the links read as chips, the selectors narrow the list, a coordinator's card lists only its
-// own, and Answer writes through `asks answer` and shows the row answered. `--before` only captures.
+// asks in two projects and three coordinators. It checks the placeholder is gone from the list, the links
+// read as chips, a desk's old /asks link narrowed to one coordinator lands on that
+// coordinator's Waiting on you and lists only its own (ADR 0102), and Answer writes through
+// `asks answer` and shows the row answered; it prints each project's waiting count without checking it.
+// `--before` only captures.
 //
 //   bun scripts/e2e/asks-answer.ts [--before] [--port 8863] [--out DIR]
 
@@ -118,8 +120,11 @@ async function main(): Promise<void> {
     const tallPhone = { ...PHONE, viewport: { width: 390, height: 1300 } };
     const tallDesk = { ...DESKTOP, viewport: { width: 1440, height: 1000 } };
 
+    // A desk reads asks on each coordinator's Waiting on you, where an old /asks link narrowed to one
+    // lands (ADR 0102); a phone keeps the page with its selectors.
+    const GESTION_ASKS = `/asks?project=awam&coordinator=${GESTION.id}`;
     for (const [width, device] of [["390", tallPhone], ["1440", tallDesk]] as const) {
-      const { page, context } = await open("/asks", device);
+      const { page, context } = await open(width === "1440" ? GESTION_ASKS : "/asks", device);
       const text = await page.locator("main").innerText();
       if (!before) {
         if (text.includes("(nada por ahora")) failures.push(`asks ${width}: the placeholder line shows`);
@@ -127,10 +132,9 @@ async function main(): Promise<void> {
       }
       await shoot(page, `asks-${width}`);
       if (!before && width === "1440") {
-        // Narrow to one coordinator, then answer the ask that waits on you there.
-        await page.locator("main").getByLabel("Project", { exact: true }).selectOption("awam");
-        await page.locator("main").getByLabel("Coordinator", { exact: true }).selectOption("t-0002");
-        await page.waitForTimeout(400);
+        // One coordinator's asks, then the one that waits on you there answered.
+        const landed = new URL(page.url());
+        if (landed.pathname !== `/project/awam/node/${GESTION.id}` || landed.searchParams.get("tab") !== "waiting") failures.push(`asks 1440: ${GESTION_ASKS} did not land on the coordinator's Waiting on you`);
         const narrowed = await page.locator("main").innerText();
         if (narrowed.includes("Comparar dos proveedores") || narrowed.includes("changelog de octubre")) failures.push("the filter kept other coordinators' asks");
         await shoot(page, "asks-filtrado-1440");
@@ -142,14 +146,14 @@ async function main(): Promise<void> {
         if (!(await page.locator("main").innerText()).includes("Answered")) failures.push("the answered row does not say so");
         await shoot(page, "asks-respondido-1440");
         // A fresh read, as a reload brings it: the answered ask stays out of what waits on you.
-        await page.goto(`${bridge.url}/asks?project=awam&coordinator=t-0002`);
+        await page.goto(`${bridge.url}${GESTION_ASKS}`);
         await page.waitForTimeout(2000);
         const after = await page.locator("main").innerText();
         if (await page.getByRole("button", { name: "Answer ¿Prospectos primero o varios números?" }).count()) failures.push("after a reload the answered ask waits on you again");
         if (!/Answered \d+[smh]? ?ago|Answered just now|Answered/.test(after)) failures.push("after a reload the answered ask does not say so");
         await shoot(page, "asks-respondido-recarga-1440");
         // A decision line answers the same way, on its own line, its links as chips.
-        await page.goto(`${bridge.url}/asks`);
+        await page.goto(`${bridge.url}${GESTION_ASKS}`);
         await page.waitForTimeout(2000);
         const decision = await page.locator("main").innerText();
         if (decision.includes("(task:AWA-711)") || !decision.includes("AWA-711")) failures.push("the decision's links do not read as chips");
@@ -157,7 +161,7 @@ async function main(): Promise<void> {
         await page.getByLabel("Your answer").fill("Cargarlos en Facturación.");
         await page.getByRole("button", { name: "Send answer" }).click();
         await page.waitForTimeout(2500);
-        await page.goto(`${bridge.url}/asks`);
+        await page.goto(`${bridge.url}${GESTION_ASKS}`);
         await page.waitForTimeout(2000);
         if (await page.getByRole("button", { name: /^Answer Datos del comercio/ }).count()) failures.push("after a reload the answered decision waits on you again");
         await shoot(page, "asks-decision-respondida-1440");

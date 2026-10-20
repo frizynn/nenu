@@ -128,8 +128,9 @@ async function main(): Promise<void> {
     const tallDesk = { ...DESKTOP, viewport: { width: 1440, height: 1100 } };
 
     // The project's page: two coordinators, one opened on its card and work, the threads apart.
-    for (const [name, device] of [["proyecto-390", tallPhone], ["proyecto-1440", tallDesk]] as const) {
-      const { page, context } = await open("/project/acme", device);
+    {
+      const name = "proyecto-390";
+      const { page, context } = await open("/project/acme", tallPhone);
       const text = await page.locator("main").innerText();
       for (const words of ["Coordinators", "Rediseño del checkout", "Lanzamiento mayorista", "Threads", "Hotfix del login", "Start project coordinator"]) {
         if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
@@ -142,10 +143,31 @@ async function main(): Promise<void> {
       await shoot(page, `${name}-abierto`);
       await context.close();
     }
-
-    // Move: a thread at the top level goes under a coordinator.
+    // A desk's project is a card per coordinator holding its threads, the project coordinator's last
+    // with the threads started from the project, each card folding (ADR 0102).
     {
-      const { page, context } = await open("/project/acme", DESKTOP);
+      const name = "proyecto-1440";
+      const { page, context } = await open("/project/acme", tallDesk);
+      const main = page.locator("main");
+      const text = await main.innerText();
+      for (const words of ["Rediseño del checkout", "Lanzamiento mayorista", "Project coordinator", "Hotfix del login", "Start project coordinator"]) {
+        if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
+      }
+      const cards = await main.locator("section.desk-card").evaluateAll((list) => list.map((card) => card.getAttribute("aria-label")));
+      if (cards.at(-1) !== "Project coordinator") failures.push(`${name}: the project coordinator's card is not last (${cards.join(", ")})`);
+      if (!await main.getByRole("group", { name: "Project coordinator threads" }).getByText("Hotfix del login").count()) failures.push(`${name}: the top-level thread is not in the project coordinator's card`);
+      await shoot(page, `${name}-abierto`);
+      await main.getByRole("button", { name: /^Rediseño del checkout/ }).first().click();
+      await page.waitForTimeout(600);
+      if (await main.getByRole("group", { name: "Rediseño del checkout threads" }).count()) failures.push(`${name}: the card does not fold`);
+      await shoot(page, `${name}-plegado`);
+      await context.close();
+    }
+
+    // Move: a thread at the top level goes under a coordinator. A desk moves it from the project
+    // coordinator's tree, its Threads tab (ADR 0102).
+    {
+      const { page, context } = await open("/project/acme/node/root", DESKTOP);
       // A desk names a row's actions while the pointer rests on it.
       await page.getByRole("button", { name: /^Hotfix del login/ }).hover();
       await page.getByRole("button", { name: "Move Hotfix del login" }).click();

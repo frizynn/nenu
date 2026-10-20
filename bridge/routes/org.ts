@@ -1,5 +1,5 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
-import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions } from "../org-cli.ts";
+import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, startNode, startOptions, toggleRoutine } from "../org-cli.ts";
 import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -91,6 +91,10 @@ export const orgRoutes: Route[] = [
   orgWrite("/api/org/thread/merge", "org.thread.merge", "Could not merge the pull request.", async ({ orgRun }, body) => {
     const merged = await mergeThread(orgRun, { project: body.project, id: body.id, method: body.method });
     return { response: { merged }, detail: { project: body.project, id: merged.id, pr: merged.pr } };
+  }),
+  orgWrite("/api/org/routine/toggle", "org.routine.toggle", "Could not change the routine.", async ({ orgRun }, body) => {
+    const routines = await toggleRoutine(orgRun, { project: body.project, name: body.name, on: body.on });
+    return { response: { routines }, detail: { project: body.project, name: body.name, on: body.on } };
   }),
   orgWrite("/api/org/thread/set", "org.thread.set", "Could not change the thread's automation.", async ({ orgRun }, body) => {
     const flags = await setThreadFlags(orgRun, { project: body.project, id: body.id, autoFixCi: body.autoFixCi, autoMerge: body.autoMerge });
