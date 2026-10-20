@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir, type Browser, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
@@ -46,6 +46,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
 //   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
+//   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3680,6 +3681,36 @@ async function reading(): Promise<void> {
 }
 
 /**
+ * A finger pushing `by` px up from (195, y), down when negative. Chromium gets raw touch events (its
+ * synthesized scroll gesture scrolls nothing headless). Mobile WebKit takes no wheel and Playwright
+ * drives no touch scroll there, so it scrolls what the engine would: the nearest box under the finger
+ * that can still go that way, chaining outward.
+ */
+async function touchDrag(engine: "webkit" | "chromium", context: Context, page: Page, y: number, by: number): Promise<void> {
+  if (engine === "chromium") {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y }] });
+    for (let step = 1; step <= 15; step++) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - step * by / 15 }] });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  } else {
+    await page.evaluate(([at, by]: readonly [number, number]) => {
+      const down = by < 0;
+      for (let el = document.elementFromPoint(195, at); el; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (el !== document.documentElement && !/auto|scroll/.test(style.overflowY)) continue;
+        if (down ? el.scrollTop <= 0 : el.scrollTop + el.clientHeight >= el.scrollHeight) continue;
+        el.scrollTop += by;
+        return;
+      }
+    }, [y, by] as const);
+  }
+  await page.waitForTimeout(400);
+}
+
+/**
  * The box stays put on a phone: a project coordinator's long chat at 390x844 in WebKit and Chromium,
  * dark and light, with the keyboard closed and open (the viewport cut to 390x470, as the keyboard
  * leaves it). Each lists what a finger can scroll (only the thread may), the root's overscroll, and
@@ -3718,34 +3749,7 @@ async function pin(): Promise<void> {
             const box = document.querySelector(".workbench-composer")!.getBoundingClientRect();
             return { header: top(".workbench-app-header"), box: Math.round(box.top), boxBottom: Math.round(box.bottom), height: window.visualViewport?.height ?? innerHeight };
           }, null);
-          // A finger pushing 300px from (195, y), up unless `down`. Chromium gets raw touch events (its synthesized
-          // scroll gesture scrolls nothing headless). Mobile WebKit takes no wheel and Playwright drives
-          // no touch scroll there, so it scrolls what the engine would: the nearest box under the
-          // finger that can still go down, chaining outward.
-          const drag = async (y: number, down = false) => {
-            const by = down ? -300 : 300;
-            if (engine === "chromium") {
-              const cdp = await context.newCDPSession(page);
-              await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y }] });
-              for (let step = 1; step <= 15; step++) {
-                await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - step * by / 15 }] });
-                await page.waitForTimeout(16);
-              }
-              await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-            } else {
-              await page.evaluate(([at, by]: readonly [number, number]) => {
-                const down = by < 0;
-                for (let el = document.elementFromPoint(195, at); el; el = el.parentElement) {
-                  const style = getComputedStyle(el);
-                  if (el !== document.documentElement && !/auto|scroll/.test(style.overflowY)) continue;
-                  if (down ? el.scrollTop <= 0 : el.scrollTop + el.clientHeight >= el.scrollHeight) continue;
-                  el.scrollTop += by;
-                  return;
-                }
-              }, [y, by] as const);
-            }
-            await page.waitForTimeout(400);
-          };
+          const drag = (y: number, down = false) => touchDrag(engine, context, page, y, down ? -300 : 300);
           const probe = async (moment: string) => {
             const at = await places();
             const list = await scrollers();
@@ -3798,6 +3802,181 @@ async function pin(): Promise<void> {
   const result = { shots, seen, failures };
   await writeFile(join(outDir, "pin.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
+}
+
+/**
+ * Every phone screen scrolls one box and nothing else: Home, Projects, a project with its History open,
+ * a coordinator node, Your asks, Settings, a chat, a coordinator's Threads, a chat's History, and two
+ * sheets over a page, in WebKit and Chromium, twice: in Safari, whose bars leave the page no inset, and
+ * as the home-screen app, 47px over and 34px under (env() is 0 headless, so the bundle's CSS says them).
+ * The herd and the organization are seeded taller than a phone on every screen. Each screen: the root
+ * opts out of vertical overscroll (a drag past an end rubber-bands the whole app in Safari otherwise),
+ * exactly one box scrolls vertically, a drag from the header, the middle and the bottom moves only that
+ * box (never the header, the tab bar, the composer or the window) and moves it at least once, and the
+ * box's last row ends above whatever sits under it. On a sheet a drag over the panel or the backdrop
+ * moves nothing behind it. WebKit's drags are touchDrag's stand-in, not the engine's touch scrolling.
+ */
+async function phoneScroll(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const seen: Record<string, unknown> = {};
+  const failures: string[] = [];
+  // orgTreeSeed with thirty more open threads, half of them under Migración de stock, so a project and
+  // a node are taller than a phone; eight more projects for Projects, a dozen asks for Your asks, and
+  // three more workspaces for Home, two of their sessions asking.
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
+    const seed = orgTreeSeed(herd, now, { coordinator: true });
+    for (const thread of seed.projects[0]!.threads) {
+      const n = Number(/^Tarea cerrada (\d+)$/.exec(String(thread.title))?.[1]);
+      if (n <= 30) Object.assign(thread, { status: "open", group: "idle", group_label: "idle", title: `Tarea abierta ${n}`, parent_id: n <= 15 ? "root" : "t-0101" });
+    }
+    for (let n = 1; n <= 8; n++) seed.projects.push({ slug: `side-${n}`, name: `Proyecto ${n}`, goal: "Un proyecto más para la lista", status: "active", threads: [] });
+    seed.asks = Array.from({ length: 12 }, (_, i) => ({ project: "acme", coordinator: { id: "root", title: "" }, line: 5 + i, state: i % 2 ? "working" : "needs-decision",
+      text: `Pregunta ${i + 1} sobre el checkout`, answer: "", links: [], confirmed: "", mismatch: "" }));
+    return seed;
+  } });
+  try {
+    const herd = bridge.herd!;
+    await addDocs(bridge);
+    await addPair(bridge);
+    await addCrew(bridge);
+    // Two more sessions asking, two more of Home's rows: its Recents stop at a count, its asks do not.
+    bridge.fake!.setStatus("w6:lead", "blocked");
+    bridge.fake!.setStatus("w5:lead", "blocked");
+    await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
+    const chat = `/pane/${encodeURIComponent(herd.working)}`;
+    const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
+      { name: "home", path: "/" },
+      { name: "projects", path: "/projects" },
+      { name: "project", path: "/project/acme", open: (page) => page.getByText(/^History/).first().click() },
+      { name: "node", path: "/project/acme/node/t-0101" },
+      { name: "asks", path: "/asks" },
+      { name: "settings", path: "/settings" },
+      { name: "chat", path: chat },
+      { name: "threads", path: `/pane/${encodeURIComponent(herd.codex)}`, open: (page) => page.getByRole("tab", { name: /^Threads/ }).click() },
+      { name: "history", path: `${chat}/history` },
+      { name: "search-sheet", path: "/", sheet: true, open: (page) => page.locator(".bottom-tab-bar").getByRole("button", { name: "Search" }).click() },
+      { name: "row-sheet", path: "/project/acme", sheet: true, open: (page) => page.getByRole("button", { name: "Panel depósito actions" }).click() },
+    ];
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        for (const [shell, over, under] of [["safari", 0, 0], ["app", 47, 34]] as const) {
+          // No service worker: it would serve the CSS from its cache, past the route that sets the insets.
+          const context = await browser.newContext({ ...PHONE, timezoneId: "UTC", locale: "en-US", serviceWorkers: "block" });
+          const page = await context.newPage();
+          let insets = 0;
+          await page.route("**/assets/*.css", async (route) => {
+            const css = await (await route.fetch()).text();
+            const set = (px: number) => () => { insets++; return `${px}px`; };
+            await route.fulfill({ contentType: "text/css", body: css
+              .replace(/env\(\s*safe-area-inset-top\s*(,[^)]*)?\)/g, set(over))
+              .replace(/env\(\s*safe-area-inset-bottom\s*(,[^)]*)?\)/g, set(under)) });
+          });
+          await page.clock.install({ time: bridge.now() });
+          for (const screen of screens) {
+            const where = `${engine} ${shell} ${screen.name}`;
+            await page.goto(bridge.url + screen.path);
+            await page.waitForTimeout(2500);
+            if (screen.open) {
+              await screen.open(page);
+              await page.waitForTimeout(800);
+            }
+            // Every vertical scroller but a text field's, each scroll offset, and where the fixed chrome stands.
+            // A box is named by its tag, two classes and a number it keeps across reads, so two alike stay apart.
+            const state = () => page.evaluate(() => {
+              const ids = window as unknown as { __e2eBoxes?: number };
+              const name = (el: HTMLElement) => {
+                el.dataset.e2eBox ??= String(ids.__e2eBoxes = (ids.__e2eBoxes ?? 0) + 1);
+                return `${el.tagName.toLowerCase()}.${String(el.className).split(" ").filter(Boolean).slice(0, 2).join(".")}#${el.dataset.e2eBox}`;
+              };
+              const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+              const scrollers = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+                .filter((el) => el.tagName !== "TEXTAREA" && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
+                .map((el) => ({ name: name(el), box: el.dataset.e2eBox!, extra: el.scrollHeight - el.clientHeight, inSheet: !!dialog?.contains(el) }));
+              const offsets: Record<string, number> = {};
+              for (const el of Array.from(document.querySelectorAll<HTMLElement>("html, body, body *"))) if (el.scrollTop && !dialog?.contains(el)) offsets[name(el)] = Math.round(el.scrollTop);
+              const top = (selector: string) => {
+                const box = document.querySelector(selector)?.getBoundingClientRect();
+                return box && box.height ? Math.round(box.top) : null;
+              };
+              const panel = dialog?.querySelector(".sheet-bottom-panel")?.getBoundingClientRect();
+              return { scrollers, offsets, windowY: scrollY, overscroll: getComputedStyle(document.documentElement).overscrollBehaviorY,
+                header: top(".workbench-app-header"), bar: top(".bottom-tab-bar"), composer: top(".workbench-composer"),
+                panel: panel ? { top: Math.round(panel.top), bottom: Math.round(panel.bottom) } : null };
+            }, null);
+            const at = await state();
+            const path = join(outDir, `phone-scroll-${screen.name}-${engine}-${shell}.png`);
+            await page.screenshot({ path, animations: "disabled" });
+            shots.push(path);
+            if (at.overscroll !== "none") failures.push(`${where}: the root's overscroll is ${at.overscroll}`);
+            const page_ = at.scrollers.filter((s) => !s.inSheet);
+            if (!screen.sheet && page_.length !== 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
+            // A finger from each place, up then down. Only the screen's own box may move, and it must; a sheet moves nothing behind it.
+            const own = !screen.sheet && page_.length === 1 ? page_[0]! : null;
+            let ownMoved = false;
+            const bottom = at.bar ?? at.composer ?? 800;
+            // A sheet is dragged in Chromium only: the WebKit stand-in walks the DOM, while an engine chains a
+            // fixed layer's scroll by its containing block. Its panel goes up only, since a pull down from the
+            // top is the sheet's own dismiss.
+            const starts: Array<[string, number, number[]]> = !screen.sheet
+              ? [["header", (at.header ?? 0) + 20, [300, -300]], ["middle", 420, [300, -300]], ["bottom", bottom + 20, [300, -300]]]
+              : at.panel && engine === "chromium"
+                ? [["backdrop", Math.max(80, at.panel.top - 120), [300, -300]], ["panel", Math.round((at.panel.top + at.panel.bottom) / 2), [300]]]
+                : [];
+            if (screen.sheet && !at.panel) failures.push(`${where}: the sheet did not open`);
+            const moved: Record<string, unknown> = {};
+            for (const [from, y, pushes] of starts) {
+              for (const by of pushes) {
+                const before = await state();
+                if (screen.sheet && !before.panel) failures.push(`${where}: the sheet closed before a drag from the ${from}`);
+                await touchDrag(engine, context, page, y, by);
+                const after = await state();
+                const changed = Object.keys({ ...before.offsets, ...after.offsets }).filter((k) => before.offsets[k] !== after.offsets[k] && k !== own?.name);
+                if (own && before.offsets[own.name] !== after.offsets[own.name]) ownMoved = true;
+                const chrome = (["header", "bar", "composer"] as const).filter((k) => after[k] !== before[k]);
+                moved[`${from} ${by > 0 ? "up" : "down"}`] = { changed, chrome, windowY: after.windowY };
+                if (changed.length || chrome.length || after.windowY !== 0) failures.push(`${where}: a drag ${by > 0 ? "up" : "down"} from the ${from} moved ${[...changed, ...chrome, ...(after.windowY ? ["the window"] : [])].join(", ")}`);
+              }
+            }
+            if (own && !ownMoved) failures.push(`${where}: no drag scrolled ${own.name}`);
+            // The end: the screen's box at its bottom, its lowest row of text drawn and not under anything.
+            const end = !own ? null : await page.evaluate((id: string) => {
+              const box = document.querySelector<HTMLElement>(`[data-e2e-box="${id}"]`);
+              if (!box) return null;
+              box.scrollTop = box.scrollHeight;
+              const drawn = (el: Element) => {
+                for (let up = el.parentElement; up && up !== box; up = up.parentElement) if (getComputedStyle(up).overflow !== "visible" && up.getBoundingClientRect().height < 2) return false;
+                return el.getBoundingClientRect().height > 0;
+              };
+              const last = Array.from(box.querySelectorAll("a, button, p, span, h2, h3, li"))
+                .filter((el) => drawn(el) && (el.textContent ?? "").trim())
+                .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0];
+              if (!last) return null;
+              const row = last.getBoundingClientRect();
+              const hit = document.elementFromPoint(row.left + Math.min(8, row.width / 2), row.bottom - 3);
+              return { text: (last.textContent ?? "").trim().slice(0, 40), bottom: Math.round(row.bottom), boxBottom: Math.round(box.getBoundingClientRect().bottom),
+                covered: !hit || !(hit === last || last.contains(hit) || hit.contains(last)) };
+            }, own.box);
+            if (end?.covered) failures.push(`${where}: the last row "${end.text}" is under something at ${end.bottom}`);
+            if (end && end.bottom > end.boxBottom) failures.push(`${where}: the last row ends at ${end.bottom}, past its box's ${end.boxBottom}`);
+            if (screen.sheet) await page.keyboard.press("Escape");
+            seen[where] = { ...at, offsets: undefined, moved, end };
+          }
+          if (under && !insets) failures.push(`${engine} ${shell}: no env(safe-area-inset-*) in the CSS to set`);
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await bridge.stop();
+  }
+  const result = { shots, seen, failures };
+  await writeFile(join(outDir, "phone-scroll.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ seen, failures }, null, 2));
   if (failures.length) process.exit(1);
 }
 
@@ -3923,8 +4102,9 @@ else if (command === "reading") await reading();
 else if (command === "pin") await pin();
 else if (command === "at-rest") await atRestBench();
 else if (command === "inline-images") await inlineImages(values.before === true);
+else if (command === "phone-scroll") await phoneScroll();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|phone-scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
