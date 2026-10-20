@@ -93,7 +93,8 @@ describe("pictures in their places", () => {
   });
 
   it("takes pictures out by number and renumbers the rest", () => {
-    expect(withoutImages(`${chip(1)} ${chip(2)} ${chip(3)}`, [2])).toBe(`${chip(1)}  ${chip(2)}`);
+    expect(withoutImages(`${chip(1)} ${chip(2)} ${chip(3)}`, [2])).toBe(`${chip(1)} ${chip(2)}`);
+    expect(withoutImages(`x ${chip(1)} y`, [1])).toBe("x y");
   });
 
   it("inserts chips at the caret, as they are", () => {

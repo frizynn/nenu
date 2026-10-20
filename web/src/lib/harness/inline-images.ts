@@ -14,7 +14,7 @@
 // them), and Claude attaches a picture a beat after its paste (150 ms measured): text sent on its heels
 // lands before the token. So the bridge types the message piece by piece and waits for each token.
 
-import { isUploadPath, uploadName } from "../message-images";
+import { isUploadPath, uploadName } from "../upload-path";
 
 export type SendPiece = { kind: "text"; text: string } | { kind: "image"; path: string };
 

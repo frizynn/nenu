@@ -18,10 +18,13 @@
 .composer-field { position: relative; display: flex; flex: 1 1 0%; min-width: 0; }
 .composer-field > textarea { position: relative; }
 .draft-chip-layer { position: absolute; left: 0; top: 0; overflow: hidden; color: transparent; pointer-events: none; }
-.draft-chip { position: relative; border-radius: var(--radius-sm); background: var(--muted); box-shadow: 0 0 0 2px var(--muted); }
-.draft-chip-icon { position: absolute; left: 0.25em; top: 50%; width: 1.05em; height: 1.05em; translate: 0 -50%; color: var(--muted-foreground); }
-/* The draft's files, inside the box above the text: a row of their own. */
-.composer-attachments { flex-basis: 100%; min-width: 0; }
+/* The pill takes no room of its own: side shadows pad it, and it stays shorter than a line so chips on
+   two wrapped lines never touch. */
+.draft-chip { position: relative; border-radius: var(--radius-sm); background: var(--muted); box-shadow: -0.1em 0 0 var(--muted), 0.3em 0 0 var(--muted); }
+.draft-chip-icon { position: absolute; left: 0.05em; top: 50%; width: 1.05em; height: 1.05em; translate: 0 -50%; color: var(--muted-foreground); }
+/* The draft's files, inside the box above the text: a row of their own, starting where the text does
+   (past the + column and the draft's own left padding). */
+.composer-attachments { flex-basis: 100%; min-width: 0; padding-left: calc(38px + 0.5rem); padding-bottom: 4px; }
 .composer-input::placeholder { color: var(--muted-foreground); }
 .composer-input-secret { -webkit-text-security: disc; }
 /* A notice on the draft it is about (a refused send, a password prompt), in flow above the box. */
@@ -81,6 +84,7 @@
 /* A desk's box is 42px, as the draft's own row there: the + column follows its padding. */
 @media (min-width: 768px) {
   .composer-lead { width: 36px; padding: 4px 0 4px 4px; }
+  .composer-attachments { padding-left: calc(36px + 0.5rem); }
 }
 
 @media (min-width: 1024px) {
@@ -100,6 +104,7 @@
   .workbench-chat[data-keyboard-open] .composer-input { transition: padding-left 150ms ease-out; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-attachments { padding-left: 14px; }
 }
 /* The line above the box: one chip per kind of work around the chat (composer-chips.tsx) at its start,
    Stop at its end, and the open chip's panel floating over the thread, anchored to the line: it takes

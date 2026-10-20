@@ -1,5 +1,8 @@
 import { filePathsInText } from "./chat-files";
 import type { TranscriptEntry, TranscriptImagePart } from "./types";
+import { isUploadPath, uploadName } from "./upload-path";
+
+export { isUploadPath, uploadName };
 
 // A message that carries images is plain text on the wire: the agent CLIs (Claude Code, Codex) read
 // an image by its absolute path, so each uploaded picture's path sits in the text where the operator
@@ -10,27 +13,12 @@ import type { TranscriptEntry, TranscriptImagePart } from "./types";
 // place that converts between the shapes.
 
 export const IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp)$/i;
-/**
- * Nenu's own generated upload names (bridge/uploads.ts saveUpload), in an uploads dir: an image named
- * by its bytes (chat-upload-preview.ts UPLOAD_NAME), or any other file with the name it was attached
- * under after the generated part (group 1).
- */
-const UPLOAD_PATH = /\/uploads\/[A-Za-z0-9_-]+-[a-z0-9]+-[a-f0-9]{8}(?:\.(?:png|jpg|gif|webp)|-([A-Za-z0-9._-]+))$/;
 /** The CLI's own placeholder (Claude Code, Codex) where it attached a pasted image path. */
 const IMAGE_TOKEN = /\[Image #\d+\]/g;
-
-export function isUploadPath(path: string): boolean {
-  return UPLOAD_PATH.test(path);
-}
 
 /** A slash command: a message that starts with "/", unless that is the path of a picture it opens with. */
 export function isSlashCommand(text: string): boolean {
   return text.startsWith("/") && !isUploadPath(text.split(/\s/, 1)[0]!);
-}
-
-/** The name a non-image upload was attached under; null for an image (named by its bytes) or any other path. */
-export function uploadName(path: string): string | null {
-  return UPLOAD_PATH.exec(path)?.[1] ?? null;
 }
 
 function removePaths(text: string, paths: string[]): string {
@@ -84,15 +72,15 @@ export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
 // ── The draft ─────────────────────────────────────────────────────────────────────────────────────
 //
 // In the composer's text a picture is a chip: two blank Braille cells (the slot its icon is drawn in),
-// "Image #N" and one more cell, none of them a character anyone types, none a place a line breaks, and
-// none whitespace, so no trim() can take a piece of a chip at either end of the draft.
+// "Image #N" and a word joiner that ends it without taking room. None of them is a character anyone
+// types, a place a line breaks, or whitespace, so no trim() can take a piece of a chip at either end.
 // N counts the draft's pictures in the order they were attached, as the thumbnails above the text do.
 
-const CHIP = /\u2800\u2800Image\u00a0#(\d+)\u2800/g;
+const CHIP = /\u2800\u2800Image\u00a0#(\d+)\u2060/g;
 
 /** The chip for the draft's picture number `n` (from 1). */
 export function imageChip(n: number): string {
-  return `\u2800\u2800Image\u00a0#${n}\u2800`;
+  return `\u2800\u2800Image\u00a0#${n}\u2060`;
 }
 
 export interface DraftChip { number: number; start: number; end: number }
@@ -110,10 +98,16 @@ export function draftWords(text: string): string {
 /** The text with the pictures numbered in `gone` taken out, and the ones after them renumbered. */
 export function withoutImages(text: string, gone: readonly number[]): string {
   if (!gone.length) return text;
-  return text.replace(CHIP, (_chip, n: string) => {
-    const number = Number(n);
-    return gone.includes(number) ? "" : imageChip(number - gone.filter((g) => g < number).length);
-  });
+  let out = "";
+  let at = 0;
+  for (const chip of draftChips(text)) {
+    out += text.slice(at, chip.start);
+    at = chip.end;
+    if (!gone.includes(chip.number)) out += imageChip(chip.number - gone.filter((g) => g < chip.number).length);
+    // A chip that leaves from between two spaces takes one of them, so the words close up.
+    else if (out.endsWith(" ") && text[at] === " ") at++;
+  }
+  return out + text.slice(at);
 }
 
 /**

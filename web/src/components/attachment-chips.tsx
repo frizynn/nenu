@@ -47,7 +47,7 @@ export function AttachmentChips({
   if (!items.length) return null;
   let pictures = 0;
   return (
-    <ul aria-label="Attached files" className="composer-attachments flex gap-2.5 overflow-x-auto px-2.5 pb-0.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <ul aria-label="Attached files" className="composer-attachments flex gap-2.5 overflow-x-auto pr-2.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((item) => item.image ? (
         <PictureTile key={item.id} item={item} number={++pictures} onRemove={() => onRemove(item.id)} onRetry={() => onRetry(item.id)} disabled={disabled} />
       ) : (
