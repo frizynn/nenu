@@ -158,7 +158,10 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
   cards; model and context come from the chat's own reading, and the project's own views are not in the panel
-  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)).
+  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
+  takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
+  `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
+  ([ADR 0105](./.adr/0105-a-docked-thread-takes-the-panels-place-at-its-width.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
@@ -204,7 +207,7 @@ the unit name; the Herdr action runs from anywhere.
   only under periods that hold one on screen, and More folds them with motion, mounted.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
-  which read worse in a measured test ([ADR 0105](./.adr/0105-home-lists-the-projects-as-rows.md)).
+  which read worse in a measured test ([ADR 0106](./.adr/0106-home-lists-the-projects-as-rows.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

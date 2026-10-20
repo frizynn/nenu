@@ -1,4 +1,4 @@
-import { paneDiff, sessionDiff, type DiffScope } from "../pane-diff.ts";
+import { paneDiff, projectSessionDiff, type DiffScope } from "../pane-diff.ts";
 import type { PaneAction } from "./context.ts";
 import { json, jsonError } from "./http.ts";
 
@@ -7,21 +7,24 @@ import { json, jsonError } from "./http.ts";
 // branches and git's arguments all come from the bridge (pane-diff.ts). Read-level, like the
 // pane's files: it shows what is under the pane's folder.
 // `/api/pane/:id/diff?scope=branch|uncommitted` — what the pane's session changed, with or without a
-// PR. The base comes from the PR of the branch checked out there, else the repo's default.
+// PR. The base comes from the PR of the branch checked out there, else the repo's default. A pane whose
+// folder is in no repository (a coordinator's) reads its project's repository instead (PROJECT.md).
 const SCOPES: readonly DiffScope[] = ["branch", "uncommitted"];
 
 export const diffPaneActions: Record<string, PaneAction> = {
   diff: {
     level: "read",
     marksSeen: false,
-    async handle({ pullRequests }, { req, url, rt, paneId }) {
+    async handle({ projects, pullRequests }, { req, url, rt, paneId }) {
       const current = rt.engine.current();
-      const cwd = [...current.agents, ...current.shellPanes].find((entry) => entry.paneId === paneId)?.cwd;
+      const panes = [...current.agents, ...current.shellPanes];
+      const cwd = panes.find((entry) => entry.paneId === paneId)?.cwd;
       const scope = url.searchParams.get("scope");
       if (scope !== null) {
         if (!SCOPES.includes(scope as DiffScope)) return jsonError("scope must be branch or uncommitted.", 400, null);
-        const base = cwd ? pullRequests.onBranch(cwd)?.base : undefined;
-        return json(await sessionDiff(cwd, scope as DiffScope, { base }), req.headers.get("accept-encoding"));
+        const repos = projects.repos(rt.name, rt.isPrimary, panes, paneId);
+        const diff = await projectSessionDiff(cwd, scope as DiffScope, repos, { base: (folder) => pullRequests.onBranch(folder)?.base });
+        return json(diff, req.headers.get("accept-encoding"));
       }
       const number = Number(url.searchParams.get("pr"));
       if (!Number.isSafeInteger(number) || number <= 0) return jsonError("pr must be a pull request number.", 400, null);

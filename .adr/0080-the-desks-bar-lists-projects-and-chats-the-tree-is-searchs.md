@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-15). Amends [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md):
   the tree is still drawn as Organizations draws it, but the desk's sidebar no longer draws it.
-  Point 3's "A phone keeps its toast" is amended by [ADR 0094](./0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md). Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): the bar leads with Projects, not Routines. Point 1's period names are amended by [ADR 0105](./0105-home-lists-the-projects-as-rows.md).
+  Point 3's "A phone keeps its toast" is amended by [ADR 0094](./0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md). Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): the bar leads with Projects, not Routines. Point 1's period names are amended by [ADR 0106](./0106-home-lists-the-projects-as-rows.md).
 - **Trail:** `web/src/components/desk-nav.tsx` · `web/src/lib/desk-nav.ts` ·
   `web/src/components/workbench-sidebar.tsx` · `web/src/hooks/use-transitions.ts` ·
   `web/src/components/status-area.tsx`
