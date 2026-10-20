@@ -76,11 +76,14 @@ export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
 // types, a place a line breaks, or whitespace, so no trim() can take a piece of a chip at either end.
 // N counts the draft's pictures in the order they were attached, as the thumbnails above the text do.
 
-const CHIP = /\u2800\u2800Image\u00a0#(\d+)\u2060/g;
+/** A chip's blank cell (its icon's slot is two) and its end: characters nobody types. */
+const CELL = "\u2800";
+const END = "\u2060";
+const CHIP = new RegExp(`${CELL}${CELL}Image\u00a0#(\\d+)${END}`, "g");
 
 /** The chip for the draft's picture number `n` (from 1). */
 export function imageChip(n: number): string {
-  return `\u2800\u2800Image\u00a0#${n}\u2060`;
+  return `${CELL}${CELL}Image\u00a0#${n}${END}`;
 }
 
 export interface DraftChip { number: number; start: number; end: number }
@@ -169,7 +172,7 @@ export function dropStrayChips(text: string, count: number, caret: number): { te
   /** Words between chips, without a chip's own characters cut loose from one (a partial copy pasted). */
   const words = (from: number, to: number) => {
     for (let i = from; i < to; i++) {
-      if (text[i] === "\u2800" || text[i] === "\u2060") {
+      if (text[i] === CELL || text[i] === END) {
         if (caret > i) moved--;
       } else out += text[i];
     }

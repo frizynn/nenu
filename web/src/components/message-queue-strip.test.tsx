@@ -150,6 +150,8 @@ it("edits a queued message's words with each picture kept in its place; a chip t
   const end = `first ${imageChip(1)}`.length;
   fireEvent.change(input, { target: { value: input.value.slice(0, end - 1) + input.value.slice(end), selectionStart: end - 1, selectionEnd: end - 1 } });
   expect(input).toHaveValue(`first  then ${imageChip(1)} end`);
+  // React wrote the corrected text back; the cursor stays where the Backspace left it.
+  expect(input.selectionStart).toBe("first ".length);
   await user.click(screen.getByRole("button", { name: "Save queued message" }));
   expect(change).toHaveBeenLastCalledWith("edit", `first  then ${blue} end`, item);
 });
