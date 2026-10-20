@@ -82,7 +82,7 @@ function NodePage() {
       <TasksHeader title="Coordinator" paused={project.status === "paused"} subtitle={<>
         Project coordinator of <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline" to={projectPath(project.slug, data.session)}>{project.name}</Link>
       </>} />
-      {(state || agent) && <p className="-mt-2 mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+      {(state || agent) && <p className="-mt-2 mb-4 flex items-center gap-2 text-subhead text-muted-foreground">
         {state && <><NodeDot state={state} /><span className="font-medium text-foreground">{STATE_LABEL[state]}</span></>}
         {state && agent && <span aria-hidden>·</span>}
         {agent && <span>{agent}</span>}

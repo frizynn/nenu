@@ -348,11 +348,11 @@ function MoveNodeDialog({ project, tree, node, session, onMoved, onCancel }: {
         {options.map((option) => (
           <label key={option.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 hover:bg-accent/60" style={{ paddingLeft: `${0.5 + option.depth}rem` }}>
             <input type="radio" name="parent" value={option.id} checked={parent === option.id} onChange={() => setParent(option.id)} />
-            <span className="min-w-0 flex-1 break-words text-sm">{option.title}</span>
+            <span className="min-w-0 flex-1 break-words text-body">{option.title}</span>
           </label>
         ))}
       </div>
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-subhead text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button type="button" size="lg" onClick={() => void move()} disabled={busy || !parent} aria-busy={busy || undefined}>{busy ? "Moving…" : "Move"}</Button>

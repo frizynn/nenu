@@ -1445,7 +1445,7 @@ export function AgentChat({
       {terminalTab && createPortal(
         <ChatMessageList dep={text} className="py-3">
           {text ? <AnsiOutput text={text} wrap={prefs.wrap} fontSize={prefs.fontSize} />
-            : <p className="py-16 text-center text-sm text-muted-foreground">{pending ? "Reading the terminal…" : "(no recent output)"}</p>}
+            : <p className="py-16 text-center text-subhead text-muted-foreground">{pending ? "Reading the terminal…" : "(no recent output)"}</p>}
         </ChatMessageList>,
         terminalTab.mirror,
       )}

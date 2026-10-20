@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { declarations } from "@/test/css-rules";
 
-// The project pages, the activity views, the thread cards, the PR bar and the smaller blocks around
+// The project pages, the activity views, the PR bar and the smaller blocks around
 // the chat draw no hand-written px text size: a px size ignores the browser's text size, and a half
 // pixel is a step the scale (index.css) doesn't have. The files in ON_SCALE also draw none of
 // Tailwind's stock sizes (text-sm is 14px, which the scale has no step for): the project pages with
@@ -25,7 +25,6 @@ const ON_SCALE = [
   "routes/node.tsx",
   "components/start-agent.tsx",
   "components/connect-conversation.tsx",
-  "components/thread-cards.tsx",
   "components/pr-bar.tsx",
   "components/activity/task-output.tsx",
   "components/autocomplete-block.tsx",
@@ -37,7 +36,6 @@ const ON_SCALE = [
 const COMPONENTS = [
   ...ON_SCALE,
   "components/threads-panel.tsx",
-  "components/activity/activity-panel.tsx",
   "components/activity/activity-parts.tsx",
   "components/activity/artifact-list.tsx",
   "components/activity/processes.tsx",
