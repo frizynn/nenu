@@ -678,7 +678,6 @@ async function workspaceRows(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench(async (bridge, browser) => {
     await addDocs(bridge);
-    await addOps(bridge);
     await addPair(bridge);
     await addCrew(bridge);
     const names = ["nenu", "api", "docs", "ops", "pair", "crew"];
@@ -3679,13 +3678,6 @@ async function reading(): Promise<void> {
 }
 
 /**
- * The box stays put on a phone: a project coordinator's long chat at 390x844 in WebKit and Chromium,
- * dark and light, with the keyboard closed and open (the viewport cut to 390x470, as the keyboard
- * leaves it). Each lists what a finger can scroll (only the thread may), the root's overscroll, and
- * where the box and the header sit before and after a drag that starts on the box and one on the
- * header: a wheel in WebKit, a touch scroll gesture in Chromium. Then the Threads tab's scrollers.
- */
-/**
  * A finger pushing `by` px up from (195, y), down when negative. Chromium gets raw touch events (its
  * synthesized scroll gesture scrolls nothing headless). Mobile WebKit takes no wheel and Playwright
  * drives no touch scroll there, so it scrolls what the engine would: the nearest box under the finger
@@ -3715,6 +3707,13 @@ async function touchDrag(engine: "webkit" | "chromium", context: Context, page: 
   await page.waitForTimeout(400);
 }
 
+/**
+ * The box stays put on a phone: a project coordinator's long chat at 390x844 in WebKit and Chromium,
+ * dark and light, with the keyboard closed and open (the viewport cut to 390x470, as the keyboard
+ * leaves it). Each lists what a finger can scroll (only the thread may), the root's overscroll, and
+ * where the box and the header sit before and after a drag that starts on the box and one on the
+ * header: a wheel in WebKit, a touch scroll gesture in Chromium. Then the Threads tab's scrollers.
+ */
 async function pin(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
@@ -3808,11 +3807,12 @@ async function pin(): Promise<void> {
  * a coordinator node, Your asks, Settings, a chat, a coordinator's Threads, a chat's History, and two
  * sheets over a page, in WebKit and Chromium, twice: in Safari, whose bars leave the page no inset, and
  * as the home-screen app, 47px over and 34px under (env() is 0 headless, so the bundle's CSS says them).
- * Each screen: the root opts out of vertical overscroll (a
- * drag past an end rubber-bands the whole app in Safari otherwise), at most one box scrolls vertically,
- * a drag from the header, the middle and the bottom moves only that box (never the header, the tab bar,
- * the composer or the window), and the box's last row ends above whatever sits under it. On a sheet a
- * drag over the panel or the backdrop moves nothing behind it.
+ * The herd and the organization are seeded taller than a phone on every screen. Each screen: the root
+ * opts out of vertical overscroll (a drag past an end rubber-bands the whole app in Safari otherwise),
+ * exactly one box scrolls vertically, a drag from the header, the middle and the bottom moves only that
+ * box (never the header, the tab bar, the composer or the window) and moves it at least once, and the
+ * box's last row ends above whatever sits under it. On a sheet a drag over the panel or the backdrop
+ * moves nothing behind it. WebKit's drags are touchDrag's stand-in, not the engine's touch scrolling.
  */
 async function phoneScroll(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -3820,17 +3820,24 @@ async function phoneScroll(): Promise<void> {
   const seen: Record<string, unknown> = {};
   const failures: string[] = [];
   // orgTreeSeed with thirty more open threads, half of them under Migración de stock, so a project and
-  // a node are taller than a phone.
+  // a node are taller than a phone; eight more projects for Projects, a dozen asks for Your asks, and
+  // three more workspaces for Home's Recents.
   const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
     const seed = orgTreeSeed(herd, now, { coordinator: true });
     for (const thread of seed.projects[0]!.threads) {
       const n = Number(/^Tarea cerrada (\d+)$/.exec(String(thread.title))?.[1]);
       if (n <= 30) Object.assign(thread, { status: "open", group: "idle", group_label: "idle", title: `Tarea abierta ${n}`, parent_id: n <= 15 ? "root" : "t-0101" });
     }
+    for (let n = 1; n <= 8; n++) seed.projects.push({ slug: `side-${n}`, name: `Proyecto ${n}`, goal: "Un proyecto más para la lista", status: "active", threads: [] });
+    seed.asks = Array.from({ length: 12 }, (_, i) => ({ project: "acme", coordinator: { id: "root", title: "" }, line: 5 + i, state: i % 2 ? "working" : "needs-decision",
+      text: `Pregunta ${i + 1} sobre el checkout`, answer: "", links: [], confirmed: "", mismatch: "" }));
     return seed;
   } });
   try {
     const herd = bridge.herd!;
+    await addDocs(bridge);
+    await addPair(bridge);
+    await addCrew(bridge);
     await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
@@ -3853,11 +3860,13 @@ async function phoneScroll(): Promise<void> {
           // No service worker: it would serve the CSS from its cache, past the route that sets the insets.
           const context = await browser.newContext({ ...PHONE, timezoneId: "UTC", locale: "en-US", serviceWorkers: "block" });
           const page = await context.newPage();
+          let insets = 0;
           await page.route("**/assets/*.css", async (route) => {
             const css = await (await route.fetch()).text();
+            const set = (px: number) => () => { insets++; return `${px}px`; };
             await route.fulfill({ contentType: "text/css", body: css
-              .replace(/env\(\s*safe-area-inset-top\s*(,[^)]*)?\)/g, `${over}px`)
-              .replace(/env\(\s*safe-area-inset-bottom\s*(,[^)]*)?\)/g, `${under}px`) });
+              .replace(/env\(\s*safe-area-inset-top\s*(,[^)]*)?\)/g, set(over))
+              .replace(/env\(\s*safe-area-inset-bottom\s*(,[^)]*)?\)/g, set(under)) });
           });
           await page.clock.install({ time: bridge.now() });
           for (const screen of screens) {
@@ -3869,12 +3878,17 @@ async function phoneScroll(): Promise<void> {
               await page.waitForTimeout(800);
             }
             // Every vertical scroller but a text field's, each scroll offset, and where the fixed chrome stands.
+            // A box is named by its tag, two classes and a number it keeps across reads, so two alike stay apart.
             const state = () => page.evaluate(() => {
-              const name = (el: Element) => `${el.tagName.toLowerCase()}.${String(el.className).split(" ").filter(Boolean).slice(0, 2).join(".")}`;
+              const ids = window as unknown as { __e2eBoxes?: number };
+              const name = (el: HTMLElement) => {
+                el.dataset.e2eBox ??= String(ids.__e2eBoxes = (ids.__e2eBoxes ?? 0) + 1);
+                return `${el.tagName.toLowerCase()}.${String(el.className).split(" ").filter(Boolean).slice(0, 2).join(".")}#${el.dataset.e2eBox}`;
+              };
               const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
               const scrollers = Array.from(document.querySelectorAll<HTMLElement>("body *"))
                 .filter((el) => el.tagName !== "TEXTAREA" && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
-                .map((el) => ({ name: name(el), extra: el.scrollHeight - el.clientHeight, inSheet: !!dialog?.contains(el) }));
+                .map((el) => ({ name: name(el), box: el.dataset.e2eBox!, extra: el.scrollHeight - el.clientHeight, inSheet: !!dialog?.contains(el) }));
               const offsets: Record<string, number> = {};
               for (const el of Array.from(document.querySelectorAll<HTMLElement>("html, body, body *"))) if (el.scrollTop && !dialog?.contains(el)) offsets[name(el)] = Math.round(el.scrollTop);
               const top = (selector: string) => {
@@ -3890,11 +3904,13 @@ async function phoneScroll(): Promise<void> {
             const path = join(outDir, `phone-scroll-${screen.name}-${engine}-${shell}.png`);
             await page.screenshot({ path, animations: "disabled" });
             shots.push(path);
+            if (under && !insets) failures.push(`${where}: no env(safe-area-inset-*) in the CSS to set`);
             if (at.overscroll !== "none") failures.push(`${where}: the root's overscroll is ${at.overscroll}`);
             const page_ = at.scrollers.filter((s) => !s.inSheet);
-            if (page_.length > 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
-            // A finger from each place, up then down. Only the screen's own box may move, and a sheet moves nothing behind it.
-            const own = screen.sheet ? null : page_[0]?.name ?? null;
+            if (!screen.sheet && page_.length !== 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
+            // A finger from each place, up then down. Only the screen's own box may move, and it must; a sheet moves nothing behind it.
+            const own = screen.sheet ? null : page_[0] ?? null;
+            let ownMoved = false;
             const bottom = at.bar ?? at.composer ?? 800;
             // A sheet is dragged in Chromium only: the WebKit stand-in walks the DOM, while an engine chains a
             // fixed layer's scroll by its containing block. Its panel goes up only, since a pull down from the
@@ -3912,16 +3928,17 @@ async function phoneScroll(): Promise<void> {
                 if (screen.sheet && !before.panel) failures.push(`${where}: the sheet closed before a drag from the ${from}`);
                 await touchDrag(engine, context, page, y, by);
                 const after = await state();
-                const changed = Object.keys({ ...before.offsets, ...after.offsets }).filter((k) => before.offsets[k] !== after.offsets[k] && k !== own);
+                const changed = Object.keys({ ...before.offsets, ...after.offsets }).filter((k) => before.offsets[k] !== after.offsets[k] && k !== own?.name);
+                if (own && before.offsets[own.name] !== after.offsets[own.name]) ownMoved = true;
                 const chrome = (["header", "bar", "composer"] as const).filter((k) => after[k] !== before[k]);
                 moved[`${from} ${by > 0 ? "up" : "down"}`] = { changed, chrome, windowY: after.windowY };
                 if (changed.length || chrome.length || after.windowY !== 0) failures.push(`${where}: a drag ${by > 0 ? "up" : "down"} from the ${from} moved ${[...changed, ...chrome, ...(after.windowY ? ["the window"] : [])].join(", ")}`);
               }
             }
+            if (own && !ownMoved) failures.push(`${where}: no drag scrolled ${own.name}`);
             // The end: the screen's box at its bottom, its lowest row of text drawn and not under anything.
-            const end = screen.sheet ? null : await page.evaluate(() => {
-              const box = Array.from(document.querySelectorAll<HTMLElement>("body *"))
-                .find((el) => el.tagName !== "TEXTAREA" && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1);
+            const end = !own ? null : await page.evaluate((id: string) => {
+              const box = document.querySelector<HTMLElement>(`[data-e2e-box="${id}"]`);
               if (!box) return null;
               box.scrollTop = box.scrollHeight;
               const drawn = (el: Element) => {
@@ -3936,7 +3953,7 @@ async function phoneScroll(): Promise<void> {
               const hit = document.elementFromPoint(row.left + Math.min(8, row.width / 2), row.bottom - 3);
               return { text: (last.textContent ?? "").trim().slice(0, 40), bottom: Math.round(row.bottom), boxBottom: Math.round(box.getBoundingClientRect().bottom),
                 covered: !hit || !(hit === last || last.contains(hit) || hit.contains(last)) };
-            }, null);
+            }, own.box);
             if (end?.covered) failures.push(`${where}: the last row "${end.text}" is under something at ${end.bottom}`);
             if (end && end.bottom > end.boxBottom) failures.push(`${where}: the last row ends at ${end.bottom}, past its box's ${end.boxBottom}`);
             if (screen.sheet) await page.keyboard.press("Escape");
