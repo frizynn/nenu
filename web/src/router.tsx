@@ -62,7 +62,7 @@ export const routes: RouteObject[] = [
       { path: "settings/usage", handle: depth(2), lazy: async () => ({ Component: (await import("@/routes/usage")).UsageRoute }) },
       // Every project as a card, opened from the desk's bar: its code loads when it is opened.
       { path: "projects", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/projects")).ProjectsRoute }) },
-      // A phone's; a desk lands on Projects (ADR 0100). Its code loads when it is opened.
+      // A phone's; a desk lands on Projects (ADR 0101). Its code loads when it is opened.
       { path: "routines", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/routines")).RoutinesRoute }) },
       // Every coordinator's asks, opened from the projects' lists: its code loads when it is opened.
       { path: "asks", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/asks")).AsksRoute }) },

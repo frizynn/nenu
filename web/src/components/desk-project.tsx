@@ -6,7 +6,7 @@ import { CoordinatorWorkCard, DeskHead, DeskTabs, useDeskTab, useOpenNode, Waiti
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
-import { ProjectContext } from "@/components/project-panel";
+import { ProjectContext } from "@/components/project-context";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StartProjectCoordinator } from "@/components/project-coordinator";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ import { isReadOnly, type AgentView, type DeviceAuth, type NodeRole, type Projec
 type Tab = "work" | "waiting" | "routines" | "context";
 
 /**
- * A project on a desk (ADR 0100): its name and goal, Project chat and New, then Work (a card per
+ * A project on a desk (ADR 0101): its name and goal, Project chat and New, then Work (a card per
  * coordinator with its threads, the project coordinator's last), Waiting on you by coordinator,
  * Routines and Context. It never redirects to the coordinator's chat: Project chat opens it.
  */

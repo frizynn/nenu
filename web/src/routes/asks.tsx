@@ -18,7 +18,7 @@ import { isReadOnly, type AskCoordinator, type AsksList, type ProjectView } from
  * Organizations' popup groups it, each row saying whose it is and where it stands, its links as chips,
  * and Answer where one waits on you (ADR 0093). A project and a coordinator narrow it, kept in the
  * address so a link can open it narrowed. Read when the page opens and again when the organization
- * moves; never polled. A desk reads them on each project's and coordinator's Waiting on you (ADR 0100),
+ * moves; never polled. A desk reads them on each project's and coordinator's Waiting on you (ADR 0101),
  * so an old link lands there.
  */
 export function AsksRoute() {

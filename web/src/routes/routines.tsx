@@ -16,7 +16,7 @@ import type { ProjectView, RoutineList, RoutineView } from "@/lib/types";
  * Every project's routines, read once when the page opens and never polled: what each one runs on,
  * and whether it is on. Read only: a routine is changed with `herdr-organizations routine` at a
  * terminal, where approving a command is the person's own step. A desk reads them on each project's
- * Routines tab (ADR 0100), so an old link lands on Projects.
+ * Routines tab (ADR 0101), so an old link lands on Projects.
  */
 export function RoutinesRoute() {
   // SAFETY: this route is a child of the root route, whose loader returns HomeData (router.tsx).

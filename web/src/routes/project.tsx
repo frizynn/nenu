@@ -16,7 +16,7 @@ import { openCoordinators, organizes, orgTree, type OrgNode } from "@/lib/org-tr
 import { isReadOnly, type StatusFile } from "@/lib/types";
 import { projectChat, runningCoordinator } from "@/lib/projects";
 
-// On a desk a project is its own page, with tabs (ADR 0100); on a phone it is as before.
+// On a desk a project is its own page, with tabs (ADR 0101); on a phone it is as before.
 export function ProjectRoute() {
   return useDesk() ? <DeskProjectRoute /> : <PhoneProjectRoute />;
 }
