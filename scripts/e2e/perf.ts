@@ -53,8 +53,11 @@ async function copyProject(root: string, { socketPath }: { socketPath: string })
   // The one way a file in the copy is written: never through a link, at the file or in a folder above
   // it, which may lead back to the operator's own registry.
   const inside = (await realpath(dest)) + sep;
-  const rewrite = async (file: string, edit: (text: string) => string) => {
-    if (!(await realpath(file)).startsWith(inside)) return;
+  const rewrite = async (file: string, edit: (text: string) => string, required = false) => {
+    if (!(await realpath(file)).startsWith(inside)) {
+      if (required) throw new Error(`${file} leads outside the bench's copy`);
+      return;
+    }
     const text = await readFile(file, "utf8");
     const edited = edit(text);
     if (edited !== text) await writeFile(file, edited);
@@ -71,11 +74,11 @@ async function copyProject(root: string, { socketPath }: { socketPath: string })
   const bind = (pane: string, workspace: string, tab: string) => (text: string) => text
     .replace(/^pane_id = ".*"$/m, `pane_id = "${pane}"`).replace(/^workspace_id = ".*"$/m, `workspace_id = "${workspace}"`)
     .replace(/^tab_id = ".*"$/m, `tab_id = "${tab}"`).replace(/^cwd = ".*"$/m, `cwd = ${JSON.stringify(threadCwd)}`);
-  await rewrite(join(dest, "threads", `${threadId}.toml`), (text) => sockets(bind(threadPane, "w1", "w1:t2")(text)));
+  await rewrite(join(dest, "threads", `${threadId}.toml`), (text) => sockets(bind(threadPane, "w1", "w1:t2")(text)), true);
   await rewrite(join(dest, ".state", "coordinator.json"), (text) => {
     const coordinator = JSON.parse(text) as Record<string, unknown>;
     return JSON.stringify({ ...coordinator, socket: socketPath, workspace_id: "w1", tab_id: "w1:t1", pane_id: coordinatorPane, cwd: threadCwd });
-  });
+  }, true);
 }
 
 /**
