@@ -40,7 +40,17 @@ describe("Home's projects", () => {
     ] });
     const { region } = show([busy], [agent("p1", "w-a", "working"), agent("p2", "w-a", "working"), agent("p3", "w-a", "idle"), agent("p4", "w-other", "working")]);
     expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 asks2 working1 to review");
-    expect(region.getByRole("link", { name: /^A/ }).getAttribute("href")).toBe("/project/a?tab=waiting");
+    // Its asks open where they are answered: the project's Waiting on you on a desk, the list on a phone.
+    expect(region.getByRole("link", { name: /^A/ }).getAttribute("href")).toBe("/asks?project=a");
+  });
+
+  it("says one ask in the singular, and calls waiting nodes waiting where Organizations lists no asks", () => {
+    const one = project("a", 1, { waitingAsks: 1 });
+    const older = project("b", 2, { threads: [{ id: "t-1", title: "Hook", parentId: "root", role: "worker", status: "open", group: "waiting-on-you", updated: ago(2) }] });
+    const { region } = show([one, older]);
+    expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("1 ask");
+    expect(region.getByRole("link", { name: /^B/ })).toHaveTextContent("1 waiting");
+    expect(region.getByRole("link", { name: /^B/ }).getAttribute("href")).toBe("/project/b");
   });
 
   it("says what a quiet project is: paused, nothing running, or nothing open", () => {

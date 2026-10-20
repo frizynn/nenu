@@ -36,10 +36,8 @@ export function workspacePath(workspaceId: string, herd: Herd, session?: string)
   return entry ? panePath(entry.paneId, session) : `/space/${encodeURIComponent(workspaceId)}${sessionSearch(session)}`;
 }
 
-export function projectPath(slug: string, session?: string, tab?: string): string {
-  const search = sessionSearch(session);
-  const tabSearch = tab ? `${search ? "&" : "?"}tab=${encodeURIComponent(tab)}` : "";
-  return `/project/${encodeURIComponent(slug)}${search}${tabSearch}`;
+export function projectPath(slug: string, session?: string): string {
+  return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
 }
 
 /** One node of a project's organization: its detail, for a node that runs in no live pane. */
@@ -62,9 +60,13 @@ export function routinesPath(session?: string): string {
   return `/routines${sessionSearch(session)}`;
 }
 
-/** Your asks: what you asked every coordinator, and where each one stands. */
-export function asksPath(session?: string): string {
-  return `/asks${sessionSearch(session)}`;
+/**
+ * Your asks: what you asked every coordinator, and where each one stands; with `project`, that
+ * project's alone, which a desk opens on the project's Waiting on you and a phone answers in place.
+ */
+export function asksPath(session?: string, project?: string): string {
+  const search = sessionSearch(session);
+  return `/asks${search}${project ? `${search ? "&" : "?"}project=${encodeURIComponent(project)}` : ""}`;
 }
 
 /** The settings route, carrying the current session like the other path helpers. */

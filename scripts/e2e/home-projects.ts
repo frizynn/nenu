@@ -9,8 +9,9 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 // Home's projects and the desk's chats, captured with Google Chrome headless at 1440 and 390 px over
 // three projects shaped like a busy herd: one with twenty open threads that all moved today (asks,
 // work, reviews, pull requests in every state), one whose threads moved days and weeks ago, and a
-// paused one. Captures Home, the desk's bar folded and unfolded, the fold mid-way, and the phone's Home,
-// then checks that no period heading is drawn without a chat under it.
+// paused one. Captures Home, the desk's bar folded, unfolding and unfolded, and the phone's Home; checks that
+// no period heading is drawn without a chat under it, that a press starts the fold's transitions both ways
+// and folding back leaves the bar as it was, and that nothing in a project's row is cut at 390 px.
 //
 //   bun scripts/e2e/home-projects.ts [--port 8871] [--out DIR] [--tag before|after]
 
@@ -83,7 +84,7 @@ async function main(): Promise<void> {
   let browser: Browser | null = null;
   try {
     browser = await launchChrome();
-    // DESKTOP and PHONE ask for reduced motion, which stills the fold; the bar is captured as most people see it.
+    // DESKTOP and PHONE ask for reduced motion, which stills the fold; these pages are captured as most people see them.
     const open = async (device: Record<string, unknown>, scheme: "dark" | "light" = "dark") => {
       const context = await browser!.newContext({ ...device, reducedMotion: "no-preference", colorScheme: scheme, timezoneId: "America/Argentina/Buenos_Aires", locale: "en-US" });
       const page = await context.newPage();
@@ -118,12 +119,12 @@ async function main(): Promise<void> {
         for (const group of folded) if (group.visible && group.rows === 0) failures.push(`folded: "${group.label}" is drawn with no chat under it`);
         const more = nav.locator("section[aria-label=Chats] button[aria-expanded]").last();
         seen.moreLabel = await more.innerText();
-        // A press starts the fold's transitions at once; counted two frames later (the first runs before the style
-        // pass that creates them), well inside their 220 ms and before a screenshot's latency hides them.
+        // A press starts the fold's transitions at once: the bar's own are counted shortly after, well inside their
+        // 220 ms and before a screenshot's latency would hide them.
         const pressAndCount = () => more.evaluate((button) => {
           (button as HTMLElement).click();
-          return new Promise<number>((done) => requestAnimationFrame(() => requestAnimationFrame(() =>
-            done(document.getAnimations().filter((motion) => motion instanceof CSSTransition).length))));
+          return new Promise<number>((done) => setTimeout(() =>
+            done(button.closest("nav")!.getAnimations({ subtree: true }).filter((motion) => motion instanceof CSSTransition).length), 40));
         });
         seen.transitionsUnfolding = await pressAndCount();
         if (!seen.transitionsUnfolding) failures.push("unfolding ran no transition");

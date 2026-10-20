@@ -67,6 +67,8 @@ export interface ProjectPulse {
   threads: number;
   /** Open coordinators and threads together. */
   open: number;
+  /** `waiting` is Organizations' asks count; false when it lists none and the tree's waiting nodes stand in. */
+  asks: boolean;
   at: number;
 }
 
@@ -83,7 +85,7 @@ export function projectPulse(project: ProjectView, agents: readonly AgentView[],
   return {
     waiting: project.waitingAsks ?? count("needs"), review: count("review"),
     working: projectAgents(project, agents, projects).filter((pane) => pane.status === "working").length,
-    coordinators, threads: open.length - coordinators, open: open.length, at: projectActivity(project, agents),
+    coordinators, threads: open.length - coordinators, open: open.length, asks: project.waitingAsks !== undefined, at: projectActivity(project, agents),
   };
 }
 

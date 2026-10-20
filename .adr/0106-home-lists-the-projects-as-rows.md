@@ -34,11 +34,13 @@ answer behind a tap, which is what the operator complained about.
    the organization tree draws for it, and when it last moved. A project with nothing running says so
    and how many threads it holds open. Five rows, then Show all; See all opens Projects.
 2. **The counts are `projectPulse`**, the same numbers Projects' cards draw, and nothing new is read.
-   "Asks" is Organizations' count of questions and decisions (the project's Waiting on you tab, where
-   such a row opens), never the headline's "needs you", which counts dialogs: a second review read
-   "2 waiting" under "1 needs you" as the same thing counted twice. "Working" counts the project's agents at work, the unit the
-   headline counts (an agent outside every project counts only there): a review caught the headline saying 1 working above a row saying 11, when the
-   row counted threads whose last group said working.
+   - "Asks" is Organizations' count of questions and decisions, never the headline's "needs you", which
+     counts dialogs: a review read "2 waiting" under "1 needs you" as one thing counted twice. A row with
+     asks opens `/asks?project=`, which a desk lands on the project's Waiting on you and a phone answers
+     in place. An Organizations that lists no asks leaves the tree's waiting nodes, shown as "waiting".
+   - "Working" counts the project's agents at work, the unit the headline counts (an agent outside every
+     project counts only there): a review caught the headline saying 1 working above a row saying 11,
+     when the row counted threads whose last group said working.
 3. **Rows keep their place while on screen** (`useHeldTime`, ADR 0094): last activity first, paused
    ones last. The order comes back on a return to the page; with a handful of projects there is no
    "N updates" count, as Recents has.
