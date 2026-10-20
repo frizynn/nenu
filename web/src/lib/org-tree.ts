@@ -23,8 +23,8 @@ export function liveState(status: AgentStatus): OpenState | undefined {
 }
 
 /**
- * A coordinator's state from its agent's. A coordinator has nothing to review: a turn that ended
- * (Herdr's `done`) leaves it idle at its prompt. Undefined while Herdr cannot tell.
+ * A coordinator's state from its agent's, and a conversation's. Neither has anything to review: a turn
+ * that ended (Herdr's `done`) leaves it idle at its prompt. Undefined while Herdr cannot tell.
  */
 export function coordinatorState(status: AgentStatus): OpenState | undefined {
   const live = liveState(status);
@@ -32,17 +32,26 @@ export function coordinatorState(status: AgentStatus): OpenState | undefined {
 }
 
 /**
+ * A conversation whose turn ended: it said `Waiting for you`, as it does before every answer, on a live
+ * pane Herdr does not read blocked. Organizations groups it Waiting on you; it waits on nobody.
+ */
+function atRest(thread: ProjectThreadView, live: OpenState | undefined): boolean {
+  return thread.conversation === true && thread.selfWaiting === true && live !== undefined && live !== "needs";
+}
+
+/**
  * Organizations' group decides, as its popup does (landing reads as review); the live pane is the
- * fresher reading of whether an agent is working, and a failed start needs you. A coordinator is the
- * exception: it never reads as ready for review, which Organizations groups it as once its report has
- * a verdict and Herdr's `done` would say after every turn; it works, needs you, or is idle.
+ * fresher reading of whether an agent is working, and a failed start needs you. A coordinator and a
+ * conversation are the exception: neither reads as ready for review, which Organizations groups them
+ * as once a report has a verdict and Herdr's `done` would say after every turn; each works, needs you
+ * (a dialog, a failed start, a lost pane), or is idle.
  */
 export function nodeState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
-  if (thread.status === "failed" || live === "needs" || thread.group === "waiting-on-you") return "needs";
+  if (thread.status === "failed" || live === "needs" || (thread.group === "waiting-on-you" && !atRest(thread, live))) return "needs";
   if (thread.group === "awaiting-merge") return "merging";
-  if (thread.role === "coordinator") {
+  if (thread.role === "coordinator" || thread.conversation) {
     const own = thread.paneId && thread.liveStatus ? coordinatorState(thread.liveStatus) : undefined;
     return own ?? (thread.group === "working" || thread.status === "starting" ? "working" : "idle");
   }

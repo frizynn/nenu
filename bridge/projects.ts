@@ -257,6 +257,7 @@ function tomlThread(record: TomlObject): OrgThreadView | undefined {
     reportUnacked: reportHash !== "" && reportHash !== string(record.acked_report_hash),
     ...(group ? { group } : {}),
     ...(string(record.activity) === WAITING_ACTIVITY ? { selfWaiting: true } : {}),
+    ...(record.keep_open === true ? { conversation: true } : {}),
     ...(branch ? { branch } : {}),
     ...(pr ? { pr } : {}),
   };
@@ -300,6 +301,7 @@ function jsonThread(record: OrgOverviewThread, prActions: boolean): OrgThreadVie
     ...(record.group ? { group: record.group, groupLabel: record.group_label } : {}),
     ...(record.note ? { note: record.note } : {}),
     ...(record.activity === WAITING_ACTIVITY ? { selfWaiting: true } : {}),
+    ...(record.keep_open ? { conversation: true } : {}),
     ...(record.branch ? { branch: record.branch } : {}),
     ...(prActions ? { autoFixCi: record.auto_fix_ci === true, autoMerge: record.auto_merge === true } : {}),
     ...(pr ? { pr } : {}),
