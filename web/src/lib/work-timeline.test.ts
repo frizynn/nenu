@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkTimeline, describeTool, firstLine, formatWorkDuration, liveStep, type WorkTurn } from "./work-timeline";
+import { buildWorkTimeline, commandOutput, describeTool, firstLine, formatWorkDuration, liveStep, stepsDiff, stepsSummary, workSegments, type WorkStep, type WorkTurn } from "./work-timeline";
 import type { TranscriptEntry, TranscriptPart } from "./types";
 
 const text = (value: string): TranscriptPart => ({ kind: "text", text: value });
@@ -255,5 +255,43 @@ describe("liveStep", () => {
 
   it("has nothing to say about a turn that is not running", () => {
     expect(liveStep(work([user(), entry("done", { parts: [tool], turn: { status: "completed" } })], "done"))).toBeNull();
+  });
+});
+
+describe("workSegments", () => {
+  it("cuts the work at the agent's words, one run of steps between two texts, the live step left out", () => {
+    const first = entry("a", { parts: [text("Looking"), tool, thought] });
+    const second = entry("b", { parts: [tool, text("Found it"), text("And more"), tool] });
+    const segments = workSegments([first, second], { part: tool as WorkStep["part"], entry: "b", index: 3 });
+    expect(segments.map((s) => s.kind === "prose" ? s.parts.map((p) => p.index) : s.steps.map((p) => `${p.entry}:${p.index}`))).toEqual([
+      [0], ["a:1", "a:2", "b:0"], [1, 2],
+    ]);
+    expect(segments[1]).toMatchObject({ kind: "steps", id: "a:1" });
+  });
+});
+
+describe("stepsSummary", () => {
+  const step = (part: TranscriptPart): WorkStep => ({ part: part as WorkStep["part"], entry: "e", index: 0 });
+  const call = (name: string, summary = "x", extra: object = {}) => step({ kind: "tool", name, summary, ...extra });
+
+  it("counts what the steps did, in the order they first did it, a file edited twice once", () => {
+    expect(stepsSummary([call("Bash"), call("Read", "a"), call("Bash"), call("Read", "b"), call("Edit", "a"), call("Edit", "a")]))
+      .toBe("Ran 2 commands, read 2 files, edited 1 file");
+    expect(stepsSummary([call("Grep"), call("WebSearch"), call("mcp__x__lookup"), call("mcp__x__other")])).toBe("Searched 1 pattern, searched the web, used 2 tools");
+    expect(stepsSummary([call("ExitPlanMode")])).toBe("Proposed a plan");
+    expect(stepsSummary([step(thought)])).toBe("Thought");
+  });
+
+  it("adds up the lines edits changed, leaving out the ones that failed", () => {
+    expect(stepsDiff([call("Read")])).toBeNull();
+    expect(stepsDiff([call("Edit", "a", { diff: { added: 3, removed: 1 } }), call("Write", "b", { diff: { added: 5, removed: 0 } }),
+      call("Edit", "c", { diff: { added: 9, removed: 9 }, result: { text: "no match", isError: true } })])).toEqual({ additions: 8, deletions: 1 });
+  });
+});
+
+describe("commandOutput", () => {
+  it("splits the exit code Claude opens a failed command with", () => {
+    expect(commandOutput("Exit code 2\nnope")).toEqual({ code: 2, output: "nope" });
+    expect(commandOutput("fine")).toEqual({ output: "fine" });
   });
 });

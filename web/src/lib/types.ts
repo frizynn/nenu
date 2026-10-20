@@ -554,6 +554,10 @@ export type TranscriptPart =
       kind: "tool";
       name: string;
       summary: string;
+      /** What the call says it does, in the agent's words. Mirrors bridge/journal/types.ts. */
+      description?: string;
+      /** Lines an edit adds and removes, from its input. */
+      diff?: { added: number; removed: number };
       /** `descriptions` runs beside `options` ("" for none), only when any option has one. */
       questions?: Array<{ title: string; options: string[]; descriptions?: string[] }>;
       result?: { text: string; truncated?: boolean; isError?: boolean; attachments?: ToolAttachment[] };

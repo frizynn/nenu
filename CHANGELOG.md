@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.29.0] - 2026-10-20
+## [1.30.0] - 2026-10-20
 
 ### Added
 
@@ -19,6 +19,12 @@ All notable changes to Nenu are recorded here. The format follows
 - The panel's tabs are Overview, Changes, Files and Terminal; Artifacts is a view inside Files (53c833d6).
 - The project's Notes, Agents, PRs and Context are no longer in the panel (53c833d6).
 - The Overview's changes refresh when the thread or its agent moves (98b173da).
+
+## [1.29.0] - 2026-10-20
+
+### Added
+- Desk chat: the steps between two of the agent's texts fold into one line ("Ran 4 commands, read 2 files", +N −M), a table of steps when open, each opening onto its command and output with its exit code; the running step stays outside (c16199e7)
+- Journal: a Claude command keeps its description and an edit its lines added and removed (3abb96ea)
 
 ## [1.28.0] - 2026-10-19
 

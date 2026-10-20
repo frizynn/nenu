@@ -27,6 +27,22 @@ const answer = (id: string) => ({
 });
 
 describe("Claude structured rows", () => {
+  test("a command keeps its description and an edit its lines added and removed", () => {
+    const call = (id: string, name: string, input: unknown) => ({ type: "tool_use", id, name, input });
+    const parts = parse([{ type: "assistant", uuid: "a", timestamp: "t", message: { role: "assistant", content: [
+      call("b", "Bash", { command: "bun test", description: "Run the  tests" }),
+      call("e", "Edit", { file_path: "a.ts", old_string: "keep\nold\nkeep", new_string: "keep\nnew\nnewer\nkeep" }),
+      call("m", "MultiEdit", { file_path: "a.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c\nd", new_string: "" }] }),
+      call("w", "Write", { file_path: "b.ts", content: "one\ntwo\n" }),
+      call("r", "Read", { file_path: "a.ts" }),
+      call("x", "MultiEdit", { file_path: "a.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "d", replace_all: true }] }),
+    ] } }]).entries()[0]!.parts;
+    expect(parts.map((part) => part.kind === "tool" ? [part.description, part.diff] : null)).toEqual([
+      ["Run the tests", undefined], [undefined, { added: 2, removed: 1 }], [undefined, { added: 1, removed: 3 }],
+      [undefined, undefined], [undefined, undefined], [undefined, undefined],
+    ]);
+  });
+
   test("the P0 probe log: queue operations, the absorbed message as speech, and no pending question", async () => {
     const parser = new ClaudeParser();
     feedText(await Bun.file(join(FIXTURES, "journal-queue-and-dialogs-v2296.jsonl")).text(), (l, o, b) => parser.line(l, o, b));
