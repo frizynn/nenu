@@ -14,12 +14,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 - Opening a chat asks for its conversation beside the pane, and a desk's panel code with it, instead of after the first render; only the chat's first read takes it, and only where the chat reads one (6f18064a, c50028d4, 555c6e0a).
 - Artifacts reads the conversation in one or two requests, checks its files together, and no longer flashes "No artifacts" before and between them; three checks at a time (6067f081, 3848c844, d1303fa1).
-- Context draws the last read at once on a return, starts reading when the pointer comes over the tab, and shows each file as its own card with its Markdown drawn (2b3dd41a).
+- Context draws the last read at once on a return, starts reading when the pointer comes over the tab, and shows each file as its own card with its Markdown drawn, hanging from the file's name (2b3dd41a, 9ef22c34).
 - Files draws a folder's last listing at once when it opens again, instead of "Loading files…" (4a7df066).
 
 ### Added
 
-- `bun scripts/e2e/perf.ts`: tap to content on Context, Work, a thread, the project chat, Files and Artifacts, over a copy of a real project and real conversations, with each tap's reads in order; the copy's Herdr sockets all point at the bench's (3c66e021, c94be377, 7dc8c70e, f5885ff5).
+- `bun scripts/e2e/perf.ts`: tap to content on Context, Work, a thread, the project chat, Files and Artifacts, over a copy of a real project and real conversations, with each tap's reads in order; the copy's Herdr sockets all point at the bench's and nothing is written outside it (3c66e021, c94be377, 7dc8c70e, f5885ff5, 6d9b3736, 18517701).
 
 ## [1.33.0] - 2026-10-20
 
