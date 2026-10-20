@@ -139,6 +139,10 @@ async function main(): Promise<void> {
     {
       const { page, context } = await open(PHONE);
       await shoot(page, "home-390");
+      // Every word of a project's row fits a phone: a count cut to "11 worki…" reads as nothing.
+      seen.cutAt390 = await page.locator("section[aria-labelledby=home-projects] .truncate").evaluateAll((spans) =>
+        spans.filter((span) => span.scrollWidth > span.clientWidth + 1).map((span) => span.textContent));
+      for (const text of seen.cutAt390 as string[]) failures.push(`390: "${text}" is cut`);
       await page.evaluate(() => window.scrollTo(0, 0), null);
       const tall = await browser.newContext({ ...PHONE, viewport: { width: 390, height: 1700 }, colorScheme: "dark", timezoneId: "America/Argentina/Buenos_Aires", locale: "en-US" });
       const full = await tall.newPage();

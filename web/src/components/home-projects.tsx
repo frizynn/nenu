@@ -17,7 +17,7 @@ export const PROJECT_ROWS = 5;
 /** What a project's state reads as, most pressing first: each count with the dot the organization tree draws for it. */
 function pulseParts(pulse: ProjectPulse): Array<{ state: NodeState; text: string }> {
   return [
-    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} waiting on you` },
+    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} ${pulse.waiting === 1 ? "needs" : "need"} you` },
     pulse.working > 0 && { state: "working" as const, text: `${pulse.working} working` },
     pulse.review > 0 && { state: "review" as const, text: `${pulse.review} to review` },
   ].filter((part) => part !== false);
@@ -30,7 +30,7 @@ function PulseLine({ project, pulse, className }: { project: ProjectView; pulse:
   const quiet = [project.status === "paused" ? "Paused" : open > 0 && "Nothing running", open > 0 ? `${open} open ${open === 1 ? "thread" : "threads"}` : "No open threads"]
     .filter(Boolean).join(" · ");
   return (
-    <span className={cn("flex min-w-0 items-center gap-x-3 overflow-hidden text-footnote text-muted-foreground", className)}>
+    <span className={cn("flex min-w-0 items-center gap-x-2.5 overflow-hidden text-footnote sm:gap-x-3 text-muted-foreground", className)}>
       {parts.length === 0
         ? <span className="truncate">{quiet}</span>
         : <>
