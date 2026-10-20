@@ -12,13 +12,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- Home lists your projects: what needs you there, how many work, how many to review and when each last moved; rows chosen over cards and chips by a readers' test (8fcb8247, 5d430fff).
+- Home lists your projects: what waits on you there, how many agents work, how many to review and when each last moved; rows chosen over cards and chips by a readers' test (8fcb8247, 5d430fff, cc81f7c6).
 - `bun scripts/e2e/home-projects.ts`: Home and the desk's chats over a busy herd, folded and unfolded, phone and desk (6a22aac1).
 
 ### Fixed
 
 - The desk's chats no longer show empty "Last 7 days / Last 30 days / Older" headings: only periods with a chat on screen, named Today, Yesterday, Previous 7 days, Previous 30 days and Older; "Show N more" folds and unfolds with motion; period names stay on top while scrolling (6a22aac1).
-- A chat's pull request glyph says what it asks: a draft's own glyph, red while checks fail, green once approved; rows take an inset focus ring and a 120 ms hover fill (6a22aac1).
+- A chat's pull request glyph says what it asks: a draft's own glyph, red while checks fail, green once approved; rows take an inset focus ring and a 120 ms hover fill (6a22aac1, cc81f7c6).
 
 ## [1.32.1] - 2026-10-20
 
