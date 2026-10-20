@@ -39,7 +39,8 @@ describe("Home's projects", () => {
       ...["t-2", "t-3", "t-4"].map((id) => ({ id, title: id, parentId: "root", role: "worker" as const, status: "open" as const, group: "working", updated: ago(2) })),
     ] });
     const { region } = show([busy], [agent("p1", "w-a", "working"), agent("p2", "w-a", "working"), agent("p3", "w-a", "idle"), agent("p4", "w-other", "working")]);
-    expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 waiting2 working1 to review");
+    expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 asks2 working1 to review");
+    expect(region.getByRole("link", { name: /^A/ }).getAttribute("href")).toBe("/project/a?tab=waiting");
   });
 
   it("says what a quiet project is: paused, nothing running, or nothing open", () => {

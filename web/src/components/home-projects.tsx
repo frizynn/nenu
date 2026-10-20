@@ -17,8 +17,8 @@ export const PROJECT_ROWS = 5;
 /** What a project's state reads as, most pressing first: each count with the dot the organization tree draws for it. */
 function pulseParts(pulse: ProjectPulse): Array<{ state: NodeState; text: string }> {
   return [
-    // "Waiting", as the project's own tab says: Organizations' asks, not the dialogs Home's headline counts as needing you.
-    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} waiting` },
+    // Asks, as Organizations names them: its questions and decisions, a unit apart from the dialogs Home's headline counts as needing you.
+    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} ${pulse.waiting === 1 ? "ask" : "asks"}` },
     pulse.working > 0 && { state: "working" as const, text: `${pulse.working} working` },
     pulse.review > 0 && { state: "review" as const, text: `${pulse.review} to review` },
   ].filter((part) => part !== false);
@@ -80,7 +80,8 @@ export function HomeProjects({ projects, agents, session, now }: {
 function ProjectRow({ project, pulse, session, now }: Entry & { session?: string; now: number }) {
   return (
     <li>
-      <Link to={projectPath(project.slug, session)}
+      {/* A project with asks opens where they are answered. */}
+      <Link to={projectPath(project.slug, session, pulse.waiting > 0 ? "waiting" : undefined)}
         className={cn("grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           project.status === "paused" && "text-muted-foreground")}>
         <span className="row-span-2 flex justify-center"><ProjectGlyph slug={project.slug} pick={project} size={16} /></span>

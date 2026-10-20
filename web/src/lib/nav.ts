@@ -36,8 +36,10 @@ export function workspacePath(workspaceId: string, herd: Herd, session?: string)
   return entry ? panePath(entry.paneId, session) : `/space/${encodeURIComponent(workspaceId)}${sessionSearch(session)}`;
 }
 
-export function projectPath(slug: string, session?: string): string {
-  return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
+export function projectPath(slug: string, session?: string, tab?: string): string {
+  const search = sessionSearch(session);
+  const tabSearch = tab ? `${search ? "&" : "?"}tab=${encodeURIComponent(tab)}` : "";
+  return `/project/${encodeURIComponent(slug)}${search}${tabSearch}`;
 }
 
 /** One node of a project's organization: its detail, for a node that runs in no live pane. */

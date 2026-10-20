@@ -117,10 +117,15 @@ async function main(): Promise<void> {
         for (const group of folded) if (group.visible && group.rows === 0) failures.push(`folded: "${group.label}" is drawn with no chat under it`);
         const more = nav.locator("section[aria-label=Chats] button[aria-expanded]").last();
         seen.moreLabel = await more.innerText();
-        await more.click();
-        await page.waitForTimeout(90);
+        // A press starts the fold's transitions at once; counted on the next frame, before a screenshot's latency hides them.
+        const pressAndCount = () => more.evaluate((button) => {
+          (button as HTMLElement).click();
+          return new Promise<number>((done) => requestAnimationFrame(() => done(document.getAnimations().filter((motion) => motion instanceof CSSTransition).length)));
+        });
+        seen.transitionsUnfolding = await pressAndCount();
+        if (!seen.transitionsUnfolding) failures.push("unfolding ran no transition");
+        await page.waitForTimeout(60);
         await shoot(page, "sidebar-1440-unfolding", sidebar);
-        seen.animationsWhileUnfolding = await page.evaluate(() => document.getAnimations().length, null);
         await page.waitForTimeout(600);
         await nav.locator(".nav-scroll").evaluate((scroller) => { scroller.scrollTop = scroller.scrollHeight; });
         await page.waitForTimeout(200);
@@ -129,10 +134,9 @@ async function main(): Promise<void> {
         seen.unfoldedPeriods = unfolded;
         for (const group of unfolded) if (group.visible && group.rows === 0) failures.push(`unfolded: "${group.label}" is drawn with no chat under it`);
         seen.lessLabel = await more.innerText();
-        // Folding back runs the same motion the other way: a frame mid-way, then the bar as it was.
-        await more.click();
-        await page.waitForTimeout(90);
-        await shoot(page, "sidebar-1440-folding", sidebar);
+        // Folding back runs the same motion the other way, then leaves the bar as it was.
+        seen.transitionsFolding = await pressAndCount();
+        if (!seen.transitionsFolding) failures.push("folding back ran no transition");
         await page.waitForTimeout(600);
         seen.refoldedPeriods = await periods(page);
         if (JSON.stringify(seen.refoldedPeriods) !== JSON.stringify(folded)) failures.push("folding back left the bar unlike it was before More");
