@@ -43,6 +43,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
+//   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3798,6 +3799,85 @@ async function pin(): Promise<void> {
   if (failures.length) process.exit(1);
 }
 
+/**
+ * A conversation that ended its turn is no ask: Home on a phone, WebKit and Chromium, dark and light,
+ * with its Workspaces list, beside a thread stopped on a real dialog. The conversation (`keep_open`)
+ * said `Waiting for you`, as it does before every answer, so Organizations groups it Waiting on you;
+ * only the dialog may count in the headline, Needs you, the Home tab's badge and a workspace's state.
+ */
+async function atRestBench(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const shots: string[] = [];
+  const seen: Record<string, unknown> = {};
+  const failures: string[] = [];
+  const talk = { paneId: "w3:talk", workspaceId: "w3", tabId: "w3:t1", session: "77777777-7777-4777-8777-777777777777" };
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
+    const seed = needsYouSeed(herd, now);
+    const ago = new Date(now - 60_000).toISOString();
+    seed.projects[0]!.threads = [
+      { id: "t-0360", title: "Charla de mejoras", parent_id: "root", role: "worker", status: "open", group: "waiting-on-you", group_label: "Waiting on you",
+        note: "done", branch: "", workspace_id: talk.workspaceId, tab_id: talk.tabId, pane_id: talk.paneId, cwd: "", updated: ago, report_unacked: true,
+        auto_fix_ci: false, auto_merge: false, pr: null, activity: "Waiting for you", percent: null, keep_open: true },
+      ...seed.projects[0]!.threads.filter((thread) => thread.id === "t-0002"),
+    ];
+    return seed;
+  } });
+  try {
+    const herd = bridge.herd!;
+    bridge.fake!.addWorkspace(talk.workspaceId, "Charla de mejoras").addTab(talk.tabId, "charla");
+    await writeJournal(join(dirname(herd.journals.get(herd.idle)!), `${talk.session}.jsonl`), [["user", "¿Qué mejoramos hoy?"], ["assistant", "Dos cosas: el composer en el celular y la charla que figura como pedido."]], bridge.now());
+    bridge.fake!.addPane({ paneId: talk.paneId, workspaceId: talk.workspaceId, tabId: talk.tabId, agent: "claude", label: "Charla de mejoras", sessionId: talk.session,
+      cwd: bridge.dir, status: "done", lines: ["● Dos cosas: el composer en el celular y la charla que figura como pedido.", "", "❯ "] });
+    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(talk.paneId); tries++) {
+      if (tries > 60) throw new Error("the bridge never listed the conversation's pane");
+      await sleep(500);
+    }
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        for (const scheme of ["dark", "light"] as const) {
+          const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
+          const page = await context.newPage();
+          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v1", "workspaces"); }, null);
+          await page.clock.install({ time: bridge.now() });
+          await page.goto(bridge.url + "/");
+          await page.locator("h1.text-large-title").waitFor({ timeout: 15_000 });
+          await page.waitForTimeout(2500);
+          const read = await page.evaluate(() => {
+            const text = (el: Element | null | undefined) => (el as HTMLElement | null)?.innerText.replace(/\s+/g, " ").trim() ?? null;
+            const needs = document.querySelector('section[aria-label="Needs you"]');
+            const row = Array.from(document.querySelectorAll("li")).find((li) => /Charla de mejoras/.test(li.textContent ?? "") && !needs?.contains(li));
+            return {
+              headline: text(document.querySelector("h1.text-large-title")),
+              needsYou: needs ? Array.from(needs.querySelectorAll("a")).map(text) : [],
+              badge: text(document.querySelector(".bottom-tab-badge")),
+              talkRow: text(row),
+            };
+          }, null);
+          seen[`${engine}-${scheme}`] = read;
+          const fail = (what: string) => failures.push(`${engine} ${scheme}: ${what}`);
+          if (read.headline !== "1 needs you") fail(`headline ${read.headline}`);
+          if (read.needsYou.some((row) => /Charla/.test(row ?? ""))) fail(`Needs you lists the conversation: ${JSON.stringify(read.needsYou)}`);
+          if (read.badge !== "1") fail(`the Home tab's badge says ${read.badge}`);
+          if (!read.talkRow || /Needs you|Waiting for your reply/.test(read.talkRow)) fail(`the conversation's workspace reads ${read.talkRow}`);
+          const path = join(outDir, `at-rest-home-${engine}-${scheme}.png`);
+          await page.screenshot({ path, animations: "disabled" });
+          shots.push(path);
+          await context.close();
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await bridge.stop();
+  }
+  const result = { shots, seen, failures };
+  await writeFile(join(outDir, "at-rest.json"), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
+}
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -3829,8 +3909,9 @@ else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "reading") await reading();
 else if (command === "pin") await pin();
+else if (command === "at-rest") await atRestBench();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
