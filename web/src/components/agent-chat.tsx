@@ -1409,7 +1409,7 @@ export function AgentChat({
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}
             lockReason={lock}
-            lockOnCard={showCard && cardCovers}
+            lockOnCard={showCard && cardCovers && !interaction?.typing}
             herdrDown={bridge === "disconnected" && !error}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
