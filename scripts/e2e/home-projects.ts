@@ -19,9 +19,9 @@ const port = Number(values.port);
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `home-projects-${Date.now()}`);
 const tag = values.tag;
 // A Tuesday evening, as in the operator's capture of Home.
-const EPOCH = Date.parse("2026-10-20T21:30:00Z");
+export const EPOCH = Date.parse("2026-10-20T21:30:00Z");
 
-function seed(herd: DemoHerd, now: number): OrgSeed {
+export function seed(herd: DemoHerd, now: number): OrgSeed {
   const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
   const bound = (paneId: string, tabId: string) => ({ workspace_id: paneId.split(":")[0]!, tab_id: tabId, pane_id: paneId });
   const pr = (number: number, extra: Record<string, unknown> = {}) => ({
@@ -170,4 +170,4 @@ async function main(): Promise<void> {
   console.log(JSON.stringify(result, null, 2));
 }
 
-await main();
+if (import.meta.main) await main();

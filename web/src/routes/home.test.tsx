@@ -521,9 +521,14 @@ it("marks a Needs you row as opening too", async () => {
   await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
-it("leaves projects and search to the sidebar instead of repeating them", async () => {
+it("lists each project with what works and what is ready to review there, and leaves search to the sidebar", async () => {
   const { main } = await setup(projectData);
-  expect(main.queryByRole("region", { name: /^Projects/ })).not.toBeInTheDocument();
+  const projects = within(main.getByRole("region", { name: /^Projects/ }));
+  const row = projects.getByRole("link", { name: /^Hub/ });
+  expect(row.getAttribute("href")).toMatch(/^\/project\/hub(\?|$)/);
+  expect(row).toHaveTextContent("1 working");
+  expect(row).toHaveTextContent("1 to review");
+  expect(projects.getByRole("link", { name: "See all" }).getAttribute("href")).toMatch(/^\/projects(\?|$)/);
   expect(main.queryByRole("searchbox")).not.toBeInTheDocument();
   const sidebar = within(screen.getByRole("complementary", { name: "Workspace sidebar" }));
   expect(sidebar.getByText("Hub")).toBeInTheDocument();

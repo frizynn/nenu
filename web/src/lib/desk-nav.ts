@@ -2,6 +2,7 @@
 // flat row each, and every conversation in a project or outside one as a chat, dated by when it last
 // moved. Kept free of React so the rows' rules stay unit-testable.
 import { displayName } from "./display-name";
+import { flatten, openCoordinators, orgTree, type NodeState } from "./org-tree";
 import { chatRecency, isOpenThread, looseChats, projectForPane } from "./projects";
 import type { AgentStatus, AgentView, ProjectThreadView, ProjectView } from "./types";
 
@@ -55,6 +56,28 @@ export function projectAgents(project: ProjectView, agents: readonly AgentView[]
 export function projectActivity(project: ProjectView, agents: readonly AgentView[]): number {
   const coordinator = agents.find((pane) => pane.paneId === project.coordinator?.paneId);
   return Math.max(0, ...project.threads.map(updatedAt), coordinator ? chatRecency(coordinator) : 0);
+}
+
+/** A project at a glance: what waits on you there, what works, what is ready to review, how much is open and when it last moved. */
+export interface ProjectPulse {
+  waiting: number;
+  working: number;
+  review: number;
+  coordinators: number;
+  threads: number;
+  at: number;
+}
+
+/** Counts open nodes as the organization tree reads them; what waits on you is Organizations' own asks count when it has one. */
+export function projectPulse(project: ProjectView, agents: readonly AgentView[]): ProjectPulse {
+  const tree = orgTree(project.threads);
+  const open = flatten(tree.open);
+  const coordinators = openCoordinators(tree).length;
+  const count = (state: NodeState) => open.filter((node) => node.state === state).length;
+  return {
+    waiting: project.waitingAsks ?? count("needs"), working: count("working"), review: count("review"),
+    coordinators, threads: open.length - coordinators, at: projectActivity(project, agents),
+  };
 }
 
 /** The most pressing state among `panes`, for a project's dot. Resting agents draw none. */

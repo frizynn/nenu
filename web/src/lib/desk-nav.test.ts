@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deskChats, liveliest, projectActivity, projectAgents } from "./desk-nav";
+import { deskChats, liveliest, projectActivity, projectAgents, projectPulse } from "./desk-nav";
 import type { AgentView, ProjectView } from "./types";
 
 const now = new Date(2026, 9, 6, 12, 0, 0).getTime();
@@ -70,5 +70,14 @@ describe("a chat's +1", () => {
     expect(deskChats({ agents, projects: [acme] }).map((chat) => [chat.title, chat.unread])).toEqual([
       ["Checkout flow", true], ["Cart badge", false], ["asked", true], ["seen", false], ["busy", false],
     ]);
+  });
+});
+
+describe("a project's pulse", () => {
+  it("counts open work by the tree's state, and takes what waits on you from Organizations' asks when it has them", () => {
+    const asking = { ...acme, threads: [...acme.threads, { id: "t-4", title: "Pricing", parentId: "root", role: "worker" as const, status: "open" as const, group: "waiting-on-you" }] };
+    expect(projectPulse(asking, [pane("flow", { status: "working" })])).toMatchObject({ waiting: 1, working: 1, review: 1, coordinators: 0, threads: 3 });
+    expect(projectPulse({ ...asking, waitingAsks: 4 }, []).waiting).toBe(4);
+    expect(projectPulse(acme, []).at).toBe(now - 5 * MIN);
   });
 });
