@@ -1,4 +1,4 @@
-# 0106. Home lists the projects as rows, each with what it holds
+# 0107. Home lists the projects as rows, each with what it holds
 
 - **Status:** Accepted (2026-10-20). Requested by the operator. Reverses the earlier Home that left
   projects to the sidebar (Search on a phone), which no ADR recorded. Amends

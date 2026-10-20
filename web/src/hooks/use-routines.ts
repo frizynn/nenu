@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage } from "@/components/node-start";
-import { fetchOrgRoutines, toggleOrgRoutine } from "@/lib/api";
-import type { RoutineList } from "@/lib/types";
+import { fetchOrgRoutines, setOrgRoutine, toggleOrgRoutine } from "@/lib/api";
+import type { RoutineEdit, RoutineList } from "@/lib/types";
 
 export interface Routines {
   list?: RoutineList;
   error?: string;
   /** Turns one on or off; the list then reads as Organizations answers. Rejects with the cause. */
   toggle: (name: string, on: boolean) => Promise<void>;
+  /** Changes what it is given (`routine set`); the list then reads as Organizations answers. Rejects with the cause. */
+  save: (name: string, edit: RoutineEdit) => Promise<void>;
 }
 
 /** A project's routines, read when the page that shows them opens and never polled (as the Routines page reads them). */
@@ -28,6 +30,10 @@ export function useRoutines(project: string, session?: string): Routines {
     error: mine?.error,
     toggle: async (name, on) => {
       const { routines } = await toggleOrgRoutine({ project, name, on }, session);
+      setRead({ project, list: routines });
+    },
+    save: async (name, edit) => {
+      const { routines } = await setOrgRoutine({ project, name, ...edit }, session);
       setRead({ project, list: routines });
     },
   };

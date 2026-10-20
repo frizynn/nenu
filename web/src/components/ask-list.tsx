@@ -8,7 +8,7 @@ import { StatusDot } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { answerOrgAsk, sendMessage } from "@/lib/api";
-import { coordinatorName, linkChip, partText, unclosed, type AskEntry, type askSections, type ChipTone, type Unclosed } from "@/lib/asks";
+import { ASK_KIND_LABEL, askHeadline, askKind, coordinatorName, linkChip, partText, unclosed, type AskEntry, type askSections, type ChipTone, type Unclosed } from "@/lib/asks";
 import type { AskGroup } from "@/lib/types";
 import { timeAgo } from "@/lib/format";
 import { nodePath } from "@/lib/nav";
@@ -93,18 +93,29 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
 }) {
   const [open, setOpen] = useState(false);
   const { answer } = answering;
-  const line = [whose && entry.project.name, whose && coordinatorName(entry.coordinator), answer === undefined && entry.detail].filter(Boolean).join(" · ");
+  const kind = askKind(entry);
+  const owner = [whose && entry.project.name, whose && coordinatorName(entry.coordinator)].filter(Boolean).join(" · ");
   const coordinator = nodePath(entry.project.slug, entry.coordinator.id, session);
   const why = unclosed(entry);
   // A row with nothing behind it (no thread, task or page) has no context to open.
   const explained = [entry, ...entry.parts].some((part) => part.links.length > 0);
+  // What waits on you reads as a question: its kind, what it asks, what its coordinator says, then what to do.
+  const { title, body } = kind ? askHeadline(entry) : { title: entry.text, body: "" };
+  // Once answered here, an ask's old answer from its coordinator no longer says anything.
+  const said = kind === "ask" && answer !== undefined ? "" : body;
+  const line = kind ? "" : [owner, answer === undefined && entry.detail].filter(Boolean).join(" · ");
+  const words = whose
+    ? <Link to={coordinator} className={cn("block break-words text-subhead hover:underline underline-offset-2", kind && "font-medium")}>{title}</Link>
+    : <p className={cn("break-words text-subhead", kind && "font-medium")}>{title}</p>;
   return (
-    <li className={cn("flex min-w-0 items-start gap-2.5 rounded-lg py-2", !compact && "px-2.5")}>
-      <span className="pt-0.5">{answer === undefined ? <AskMark group={entry.group} /> : <AskMark group="done" />}</span>
+    <li className={cn("flex min-w-0 items-start gap-2.5", kind ? "ask-waiting" : "rounded-lg py-2", !compact && "px-2.5")}>
+      {!kind && <span className="pt-0.5">{answer === undefined ? <AskMark group={entry.group} /> : <AskMark group="done" />}</span>}
       <div className="min-w-0 flex-1">
-        {whose
-          ? <Link to={coordinator} className="block break-words text-subhead hover:underline underline-offset-2">{entry.text}</Link>
-          : <p className="break-words text-subhead">{entry.text}</p>}
+        {kind && <p className="ask-kind" data-answered={answer !== undefined ? "" : undefined}>
+          {answer !== undefined ? "Answered" : ASK_KIND_LABEL[kind]}{owner && <span className="ask-kind-owner">{owner}</span>}
+        </p>}
+        {words}
+        {said && <p className="mt-0.5 break-words text-subhead text-muted-foreground">{said}</p>}
         {line && <p className="break-words text-footnote text-muted-foreground">{line}</p>}
         <Answered answer={answer} at={entry.answeredAt} />
         {why && <Why why={why} entry={entry} session={session} readOnly={readOnly} />}
@@ -112,16 +123,17 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
         {entry.parts.length > 0 && <ul aria-label="Parts of this question" className="mt-2 flex flex-col gap-2">
           {entry.parts.map((part, index) => <Part key={part.key} head={entry} part={part} session={session} answering={parts[index]!} />)}
         </ul>}
-        <div className="mt-1 -ml-2 flex flex-wrap items-center">
-          {explained && <button type="button" className="quiet-action" aria-expanded={open} onClick={() => setOpen(!open)}>
-            <ChevronRight aria-hidden className={cn("size-3.5 transition-transform", open && "rotate-90")} />Context
-          </button>}
+        <div className={cn("flex flex-wrap items-center", kind ? "mt-2.5 gap-1" : "mt-1 -ml-2")}>
           {!open && <AnswerControl entry={entry} session={session} answering={answering} />}
+          {explained && <button type="button" className={cn("quiet-action", kind && !(answering.answerable && answer === undefined && !open) && "-ml-2")}
+            aria-expanded={open} onClick={() => setOpen(!open)}>
+            <ChevronRight aria-hidden className={cn("desk-fold size-3.5", open && "rotate-90")} />Context
+          </button>}
         </div>
-        {open && explained && <AskContext entry={entry} session={session}>
-          {answering.answerable && answer === undefined && <div className="mt-3 -ml-2 border-t border-border pt-2">
+        {open && explained && <div className="desk-reveal"><AskContext entry={entry} session={session}>
+          {answering.answerable && answer === undefined && <div className="mt-3 border-t border-border pt-3">
             <AnswerControl entry={entry} session={session} answering={answering} /></div>}
-        </AskContext>}
+        </AskContext></div>}
       </div>
     </li>
   );
@@ -135,7 +147,7 @@ function Part({ head, part, session, answering }: { head: AskEntry; part: AskEnt
     {answer === undefined && part.detail && <p className="break-words text-footnote text-muted-foreground">{part.detail}</p>}
     <Answered answer={answer} at={part.answeredAt} />
     {part.links.length > 0 && <Chips entry={part} links={part.links} session={session} />}
-    {answering.answerable && answer === undefined && <div className="mt-1 -ml-2 flex"><AnswerControl entry={part} session={session} answering={answering} /></div>}
+    {answering.answerable && answer === undefined && <div className="mt-2 flex"><AnswerControl entry={part} session={session} answering={answering} /></div>}
   </li>;
 }
 
@@ -143,7 +155,8 @@ function Part({ head, part, session, answering }: { head: AskEntry; part: AskEnt
 function AnswerControl({ entry, session, answering }: { entry: AskEntry; session?: string; answering: Answering }) {
   const [writing, setWriting] = useState(false);
   if (!answering.answerable || answering.answer !== undefined) return null;
-  if (!writing) return <button type="button" className="quiet-action" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>Answer</button>;
+  if (!writing) return <Button type="button" size="sm" variant="secondary" className="desk-head-action-quiet" aria-label={`Answer ${entry.text}`} onClick={() => setWriting(true)}>
+    <ChatCircle aria-hidden className="size-3.5" />Answer</Button>;
   return <AnswerForm entry={entry} session={session} onCancel={() => setWriting(false)} onAnswered={(text) => { setWriting(false); answering.onAnswered(text); }} />;
 }
 
@@ -260,7 +273,7 @@ function AnswerForm({ entry, session, onCancel, onAnswered }: {
     <form className="mt-2 flex w-full flex-col gap-2" onSubmit={(event) => void submit(event)}>
       <label htmlFor={id} className="sr-only">Your answer</label>
       {/* STATUS.md keeps an ask on one line, so a line break becomes a space. */}
-      <textarea id={id} rows={2} value={text} maxLength={2_000} autoFocus disabled={busy}
+      <textarea id={id} rows={2} value={text} maxLength={2_000} autoFocus disabled={busy} placeholder="Your answer"
         onChange={(event) => setText(event.target.value.replace(/[\r\n]+/g, " "))}
         className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-subhead" />
       {error && <p role="alert" className="text-footnote text-destructive">{error}</p>}

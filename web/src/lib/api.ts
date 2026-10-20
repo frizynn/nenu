@@ -27,6 +27,7 @@ import type {
   PaneSkillsResponse,
   PaneReadResponse,
   QueueWaitReason,
+  RoutineEdit,
   RoutineList,
   SendOutcome,
   SendRequest,
@@ -705,6 +706,11 @@ export function fetchOrgRoutines(project: string, session?: string): Promise<{ o
 /** Organizations' `routine toggle`: turns one routine on or off, and answers the routines as they then read. */
 export function toggleOrgRoutine(input: { project: string; name: string; on: boolean }, session?: string): Promise<{ ok: true; routines: RoutineList }> {
   return req(withSession("/api/org/routine/toggle", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
+/** Organizations' `routine set`: changes the fields given of one routine, and answers the routines as they then read. */
+export function setOrgRoutine(input: { project: string; name: string } & RoutineEdit, session?: string): Promise<{ ok: true; routines: RoutineList }> {
+  return req(withSession("/api/org/routine/set", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
 /** The coordinator's task list; `tasks` is null when this Organizations has no `task list`. */

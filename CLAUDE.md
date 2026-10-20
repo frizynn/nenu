@@ -189,9 +189,12 @@ the unit name; the Herdr action runs from anywhere.
   (`/api/org/report`, by thread id, never a path) and says what keeps it from closing; only ids reach
   the coordinator ([ADR 0096](./.adr/0096-a-question-carries-its-context.md)).
 - **On a desk a project and a coordinator are pages with tabs** (ADR 0102, `desk-project.tsx`,
-  `desk-coordinator.tsx`, `lib/project-work.ts`): Work as a card per coordinator with its threads (Open or
-  Finished), Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch,
-  Context; never a redirect to a chat. On a desk `/asks` and `/routines` land there; a phone is unchanged.
+  `desk-coordinator.tsx`, `lib/project-work.ts`): Work as a card per open coordinator with its threads,
+  Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch, Context;
+  never a redirect to a chat. On a desk `/asks` and `/routines` land there; a phone is unchanged. Finished
+  work is History (`?work=finished`), by day with a search, without coordinators that ran no thread; a
+  waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
+  where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
   page, each a row folding over its card and work, the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
@@ -207,7 +210,7 @@ the unit name; the Herdr action runs from anywhere.
   only under periods that hold one on screen, and More folds them with motion, mounted.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
-  which read worse in a measured test ([ADR 0106](./.adr/0106-home-lists-the-projects-as-rows.md)).
+  which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

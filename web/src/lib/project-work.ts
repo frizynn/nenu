@@ -1,16 +1,15 @@
-// What a desk's project and coordinator pages list (ADR 0102): every coordinator as a card holding the
-// threads it runs, the project coordinator's card last with the threads started from the project, and
-// the routines by whom they reach. It reads the one tree (org-tree.ts) and never re-judges a node's state.
+// What a desk's project and coordinator pages list (ADR 0102): every open coordinator as a card holding
+// the threads it runs, the project coordinator's card last with the threads started from the project;
+// finished work as one History by day (ADR 0106); the routines by whom they reach. It reads the one
+// tree (org-tree.ts) and never re-judges a node's state.
 import { askSections, type AskEntry } from "./asks";
 import { flatten, openCoordinators, orgTree, type NodeState, type OrgNode } from "./org-tree";
-import type { AskCoordinator, AsksList, ProjectThreadView, ProjectView, RoutineView } from "./types";
-
-export type WorkFilter = "open" | "finished";
+import type { AskCoordinator, AsksList, ProjectThreadView, ProjectView, RoutineEdit, RoutineView } from "./types";
 
 export interface WorkCard {
   /** The coordinator; undefined for the project coordinator's card. */
   coordinator?: OrgNode;
-  /** The threads it runs directly, in the tree's order (the most urgent first, or the newest first once finished). */
+  /** The threads it runs directly, in the tree's order (the most urgent first). */
   rows: OrgNode[];
 }
 
@@ -18,40 +17,77 @@ const isCoordinator = (node: OrgNode) => node.thread.role === "coordinator";
 const updatedAt = (thread: ProjectThreadView) => Date.parse(thread.updated ?? "") || 0;
 
 /**
- * Open: each open coordinator, at any depth and in the tree's order, with its open threads, then the
- * project coordinator with the open threads at the top level. Finished: the same cards over resolved
- * threads, every coordinator that ran one, newest first. A coordinator under another is its own card.
+ * Each open coordinator, at any depth and in the tree's order, with its open threads, then the project
+ * coordinator with the open threads at the top level. A coordinator under another is its own card.
  */
-export function workCards(project: ProjectView, filter: WorkFilter): WorkCard[] {
+export function workCards(project: ProjectView): WorkCard[] {
   const tree = orgTree(project.threads);
-  if (filter === "open") {
-    return [
-      ...openCoordinators(tree).map(({ node }) => ({ coordinator: node, rows: node.children.filter((child) => !isCoordinator(child)) })),
-      { rows: tree.open.filter((node) => !isCoordinator(node)) },
-    ];
-  }
-  const ids = new Set(project.threads.map((thread) => thread.id));
-  const nodes = new Map(flatten([...tree.open, ...tree.history]).map((node) => [node.thread.id, node]));
-  const finished = [...nodes.values()].filter((node) => node.state === "resolved" && !isCoordinator(node))
-    .sort((a, b) => updatedAt(b.thread) - updatedAt(a.thread));
-  const byParent = new Map<string, OrgNode[]>();
-  for (const node of finished) {
-    const parent = ids.has(node.thread.parentId) ? node.thread.parentId : "root";
-    const rows = byParent.get(parent);
-    if (rows) rows.push(node);
-    else byParent.set(parent, [node]);
-  }
-  const coordinators = [...nodes.values()].filter((node) => isCoordinator(node) && (node.state === "resolved" || byParent.has(node.thread.id)))
-    .sort((a, b) => Number(a.state === "resolved") - Number(b.state === "resolved") || updatedAt(b.thread) - updatedAt(a.thread));
   return [
-    ...coordinators.map((node) => ({ coordinator: node, rows: byParent.get(node.thread.id) ?? [] })),
-    ...(byParent.has("root") ? [{ rows: byParent.get("root")! }] : []),
+    ...openCoordinators(tree).map(({ node }) => ({ coordinator: node, rows: node.children.filter((child) => !isCoordinator(child)) })),
+    { rows: tree.open.filter((node) => !isCoordinator(node)) },
   ];
 }
 
-/** How many nodes the Finished filter holds: every resolved one, coordinators included. */
+/** A finished thread with whoever ran it, or a finished coordinator with how many threads it ran. */
+export interface HistoryRow {
+  node: OrgNode;
+  /** The coordinator that ran a thread; `Project` for one started from the project. */
+  by?: string;
+  /** A coordinator's: the threads it ran. */
+  threads?: number;
+}
+
+export interface HistoryDay { key: string; label: string; rows: HistoryRow[] }
+
+/**
+ * Everything finished in History: each resolved thread and each resolved coordinator that ran at least
+ * one thread. A coordinator that never ran one is a start that failed or was started again under the
+ * same name, and is left out, so the same name does not read twice.
+ */
+function historyRows(project: ProjectView): HistoryRow[] {
+  const tree = orgTree(project.threads);
+  const titles = new Map(project.threads.map((thread) => [thread.id, thread.title]));
+  return flatten([...tree.open, ...tree.history])
+    .filter((node) => node.state === "resolved" && (!isCoordinator(node) || node.children.length > 0))
+    .sort((a, b) => updatedAt(b.thread) - updatedAt(a.thread))
+    .map((node) => isCoordinator(node)
+      ? { node, threads: node.children.length }
+      : { node, by: titles.get(node.thread.parentId) ?? "Project" });
+}
+
+/** How many rows History holds. */
 export function finishedCount(project: ProjectView): number {
-  return project.threads.filter((thread) => thread.status === "resolved").length;
+  return historyRows(project).length;
+}
+
+/** Case and accents aside: `calidad` finds `Calidad y orden del código`, `codigo` finds `código`. */
+const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+const dayKey = (at: Date) => `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
+
+/** A day as History heads it: Today, Yesterday, a weekday with its date within the week, then the date. */
+export function dayLabel(at: Date, now: Date): string {
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    - new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime()) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days > 1 && days < 7) return at.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  return at.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
+}
+
+/** History, newest first, by the day each row last changed; `query` keeps rows whose name, id or coordinator holds it. */
+export function historyDays(project: ProjectView, query = "", now = new Date()): HistoryDay[] {
+  const wanted = fold(query.trim());
+  const days: HistoryDay[] = [];
+  for (const row of historyRows(project)) {
+    if (wanted && ![row.node.thread.title, row.node.thread.id, row.by ?? ""].some((text) => fold(text).includes(wanted))) continue;
+    const at = updatedAt(row.node.thread);
+    const key = at ? dayKey(new Date(at)) : "undated";
+    const last = days.at(-1);
+    if (last?.key === key) last.rows.push(row);
+    else days.push({ key, label: at ? dayLabel(new Date(at), now) : "Earlier", rows: [row] });
+  }
+  return days;
 }
 
 /** A card's second line: what waits on you there, then what its threads are doing. */
@@ -133,4 +169,44 @@ export function routinesFor(routines: readonly RoutineView[], coordinatorId: str
     const target = routineTarget(routine, threads);
     return coordinatorId === "root" ? target.kind === "root" : target.kind === "node" && target.id === coordinatorId;
   });
+}
+
+/** The pull request events a routine can fire on, in Organizations' order, as the editor names them. */
+export const ROUTINE_EVENTS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: "opened", label: "A pull request opens" }, { id: "checks-failed", label: "Checks fail" },
+  { id: "review", label: "A review lands" }, { id: "merged", label: "It merges" },
+];
+
+/** A routine in the editor: its trigger and what each trigger holds, whom it reaches as `routine set --to` takes it, and its prompt. */
+export interface RoutineDraft {
+  trigger: "schedule" | "pr";
+  schedule: string;
+  events: string[];
+  /** `root`, `owner`, `new`, or `node:<id>`; a node only named by a title nothing matches keeps Organizations' `to`. */
+  to: string;
+  /** For `new`: `root` or a node id. */
+  parent: string;
+  prompt: string;
+}
+
+export function routineDraft(routine: RoutineView, threads: readonly ProjectThreadView[]): RoutineDraft {
+  const target = routineTarget(routine, threads);
+  const to = target.kind === "node" ? (target.id ? `node:${target.id}` : routine.to) : target.kind;
+  return {
+    trigger: routine.trigger, schedule: routine.schedule, events: routine.trigger === "pr" && !routine.events.length ? ROUTINE_EVENTS.map((event) => event.id) : routine.events,
+    to, parent: target.kind === "new" ? target.parent : "root", prompt: routine.prompt,
+  };
+}
+
+/** What the editor changed, and only that: `routine set` keeps every field it is not given. */
+export function routineChanges(routine: RoutineView, threads: readonly ProjectThreadView[], draft: RoutineDraft): RoutineEdit {
+  const was = routineDraft(routine, threads);
+  const sorted = (events: readonly string[]) => [...events].sort().join(",");
+  const edit: RoutineEdit = {};
+  if (draft.trigger === "schedule" && (was.trigger !== "schedule" || draft.schedule.trim() !== was.schedule)) edit.schedule = draft.schedule.trim();
+  if (draft.trigger === "pr" && (was.trigger !== "pr" || sorted(draft.events) !== sorted(was.events))) edit.events = [...draft.events];
+  if (draft.to !== was.to) edit.to = draft.to;
+  if (draft.to === "new" && (edit.to !== undefined || draft.parent !== was.parent)) edit.parent = draft.parent;
+  if (draft.prompt.trim() !== was.prompt.trim()) edit.prompt = draft.prompt.trim();
+  return edit;
 }

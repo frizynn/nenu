@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.34.0] - 2026-10-21
+## [1.35.0] - 2026-10-21
 
 ### Added
 
@@ -19,6 +19,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 - The desk's chats no longer show empty "Last 7 days / Last 30 days / Older" headings: only periods with a chat on screen, named Today, Yesterday, Previous 7 days, Previous 30 days and Older; "Show N more" folds and unfolds with motion; period names stay on top while scrolling (6a22aac1).
 - A chat's pull request glyph says what it asks: a draft's own glyph, red while checks fail, green once approved; rows take an inset focus ring and a 120 ms hover fill (6a22aac1, cc81f7c6).
+
+## [1.34.0] - 2026-10-20
+
+### Added
+
+- Edit a routine from its project's Routines: when it runs, whom it reaches and what it asks, through Organizations' `routine set`; the first routine opens beside the list (05a641bc, 27a2ad10, 6d4fe864).
+- History on a project's Work: everything finished by day, with a search; `bun scripts/e2e/project-page.ts` captures the page at a real project's size (27a2ad10, e56e58a1, 6d4fe864).
+
+### Changed
+
+- Work shows only the open work; coordinators that never ran a thread no longer show, so no name repeats; a row keeps its merged or closed pull request; a fold no longer re-reads the tree (27a2ad10, b3448861, 6d4fe864).
+- Waiting on you reads as questions: the kind in red, what it asks, the recommendation, then Answer as a button; Your asks on a phone too (27a2ad10, 6d4fe864).
+- A project's and a coordinator's header buttons share one size and centre on the title; tab counts are pills (27a2ad10).
 
 ## [1.33.0] - 2026-10-20
 
