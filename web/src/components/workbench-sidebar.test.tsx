@@ -699,6 +699,26 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(badge.querySelector(".nav-row-end svg")).toBeInTheDocument();
   });
 
+  it("draws a pull request's glyph for what it asks: a draft first, then failing checks or asked changes in red", () => {
+    const pr = (number: number, extra: object) => ({ url: `https://github.com/acme/shop/pull/${number}`, number, state: "open" as const, ...extra });
+    const updated = new Date(now - 10 * MIN).toISOString();
+    const prs = { ...acme, threads: [...acme.threads,
+      thread("t-5", "Draft work", { updated, pr: pr(50, { state: "draft", checks: { passed: 0, failed: 2, pending: 0 } }) }),
+      thread("t-6", "Red checks", { updated, pr: pr(51, { review: "approved", checks: { passed: 3, failed: 1, pending: 0 } }) }),
+      thread("t-7", "Asked changes", { updated, pr: pr(52, { review: "changes_requested" }) }),
+      thread("t-8", "Waiting review", { updated, pr: pr(53, { review: "review_required" }) }),
+    ] };
+    open("/", { ...herd, projects: [prs] } as unknown as HomeData);
+    const end = (name: string) => section("Today").getByRole("link", { name: new RegExp(`^${name}`) });
+    expect(end("Draft work")).toHaveAccessibleName(/pull request #50, draft$/);
+    expect(end("Draft work").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
+    expect(end("Red checks")).toHaveAccessibleName(/pull request #51, checks failing$/);
+    expect(end("Red checks").querySelector(".nav-row-end")).toHaveAttribute("data-pr", "failing");
+    expect(end("Asked changes")).toHaveAccessibleName(/pull request #52, changes requested$/);
+    expect(end("Waiting review")).toHaveAccessibleName(/pull request #53$/);
+    expect(end("Waiting review").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
+  });
+
   it("keeps the workspace tree out of the bar until Search opens, then browses it under the box", async () => {
     const user = open();
     expect(screen.queryByRole("region", { name: "Workspaces" })).toBeNull();

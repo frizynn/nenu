@@ -134,12 +134,15 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
   );
 }
 
-/** What a chat's pull request asks of you, in the words its glyph's tone stands for; none while it only waits. */
-function prTone(pr: NonNullable<DeskChat["thread"]>["pr"]): { tone?: "failing" | "approved"; word?: string } {
-  if (!pr || pr.state === "draft") return { word: pr && "draft" };
-  if (pr.checks?.failed || pr.review === "changes_requested") return { tone: "failing", word: pr.checks?.failed ? "checks failing" : "changes requested" };
-  if (pr.review === "approved" && !pr.checks?.pending) return { tone: "approved", word: "approved" };
-  return {};
+type ThreadPr = NonNullable<NonNullable<DeskChat["thread"]>["pr"]>;
+
+/** An open pull request's glyph, its tone and the words a screen reader hears for both; a draft first, whatever its checks say. */
+function prMark(pr: ThreadPr): { glyph: typeof GitPullRequest; tone?: "failing" | "approved"; word?: string } {
+  if (pr.state === "draft") return { glyph: GitPullRequestDraft, word: "draft" };
+  if (pr.checks?.failed) return { glyph: GitPullRequest, tone: "failing", word: "checks failing" };
+  if (pr.review === "changes_requested") return { glyph: GitPullRequest, tone: "failing", word: "changes requested" };
+  if (pr.review === "approved" && !pr.checks?.pending) return { glyph: GitPullRequest, tone: "approved", word: "approved" };
+  return { glyph: GitPullRequest };
 }
 
 /**
@@ -155,8 +158,7 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
   const ask = thread ? awaits(thread) : undefined;
   const word = ask ? ASK[ask].word : state ? STATE_LABEL[state].toLowerCase() : pane && STATUS_LABEL[pane.status];
   const pr = thread?.pr && (thread.pr.state === "open" || thread.pr.state === "draft") ? thread.pr : undefined;
-  const prState = prTone(pr);
-  const PrGlyph = pr?.state === "draft" ? GitPullRequestDraft : GitPullRequest;
+  const mark = pr && prMark(pr);
   return (
     <Link className="nav-row" to={to} aria-current={current ? "page" : undefined}>
       <span className="nav-lead">
@@ -165,9 +167,9 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
       <span className="nav-row-text">{chat.title}</span>
       {word && <span className="sr-only">, {word}</span>}
       {chat.unread && !current && <span className="nav-unread" data-unread aria-hidden>+1</span>}
-      {pr && <>
-        <span className="nav-row-end" data-pr={prState.tone} aria-hidden><PrGlyph size={14} /></span>
-        <span className="sr-only">, pull request{pr.number ? ` #${pr.number}` : ""}{prState.word ? `, ${prState.word}` : ""}</span>
+      {pr && mark && <>
+        <span className="nav-row-end" data-pr={mark.tone} aria-hidden><mark.glyph size={14} /></span>
+        <span className="sr-only">, pull request{pr.number ? ` #${pr.number}` : ""}{mark.word ? `, ${mark.word}` : ""}</span>
       </>}
       {chat.unread && !current && <span className="sr-only">, new</span>}
     </Link>

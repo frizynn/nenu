@@ -74,10 +74,12 @@ describe("a chat's +1", () => {
 });
 
 describe("a project's pulse", () => {
-  it("counts open work by the tree's state, and takes what waits on you from Organizations' asks when it has them", () => {
-    const asking = { ...acme, threads: [...acme.threads, { id: "t-4", title: "Pricing", parentId: "root", role: "worker" as const, status: "open" as const, group: "waiting-on-you" }] };
-    expect(projectPulse(asking, [pane("flow", { status: "working" })])).toMatchObject({ waiting: 1, working: 1, review: 1, coordinators: 0, threads: 3 });
-    expect(projectPulse({ ...asking, waitingAsks: 4 }, []).waiting).toBe(4);
-    expect(projectPulse(acme, []).at).toBe(now - 5 * MIN);
+  it("counts its agents at work, the tree's reviews, and takes what waits on you from Organizations' asks when it has them", () => {
+    const asking = { ...acme, threads: [...acme.threads, { id: "t-4", title: "Pricing", parentId: "root", role: "worker" as const, status: "open" as const, group: "waiting-on-you", updated: "" }] };
+    // A working agent outside the project counts nowhere here, as Home's headline counts it once.
+    const agents = [pane("flow", { status: "working" }), pane("elsewhere", { workspaceId: "w9", status: "working" })];
+    expect(projectPulse(asking, agents, [asking])).toMatchObject({ waiting: 1, working: 1, review: 1, coordinators: 0, threads: 3, open: 3 });
+    expect(projectPulse({ ...asking, waitingAsks: 4 }, [], [asking]).waiting).toBe(4);
+    expect(projectPulse(acme, [], [acme])).toMatchObject({ working: 0, at: now - 5 * MIN });
   });
 });

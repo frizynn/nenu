@@ -186,7 +186,8 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .workbench-navigation[data-variant="sidebar"] .nav-host { border-top: 0; }
 }
 
-/* Motion answers a press only: the tree Search opens fades down into place, and More's rows open and close (above). */
+/* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
+   poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */
 @keyframes nav-enter { from { opacity: 0; transform: translateY(-3px); } }
 .nav-enter { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
 

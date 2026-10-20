@@ -65,18 +65,25 @@ export interface ProjectPulse {
   review: number;
   coordinators: number;
   threads: number;
+  /** Open coordinators and threads together. */
+  open: number;
   at: number;
 }
 
-/** Counts open nodes as the organization tree reads them; what waits on you is Organizations' own asks count when it has one. */
-export function projectPulse(project: ProjectView, agents: readonly AgentView[]): ProjectPulse {
+/**
+ * What waits on you is Organizations' own asks count when it has one, else the tree's nodes that need
+ * you; what is ready to review is the tree's. Working counts the project's agents at work, as Home's
+ * headline counts every agent, so the two never disagree about the same herd.
+ */
+export function projectPulse(project: ProjectView, agents: readonly AgentView[], projects: readonly ProjectView[] | undefined): ProjectPulse {
   const tree = orgTree(project.threads);
   const open = flatten(tree.open);
   const coordinators = openCoordinators(tree).length;
   const count = (state: NodeState) => open.filter((node) => node.state === state).length;
   return {
-    waiting: project.waitingAsks ?? count("needs"), working: count("working"), review: count("review"),
-    coordinators, threads: open.length - coordinators, at: projectActivity(project, agents),
+    waiting: project.waitingAsks ?? count("needs"), review: count("review"),
+    working: projectAgents(project, agents, projects).filter((pane) => pane.status === "working").length,
+    coordinators, threads: open.length - coordinators, open: open.length, at: projectActivity(project, agents),
   };
 }
 

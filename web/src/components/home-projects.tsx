@@ -17,7 +17,8 @@ export const PROJECT_ROWS = 5;
 /** What a project's state reads as, most pressing first: each count with the dot the organization tree draws for it. */
 function pulseParts(pulse: ProjectPulse): Array<{ state: NodeState; text: string }> {
   return [
-    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} ${pulse.waiting === 1 ? "needs" : "need"} you` },
+    // "Waiting", as the project's own tab says: Organizations' asks, not the dialogs Home's headline counts as needing you.
+    pulse.waiting > 0 && { state: "needs" as const, text: `${pulse.waiting} waiting` },
     pulse.working > 0 && { state: "working" as const, text: `${pulse.working} working` },
     pulse.review > 0 && { state: "review" as const, text: `${pulse.review} to review` },
   ].filter((part) => part !== false);
@@ -26,7 +27,7 @@ function pulseParts(pulse: ProjectPulse): Array<{ state: NodeState; text: string
 /** The line under a project's name: its counts, or what it is when nothing runs there. */
 function PulseLine({ project, pulse, className }: { project: ProjectView; pulse: ProjectPulse; className?: string }) {
   const parts = pulseParts(pulse);
-  const open = pulse.threads + pulse.coordinators;
+  const { open } = pulse;
   const quiet = [project.status === "paused" ? "Paused" : open > 0 && "Nothing running", open > 0 ? `${open} open ${open === 1 ? "thread" : "threads"}` : "No open threads"]
     .filter(Boolean).join(" · ");
   return (
@@ -60,12 +61,14 @@ export function HomeProjects({ projects, agents, session, now }: {
 }) {
   const held = useHeldTime((entry: Entry) => entry.project.slug, (entry) => entry.pulse.at);
   if (!projects.length) return null;
-  const entries = held.order(projects.map((project) => ({ project, pulse: projectPulse(project, agents) })));
+  const entries = held.order(projects.map((project) => ({ project, pulse: projectPulse(project, agents, projects) })));
   const ordered = [...entries.filter((entry) => entry.project.status !== "paused"), ...entries.filter((entry) => entry.project.status === "paused")];
-  const all = <Link to={projectsPath(session)} className="text-muted-foreground hover:text-foreground">See all</Link>;
   return (
     <section aria-labelledby="home-projects" className="flex flex-col gap-2">
-      <HomeHeading id="home-projects" label="Projects" count={projects.length} note={all} />
+      <div className="flex items-center">
+        <HomeHeading id="home-projects" label="Projects" count={projects.length} />
+        <Link to={projectsPath(session)} className="ml-auto text-footnote text-muted-foreground hover:text-foreground">See all</Link>
+      </div>
       <div className="sm:-mx-2.5">
         <FoldedList items={ordered} rows={PROJECT_ROWS}>{(entry) => <ProjectRow key={entry.project.slug} {...entry} session={session} now={now} />}</FoldedList>
       </div>

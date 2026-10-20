@@ -129,6 +129,14 @@ async function main(): Promise<void> {
         seen.unfoldedPeriods = unfolded;
         for (const group of unfolded) if (group.visible && group.rows === 0) failures.push(`unfolded: "${group.label}" is drawn with no chat under it`);
         seen.lessLabel = await more.innerText();
+        // Folding back runs the same motion the other way: a frame mid-way, then the bar as it was.
+        await more.click();
+        await page.waitForTimeout(90);
+        await shoot(page, "sidebar-1440-folding", sidebar);
+        await page.waitForTimeout(600);
+        seen.refoldedPeriods = await periods(page);
+        await more.click();
+        await page.waitForTimeout(600);
         // Hover and keyboard focus on a chat, the way a mouse and Tab reach it.
         await nav.locator("section[aria-label=Chats] a.nav-row").nth(2).hover();
         await page.waitForTimeout(200);

@@ -43,15 +43,15 @@ export function ProjectsRoute() {
           {shown.length === 0
             ? <p className="px-1 text-subhead text-muted-foreground">No project matches “{query.trim()}”.</p>
             : <ul className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-3">
-              {shown.map((project) => <li key={project.slug}><ProjectCard project={project} agents={data.agents} now={now} session={data.session} /></li>)}
+              {shown.map((project) => <li key={project.slug}><ProjectCard project={project} agents={data.agents} projects={projects} now={now} session={data.session} /></li>)}
             </ul>}
         </>}
     </ColumnPage>
   );
 }
 
-function ProjectCard({ project, agents, now, session }: { project: ProjectView; agents: readonly AgentView[]; now: number; session?: string }) {
-  const { waiting, working, coordinators, threads, at } = projectPulse(project, agents);
+function ProjectCard({ project, agents, projects, now, session }: { project: ProjectView; agents: readonly AgentView[]; projects: readonly ProjectView[]; now: number; session?: string }) {
+  const { waiting, working, coordinators, threads, at } = projectPulse(project, agents, projects);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
     <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-accent/40">
