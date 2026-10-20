@@ -53,7 +53,7 @@ function Desk(props: Partial<ComponentProps<typeof Composer>>) {
     <button type="button" onClick={() => setGone(true)}>lock it</button>
     {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
     <Composer {...base} {...props} paneId={paneId} gone={gone}
-      sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal: () => setShown(true) }} />
+      sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal: () => setShown(true), report: () => {} }} />
     <Status />
   </>;
 }

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, Layers, LayoutTemplate, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
+import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, LayoutTemplate, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
 import { useConversationScan } from "@/components/chat-files-browser";
@@ -15,28 +15,27 @@ import type { DiffScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TABS: ReadonlyArray<readonly [InspectorTab, string, IconComponent]> = [
-  ["project", "Project", LayoutTemplate],
+  ["overview", "Overview", LayoutTemplate],
   ["changes", "Changes", GitCompareArrows],
   ["files", "Files", FolderTree],
-  ["artifacts", "Artifacts", Layers],
   ["terminal", "Terminal", SquareTerminal],
 ];
 
 /**
- * A session's panel on a desk, right of its chat: the project first when the pane has one, then
- * Changes, Files, Artifacts and Terminal for that pane, each read only while it is on screen.
+ * A session's panel on a desk, right of its chat: Overview first when the pane belongs to a project,
+ * then Changes, Files and Terminal for that pane, each read only while it is on screen.
  */
-export default function SessionPanel({ inspector, paneId, session, artifacts, pr, project }: {
+export default function SessionPanel({ inspector, paneId, session, artifacts, pr, overview }: {
   inspector: SessionInspectorState;
   paneId: string;
   session?: string;
   /** The pane has a conversation whose files can be listed (an agent, not a shell). */
   artifacts: boolean;
   pr?: SessionPr;
-  /** The Project tab's body (project-panel.tsx); without it the tab is not offered. */
-  project?: ReactNode;
+  /** The Overview tab's body (thread-overview.tsx); without it the tab is not offered. */
+  overview?: ReactNode;
 }) {
-  const tabs = TABS.filter(([key]) => (key !== "artifacts" || artifacts) && (key !== "project" || project));
+  const tabs = TABS.filter(([key]) => key !== "overview" || overview);
   const view: InspectorTab = tabs.some(([key]) => key === inspector.tab) ? inspector.tab : "changes";
   const { panelRef, entering } = inspector;
   useLayoutEffect(() => {
@@ -74,7 +73,7 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
         aria-valuenow={width} aria-valuemin={PANEL_WIDTH.min} aria-valuemax={PANEL_WIDTH.max}
         className="session-panel-resize" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onKeyDown={onKeyDown} />
       <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-2">
-        {/* Five tabs fit a panel at its first width; a narrower one scrolls them rather than overlap the fold button. */}
+        {/* A narrow panel scrolls its tabs rather than overlap the fold button. */}
         <div role="tablist" aria-label="Session" className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
           {tabs.map(([key, label, Icon]) => (
             <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => inspector.setTab(key)} className="panel-tab shrink-0 px-1.5">
@@ -86,10 +85,10 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
           <PanelRightClose aria-hidden className="size-4" />
         </button>
       </div>
-      <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" || view === "project" ? "flex flex-col" : "overflow-y-auto")}>
-        {view === "project" ? project
+      <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" ? "flex flex-col" : "overflow-y-auto")}>
+        {view === "overview" ? overview
           : view === "terminal" ? <Terminal publish={inspector.setTerminal} />
-          : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} />}
+          : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} artifacts={artifacts} />}
       </div>
     </aside>
   );
@@ -113,12 +112,31 @@ function Terminal({ publish }: { publish: (slots: TerminalSlots | null) => void 
 }
 
 /** The body of the tab on screen; the panel remounts it for another pane. */
-function TabBody({ tab, paneId, session, pr }: { tab: Exclude<InspectorTab, "terminal" | "project">; paneId: string; session?: string; pr?: SessionPr }) {
+function TabBody({ tab, paneId, session, pr, artifacts }: { tab: "changes" | "files"; paneId: string; session?: string; pr?: SessionPr; artifacts: boolean }) {
+  if (tab === "changes") return <Changes paneId={paneId} session={session} pr={pr} />;
+  return <Files paneId={paneId} session={session} artifacts={artifacts} />;
+}
+
+const FILE_VIEWS: ReadonlyArray<readonly ["folder" | "artifacts", string]> = [["folder", "Folder"], ["artifacts", "Artifacts"]];
+
+/** The pane's folder, and beside it what the agent handed over when the pane has a conversation. */
+function Files({ paneId, session, artifacts }: { paneId: string; session?: string; artifacts: boolean }) {
   const openFile = useContext(FilePreviewContext);
   const open = (path: string) => openFile?.(path);
-  if (tab === "changes") return <Changes paneId={paneId} session={session} pr={pr} />;
-  if (tab === "files") return <div className="px-3 pb-8 pt-2"><ProjectFilesBrowser paneId={paneId} session={session} onOpen={open} /></div>;
-  return <Artifacts paneId={paneId} session={session} onOpen={open} />;
+  const [view, setView] = useState<"folder" | "artifacts">("folder");
+  const shown = artifacts ? view : "folder";
+  return <>
+    {artifacts && <div role="radiogroup" aria-label="Files" className="mx-3 mt-3 flex w-fit rounded-lg bg-muted/50 p-0.5">
+      {FILE_VIEWS.map(([key, label]) => (
+        <button key={key} type="button" role="radio" aria-checked={shown === key} onClick={() => setView(key)}
+          className={cn("inline-flex h-7 items-center rounded-md px-2.5 text-xs", shown === key ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+          {label}
+        </button>
+      ))}
+    </div>}
+    {shown === "folder" ? <div className="px-3 pb-8 pt-2"><ProjectFilesBrowser paneId={paneId} session={session} onOpen={open} /></div>
+      : <Artifacts paneId={paneId} session={session} onOpen={open} />}
+  </>;
 }
 
 const SCOPES: ReadonlyArray<readonly [DiffScope, string]> = [["branch", "Branch"], ["uncommitted", "Uncommitted"]];

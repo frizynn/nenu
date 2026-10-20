@@ -50,6 +50,7 @@ import { LiveConversation } from "@/components/live-conversation";
 import { PaneCwdContext } from "@/components/work-log-tools";
 import type { SessionPanelLink } from "@/components/session-inspector";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
+import { contextPercent } from "@/components/workbench-context-meter";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
 import { useModelMenuSource } from "@/hooks/use-model-menu-source";
 import { useModelCatalog } from "@/hooks/use-model-catalog";
@@ -933,6 +934,12 @@ export function AgentChat({
 
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
+  const report = sessionPanel?.report;
+  const reportedModel = telemetry?.model;
+  // Whole percents, as the panel shows them: a token more is no reason to draw it again.
+  const contextUsed = contextPercent(telemetry?.context);
+  const contextShown = contextUsed === null ? undefined : Math.round(contextUsed);
+  useEffect(() => { report?.({ model: reportedModel, contextPercent: contextShown }); }, [report, reportedModel, contextShown]);
   const telemetryProps = {
     telemetry,
     stale: conversation.error || connecting,

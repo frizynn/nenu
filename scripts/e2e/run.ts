@@ -29,7 +29,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts artifacts [--port 8797] [--out DIR]  Artifacts and files: delivered, published, images in and out of the folder
 //   bun scripts/e2e/run.ts files    [--port 8797] [--out DIR]   Every file a chat hands over, followed: taps, new tabs, lists, Open, refusals
 //   bun scripts/e2e/run.ts home     [--port 8797] [--out DIR] [--seconds 60]  A busy Home, calm then asked: captures, each list, requests per minute
-//   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, ⋯ Project, requests per tab
+//   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, Overview, requests per tab
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
 //   bun scripts/e2e/run.ts back     [--port 8797] [--out DIR]   Into a project's threads and back, two projects: history length, motion, Back from Home
@@ -1896,14 +1896,14 @@ async function inspector(before: boolean): Promise<void> {
     if (!before) {
       const { page, close } = await open(DESKTOP, herd.working);
       steps["desktop-changes-open"] = log;
-      // A project's session opens its panel on Project (ADR 0081); Changes is the next tab.
+      // A project's session opens its panel on Overview (ADR 0101); Changes is the next tab.
       await panel(page).getByRole("tab", { name: /Changes/ }).click();
       await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
       await step("desktop-changes", page);
       await step("desktop-uncommitted", page, () => panel(page).getByRole("radio", { name: "Uncommitted" }).click());
       await step("desktop-files", page, () => panel(page).getByRole("tab", { name: /Files/ }).click());
-      await step("desktop-artifacts", page, () => panel(page).getByRole("tab", { name: /Artifacts/ }).click());
-      await step("desktop-project", page, () => panel(page).getByRole("tab", { name: /^Project/ }).click());
+      await step("desktop-artifacts", page, () => panel(page).getByRole("radio", { name: "Artifacts" }).click());
+      await step("desktop-overview", page, () => panel(page).getByRole("tab", { name: /^Overview/ }).click());
       await step("desktop-closed", page, () => page.keyboard.press("Meta+Alt+KeyB"));
       await step("desktop-reopened", page, () => page.getByRole("button", { name: "Show session panel" }).click());
       await step("desktop-switched", page, () => page.goto(bridge.url + `/pane/${encodeURIComponent(herd.blocked)}`));

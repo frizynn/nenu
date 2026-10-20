@@ -61,8 +61,8 @@ needs you. Nenu is its phone and web front end:
   pass and it is approved) and toggle auto-fix and auto-merge.
 
 Nenu only asks Organizations to do these things through its CLI and reads its `--json` contract:
-`overview`, and for a desk's Project tab `task list`, `project show` and `routine list`, which an older
-Organizations lacks (the tab then shows the threads and the goal, and says so). Projects, threads and memory live in Organizations. Without it installed, Nenu works as
+`overview`, and `routine list` for Routines and a project chat's Routines chip, which an older
+Organizations may lack. Projects, threads and memory live in Organizations. Without it installed, Nenu works as
 before on plain Herdr workspaces. `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
 not on the service `PATH`, and `HERDR_PROJECTS_ROOT` overrides the project registry folder.
 

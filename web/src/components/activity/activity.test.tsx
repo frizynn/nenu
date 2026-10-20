@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import fixture from "./activity.fixture.json";
 import type { ActivityResponse, ActivityWorkflow, WorkflowDetailResponse } from "@/lib/activity";
-import { ActivityPanel } from "./activity-panel";
 import { ArtifactList } from "./artifact-list";
 import { WorkflowAgentList, WorkflowDetail } from "./workflow-detail";
 
@@ -12,68 +11,6 @@ const list = fixture.list as ActivityResponse & { available: true };
 const detail = fixture.detail as WorkflowDetailResponse;
 const now = fixture.now;
 const running = list.workflows.find((w) => w.status === "running")!;
-
-describe("ActivityPanel", () => {
-  test("groups running work, finished work and artifacts", () => {
-    const onOpenWorkflow = vi.fn();
-    render(<ActivityPanel data={list} now={now} onOpenWorkflow={onOpenWorkflow} />);
-    expect(screen.getByRole("button", { name: /Running/ })).toHaveTextContent("Running2");
-    expect(screen.getByText("impl:B1")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("impl:B3"));
-    expect(onOpenWorkflow).toHaveBeenCalledWith("wf_fe5d5046-9d2", "a5ecc06a0363074c3");
-    // What finished is history: folded until asked for.
-    expect(screen.queryByText("Typecheck bridge through the gate")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
-    expect(screen.getByText("Typecheck bridge through the gate")).toBeInTheDocument();
-    expect(screen.getByText("failed · exit 144")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("nenu-workflows-view-design"));
-    expect(onOpenWorkflow).toHaveBeenLastCalledWith("wf_58bd2e6c-e80");
-    expect(screen.getByRole("link", { name: /Rediseño Nenu sobre Herdr/ })).toHaveAttribute("href", "https://claude.ai/code/artifact/00000000-redacted");
-  });
-
-  test("the filters narrow what is listed", () => {
-    render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} />);
-    // "Tasks" read as the project's task list; these are commands the session left running.
-    expect(screen.queryByRole("button", { name: /^Tasks/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^Commands/ }));
-    expect(screen.getByRole("button", { name: /^Commands/ })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
-    expect(screen.queryByText("nenu-wave")).toBeNull();
-    expect(screen.getByText("Run CI gates: fmt, clippy, tests, release build")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Artifacts/ }));
-    expect(screen.queryByText("Run CI gates: fmt, clippy, tests, release build")).toBeNull();
-    expect(screen.getByRole("link", { name: /Rediseño/ })).toBeInTheDocument();
-  });
-
-  test("a command with output opens it", () => {
-    const onOpenTask = vi.fn();
-    render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} onOpenTask={onOpenTask} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Finished/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Output of Typecheck bridge through the gate" }));
-    expect(onOpenTask).toHaveBeenCalledWith("b3f8meozt");
-    expect(screen.queryByRole("button", { name: "Output of F1 gate progress" })).toBeNull();
-  });
-
-  test("says what each kind of background work is", () => {
-    render(<ActivityPanel data={list} now={now} onOpenWorkflow={() => {}} />);
-    expect(screen.getByText(/Workflows are agents the session fans out; commands are shell commands it left running/)).toBeInTheDocument();
-  });
-
-  test("says why a pane has no activity", () => {
-    const { rerender } = render(<ActivityPanel data={{ available: false, reason: "unsupported" }} now={now} onOpenWorkflow={() => {}} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Claude Code sessions");
-    rerender(<ActivityPanel data={{ available: true, sessionKey: "k", workflows: [], tasks: [], artifacts: [], truncated: false }} now={now} onOpenWorkflow={() => {}} />);
-    expect(screen.getByText("Nothing running in the background.")).toBeInTheDocument();
-  });
-
-  test("a failed refresh keeps the last list and offers a retry", () => {
-    const onRetry = vi.fn();
-    render(<ActivityPanel data={list} stale now={now} onOpenWorkflow={() => {}} onRetry={onRetry} />);
-    expect(screen.getByText("Couldn’t refresh. Showing last known activity.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(onRetry).toHaveBeenCalledOnce();
-  });
-});
 
 describe("ArtifactList", () => {
   test("renders only claude.ai links, opened in a new tab without an opener", () => {

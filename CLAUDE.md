@@ -153,12 +153,12 @@ the unit name; the Herdr action runs from anywhere.
   are the strips above that chat, and `/space/:spaceId` only resolves old links and an empty workspace
   ([ADR 0065](./.adr/0065-a-workspace-opens-on-its-pane.md)).
 - **A desk's session opens with its own panel** (`web/src/components/session-inspector.tsx`): Changes,
-  Files, Artifacts and Terminal for that pane from 1024 px, each read only while on screen, folded with ⌘⌥B
+  Files (its folder, and Artifacts where it has a conversation) and Terminal for that pane from 1024 px,
+  each read only while on screen, folded with ⌘⌥B
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
-  **Project**, its first tab (`project-panel.tsx`): Notes from `task list`, Agents, PRs (a row opens its
-  diff in place) and Context from `project show`; a missing document degrades to what the overview says,
-  never an error, and a task is marked only by asking the coordinator through the guarded send
-  ([ADR 0081](./.adr/0081-on-a-desk-the-project-is-the-panels-first-tab.md)).
+  **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
+  cards; model and context come from the chat's own reading, and the project's own views are not in the panel
+  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).

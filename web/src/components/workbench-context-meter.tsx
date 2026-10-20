@@ -11,6 +11,15 @@ export function formatContextTokens(value: number | null): string {
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
 }
 
+/** How full the context is, 0 to 100: the share the agent reported, else used over the window; null while unknown. */
+export function contextPercent(context: { usedPercent?: number; usedTokens?: number | null; windowTokens?: number | null } | undefined): number | null {
+  const { usedPercent, usedTokens, windowTokens } = context ?? {};
+  if (usedPercent !== undefined && Number.isFinite(usedPercent) && usedPercent >= 0 && usedPercent <= 100) return usedPercent;
+  const used = usedTokens != null && Number.isFinite(usedTokens) && usedTokens >= 0 ? usedTokens : null;
+  const max = windowTokens != null && Number.isFinite(windowTokens) && windowTokens > 0 ? windowTokens : null;
+  return used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
+}
+
 /** The composer row's context ring: a 16px ring and its number, and nothing at all while unreported
  *  (a hollow ring said nothing; Compact stays one Commands row away). */
 export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
@@ -31,7 +40,7 @@ export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, 
   };
   const used = usedTokens !== null && Number.isFinite(usedTokens) && usedTokens >= 0 ? usedTokens : null;
   const max = maxTokens !== null && Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : null;
-  const percentage = reportedPercent !== undefined && Number.isFinite(reportedPercent) && reportedPercent >= 0 && reportedPercent <= 100 ? reportedPercent : used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
+  const percentage = contextPercent({ usedPercent: reportedPercent, usedTokens: used, windowTokens: max });
   if (percentage === null) return null;
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;
