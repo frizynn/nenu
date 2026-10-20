@@ -43,7 +43,7 @@ export function __forgetContexts(): void {
 function SharedFile({ icon, name, note, text }: { icon: ReactNode; name: string; note?: string; text: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <li className="desk-context-file" data-open={open ? "" : undefined}>
+    <li className="desk-context-file">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="desk-context-row">
         <ChevronRight aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", open && "rotate-90")} />
         {icon}
