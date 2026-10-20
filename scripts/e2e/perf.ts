@@ -67,21 +67,31 @@ async function copyProject(root: string, { socketPath }: { socketPath: string })
  * it fell back, a screen that showed something and then took it away. Both run in the page, so no
  * round trip to the bench is counted.
  */
-async function tapTo(page: Page, target: string, ready: string, timeout = 30_000, quiet = 1500): Promise<{ ms: number; flips: number }> {
+interface Tap {
+  ms: number;
+  flips: number;
+  /** The /api reads the tap set off before it was done, each as `route@start-end` in ms from the tap: the waterfall, which load stretches but does not reorder. */
+  reads: string[];
+}
+
+async function tapTo(page: Page, target: string, ready: string, timeout = 30_000, quiet = 1500): Promise<Tap> {
   return page.evaluate(async ({ target, ready, timeout, quiet }) => {
     const element = new Function(`return (${target})`)() as HTMLElement | null;
     if (!element) throw new Error(`no target: ${target}`);
     const holds = new Function(`return Boolean(${ready})`) as () => boolean;
     const start = performance.now();
     element.click();
-    return new Promise<{ ms: number; flips: number }>((resolve, reject) => {
+    const reads = (until: number) => (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+      .filter((entry) => entry.startTime >= start && entry.startTime <= until && entry.name.includes("/api/") && !entry.name.includes("/api/events"))
+      .map((entry) => `${new URL(entry.name).pathname.replace(/^\/api\/pane\/[^/]+/, "pane").replace(/^\/api\//, "")}@${Math.round(entry.startTime - start)}-${Math.round(entry.responseEnd - start)}`);
+    return new Promise<Tap>((resolve, reject) => {
       let since: number | null = null;
       let flips = 0;
       const tick = () => {
         const now = performance.now();
         if (holds()) {
           since ??= now;
-          if (now - since >= quiet) return resolve({ ms: Math.round(since - start), flips });
+          if (now - since >= quiet) return resolve({ ms: Math.round(since - start), flips, reads: reads(since) });
         } else if (since !== null) {
           flips++;
           since = null;
@@ -94,9 +104,9 @@ async function tapTo(page: Page, target: string, ready: string, timeout = 30_000
   }, { target, ready, timeout, quiet });
 }
 
-const stats = (xs: Array<{ ms: number; flips: number }>) => {
+const stats = (xs: Tap[]) => {
   const sorted = xs.map((x) => x.ms).sort((a, b) => a - b);
-  return { runs: xs.map((x) => x.ms), median: sorted[Math.floor(sorted.length / 2)]!, min: sorted[0]!, max: sorted.at(-1)!, flips: xs.map((x) => x.flips) };
+  return { runs: xs.map((x) => x.ms), median: sorted[Math.floor(sorted.length / 2)]!, min: sorted[0]!, max: sorted.at(-1)!, flips: xs.map((x) => x.flips), reads: xs.map((x) => x.reads) };
 };
 
 interface Surface {
@@ -183,7 +193,7 @@ const surfaces = (desk: boolean): Surface[] => desk ? [
 async function measure(browser: Browser, url: string, title: string, form: "desk" | "phone") {
   const results: Record<string, ReturnType<typeof stats>> = {};
   for (const surface of surfaces(form === "desk")) {
-    const times: Array<{ ms: number; flips: number }> = [];
+    const times: Tap[] = [];
     for (let run = 0; run < runs; run++) {
       // The probes are strings evaluated in the page, which the strict CSP would refuse.
       const context = await browser.newContext({ ...(form === "desk" ? DESKTOP : PHONE), bypassCSP: true });
@@ -212,7 +222,8 @@ async function measure(browser: Browser, url: string, title: string, form: "desk
       }
     }
     if (times.length) results[surface.name] = stats(times);
-    console.log(`[perf] ${form} ${surface.name}: ${JSON.stringify(results[surface.name] ?? null)}`);
+    const { reads: _reads, ...shown } = results[surface.name] ?? { reads: [] };
+    console.log(`[perf] ${form} ${surface.name}: ${results[surface.name] ? JSON.stringify(shown) : null}`);
   }
   return results;
 }
