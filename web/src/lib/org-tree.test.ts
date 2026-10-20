@@ -66,6 +66,24 @@ describe("awaits", () => {
     // A stale report on a node that no longer needs you says nothing.
     expect(awaits(node("a", "root", { paneId: "p", liveStatus: "working", group: "working", selfWaiting: true }))).toBeUndefined();
   });
+
+  it("reads a conversation that ended its turn as a chat at rest, not as one waiting for your reply", () => {
+    // Organizations groups it Waiting on you after every turn, because it reports `Waiting for you` before each answer.
+    const resting = node("a", "root", { conversation: true, paneId: "p", liveStatus: "done", group: "waiting-on-you", selfWaiting: true, reportUnacked: true });
+    expect(nodeState(resting)).toBe("idle");
+    expect(awaits(resting)).toBeUndefined();
+    expect(nodeState({ ...resting, liveStatus: "idle" })).toBe("idle");
+    expect(nodeState({ ...resting, liveStatus: "working", group: "working", selfWaiting: undefined })).toBe("working");
+    // Herdr's `done` after a turn is no review for a conversation either.
+    expect(nodeState({ ...resting, group: "ready-for-review", selfWaiting: undefined })).toBe("idle");
+  });
+
+  it("still says a conversation needs you when it is stopped on a dialog, failed, or lost its pane", () => {
+    const base = { conversation: true, group: "waiting-on-you", selfWaiting: true } as const;
+    expect(awaits(node("a", "root", { ...base, paneId: "p", liveStatus: "blocked" }))).toBe("question");
+    expect(nodeState(node("a", "root", { ...base, status: "failed", paneId: "p", liveStatus: "idle" }))).toBe("needs");
+    expect(nodeState(node("a", "root", { ...base, note: "pane closed" }))).toBe("needs");
+  });
 });
 
 describe("orgTree", () => {

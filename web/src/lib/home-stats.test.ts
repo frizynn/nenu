@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
+import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
 import type { AgentView, ProjectView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -65,6 +65,19 @@ it("lists after them the threads whose agent stopped for your reply, on a live p
   };
   const items = needsYouItems([agent("a", "blocked"), agent("r", "idle")], [{ paneId: "a", detectedAt: 1 }], [hub]);
   expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : item.reply ? "reply" : "blocked"}`)).toEqual(["a:asks", "r:reply"]);
+});
+
+it("leaves out a conversation that ended its turn, from Needs you, Home's count and its rows", () => {
+  const talk = { id: "t1", title: "Charla", parentId: "root", role: "worker", status: "open", paneId: "c", liveStatus: "done", group: "waiting-on-you", selfWaiting: true, conversation: true } as const;
+  const hub: ProjectView = { slug: "hub", name: "Hub", status: "active", source: "json", threads: [talk] };
+  const agents = [agent("c", "done")];
+  expect(needsYouItems(agents, [], [hub])).toEqual([]);
+  expect(needsYouCount({ agents, projects: [hub] })).toBe(0);
+  expect(recentChats(agents, [hub], new Set())[0]).not.toHaveProperty("ask");
+  expect(reviewItems([hub])).toEqual([]);
+  // Stopped on a dialog, it asks like any agent.
+  const asking = [agent("c", "blocked")];
+  expect(needsYouCount({ agents: asking, projects: [{ ...hub, threads: [{ ...talk, liveStatus: "blocked" }] }] })).toBe(1);
 });
 
 describe("review state", () => {

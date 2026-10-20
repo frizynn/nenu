@@ -213,6 +213,23 @@ describe("ProjectRegistry: Organizations fields", () => {
     expect(dialog).not.toHaveProperty("selfWaiting");
   });
 
+  test("a thread kept open as a conversation reaches the client as one, from --json and from the files", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "demo", "threads", "t-0002.toml"), `id = "t-0002"\ntitle = "Charla"\nstatus = "open"\nkeep_open = true\n`);
+    const registry = registryFor(root, { run: overviewRun([
+      overviewThread({ keep_open: true }),
+      overviewThread({ id: "t-0002", keep_open: false }),
+    ]) });
+    const files = registry.list("default", true, [])[0]!.threads;
+    expect(files.find((thread) => thread.id === "t-0002")).toMatchObject({ conversation: true });
+    expect(files.find((thread) => thread.id === "t-0001")).not.toHaveProperty("conversation");
+
+    await registry.refresh();
+    const [talk, worker] = registry.list("default", true, [])[0]!.threads;
+    expect(talk).toMatchObject({ conversation: true });
+    expect(worker).not.toHaveProperty("conversation");
+  });
+
   test("an unread PR under --json shows no numbers, and a contract without PR actions hides them", async () => {
     const { auto_fix_ci: _fix, auto_merge: _merge, ...withoutFlags } = overviewThread({
       pr: { url: "https://github.com/acme/demo/pull/9", state: "", review: "", checks: null, additions: null, deletions: null, failing: [], comment_count: null, draft: null, mergeable: null, merge_blocker: "the ticker has not read this pull request yet" },
