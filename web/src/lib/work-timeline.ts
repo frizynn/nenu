@@ -175,3 +175,83 @@ export function liveStep(turn: WorkTurn): LiveStep | null {
   const part = last?.parts[index];
   return last && part?.kind === "thinking" ? { part, ...at(last, index) } : null;
 }
+
+/** A step of a turn's work: a call or a thought, where it sits in the journal. */
+export interface WorkStep {
+  part: Extract<TranscriptPart, { kind: "tool" | "thinking" }>;
+  entry: string;
+  index: number;
+}
+
+/**
+ * A desk's turn as it reads: the agent's words, and between two of them the run of steps it took, one
+ * fold each. `id` names a run by its first step, so a fold keeps its state while the turn grows.
+ */
+export type WorkSegment =
+  | { kind: "prose"; entry: TranscriptEntry; parts: Array<{ part: TranscriptPart; index: number }> }
+  | { kind: "steps"; id: string; steps: WorkStep[] };
+
+/** `activity` cut at the agent's words; the live step is left out, since it draws below as the turn's last row. */
+export function workSegments(activity: TranscriptEntry[], live: LiveStep | null): WorkSegment[] {
+  const segments: WorkSegment[] = [];
+  for (const entry of activity) {
+    entry.parts.forEach((part, index) => {
+      if (part.kind === "image" || (live?.entry === entry.uuid && live.index === index)) return;
+      const last = segments.at(-1);
+      if (part.kind === "tool" || part.kind === "thinking") {
+        const step = { part, entry: entry.uuid, index };
+        if (last?.kind === "steps") last.steps.push(step);
+        else segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, steps: [step] });
+      } else if (last?.kind === "prose" && last.entry === entry) last.parts.push({ part, index });
+      else segments.push({ kind: "prose", entry, parts: [{ part, index }] });
+    });
+  }
+  return segments;
+}
+
+// What a run of steps did, by the verb its steps share: "Ran 3 commands, read 2 files".
+const COUNTED: Record<string, [verb: string, noun: string]> = {
+  Ran: ["ran", "command"], Read: ["read", "file"], Edited: ["edited", "file"], Wrote: ["wrote", "file"], Searched: ["searched", "pattern"],
+  Listed: ["listed", "folder"], Fetched: ["fetched", "page"], "Searched the web": ["searched the web", "time"], "Ran agent": ["ran", "agent"],
+  Question: ["asked", "question"],
+};
+
+/** A run of steps as its fold's one line, in the order the steps first did each thing. */
+export function stepsSummary(steps: WorkStep[]): string {
+  const groups = new Map<string, { phrase: string; noun?: string; targets: Set<string>; count: number }>();
+  for (const { part } of steps) {
+    if (part.kind === "thinking") continue;
+    const step = part.questions?.length ? QUESTION_STEP : describeTool(part.name);
+    const counted = COUNTED[step.done];
+    const key = step.kind === "tool" ? "tool" : step.done;
+    const phrase = counted?.[0] ?? (key === "tool" ? "used" : step.kind === "plan" && step.target === "title" ? "proposed a plan" : step.done.toLowerCase());
+    const group = groups.get(key) ?? { phrase, noun: counted?.[1] ?? (key === "tool" ? "tool" : undefined), targets: new Set(), count: 0 };
+    group.count++;
+    group.targets.add(part.summary);
+    groups.set(key, group);
+  }
+  const phrases = [...groups].map(([key, { phrase, noun, targets, count }]) => {
+    // A file edited twice is one file edited.
+    const n = key === "Edited" || key === "Wrote" ? targets.size : count;
+    if (!noun) return phrase;
+    if (noun === "time") return n === 1 ? phrase : `${phrase} ${n} times`;
+    return `${phrase} ${n} ${noun}${n === 1 ? "" : "s"}`;
+  });
+  const line = phrases.join(", ") || "thought";
+  return line[0]!.toUpperCase() + line.slice(1);
+}
+
+/** The lines a run of steps added and removed, from the edits that went through; null when none. */
+export function stepsDiff(steps: WorkStep[]): { additions: number; deletions: number } | null {
+  const edits = steps.flatMap(({ part }) => part.kind === "tool" && part.diff && !part.result?.isError ? [part.diff] : []);
+  return edits.length ? { additions: edits.reduce((sum, d) => sum + d.added, 0), deletions: edits.reduce((sum, d) => sum + d.removed, 0) } : null;
+}
+
+// Claude opens a failed command's result with its exit code, on a line of its own.
+const EXIT_CODE = /^Exit code (\d+)\n?/;
+
+/** A command's output split from the exit code it opens with, when it opens with one. */
+export function commandOutput(text: string): { code?: number; output: string } {
+  const match = EXIT_CODE.exec(text);
+  return match ? { code: Number(match[1]), output: text.slice(match[0].length) } : { output: text };
+}
