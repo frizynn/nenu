@@ -1,7 +1,7 @@
 // Small presentational helpers.
 
 /** Collapse $HOME to `~` — handles /home/<user>, /Users/<user> (macOS), /var/home/<user> (Fedora). */
-function tildeHome(cwd: string): string {
+export function tildeHome(cwd: string): string {
   return cwd.replace(/^\/(?:var\/)?home\/[^/]+/, "~").replace(/^\/Users\/[^/]+/, "~");
 }
 

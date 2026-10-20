@@ -18,6 +18,8 @@ export interface APIRequest { get(url: string): Promise<APIResponse> }
 export interface Locator {
   click(opts?: { timeout?: number; modifiers?: Array<"Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift"> }): Promise<void>;
   hover(opts?: { timeout?: number }): Promise<void>;
+  dblclick(opts?: { timeout?: number }): Promise<void>;
+  focus(): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
   inputValue(): Promise<string>;
   setInputFiles(files: { name: string; mimeType: string; buffer: Buffer }): Promise<void>;
@@ -60,7 +62,7 @@ export interface Page {
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
   keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void> };
   touchscreen: { tap(x: number, y: number): Promise<void> };
-  mouse: { move(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
+  mouse: { move(x: number, y: number, opts?: { steps?: number }): Promise<void>; down(): Promise<void>; up(): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
   setViewportSize(size: { width: number; height: number }): Promise<void>;
   goBack(): Promise<unknown>;
   reload(): Promise<unknown>;

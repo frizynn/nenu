@@ -8,6 +8,24 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-20
+
+### Added
+
+- Desk: drag the sidebar's edge and the right column's to resize them; arrows, Home/End and a double-click work too, and each width is kept per device (78333131).
+- `bun scripts/e2e/panels.ts`: what moves when a thread docks and the panel folds, each grip, Changes beside a coordinator (78333131).
+
+### Changed
+
+- Desk: a thread opened beside its coordinator takes the panel's place at its width, and the sidebar no longer folds for it: nothing moves (78333131).
+- Desk: the session panel slides open and shut instead of jumping, from a press only; ⌘⌥B stays instant (78333131).
+
+### Fixed
+
+- Changes beside a coordinator read its project's repository instead of saying its folder is not one; with none, it names the folder; a private-named folder is never read (537562e3, 44ff5dba).
+- Desk: a narrow docked thread keeps its title whole (a3b9771f).
+- Desk: a column that leaves mid-drag no longer leaves the page unable to select text (44ff5dba).
+
 ## [1.32.1] - 2026-10-20
 
 ### Added

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, LayoutTemplate, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
@@ -6,7 +6,7 @@ import { useConversationScan } from "@/components/chat-files-browser";
 import { DiffBody, useDiffRead } from "@/components/diff-viewer";
 import { ciLabel, ciTone } from "@/components/pr-bar";
 import { ProjectFilesBrowser } from "@/components/project-files-browser";
-import { clampWidth, ICON_BUTTON, PANEL_WIDTH, slidePanel, type InspectorTab, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
+import { ColumnEdge, ICON_BUTTON, slidePanel, type InspectorTab, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
 import { fetchActivity, type ActivityArtifact } from "@/lib/activity";
 import { fetchSessionDiff } from "@/lib/api";
 import { chatFileReferences } from "@/lib/chat-files";
@@ -43,35 +43,10 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
     if (entering.current && panelRef.current) slidePanel(panelRef.current, "in");
     entering.current = false;
   }, [panelRef, entering]);
-  const drag = useRef<{ x: number; width: number } | null>(null);
-  const [dragWidth, setDragWidth] = useState<number | null>(null);
-  const width = dragWidth ?? inspector.width;
-
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { x: event.clientX, width: inspector.width };
-  };
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (drag.current) setDragWidth(clampWidth(drag.current.width + drag.current.x - event.clientX));
-  };
-  const onPointerUp = () => {
-    if (drag.current && dragWidth !== null) inspector.setWidth(dragWidth);
-    drag.current = null;
-    setDragWidth(null);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const delta = event.key === "ArrowLeft" ? PANEL_WIDTH.step : event.key === "ArrowRight" ? -PANEL_WIDTH.step : 0;
-    if (!delta) return;
-    event.preventDefault();
-    inspector.setWidth(inspector.width + delta);
-  };
 
   return (
-    <aside ref={panelRef} aria-label="Session panel" className="session-panel" style={{ width }}>
-      <div role="separator" aria-orientation="vertical" aria-label="Resize session panel" tabIndex={0}
-        aria-valuenow={width} aria-valuemin={PANEL_WIDTH.min} aria-valuemax={PANEL_WIDTH.max}
-        className="session-panel-resize" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onKeyDown={onKeyDown} />
+    <aside ref={panelRef} aria-label="Session panel" className="session-panel" style={{ width: inspector.width }}>
+      <ColumnEdge inspector={inspector} label="Resize session panel" />
       <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-2">
         {/* A narrow panel scrolls its tabs rather than overlap the fold button. */}
         <div role="tablist" aria-label="Session" className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">

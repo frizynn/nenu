@@ -180,7 +180,8 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 }
 
 @media (min-width: 1024px) {
-  .workbench-sidebar { display: flex; flex-direction: column; width: 272px; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--workbench-sidebar); }
+  /* Its width is the operator's (workbench-shell's grip), never more than 40% of the window. */
+  .workbench-sidebar { position: relative; display: flex; flex-direction: column; width: 272px; max-width: 40vw; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--workbench-sidebar); }
   .workbench-shell[data-sidebar-collapsed="true"] > .workbench-sidebar { display: none; }
 }
 

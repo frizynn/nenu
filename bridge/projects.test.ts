@@ -62,6 +62,15 @@ describe("ProjectRegistry", () => {
     expect(reused.coordinator).toBeUndefined();
   });
 
+  test("names its repositories for the panes it holds, and none for any other", () => {
+    const registry = registryFor(fixture());
+    const panes = [pane({}), pane({ paneId: "p2", tabId: "t2", cwd: "/work/demo/wt" }), pane({ paneId: "p9", tabId: "t9", cwd: "/work/other" })];
+    expect(registry.repos("default", true, panes, "p1")).toEqual(["/work/demo"]);
+    expect(registry.repos("default", true, panes, "p2")).toEqual(["/work/demo"]);
+    expect(registry.repos("default", true, panes, "p9")).toEqual([]);
+    expect(registry.repos("named", false, panes, "p1")).toEqual([]);
+  });
+
   test("malformed metadata fails soft", () => {
     const root = fixture();
     writeFileSync(join(root, "demo", "threads", "t-0002.toml"), "bad = [");
