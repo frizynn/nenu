@@ -98,8 +98,9 @@ export function pushSupported(): boolean {
 /** Why push can't run where the browser has no Push API. iOS (16.4+) gives Web Push only to a web app
  *  opened from the Home Screen, so a Safari tab can get it by being added there. The platform or UA
  *  names an iPhone, iPod or iPad; an iPad asking for the desktop site says Mac, and only its touch
- *  points tell it from one. */
-function missingPush(): "unsupported" | "home-screen" {
+ *  points tell it from one. Over plain HTTP the Home Screen would not help: that is HTTPS's to fix. */
+function missingPush(): "unsupported" | "home-screen" | "insecure" {
+  if (!window.isSecureContext) return "insecure";
   const device = `${navigator.platform} ${navigator.userAgent}`;
   const ios = /iPhone|iPad|iPod/.test(device) || (/Mac/.test(device) && navigator.maxTouchPoints > 1);
   const standalone = window.matchMedia?.("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
