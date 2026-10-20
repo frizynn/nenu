@@ -32,10 +32,16 @@ export function useArtifactMetadata(
         for (let index = 0; index < candidates.length; index += 20) batches.push(candidates.slice(index, index + 20));
         const answers: ArtifactMetadata[][] = [];
         let next = 0;
+        let failed = false;
         const worker = async () => {
-          while (next < batches.length) {
+          while (!failed && next < batches.length) {
             const index = next++;
-            answers[index] = await fetchArtifactMetadata(paneId, batches[index]!, session, controller.signal);
+            try {
+              answers[index] = await fetchArtifactMetadata(paneId, batches[index]!, session, controller.signal);
+            } catch (error) {
+              failed = true; // the others ask for no new batch: this read already failed
+              throw error;
+            }
           }
         };
         await Promise.all(Array.from({ length: Math.min(3, batches.length) }, worker));
