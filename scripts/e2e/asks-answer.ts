@@ -9,9 +9,9 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 // Your asks shaped like a real registry on 2026-10-17 (ADR 0093), captured with Google Chrome headless at
 // 390 and 1440 px: a decision line that is only a parenthesis, an ask whose links read as raw text, and
 // asks in two projects and three coordinators. It checks the placeholder is gone from the list and the
-// count, the links read as chips, the selectors narrow the list on a phone (a desk lands on the
-// coordinator's Waiting on you, ADR 0102), a coordinator's card lists only its own, and Answer writes
-// through `asks answer` and shows the row answered. `--before` only captures.
+// count, the links read as chips, a desk's old /asks link narrowed to one coordinator lands on that
+// coordinator's Waiting on you and lists only its own (ADR 0102), and Answer writes through
+// `asks answer` and shows the row answered. `--before` only captures.
 //
 //   bun scripts/e2e/asks-answer.ts [--before] [--port 8863] [--out DIR]
 
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
     // A desk reads asks on each coordinator's Waiting on you, where an old /asks link narrowed to one
     // lands (ADR 0102); a phone keeps the page with its selectors.
-    const GESTION_ASKS = "/asks?project=awam&coordinator=t-0002";
+    const GESTION_ASKS = `/asks?project=awam&coordinator=${GESTION.id}`;
     for (const [width, device] of [["390", tallPhone], ["1440", tallDesk]] as const) {
       const { page, context } = await open(width === "1440" ? GESTION_ASKS : "/asks", device);
       const text = await page.locator("main").innerText();
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
       if (!before && width === "1440") {
         // One coordinator's asks, then the one that waits on you there answered.
         const landed = new URL(page.url());
-        if (landed.pathname !== "/project/awam/node/t-0002" || !landed.search.includes("tab=waiting")) failures.push(`asks 1440: ${GESTION_ASKS} did not land on the coordinator's Waiting on you`);
+        if (landed.pathname !== `/project/awam/node/${GESTION.id}` || landed.searchParams.get("tab") !== "waiting") failures.push(`asks 1440: ${GESTION_ASKS} did not land on the coordinator's Waiting on you`);
         const narrowed = await page.locator("main").innerText();
         if (narrowed.includes("Comparar dos proveedores") || narrowed.includes("changelog de octubre")) failures.push("the filter kept other coordinators' asks");
         await shoot(page, "asks-filtrado-1440");
