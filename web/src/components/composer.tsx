@@ -2,7 +2,7 @@ import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-mes
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { useOutageNoticeShown } from "@/lib/connection-health";
 import { MessageQueueStrip } from "./message-queue-strip";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
@@ -50,6 +50,7 @@ import { NoEchoNotice } from "@/components/no-echo-notice";
 import { ComposerNotice } from "@/components/composer-notice";
 import { AttachmentChips } from "@/components/attachment-chips";
 import { DraftChipLayer } from "@/components/draft-chip-layer";
+import { useDraftChips } from "@/hooks/use-draft-chips";
 import { DiffCommentChips } from "@/components/diff-comment-chips";
 import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
@@ -57,7 +58,7 @@ import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
-import { draftChips, draftFromWire, draftWords, editChips, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
+import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
   addLocalSend,
   listLocalSends,
@@ -673,16 +674,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Where a picked, pasted or dropped picture's chip goes: the box's cursor as it last stood.
-  const caretRef = useRef<number | null>(null);
-  const pendingCaretRef = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const at = pendingCaretRef.current;
-    const el = inputRef.current;
-    if (at === null || !el) return;
-    pendingCaretRef.current = null;
-    if (document.activeElement === el) el.setSelectionRange(at, at);
-  });
+  // The draft's picture chips: kept whole across edits, the cursor kept out of them (ADR 0104).
+  const pictureChips = useDraftChips(inputRef);
   const fileRef = useRef<HTMLInputElement>(null);
   const direct = useDirectTyping({
     paneKey: `${session ?? ""}\0${paneId}`,
@@ -1197,10 +1190,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (!result.images) return focusInputEnd();
     const text = inputValueRef.current;
     const el = inputRef.current;
-    const at = el && document.activeElement === el ? el.selectionEnd : caretRef.current ?? text.length;
+    const at = el && document.activeElement === el ? el.selectionEnd : pictureChips.caret.current ?? text.length;
     const placed = insertImageChips(text, at, Array.from({ length: result.images }, (_, i) => before + i + 1));
     updateInput(placed.text);
-    placeCaret(placed.caret);
+    pictureChips.place(placed.caret);
   }
 
   /** Take an attachment out; a picture takes its chip with it, and the pictures after it renumber. */
@@ -1211,33 +1204,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (n > 0) updateInput((text) => withoutImages(text, [n]));
   }
 
-  /** One edit of the box, with every chip kept whole and naming one picture: one the edit touched
-   *  leaves with its picture, and chip text pasted or brought back by undo leaves on its own. */
+  /** One edit of the box: a chip it touched leaves with its picture, and chip text pasted or brought
+   *  back by undo leaves on its own. */
   function editDraft(value: string, caret: number) {
     const shown = pictures(attachments.current());
-    const kept = editChips(inputValueRef.current, value, caret, shown.length);
+    const kept = pictureChips.edit(inputValueRef.current, value, caret, shown.length);
     shown.filter((_item, i) => kept.removed.includes(i + 1)).forEach((item) => attachments.remove(item.id));
-    if (kept.text !== value) placeCaret(kept.caret);
-    caretRef.current = kept.caret;
     skills.onChange(kept.text, kept.caret);
-  }
-
-  /** The cursor inside a chip goes to its end, so nothing is typed into one. */
-  function selectDraft(el: HTMLTextAreaElement) {
-    const { selectionStart: start, selectionEnd: end } = el;
-    caretRef.current = end;
-    const inside = start === end ? draftChips(el.value).find((chip) => chip.start < start && start < chip.end) : undefined;
-    if (inside) {
-      el.setSelectionRange(inside.end, inside.end);
-      caretRef.current = inside.end;
-    }
-    skills.onSelect(el.selectionStart);
-  }
-
-  /** Put the cursor at `at` once React has written the value it belongs to. */
-  function placeCaret(at: number) {
-    caretRef.current = at;
-    pendingCaretRef.current = at;
   }
 
   function onPickFiles(e: ChangeEvent<HTMLInputElement>) {
@@ -1565,7 +1538,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               ref={inputRef}
               value={direct.active ? direct.value : input}
               onChange={direct.active ? direct.onChange : (e) => editDraft(e.target.value, e.target.selectionStart)}
-              onSelect={(e) => direct.active ? skills.onSelect(e.currentTarget.selectionStart) : selectDraft(e.currentTarget)}
+              onSelect={(e) => skills.onSelect(direct.active ? e.currentTarget.selectionStart : pictureChips.select(e.currentTarget))}
               onFocus={() => { skills.onFocus(); onInputFocus?.(); }}
               onBlur={skills.onBlur}
               aria-autocomplete={skills.open ? "list" : undefined}

@@ -104,6 +104,8 @@ describe("pictures in their places", () => {
     const pasted = `${cut.text} ${chip(1)} B`;
     expect(editChips(cut.text, pasted, pasted.length, 1)).toEqual({ text: `A ${chip(1)} C  B`, removed: [], caret: `A ${chip(1)} C  B`.length });
     expect(dropStrayChips(`x ${chip(3)} y`, 2, 0)).toEqual({ text: "x  y", caret: 0 });
+    // Part of a chip copied and pasted: its blank cells and joiner leave, its letters stay words.
+    expect(dropStrayChips(`a\u2800\u2800Ima b ${chip(1)}`, 1, 9)).toEqual({ text: `aIma b ${chip(1)}`, caret: 7 });
   });
 
   it("keeps the cursor with its words when a removal turns #10 into #9", () => {

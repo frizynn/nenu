@@ -161,22 +161,31 @@ export function keepChipsWhole(before: string, after: string, caret: number): { 
 /**
  * Chips that name no picture leave the text: a number past the `count` pictures, or a second chip
  * for the same picture (chip text pasted back in, or brought back by undo). The first chip for a
- * number keeps it.
+ * number keeps it. A chip's own characters outside a whole chip leave too: nobody types them.
  */
 export function dropStrayChips(text: string, count: number, caret: number): { text: string; caret: number } {
   let out = "";
-  let at = 0;
   let moved = caret;
+  /** Words between chips, without a chip's own characters cut loose from one (a partial copy pasted). */
+  const words = (from: number, to: number) => {
+    for (let i = from; i < to; i++) {
+      if (text[i] === "\u2800" || text[i] === "\u2060") {
+        if (caret > i) moved--;
+      } else out += text[i];
+    }
+  };
+  let at = 0;
   const seen = new Set<number>();
   for (const chip of draftChips(text)) {
-    out += text.slice(at, chip.start);
+    words(at, chip.start);
     at = chip.end;
     if (chip.number <= count && !seen.has(chip.number)) {
       seen.add(chip.number);
       out += text.slice(chip.start, chip.end);
     } else if (caret > chip.start) moved -= Math.min(caret, chip.end) - chip.start;
   }
-  return at ? { text: out + text.slice(at), caret: moved } : { text, caret };
+  words(at, text.length);
+  return { text: out, caret: moved };
 }
 
 /**

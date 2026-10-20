@@ -15,8 +15,10 @@ import { claudeAdapter } from "./index";
 const fixture = (name: string): StyledLine[] =>
   splitLines(parseAnsi(readFileSync(join(import.meta.dirname, "fixtures", `${name}-v2299.txt`), "utf8")));
 
-const RED = "/tmp/nsh/work/uploads/photo-mf3k2a-0a1b2c3d.png";
-const BLUE = "/tmp/nsh/work/uploads/photo-mf3k2b-4e5f6a7b.png";
+// Paths the operator typed, not Nenu's uploads: an upload now goes piece by piece, pasted alone in its
+// place (ADR 0104), so this one-paste shape is what a long message with typed image paths still makes.
+const RED = "/tmp/nsh/work/shots/photo-red.png";
+const BLUE = "/tmp/nsh/work/shots/photo-blue.png";
 const PROSE = [
   "Hay un problema en la vista de prueba que quiero que en lugar de mostrar dos botones muestre una lista con el agente que sea y el nivel de permisos, porque si no es imposible elegir bien desde el telefono cuando estoy lejos del escritorio y sin la notebook a mano para nada",
   "despues en los proyectos hay un retoque abajo de lo que aparece todo el rato que no deberia aparecer, sino que en otra pestana y falta implementar los diffs que no se implementaron todavia en ninguna parte del producto",

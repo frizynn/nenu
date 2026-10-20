@@ -1,4 +1,4 @@
-import { placedPicturesCarrySend } from "../inline-images";
+import { hasPlacedPictures, placedPicturesCarrySend } from "../inline-images";
 
 // Codex replaces a sufficiently large paste with one atomic token while keeping the full payload
 // internally: `[Pasted Content N chars]` (optionally suffixed ` #2`, ` #3`, … when equal-sized
@@ -25,5 +25,5 @@ function collapsedPiece(piece: string): string | null {
 
 /** The Codex adapter's supplemental send evidence: a paste token, or pictures in their places. */
 export function codexCarriesSend(sent: string, draft: string): boolean {
-  return codexDraftCarriesSend(sent, draft) || placedPicturesCarrySend(sent, draft, collapsedPiece);
+  return hasPlacedPictures(sent) ? placedPicturesCarrySend(sent, draft, collapsedPiece) : codexDraftCarriesSend(sent, draft);
 }

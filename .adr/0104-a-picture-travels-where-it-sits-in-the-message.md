@@ -5,6 +5,7 @@
 - **Trail:** `web/src/lib/message-images.ts` (`imageChip`, `serializeDraft`, `draftFromWire`,
   `keepChipsWhole`, `tokenPieces`, `pathPieces`) · `web/src/lib/harness/inline-images.ts` ·
   `bridge/guarded-send.ts` (`typePieces`) · `web/src/components/draft-chip-layer.tsx` ·
+  `web/src/hooks/use-draft-chips.ts` · `web/src/lib/upload-path.ts` (`isPicturePath`) ·
   `web/src/components/attachment-chips.tsx` · `web/src/components/transcript-view.tsx` (`UserWords`) ·
   `scripts/e2e/inline-images.ts`
 
@@ -45,9 +46,11 @@ draws the token about 150 ms after that paste, so text sent on its heels lands b
 3. **A harness without it gets the paths in place, as text** (omp today). Its agent reads them where
    they sit, as it always read paths.
 4. **In the draft a picture is a chip**, characters in the textarea (two blank Braille cells, "Image
-   #N", one more cell: nothing anyone types, not whitespace, no line break inside). A layer under the
+   #N", a word joiner: nothing anyone types, not whitespace, no line break inside). A layer under the
    textarea paints the pill and the icon. An edit that touches a chip takes the whole chip and its
-   picture; removing the thumbnail takes the chip; the rest renumber. The textarea stays the editor.
+   picture; removing the thumbnail takes the chip; the rest renumber; chip text that names no picture
+   (pasted back, brought back by undo) leaves. The textarea stays the editor, in the composer and in
+   the queue editor alike (`hooks/use-draft-chips.ts`).
 5. **The conversation draws each picture at its token** (the k-th token is the message's k-th picture,
    whatever its number), or at its path when the CLI kept paths as text.
 

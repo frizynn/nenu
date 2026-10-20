@@ -321,6 +321,15 @@ describe("guardedSend", () => {
     expect(term.keys()).toEqual([]);
   });
 
+  test("a retry never takes a long first piece's paste token for the whole message (Claude collapses it)", async () => {
+    const long = Array.from({ length: 4 }, (_v, i) => `line ${i} ${"word ".repeat(58)}`).join("\n");
+    const term = new Term();
+    term.draft = "[Pasted text #1 +3 lines]";
+    const { outcome } = await run(term, { text: `${long} ${red} and the end` }, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome.ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+  });
+
   test("an agent with no adapter gets the message in one write, its paths in place", async () => {
     const term = new Term();
     term.agent = null;

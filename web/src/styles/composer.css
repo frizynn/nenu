@@ -20,7 +20,7 @@
 .draft-chip-layer { position: absolute; left: 0; top: 0; overflow: hidden; color: transparent; pointer-events: none; }
 /* The pill takes no room of its own: side shadows pad it, and it stays shorter than a line so chips on
    two wrapped lines never touch. */
-.draft-chip { position: relative; border-radius: var(--radius-sm); background: var(--muted); box-shadow: -0.1em 0 0 var(--muted), 0.3em 0 0 var(--muted); }
+.draft-chip { position: relative; border-radius: var(--radius-sm); background: var(--muted); box-shadow: -0.12em 0 0 var(--muted), 0.12em 0 0 var(--muted); }
 .draft-chip-icon { position: absolute; left: 0.05em; top: 50%; width: 1.05em; height: 1.05em; translate: 0 -50%; color: var(--muted-foreground); }
 /* The draft's files, inside the box above the text: a row of their own, starting where the text does
    (past the + column and the draft's own left padding). */

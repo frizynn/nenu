@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { Check, Pencil, Send, Trash2, X, Zap } from "@/components/ui/icon";
 import type { QueueMessage } from "@/lib/api";
 import { queueRowStatus, type DeliveredRow } from "@/hooks/use-message-queue";
-import { draftFromWire, editChips, serializeDraft } from "@/lib/message-images";
+import { draftFromWire, serializeDraft } from "@/lib/message-images";
+import { useDraftChips } from "@/hooks/use-draft-chips";
 import { DraftChipLayer } from "./draft-chip-layer";
 import { QueuedMessage, type QueuedAction } from "./queued-message";
 
@@ -42,6 +43,7 @@ export function MessageQueueStrip({
   // the composer (ADR 0104); a chip the edit takes leaves with its picture. Files ride along.
   const [draft, setDraft] = useState<ReturnType<typeof draftFromWire>>({ text: "", images: [], files: [] });
   const editor = useRef<HTMLTextAreaElement>(null);
+  const chips = useDraftChips(editor);
   if (!messages.length && !delivered.length && !error) return null;
   // The strip sits in the composer, so every px it takes comes off the conversation: rows show three
   // lines (Edit has the rest) and the strip stops at 13rem, less on a short screen. Below the desk
@@ -100,8 +102,9 @@ export function MessageQueueStrip({
                       ref={editor}
                       className="block w-full resize-y rounded-lg bg-transparent p-2 text-body text-foreground"
                       value={draft.text}
+                      onSelect={(e) => chips.select(e.currentTarget)}
                       onChange={(e) => {
-                        const kept = editChips(draft.text, e.target.value, e.target.selectionStart, draft.images.length);
+                        const kept = chips.edit(draft.text, e.target.value, e.target.selectionStart, draft.images.length);
                         setDraft({ ...draft, text: kept.text, images: draft.images.filter((_path, i) => !kept.removed.includes(i + 1)) });
                       }}
                     />

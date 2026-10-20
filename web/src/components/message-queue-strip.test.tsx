@@ -141,6 +141,11 @@ it("edits a queued message's words with each picture kept in its place; a chip t
   await user.click(within(await menuOf(user, 1)).getByRole("button", { name: "Edit" }));
   const input = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Edit queued message" });
   expect(input).toHaveValue(`first ${imageChip(1)} then ${imageChip(2)} end`);
+  // A tap inside a chip puts the cursor at its end, so typing never lands in one.
+  input.focus();
+  input.setSelectionRange(9, 9);
+  fireEvent.select(input);
+  expect(input.selectionStart).toBe(`first ${imageChip(1)}`.length);
   // A Backspace into chip 1: picture 1 leaves with all of its chip, and blue becomes picture 1.
   const end = `first ${imageChip(1)}`.length;
   fireEvent.change(input, { target: { value: input.value.slice(0, end - 1) + input.value.slice(end), selectionStart: end - 1, selectionEnd: end - 1 } });
