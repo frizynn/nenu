@@ -8,6 +8,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.31.2] - 2026-10-20
+
+### Fixed
+
+- On a phone only the thread scrolls: a drag on the box, the header or the thread no longer moves the chat, and the page does not rubber-band in Safari (9678c138).
+- A conversation (`keep_open`) that ended its turn reads as a chat at rest, not as Needs you: off Home's headline, its list, the tab's badge and its workspace's state. A dialog on its screen still needs you (89006a72).
+
 ## [1.31.1] - 2026-10-20
 
 The redesign's last polish pass (#101), ported onto the desk redesign. Parts main had already redone are left as main draws them.
