@@ -8,11 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.31.3] - 2026-10-20
+## [1.32.1] - 2026-10-20
 
 ### Changed
 
-- `bun scripts/e2e/run.ts phone-scroll`: every phone screen and two sheets scroll one box, and a drag moves nothing else, in Safari and the home-screen app; red on 1.31.1 (172fb86e, 60e7813a).
+- `bun scripts/e2e/run.ts phone-scroll`: every phone screen and two sheets scroll one box, and a drag moves nothing else, in Safari and the home-screen app; red on 1.31.1 (172fb86e, 60e7813a, bae05320).
+
+## [1.32.0] - 2026-10-20
+
+### Added
+
+- A picture goes where you put it in the message: a numbered chip in the text and a thumbnail with the same number above it, the agent (Claude, Codex) gets it in that place as from the terminal, and the conversation shows it there (197235c9, cee5a98d, b5d781c0, 2c77c109).
 
 ## [1.31.2] - 2026-10-20
 

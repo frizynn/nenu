@@ -514,6 +514,40 @@ describe("journal media", () => {
     expect(screen.getByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=u-paste&n=0");
   });
 
+  // ADR 0104: the k-th token is the message's k-th picture, whatever number the CLI gave it.
+  const order = (bubble: HTMLElement) => {
+    const out: string[] = [];
+    const walk = document.createTreeWalker(bubble, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      if (node instanceof HTMLImageElement) out.push(`<${node.alt}>`);
+      else if (node.nodeType === Node.TEXT_NODE && node.textContent!.trim()) out.push(node.textContent!.trim());
+    }
+    return out.join(" ");
+  };
+
+  it("draws each picture of your message where its token was, as Claude logs it", () => {
+    render(withViewer(<TranscriptView entries={[turn({ uuid: "u-placed", parts: [{ kind: "text", text: "first the red one [Image #6] then the blue one [Image #7] and that is all" }, image(0), image(1)] })]} />));
+    const bubble = document.querySelector<HTMLElement>('[data-speaker="user"]')!;
+    expect(order(bubble)).toMatch(/^first the red one <Image 1> then the blue one <Image 2> and that is all/);
+    expect(bubble).not.toHaveTextContent("[Image #6]");
+  });
+
+  it("draws them in place from Codex's shape too: the pictures first, then the text with the tokens", () => {
+    render(withViewer(<TranscriptView entries={[turn({ uuid: "u-codex", parts: [image(0), image(1), { kind: "text", text: "first [Image #1]  then [Image #2]  end" }] })]} />));
+    expect(order(document.querySelector<HTMLElement>('[data-speaker="user"]')!)).toMatch(/^first <Image 1> then <Image 2> end/);
+  });
+
+  it("puts a picture the words never place after them, and leaves an unmatched token as words", () => {
+    render(withViewer(<TranscriptView entries={[turn({ uuid: "u-extra", parts: [{ kind: "text", text: "look [Image #1]" }, image(0), image(1)] })]} />));
+    expect(order(document.querySelector<HTMLElement>('[data-speaker="user"]')!)).toMatch(/^look <Image 1> <Image 2>/);
+  });
+
+  it("draws a picture path left in the text where it was", () => {
+    const up = "/home/you/.local/state/nenu/uploads/w1_p1-mv8g-0a1b2c3d.png";
+    render(withViewer(<TranscriptView entries={[turn({ uuid: "u-path", parts: [{ kind: "text", text: `before ${up} after` }] })]} />));
+    expect(order(document.querySelector<HTMLElement>('[data-speaker="user"]')!)).toMatch(/^before <Image 1> after/);
+  });
+
   it("shows what a tool returned as thumbnails, addressed through the entry that made the call", async () => {
     render(withViewer(<TranscriptView activityStatus="working" entries={[
       turn({ uuid: "ask", parts: [{ kind: "text", text: "check the screenshot" }] }),

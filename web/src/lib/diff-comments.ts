@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 import { localSendScope } from "./local-sends";
+import { isSlashCommand } from "./message-images";
 
 /** One comment on one changed line. A line holds at most one: saving again replaces it. */
 export interface DiffComment {
@@ -88,7 +89,7 @@ export function forgetDiffComments(paneId: string, session: string | undefined, 
 
 /** The comments a message from the composer carries: none for a slash command, which goes alone. */
 export function diffCommentsCarried(message: string, comments: readonly DiffComment[]): readonly DiffComment[] {
-  return message.startsWith("/") ? NONE : comments;
+  return isSlashCommand(message) ? NONE : comments;
 }
 
 /** One code span around `text`, fenced past any backticks it holds. */

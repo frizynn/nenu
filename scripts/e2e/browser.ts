@@ -19,6 +19,8 @@ export interface Locator {
   click(opts?: { timeout?: number; modifiers?: Array<"Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift"> }): Promise<void>;
   hover(opts?: { timeout?: number }): Promise<void>;
   fill(text: string, opts?: { timeout?: number }): Promise<void>;
+  inputValue(): Promise<string>;
+  setInputFiles(files: { name: string; mimeType: string; buffer: Buffer }): Promise<void>;
   press(key: string, opts?: { timeout?: number }): Promise<void>;
   isVisible(): Promise<boolean>;
   count(): Promise<number>;
