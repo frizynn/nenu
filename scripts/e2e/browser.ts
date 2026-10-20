@@ -8,7 +8,11 @@ import { join } from "node:path";
 // already in Playwright's cache (webkit-2287 for 1.60.0).
 
 export interface Request { url(): string; method(): string }
-export interface Route { request(): Request; fulfill(opts: { json?: unknown; status?: number }): Promise<void> }
+export interface Route {
+  request(): Request;
+  fetch(): Promise<{ text(): Promise<string> }>;
+  fulfill(opts: { json?: unknown; status?: number; body?: string; contentType?: string }): Promise<void>;
+}
 export interface APIResponse { status(): number; headers(): Record<string, string>; json(): Promise<unknown> }
 export interface APIRequest { get(url: string): Promise<APIResponse> }
 export interface Locator {
