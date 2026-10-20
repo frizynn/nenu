@@ -28,6 +28,7 @@ the same `Waiting for you` report.
    `done` after an answer, or a report Organizations groups Ready for review, leaves it idle; its
    pull request still reads as review once approved or landing.
 4. A worker that is not a conversation and says `Waiting for you` stopped to ask: it still needs you.
+5. A coordinator kept open reads as any coordinator does: this rule is for the threads that talk.
 
 ## Consequences
 
