@@ -678,6 +678,7 @@ async function workspaceRows(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench(async (bridge, browser) => {
     await addDocs(bridge);
+    await addOps(bridge);
     await addPair(bridge);
     await addCrew(bridge);
     const names = ["nenu", "api", "docs", "ops", "pair", "crew"];
@@ -3821,7 +3822,7 @@ async function phoneScroll(): Promise<void> {
   const failures: string[] = [];
   // orgTreeSeed with thirty more open threads, half of them under Migración de stock, so a project and
   // a node are taller than a phone; eight more projects for Projects, a dozen asks for Your asks, and
-  // three more workspaces for Home's Recents.
+  // three more workspaces for Home, two of their sessions asking.
   const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
     const seed = orgTreeSeed(herd, now, { coordinator: true });
     for (const thread of seed.projects[0]!.threads) {
@@ -3838,6 +3839,9 @@ async function phoneScroll(): Promise<void> {
     await addDocs(bridge);
     await addPair(bridge);
     await addCrew(bridge);
+    // Two more sessions asking, two more of Home's rows: its Recents stop at a count, its asks do not.
+    bridge.fake!.setStatus("w6:lead", "blocked");
+    bridge.fake!.setStatus("w5:lead", "blocked");
     await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
@@ -3904,12 +3908,11 @@ async function phoneScroll(): Promise<void> {
             const path = join(outDir, `phone-scroll-${screen.name}-${engine}-${shell}.png`);
             await page.screenshot({ path, animations: "disabled" });
             shots.push(path);
-            if (under && !insets) failures.push(`${where}: no env(safe-area-inset-*) in the CSS to set`);
             if (at.overscroll !== "none") failures.push(`${where}: the root's overscroll is ${at.overscroll}`);
             const page_ = at.scrollers.filter((s) => !s.inSheet);
             if (!screen.sheet && page_.length !== 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
             // A finger from each place, up then down. Only the screen's own box may move, and it must; a sheet moves nothing behind it.
-            const own = screen.sheet ? null : page_[0] ?? null;
+            const own = !screen.sheet && page_.length === 1 ? page_[0]! : null;
             let ownMoved = false;
             const bottom = at.bar ?? at.composer ?? 800;
             // A sheet is dragged in Chromium only: the WebKit stand-in walks the DOM, while an engine chains a
@@ -3959,6 +3962,7 @@ async function phoneScroll(): Promise<void> {
             if (screen.sheet) await page.keyboard.press("Escape");
             seen[where] = { ...at, offsets: undefined, moved, end };
           }
+          if (under && !insets) failures.push(`${engine} ${shell}: no env(safe-area-inset-*) in the CSS to set`);
           await context.close();
         }
       } finally {
