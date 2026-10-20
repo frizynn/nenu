@@ -290,7 +290,8 @@ function StepBody({ part, query, focused, waiting, active }: { part: ToolPart; q
 function RowTarget({ part, query, focused }: { part: ToolPart; query: string; focused: boolean }) {
   const cwd = useContext(PaneCwdContext);
   const step = describeCall(part);
-  if (part.description) return <span className="min-w-0 flex-1 truncate text-foreground"><Highlight text={part.description} query={query} current={focused} /></span>;
+  // Find does not search a description (only a desk draws one), so it is drawn unmarked.
+  if (part.description) return <span className="min-w-0 flex-1 truncate text-foreground">{part.description}</span>;
   const text = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
   return <span className={cn("min-w-0 flex-1 truncate", step.target === "text" || step.target === "title" ? "text-foreground" : "font-mono text-caption text-muted-foreground")}>
     <Highlight text={text} query={query} current={focused} />
@@ -371,18 +372,19 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked }: { steps:
 export function DeskLiveStep({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
+  const cwd = useContext(PaneCwdContext);
   const { part } = step;
   const call = part.kind === "tool" ? describeCall(part) : null;
   const open = expanded || focused;
   const described = part.kind === "tool" && !!part.description;
-  const what = part.kind === "tool" ? part.description || call!.text : firstLine(part.text);
+  const what = part.kind !== "tool" ? firstLine(part.text) : call!.target === "path" && call!.text ? spokenPath(call!.text, cwd) : call!.text;
   return <div data-live-step data-turn={marker} className={cn("min-w-0", focused && marker && "rounded ring-2 ring-primary/60")}>
     <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)}
       className="flex min-h-8 w-full min-w-0 items-center gap-2 text-left text-footnote text-muted-foreground hover:text-foreground">
       {waiting ? <StepIcon kind={call?.kind ?? "thinking"} /> : <LiveGlyph />}
       <span className="shrink-0 text-foreground">{!call ? "Thinking" : waiting ? call.ask : call.doing}</span>
       <span className={cn("min-w-0 truncate", !call && "italic", call && !described && call.target !== "text" && call.target !== "title" && "font-mono text-caption")}>
-        <Highlight text={what} query={query} current={focused} />
+        {described ? part.description : <Highlight text={what} query={query} current={focused} />}
       </span>
       {waiting ? <WaitingChip /> : step.since && <span className="shrink-0 text-subtle-foreground">· <Elapsed since={step.since} /></span>}
     </button>

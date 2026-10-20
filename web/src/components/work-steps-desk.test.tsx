@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TranscriptView } from "./transcript-view";
+import { PaneCwdContext } from "./work-log-tools";
 import type { TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // On a desk, a turn's steps between two of the agent's texts fold into one line, a table when open.
@@ -70,5 +71,19 @@ describe("a desk's work log", () => {
     const row = screen.getByText("Integration tests", { selector: "[data-live-step] *" });
     expect(row.closest("[data-live-step]")).toHaveTextContent("Running");
     expect(row.closest("[data-work-steps]")).toBeNull();
+  });
+
+  it("names the file a running step reads as its finished row will, from the pane's folder", () => {
+    const live = says("d", [call("Read", "/repo/src/auth.ts", { result: undefined })]);
+    render(<PaneCwdContext.Provider value="/repo"><TranscriptView entries={[...entries.slice(0, 3), live]} activityStatus="working" /></PaneCwdContext.Provider>);
+    const step = document.querySelector("[data-live-step]") as HTMLElement;
+    expect(step).toHaveTextContent("src/auth.ts");
+    expect(step).not.toHaveTextContent("/repo/src/auth.ts");
+  });
+
+  it("draws a description unmarked, since find does not count it", async () => {
+    render(<TranscriptView entries={entries} activityStatus="done" query="Integration" />);
+    await userEvent.click(screen.getByRole("button", { name: /^Edited 1 file, ran 1 command/ }));
+    expect(screen.getByRole("button", { name: /^Ran\s*Integration tests/ }).querySelector("mark")).toBeNull();
   });
 });

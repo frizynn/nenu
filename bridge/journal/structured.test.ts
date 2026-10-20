@@ -35,10 +35,11 @@ describe("Claude structured rows", () => {
       call("m", "MultiEdit", { file_path: "a.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c\nd", new_string: "" }] }),
       call("w", "Write", { file_path: "b.ts", content: "one\ntwo\n" }),
       call("r", "Read", { file_path: "a.ts" }),
+      call("x", "MultiEdit", { file_path: "a.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "d", replace_all: true }] }),
     ] } }]).entries()[0]!.parts;
     expect(parts.map((part) => part.kind === "tool" ? [part.description, part.diff] : null)).toEqual([
       ["Run the tests", undefined], [undefined, { added: 2, removed: 1 }], [undefined, { added: 1, removed: 3 }],
-      [undefined, undefined], [undefined, undefined],
+      [undefined, undefined], [undefined, undefined], [undefined, undefined],
     ]);
   });
 

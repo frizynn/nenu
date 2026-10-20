@@ -271,7 +271,7 @@ function toolDetails(name: string, input: unknown): Pick<ToolPart, "description"
   }
   // One occurrence's lines would undercount an edit applied everywhere.
   if (name === "Edit" && o.replace_all !== true) return { diff: editDiff(text(o.old_string), text(o.new_string)) };
-  if (name === "MultiEdit" && Array.isArray(o.edits)) return { diff: o.edits.reduce<{ added: number; removed: number }>((sum, edit) => {
+  if (name === "MultiEdit" && Array.isArray(o.edits) && !o.edits.some((edit) => edit !== null && typeof edit === "object" && edit.replace_all === true)) return { diff: o.edits.reduce<{ added: number; removed: number }>((sum, edit) => {
     const one = edit !== null && typeof edit === "object" ? editDiff(text(edit.old_string), text(edit.new_string)) : { added: 0, removed: 0 };
     return { added: sum.added + one.added, removed: sum.removed + one.removed };
   }, { added: 0, removed: 0 }) };
