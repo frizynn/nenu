@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -154,30 +154,9 @@ try {
   result.undock = await track(page, () => page.getByRole("button", { name: "Close thread" }).click());
   await shoot(page, "3-undocked");
 
-  // The page's own frame rate at rest, to read the fold's frames against.
-  result.idleFrameMs = await page.evaluate(() => new Promise<number[]>((resolve) => {
-    const times: number[] = [];
-    const tick = (t: number) => { times.push(t); if (times.length < 20) requestAnimationFrame(tick); else resolve(times.slice(1).map((x, i) => Math.round(x - times[i]!))); };
-    requestAnimationFrame(tick);
-  }), null);
   result.fold = await track(page, () => page.getByRole("button", { name: "Hide session panel" }).click());
   await shoot(page, "4-folded");
   result.unfold = await track(page, () => page.getByRole("button", { name: "Show session panel" }).click());
-  // The fold and the open again, timed by frames alone: nothing read from the layout.
-  const frameTimes = () => page.evaluate(() => {
-    const w = window as unknown as { __ticks: number[] };
-    w.__ticks = [];
-    const tick = (t: number) => { w.__ticks.push(t); if (w.__ticks.length < 40) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-  }, null);
-  const intervals = async () => { await page.waitForTimeout(700); return page.evaluate(() => { const t = (window as unknown as { __ticks: number[] }).__ticks; return t.slice(1).map((x, i) => Math.round(x - t[i]!)); }, null); };
-  await frameTimes();
-  await page.getByRole("button", { name: "Hide session panel" }).click();
-  result.foldFrameMs = await intervals();
-  await frameTimes();
-  await page.getByRole("button", { name: "Show session panel" }).click();
-  result.unfoldFrameMs = await intervals();
-
   const panel = page.getByRole("complementary", { name: "Session panel" });
   await panel.getByRole("tab", { name: /^Changes/ }).click();
   await page.waitForTimeout(800);
@@ -203,12 +182,12 @@ try {
   await shoot(page, "8c-docked-widest");
 
   // The same fold beside a long conversation (200 turns), with motion and without: each frame's
-  // length, the second the one reflow an instant fold costs.
+  // length, the second the one reflow an instant fold costs. No fake clock here: it would drive
+  // requestAnimationFrame itself, and the frames would be its timers, not the compositor's.
   await writeLongJournal(herd.journals.get(herd.idle)!, 200, bridge.now());
   for (const motion of ["no-preference", "reduce"] as const) {
     const long = await browser.newContext({ ...DESKTOP, reducedMotion: motion, colorScheme: "dark", timezoneId: "UTC", locale: "en-US" });
     const longPage = await long.newPage();
-    await longPage.clock.install({ time: bridge.now() });
     await longPage.goto(bridge.url + coordinator);
     await longPage.getByRole("textbox").first().waitFor({ timeout: 15_000 });
     await longPage.waitForTimeout(1500);
@@ -225,9 +204,14 @@ try {
       if (!(await hide.count())) await longPage.getByRole("button", { name: "Show session panel" }).click();
       await longPage.waitForTimeout(400);
     }
-    await ticks();
-    await longPage.getByRole("button", { name: /session panel/ }).first().click();
-    result[`longFoldFrameMs-${motion}`] = await read();
+    // Three folds and three opens: each its frames' lengths.
+    const runs: number[][] = [];
+    for (let run = 0; run < 6; run++) {
+      await ticks();
+      await longPage.getByRole("button", { name: /session panel/ }).first().click();
+      runs.push(await read());
+    }
+    result[`longFoldFrameMs-${motion}`] = runs;
     await long.close();
   }
 
@@ -250,6 +234,7 @@ try {
 } finally {
   await browser.close();
   await bridge.stop();
+  await rm(coordinatorFolder, { recursive: true, force: true });
 }
 writeFileSync(join(outDir, "panels.json"), JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));

@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -53,16 +53,18 @@ export function ResizeHandle({ label, edge, width, range, limit, onChange, class
     state.moved ||= next !== state.width;
     state.column.style.width = `${next}px`;
   };
-  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+  // The capture ends on a release, a cancel, or the column leaving mid-drag (a fold, a docked thread
+  // gone): each ends the drag, so the page never keeps the drag's cursor and its selection off.
+  const endDrag = () => {
     const state = drag.current;
     if (!state) return;
     drag.current = null;
     delete document.documentElement.dataset.resizing;
     setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    // A press that moved nothing chooses no width.
-    if (state.moved) onChange(Math.round(state.column.getBoundingClientRect().width));
+    // A press that moved nothing chooses no width, and a column that left keeps the one it had.
+    if (state.moved && state.column.isConnected) onChange(Math.round(state.column.getBoundingClientRect().width));
   };
+  useEffect(() => () => { if (drag.current) delete document.documentElement.dataset.resizing; }, []);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? range.step * 4 : range.step;
     const widest = max(event.currentTarget.parentElement);
@@ -82,7 +84,7 @@ export function ResizeHandle({ label, edge, width, range, limit, onChange, class
       title="Drag to resize · double-click to reset"
       data-edge={edge} data-dragging={dragging || undefined}
       className={cn("resize-handle", className)}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onLostPointerCapture={endDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
       onDoubleClick={(event) => onChange(clampTo(range, range.initial, max(event.currentTarget.parentElement)))} onKeyDown={onKeyDown} />
   );
 }

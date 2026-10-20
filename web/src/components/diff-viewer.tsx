@@ -109,7 +109,9 @@ export function DiffBody({ read, footer, empty, comments: target, onLeave }: {
       <Pending aria-hidden className="size-4" />Reading the diff…
     </p>}
     {read.state === "failed" && <div className="px-4"><p role="alert" className="text-sm">{read.message}</p>{footer}</div>}
-    {diff && !diff.ok && <div className="px-4"><p className="text-sm">{diff.message}</p>{footer}</div>}
+    {diff && !diff.ok && <div className="px-4"><p className="text-sm">{diff.message}</p>
+      {diff.repo && <p className="mt-1 text-xs text-muted-foreground">In the project's repository, <code className="font-mono">{tildeHome(diff.repo)}</code>, since this pane's folder is not a git repository.</p>}
+      {footer}</div>}
     {diff?.ok && <>
       <div className="flex flex-col gap-1 px-4 text-xs text-muted-foreground">
         <p className="text-[13px] text-foreground">

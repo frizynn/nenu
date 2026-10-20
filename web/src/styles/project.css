@@ -88,6 +88,7 @@
 .session-panel[data-sliding] > :not(.resize-handle) { min-width: var(--slide-width); }
 .session-panel[data-docked] { animation: column-in 150ms ease-out; }
 @keyframes column-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .session-panel[data-docked] { animation: none; } }
 
 /* A group's name over its rows in a panel's list (threads-panel). */
 .panel-group-heading { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; padding: 0 8px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }

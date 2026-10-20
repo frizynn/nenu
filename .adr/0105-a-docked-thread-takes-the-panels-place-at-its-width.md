@@ -19,8 +19,9 @@ but the panel's could be dragged, and the panel's grip had no double-click, Home
 
 1. **One right column, one width.** The session panel and a docked thread are the same column:
    the thread takes the panel's place at the panel's width (`PANEL_WIDTH`, 320–960 px, kept per
-   device), and the chat beside it keeps 22rem. Docking and closing a thread move nothing; the
-   thread only fades in.
+   device), and the chat beside it keeps 22rem. With the panel open, docking and closing a thread
+   move nothing; the thread only fades in. With it folded, the thread opens the column as the panel
+   would.
 2. **Nothing folds to make room.** The sidebar stays as the person left it. A narrow column cuts
    the thread's title and drops its subtitle before any control.
 3. **Every desk column edge is one grip** (`ResizeHandle`): the sidebar's (220–420 px, at most 40%
@@ -33,8 +34,9 @@ but the panel's could be dragged, and the panel's grip had no double-click, Home
 
 - A docked thread starts at 460 px instead of about 700; one drag widens it, and it stays wider for
   the panel too.
-- The open and the fold reflow the chat on every frame of the slide. On the bench host under a load
-  of 177, beside a 200-turn chat, an instant fold took one 160 ms frame and a slide four of 85–180 ms.
-  Revisit the slide (back to an instant change) if it stutters on the person's own machine.
+- The open and the fold reflow the chat on every frame of the slide. On the bench host (headless
+  Chromium, software rendering, load 154–197), beside a 200-turn chat, six folds and opens each: a
+  slide drew 5–7 frames of 33–117 ms, an instant change 1–4 frames of up to 50–117 ms. Revisit the
+  slide (back to an instant change) if it stutters on the person's own machine.
 - Revisit point 1 only if people keep widening the column for a thread and narrowing it again for the
   panel: then the two want widths of their own.

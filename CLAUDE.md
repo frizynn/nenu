@@ -160,7 +160,7 @@ the unit name; the Herdr action runs from anywhere.
   cards; model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
-  `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking move 0 px)
+  `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
   ([ADR 0105](./.adr/0105-a-docked-thread-takes-the-panels-place-at-its-width.md)).
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside

@@ -303,11 +303,13 @@ export async function projectSessionDiff(
 ): Promise<PaneDiff> {
   const own = await sessionDiff(cwd, scope, { base: cwd ? base(cwd) : undefined, run, limits });
   if (own.ok || own.reason !== "no-repo") return own;
-  for (const repo of repos) {
+  // A repository in a private-named folder (a password store, a dotfile config) is never read for it.
+  for (const repo of repos.filter((path) => !isPrivateProjectPath(path))) {
     const read = await sessionDiff(repo, scope, { base: base(repo), run, limits });
     // A repository that is gone, or no longer one, gives way to the next.
     if (read.ok || (read.reason !== "no-repo" && read.reason !== "no-folder")) return { ...read, repo };
   }
+  // `no-repo` comes only after the folder was found, so `cwd` is a path here.
   const folder = homeLabel(cwd!);
   return { ...own, message: repos.length
     ? `This pane works in ${folder}, which is not a git repository, and no repository its project names could be read.`

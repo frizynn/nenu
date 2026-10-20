@@ -292,6 +292,8 @@ describe("a session's changes, with or without a pull request", () => {
       expect(alone.ok ? "" : alone.message).toBe(`This pane works in ${plain}, which is not in a git repository, so there are no changes to read.`);
       const named = await projectSessionDiff(plain, "branch", [join(plain, "gone")], { base: () => undefined });
       expect(named.ok ? "" : named.message).toContain("no repository its project names could be read");
+      // A private-named folder is never read for it, even when it is a repository.
+      expect(await projectSessionDiff(plain, "branch", [join(repo, ".ssh")], { base: () => undefined })).not.toHaveProperty("repo");
     } finally {
       rmSync(plain, { recursive: true, force: true });
     }

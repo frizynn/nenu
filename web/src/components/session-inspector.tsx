@@ -23,7 +23,7 @@ export const PANEL_WIDTH: WidthRange = { min: 320, initial: 460, max: 960, step:
 
 interface Stored { open: boolean; width: number; tab: InspectorTab }
 const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "overview" };
-export const clampWidth = (width: number) => clampTo(PANEL_WIDTH, width);
+const clampWidth = (width: number) => clampTo(PANEL_WIDTH, width);
 
 function readStored(): Stored {
   try {
