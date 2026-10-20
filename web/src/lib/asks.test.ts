@@ -1,4 +1,4 @@
-import { askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, type AskEntry } from "./asks";
+import { askHeadline, askKind, askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, type AskEntry } from "./asks";
 import type { AskRow, AsksList, ProjectView } from "./types";
 
 // Rows as `asks --json` prints them (Organizations docs/json.md, Asks), each placed by the bridge.
@@ -146,4 +146,21 @@ it("never folds rows that do not close: each keeps its own reason and its own as
     decisions: [],
   }, projects);
   expect(sections[0]!.entries.map((entry) => [entry.text, entry.parts.length])).toEqual([["Coupons in the cart", 0], ["Coupons on the receipt", 0]]);
+});
+
+describe("askHeadline", () => {
+  it("splits a decision at its first ` : `, into what it asks and the recommendation", () => {
+    expect(askHeadline({ text: "Stock : que AWAM sea la fuente : recomiendo sí", detail: "decision" })).toEqual({ title: "Stock", body: "que AWAM sea la fuente : recomiendo sí" });
+    expect(askHeadline({ text: "Rotar la clave", detail: "decision" })).toEqual({ title: "Rotar la clave", body: "" });
+  });
+
+  it("gives an ask its coordinator's answer as the second line", () => {
+    expect(askHeadline({ text: "Cuotas", detail: "Dos opciones; recomiendo 3" })).toEqual({ title: "Cuotas", body: "Dos opciones; recomiendo 3" });
+  });
+
+  it("names only what waits on you", () => {
+    expect(askKind({ group: "waiting", detail: "decision" })).toBe("decision");
+    expect(askKind({ group: "waiting", detail: "" })).toBe("ask");
+    expect(askKind({ group: "progress", detail: "decision" })).toBeUndefined();
+  });
 });
