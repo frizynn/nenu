@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- A picture goes where you put it in the message: a numbered chip in the text and a thumbnail with the same number above it, the agent (Claude, Codex) gets it in that place as from the terminal, and the conversation shows it there (197235c9).
+- A picture goes where you put it in the message: a numbered chip in the text and a thumbnail with the same number above it, the agent (Claude, Codex) gets it in that place as from the terminal, and the conversation shows it there (197235c9, cee5a98d, b5d781c0).
 
 ## [1.31.2] - 2026-10-20
 
