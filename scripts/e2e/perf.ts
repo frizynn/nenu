@@ -9,8 +9,8 @@ import { seedDemoHerd } from "./scenario.ts";
 // Tap to content on the screens that read the most, over projects and a conversation of real size:
 // a copy of a real Organizations project read by the real herdr-organizations binary, and a real
 // Claude journal behind one of its threads. The copy keeps the operator's registry untouched, and
-// every Herdr socket it names is rewritten to the bench's FakeHerdr. Nothing is printed from the
-// journal or the project: only times, sizes and counts.
+// every Herdr socket its .json and .toml files name is rewritten to the bench's FakeHerdr, or the run
+// stops. Nothing is printed from the journal or the project: only times, sizes and counts.
 //
 //   bun scripts/e2e/perf.ts --projects ~/.herdr-projects --project awam-org --thread t-0451 \
 //     --journal <a Claude .jsonl> [--coordinator-journal <another>] --cwd <that thread's worktree> [--runs 5] [--port 8798] [--out DIR] [--serve]
@@ -48,9 +48,19 @@ const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(
 async function copyProject(root: string, { socketPath }: { socketPath: string }) {
   const dest = join(root, slug);
   await cp(join(source, slug), dest, { recursive: true, verbatimSymlinks: true });
-  const rewrite = async (file: string, edit: (text: string) => string) => writeFile(file, edit(await readFile(file, "utf8")));
+  const rewrite = async (file: string, edit: (text: string) => string) => {
+    const text = await readFile(file, "utf8");
+    const edited = edit(text);
+    if (edited !== text) await writeFile(file, edited);
+  };
   const sockets = (text: string) => text.replace(/"socket":\s*"[^"]*"/g, `"socket": ${JSON.stringify(socketPath)}`).replace(/^socket = ".*"$/gm, `socket = ${JSON.stringify(socketPath)}`);
-  for (const name of await readdir(join(dest, ".state"))) if (name.endsWith(".json")) await rewrite(join(dest, ".state", name), sockets);
+  // Every file Organizations may read a binding from, wherever it sits in the copy; then none may name another socket.
+  const files = (await readdir(dest, { recursive: true })).filter((name) => /\.(json|toml)$/.test(name)).map((name) => join(dest, name));
+  for (const file of files) await rewrite(file, sockets);
+  for (const file of files) {
+    const named = [...(await readFile(file, "utf8")).matchAll(/(?:"socket":\s*|^socket = )"([^"]*)"/gm)].map((match) => match[1]);
+    if (named.some((path) => path !== socketPath)) throw new Error(`${file} still names a Herdr socket other than the bench's`);
+  }
   const bind = (pane: string, workspace: string, tab: string) => (text: string) => text
     .replace(/^pane_id = ".*"$/m, `pane_id = "${pane}"`).replace(/^workspace_id = ".*"$/m, `workspace_id = "${workspace}"`)
     .replace(/^tab_id = ".*"$/m, `tab_id = "${tab}"`).replace(/^cwd = ".*"$/m, `cwd = ${JSON.stringify(threadCwd)}`);
