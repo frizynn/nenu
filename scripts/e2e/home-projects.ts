@@ -41,8 +41,17 @@ export function seed(herd: DemoHerd, now: number): OrgSeed {
     ["Factura emitida afuera", "idle"], ["Opción atada a otra variante", "working"], ["Mensaje de las 24 h", "working"],
     ["Auditoría antes del release", "working"], ["Prueba de Beacon en modo local", "idle"], ["Borrar el código muerto", "ready-for-review"],
   ] as const;
+  // What Organizations' coordinator asks the person, as `asks --json` prints it: two decisions wait, one is done.
+  const channels = { id: "t-0010", title: "Coordinador de canales" };
+  const ask = (line: number, state: string, text: string) =>
+    ({ project: "acme-shop", coordinator: channels, line, state, text, answer: "", links: [], confirmed: "", mismatch: "", actions: ["answer"] });
   return {
     profiles: ["claude", "codex"],
+    asks: [
+      ask(4, "needs-decision", "¿Publicamos variantes nuevas antes del lunes?"),
+      ask(5, "needs-decision", "¿Precio mayorista por volumen o por cliente?"),
+      ask(6, "done", "Canales: Mercado Libre primero"),
+    ],
     projects: [{
       slug: "acme-shop", name: "Acme Shop", goal: "Coordinar el trabajo de la tienda: frentes, agentes, revisiones y merges", status: "active",
       threads: [
@@ -180,6 +189,17 @@ async function main(): Promise<void> {
       await page.waitForTimeout(1500);
       await shoot(page, "home-1440-full");
       seen.homeText = (await page.locator("main").innerText()).split("\n").slice(0, 40);
+      await context.close();
+    }
+    // A project with asks opens where they are answered: its Waiting on you on a desk, the list with Answer on a phone.
+    for (const [name, device] of [["1440", DESKTOP], ["390", PHONE]] as const) {
+      const { page, context } = await open(device);
+      await page.locator("section[aria-labelledby=home-projects]").getByRole("link", { name: /^Acme Shop/ }).click();
+      await page.getByText("¿Publicamos variantes nuevas antes del lunes?").first().waitFor({ timeout: 15_000 })
+        .catch(() => failures.push(`${name}: the asks row opened no ask`));
+      await page.waitForTimeout(800);
+      seen[`asksOpen-${name}`] = new URL(page.url()).pathname + new URL(page.url()).search;
+      await shoot(page, `asks-from-home-${name}`);
       await context.close();
     }
   } finally {
