@@ -258,6 +258,8 @@ export interface OrgSeed {
   profiles: string[];
   /** `false` is an Organizations without `node move` (fake-org.ts). */
   moves?: boolean;
+  /** `false` is an Organizations without `asks answer` (fake-org.ts). */
+  answers?: boolean;
   /** `asks --json`'s rows, as Organizations prints them; without it the fake has no `asks` (fake-org.ts). */
   asks?: Array<Record<string, unknown>>;
   /** `asks --json`'s decision rows, from the Organizations that answers them (fake-org.ts). */

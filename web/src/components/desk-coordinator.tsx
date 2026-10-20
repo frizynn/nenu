@@ -5,7 +5,7 @@ import { ChatCircle, ChevronRight, GitPullRequest, Plus } from "@/components/ui/
 import { AskSections } from "@/components/ask-list";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
-import { DeskHead, DeskTabs, useDeskTab, useOpenNode, type DeskTab } from "@/components/desk-pages";
+import { DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenNode, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -87,10 +87,10 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
           : <span className="inline-flex items-center gap-1"><GitPullRequest aria-hidden size={12} />#{pr.number}</span>)}
       </span>}
       actions={<>
-        {chat && <Button type="button" variant="outline" onClick={() => navigate(panePath(chat, session))}><ChatCircle aria-hidden className="size-4" />Open chat</Button>}
-        {canStart && <Button type="button" aria-haspopup="dialog"
+        {chat && <DeskAction onClick={() => navigate(panePath(chat, session))}><ChatCircle aria-hidden className="size-4" />Open chat</DeskAction>}
+        {canStart && <DeskAction primary aria-haspopup="dialog"
           onClick={() => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent: id, onStarted: onChanged })}>
-          <Plus aria-hidden className="size-4" />New thread</Button>}
+          <Plus aria-hidden className="size-4" />New thread</DeskAction>}
       </>} />
     <DeskTabs label={thread?.title ?? "Project coordinator"} tabs={tabs} tab={tab} onChange={setTab} />
     <div role="tabpanel" aria-label={tabs.find((candidate) => candidate.id === tab)!.label}>

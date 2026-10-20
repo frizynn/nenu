@@ -1,26 +1,28 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ChatCircle, ChevronDown, Plus, Workflow } from "@/components/ui/icon";
+import { ChatCircle, ChevronDown, ChevronLeft, History, Plus, Search, Workflow } from "@/components/ui/icon";
 
-import { CoordinatorWorkCard, DeskHead, DeskTabs, useDeskTab, useOpenNode, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
+import { NodeDot } from "@/components/node-row";
+import { CoordinatorWorkCard, DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenNode, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
 import { ProjectContext } from "@/components/project-context";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StartProjectCoordinator } from "@/components/project-coordinator";
-import { Button } from "@/components/ui/button";
-import { Segmented } from "@/components/ui/segmented";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useAsks } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
 import { coordinatorState, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
-import { finishedCount, waitingGroups, workCards, type WorkFilter } from "@/lib/project-work";
+import { finishedCount, historyDays, waitingGroups, workCards, type HistoryRow } from "@/lib/project-work";
+import { clockTime } from "@/lib/format";
 import { nodePath, panePath, projectsPath } from "@/lib/nav";
 import { runningCoordinator } from "@/lib/projects";
 import { isReadOnly, type AgentView, type DeviceAuth, type NodeRole, type ProjectView } from "@/lib/types";
 
 type Tab = "work" | "waiting" | "routines" | "context";
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * A project on a desk (ADR 0102): its name and goal, Project chat and New, then Work (a card per
@@ -56,8 +58,8 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
       mark={<ProjectGlyph slug={project.slug} pick={project} size={20} />} subtitle={project.goal}
       actions={<>
         {coordinator
-          ? <Button type="button" variant="outline" onClick={() => navigate(panePath(coordinator.paneId, session))}><ChatCircle aria-hidden className="size-4" />Project chat</Button>
-          : !readOnly && <StartProjectCoordinator project={project} session={session} onStarted={onChanged} />}
+          ? <DeskAction onClick={() => navigate(panePath(coordinator.paneId, session))}><ChatCircle aria-hidden className="size-4" />Project chat</DeskAction>
+          : !readOnly && <StartProjectCoordinator project={project} session={session} onStarted={onChanged} action />}
         {roles.length > 0 && <NewMenu project={project} roles={roles} onStarted={onChanged} />}
       </>} />
     <DeskTabs label={project.name} tabs={tabs} tab={tab} onChange={setTab} />
@@ -74,7 +76,10 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
   </>;
 }
 
-/** Open or Finished, in the address (`?work=finished`), and the cards for it. */
+/**
+ * The open work, a card per coordinator; finished work is History (`?work=finished`), one quiet step away
+ * (ADR 0106): by day, newest first, with a search.
+ */
 function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
   project: ProjectView;
   coordinator: ReturnType<typeof runningCoordinator>;
@@ -85,37 +90,89 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   onChanged: () => void;
 }) {
   const [params, setParams] = useSearchParams();
-  const filter: WorkFilter = params.get("work") === "finished" ? "finished" : "open";
-  const setFilter = (next: WorkFilter) => setParams((current) => {
+  const history = params.get("work") === "finished";
+  const showHistory = (on: boolean) => setParams((current) => {
     const kept = new URLSearchParams(current);
-    if (next === "open") kept.delete("work");
-    else kept.set("work", next);
+    if (on) kept.set("work", "finished");
+    else kept.delete("work");
     return kept;
   }, { replace: true });
-  // Open cards start open and finished ones closed; a fold the person changed lasts while the page does.
+  // Cards start open; a fold the person changed lasts while the page does.
   const [folds, setFolds] = useState<Record<string, boolean>>({});
-  const cards = workCards(project, filter);
+  // A fold re-renders Work; the tree is read again only when a poll brings new threads.
+  const finished = useMemo(() => finishedCount(project), [project]);
+  const cards = useMemo(() => workCards(project), [project]);
+  if (history) return <WorkHistory project={project} count={finished} onBack={() => showHistory(false)} onOpenNode={onOpenNode} />;
+
   const rootState = coordinator && coordinatorState(coordinator.liveStatus);
   const newThread = (parent: string) => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent, onStarted: onChanged });
-
+  const threads = cards.reduce((sum, card) => sum + card.rows.length, 0);
   return <>
-    <Segmented label="Show" className="mb-4 w-64" value={filter} onChange={setFilter}
-      options={[{ value: "open", label: "Open" }, { value: "finished", label: `Finished ${finishedCount(project)}` }]} />
+    <div className="desk-toolbar">
+      <span className="min-w-0 flex-1 truncate">{plural(cards.length - 1, "coordinator")} · {plural(threads, "thread")} open</span>
+      {finished > 0 && <button type="button" className="quiet-action" onClick={() => showHistory(true)}>
+        <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>
+      </button>}
+    </div>
     {cards.map((card) => {
       const id = card.coordinator?.thread.id ?? "root";
-      const key = `${filter}:${id}`;
-      const open = folds[key] ?? filter === "open";
-      // Finished work is history: nothing starts from it, and the coordinator's own state belongs to Open.
-      const finished = filter === "finished";
-      const own = finished ? undefined : card.coordinator ? (card.coordinator.state === "working" ? "working" : undefined)
-        : rootState ? STATE_LABEL[rootState].toLowerCase() : undefined;
-      return <CoordinatorWorkCard key={key} card={card} waiting={finished ? 0 : waiting(id)} open={open} ownState={own}
-        onToggle={() => setFolds((current) => ({ ...current, [key]: !open }))}
+      const open = folds[id] ?? true;
+      const own = card.coordinator ? (card.coordinator.state === "working" ? "working" : undefined)
+        : rootState ? `coordinator ${STATE_LABEL[rootState].toLowerCase()}` : undefined;
+      return <CoordinatorWorkCard key={id} card={card} waiting={waiting(id)} open={open} ownState={own}
+        onToggle={() => setFolds((current) => ({ ...current, [id]: !open }))}
         onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
-        onNewThread={canStart && !finished ? () => newThread(id) : undefined} />;
+        onNewThread={canStart ? () => newThread(id) : undefined} />;
     })}
-    {filter === "finished" && cards.length === 0 && <p className="px-1 text-subhead text-muted-foreground">Nothing has finished yet.</p>}
   </>;
+}
+
+/** Rows History draws before Show more: a project finishes hundreds of threads. */
+const HISTORY_ROWS = 100;
+
+function WorkHistory({ project, count, onBack, onOpenNode }: { project: ProjectView; count: number; onBack: () => void; onOpenNode: (node: OrgNode) => void }) {
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(HISTORY_ROWS);
+  const days = useMemo(() => historyDays(project, query), [project, query]);
+  const shown = days.reduce((sum, day) => sum + day.rows.length, 0);
+  let left = limit;
+  return <>
+    <div className="desk-toolbar">
+      <button type="button" className="quiet-action -ml-2" onClick={onBack}><ChevronLeft aria-hidden className="size-3.5" />Open work</button>
+      <span className="flex-1" />
+      <label className="desk-search">
+        <Search aria-hidden className="size-3.5 shrink-0" />
+        <span className="sr-only">Search finished work</span>
+        <input type="search" value={query} placeholder={`Search ${count} finished`} onChange={(event) => { setQuery(event.target.value); setLimit(HISTORY_ROWS); }} />
+      </label>
+    </div>
+    {days.length === 0 && <p className="px-1 text-subhead text-muted-foreground">{query ? "Nothing finished matches." : "Nothing has finished yet."}</p>}
+    {days.map((day) => {
+      if (left <= 0) return null;
+      const rows = day.rows.slice(0, left);
+      left -= rows.length;
+      return <section key={day.key} aria-label={day.label} className="desk-history-day">
+        <h2 className="desk-history-label">{day.label}<span className="tabular-nums">{day.rows.length} finished</span></h2>
+        <div className="desk-card">{rows.map((row) => <HistoryItem key={row.node.thread.id} row={row} onOpen={onOpenNode} />)}</div>
+      </section>;
+    })}
+    {shown > limit && <button type="button" className="quiet-action mt-3" onClick={() => setLimit(limit + HISTORY_ROWS)}>Show {Math.min(HISTORY_ROWS, shown - limit)} more</button>}
+  </>;
+}
+
+/** A finished thread, by whom; or a finished coordinator, with the threads it ran. Its end is when it finished. */
+function HistoryItem({ row, onOpen }: { row: HistoryRow; onOpen: (node: OrgNode) => void }) {
+  const { thread } = row.node;
+  const at = Date.parse(thread.updated ?? "");
+  return <button type="button" className="desk-row" onClick={() => onOpen(row.node)}>
+    <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+      {row.threads !== undefined ? <Workflow aria-hidden size={14} /> : <NodeDot state="resolved" className="size-1.5" />}
+    </span>
+    <span className="min-w-0 flex-1 truncate">{thread.title}
+      <span className="desk-row-by">{row.threads !== undefined ? `Coordinator · ${plural(row.threads, "thread")}` : row.by}</span>
+    </span>
+    {Number.isFinite(at) && <span className="desk-row-end">{clockTime(at)}</span>}
+  </button>;
 }
 
 /** New: a thread or a coordinator at the project's top level. */
@@ -128,9 +185,9 @@ function NewMenu({ project, roles, onStarted }: { project: ProjectView; roles: r
     { role: "coordinator", label: "Coordinator", detail: "Owns a front and starts its threads", icon: Workflow },
   ];
   return <>
-    <Button ref={trigger} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
-      <Plus aria-hidden className="size-4" />New<ChevronDown aria-hidden className="size-3.5" />
-    </Button>
+    <DeskAction primary ref={trigger} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Plus aria-hidden className="size-4" />New<ChevronDown aria-hidden className="-mr-0.5 size-3.5 opacity-60" />
+    </DeskAction>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="New" className="w-72 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
       {items.filter((item) => roles.includes(item.role)).map(({ role, label, detail, icon: Icon }) => (
         <button key={role} type="button" onClick={() => start(role)} className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-accent">

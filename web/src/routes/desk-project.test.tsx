@@ -36,15 +36,22 @@ const prRoutine = { name: "pr-followup", trigger: "pr", to: "", parent: "", prom
 const leadRoutine = { ...prRoutine, name: "lead-daily", trigger: "schedule", to: "node:Lead", schedule: "daily 09:00", events: [] };
 
 let toggled: unknown[] = [];
+let edited: unknown[] = [];
 beforeEach(() => {
   toggled = [];
+  edited = [];
   __forgetSummaries();
   server.use(
     http.get("/api/org/summary", () => HttpResponse.json({ ok: true, coordinator: null, usage: null, status: null, threads: [] })),
     http.get("/api/org/asks", () => HttpResponse.json({ ok: true, answers: true, decisions: [], asks: [
       { project: "hub", coordinator: { id: "t-3", title: "Lead" }, line: 4, text: "Which plan?", answer: "", links: [], group: "waiting", state: "needs-decision", answerable: true },
     ] })),
-    http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: true, broken: 0, routines: [prRoutine, leadRoutine] })),
+    http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: true, editable: true, broken: 0, routines: [prRoutine, leadRoutine] })),
+    http.post("/api/org/routine/set", async ({ request }) => {
+      const body = await request.json() as { name: string; prompt?: string; to?: string };
+      edited.push(body);
+      return HttpResponse.json({ ok: true, routines: { available: true, editable: true, broken: 0, routines: [{ ...prRoutine, prompt: body.prompt ?? prRoutine.prompt, to: body.to ?? "" }, leadRoutine] } });
+    }),
     http.post("/api/org/routine/toggle", async ({ request }) => {
       const body = await request.json() as { name: string; on: boolean };
       toggled.push(body);
@@ -82,14 +89,16 @@ describe("a desk's project page", () => {
     expect(router.state.location.pathname).toBe("/project/hub");
   });
 
-  it("shows Finished in place of History, folded by who ran it", async () => {
+  it("keeps finished work in History, one step away, by day and searched by who ran it", async () => {
     const { user, router } = setup("/project/hub");
-    await user.click(await screen.findByRole("radio", { name: "Finished 1" }));
+    await user.click(await screen.findByRole("button", { name: /History\s*1/ }));
     expect(router.state.location.search).toBe("?work=finished");
-    await screen.findByText("1 thread");
-    const lead = screen.getByRole("region", { name: "Lead" });
-    await user.click(within(lead).getByRole("button", { expanded: false }));
-    expect(within(lead).getByRole("button", { name: /Shipped/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Shipped\s*Lead/ })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Lead" })).toBeNull();
+    await user.type(screen.getByRole("searchbox", { name: "Search finished work" }), "nothing like it");
+    expect(await screen.findByText("Nothing finished matches.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open work" }));
+    expect(router.state.location.search).toBe("");
   });
 
   it("lists what waits on you by coordinator, with Answer in place", async () => {
@@ -103,16 +112,45 @@ describe("a desk's project page", () => {
     expect(lead.getByRole("link", { name: /Open coordinator/ })).toHaveAttribute("href", "/project/hub/node/t-3");
   });
 
-  it("opens a routine beside the list, says whom it reaches, and turns it off through Organizations", async () => {
+  it("opens the first routine beside the list, another on a tap, says whom it reaches, and turns it off through Organizations", async () => {
     const { user, router } = setup("/project/hub?tab=routines");
-    await user.click(await screen.findByRole("button", { name: /pr-followup/ }));
-    expect(router.state.location.search).toBe("?tab=routines&routine=pr-followup");
+    expect(await screen.findByRole("complementary", { name: "Routine pr-followup" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /lead-daily/ }));
+    expect(router.state.location.search).toBe("?tab=routines&routine=lead-daily");
+    await user.click(within(await screen.findByRole("complementary", { name: "Routine lead-daily" })).getByRole("button", { name: "Close routine" }));
+    expect(router.state.location.search).toBe("?tab=routines&routine=");
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+    await user.click(screen.getByRole("button", { name: /pr-followup/ }));
     const detail = within(await screen.findByRole("complementary", { name: "Routine pr-followup" }));
     expect(detail.getByText("The thread that owns the pull request")).toBeInTheDocument();
     expect(detail.getByText("Fix the checks.")).toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "pr-followup on" }));
     await waitFor(() => expect(screen.getByRole("switch", { name: "pr-followup on" })).toHaveAttribute("aria-checked", "false"));
     expect(toggled).toEqual([{ project: "hub", name: "pr-followup", on: false }]);
+  });
+
+  it("edits a routine where Organizations can, sending only what changed", async () => {
+    const { user } = setup("/project/hub?tab=routines&routine=pr-followup");
+    const detail = within(await screen.findByRole("complementary", { name: "Routine pr-followup" }));
+    await user.click(detail.getByRole("button", { name: "Edit" }));
+    const form = within(detail.getByRole("form", { name: "Edit pr-followup" }));
+    expect(form.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(form.getByRole("checkbox", { name: "Checks fail" })).toHaveAttribute("aria-checked", "true");
+    await user.selectOptions(form.getByLabelText("Goes to"), "node:t-3");
+    const prompt = form.getByLabelText("What it asks");
+    await user.clear(prompt);
+    await user.type(prompt, "Fix them now.");
+    await user.click(form.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(edited).toEqual([{ project: "hub", name: "pr-followup", to: "node:t-3", prompt: "Fix them now." }]));
+    expect(await detail.findByText("Fix them now.")).toBeInTheDocument();
+    expect(detail.getByText("Lead")).toBeInTheDocument();
+  });
+
+  it("offers no Edit to a read-only device or where Organizations cannot edit", async () => {
+    server.use(http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: true, editable: false, broken: 0, routines: [prRoutine] })));
+    setup("/project/hub?tab=routines&routine=pr-followup");
+    const detail = within(await screen.findByRole("complementary", { name: "Routine pr-followup" }));
+    expect(detail.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 });
 

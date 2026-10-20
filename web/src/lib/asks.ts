@@ -66,6 +66,27 @@ export function askSections(list: AsksList, projects: readonly ProjectView[], fi
   });
 }
 
+/** What a row that waits on you is: a decision its coordinator put to you, or something you asked that now needs your call. */
+export type AskKind = "decision" | "ask";
+
+export const ASK_KIND_LABEL: Record<AskKind, string> = { decision: "Decision", ask: "Your ask" };
+
+export function askKind(entry: Pick<AskEntry, "group" | "detail">): AskKind | undefined {
+  if (entry.group !== "waiting") return undefined;
+  return entry.detail === "decision" ? "decision" : "ask";
+}
+
+/**
+ * A waiting row as two lines: what it asks of you, then what its coordinator says about it. A decision
+ * is written `<what goes to the user> : <recommendation>` (Organizations' skill/COORDINATOR.md), so it
+ * splits at the first ` : `; an ask's second line is its coordinator's answer.
+ */
+export function askHeadline(entry: Pick<AskEntry, "text" | "detail">): { title: string; body: string } {
+  if (entry.detail !== "decision") return { title: entry.text, body: entry.detail };
+  const at = entry.text.indexOf(" : ");
+  return at > 0 ? { title: entry.text.slice(0, at).trim(), body: entry.text.slice(at + 3).trim() } : { title: entry.text, body: "" };
+}
+
 /** The threads and tasks a row's links name: what it is about. A page names nothing Organizations confirmed. */
 function subjects(entry: Pick<AskEntry, "links">): string[] {
   return entry.links.flatMap((link) => link.thread ? [`thread:${link.thread}`] : link.kind === "task" && link.target ? [`task:${link.target}`] : []);

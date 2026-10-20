@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { Play, RefreshCw } from "@/components/ui/icon";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 import { errorMessage } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
@@ -10,6 +10,7 @@ import { coordinatorState } from "@/lib/org-tree";
 import { runningCoordinator } from "@/lib/projects";
 import { setStatus } from "@/lib/status";
 import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Drawn only when Start or Replace is tapped, so it stays out of the first load.
 const CoordinatorWindow = lazy(() => import("@/components/coordinator-window").then((module) => ({ default: module.CoordinatorWindow })));
@@ -84,13 +85,15 @@ function ReplaceCoordinator({ project, agent, session, onReplaced, onCancel }: {
 }
 
 /** Start the project coordinator, as one small action among New thread and New coordinator. Nothing while it runs. */
-export function StartProjectCoordinator({ project, session, onStarted }: {
+export function StartProjectCoordinator({ project, session, onStarted, action = false }: {
   project: ProjectView;
   session?: string;
   onStarted: () => Promise<void> | void;
+  /** Drawn as a desk header's action, the box of the button beside it (DeskAction). */
+  action?: boolean;
 }) {
   if (runningCoordinator(project) || project.status === "paused" || project.nodeActions === false) return null;
-  return <CoordinatorStart project={project} session={session} readOnly={false} onStarted={onStarted} compact />;
+  return <CoordinatorStart project={project} session={session} readOnly={false} onStarted={onStarted} compact={action ? "action" : true} />;
 }
 
 /**
@@ -104,8 +107,8 @@ function CoordinatorStart({ project, session, readOnly, onStarted, compact = fal
   session?: string;
   readOnly: boolean;
   onStarted: () => Promise<void> | void;
-  /** One quiet action instead of the section that stands in for the coordinator's row. */
-  compact?: boolean;
+  /** One quiet action instead of the section that stands in for the coordinator's row; `action` as a desk header's. */
+  compact?: boolean | "action";
 }) {
   const [choosing, setChoosing] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -137,7 +140,8 @@ function CoordinatorStart({ project, session, readOnly, onStarted, compact = fal
     {outcome && !outcome.error && outcome.text && <p role="status" className="mt-2 text-footnote text-muted-foreground">{outcome.text}</p>}
   </>;
   if (compact) return <>
-    <button type="button" className="quiet-action" aria-haspopup="dialog" disabled={starting} onClick={() => setChoosing(true)}>
+    <button type="button" className={compact === "action" ? cn(buttonVariants({ variant: "secondary" }), "desk-head-action desk-head-action-quiet") : "quiet-action"}
+      aria-haspopup="dialog" disabled={starting} onClick={() => setChoosing(true)}>
       <Play aria-hidden className="size-4" />{starting ? "Starting project coordinator…" : "Start project coordinator"}
     </button>
     {outcome && <div className="basis-full">{said}</div>}
