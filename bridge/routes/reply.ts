@@ -53,7 +53,10 @@ export const replyPaneActions: Record<string, PaneAction> = {
     level: "write",
     marksSeen: true,
     handle: async ({ cfg, audit, input, awaiting, agentStates, journals }, { req, rt, paneId, device }) =>
-      noteSent(await sendPane(rt, cfg, input, paneId, req, audit, device, () => claudeLog(agentStates, journals, rt.name, paneId)), () => awaiting.sent(rt.name, paneId)),
+      noteSent(
+        await sendPane(rt, cfg, input, paneId, req, audit, device, () => claudeLog(agentStates, journals, rt.name, paneId), () => agentStates.get(rt.name, paneId)?.waiting !== undefined),
+        () => awaiting.sent(rt.name, paneId),
+      ),
   },
   reply: {
     level: "write",
@@ -357,6 +360,7 @@ export async function sendPane(
   audit: AuditLog,
   device: string | null,
   log?: () => GuardedSendDeps["received"],
+  waiting?: GuardedSendDeps["waiting"],
 ): Promise<Response> {
   let request: SendRequest | string;
   try {
@@ -375,9 +379,9 @@ export async function sendPane(
     const received = log?.();
     const locked = await input.run(rt.name, paneId, () =>
       guardedSend(
-        { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker), ...(received ? { received } : {}) },
+        { herdr: rt.herdr, paneId, readLines: cfg.readLines, submitKeys: cfg.submitKeys, trigger: triggerFor(rt.poker), ...(received ? { received } : {}), ...(waiting ? { waiting } : {}) },
         send,
-        prior ? { typeAttempted: prior.trace.typeAttempted, textDelivered: delivered } : undefined,
+        prior ? { typeAttempted: prior.trace.typeAttempted, textDelivered: delivered, ...(prior.trace.typedAt !== undefined ? { typedAt: prior.trace.typedAt } : {}) } : undefined,
       ),
     );
     if (locked.busy) {

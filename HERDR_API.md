@@ -124,7 +124,17 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
   `send_keys` return before the target program has read, let alone rendered, anything. So a
   successful RPC pair is not evidence a reply was delivered — a focused TUI dialog can swallow the
   text and consume the Enter with both calls reporting success. Anything that needs delivery
-  *confirmed* must read the pane back and look (`bridge/guarded-send.ts`).
+  *confirmed* must read the pane back and look (`bridge/guarded-send.ts`), or, on a Claude pane, read
+  Claude's log ([ADR 0114](.adr/0114-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
+- **What the PTY hands the program, rechecked 2026-10-21 on herdr 0.9.3 (Linux).** A raw-mode reader
+  in a pane (it enables DECSET 2004, as Claude Code 2.1.306 does) got one 1 500-byte `send_text` as
+  one read, a 1 512-byte bracketed paste as one read, and a 5 012-byte bracketed paste as two reads of
+  4 095 and 917 bytes. Herdr writes the whole text; the terminal splits a large write, and the paste
+  framing is what keeps the pieces one paste. Herdr does not frame a paste itself, even when the
+  program enabled the mode: whoever wants a paste writes `ESC[200~ … ESC[201~` inside the text.
+- **`pane.send_input {pane_id, text?, keys?}`** (in the 0.9.3 schema) takes text and keys in one
+  call. Nenu does not use it: two calls back to back reach the PTY in the same order, and keeping
+  them apart keeps the queue's audit line for the text and for the submit.
 
 > **Herdr answers no `OSC 10` / `OSC 11` background query, and relays SGR verbatim** (live-probed
 > 2026-07-29 in a pane running a raw-mode `stty` probe: both queries returned nothing).

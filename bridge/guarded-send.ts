@@ -42,6 +42,8 @@ export interface GuardedSendDeps {
    * Without it, or when it never answers, the input box letting go of the text is the last word.
    */
   received?: (since: number) => Promise<string | null | undefined>;
+  /** Whether the CLI's own state says a dialog owns the keyboard (Claude's `waiting`, ADR 0067). */
+  waiting?: () => boolean;
 }
 
 /** What earlier attempts with the same request id left behind, when they failed. */
@@ -50,6 +52,8 @@ export interface PriorAttempt {
   typeAttempted: boolean;
   /** An earlier attempt knows the text reached the pane: it is in the box, or already submitted. */
   textDelivered: boolean;
+  /** When the earlier attempt first wrote (epoch ms): the CLI's log from then says whether it arrived. */
+  typedAt?: number;
 }
 
 /** Where a send stopped, in the vocabulary of the `reply.unsent` audit line (send-report.ts). */
@@ -68,6 +72,8 @@ export interface SendTrace {
   screen: string[] | null;
   /** The text went out without an adapter able to read it back (no grammar for this harness). */
   unverified: boolean;
+  /** When this request id first wrote to the pane (epoch ms), in this attempt or an earlier one. */
+  typedAt?: number;
 }
 
 export interface GuardedSendResult {
@@ -100,6 +106,9 @@ const PICTURE_UNSEEN: Stopped = {
   why: "A picture didn't show in the agent's input box where it goes.",
   left: "Nothing was submitted; part of the message may be typed, so check Terminal before retrying.",
 };
+const DIALOG_UP: Stopped = { why: "A dialog opened in the agent's terminal before Enter.", left: "Nothing was submitted; check Terminal before retrying." };
+const UNLOGGED =
+  "Enter went out, but the agent neither showed nor logged your message. It may still arrive: check the conversation before sending it again.";
 const CLEARED = "Nothing was submitted, and Nenu cleared what it had typed, so the input box is empty: send it again.";
 const incomplete = (sent: number, received: number) =>
   `Your message reached the agent incomplete: it logged ${received} of ${sent} characters. The agent may be answering that part; send the whole message again if it needs it.`;
@@ -115,6 +124,16 @@ export const TRIGGER_SLICE_MS = 400;
  */
 export const LOCAL_DELAYS_MS: readonly number[] = [0, 20, 20, 30, 30, 50, 50, 100, 100, 200, 200, 300, 350, 350, 350, 350];
 export const VERIFY_BUDGET_MS = LOCAL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
+/**
+ * The bound on a wait for something the terminal or the CLI will do: paint the text, draw a picture's
+ * token, empty the box, log the message (ADR 0114). It is no guess at how long that takes, which a
+ * loaded host stretches past any guess: every wait ends on the first look that sees it, and the bound
+ * is counted in the pauses between looks, so where looks themselves are slow a wait only lasts longer.
+ */
+export const WAIT_BUDGET_MS = 15_000;
+export const WAIT_DELAYS_MS: readonly number[] = [...LOCAL_DELAYS_MS, ...Array<number>(Math.ceil((WAIT_BUDGET_MS - VERIFY_BUDGET_MS) / 250)).fill(250)];
+/** How long a picture's path must sit in the box as text before the send takes it as staying text. */
+export const PATH_SETTLED_MS = 1_000;
 
 // ── The trigger regex ─────────────────────────────────────────────────────────────────────────────
 
@@ -221,6 +240,7 @@ class Send {
   ) {
     this.sleep = deps.sleep ?? defaultSleep;
     if (prior?.typeAttempted) this.trace.typeAttempted = true;
+    if (prior?.typedAt !== undefined) this.trace.typedAt = prior.typedAt;
   }
 
   get priorDelivered(): boolean {
@@ -315,14 +335,23 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     send.trace.preflight = seen.composer ? "composer" : "no-composer";
     if (!seen.composer && !request.force) return send.fail(send.trace.noEcho ? NO_ECHO : NO_BOX, false, "not_ready");
   }
+  // A dialog the CLI itself reports owns the keyboard whatever the screen shows (ADR 0067).
+  if (deps.waiting?.() && !request.force && request.expectedPrompt === undefined) return send.fail(NO_BOX, false, "not_ready");
 
   // An earlier attempt with this id may have typed before it failed (an ack lost after the bytes
   // reached the PTY). Its text, still in the box, is this send's text: submit it rather than type a
   // second copy. Text it delivered that is no longer in the box may have been submitted by an Enter
   // whose ack was lost, so nothing is typed; neither when the box cannot be read to tell.
   if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
+  // The CLI's log says whether an earlier try reached the agent (ADR 0114): if it logged the message
+  // nothing is typed again, and a log that holds nothing since that try proves it never arrived.
+  let earlier: string | null | undefined;
+  if (prior?.typeAttempted && prior.typedAt !== undefined && deps.received) {
+    earlier = await deps.received(prior.typedAt).catch(() => undefined);
+    if (typeof earlier === "string") return judged(send, earlier);
+  }
   const alreadyTyped = prior?.typeAttempted === true && seen !== null && send.carries(seen);
-  if (prior?.textDelivered && !alreadyTyped) return send.fail(MAYBE_SENT, true);
+  if (prior?.textDelivered && !alreadyTyped && earlier !== null) return send.fail(MAYBE_SENT, true);
 
   if (!alreadyTyped && seen?.composer === true && seen.draft !== null) {
     send.trace.phase = "pre-type";
@@ -330,9 +359,13 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     if (swept) return swept;
   }
 
+  const now = deps.now ?? Date.now;
+  // The log is read from here: an Enter of this attempt cannot be logged before it.
+  const since = now();
   if (!alreadyTyped) {
     send.trace.phase = "type";
     send.trace.typeAttempted = true;
+    send.trace.typedAt ??= since;
     if (pieces !== null) {
       const typed = await typePieces(send, deps, adapter, pieces, pasted);
       if (typed) return typed;
@@ -345,6 +378,8 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
       }
     }
   }
+
+  if (deps.received && logWitnesses(request)) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {
@@ -364,7 +399,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   }
   // A forced send already overrode "no input box": the text in the box is the evidence it trusts.
   if ((last.composer === false && !request.force) || !send.carries(last)) return await unsent(send, deps, adapter, MOVED);
-  const submittedAt = (deps.now ?? Date.now)();
+  const submittedAt = now();
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
   } catch {
@@ -372,7 +407,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   }
 
   send.trace.phase = "confirm";
-  for (const delay of LOCAL_DELAYS_MS) {
+  for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     try {
       if (!send.carries(await send.read())) return await logged(send, deps, submittedAt);
@@ -411,21 +446,24 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
 }
 
 /**
- * Wait, within the verify window, for the box to show `count` `[Image #N]` tokens: "token". When the
- * window ends with the picture's path as text at the end of the box, "path"; else null.
+ * Wait for the box to show `count` `[Image #N]` tokens: "token". Claude reads a pasted picture before
+ * it draws anything, and draws the path as text only when it cannot attach it, so a path that sits at
+ * the end of the box for {@link PATH_SETTLED_MS} is "path". Neither within the bound: null.
  */
 async function pictureDrawn(send: Send, count: number, path: string): Promise<"token" | "path" | null> {
-  let last: string | null = null;
-  for (const delay of LOCAL_DELAYS_MS) {
+  let shownFor = -1;
+  for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     try {
-      last = (await send.read()).draft;
-      if (imageTokens(last) >= count) return "token";
+      const draft = (await send.read()).draft;
+      if (imageTokens(draft) >= count) return "token";
+      shownFor = pathShows(draft, path) ? shownFor + delay : -1;
+      if (shownFor >= PATH_SETTLED_MS) return "path";
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
   }
-  return pathShows(last, path) ? "path" : null;
+  return null;
 }
 
 /**
@@ -463,11 +501,74 @@ async function logged(send: Send, deps: GuardedSendDeps, since: number): Promise
       return send.done();
     }
     if (text === undefined) return send.done();
-    if (text === null) continue;
-    const check = deliveryVerdict(send.request.text, text);
-    return check.verdict === "incomplete" ? send.fail(incomplete(check.sentChars, check.receivedChars), true, "incomplete") : send.done();
+    if (text !== null) return judged(send, text);
   }
   return send.done();
+}
+
+/** What the CLI logged for this send: all of it is sent, less is incomplete (ADR 0076). */
+function judged(send: Send, text: string): GuardedSendResult {
+  const check = deliveryVerdict(send.request.text, text);
+  return check.verdict === "incomplete" ? send.fail(incomplete(check.sentChars, check.receivedChars), true, "incomplete") : send.done();
+}
+
+/**
+ * Whether the CLI's log can witness this send. A slash command or a `!` shell line is logged as
+ * something else, so its Enter still waits for the box to show it; so does a send bound to a dialog
+ * or forced past a screen the adapter misreads.
+ */
+function logWitnesses(request: SendRequest): boolean {
+  return request.expectedPrompt === undefined && !request.force && !/^\s*[/!]/.test(request.text);
+}
+
+/**
+ * Enter right behind the text, and the CLI's log as the witness (ADR 0114). The pre-flight read, or
+ * the sweep's, was the last look before the text, as a read used to be the last look before Enter;
+ * the terminal hands Claude the text and the Enter in order however late it reads them, so there is
+ * no window to wait out first. The message is sent once the log has it (or Claude queued it, which
+ * it logs as such), or once the box has not held it for a verify window with no log in time: what
+ * the old guard accepted, and a loaded Claude that has not read the bytes yet will still take them.
+ * Still in the box at the bound, Claude never took the Enter: the send leaves the box as it found it.
+ */
+async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, received: NonNullable<GuardedSendDeps["received"]>, since: number): Promise<GuardedSendResult> {
+  send.trace.phase = "submit";
+  if (deps.waiting?.()) return await unsent(send, deps, adapter, DIALOG_UP);
+  try {
+    await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
+  } catch {
+    return send.fail(NOT_SUBMITTED, true);
+  }
+  send.trace.phase = "confirm";
+  let held: boolean | null = null;
+  let goneFor = -1;
+  for (const delay of WAIT_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    let text: string | null | undefined;
+    try {
+      text = await received(since);
+    } catch {
+      text = undefined;
+    }
+    if (text === undefined) return send.done();
+    if (text !== null) return judged(send, text);
+    try {
+      held = send.carries(await send.read());
+      goneFor = held ? -1 : goneFor + delay;
+    } catch {
+      // A failed read shows nothing; the log may still answer.
+    }
+    if (goneFor >= VERIFY_BUDGET_MS) return send.done();
+  }
+  if (held !== true) return send.fail(UNLOGGED, true);
+  const left = await unsent(send, deps, adapter, { why: "Enter went out, but the agent never took the message.", left: "Nothing was submitted; check Terminal before retrying." });
+  if (left.outcome.ok || left.outcome.textDelivered) return left;
+  // The sweep's keys reach Claude after the Enter, so a Claude slow enough may have taken it after all.
+  for (const delay of LOCAL_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    const text = await received(since).catch(() => null);
+    if (typeof text === "string") return judged(send, text);
+  }
+  return left;
 }
 
 /**
@@ -493,7 +594,7 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   } catch (err) {
     return send.fail(`Couldn't clear the terminal input: ${message(err)}`, false);
   }
-  for (const delay of LOCAL_DELAYS_MS) {
+  for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     try {
       const now = await send.read();
@@ -548,8 +649,8 @@ async function verify(send: Send, deps: GuardedSendDeps): Promise<boolean> {
   if (await send.check()) return true;
   const trigger = deps.trigger;
   let pattern = trigger?.available() ? triggerPattern(send.request.text) : null;
-  let budget = VERIFY_BUDGET_MS;
-  const polls = LOCAL_DELAYS_MS.slice(1);
+  let budget = WAIT_BUDGET_MS;
+  const polls = WAIT_DELAYS_MS.slice(1);
   let next = 0;
   while (budget > 0) {
     if (pattern !== null) {

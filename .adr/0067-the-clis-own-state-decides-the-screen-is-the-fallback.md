@@ -4,6 +4,7 @@
   rules 2 and 3 (what "a running turn" means). Keeps 0066's single press, cooldown, write lock, queue
   confirmation and held rows, and keeps [ADR 0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md):
   the screen still chooses the keys that answer a dialog.
+- **Extended by:** [ADR 0114](./0114-enter-follows-the-text-and-claudes-log-is-the-witness.md): Claude's `waiting` and log also decide a send.
 - **Trail:** `bridge/agent-state.ts` · `bridge/agent-state-sources.ts` · `bridge/interrupt.ts` ·
   `bridge/routes/reply.ts` (`interruptPane`) · `bridge/routes/snapshot.ts` (`turn`) ·
   `bridge/queue-readiness.ts` · `bridge/interactions.ts` (`waiting`) · `web/src/lib/turn.ts` ·

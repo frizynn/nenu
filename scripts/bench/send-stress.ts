@@ -174,7 +174,7 @@ async function openDialog(pid: number, nonce: string) {
 
 // ── One trial ──────────────────────────────────────────────────────────────────────────────────
 
-type Verdict = "ok" | "refused" | "stuck" | "dup" | "lost" | "false" | "failed" | "path" | "partial";
+type Verdict = "ok" | "refused" | "stuck" | "dup" | "lost" | "false" | "failed" | "path" | "partial" | "setup";
 interface Trial {
   variant: string;
   round: number;
@@ -201,7 +201,14 @@ async function trial(variant: string, round: number): Promise<Trial> {
   const text = message(kind, nonce);
   const pictures = kind === "img3" ? 3 : kind === "img1" ? 1 : 0;
   if (variant.includes("busy")) await startTurn(pid, 10);
-  if (variant.startsWith("dialog")) await openDialog(pid, nonce);
+  if (variant.startsWith("dialog")) {
+    await openDialog(pid, nonce);
+    // A dialog that never opened (Claude answered without the tool) is no trial of a send into one.
+    if ((await box()).composer || sessionFile(pid)?.status !== "waiting") {
+      await herdr.sendPaneKeys(pane, ["Escape"]);
+      return { variant, round, verdict: "setup", ms: 0, said: "the dialog did not open", logged: 0, left: null, load: 0 };
+    }
+  }
   if (variant.startsWith("draft")) {
     await herdr.sendPaneText(pane, `hand typed draft ${nonce}`);
     await until(async () => (await box()).draft !== null, 5_000, 50);
@@ -274,12 +281,14 @@ for (let round = 1; round <= rounds; round++) {
 }
 
 const good = (t: Trial) => t.verdict === "ok" || t.verdict === "refused";
+// A trial whose setup failed says nothing about the send; it is counted apart.
+const counted = results.filter((t) => t.verdict !== "setup");
 console.log("\nvariant           good/total   p50ms   max ms   bad verdicts");
 for (const variant of chosen) {
-  const mine = results.filter((t) => t.variant === variant);
+  const mine = counted.filter((t) => t.variant === variant);
   const times = mine.map((t) => t.ms).sort((a, b) => a - b);
   const bad = mine.filter((t) => !good(t)).map((t) => t.verdict);
   console.log(`${variant.padEnd(18)}${`${mine.filter(good).length}/${mine.length}`.padEnd(13)}${String(times[Math.floor(times.length / 2)] ?? 0).padStart(6)}${String(times.at(-1) ?? 0).padStart(9)}   ${bad.join(",")}`);
 }
-const total = results.filter(good).length;
-console.log(`\nall: ${total}/${results.length} good · stuck ${results.filter((t) => t.verdict === "stuck").length} · dup ${results.filter((t) => t.verdict === "dup").length}`);
+const total = counted.filter(good).length;
+console.log(`\nall: ${total}/${counted.length} good · stuck ${counted.filter((t) => t.verdict === "stuck").length} · dup ${counted.filter((t) => t.verdict === "dup").length} · setup failed ${results.length - counted.length}`);
