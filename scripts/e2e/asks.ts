@@ -212,9 +212,11 @@ async function main(): Promise<void> {
         const { page, context } = await open("/asks", device, "Your asks");
         const text = await page.locator("main").innerText();
         pages[name] = { regions: await regions(page) };
-        for (const words of ["Wait on you", "Does not close", "In progress", "Done", "Other lines", "Marked done, but PR #1351 is still open.", "Acme Shop · Rediseño del checkout"]) {
+        for (const words of ["Waiting on you", "Does not close", "In progress", "Done", "esta línea no sigue el formato", "Marked done, but PR #1351 is still open.", "Acme Shop · Rediseño del checkout"]) {
           if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
         }
+        // A line outside the format reads as a request in progress, never under "Other lines" (ADR 0108).
+        if (text.includes("Other lines")) failures.push(`${name}: an "Other lines" section`);
         await shoot(page, name);
         if (name === "asks-phone") {
           await page.getByRole("link", { name: /Login con email/ }).first().click();

@@ -59,7 +59,7 @@ function setup({ paneId, readOnly = false }: { paneId?: string; readOnly?: boole
 
 it("reads an ask and the decisions about the same task as one question, each part with its own Answer", () => {
   setup();
-  const waiting = screen.getByRole("region", { name: "Wait on you" });
+  const waiting = screen.getByRole("region", { name: "Waiting on you" });
   expect(within(waiting).getAllByRole("link", { name: /ACM-12/ })).toHaveLength(1);
   const parts = within(waiting).getByRole("list", { name: "Parts of this question" });
   expect(Array.from(parts.children, (part) => part.firstChild?.textContent)).toEqual(["instalments: A, B or C", "tell yesterday's 412 orders"]);
@@ -70,7 +70,7 @@ it("reads an ask and the decisions about the same task as one question, each par
 
 it("opens a question's context in place: the whole report with its table and its captures, and Answer at its foot", async () => {
   const { reads, user } = setup();
-  const waiting = screen.getByRole("region", { name: "Wait on you" });
+  const waiting = screen.getByRole("region", { name: "Waiting on you" });
   await user.click(within(waiting).getByRole("button", { name: "Context" }));
   const context = await within(waiting).findByRole("region", { name: "Context" });
   await within(context).findByRole("table");
