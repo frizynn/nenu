@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } fr
 import { ChevronDown } from "@/components/ui/icon";
 
 import { useLongPress } from "@/hooks/use-long-press";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StatusDot } from "@/components/status-badge";
 import { revealScrollLeft } from "@/components/ui/strip-reveal";
 import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
 
@@ -64,7 +64,7 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
       title={label}
       className="strip-chip"
     >
-      {icon ?? (status && <StatusDot status={status} />)}
+      {icon ?? (status && !resting(status) && <StatusDot status={status} />)}
       <span className="strip-chip-label">{label}</span>
       {tag && <span className="strip-chip-tag"> · {tag}</span>}
       {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}

@@ -7,7 +7,8 @@ import { startTestBridge } from "./bridge.ts";
 import { deskOrg, type OrgSeed } from "./scenario.ts";
 
 // The desk's bar at every width the grip allows, and the phone's drawer: no list scrolls sideways, every
-// row ends inside the bar, a long name ends in an ellipsis, and the chats' "N updates" sits at the bar's
+// row ends inside the bar, a long name ends in an ellipsis, a resting chat reads muted until the pointer
+// rests on it, and the chats' "N updates" sits at the bar's
 // own edge. A chat with a name wider than the bar stands in for the one that pushed the list sideways
 // (21/10: the projects read "M" and "r Org" and "8 updates" floated past the rows). Captures each width
 // and the drawer in dark and light, with Home and a project's page at the default width. Exits 1 on any failure.
@@ -69,6 +70,15 @@ async function main(): Promise<void> {
         await page.locator(".workbench-sidebar .nav-chats .nav-row >> visible=true").first().waitFor({ timeout: 30_000 });
         await page.waitForTimeout(600);
         for (const line of await page.evaluate(measure, true)) failures.push(`desk ${width}px ${scheme}: ${line}`);
+        // A resting chat steps back to the muted ink, and the pointer brings the full ink back.
+        const ink = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).color);
+        const resting = ".nav-chats .nav-row:not([data-live], [aria-current]) >> visible=true";
+        const [live, quiet] = [await ink(".nav-chats .nav-row[data-live] >> visible=true"), await ink(resting)];
+        if (live === quiet) failures.push(`desk ${width}px ${scheme}: a resting chat reads in the live ink (${quiet})`);
+        await page.locator(resting).first().hover();
+        await page.waitForTimeout(300);
+        const hovered = await ink(".nav-chats .nav-row:not([data-live], [aria-current]):hover");
+        if (hovered !== live) failures.push(`desk ${width}px ${scheme}: the pointer leaves a resting chat at ${hovered}, not ${live}`);
         await page.mouse.move(1439, 899);
         const name = `${values.tag}-desk-${width}-${scheme}.png`;
         await page.screenshot({ path: join(outDir, name), clip: { x: 0, y: 0, width: Math.max(width, 440), height: 900 }, animations: "disabled" });

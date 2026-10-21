@@ -37,13 +37,16 @@ T3 Code's own working glyph, `CircleDashed`, is still.
 2. **Colour only for what asks something of you:** red and blue; everything else is grey.
 3. **Nothing spins.** A state that lasts is a still glyph.
 4. **In the desk's bar a resting chat reads in the muted ink;** a live one, the one on screen and the
-   one under the pointer keep the full ink, as T3 Code's list does.
+   one under the pointer keep the full ink, as T3 Code's list does. A phone's drawer keeps every chat
+   in the full ink: no pointer rests on a row there to bring one back.
 
 ## Consequences
 
 - `status-badge.test` pins a different glyph per state, the two colours and the still marks; a dot per
   state brought back fails it.
 - A rail tile's corner badge draws the same glyph on a disc of the rail, and only for a live state.
+  Where no column holds names in line (a chip, a row's end, the chat's subtitle, a folded node's
+  summary), a resting agent draws nothing at all (`resting`); in a list its empty box keeps the column.
 - Dots that are not a node's or an agent's state (a check run, a tool's activity, usage, a link chip's
   tone) keep their own colours; they say something else.
 - Revisit only with a measured reason that a glyph reads worse at a glance than the colour it

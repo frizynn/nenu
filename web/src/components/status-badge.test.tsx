@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 
 import type { NodeState } from "@/lib/org-tree";
 
-import { StateMark, StatusDot } from "./status-badge";
+import { resting, StateMark, StatusDot } from "./status-badge";
 
 const mark = (state: NodeState) => render(<StateMark state={state} />).container.firstElementChild!;
 
@@ -37,5 +37,11 @@ describe("StatusDot", () => {
   it("draws an agent's status as its state's glyph", () => {
     const glyph = (status: Parameters<typeof StatusDot>[0]["status"]) => render(<StatusDot status={status} />).container.firstElementChild!.getAttribute("data-node-state");
     expect([glyph("blocked"), glyph("working"), glyph("done"), glyph("idle"), glyph("unknown")]).toEqual(["needs", "working", "review", "idle", "idle"]);
+  });
+});
+
+describe("resting", () => {
+  it("names the statuses that draw nothing, for places with no column to keep", () => {
+    expect((["blocked", "working", "done", "idle", "unknown"] as const).filter(resting)).toEqual(["idle", "unknown"]);
   });
 });

@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { ChevronRight, LayoutGrid, LayoutTemplate } from "@/components/ui/icon";
 
 import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StatusDot } from "@/components/status-badge";
 import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
@@ -65,7 +65,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
         <Link className="nav-row" to={href} aria-current={branch.current ? "true" : undefined}>
           <span className="nav-lead"><OpeningMark to={href}><LayoutGrid aria-hidden size={14} /></OpeningMark></span>
           <span className="nav-row-text">{name}</span>
-          {status && <StatusDot status={status} />}
+          {status && !resting(status) && <StatusDot status={status} />}
           {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
           <span className="nav-count">{branch.tabs.length} {branch.tabs.length === 1 ? "tab" : "tabs"}</span>
         </Link>
@@ -123,7 +123,7 @@ function TabRows({ tab, folds, projects, session, currentPaneId, open, onToggle 
       aria-label={[tab.label, status && STATUS_LABEL[status], count].filter(Boolean).join(", ")} onClick={() => onToggle(!open)}>
       <ChevronRight aria-hidden size={14} className="nav-tab-fold" />
       <RowBody mark={<LayoutTemplate aria-hidden size={14} />} title={tab.label} end={<>
-        {status && <StatusDot status={status} />}
+        {status && !resting(status) && <StatusDot status={status} />}
         <span className="nav-count">{count}</span>
       </>} />
     </button>

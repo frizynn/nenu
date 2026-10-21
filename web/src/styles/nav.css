@@ -146,6 +146,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
    chat that waits, works, finished unseen or has something to review, the one on screen and the one
    under the pointer keep the full ink. */
 .nav-chats .nav-row:not([data-live], [aria-current="page"]) { color: var(--muted-foreground); }
+@media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
 .nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
 @media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }

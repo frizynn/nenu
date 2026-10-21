@@ -68,7 +68,7 @@ import { PaneStrip } from "@/components/pane-strip";
 import { PaneActionsSheet } from "@/components/pane-actions-sheet";
 import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
-import { StateMark, StatusDot } from "@/components/status-badge";
+import { resting, StateMark, StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { submitPreviewChoice, submitPreviewKeys, submitPreviewNote, submitPreviewPoint } from "@/lib/preview-action";
@@ -1084,7 +1084,7 @@ export function AgentChat({
     <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
       {isShell
         ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
-        : <StatusDot status={agent.status} className={cn(connecting && "opacity-40")} />}
+        : !resting(agent.status) && <StatusDot status={agent.status} className={cn(connecting && "opacity-40")} />}
       <span className="min-w-0 truncate">{place?.place}</span>
       {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
     </span>

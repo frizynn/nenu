@@ -9,7 +9,7 @@ import { ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StatusDot } from "@/components/status-badge";
 import { ChatRow, Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { MachinesSlot } from "@/components/machines-slot";
@@ -470,7 +470,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
-          {status && <StatusDot status={status} />}
+          {status && !resting(status) && <StatusDot status={status} />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
           {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
           {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
@@ -582,7 +582,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
         <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
-        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} />)}</span>}
+        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.filter((child) => child.state !== "idle").slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-3" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
         {page && <ChevronRight aria-hidden size={14} className="shrink-0 text-muted-foreground" />}

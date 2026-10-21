@@ -32,3 +32,11 @@ describe("a row More folds", () => {
     expect(inner.overflow).toBe("clip");
   });
 });
+
+describe("a resting chat in the desk's bar", () => {
+  // The muted rule outweighs the shared hover rule (0,3,0 against 0,2,0), so the pointer needs its own.
+  it("steps back to the muted ink and takes the full ink back under the pointer", () => {
+    expect(declarations(css, '.nav-chats .nav-row:not([data-live], [aria-current="page"])', [LAYER]).color).toBe("var(--muted-foreground)");
+    expect(declarations(css, ".nav-chats .nav-row:hover", [LAYER, "@media (hover: hover)"]).color).toBe("var(--foreground)");
+  });
+});

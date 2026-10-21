@@ -1,18 +1,20 @@
 import { HomeHeading, SessionRow, useOpeningPath } from "@/components/home-panels";
-import { StatusDot } from "@/components/status-badge";
 import { ChatRow } from "@/components/nav-rows";
 import { recentChats } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { MACHINE_STATE_WORD as STATE_WORD, otherMachines } from "@/lib/machines";
-import type { AgentStatus, MachineState, MachineView } from "@/lib/types";
+import type { MachineState, MachineView } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // The other machines Herdr has saved, each under its own name with its chats, newest first. A row
 // opens the chat on its machine (`?s=@<label>`); a machine that is not connected says why instead.
 // Loaded only when there is more than one machine (machines-slot.tsx).
 
-// The machine's dot: blocked's red for one that cannot be reached, a grey one while it connects.
-const DOT: Record<MachineState, AgentStatus> = {
-  connected: "done", connecting: "unknown", offline: "blocked", "old-nenu": "blocked", "no-nenu": "unknown", disabled: "unknown", off: "unknown",
+// The machine's dot, like the bar's host: green once connected, red for one that cannot be reached, a
+// grey ring otherwise. A link's health, not an agent's state, so not a StateMark (ADR 0113).
+const DOT: Record<MachineState, string> = {
+  connected: "bg-status-done", connecting: "border-[1.5px] border-status-idle/60", offline: "bg-status-blocked", "old-nenu": "bg-status-blocked",
+  "no-nenu": "border-[1.5px] border-status-idle/60", disabled: "border-[1.5px] border-status-idle/60", off: "border-[1.5px] border-status-idle/60",
 };
 
 const chatsOf = (machine: MachineView) => (machine.herd ? recentChats([...machine.herd.agents, ...machine.herd.shellPanes], undefined, new Set()) : []);
@@ -31,7 +33,7 @@ function NavMachine({ machine }: { machine: MachineView }) {
   return (
     <section aria-label={machine.label} className="nav-group" data-machine>
       <h3 className="nav-label">
-        <StatusDot status={DOT[machine.state]} />
+        <span aria-hidden className={cn("inline-flex size-1.5 shrink-0 rounded-full", DOT[machine.state])} />
         {machine.label}
         {machine.state === "connected" && chats.length > 0 && <span className="nav-count">{chats.length}</span>}
       </h3>
