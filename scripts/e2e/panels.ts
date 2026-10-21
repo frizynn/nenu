@@ -184,7 +184,7 @@ try {
   await shoot(page, "8b-docked-narrowest-row", { x: 1440 - 340, y: 900 - 140, width: 340, height: 140 });
   result.rowsNarrowest = await page.evaluate(brokenRows, null);
   // The docked thread's row holds chips, or the narrow box's rules were never put to the test.
-  result.dockedChips = await page.evaluate(() => document.querySelectorAll(".composer-meta .composer-chip").length, null);
+  result.dockedChips = await page.evaluate(() => document.querySelectorAll(".session-panel[data-docked] .composer-meta .composer-chip").length, null);
   await page.keyboard.press("End");
   await shoot(page, "8c-docked-widest");
   result.rowsWidest = await page.evaluate(brokenRows, null);
