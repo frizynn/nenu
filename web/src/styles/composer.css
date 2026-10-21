@@ -36,8 +36,8 @@
 .composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--accent); } }
-/* A row above the box (Stop's, a notice) folds open and shut, so the thread moves with it instead of
-   jumping (Fold in composer.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
+/* A row above the box (the chips' line, a notice) folds open and shut, so the thread moves with it
+   instead of jumping (composer-fold.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
 .composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms ease-out, opacity 220ms ease-out; }
 /* No min-width either: the chips' line scrolls inside the composer's width instead of widening it. */
 .composer-fold > div { min-height: 0; min-width: 0; }

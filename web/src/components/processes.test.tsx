@@ -133,7 +133,7 @@ it("says Published when all the session left is pages it published", async () =>
   const { user } = renderChat();
   await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
   await fromMenu(user, /^Published · 1$/);
-  expect(within(screen.getByRole("dialog", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
+  expect(within(screen.getByRole("dialog", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toHaveAttribute("aria-expanded", "true");
 });
 
 it("shows no chip when the session has nothing at all", async () => {

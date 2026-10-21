@@ -169,7 +169,7 @@ export function ProcessesList({ processes, artifacts = [], finished, quiet = fal
         {finished && finished.count > 0 && finished.rows}
         {processes.done.length > 0 && <ul aria-label="Done" className="flex flex-col">{done.map(row)}</ul>}
       </Fold>}
-      {artifacts.length > 0 && <Fold title="Published" count={artifacts.length} defaultOpen={quiet && doneCount === 0}><ArtifactList artifacts={artifacts} /></Fold>}
+      {artifacts.length > 0 && <Fold title="Published" count={artifacts.length} defaultOpen={quiet && processes.done.length === 0}><ArtifactList artifacts={artifacts} /></Fold>}
     </div>
   );
 }

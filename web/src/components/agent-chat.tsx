@@ -988,7 +988,8 @@ export function AgentChat({
     <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
   const published = activity.data?.available ? activity.data.artifacts : [];
   // The row above the composer: what needs you and what works, this session's background work beside
-  // the project's threads around it, then the project's open PRs and its routines.
+  // the project's threads around it, then the project's open PRs. Finished work and routines are rows
+  // of the ⋯ menu (ADR 0108).
   const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"], quiet = false) => (
     <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} quiet={quiet} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
