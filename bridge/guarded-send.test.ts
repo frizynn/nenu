@@ -428,8 +428,22 @@ describe("guardedSend", () => {
       { text: placed, requestId: "r1" },
     );
     expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
     expect(pastes).toBe(1);
     expect(term.draft).toBe("");
+    expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a message opening with a picture, past the send's clock before anything was typed, says nothing was typed", async () => {
+    const term = new Term();
+    let clock = 0;
+    term.onRead = () => void (clock = PICTURES_BY_MS);
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: `${red} what is this?`, requestId: "r1" },
+    );
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(term.count("pane.send_text")).toBe(0);
   });
 
   test("the send's pictures stop by its clock: a second picture pasting forever after a slow first fits the phone's wait", async () => {

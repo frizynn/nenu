@@ -109,6 +109,7 @@ const PICTURE_UNSEEN: Stopped = {
   left: LEFT_IN_BOX,
 };
 const DIALOG_UP: Stopped = { why: "A dialog opened in the agent's terminal before Enter, so nothing was sent.", left: LEFT_IN_BOX };
+const PICTURES_LATE: Stopped = { why: "The agent took too long with the pictures, so nothing was sent.", left: LEFT_IN_BOX };
 const DIALOG_OPEN = "A dialog is open in the agent's terminal. Answer it there first; nothing was typed.";
 const NEVER_TAKEN: Stopped = { why: "Enter went out, but the agent never took the message, so nothing was sent.", left: LEFT_IN_BOX };
 const TAKEN =
@@ -472,8 +473,11 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
   let attached = 0;
   let wrote = false;
   for (const piece of pieces) {
-    // Past the send's clock no picture is pasted that would not be waited for (ADR 0117).
-    if (piece.kind === "image" && send.elapsed() >= PICTURES_BY_MS) return await unsent(send, deps, adapter, PICTURE_UNSEEN);
+    // Past the send's clock no picture is pasted (ADR 0117): what this send typed is cleared, or, with
+    // nothing typed yet, there is nothing to clear.
+    if (piece.kind === "image" && send.elapsed() >= PICTURES_BY_MS) {
+      return wrote ? await unsent(send, deps, adapter, PICTURES_LATE) : send.fail(`${PICTURES_LATE.why} Nothing was typed: send it again.`, false);
+    }
     const text = piece.kind === "image" ? `\x1b[200~${piece.path}\x1b[201~` : pasted(piece.text) ? `\x1b[200~${piece.text}\x1b[201~` : piece.text;
     try {
       await deps.herdr.sendPaneText(deps.paneId, text);
