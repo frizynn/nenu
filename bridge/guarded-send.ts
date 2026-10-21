@@ -502,7 +502,9 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   return send.fail("The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready.", false);
 }
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+// Whitespace is not compared: a long draft wraps, and the box's reading joins a word cut at the
+// edge with a space.
+const bare = (text: string) => text.replace(/\s+/g, "");
 
 /**
  * Clear the input box while it still holds `expected`, a draft the operator took over on the phone
@@ -527,7 +529,7 @@ export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "pan
   } catch (err) {
     return { ok: false, error: `herdr read failed: ${message(err)}` };
   }
-  if (seen.composer !== true || seen.draft === null || oneLine(seen.draft) !== oneLine(expected)) return kept;
+  if (seen.composer !== true || seen.draft === null || bare(seen.draft) !== bare(expected)) return kept;
   const failed = await sweep(send, full, adapter, seen);
   return failed && !failed.outcome.ok ? { ok: false, error: failed.outcome.error } : { ok: true };
 }

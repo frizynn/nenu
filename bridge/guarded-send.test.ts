@@ -845,7 +845,8 @@ describe("clearTakenDraft", () => {
   test("clears the box while it holds exactly the draft taken over, and confirms it emptied (ADR 0112)", async () => {
     const term = new Term();
     term.draft = "mira como se ve";
-    expect(await clearTakenDraft(deps(term), "mira  como se ve")).toEqual({ ok: true });
+    // As the phone read it: a word cut where the box wrapped comes back with a space in it.
+    expect(await clearTakenDraft(deps(term), "mira co mo se ve")).toEqual({ ok: true });
     expect(term.draft).toBe("");
     expect(term.keys()[0]![0]).toBe("ctrl+k");
   });
