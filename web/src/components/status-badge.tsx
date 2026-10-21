@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { Check, CircleAlert, CircleCheck, CircleDashed, GitMerge, type IconComponent } from "@/components/ui/icon";
 import { useLiveMotion } from "@/lib/live-motion";
@@ -34,16 +34,20 @@ export function StateMark({ state, className }: { state: NodeState; className?: 
   return <Glyph aria-hidden data-node-state={state} strokeWidth={2} className={cn("size-3.5 shrink-0", tone, className)} />;
 }
 
+// The dashed circle's six dashes turn a sixth of a turn per pass, in ten steps: each pass ends with
+// every dash where the next one was, so it reads as moving without ever spinning.
+const TURN_STEPS = 10;
+
 /**
- * Work in progress: the dashed circle turning a sixth of a turn per pass, its dashes landing where the
- * next ones were, so it reads as moving without ever spinning. Still while off screen, on a hidden
+ * Work in progress: the dashed circle turning slowly (ADR 0117). Still while off screen, on a hidden
  * page, under the idle lock or reduced motion: there the shape alone says it works.
  */
 function WorkingMark({ className }: { className?: string }) {
   const ref = useRef<SVGSVGElement>(null);
-  const moving = useLiveMotion(ref);
+  const moving = useLiveMotion(ref, TURN_STEPS, (n) => ref.current?.style.setProperty("transform", `rotate(${n * (60 / TURN_STEPS)}deg)`));
+  useEffect(() => { if (!moving) ref.current?.style.removeProperty("transform"); }, [moving]);
   return <CircleDashed ref={ref} aria-hidden data-node-state="working" data-moving={moving || undefined} strokeWidth={2}
-    className={cn("size-3.5 shrink-0", MARK.working.tone, moving && "mark-turn", className)} />;
+    className={cn("size-3.5 shrink-0", MARK.working.tone, className)} />;
 }
 
 /** Whether an agent's status draws nothing: where no column holds the names in line, leave its mark out. */

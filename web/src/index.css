@@ -68,9 +68,6 @@
   --motion-panel: 180ms;
   --motion-page: 280ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
-  /* The one motion that lasts (ADR 0117): the glow across a running turn's live line and the working
-     mark's turn, one pass every 2.2 s in 30 steps, a few composited frames a second, none off screen. */
-  --motion-glow: 2200ms;
   /* Grounds in three steps of grey, as the Cursor-style board's tokens sheet draws them: the sidebar
      (--workbench-sidebar) below the page, raised surfaces (cards, the composer, bubbles) above it and
      floating layers on top. Light is measured from Cursor (#f1f1f1, #f7f7f7, #fdfdfd); dark is
@@ -447,11 +444,9 @@
 }
 
 /* The live line's glow (Glow in work-activity-label.tsx, after T3 Code's): a copy of the line in the
-   full ink, seen through a soft window that slides across it. The window moves one way and the copy
-   inside it the other, both by transform alone, so every frame is the compositor's. The window is in
-   the page only while the glow may move (on screen, page shown, no idle lock, motion not reduced). */
-@keyframes glow-window { from { transform: translateX(0); } to { transform: translateX(100%); } }
-@keyframes glow-copy { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+   full ink, seen through a soft window that slides across it. The window steps one way and the copy
+   inside it the other, by transform alone, drawn by lib/live-motion.ts's one timer, so a frame is drawn
+   only when it moved. It is in the page only while it may move. */
 .glow-window {
   --glow-width: 4.5rem;
   position: absolute;
@@ -463,27 +458,12 @@
   mask-image: linear-gradient(to right, transparent 0, rgb(0 0 0 / 12%) 0.675rem, rgb(0 0 0 / 55%) 1.575rem, black 2.25rem,
     rgb(0 0 0 / 55%) 2.925rem, rgb(0 0 0 / 12%) 3.825rem, transparent var(--glow-width), transparent 100%);
   mask-repeat: no-repeat;
-  animation: glow-window var(--motion-glow) steps(30) infinite;
+  will-change: transform;
 }
-.glow-copy {
-  display: block;
-  width: 100%;
-  animation: glow-copy var(--motion-glow) steps(30) infinite;
-}
+.glow-copy { display: block; width: 100%; will-change: transform; }
+/* The working mark while it turns (WorkingMark in status-badge.tsx): its own layer, so a step is composited, not painted. */
+[data-node-state="working"][data-moving] { will-change: transform; }
 .glow-copy > * { width: calc(100% - 2 * var(--glow-width)); margin-left: var(--glow-width); }
-@media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .glow-window { animation: none; opacity: 0; }
-  .glow-copy { animation: none; }
-}
-
-/* Work in progress (WorkingMark in status-badge.tsx): the dashed circle's six dashes turn a sixth of a
-   turn per pass, in the glow's length and steps, so each pass ends where the next begins. Transform
-   alone; on the page only while the mark is on screen on a shown page. */
-@keyframes mark-turn { from { transform: rotate(0deg); } to { transform: rotate(60deg); } }
-.mark-turn { animation: mark-turn var(--motion-glow) steps(30) infinite; }
-@media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .mark-turn { animation: none; }
-}
 
 /* A sub-16px editable field makes iOS zoom the entire app on focus. Keep browser zoom available
    for accessibility; make touch fields readable instead of disabling scaling in the viewport. */

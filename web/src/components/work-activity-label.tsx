@@ -42,18 +42,27 @@ export function Elapsed({ since, prefix = "", fallback = "", fine = false, class
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 
+// A pass of the glow in 20 steps (~9 frames a second); the working mark's steps fall on every other one.
+const GLOW_STEPS = 20;
+
 /**
  * A live line, glowing: a light passes across its words while the agent works (ADR 0117). While it
- * runs, the words are drawn a second time in the full ink behind a window that slides over them (the
+ * moves, the words are drawn a second time in the full ink behind a window that steps over them (the
  * copy hidden from assistive tech); `layout` lays out both copies alike (a row's flex classes).
  */
 export function Glow({ children, className, layout }: { children: ReactNode; className?: string; layout?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const running = useLiveMotion(ref);
+  const lens = useRef<HTMLSpanElement>(null);
+  const copy = useRef<HTMLSpanElement>(null);
+  const running = useLiveMotion(ref, GLOW_STEPS, (n) => {
+    const at = (n / GLOW_STEPS) * 100;
+    lens.current?.style.setProperty("transform", `translateX(${at}%)`);
+    copy.current?.style.setProperty("transform", `translateX(${-at}%)`);
+  });
   return <span ref={ref} data-glow={running ? "running" : "still"} className={cn("relative min-w-0 overflow-hidden", layout, className)}>
     {children}
-    {running && <span aria-hidden="true" className="glow-window">
-      <span className="glow-copy"><span className={cn("block text-foreground", layout)}>{children}</span></span>
+    {running && <span ref={lens} aria-hidden="true" className="glow-window">
+      <span ref={copy} className="glow-copy"><span className={cn("block text-foreground", layout)}>{children}</span></span>
     </span>}
   </span>;
 }

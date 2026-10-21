@@ -56,7 +56,7 @@ async function descendantsCpuMs(): Promise<number> {
 function liveCount(page: Page) {
   return page.evaluate(() => ({
     glows: document.querySelectorAll('[data-glow="running"]').length,
-    marks: document.querySelectorAll(".mark-turn").length,
+    marks: document.querySelectorAll('[data-node-state="working"][data-moving]').length,
     workingMarks: document.querySelectorAll('[data-node-state="working"]').length,
     animations: document.getAnimations().filter((a) => a.playState === "running").length,
   }), null);
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
           const before = await descendantsCpuMs();
           await sleep(seconds * 1000);
           const cpu = await descendantsCpuMs() - before;
-          results.push({ run, motion, screen, ...live, browserCpuMs: cpu, browserCpuPercent: Math.round(cpu / (seconds * 10)) / 100 });
+          results.push({ run, motion, screen, ...live, browserCpuMs: cpu, browserCpuPercent: Math.round(cpu / (seconds * 1000) * 1000) / 10 });
           console.log(JSON.stringify(results.at(-1)));
           await context.close();
         }

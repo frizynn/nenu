@@ -60,27 +60,48 @@ it("stills every live motion on a hidden page, under the idle lock and under red
   const mark = container.querySelector<SVGElement>('[data-node-state="working"]')!;
   act(() => { seen(glow, true); seen(mark, true); });
   expect(glow.dataset.glow).toBe("running");
-  expect(mark).toHaveClass("mark-turn");
+  expect(mark).toHaveAttribute("data-moving");
 
   hide(true);
   expect(glow.dataset.glow).toBe("still");
-  expect(mark).not.toHaveClass("mark-turn");
+  expect(mark).not.toHaveAttribute("data-moving");
   hide(false);
-  expect(mark).toHaveClass("mark-turn");
+  expect(mark).toHaveAttribute("data-moving");
 
   act(() => setLocked(true));
   expect(glow.dataset.glow).toBe("still");
-  expect(mark).not.toHaveClass("mark-turn");
+  expect(mark).not.toHaveAttribute("data-moving");
   act(() => setLocked(false));
   expect(glow.dataset.glow).toBe("running");
 
   reduce = true;
   act(() => { for (const fn of reducedListeners) fn(); });
   expect(glow.dataset.glow).toBe("still");
-  expect(mark).not.toHaveClass("mark-turn");
+  expect(mark).not.toHaveAttribute("data-moving");
+});
+
+it("steps every moving one on one shared timer, and stops it when nothing moves", () => {
+  vi.useFakeTimers();
+  try {
+    const { container, unmount } = render(<><Glow>Working for 9s</Glow><StateMark state="working" /></>);
+    const glow = container.querySelector<HTMLElement>("[data-glow]")!;
+    const mark = container.querySelector<SVGElement>('[data-node-state="working"]')!;
+    act(() => { seen(glow, true); seen(mark, true); });
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => { vi.advanceTimersByTime(2200); });
+    expect(vi.getTimerCount()).toBe(1);
+    expect(mark.style.transform).toMatch(/^rotate\(\d+deg\)$/);
+    expect(container.querySelector<HTMLElement>(".glow-window")!.style.transform).toMatch(/^translateX\([\d.]+%\)$/);
+    act(() => { seen(glow, false); seen(mark, false); });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(mark.style.transform).toBe("");
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("never moves a mark that does not say work in progress", () => {
   const { container } = render(<><StateMark state="needs" /><StateMark state="review" /><StateMark state="idle" /></>);
-  expect(container.querySelector(".mark-turn")).toBeNull();
+  expect(container.querySelector("[data-moving]")).toBeNull();
 });
