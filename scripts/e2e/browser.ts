@@ -31,6 +31,7 @@ export interface Locator {
   first(): Locator;
   last(): Locator;
   nth(index: number): Locator;
+  filter(opts: { hasText?: string | RegExp }): Locator;
   innerText(): Promise<string>;
   getAttribute(name: string, opts?: { timeout?: number }): Promise<string | null>;
   scrollIntoViewIfNeeded(): Promise<void>;
