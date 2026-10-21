@@ -177,7 +177,7 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0115](./.adr/0115-a-tap-on-a-coordinator-enters-its-chat.md)). On a phone a project chat draws no
   views under its title: Chat, Threads, PRs and Status are the ⋯'s first rows, what waits on you is a red
   count on the ⋯, and only an open view draws them, as a 32 px switch; `coordinator-chat.ts` also measures
-  that ([ADR 0120](./.adr/0120-a-phones-project-views-are-rows-of-the-menu.md)). Never its threads' report cards
+  that ([ADR 0121](./.adr/0121-a-phones-project-views-are-rows-of-the-menu.md)). Never its threads' report cards
   (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
   holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
   opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass
@@ -235,7 +235,8 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
   Working, PRs) are in the row under the box beside the model, finished work and routines are rows of
-  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass. Stop sits in the box beside Send, never
+  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass; only a usage limit's line sits above
+  the box while it holds (ADR 0120). Stop sits in the box beside Send, never
   in its slot, so a draft never swaps it under the thumb
   ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **A turn's work reads the same on a phone and a desk** (`work-log-tools.tsx`, `fold.tsx`): "Worked for"
@@ -380,6 +381,13 @@ the unit name; the Herdr action runs from anywhere.
   alone is no turn, so Send goes directly. Don't add a screen regex for something these files say; the
   screen keeps only what no file records (dialog keys, the input box, Codex's own queue). Hooks only
   speed up a re-read ([ADR 0067](./.adr/0067-the-clis-own-state-decides-the-screen-is-the-fallback.md)).
+- **A Claude at its usage limit is held by its own log, and its messages wait in Nenu** — the newest
+  `usage_limit_reached` row holds it at rest until its reset or a reply on any Claude of the same profile
+  (a switched account), read once at rest, never from the screen; its "continuing automatically · esc to
+  cancel" notice is Claude's own and leaves the box ready. Send waits in the queue with `limit` and goes
+  when it lifts, Continue now types Claude's continue prompt, and the mark is a grey hourglass; Nenu never
+  reads the account to see a switch. `bun scripts/e2e/run.ts usage-limit` must pass
+  ([ADR 0120](./.adr/0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md)).
 - **A generically-detected menu emits only the keys the screen printed** — the footer's
   `<key> to <verb>` hints plus the arrows it advertised. Never synthesise a digit from a numbered row:
   in the `/model` picker a digit confirms *and* persists the user's default. The generic grammar

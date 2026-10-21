@@ -116,12 +116,13 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0114 |
 | [0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md) | A state is a still glyph, coloured only when it asks for you | Accepted; decision 3 superseded by 0118 |
 | [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
-| [0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Accepted; amended by 0119 and 0120 |
+| [0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Accepted; amended by 0119 and 0121 |
 | [0116](./0116-a-turn-reads-as-t3-code-draws-its-work.md) | A turn reads as T3 Code draws its work, the same on a phone and a desk (reverses the desk's step table) | Accepted; amended by 0118 |
 | [0117](./0117-enter-follows-the-text-and-claudes-log-is-the-witness.md) | Enter follows the text, and Claude's log is the witness; waits end on the event (amends 0048, 0067, 0076, 0104) | Accepted |
 | [0118](./0118-work-in-progress-looks-alive.md) | Work in progress looks alive, where it happens, and one message is on screen once (amends 0111, 0113, 0116) | Accepted |
 | [0119](./0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md) | A chat panel's sections fold, and the operator arranges them; a coordinator's Threads lists its whole subtree (amends 0101, 0115) | Accepted |
-| [0120](./0120-a-phones-project-views-are-rows-of-the-menu.md) | A phone's project views are rows of the ⋯, and what waits on you is counted on it (amends 0115) | Accepted |
+| [0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md) | A Claude at its usage limit reads so, and its messages wait in Nenu; Continue now resumes it (amends 0067, 0108, 0113, 0114) | Accepted |
+| [0121](./0121-a-phones-project-views-are-rows-of-the-menu.md) | A phone's project views are rows of the ⋯, and what waits on you is counted on it (amends 0115) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

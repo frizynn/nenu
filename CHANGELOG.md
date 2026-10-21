@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.44.0] - 2026-10-22
+## [1.45.0] - 2026-10-22
 
 ### Changed
 
@@ -17,6 +17,19 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - A red count on the ⋯ and on its Status row says what waits on you with the menu shut (be33368f, ca9f2c73, 87823561).
+
+## [1.44.0] - 2026-10-22
+
+### Added
+
+- A Claude at its account's usage limit says so: "Usage limit · resets 6:40 PM" over the box with Continue now, a grey hourglass in the bar and Home, and the bar says when it resets; read from Claude's own log, lifted at the reset or when any Claude of the same account gets a reply (6ffde34d, 0f08fb15, b1309d6b).
+- A message sent to it waits in Nenu's queue, "Goes when Claude is back, ~6:40 PM", and goes by itself once the limit lifts; Send now on the row sends it anyway (6ffde34d, 0f08fb15).
+- Continue now types the continue prompt Claude itself sends at the reset, for when the account was switched (0f08fb15, b1309d6b).
+- `bun scripts/e2e/run.ts usage-limit` walks it on a desk and a phone (c8dfe068).
+
+### Fixed
+
+- **A send to a Claude at its usage limit no longer says "nothing was sent" when it was typed.** Its "continuing automatically · esc to cancel" notice was read as a dialog: the first Send typed nothing, a second left the message in Claude's box, where another prompt was then glued to it (8d6494e4).
 
 ## [1.43.0] - 2026-10-22
 

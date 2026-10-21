@@ -1,4 +1,4 @@
-# 0120. A phone's project views are rows of the ⋯, and what waits on you is counted on it
+# 0121. A phone's project views are rows of the ⋯, and what waits on you is counted on it
 
 - **Status:** Accepted (2026-10-22). Requested by the operator, who chose where the views go (the ⋯)
   and delegated the rest. Amends [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) point 3

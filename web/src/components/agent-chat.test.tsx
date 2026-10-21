@@ -27,6 +27,7 @@ import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
 import { WorkbenchNavigationContext, type WorkbenchNavigation } from "@/lib/workbench-navigation";
+import { CONTINUE_PROMPT, resetTime } from "@/lib/usage-limit";
 import { AgentChat } from "./agent-chat";
 import { ConnectionBanner } from "./connection-banner";
 import { StatusArea } from "./status-area";
@@ -193,7 +194,7 @@ describe("AgentChat — header title block", () => {
     expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
   });
 
-  // A phone's project views (ADR 0120): its rows head the menu, and what waits on you shows on the ⋯ while shut.
+  // A phone's project views (ADR 0121): its rows head the menu, and what waits on you shows on the ⋯ while shut.
   it("heads the ⋯ menu with a project's rows and counts what waits on you on the ⋯ itself", async () => {
     const show = vi.fn();
     renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [
@@ -1476,35 +1477,37 @@ describe("AgentChat — why the composer is locked", () => {
   });
 });
 
-// Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
-// unsendable (ADR 0048 step 4), which is right, but it is not a question for the operator: Claude
-// resumes on its own. Only a screen that really waits on a key earns the interaction notice.
+// Claude's usage-limit pause paints "esc to cancel" under a live input box. It is Claude's own key and
+// the box stays ready (ADR 0120); only a screen that really waits on a key earns the interaction notice.
+const USAGE_LIMIT_TEXT = [
+  "● Listo, te aviso cuando termine.",
+  "  ⎿  You've hit your session limit · resets 1:20am (Europe/Amsterdam)",
+  "",
+  "  Usage limit reached · continuing automatically at 1:20am · esc to cancel",
+  "",
+  "✻ Sautéed for 1h 55m 17s · done 10:22 PM",
+  "",
+  "✔ Update installed · Restart to update",
+  RULE,
+  "❯ ",
+  RULE,
+  "  ⚠ Usage limit reached · limit resets 1:20am",
+  "    Continuing automatically at 1:20am · esc to cancel",
+  "  Opus 5.5 (1M context) | Context 18% used (82% left) | 5h 100% used (0% left)",
+  "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
+].join("\n");
+
 describe("AgentChat — terminal waiting notice", () => {
-  const USAGE_LIMIT_TEXT = [
-    "● Listo, te aviso cuando termine.",
-    "  ⎿  You've hit your session limit · resets 1:20am (Europe/Amsterdam)",
-    "",
-    "  Usage limit reached · continuing automatically at 1:20am · esc to cancel",
-    "",
-    "✻ Sautéed for 1h 55m 17s · done 10:22 PM",
-    "",
-    "✔ Update installed · Restart to update",
-    RULE,
-    "❯ ",
-    RULE,
-    "  ⚠ Usage limit reached · limit resets 1:20am",
-    "    Continuing automatically at 1:20am · esc to cancel",
-    "  Opus 5.5 (1M context) | Context 18% used (82% left) | 5h 100% used (0% left)",
-    "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
-  ].join("\n");
   const UNKNOWN_WAIT_TEXT = ["● Working on it", "", "  Something new needs your attention", "", "  Enter to continue"].join("\n");
 
-  it("shows a usage-limit pause as one quiet line, not a terminal waiting notice", async () => {
+  // The limit itself comes from Claude's log (ADR 0120); its notice on screen is Claude's own and no
+  // longer a wait, so without that state nothing is said about it here.
+  it("says nothing about a usage-limit notice the CLI's own state does not report", async () => {
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
     renderChat({ agent, agents: [agent], text: USAGE_LIMIT_TEXT });
-    expect(await screen.findByText(/Usage limit reached · limit resets 1:20am/, { selector: "[data-terminal-notice] *" })).toBeVisible();
+    await screen.findByRole("textbox");
     expect(screen.queryByText(/terminal is waiting/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /terminal keys/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Terminal waiting" })).not.toBeInTheDocument();
   });
 
   it("says in words what an unrecognised wait is, and leads to the terminal and its keys", async () => {
@@ -1804,6 +1807,68 @@ describe("AgentChat — Send while only background work runs", () => {
     await waitFor(() => expect(wire.posts).toEqual([expect.objectContaining({ action: "add", text: "status?", deliveryMode: "asap" })]));
     expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
     expect(wire.sends).toEqual([]);
+  });
+});
+
+// ADR 0120: a Claude at its account's usage limit. The line says until when; Send waits in Nenu's
+// queue and says so in the thread; Continue now types the continue prompt past the limit.
+describe("AgentChat — an agent at its usage limit", () => {
+  const RESETS = Date.now() + 2 * 3_600_000;
+  function serveQueue() {
+    const posts: Array<Record<string, unknown>> = [];
+    const sends: string[] = [];
+    let rows: Array<Record<string, unknown>> = [];
+    const page = () => HttpResponse.json({ available: true, scope: "scope", messages: rows, delivered: [] });
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, page),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        if (body.action === "add") rows = [{ id: body.id, text: body.text, state: "queued", createdAt: Date.now(), revision: 0, deliveryMode: body.deliveryMode, waitingFor: "limit", until: RESETS }];
+        return page();
+      }),
+      http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
+        const body = (await request.json()) as { text: string; requestId: string };
+        sends.push(body.text);
+        return HttpResponse.json({ ok: true, requestId: body.requestId, ack: "submitted" });
+      }),
+    );
+    return { posts, sends };
+  }
+  const limited = () => ({ ...fixtureAgents[0]!, paneId: "limited", agent: "claude", status: "done" as const, hasSession: true,
+    turn: { running: false, limit: { resetsAt: RESETS }, source: "claude-session" as const } });
+
+  it("names the limit and when it resets, with Continue now, and leaves the box open", async () => {
+    serveQueue();
+    const agent = limited();
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: USAGE_LIMIT_TEXT });
+    expect(await screen.findByText(`Usage limit · resets ${resetTime(RESETS)}`)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue now" })).toBeEnabled();
+    expect(screen.queryByText(/terminal is waiting/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeEnabled();
+  });
+
+  it("Send waits in Nenu's queue and says until when; nothing is typed and nothing fails", async () => {
+    const wire = serveQueue();
+    const agent = limited();
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: USAGE_LIMIT_TEXT });
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole("textbox"), "Haceme el diagrama");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(wire.posts).toEqual([expect.objectContaining({ action: "add", text: "Haceme el diagrama", deliveryMode: "asap" })]));
+    expect(await screen.findByText(`Goes when Claude is back, ~${resetTime(RESETS)}.`)).toBeVisible();
+    expect(wire.sends).toEqual([]);
+    expect(screen.queryByText(/nothing was sent/i)).not.toBeInTheDocument();
+  });
+
+  it("Continue now types the continue prompt past the limit, once", async () => {
+    const wire = serveQueue();
+    const agent = limited();
+    renderChat({ paneId: agent.paneId, agent, agents: [agent], text: USAGE_LIMIT_TEXT });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Continue now" }));
+    await waitFor(() => expect(wire.sends).toEqual([CONTINUE_PROMPT]));
+    expect(wire.posts).toEqual([]);
   });
 });
 

@@ -319,6 +319,36 @@ it("a Claude row for after the turn waits, says why, and costs no write while it
   } finally { await t.close(); }
 });
 
+// ADR 0120: a message for a Claude at its usage limit waits in Nenu, says so, and goes when the limit
+// lifts, or now when the operator sends it.
+it("a row for a Claude at its usage limit waits for the limit, and goes once it lifts", async () => {
+  const t = await agentPane("claude", "idle");
+  try {
+    t.pane.turn = { running: false, limit: { resetsAt: Date.now() + 3_600_000 }, source: "claude-session" };
+    const added = await t.add("one", "Hacé el diagrama", "asap");
+    expect(added.body.messages[0]).toMatchObject({ state: "queued", waitingFor: "limit" });
+    for (let i = 0; i < 5; i++) { t.service.kick(); await Bun.sleep(5); }
+    expect(t.pane.submitted).toEqual([]);
+    t.pane.turn = { running: false, source: "claude-session" };
+    t.service.kick();
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect(t.pane.submitted).toEqual(["Hacé el diagrama"]);
+  } finally { await t.close(); }
+});
+
+it("Send now takes a row past the usage limit, and only past it", async () => {
+  const t = await agentPane("claude", "idle");
+  try {
+    t.pane.turn = { running: false, limit: { resetsAt: Date.now() + 3_600_000 }, source: "claude-session" };
+    const added = await t.add("one", "Seguí", "asap");
+    const row = added.body.messages[0];
+    expect(row).toMatchObject({ waitingFor: "limit" });
+    await t.call({ action: "send", id: "one", scope: await t.scope(), revision: row.revision });
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect(t.pane.submitted).toEqual(["Seguí"]);
+  } finally { await t.close(); }
+});
+
 it("the second Claude row waits for Herdr to see the first one's turn start (state_change_seq)", async () => {
   const t = await agentPane("claude", "idle");
   try {

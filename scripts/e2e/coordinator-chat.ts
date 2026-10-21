@@ -11,7 +11,7 @@ import { herdSeed } from "./scenario.ts";
 // Then the back control from that chat, as far as it climbs (coordinator → project → Projects). Over
 // phone-nav.ts's herd: Acme organizes coordinators (its own and Rediseño mobile run in a pane,
 // Migración de stock does not), and Nenu runs only its own coordinator. Captures each screen.
-// On a phone its views are the ⋯'s rows (ADR 0120): nothing stands between the title and the chat, each
+// On a phone its views are the ⋯'s rows (ADR 0121): nothing stands between the title and the chat, each
 // view is 2 taps from it (⋯, the row) and Chat 1 tap back, and what waits on you is counted on the ⋯.
 // Exits 1 when a running coordinator takes more than 2 taps or its chat has no back to its project, or
 // when a phone's chat draws a band of views, a view takes more taps, or Acme's waiting ask is not on its ⋯.

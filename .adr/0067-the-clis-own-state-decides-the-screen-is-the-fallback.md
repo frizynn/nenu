@@ -1,6 +1,6 @@
 # 0067. The CLI's own state decides whether a turn runs; the screen is the fallback
 
-- **Status:** Accepted (2026-10-11). Amends [ADR 0066](./0066-stop-presses-the-clis-interrupt-key-once.md)
+- **Status:** Accepted (2026-10-11). Amended by [ADR 0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md): a Claude at rest has its transcript read once, unwatched, for its usage limit. Amends [ADR 0066](./0066-stop-presses-the-clis-interrupt-key-once.md)
   rules 2 and 3 (what "a running turn" means). Keeps 0066's single press, cooldown, write lock, queue
   confirmation and held rows, and keeps [ADR 0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md):
   the screen still chooses the keys that answer a dialog.

@@ -5,7 +5,7 @@ import { ChevronDown, GitPullRequest, GitPullRequestDraft, Plus } from "@/compon
 import { NodeDot } from "@/components/node-row";
 import { OpeningMark, PaneMark } from "@/components/nav-rows";
 import { ProjectGlyph } from "@/components/project-glyph";
-import { AGENT_STATE, resting, StatusDot } from "@/components/status-badge";
+import { AGENT_STATE, resting, StateMark, StatusDot } from "@/components/status-badge";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, liveliest, projectActivity, projectAgents, type DeskChat } from "@/lib/desk-nav";
 import { timeAgo, timeAgoShort } from "@/lib/format";
@@ -14,6 +14,7 @@ import { nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, awaits, nodeState, STATE_LABEL } from "@/lib/org-tree";
 import { groupByRecency } from "@/lib/projects";
 import { STATUS_LABEL, type ProjectView } from "@/lib/types";
+import { limitLine, resetTime, usageLimitOf } from "@/lib/usage-limit";
 
 /** How many projects, and how many chats, the bar lists before More; the one on screen always shows. */
 const PROJECTS_SHOWN = 5;
@@ -161,14 +162,18 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
   const mark = pr && prMark(pr);
   // Only what is alive reads in full ink: a chat that waits, works, finished unseen or has something to review.
   const shown = state ?? (pane && AGENT_STATE[pane.status]);
-  const live = ask !== undefined || (shown !== undefined && shown !== "idle" && shown !== "resolved") || chat.unread;
+  // The usage limit outranks what the tree says: the agent is held until a time, whatever it was doing.
+  const limit = usageLimitOf(pane);
+  const live = ask !== undefined || limit !== undefined || (shown !== undefined && shown !== "idle" && shown !== "resolved") || chat.unread;
   return (
     <Link className="nav-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
       <span className="nav-lead">
-        <OpeningMark to={to}>{state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />}</OpeningMark>
+        <OpeningMark to={to}>{limit ? <StateMark state="limit" /> : state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />}</OpeningMark>
       </span>
       <span className="nav-row-text">{chat.title}</span>
-      {word && <span className="sr-only">, {word}</span>}
+      {limit
+        ? <span className="nav-limit" data-limit title={limitLine(limit)}><span className="sr-only">, usage limit, </span>resets {resetTime(limit.resetsAt)}</span>
+        : word && <span className="sr-only">, {word}</span>}
       {chat.unread && !current && <span className="nav-unread" data-unread aria-hidden>+1</span>}
       {pr && mark && <>
         <span className="nav-row-end" data-pr={mark.tone} aria-hidden><mark.glyph size={14} /></span>

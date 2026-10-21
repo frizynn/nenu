@@ -168,7 +168,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   };
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
-  // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0120).
+  // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0121).
   // Status counts what waits on you; the others only how many there are.
   const phoneViews: PhoneViewRow[] | undefined = !desk ? [
     { key: "chat", label: "Chat", icon: ChatCircleText, count: 0 },

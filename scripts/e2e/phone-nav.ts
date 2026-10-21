@@ -12,7 +12,7 @@ import { herdSeed } from "./scenario.ts";
 // coordinator at 390x844, counting taps from Home (2, a nested one too: it is its own row) and from
 // the drawer (3), landing on its chat where it runs and on its page where it does not (ADR 0115), and
 // captures every screen, plus Home at 1440. A coordinator's chat holds its views in the ⋯ and draws
-// none under its title; an open view draws them as a 32px switch (ADR 0120). Exits 1 on any failure.
+// none under its title; an open view draws them as a 32px switch (ADR 0121). Exits 1 on any failure.
 //
 //   bun scripts/e2e/phone-nav.ts [--port 8871] [--out DIR] [--tag before|after]
 

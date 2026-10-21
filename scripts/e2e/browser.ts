@@ -157,7 +157,7 @@ export async function reportModel(page: Page, usedPercent = 11): Promise<void> {
   });
 }
 
-/** A phone's project view from its chat: the header's ⋯, then its row (ADR 0120). */
+/** A phone's project view from its chat: the header's ⋯, then its row (ADR 0121). */
 export async function openPhoneView(page: Page, view: "Chat" | "Threads" | "PRs" | "Status", timeout = 5000): Promise<void> {
   await page.getByRole("button", { name: /^Conversation actions/ }).first().click({ timeout });
   await page.getByRole("dialog", { name: "Conversation actions" }).getByRole("button", { name: new RegExp(`^${view}`) }).click({ timeout });
