@@ -121,7 +121,7 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
         onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
         onNewThread={canStart ? () => newThread(id) : undefined} />;
     })}
-    {/* What finished is reachable, never in the way: one quiet line after the live work (ADR 0108). */}
+    {/* What finished is reachable, never in the way: one quiet line after the live work (ADR 0109). */}
     {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={() => showHistory(true)}>
       <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>
     </button>}
@@ -133,7 +133,7 @@ const HISTORY_ROWS = 100;
 
 function WorkHistory({ project, count, search, onBack, onOpenNode }: {
   project: ProjectView; count: number;
-  /** What a coordinator's "N finished" opened it searching: its own name (ADR 0108). */
+  /** What a coordinator's "N finished" opened it searching: its own name (ADR 0109). */
   search: string;
   onBack: () => void; onOpenNode: (node: OrgNode) => void;
 }) {

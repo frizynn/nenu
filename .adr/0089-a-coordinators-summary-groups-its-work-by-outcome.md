@@ -1,6 +1,6 @@
 # 0089. A coordinator's Summary groups its work by outcome
 
-- **Status:** Accepted (2026-10-16); its Summary view superseded by [ADR 0108](./0108-a-coordinators-page-shows-live-work.md) (2026-10-21). Requested by the operator. Amends
+- **Status:** Accepted (2026-10-16); its Summary view superseded by [ADR 0109](./0109-a-coordinators-page-shows-live-work.md) (2026-10-21). Requested by the operator. Amends
   [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) for this one view: the tree
   stays as Organizations draws it everywhere, the node page included.
 - **Trail:** `web/src/lib/coordinator-summary.ts` · `web/src/components/coordinator-summary.tsx` ·

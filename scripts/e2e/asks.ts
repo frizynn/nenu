@@ -215,7 +215,7 @@ async function main(): Promise<void> {
         for (const words of ["Waiting on you", "Does not close", "In progress", "Done", "esta línea no sigue el formato", "Marked done, but PR #1351 is still open.", "Acme Shop · Rediseño del checkout"]) {
           if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
         }
-        // A line outside the format reads as a request in progress, never under "Other lines" (ADR 0108).
+        // A line outside the format reads as a request in progress, never under "Other lines" (ADR 0109).
         if (text.includes("Other lines")) failures.push(`${name}: an "Other lines" section`);
         await shoot(page, name);
         if (name === "asks-phone") {

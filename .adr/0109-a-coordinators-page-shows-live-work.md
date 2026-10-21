@@ -1,4 +1,4 @@
-# 0108. A coordinator's page shows its live work; what finished is one line away
+# 0109. A coordinator's page shows its live work; what finished is one line away
 
 - **Status:** Accepted (2026-10-21). Requested by the operator. Supersedes
   [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md)'s Summary view (a node's own

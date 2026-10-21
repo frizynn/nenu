@@ -134,7 +134,7 @@ function NodePage() {
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
       </section>
-      {/* Its live work; what finished is the tree's one folded History line (ADR 0108). */}
+      {/* Its live work; what finished is the tree's one folded History line (ADR 0109). */}
       {coordinator && <OrgTreeList key={thread.id}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}

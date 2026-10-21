@@ -75,7 +75,7 @@ const FINISHED = new Set(["finished", "closed", "merged", "complete", "completed
  * An Asked line Organizations could not read (its brackets hold no state the format names, such as
  * `[in-progress]`), as the request it still is: its own bracket word says done or, failing that, it is
  * in progress, never a waiting one; its words split at the format's ` : ` into the ask and its answer
- * (ADR 0108). Its links stay unread: Organizations confirmed none.
+ * (ADR 0109). Its links stay unread: Organizations confirmed none.
  */
 export function unmarked(line: string, answer = ""): { group: AskGroup; text: string; detail: string } {
   const lead = /^\[([^\]]*)\]\s*/.exec(line);

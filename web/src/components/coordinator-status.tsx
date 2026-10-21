@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 // and nothing else: a known `[state]` opening a line is a chip, and a thread id this project lists
 // opens its node. A long file shown unasked folds under Show all. Under a coordinator's card, which
 // already says what the file says, it starts closed (ADR 0091), and the person's tap opens all of it:
-// a fold there was a clipped box the wheel could not move (ADR 0108).
+// a fold there was a clipped box the wheel could not move (ADR 0109).
 
 type AskState = "open" | "working" | "needs-decision" | "answered" | "done";
 const ASK_STATE: Record<AskState, { label: string; tone: string }> = {

@@ -169,7 +169,7 @@ the unit name; the Herdr action runs from anywhere.
   threads' report cards (the Summary of ADR 0089 is gone); a tap anywhere on a coordinator card's head
   opens it, its Waiting on you holds only what waits on you, an Asked line outside the format reads as
   a request (`unmarked`), and an opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must
-  pass ([ADR 0108](./.adr/0108-a-coordinators-page-shows-live-work.md)).
+  pass ([ADR 0109](./.adr/0109-a-coordinators-page-shows-live-work.md)).
   A conversation (`keep_open`) that ended its turn reads idle, never Needs you; only a dialog, a failed
   start or a lost pane make it ask ([ADR 0103](./.adr/0103-a-conversation-that-ended-its-turn-waits-on-nobody.md)).
   A report reads in plain words once Organizations' summary agent wrote them for it, the agent's words a
@@ -213,6 +213,10 @@ the unit name; the Herdr action runs from anywhere.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
   which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)).
+- **The line above a chat's box holds only live work** (`composer-chips.tsx`): Needs you, Working, PRs;
+  finished work and routines are rows of the ⋯ menu. Stop sits in the box beside Send, never in its
+  slot, so a draft never swaps it under the thumb
+  ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

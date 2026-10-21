@@ -51,7 +51,7 @@ export function AskSections({ sections, session, whose, answers, readOnly, compa
 }) {
   // Answered here, until the next read of the asks moves the row where Organizations puts it.
   const [answered, setAnswered] = useState<Record<string, string>>({});
-  // What is done stays one line until opened: the list is for what is still open (ADR 0108).
+  // What is done stays one line until opened: the list is for what is still open (ADR 0109).
   const [doneShown, setDoneShown] = useState(false);
   if (sections.length === 0) return null;
   const answer = (entry: AskEntry, group: AskGroup): Answering => ({

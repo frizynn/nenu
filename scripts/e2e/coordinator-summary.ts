@@ -12,7 +12,7 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 // Organizations adds (`verdict`, `summary`, `captures`, `deliverables`). The captures are mock
 // screens the bench renders itself, so no real screen or client data is involved. It checks the
 // library route from outside the page (what it serves and what it refuses), then that the
-// coordinator's page lists only its tree (its Summary is gone, ADR 0108) and that a thread's own page
+// coordinator's page lists only its tree (its Summary is gone, ADR 0109) and that a thread's own page
 // carries its report, a capture opened large. `--quiet` seeds the same threads without the new
 // fields: an Organizations that predates them.
 //
@@ -217,7 +217,7 @@ async function main(): Promise<void> {
       shots.push(path);
     };
 
-    // The coordinator's page lists its live work as the tree, never its threads' reports (ADR 0108).
+    // The coordinator's page lists its live work as the tree, never its threads' reports (ADR 0109).
     for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
       const { page, context } = await open(NODE, device);
       if (await page.getByRole("tab", { name: "Summary" }).count()) failures.push(`${name}: the coordinator page still offers a Summary`);

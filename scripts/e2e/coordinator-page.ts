@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
-// A coordinator's page and the way into it (ADR 0108), at 1440 and 390 px with Google Chrome headless:
+// A coordinator's page and the way into it (ADR 0109), at 1440 and 390 px with Google Chrome headless:
 // a tap anywhere on a coordinator's card on the project page opens its page; the page lists only live
 // work, with finished work one line to History; Open chat and New thread are one box; Waiting on you
 // holds only what waits on you; the Asked lines read as requests with a state, done ones folded; and

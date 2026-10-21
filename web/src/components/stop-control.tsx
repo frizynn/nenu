@@ -12,9 +12,9 @@ function StopGlyph() {
 }
 
 /**
- * The composer's Stop, at the end of the "Working for …" row above the draft for as long as a turn
- * runs. It never takes the Send slot, so typing a draft never moves it under the thumb. Every phase
- * keeps the row's 32px height: "Really stop?" when the bridge asked, "Stopping…" in flight.
+ * The composer's Stop, in the box beside Send for as long as a turn runs (ADR 0108). It never takes the
+ * Send slot, so typing a draft never swaps it under the thumb. Every phase keeps the box's 32px
+ * controls: "Really stop?" when the bridge asked, "Stopping…" in flight.
  */
 export function StopControl({ stop, disabled }: { stop: StopTurn; disabled: boolean }) {
   if (stop.phase === "stopping") {
@@ -33,8 +33,8 @@ export function StopControl({ stop, disabled }: { stop: StopTurn; disabled: bool
     );
   }
   return (
-    <Button type="button" variant="outline" className="composer-stop hit-area h-8 gap-1.5" onClick={stop.stop} disabled={disabled} aria-label="Stop" title="Stop (Esc)">
-      <StopGlyph />Stop
+    <Button type="button" size="icon" variant="outline" className="composer-action composer-stop-icon hit-area" onClick={stop.stop} disabled={disabled} aria-label="Stop" title="Stop (Esc)">
+      <StopGlyph />
     </Button>
   );
 }

@@ -28,7 +28,7 @@ type Tab = "threads" | "waiting" | "routines" | "status";
 /**
  * A coordinator on a desk (ADR 0102): its name, state, threads working and pull request, Open chat and
  * New thread, then Threads (only its live work, finished work one line away in the project's History,
- * ADR 0108), what waits on you there, the routines that reach it, and Status (its card, with what was
+ * ADR 0109), what waits on you there, the routines that reach it, and Status (its card, with what was
  * asked of it, and STATUS.md). `thread` is undefined for the project's own coordinator.
  */
 export function DeskCoordinator({ project, thread, panes, device, session, onChanged }: {
@@ -45,11 +45,11 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   const id = thread?.id ?? "root";
   // The project coordinator runs the threads started from the project; another, its whole subtree.
   const work = thread ? threadTree(project, thread.id) : coordinatedThreads(project).filter((candidate) => candidate.role !== "coordinator");
-  // Only its own report and STATUS.md are read here: the page draws no other thread's report (ADR 0108).
+  // Only its own report and STATUS.md are read here: the page draws no other thread's report (ADR 0109).
   const read = useThreadSummaries(project, thread ? [thread] : []);
   const asks = useAsks([project]);
   const routines = useRoutines(project.slug, session);
-  // Only what waits on you: what it is doing and what it did are its Status (ADR 0108).
+  // Only what waits on you: what it is doing and what it did are its Status (ADR 0109).
   const mine = asks.list ? askSections(asks.list, [project], { project: project.slug, coordinator: id }).filter((section) => section.group === "waiting") : [];
   const waiting = asks.list ? waitingGroups(asks.list, project).find((group) => group.coordinator.id === id)?.count ?? 0 : 0;
   const reaching = (list: readonly RoutineView[]) => routinesFor(list, id, project.threads);
@@ -129,7 +129,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
 
 /**
  * A coordinator's live work: its open threads, the most urgent first, each a row that opens it; what
- * finished is one line that opens the project's History, never cards on this page (ADR 0108).
+ * finished is one line that opens the project's History, never cards on this page (ADR 0109).
  */
 function LiveWork({ threads, onOpenNode, onHistory }: { threads: readonly ProjectThreadView[]; onOpenNode: (node: OrgNode) => void; onHistory: () => void }) {
   const walk = (nodes: readonly OrgNode[], depth: number): Array<{ node: OrgNode; depth: number }> =>

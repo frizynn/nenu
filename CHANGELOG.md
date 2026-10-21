@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.36.0] - 2026-10-21
+## [1.37.0] - 2026-10-21
 
 ### Changed
 
@@ -18,6 +18,7 @@ All notable changes to Nenu are recorded here. The format follows
 - A coordinator's Waiting on you shows only what waits on you; its asks are on Status, done ones folded to one line everywhere (3069c4af, 5c06d6a1).
 - An Asked line outside the format (`[in-progress] …`) reads as a request in progress or done, never under "Other lines" (5c06d6a1).
 - A thread whose PR merged reads "merged, closes on its own" and no longer counts as to review, Home included (bcd3105b, 94b385df, d142080d).
+- History sits after the live work on the project and coordinator pages, never beside it (b2dec9d9).
 
 ### Fixed
 
@@ -26,6 +27,18 @@ All notable changes to Nenu are recorded here. The format follows
 ### Added
 
 - `bun scripts/e2e/coordinator-page.ts`: the project card, the coordinator page, its buttons, Waiting on you, Status and its scroll, desk and phone (f5b7630f).
+
+## [1.36.0] - 2026-10-21
+
+### Changed
+
+- The line above the box shows only what asks for you or runs (Needs you, Working, PRs); finished work and routines moved to the chat's ⋯ menu, which opens the same panel on its rows (5c33fb09, 12423225, 21ab5094).
+- Stop is a round button in the box beside Send, so a running turn no longer takes a line of its own above the box (5c33fb09, 12423225).
+
+### Fixed
+
+- Opening a project's chat no longer folds an empty line shut two seconds in (2cb05671).
+
 ## [1.35.1] - 2026-10-21
 
 ### Fixed

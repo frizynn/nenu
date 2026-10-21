@@ -37,7 +37,7 @@ export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb: Rea
 
 /**
  * A page's header action: every one the same button (height, radius, padding and fill), so Open chat
- * and New thread read as a pair and neither looks like another kind of control (ADR 0108).
+ * and New thread read as a pair and neither looks like another kind of control (ADR 0109).
  */
 export function DeskAction({ className, ...props }: ComponentProps<typeof Button>) {
   return <Button type="button" variant="secondary" className={cn("desk-head-action desk-head-action-quiet", className)} {...props} />;
@@ -106,7 +106,7 @@ const CARD_ROWS = 20;
 
 /**
  * A coordinator's card: its fold, then its name and what its threads are doing, which opens its page
- * wherever it is tapped (ADR 0108), and + to start a thread under it; its threads under it. The project
+ * wherever it is tapped (ADR 0109), and + to start a thread under it; its threads under it. The project
  * coordinator's card holds the threads started from the project.
  */
 export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, ownState }: {

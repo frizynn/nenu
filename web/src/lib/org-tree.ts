@@ -17,7 +17,7 @@ export const STATE_LABEL: Record<NodeState, string> = {
 
 /**
  * A node in the review group whose pull request already merged: Organizations resolves it on its own
- * shortly, so it is not work to review (ADR 0108). Every "to review" count and word asks `toReview`.
+ * shortly, so it is not work to review (ADR 0109). Every "to review" count and word asks `toReview`.
  */
 export function mergedToClose({ thread, state }: { thread: Pick<ProjectThreadView, "pr">; state: NodeState }): boolean {
   return state === "review" && thread.pr?.state === "merged";

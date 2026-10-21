@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 const CaptureViewer = lazy(() => import("./capture-viewer"));
 
-// A node's own report (ADR 0089, its Summary superseded by ADR 0108): what its agent's last report says
+// A node's own report (ADR 0089, its Summary superseded by ADR 0109): what its agent's last report says
 // in plain words, its PR, the pictures it took and the documents it left. Every report field may be
 // missing (an Organizations without them, a thread that has not reported), and the page then shows only
 // what Organizations knows. The summary is the agent's text, drawn as text.
