@@ -340,7 +340,9 @@ export class AgentStates {
     const transcript = entry.transcript;
     if (!transcript) return;
     await this.readTail(transcript);
-    if (!transcript.watcher && !entry.dropped) {
+    // Only a turn still running watches: one that ended during the read left a Claude at rest.
+    const busy = entry.file?.status === "busy" && !entry.file.waitingFor;
+    if (!transcript.watcher && !entry.dropped && busy && entry.transcript === transcript) {
       transcript.watcher = this.watchFile(transcript.path, () => {
         void this.readTail(transcript).then(() => this.update(entry));
       });
