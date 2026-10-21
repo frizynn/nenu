@@ -35,10 +35,10 @@ const TONE_ICON: Record<Exclude<QueuedTone, "waiting">, ReactNode> = {
 
 /**
  * One of the operator's own messages that has not reached the conversation yet, drawn the same way
- * whether this device queued it (the bubble at the end of the chat) or another one did (the rows
- * above the composer): the bubble, a status line under it and one trailing ⋯ of 44px. A message
- * waiting in a queue wears a Queued badge; managing it (Send now, Edit, Remove) lives behind the ⋯
- * so the line never wraps a button onto a row of its own. A remedy for the state it is in (Retry,
+ * whether this device queued it or another one did, at the end of the chat: the bubble, a status
+ * line under it and one trailing ⋯ of 44px. A message waiting in a queue wears a Queued badge;
+ * managing it (Send now, Edit, Remove) lives behind the ⋯ so the line never wraps a button onto a
+ * row of its own. A remedy for the state it is in (Retry,
  * Open Terminal, Read it now) stays on the line, next to the words that call for it.
  */
 export function QueuedMessage({
@@ -50,7 +50,6 @@ export function QueuedMessage({
   menu,
   remedies = [],
   editor,
-  clamp = false,
 }: {
   /** The wire text: prose plus image paths. */
   text: string;
@@ -64,8 +63,6 @@ export function QueuedMessage({
   remedies?: QueuedAction[];
   /** Replaces the bubble's text while the message is edited in place. */
   editor?: ReactNode;
-  /** Shows the first three lines only, where the rows share a short strip above the composer. */
-  clamp?: boolean;
 }) {
   const { pieces, paths } = pathPieces(text);
   const media = useContext(FileMediaContext);
@@ -91,7 +88,7 @@ export function QueuedMessage({
         {editor ?? (
           <>
             <PlacedMessage pieces={pieces} images={pathImages(paths, media)}
-              words={(words, key) => <MarkdownText key={key} text={words} query="" className={clamp ? "line-clamp-3" : undefined} />} />
+              words={(words, key) => <MarkdownText key={key} text={words} query="" />} />
           </>
         )}
       </div>

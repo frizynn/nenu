@@ -127,10 +127,7 @@ async function desk(browser: Browser, scheme: "dark" | "light") {
     const from = bridge.fake!.submitted.length;
     await page.locator("textarea").last().fill("Please address these, then push.");
     await page.getByRole("button", { name: "Send" }).click();
-    // A working agent asks: now, or after this turn.
-    const now = page.getByRole("button", { name: /^Send now/ });
-    seen["desk send asked now or later"] = (await now.count()) > 0;
-    if (await now.count()) await now.first().click();
+    // A working agent takes it now, as its terminal's Enter does (ADR 0113): nothing to answer.
     for (let i = 0; i < 40 && bridge.fake!.submitted.length === from; i++) await page.waitForTimeout(250);
     seen.submitted = bridge.fake!.submitted.slice(from);
     await page.waitForTimeout(800);

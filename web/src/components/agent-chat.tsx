@@ -1419,6 +1419,7 @@ export function AgentChat({
               returnFocus: actionsRef, onOpenChange: openChip }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
+            terminalView={conversationCapable && prefs.rawTerminal}
             prepareSend={showConversation ? panels.prepareSend : undefined}
             onInputFocus={() => { void panels.changePanel(null); }}
             dialogPresent={dialogPresent}

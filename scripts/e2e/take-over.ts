@@ -6,7 +6,7 @@ import type { TestBridge } from "./bridge.ts";
 import type { Check } from "./inline-images.ts";
 
 // The take-over bench (ADR 0112), on a phone in WebKit: a draft Nenu left in Claude's input box, the
-// way the 2026-10-21 report found it. Take over must bring the text into the composer and leave the
+// way the 2026-10-21 report found it. Add to mine (Take over) must bring the text into the composer and leave the
 // terminal's box empty, and Type into terminal must then reach the pane, Backspace included.
 
 export async function takeOverBench(bridge: TestBridge, browser: Browser, outDir: string): Promise<{ checks: Check[]; shots: string[] }> {
@@ -28,10 +28,10 @@ export async function takeOverBench(bridge: TestBridge, browser: Browser, outDir
     shots.push(path);
   };
   await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
-  await page.getByText("Draft in terminal").waitFor({ timeout: 15_000 });
+  await page.getByRole("group", { name: "Text in Claude's box" }).waitFor({ timeout: 15_000 });
   await shoot("stranded");
 
-  await page.getByRole("button", { name: "Take over" }).click();
+  await page.getByRole("button", { name: "Add to mine" }).click();
   for (let tries = 0; draft() && tries < 40; tries++) await page.waitForTimeout(100);
   const box = page.getByRole("textbox").first();
   check("Take over brings the draft into the composer", (await box.inputValue()) === stranded, await box.inputValue());

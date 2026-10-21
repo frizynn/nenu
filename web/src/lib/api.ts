@@ -662,11 +662,14 @@ export function sendKeys(
   );
 }
 
-/** Clear the agent's input box while it still holds `draft`, which the phone took over (ADR 0112). */
-export function clearTerminalDraft(paneId: string, draft: string, session?: string): Promise<ActionResponse> {
+/**
+ * Act on the agent's input box while it still holds `draft`: take it over into the composer (ADR
+ * 0112), discard it, or send it with Enter (ADR 0113).
+ */
+export function clearTerminalDraft(paneId: string, draft: string, session?: string, action: "take" | "discard" | "send" = "take"): Promise<ActionResponse> {
   return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/clear-draft`, session), {
     method: "POST",
-    body: JSON.stringify({ draft }),
+    body: JSON.stringify(action === "take" ? { draft } : { draft, action }),
   });
 }
 
