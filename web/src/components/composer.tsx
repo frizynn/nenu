@@ -55,7 +55,7 @@ import { DiffCommentChips } from "@/components/diff-comment-chips";
 import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
-import { ComposerChips, type ChipLine } from "@/components/composer-chips";
+import { ComposerChips, rowChips, type ChipLine } from "@/components/composer-chips";
 import { Fold } from "@/components/composer-fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
@@ -1590,7 +1590,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         </div>
         {/* The chips sit in the model's row, never on a line above the box: the thread keeps that
             height (ADR 0108, `run.ts chip-line`). The panel a chip opens floats over the thread. */}
-        {(modelControl || place || chips.chips.some((chip) => !chip.tucked) || chips.open) && (
+        {(modelControl || place || rowChips(chips.chips).length > 0 || chips.open) && (
           <div role="group" aria-label="Message tools" className="composer-meta">
             {/* The model gives way first: the chips and the place keep their width. */}
             {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}

@@ -49,6 +49,9 @@ export interface ChipView {
   content: ReactNode;
 }
 
+/** The chips drawn in the row: every one but those tucked into the ⋯ menu. */
+export const rowChips = (chips: readonly ChipView[]) => chips.filter((chip) => !chip.tucked);
+
 const ENDED: ReadonlySet<NodeState> = new Set(["merging", "closing", "resolved"]);
 
 /** The threads around a chat, the chat's own left out: it is on screen already. */
@@ -215,7 +218,7 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     };
   }, [Boolean(shown)]);
 
-  const row = chips.filter((chip) => !chip.tucked);
+  const row = rowChips(chips);
   const close = () => closeRef.current("own");
   const trap = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab" || !panel.current) return;

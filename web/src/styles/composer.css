@@ -115,7 +115,7 @@
    height and neither the box nor the conversation moves when it opens. Marks are still; only the
    panel moves, once, as it opens. A phone keeps the word only for Needs you: the rest are a mark and a
    count, named in full to a screen reader. */
-.composer-dock { position: relative; }
+.composer-dock { position: relative; container: composer / inline-size; }
 .composer-chips { display: flex; flex: 0 0 auto; }
 .composer-chip-row { display: flex; align-items: center; gap: 2px; }
 .composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale var(--motion-control) var(--motion-ease); }
@@ -123,14 +123,17 @@
 .composer-chip[aria-expanded="true"] { background: var(--accent); }
 .composer-chip:active { scale: 0.97; }
 @media (hover: hover) { .composer-chip:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
-@media (max-width: 767px) {
+/* What gives way is read off the box's own width, so a phone and a thread docked beside its coordinator
+   on a desk take the same row. Narrow, only Needs you keeps its word, and with chips in the row the
+   model's effort and the context's number step aside (the model picker and the ring's own panel still
+   say them); the model's name truncates after that, and at a docked thread's narrowest it steps aside
+   too: the chips and the place keep their width. */
+@container composer (max-width: 479px) {
   .composer-chip { gap: 5px; padding: 0 7px; }
   .composer-chip:not([data-chip="needs"]) .composer-chip-label { display: none; }
-  /* With chips in the row the model's effort and the context's number step aside (the model picker and
-     the ring's own panel still say them), and the model's name is what truncates after that: the chips
-     and the place keep their width. */
   .composer-meta:has(.composer-chip) .workbench-effort, .composer-meta:has(.composer-chip) .workbench-context-number { display: none; }
 }
+@container composer (max-width: 299px) { .composer-meta:has(.composer-chip) .workbench-model { display: none; } }
 /* 44px of reach each way: at least 44px wide, and grown down into the home indicator's inset, never up
    into the box, as the row's other targets. */
 @media (pointer: coarse) {

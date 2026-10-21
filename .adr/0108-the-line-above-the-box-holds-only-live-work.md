@@ -69,13 +69,15 @@ chat (a worker with Needs you, Background and PRs; WebKit, 390×844 and 1440×90
 
 **Decision, replacing 1 and 5:** the live chips (Needs you, Working or Background, PRs) sit in the row
 under the box, between the model and the place. That row is there on every chat, so they cost no height
-and no width of the draft. They are as quiet as the row's other controls; on a phone only Needs you
-keeps its word, the rest are a mark and a count (a dot, a pull-request icon), named in full to a screen
-reader. Each is at least 44 px wide on a touch screen, and its 44 px reach grows down, away from the
-box. When the row is full on a phone the model gives way: while chips are there its effort word and
-the context's number step aside (the picker and the ring's panel still say them), then its name
-truncates; the chips and the place keep their width. On a desk the place gives way: the branch and the
-machine truncate side by side inside it. The panel a chip opens still floats over the
+and no width of the draft. They are as quiet as the row's other controls; only Needs you
+keeps its word in a narrow box, the rest are a mark and a count (a dot, a pull-request icon), named in
+full to a screen reader. Each is at least 44 px wide on a touch screen, and its 44 px reach grows down, away from the
+box. What gives way is read off the box's own width (a container query), so a phone and a thread
+docked beside its coordinator take the same row: under 480 px only Needs you keeps its word and, while
+chips are there, the model's effort and the context's number step aside (the picker and the ring's
+panel still say them), then the model's name truncates, and under 300 px it steps aside too; the chips
+and the place keep their width. On a desk the place gives way: the branch and the machine truncate side
+by side inside it. The panel a chip opens still floats over the
 thread from the box's top edge. With the phone's keyboard up the row gives its height back, chips
 included, as the line did; an open panel stays. Nothing folds: the row does not change height.
 `run.ts chip-line` (with a model reported, as in a real session) fails when anything sits between the
