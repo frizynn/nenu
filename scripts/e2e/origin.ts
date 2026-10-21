@@ -141,7 +141,8 @@ try {
     await toProject(page);
   }, "/", { system: true });
 
-  // #208: Home → project → coordinator → Threads → ‹ → ‹ ends at the entry + 2.
+  // #208: Home → project → coordinator's page → its chat → Threads → ‹ → ‹ ends at the entry + 3; the
+  // coordinator's page is the entry a phone's row opens (ADR 0110).
   const context = await browser.newContext({ ...PHONE, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
   const page = await context.newPage();
   await page.goto(bridge.url + "/");
@@ -151,6 +152,8 @@ try {
   await toProject(page);
   await settle(page);
   await click('main >> text="Rediseño mobile"')(page);
+  await settle(page);
+  await page.locator("main").getByRole("button", { name: "Open chat" }).click({ timeout: 5000 });
   await settle(page);
   await page.getByRole("tab", { name: /^Threads/ }).click({ timeout: 5000 });
   await settle(page);
