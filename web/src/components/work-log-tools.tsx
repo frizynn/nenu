@@ -131,7 +131,11 @@ function StepLine({ icon, live, label, title, expanded, controls, onToggle, chil
   children: ReactNode;
 }) {
   const chevron = <ChevronRight aria-hidden="true" className={cn(CHEVRON, expanded && "rotate-90", !onToggle && "invisible")} />;
-  const text = live ? <Glow layout={ROW_TEXT}>{children}</Glow> : <span className={ROW_TEXT}>{children}</span>;
+  // Live, the glow spans the words only, so its light is on them for the whole pass, not on the row's
+  // empty end; the spacer keeps the chevron in its column.
+  const text = live
+    ? <><Glow layout="flex min-w-0 items-center gap-2">{children}</Glow><span className="flex-1" /></>
+    : <span className={ROW_TEXT}>{children}</span>;
   if (!onToggle) return <div className={ROW} title={title}>{icon}{text}{chevron}</div>;
   return <button type="button" data-work-toggle={live ? undefined : true} aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
     title={title} className={ROW}>
