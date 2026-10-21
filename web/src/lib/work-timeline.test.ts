@@ -259,7 +259,7 @@ describe("liveStep", () => {
 });
 
 describe("workSegments", () => {
-  it("cuts the work at the agent's words, one run of steps between two texts, the live step left out but naming its run", () => {
+  it("cuts the work at the agent's words, one run of steps between two texts, the live step left out", () => {
     const first = entry("a", { parts: [text("Looking"), tool, thought] });
     const second = entry("b", { parts: [tool, text("Found it"), text("And more"), tool] });
     const segments = workSegments([first, second], { part: tool as WorkStep["part"], entry: "b", index: 3 });
