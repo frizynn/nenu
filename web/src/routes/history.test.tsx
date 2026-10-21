@@ -116,8 +116,8 @@ describe("history with nothing to read", () => {
     expect(await screen.findByRole("heading", { name: "This pane is closed" })).toBeInTheDocument();
     // The one action style every empty and error page shares: the large ink button.
     // Every empty state says the way home in the same words (not-found.tsx, pane-gone.tsx).
-    expect(within(screen.getByRole("main")).getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
-    expect(within(screen.getByRole("main")).getByRole("link", { name: "Go to Home" })).not.toHaveClass("text-sm");
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground", "text-body");
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Go to Home" })).not.toHaveClass("text-footnote");
     await user.click(within(screen.getByRole("main")).getByRole("link", { name: "Go to Home" }));
     expect(router.state.location.pathname).toBe("/");
   });

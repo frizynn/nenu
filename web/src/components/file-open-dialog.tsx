@@ -69,10 +69,10 @@ export function FileOpenButton({ paneId, session, path, label, className, childr
       <Dialog open={open} onClose={close} title="Open this file outside Nenu's preview?"
         description="It opens in a new browser tab. Web pages and SVG run sandboxed there, with no network and no access to Nenu. Other files may download.">
         <code className="mt-3 block select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">{path}</code>
-        <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
+        <p className="mt-2 text-footnote text-muted-foreground" aria-live="polite">
           {grant.state === "loading" ? "Checking the file…" : ready ? formatFileSize(ready.size) : null}
         </p>
-        {grant.state === "refused" && <p role="alert" className="mt-2 text-sm text-destructive">{grant.error}</p>}
+        {grant.state === "refused" && <p role="alert" className="mt-2 text-footnote text-destructive">{grant.error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="ghost" size="lg" onClick={close}>Cancel</Button>
           {ready

@@ -15,7 +15,7 @@ export function TranscriptQuestion({ title, options, descriptions, active }: { t
   if (active && live === "card") return null;
   const described = descriptions?.some(Boolean) ?? false;
   return <section aria-label="Agent question" className="space-y-2 rounded-lg border bg-muted/30 p-3">
-    <p className="text-sm font-medium">{title}</p>
+    <p className="text-footnote font-medium">{title}</p>
     {/* Options that say what they mean read as rows, label over meaning, like the live card's answers. */}
     {options.length > 0 && <div className={described ? "flex flex-col gap-2" : "flex flex-wrap gap-2"}>
       {options.map((option, index) => {
@@ -23,7 +23,7 @@ export function TranscriptQuestion({ title, options, descriptions, active }: { t
         const { text, recommended } = recommendedLabel(option);
         const description = descriptions?.[index];
         return <button key={index} type="button" disabled={!active || !prepare}
-          className={cn("inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-3 text-left text-sm disabled:text-muted-foreground",
+          className={cn("inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-3 text-left text-footnote disabled:text-muted-foreground",
             described && "w-full flex-col items-start justify-center gap-0.5 py-2")}
           onClick={() => prepare?.(`${title}\n${option}`)}>
           <span className="inline-flex flex-wrap items-center gap-2">

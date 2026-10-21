@@ -75,7 +75,7 @@ export default function PdfPreview({ bytes }: { bytes: ArrayBuffer }) {
       <span aria-live="polite">{document ? `${page} / ${document.numPages}` : "Opening PDF…"}</span>
       <button type="button" className="file-preview-action disabled:opacity-30" aria-label="Next page" disabled={!document || page >= document.numPages} onClick={() => setPage((value) => value + 1)}><ChevronRight className="size-4" /></button>
     </div>
-    {error ? <p role="alert" className="p-5 text-sm">{error}</p> : <div className="relative p-3" aria-busy={rendering}>
+    {error ? <p role="alert" className="p-5 text-footnote">{error}</p> : <div className="relative p-3" aria-busy={rendering}>
       {rendering && <p role="status" className="absolute inset-x-3 top-4 text-center text-xs text-muted-foreground">Rendering page…</p>}
       <canvas ref={canvas} aria-label={`PDF page ${page}`} className="mx-auto bg-white" />
     </div>}

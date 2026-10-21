@@ -28,7 +28,7 @@ export function PromptRequestContext({ prompt }: { prompt: PromptModel }) {
   return (
     <div aria-label="Request details" className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
       <div className="mb-1 text-xs font-medium text-muted-foreground">Request details</div>
-      <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{context}</div>
+      <div className="whitespace-pre-wrap break-words text-subhead text-foreground">{context}</div>
     </div>
   );
 }

@@ -559,7 +559,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
                 </div>
               }>Send a message to start, or link the one already running.</EmptyState>}
               {footer}
-            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-footnote text-muted-foreground">
               <ChatCircle className="size-5" />
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && offer && <div className="w-full max-w-sm">{offer}</div>}

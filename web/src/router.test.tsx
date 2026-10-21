@@ -60,9 +60,9 @@ describe("routes", () => {
     expect(screen.getByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("/this/does/not/exist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/?s=qa");
-    // The large button's 16px label: a link wearing buttonVariants bare keeps the base text-sm beside it.
-    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
-    expect(screen.getByRole("link", { name: "Go to Home" })).not.toHaveClass("text-sm");
+    // The large button's body label: a link wearing buttonVariants bare keeps the base text-footnote beside it.
+    expect(screen.getByRole("link", { name: "Go to Home" })).toHaveClass("ui-button-lg", "bg-foreground", "text-body");
+    expect(screen.getByRole("link", { name: "Go to Home" })).not.toHaveClass("text-footnote");
     expect(screen.queryByText(/Nenu hit a problem|Something went wrong/)).not.toBeInTheDocument();
     router.dispose();
   });

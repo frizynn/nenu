@@ -265,7 +265,7 @@ export function ChatFilesBrowser({
 
         {filter === "project" ? <ProjectFilesBrowser key={`${paneId}:${session}`} paneId={paneId} session={session} onOpen={openReference} /> : <>
         {filter === "file" && <div className="mb-3 flex flex-wrap gap-2">
-          <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-sm" />
+          <input ref={searchRef} aria-label="Search files" placeholder="Search name or path…" value={query} onChange={event => setQuery(event.target.value)} className="min-h-11 min-w-0 flex-[1_1_100%] rounded-md border bg-background px-3 text-footnote" />
           {/* At least 9rem each, so the longest default ("Recent first") clears the chevron. */}
           <SelectField aria-label="File extension" value={extension} onChange={event => setExtension(event.target.value)} className="flex-[1_1_9rem]">
             <option value="all">Any format</option>{extensions.map(ext => <option key={ext} value={ext}>.{ext}</option>)}
@@ -275,14 +275,14 @@ export function ChatFilesBrowser({
           </SelectField>
         </div>}
         {scan.loading && (
-          <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground">
+          <div role="status" className="mb-3 flex min-h-11 items-center gap-2 rounded-lg bg-muted/50 px-3 text-footnote text-muted-foreground">
             <Pending aria-hidden="true" className="size-4" />
             Scanning the full conversation…
           </div>
         )}
 
         {scan.error && (
-          <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-footnote">
             <span>Some older messages could not be scanned.</span>
             <Button variant="outline" size="sm" className="min-h-11" onClick={retry}>
               <RefreshCw aria-hidden="true" className="size-4" /> Retry
@@ -299,7 +299,7 @@ export function ChatFilesBrowser({
                   className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileIcon name={reference.name} /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{reference.name}</span>
+                    <span className="block truncate text-footnote font-medium">{reference.name}</span>
                     <span className="block truncate font-mono text-caption text-muted-foreground">{reference.path}</span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-muted-foreground">
@@ -313,7 +313,7 @@ export function ChatFilesBrowser({
         ) : !scan.loading && (
           <div className="rounded-xl border border-dashed px-5 py-10 text-center">
             <FileText aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" />
-            <p className="text-sm font-medium">{query || extension !== "all" ? "No matching files" : "No files in this conversation"}</p>
+            <p className="text-footnote font-medium">{query || extension !== "all" ? "No matching files" : "No files in this conversation"}</p>
             <p className="mt-1 text-xs text-muted-foreground">Browse Project for the working directory.</p>
           </div>
         )}

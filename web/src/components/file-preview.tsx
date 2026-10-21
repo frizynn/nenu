@@ -283,11 +283,11 @@ function DocumentContent({ data, name, openRelated, hrefRelated, onError }: { da
       // A picture under a name without an image extension: the bridge's type says what it is.
       return <img src={data.url} alt={name} decoding="async" className="mx-auto h-auto max-w-full" onError={() => onError("Could not load this image.")} />;
     case "text":
-      if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{data.text}</pre>;
+      if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-code whitespace-pre">{data.text}</pre>;
       return <FilePreviewContext.Provider value={openRelated}><FileHrefContext.Provider value={hrefRelated}>
         <MarkdownText text={data.text} className="mx-auto max-w-3xl p-5 sm:p-8" />
       </FileHrefContext.Provider></FilePreviewContext.Provider>;
   }
 }
 
-function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Pending className="size-4" />Loading document…</div>; }
+function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-footnote text-muted-foreground"><Pending className="size-4" />Loading document…</div>; }

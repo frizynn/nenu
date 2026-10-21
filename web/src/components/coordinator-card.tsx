@@ -81,7 +81,7 @@ function CoordinatorCard({ status, usage, asks, asksTitled, agents, prs, summari
 }) {
   const updated = Date.parse(status?.updated ?? "");
 
-  return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
+  return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-footnote">
     {status?.objective && <div>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-footnote font-semibold text-muted-foreground">Objective</h3>

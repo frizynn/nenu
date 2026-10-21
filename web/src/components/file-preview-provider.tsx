@@ -27,7 +27,7 @@ class PreviewBoundary extends Component<{ children: ReactNode; onClose: () => vo
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
-    if (this.state.failed) return <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-[calc(100vw-32px)] rounded-lg border bg-background p-4 text-sm">
+    if (this.state.failed) return <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-[calc(100vw-32px)] rounded-lg border bg-background p-4 text-footnote">
       <p>The document viewer could not load. Reload Nenu to try again.</p>
       <div className="mt-2 flex gap-2"><button type="button" className="min-h-11 rounded-md border px-3" onClick={() => { void checkForUpdate(); }}>Reload Nenu</button><button type="button" className="min-h-11 px-3" onClick={this.props.onClose}>Close</button></div>
     </div>;
@@ -54,7 +54,7 @@ export function FilePreviewProvider({ paneId, session, panes, children }: { pane
   const href = useMemo(() => paneId ? (path: string) => filePagePath(paneId, path, session) : null, [paneId, session]);
   return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}><FileHrefContext.Provider value={href}><MediaViewerContext.Provider value={viewer}>
     {children}
-    {visible && <PreviewBoundary key={visible.seq} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-sm">Opening document…</div>}>
+    {visible && <PreviewBoundary key={visible.seq} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-footnote">Opening document…</div>}>
       <FilePreview key={`${paneId}:${session}`} paneId={visible.paneId} session={session} items={visible.items} start={visible.start} panes={panes} onClose={close} />
     </Suspense></PreviewBoundary>}
   </MediaViewerContext.Provider></FileHrefContext.Provider></FilePreviewContext.Provider></FileMediaContext.Provider>;

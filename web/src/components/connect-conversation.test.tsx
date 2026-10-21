@@ -41,7 +41,7 @@ describe("ConnectConversation", () => {
     const user = userEvent.setup();
     render(<RecoveryLeads.Provider value><ConnectConversation paneId="w2:codex" disabled={false} onConnected={vi.fn()} /></RecoveryLeads.Provider>);
     const find = screen.getByRole("button", { name: "Find Codex conversations" });
-    expect(find).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+    expect(find).toHaveClass("ui-button-lg", "bg-foreground", "text-body");
     expect(find).not.toHaveClass("w-full");
     await user.click(screen.getByRole("button", { name: "Enter a session ID" }));
     // The block tier: a card's one commit, full width, the option rows' radius and type.

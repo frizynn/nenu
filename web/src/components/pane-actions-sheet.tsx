@@ -108,7 +108,7 @@ export function PaneActionsSheet({
   return (
     <BottomSheet open={open} onClose={onClose} title={name}>
       {readOnly ? (
-        <p className="py-2 text-sm text-muted-foreground">
+        <p className="py-2 text-footnote text-muted-foreground">
           Read-only — this device isn't authorised to rename or close panes.
         </p>
       ) : mode === "actions" ? (

@@ -83,7 +83,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
           <FileLink path={target} onOpen={() => onOpen(target)} label={`Open ${board ?? file.name}`} title={file.path} className={ROW}>
             <span className={cn(TILE, board && "text-primary")}><Icon aria-hidden="true" className="size-4" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">{board ?? file.name}</span>
+              <span className="block truncate text-footnote font-medium">{board ?? file.name}</span>
               <span className="block truncate text-xs text-muted-foreground">{caption(kind, when(file.lastSeen.timestamp))}</span>
             </span>
           </FileLink>
@@ -99,7 +99,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
             <img src={paneFileUrl(paneId, file.src, session)} alt="" loading="lazy" className="size-full object-contain"
               onError={() => setBroken((known) => new Set(known).add(file.path))} />
           </span>
-          <span className="mt-1.5 block truncate text-sm font-medium">{file.name}</span>
+          <span className="mt-1.5 block truncate text-footnote font-medium">{file.name}</span>
           <span className="block truncate text-xs text-muted-foreground">{caption(fileExtension(file).toUpperCase(), when(file.lastSeen.timestamp))}</span>
         </FileLink>)}
       </div>
@@ -109,7 +109,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
       <button type="button" aria-expanded={outsideOpen} onClick={() => setOutsideOpen((open) => !open)} className={cn(ROW, "px-3")}>
         <Lock aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm">{sections.outside.length} {sections.outside.length === 1 ? "image" : "images"} named outside the pane's folder</span>
+          <span className="block text-footnote">{sections.outside.length} {sections.outside.length === 1 ? "image" : "images"} named outside the pane's folder</span>
           <span className="block text-xs text-muted-foreground">No preview. Open asks you first.</span>
         </span>
         <ChevronRight aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", outsideOpen && "rotate-90")} />
@@ -118,7 +118,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
         <FileOpenButton paneId={paneId} session={session} path={file.path} label={`Open ${file.name}`} className={ROW}>
           <span className={TILE}><ImageIcon aria-hidden="true" className="size-4" /></span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">{file.name}</span>
+            <span className="block truncate text-footnote font-medium">{file.name}</span>
             <span className="block truncate font-mono text-caption text-muted-foreground">{file.path}</span>
           </span>
         </FileOpenButton>
@@ -129,7 +129,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
 
     {empty && ready && !metadata.loading && <div className="rounded-xl border border-dashed px-5 py-10 text-center">
       <FileText aria-hidden="true" className="mx-auto mb-3 size-7 text-muted-foreground/60" />
-      <p className="text-sm font-medium">No artifacts in this conversation</p>
+      <p className="text-footnote font-medium">No artifacts in this conversation</p>
       <p className="mt-1 text-xs text-muted-foreground">Files the agent sends or links, its designboards and claude.ai pages show up here. Project and Files list the rest.</p>
     </div>}
   </>;

@@ -419,7 +419,7 @@ export function SideSheet({
         <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 pt-[env(safe-area-inset-top)]">
           <div className="flex min-h-13 min-w-0 flex-1 items-center pl-2">
             {content.heading ?? (
-              <span id={titleId} className="text-sm font-semibold">
+              <span id={titleId} className="text-subhead font-semibold">
                 {title}
               </span>
             )}

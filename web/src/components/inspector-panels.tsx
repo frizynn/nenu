@@ -146,7 +146,7 @@ function Changes({ paneId, session, pr }: { paneId: string; session?: string; pr
         </button>
       </div>
       <DiffBody read={read} comments={{ paneId, session }} empty={<div className="mx-4 rounded-xl border border-dashed px-5 py-8 text-center">
-        <p className="text-sm font-medium">{scope === "branch" ? "Nothing changed on this branch" : "Nothing left to commit"}</p>
+        <p className="text-footnote font-medium">{scope === "branch" ? "Nothing changed on this branch" : "Nothing left to commit"}</p>
         <p className="mt-1 text-xs text-muted-foreground">{scope === "branch" ? "The working tree matches where the branch started." : "Every edit in this folder is committed."}</p>
       </div>} />
     </div>

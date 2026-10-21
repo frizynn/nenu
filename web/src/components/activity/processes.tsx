@@ -163,7 +163,7 @@ export function ProcessesList({ processes, artifacts = [], finished, quiet = fal
         <span>Couldn’t refresh. Showing last known activity.</span>
         {onRetry && <button type="button" onClick={onRetry} className="min-h-11 rounded-md px-2 text-foreground hover:bg-muted/50 lg:min-h-8">Retry</button>}
       </div>}
-      {live.length === 0 && !quiet && <p className="px-2 py-2 text-sm text-muted-foreground">Nothing running in the background.</p>}
+      {live.length === 0 && !quiet && <p className="px-2 py-2 text-footnote text-muted-foreground">Nothing running in the background.</p>}
       {live.length > 0 && <ul aria-label="In progress" className="flex flex-col">{live.map(row)}</ul>}
       {doneCount > 0 && <Fold title="Done" count={doneCount} defaultOpen={quiet} extra={(open) => open && processes.done.length > DONE_PREVIEW &&
         <button type="button" onClick={() => setAll(!all)} className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground lg:min-h-8">{all ? "Show less" : "Show all"}</button>}>
@@ -191,7 +191,7 @@ export function ProcessDetailView({ paneId, session, activity, detail, now, onCh
   // An answer still in flight for the run shown before is not this run's.
   const own = loaded.detail?.workflow.runId === detail.runId ? loaded.detail : null;
   const shown = own?.workflow ?? listed;
-  if (!shown) return <p role="status" className="text-sm text-muted-foreground">{loaded.failed ? "This workflow is no longer available." : "Loading workflow…"}</p>;
+  if (!shown) return <p role="status" className="text-footnote text-muted-foreground">{loaded.failed ? "This workflow is no longer available." : "Loading workflow…"}</p>;
   return <WorkflowDetail workflow={shown} results={own?.results} now={now} selectedAgentId={detail.agentId}
     onSelectAgent={(agentId) => onChange({ ...detail, agentId })} />;
 }
@@ -209,7 +209,7 @@ export function ProcessPanel({ title, onClose, children }: { title: string; onCl
   return (
     <aside aria-label={`Details: ${title}`} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }} className="flex min-h-0 w-[430px] max-w-[45%] shrink-0 flex-col border-l border-border bg-background">
       <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-subhead font-semibold">{title}</span>
         <Button variant="ghost" size="icon" aria-label="Close details" onClick={onClose}><X aria-hidden="true" /></Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>

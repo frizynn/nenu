@@ -63,7 +63,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <AgentIcon agent={agent} className="size-5" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
+          <h3 className="text-footnote font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
           <p className="mt-0.5 text-footnote text-muted-foreground">{parsed.kind === "reasoning" ? menu.title.replace(/^Select Reasoning Level for /i, "") : "Choose a model, then apply your selection."}</p>
         </div>
       </div>

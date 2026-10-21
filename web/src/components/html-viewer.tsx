@@ -124,8 +124,8 @@ export function HtmlViewer({ paneId, session, path, name, reload, onError }: {
             onLoad={() => setLoaded(true)}
           />
         : source === null
-          ? <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Pending className="size-4" />Loading source…</div>
-          : <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{source.text}</pre>}
+          ? <div role="status" className="flex items-center justify-center gap-2 p-10 text-footnote text-muted-foreground"><Pending className="size-4" />Loading source…</div>
+          : <pre className="overflow-x-auto p-5 font-mono text-code whitespace-pre">{source.text}</pre>}
     </div>
   </>;
 }

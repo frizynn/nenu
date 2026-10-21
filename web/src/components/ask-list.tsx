@@ -227,7 +227,7 @@ function AskCoordinator({ open, paneId, session, why, name, onCancel, onAsked }:
   return (
     <Dialog open={open} onClose={cancel} title="Ask the coordinator?"
       description={<>Nenu asks {name} to close what is still open, or to update the line and say why. {why.said}</>}>
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-footnote text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={cancel} disabled={busy}>Cancel</Button>
         <Button type="button" size="lg" onClick={() => void ask()} disabled={busy} aria-busy={busy || undefined}>{busy ? "Sending…" : "Ask the coordinator"}</Button>

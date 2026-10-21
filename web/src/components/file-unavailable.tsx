@@ -25,7 +25,7 @@ export function FileUnavailable({ failure, path, paneId, session, owner, onOpenF
   onRetry: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  if (!failure.outside) return <div role="alert" className="p-6 text-sm">
+  if (!failure.outside) return <div role="alert" className="p-6 text-footnote">
     <p>{failure.message}</p>
     <div className="mt-3 flex flex-wrap gap-2">
       <button type="button" className="min-h-11 rounded-md border px-4" onClick={onRetry}>Retry</button>
@@ -35,7 +35,7 @@ export function FileUnavailable({ failure, path, paneId, session, owner, onOpenF
   const copy = async () => {
     try { await navigator.clipboard.writeText(path); setCopied(true); } catch { setCopied(false); }
   };
-  return <div role="alert" className="mx-auto flex max-w-xl flex-col gap-3 p-6 text-sm">
+  return <div role="alert" className="mx-auto flex max-w-xl flex-col gap-3 p-6 text-footnote">
     <p className="font-medium">This file is outside this agent's folder</p>
     <p className="text-muted-foreground">
       Nenu only previews files inside the folder this agent works in, or files the agent sent with SendUserFile.

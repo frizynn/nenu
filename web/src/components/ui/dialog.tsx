@@ -58,7 +58,7 @@ export function Dialog({ open, onClose, title, description, children, className 
       {mounted && (
         <div className="p-5">
           <h2 id={titleId} className="text-base font-semibold">{content.title}</h2>
-          {content.description && <div id={descriptionId} className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{content.description}</div>}
+          {content.description && <div id={descriptionId} className="mt-1.5 text-subhead text-muted-foreground">{content.description}</div>}
           {content.children}
         </div>
       )}
@@ -79,7 +79,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, busy = f
 }) {
   return (
     <Dialog open={open} onClose={onCancel} title={title} description={description}>
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-footnote text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button type="button" variant="destructive" size="lg" onClick={onConfirm} disabled={busy} aria-busy={busy || undefined}>{busy ? "Working…" : confirmLabel}</Button>

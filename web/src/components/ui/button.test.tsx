@@ -40,7 +40,7 @@ describe("Button", () => {
     expect(button).toHaveClass("bg-foreground", "w-full", "min-h-10", "coarse:min-h-11", "rounded-lg", "text-body", "font-medium", "justify-center", "text-center");
     // A long label wraps inside the button instead of running past the card's edge.
     expect(button).toHaveClass("whitespace-normal");
-    for (const replaced of ["rounded-md", "text-sm", "whitespace-nowrap"]) expect(button).not.toHaveClass(replaced);
+    for (const replaced of ["rounded-md", "text-footnote", "whitespace-nowrap"]) expect(button).not.toHaveClass(replaced);
     // A press on a bar this wide stays a nudge (direction.md: 0.97 to 0.98), not the base's 0.96.
     expect(button).toHaveClass("active:scale-[0.98]");
     expect(button).not.toHaveClass("active:scale-[0.96]");

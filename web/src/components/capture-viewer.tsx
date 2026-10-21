@@ -52,7 +52,7 @@ export default function CaptureViewer({ images, start, onClose }: { images: read
       onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
       <div ref={panel} role="dialog" aria-modal="true" aria-label={current.label} tabIndex={-1} onKeyDown={onKeyDown} className="file-preview-panel file-preview-panel--image">
         <ImageViewer images={images} index={index} name={current.label} downloadUrl={current.src}
-          error={failed.has(current.src) ? <p className="p-4 text-sm">Could not load this picture.</p> : undefined}
+          error={failed.has(current.src) ? <p className="p-4 text-footnote">Could not load this picture.</p> : undefined}
           onStep={step} onClose={close} onDismissed={onClose} onImageError={(src) => mark(src, true)} onImageLoad={(src) => mark(src, false)} />
       </div>
     </div>,
