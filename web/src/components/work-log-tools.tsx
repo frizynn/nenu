@@ -16,12 +16,13 @@ import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Fold } from "./fold";
 import { LiveGlyph } from "./work-activity-label";
+import { StateMark } from "@/components/status-badge";
 
 // A turn's work as a timeline, the same on a phone and a desk: one line per step, its icon and what it
 // did in the quiet greys, so the steps read as the agent working and its prose as what it says. A
 // command reads as itself; a thought as its opening words. Several calls between two of the agent's
 // texts fold under one line ("Ran 3 commands"), and a step opens onto its command, coloured as a shell
-// reads it, and its output in grey (ADR 0113).
+// reads it, and its output in grey (ADR 0114).
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
 
@@ -169,7 +170,7 @@ function spokenPath(path: string, cwd: string): string {
 /** A call the operator has to answer for says so on its line: the blocked dot, and the words plain (direction.md). */
 function WaitingChip() {
   return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 text-caption text-foreground">
-    <span aria-hidden="true" className="size-1.5 rounded-full bg-status-blocked" />Waiting on you
+    <StateMark state="needs" />Waiting on you
   </span>;
 }
 

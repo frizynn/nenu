@@ -1,57 +1,39 @@
+import { Check, CircleAlert, CircleCheck, CircleDashed, GitMerge, type IconComponent } from "@/components/ui/icon";
+import type { NodeState } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 import type { AgentStatus } from "@/lib/types";
 
-const DOT: Record<AgentStatus, string> = {
-  blocked: "bg-status-blocked",
-  working: "bg-status-working",
-  done: "bg-status-done",
-  idle: "bg-status-idle",
-  unknown: "bg-status-unknown",
-};
+/** An agent's status in the tree's terms: a finished turn waits to be looked at, as a thread to review does. */
+export const AGENT_STATE: Record<AgentStatus, NodeState> = { blocked: "needs", working: "working", done: "review", idle: "idle", unknown: "idle" };
 
 /**
- * As a FILL, the status palette needs a different ramp than it does as text. Every --status-* value
- * is tuned near the same lightness for text contrast, so drawn as solid discs the resting states
- * (idle / unknown) carry exactly as much weight as blocked — eighteen idle dots would out-shout the
- * one thing that needs you. The resting states are therefore hollow rings; the states that mean
- * something is happening stay solid.
+ * One still glyph per state, told apart by its shape before its colour: what waits on you is a red
+ * alert, what is ready to look at a blue check, work in progress a grey dashed circle, a merge left
+ * its grey branch, a resolved node a grey tick. Colour is only for what asks something of you, and a
+ * resting node draws nothing, so a list shows at a glance only what is alive. Nothing spins: a state
+ * that lasts a whole turn is a still glyph (calm-motion.test).
  */
-const RESTING: ReadonlySet<AgentStatus> = new Set(["idle", "unknown"]);
-
-const RING: Record<AgentStatus, string> = {
-  blocked: "border-status-blocked",
-  working: "border-status-working",
-  done: "border-status-done",
-  idle: "border-status-idle/60",
-  unknown: "border-status-unknown/60",
+const MARK: Record<Exclude<NodeState, "idle">, { glyph: IconComponent; tone: string }> = {
+  needs: { glyph: CircleAlert, tone: "text-status-blocked" },
+  review: { glyph: CircleCheck, tone: "text-primary" },
+  working: { glyph: CircleDashed, tone: "text-muted-foreground" },
+  merging: { glyph: GitMerge, tone: "text-muted-foreground" },
+  closing: { glyph: GitMerge, tone: "text-muted-foreground" },
+  resolved: { glyph: Check, tone: "text-muted-foreground" },
 };
 
-export function StatusDot({
-  status,
-  surface = "bg-background",
-  className,
-}: {
-  status: AgentStatus;
-  /**
-   * The colour the dot sits ON. A hollow ring must be FILLED with its surface, not left
-   * transparent: over the avatar's corner a transparent interior showed orange logo through one
-   * half and page grey through the other, reading as a notch cut out of the icon rather than a
-   * badge. Pass the card's surface when the dot sits on a card.
-   */
-  surface?: string;
-  className?: string;
-}) {
-  const hollow = RESTING.has(status);
-  // One static node per status. Colour alone carries activity, avoiding a permanent compositor
-  // animation and the extra ping node for every working pane. 6px beside every row, chip and title;
-  // only an avatar's corner badge (sidebar-rail) passes a size of its own.
-  return (
-    <span
-      className={cn(
-        "inline-flex size-1.5 shrink-0 rounded-full",
-        hollow ? cn("border-[1.5px]", surface, RING[status]) : DOT[status],
-        className,
-      )}
-    />
-  );
+/** A state's mark, 14px; a resting one keeps the box empty so the names beside it stay in line. */
+export function StateMark({ state, className }: { state: NodeState; className?: string }) {
+  if (state === "idle") return <span aria-hidden data-node-state="idle" className={cn("inline-flex size-3.5 shrink-0", className)} />;
+  const { glyph: Glyph, tone } = MARK[state];
+  // A 2px stroke: at 14px the icon set's 1.5 left the dashed circle at 3:1 on the light bar.
+  return <Glyph aria-hidden data-node-state={state} strokeWidth={2} className={cn("size-3.5 shrink-0", tone, className)} />;
+}
+
+/** Whether an agent's status draws nothing: where no column holds the names in line, leave its mark out. */
+export const resting = (status: AgentStatus) => AGENT_STATE[status] === "idle";
+
+/** An agent's mark: the same glyph its state draws in the tree. */
+export function StatusDot({ status, className }: { status: AgentStatus; className?: string }) {
+  return <StateMark state={AGENT_STATE[status]} className={className} />;
 }

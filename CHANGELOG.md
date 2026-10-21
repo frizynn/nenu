@@ -16,8 +16,19 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- Opening and closing a turn, a group, a command or a thought folds open in 180 ms and shut in 120 ms; under reduced motion it only fades; a search hit inside one is simply there (0b29b720, 3aadc6af, 22e7ce9a).
+- Opening and closing a turn, a group, a command or a thought folds open in 180 ms and shut in 120 ms; under reduced motion it only fades; a search hit inside one is simply there (0b29b720, 3aadc6af, 22e7ce9a, 12366e0f).
 - `bun scripts/e2e/run.ts commands` replays the command demo at 1440×900 and 390×844 and checks the grouping (c5f2088b).
+
+## [1.38.5] - 2026-10-21
+
+### Changed
+
+- A state is a still glyph instead of a coloured dot, in the bar, Home, a project and the chat: a red alert waits on you, a blue check is to review, a grey dashed circle works, nothing at rest (13a17b47, e344eee0).
+- The desk's bar reads resting chats in the muted ink, on 32px rows; what is alive keeps the full ink (65e2b047).
+
+### Fixed
+
+- A long chat name no longer widens the desk's bar: it ends in "…", and a sideways swipe can no longer cut the projects to "M" or float "N updates" past the rows (762beb09).
 
 ## [1.38.4] - 2026-10-21
 

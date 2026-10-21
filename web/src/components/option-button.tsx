@@ -4,6 +4,7 @@ import { Check } from "@/components/ui/icon";
 import { RecommendedBadge, recommendedLabel } from "@/components/recommended-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { StateMark } from "@/components/status-badge";
 
 // The one shared visual language for a dialog: the card every dialog is drawn as (the bridge's
 // QuestionCard and each block a grammar lifts off the screen), its option list and its actions. One
@@ -20,7 +21,7 @@ export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-xl border border
 export function WaitingOnYou() {
   return (
     <span className="flex shrink-0 items-center gap-2 font-medium text-foreground">
-      <span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />
+      <StateMark state="needs" />
       Waiting on you
     </span>
   );

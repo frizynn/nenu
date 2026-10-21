@@ -21,3 +21,22 @@ describe("a chat's row that can't be opened", () => {
     expect(declarations(css, "button.nav-pane:disabled:hover", [LAYER, "@media (hover: hover)"]).background).toBe("none");
   });
 });
+
+describe("a row More folds", () => {
+  // The fold is a grid, and its clipped box is no scroller, so it kept a grid item's automatic minimum:
+  // a chat's whole name. One long name widened every row and label past the bar, and a sideways swipe
+  // scrolled the list until the projects read "M" (21/10). bun scripts/e2e/sidebar.ts measures the bar.
+  it("lets its box narrow to the bar, so a long name ends in an ellipsis instead of widening the list", () => {
+    const inner = declarations(css, ".nav-reveal-inner", [LAYER]);
+    expect(inner["min-width"]).toBe("0");
+    expect(inner.overflow).toBe("clip");
+  });
+});
+
+describe("a resting chat in the desk's bar", () => {
+  // The muted rule outweighs the shared hover rule (0,3,0 against 0,2,0), so the pointer needs its own.
+  it("steps back to the muted ink and takes the full ink back under the pointer", () => {
+    expect(declarations(css, '.nav-chats .nav-row:not([data-live], [aria-current="page"])', [LAYER]).color).toBe("var(--muted-foreground)");
+    expect(declarations(css, ".nav-chats .nav-row:hover", [LAYER, "@media (hover: hover)"]).color).toBe("var(--foreground)");
+  });
+});

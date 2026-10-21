@@ -259,7 +259,7 @@ function askedCall(turn: WorkTurn): string | undefined {
  * A turn: one line that says how long it worked ("Working for 9s", "Worked for 12s ⌄") and when it
  * finished, then what it did in order, the agent's words between its runs of steps, and its answer.
  * A running turn is open, its step in progress last; a finished one folds to its line and its answer,
- * and opens again with a tap, the same on a phone and a desk (ADR 0113).
+ * and opens again with a tap, the same on a phone and a desk (ADR 0114).
  */
 function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
