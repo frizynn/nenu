@@ -134,7 +134,7 @@ export function AppHeader({
             {title !== undefined && !home && (
               <div
                 aria-hidden={titleHidden || undefined}
-                className={cn("flex min-w-0 flex-col transition-opacity duration-150 ease-out motion-reduce:duration-100", titleHidden && "opacity-0")}
+                className={cn("flex min-w-0 flex-col transition-opacity duration-120 ease-out motion-reduce:duration-120", titleHidden && "opacity-0")}
               >
                 <h1 className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</h1>
                 {subtitle && <span className="truncate text-footnote text-muted-foreground">{subtitle}</span>}

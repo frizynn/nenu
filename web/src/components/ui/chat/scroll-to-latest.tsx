@@ -27,7 +27,7 @@ export function ScrollToLatest({ onClick, waiting = false, count = 0, changed = 
     <div className={cn("pointer-events-none flex", corner && !pill ? "justify-end" : "justify-center")}>
       <button key={pill ? "pill" : "circle"} type="button" onClick={onClick} aria-label={pill ? undefined : changed ? "Scroll to latest, updated" : "Scroll to latest"}
         className={cn(
-          "pointer-events-auto relative flex h-9 shrink-0 items-center justify-center rounded-full shadow-(--shadow-float) transition-[scale,background-color] duration-150 ease-out active:scale-[0.97] animate-in fade-in slide-in-from-bottom-1 coarse:h-11 motion-reduce:animate-none motion-reduce:transition-none",
+          "pointer-events-auto relative flex h-9 shrink-0 items-center justify-center rounded-full shadow-(--shadow-float) transition-[scale,background-color] duration-120 ease-out active:scale-[0.97] animate-in fade-in slide-in-from-bottom-1 coarse:h-11 motion-reduce:animate-none motion-reduce:transition-none",
           pill ? "gap-1.5 px-4 text-footnote font-medium" : "w-9 coarse:w-11",
           fresh ? "bg-foreground text-background hover:bg-foreground/90" : "border bg-popover text-popover-foreground hover:bg-accent",
         )}>

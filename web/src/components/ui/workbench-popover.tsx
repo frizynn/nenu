@@ -30,7 +30,7 @@ interface WorkbenchPopoverProps {
 const PHONE_SHEET = [
   "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
   "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
-  "max-lg:duration-300 max-lg:ease-[cubic-bezier(0.32,0.72,0,1)] max-lg:animate-in max-lg:slide-in-from-bottom motion-reduce:animate-none",
+  "max-lg:duration-180 max-lg:ease-out max-lg:animate-in max-lg:slide-in-from-bottom motion-reduce:animate-none",
 ].join(" ");
 
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */

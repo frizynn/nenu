@@ -27,7 +27,7 @@ function Switch({ checked, onCheckedChange, disabled, id, ...rest }: SwitchProps
       onClick={() => onCheckedChange(!checked)}
       data-slot="switch"
       className={cn(
-        "hit-area inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-out motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
+        "hit-area inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-120 ease-out motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
         SIZE,
         // Off is a solid track, not a hollow outline. The track alone is 1.27:1 on a white card, so
         // an inset ring carries the 3:1 that WCAG 1.4.11 asks of the state: 3.3:1 light, 3.6:1 dark.
@@ -37,7 +37,7 @@ function Switch({ checked, onCheckedChange, disabled, id, ...rest }: SwitchProps
     >
       <span
         className={cn(
-          "pointer-events-none block size-5 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition-transform duration-200 ease-out motion-reduce:transition-none coarse:size-[27px]",
+          "pointer-events-none block size-5 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition-transform duration-120 ease-out motion-reduce:transition-none coarse:size-[27px]",
           checked ? "translate-x-[18px] coarse:translate-x-[22px]" : "translate-x-0.5",
         )}
       />

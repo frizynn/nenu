@@ -213,7 +213,7 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
         aria-hidden="true"
         tabIndex={-1}
         className={cn(
-          "absolute inset-0 bg-black/50 duration-200 ease-out motion-reduce:animate-none lg:duration-150",
+          "absolute inset-0 bg-black/50 duration-180 ease-out motion-reduce:animate-none",
           closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open,
         )}
         onPointerDown={() => {
@@ -233,9 +233,9 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
           transition: drag.current.engaged ? "none" : undefined,
         }}
         className={cn(
-          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl outline-none border-t border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
+          "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl outline-none border-t border-border bg-background shadow-2xl duration-180 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
-          "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)] lg:duration-150",
+          "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)]",
           // A released drag closes from where the finger left it: the exit runs from the panel's
           // own transform to fully below the screen.
           closing
@@ -410,7 +410,7 @@ export function SideSheet({
           transition: dragging.current ? "none" : undefined,
         }}
         className={cn(
-          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col outline-none border-r border-border bg-background shadow-2xl duration-200 ease-out motion-reduce:animate-none",
+          "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col outline-none border-r border-border bg-background shadow-2xl duration-180 ease-out motion-reduce:animate-none",
           // A released swipe closes from where the finger left it, out past the left edge.
           closing ? "animate-out slide-out-to-left fill-mode-forwards" : "animate-in slide-in-from-left-4",
           className,
@@ -449,7 +449,7 @@ export function SideSheet({
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        className={cn("flex-1 bg-black/50 duration-200 ease-out motion-reduce:animate-none", closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open)}
+        className={cn("flex-1 bg-black/50 duration-180 ease-out motion-reduce:animate-none", closing ? BACKDROP_MOTION.closing : BACKDROP_MOTION.open)}
         onPointerDown={() => {
           backdropArmed.current = true;
         }}

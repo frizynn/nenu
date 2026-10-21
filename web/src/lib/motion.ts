@@ -11,6 +11,11 @@ import { matchRoutes, useLocation, useNavigate, type DataRouter, type RouterNavi
  */
 export type Motion = "push" | "pop" | "fade";
 
+/** index.css's --motion-* tokens, for the few motions drawn from script (Web Animations). */
+export const MOTION_CONTROL_MS = 120;
+export const MOTION_PANEL_MS = 180;
+export const MOTION_EASE = "cubic-bezier(0.2, 0, 0, 1)";
+
 /** How long the old page may stay frozen on screen while the next one loads. Past it the change goes
  *  through as it always did, unanimated; under NAV_BUSY_THRESHOLD_MS, so a slow link still shows the bar. */
 export const MOTION_BUDGET_MS = 300;

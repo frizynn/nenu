@@ -75,7 +75,7 @@ export type OptionTone = "default" | "selected" | "busy";
 export function optionRow(tone: OptionTone = "default"): string {
   return cn(
     "flex min-h-9 w-full min-w-0 items-center gap-3 px-3.5 py-1.5 text-left select-none coarse:min-h-11 coarse:py-2",
-    "transition-colors duration-150 ease-out motion-reduce:transition-none focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed",
+    "transition-colors duration-120 ease-out motion-reduce:transition-none focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed",
     tone === "default" ? "enabled:hover:bg-[var(--workbench-row-hover)] enabled:active:bg-[var(--workbench-row-selected)]" : ROW_SELECTED,
   );
 }

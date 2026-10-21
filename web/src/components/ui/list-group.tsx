@@ -10,7 +10,7 @@ export const listRowClass =
 
 /** The press and hover tint of a row that is a control, clipped to the card's corners. */
 export const listRowPressable =
-  "select-none transition-colors duration-150 ease-out first:rounded-t-xl last:rounded-b-xl hover:bg-accent active:bg-muted motion-reduce:transition-none focus-visible:outline-offset-[-2px]";
+  "select-none transition-colors duration-120 ease-out first:rounded-t-xl last:rounded-b-xl hover:bg-accent active:bg-muted motion-reduce:transition-none focus-visible:outline-offset-[-2px]";
 
 export function ListSection({ title, footer, children }: { title?: ReactNode; footer?: ReactNode; children: ReactNode }) {
   const headingId = useId();

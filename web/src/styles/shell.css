@@ -18,14 +18,14 @@
 .rail-tile-dot { position: absolute; top: 3px; right: 3px; box-shadow: 0 0 0 2px var(--rail-surface); }
 /* A floating label, so it takes the popover surface and the float shadow. The pointer can rest on it.
    A long name wraps rather than losing its end, which is what tells client-x-events from client-x-orders. */
-.rail-tip { position: fixed; z-index: 60; max-width: 20rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); overflow-wrap: anywhere; translate: 0 -50%; animation: rail-tip-in 150ms ease-out; }
-.rail-tip[data-leaving] { pointer-events: none; animation: rail-tip-out 120ms ease-in forwards; }
+.rail-tip { position: fixed; z-index: 60; max-width: 20rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); box-shadow: var(--shadow-float); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); overflow-wrap: anywhere; translate: 0 -50%; animation: rail-tip-in var(--motion-control) var(--motion-ease); }
+.rail-tip[data-leaving] { pointer-events: none; animation: rail-tip-out var(--motion-control) var(--motion-ease) forwards; }
 
 /* The phone's tab bar: in flow under the route, so nothing scrolls behind it, clear of the home indicator,
    and pinned to the bottom even when the route draws nothing yet (a redirect on its way).
    Five tabs of one weight, New included, so the Needs you badge is what draws the eye. */
 .bottom-tab-bar { display: flex; flex-shrink: 0; margin-top: auto; align-items: flex-start; justify-content: space-around; padding: 6px 12px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--chrome); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.bottom-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 64px; height: 48px; border-radius: var(--radius-lg); color: var(--subtle-foreground); font-size: var(--text-micro); line-height: var(--text-micro--line-height); font-weight: var(--text-micro--font-weight); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: scale 120ms ease-out; }
+.bottom-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 64px; height: 48px; border-radius: var(--radius-lg); color: var(--subtle-foreground); font-size: var(--text-micro); line-height: var(--text-micro--line-height); font-weight: var(--text-micro--font-weight); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: scale var(--motion-control) var(--motion-ease); }
 .bottom-tab:active { scale: 0.97; }
 .bottom-tab[aria-current="page"], .bottom-tab[aria-pressed="true"] { color: var(--foreground); }
 .bottom-tab[aria-current="page"] svg, .bottom-tab[aria-pressed="true"] svg { stroke-width: 1.75; }
@@ -42,8 +42,8 @@
 @media (prefers-reduced-motion: reduce) {
   .bottom-tab { transition: none; }
   .bottom-tab:active { scale: none; }
-  .rail-tip { animation: rail-tip-fade 100ms ease-out; }
-  .rail-tip[data-leaving] { animation: rail-tip-out 120ms ease-in forwards; }
+  .rail-tip { animation: rail-tip-fade var(--motion-control) var(--motion-ease); }
+  .rail-tip[data-leaving] { animation: rail-tip-out var(--motion-control) var(--motion-ease) forwards; }
 }
 
 @media (min-width: 1024px) {
@@ -63,8 +63,8 @@
 .resize-handle { position: absolute; inset-block: 0; z-index: 2; width: 8px; cursor: col-resize; touch-action: none; outline: none; }
 .resize-handle[data-edge="end"] { right: -4px; }
 .resize-handle[data-edge="start"] { left: -4px; }
-.resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 3px; width: 2px; background: transparent; transition: background-color 120ms ease-out; }
-@media (hover: hover) { .resize-handle:hover::after { background: color-mix(in srgb, var(--foreground) 22%, transparent); transition-delay: 150ms; } }
+.resize-handle::after { content: ""; position: absolute; inset-block: 0; left: 3px; width: 2px; background: transparent; transition: background-color var(--motion-control) var(--motion-ease); }
+@media (hover: hover) { .resize-handle:hover::after { background: color-mix(in srgb, var(--foreground) 22%, transparent); transition-delay: var(--motion-control); } }
 .resize-handle[data-dragging]::after, .resize-handle:focus-visible::after { background: var(--ring); transition-delay: 0ms; }
 :root[data-resizing], :root[data-resizing] * { cursor: col-resize !important; user-select: none; }
 @media (prefers-reduced-motion: reduce) { .resize-handle::after { transition: none; } }

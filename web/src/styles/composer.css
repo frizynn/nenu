@@ -9,7 +9,7 @@
 /* useFocusInPlace parks focus on the surface between a touch on the draft and its tap: no ring for that. */
 .composer-surface:focus { outline: none; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
-.composer-box { display: flex; flex-wrap: wrap; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color 150ms ease-out; }
+.composer-box { display: flex; flex-wrap: wrap; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color var(--motion-control) var(--motion-ease); }
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
 .composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
 /* Nothing can be written: a quiet well that holds only the reason. */
@@ -38,16 +38,16 @@
 @media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--accent); } }
 /* A row above the box (the chips' line, a notice) folds open and shut, so the thread moves with it
    instead of jumping (composer-fold.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
-.composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms ease-out, opacity 220ms ease-out; }
+.composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
 /* No min-width either: the chips' line scrolls inside the composer's width instead of widening it. */
 .composer-fold > div { min-height: 0; min-width: 0; }
 .composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
-.composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: 150ms; }
+.composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: var(--motion-control); }
 @starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
 /* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
    menu it opens hangs above the box, never over the draft. */
-.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s; }
-.composer-plus { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; color: var(--muted-foreground); background: var(--muted); transition: color 150ms ease-out, background-color 150ms ease-out, scale 120ms ease-out; }
+.composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width var(--motion-control) var(--motion-ease), padding var(--motion-control) var(--motion-ease), opacity var(--motion-control) var(--motion-ease), visibility 0s; }
+.composer-plus { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; color: var(--muted-foreground); background: var(--muted); transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease); }
 .composer-plus[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
 .composer-plus:active { scale: 0.96; }
 @media (hover: hover) { .composer-plus:hover { color: var(--foreground); background: var(--accent); } }
@@ -101,8 +101,8 @@
   /* …and a typed draft gets the +'s width, so it wraps no sooner than it did without one; the + is
      back as soon as the box is empty or the keyboard goes down. The draft's inset moves with the
      column, so the text slides over as one piece, and the + is hidden only once it has faded. */
-  .workbench-chat[data-keyboard-open] .composer-input { transition: padding-left 150ms ease-out; }
-  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width 150ms ease-out, padding 150ms ease-out, opacity 150ms ease-out, visibility 0s 150ms; }
+  .workbench-chat[data-keyboard-open] .composer-input { transition: padding-left var(--motion-control) var(--motion-ease); }
+  .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { width: 0; padding: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: width var(--motion-control) var(--motion-ease), padding var(--motion-control) var(--motion-ease), opacity var(--motion-control) var(--motion-ease), visibility 0s var(--motion-control); }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-attachments { padding-left: 14px; }
 }
@@ -115,7 +115,7 @@
 .composer-line { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
 .composer-chip-row { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
 .composer-chip-row::-webkit-scrollbar { display: none; }
-.composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale 120ms ease-out; }
+.composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale var(--motion-control) var(--motion-ease); }
 .composer-chip[aria-expanded="true"] { background: var(--popover); border-color: color-mix(in oklab, var(--foreground) 14%, transparent); box-shadow: var(--shadow-float); }
 .composer-chip:active { scale: 0.97; }
 @media (hover: hover) { .composer-chip:hover { background: var(--popover); } }
@@ -124,7 +124,7 @@
   .composer-chip::before { content: ""; position: absolute; inset: -4px 0; }
 }
 .composer-chip-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 2px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), translate 200ms cubic-bezier(0.23, 1, 0.32, 1), scale 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+.composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 2px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity var(--motion-control) var(--motion-ease), translate var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease); }
 @starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; scale: 0.98; } }
 /* A desk's composer is wide: the panel keeps a list's measure, from the chips' edge. */
 @media (min-width: 768px) { .composer-chip-panel { right: auto; width: min(100%, 30rem); } }
@@ -147,7 +147,7 @@
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
-  .composer-fold { transition: opacity 120ms ease-out; }
+  .composer-fold { transition: opacity var(--motion-control) var(--motion-ease); }
   .composer-plus:active { scale: none; }
   .composer-chip, .composer-chip-panel { transition: none; }
   .composer-chip:active { scale: none; }

@@ -15,18 +15,18 @@
 .file-preview-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-weight: 500; }
 .file-preview-subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); color: var(--muted-foreground); }
 .file-preview-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
-.file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out; }
+.file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease); }
 @media (hover: hover) and (pointer: fine) { .file-preview-action:hover { background: var(--accent); color: var(--foreground); } }
 .file-preview-action:active { scale: 0.97; }
 @media (pointer: coarse) { .file-preview-action { width: 44px; height: 44px; } }
 
 /* Done leaves on a phone, the ✕ on a desk: one of the two is on screen at a time. Its 12px start
    padding plus the bar's 4px sets the word on the 16px gutter, and the target runs to the edge. */
-.preview-done { display: none; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--radius-md); font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; -webkit-user-select: none; user-select: none; transition: opacity 120ms ease-out; }
+.preview-done { display: none; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--radius-md); font-size: var(--text-headline); line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.01em; -webkit-user-select: none; user-select: none; transition: opacity var(--motion-control) var(--motion-ease); }
 .preview-done:active { opacity: 0.6; }
 
 .file-preview-tabs { display: flex; flex-shrink: 0; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--muted) 35%, transparent); }
-.file-preview-tab { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border-radius: var(--radius-md); padding: 0 12px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; transition: background-color 120ms ease-out, color 120ms ease-out; }
+.file-preview-tab { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border-radius: var(--radius-md); padding: 0 12px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 .file-preview-tab[aria-selected="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
 .file-preview-content { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; }
 .file-preview-html { display: block; width: 100%; height: 100%; min-height: 480px; border: 0; background: white; touch-action: pan-x pan-y; }
@@ -59,17 +59,17 @@
 
 /* Entry rises 8px into place; exit goes back the same way while the layer is still mounted. */
 @media (prefers-reduced-motion: no-preference) {
-  .file-preview-backdrop { transition: background-color 200ms ease-out; }
-  .file-preview-panel { transition: opacity 200ms ease-out, translate 200ms ease-out; }
+  .file-preview-backdrop { transition: background-color var(--motion-panel) var(--motion-ease); }
+  .file-preview-panel { transition: opacity var(--motion-panel) var(--motion-ease), translate var(--motion-panel) var(--motion-ease); }
   @starting-style {
     .file-preview-backdrop { background-color: transparent; }
     .file-preview-panel { opacity: 0; translate: 0 8px; }
   }
-  .file-preview-backdrop[data-leaving] { background-color: transparent; transition-duration: 150ms; }
-  .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; translate: 0 8px; transition-duration: 150ms; }
+  .file-preview-backdrop[data-leaving] { background-color: transparent; transition-duration: var(--motion-control); }
+  .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; translate: 0 8px; transition-duration: var(--motion-control); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .file-preview-panel { transition: opacity 120ms ease-out; }
+  .file-preview-panel { transition: opacity var(--motion-control) var(--motion-ease); }
   @starting-style { .file-preview-panel { opacity: 0; } }
   .file-preview-backdrop[data-leaving] .file-preview-panel { opacity: 0; }
 }
@@ -93,35 +93,35 @@
 /* A desk leaves room for the bars around the picture; a phone, on its side too, gives it the whole
    screen and floats the bars over it, as Photos does. */
 @media (min-width: 640px) and (pointer: fine) { .image-viewer-zoom { padding: 72px; } }
-.image-viewer-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; animation: image-viewer-appear 120ms ease-out 300ms forwards; }
+.image-viewer-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; animation: image-viewer-appear var(--motion-control) var(--motion-ease) var(--motion-page) forwards; }
 @keyframes image-viewer-appear { to { opacity: 1; } }
 .image-viewer-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 72px 16px; }
 .image-viewer-error > * { max-width: 36rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); color: var(--card-foreground); }
 
-.image-viewer-bar { position: absolute; inset-inline: 0; display: flex; align-items: center; gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); background: color-mix(in oklab, #000 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); transition: opacity 200ms ease-out, visibility 0s; }
+.image-viewer-bar { position: absolute; inset-inline: 0; display: flex; align-items: center; gap: 4px; padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right)); background: color-mix(in oklab, #000 55%, transparent); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); transition: opacity var(--motion-panel) var(--motion-ease), visibility 0s; }
 .image-viewer-top { top: 0; justify-content: space-between; min-height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
 .image-viewer-bottom { bottom: 0; justify-content: center; gap: 16px; min-height: calc(48px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
 .image-viewer-title { position: absolute; inset-inline: 96px; bottom: 0; height: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: var(--text-headline); line-height: 48px; font-weight: 600; letter-spacing: -0.01em; pointer-events: none; }
 .image-viewer-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
-.image-viewer-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-md); transition: background-color 120ms ease-out, scale 120ms ease-out; }
+.image-viewer-action { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-md); transition: background-color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease); }
 @media (hover: hover) and (pointer: fine) { .image-viewer-action:not(:disabled):hover { background: rgb(255 255 255 / 12%); } }
 .image-viewer-action:not(:disabled):active { scale: 0.97; }
 .image-viewer-action:disabled { color: #71717a; }
 .image-viewer-count { min-width: 4.5rem; text-align: center; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); font-variant-numeric: tabular-nums; }
-.image-viewer[data-chrome="hidden"] .image-viewer-bar, .image-viewer[data-gesture] .image-viewer-bar { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 200ms ease-out, visibility 0s linear 200ms; }
+.image-viewer[data-chrome="hidden"] .image-viewer-bar, .image-viewer[data-gesture] .image-viewer-bar { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--motion-panel) var(--motion-ease), visibility 0s var(--motion-panel); }
 @media (max-width: 639px) { .image-viewer .preview-close { display: none; } }
 
 /* Entry: the black fades up and the picture settles from 96%. Reduced motion keeps the fade only. */
 @media (prefers-reduced-motion: no-preference) {
-  .image-viewer-scrim { transition: opacity 200ms ease-out; }
-  .image-viewer-zoom > img { transition: opacity 200ms ease-out, scale 200ms ease-out; }
+  .image-viewer-scrim { transition: opacity var(--motion-panel) var(--motion-ease); }
+  .image-viewer-zoom > img { transition: opacity var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease); }
   @starting-style {
     .image-viewer-scrim { opacity: 0; }
     .image-viewer-zoom > img { opacity: 0; scale: 0.96; }
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .image-viewer-scrim, .image-viewer-zoom > img { transition: opacity 120ms ease-out; }
+  .image-viewer-scrim, .image-viewer-zoom > img { transition: opacity var(--motion-control) var(--motion-ease); }
   @starting-style { .image-viewer-scrim, .image-viewer-zoom > img { opacity: 0; } }
-  .image-viewer-bar { transition: opacity 120ms ease-out, visibility 0s; }
+  .image-viewer-bar { transition: opacity var(--motion-control) var(--motion-ease), visibility 0s; }
 }

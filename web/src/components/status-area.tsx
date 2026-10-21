@@ -154,7 +154,7 @@ function Toast({ message, leaving, ref, onHover, onFocusChange }: {
       style={offset ? { translate: `0 ${leaving ? offset - 8 : offset}px`, transitionDuration: dragging ? "0ms" : undefined } : undefined}
       className={cn(
         "pointer-events-auto relative w-full max-w-[22.375rem] touch-none rounded-xl border border-border bg-popover text-popover-foreground shadow-(--shadow-float) lg:w-90 lg:max-w-none",
-        "animate-in fade-in duration-150 ease-out motion-safe:slide-in-from-top-2 motion-reduce:duration-[120ms]",
+        "animate-in fade-in duration-120 ease-out motion-safe:slide-in-from-top-2 motion-reduce:duration-120",
         "transition-[opacity,translate] data-leaving:opacity-0 motion-safe:data-leaving:-translate-y-2",
       )}>
       {message.to ? (

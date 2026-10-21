@@ -80,7 +80,7 @@ export function HomeProjects({ projects, agents, session, now }: {
     {quiet.length > 0 && <>
       <button type="button" aria-expanded={quietShown} aria-controls="home-quiet-projects" onClick={() => setQuietShown(!quietShown)}
         className="mt-1 inline-flex min-h-9 items-center gap-1.5 self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
-        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform duration-150 motion-reduce:transition-none", quietShown && "rotate-90")} />
+        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform duration-120 motion-reduce:transition-none", quietShown && "rotate-90")} />
         Quiet <span className="tabular-nums font-normal">{quiet.length}</span>
       </button>
       {quietShown && <ul id="home-quiet-projects" aria-label="Quiet projects" className="flex flex-col max-sm:divide-y max-sm:divide-border">{quiet.map(row)}</ul>}

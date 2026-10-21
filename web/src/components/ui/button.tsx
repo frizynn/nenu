@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 // Heights live in the ui-button-* classes (index.css, components layer): 44px on a coarse pointer,
 // and a caller's own h-* or size-* still wins. `block` is the large primary of a card or a sheet.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,opacity,scale] duration-150 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:not-aria-busy:text-disabled-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.96] motion-reduce:active:scale-100 select-none",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,opacity,scale] duration-120 ease-out motion-reduce:transition-none disabled:pointer-events-none disabled:not-aria-busy:text-disabled-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.96] motion-reduce:active:scale-100 select-none",
   {
     variants: {
       variant: {

@@ -6,6 +6,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { loadSessionPanel } from "@/lib/desk-chunks";
 import { isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
+import { MOTION_CONTROL_MS, MOTION_EASE, MOTION_PANEL_MS } from "@/lib/motion";
 import type { ProjectThreadView, ThreadPullRequest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -202,7 +203,7 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
 /**
  * The right column's slide when the person opens or folds it: its width moves, so the chat beside it
  * follows instead of jumping, while what it holds keeps its full width and fades (project.css
- * `data-sliding`). 200 ms in, 160 ms out, both decelerating. Null, so the change is instant, under
+ * `data-sliding`). A panel's length in, a control's out, both decelerating (index.css --motion-*). Null, so the change is instant, under
  * reduced motion or without Web Animations.
  */
 export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animation | null {
@@ -213,8 +214,8 @@ export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animati
   panel.style.setProperty("--slide-width", `${width}px`);
   panel.dataset.sliding = "";
   const slide = direction === "in"
-    ? panel.animate([hidden, shown], { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" })
-    : panel.animate([shown, hidden], { duration: 160, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "forwards" });
+    ? panel.animate([hidden, shown], { duration: MOTION_PANEL_MS, easing: MOTION_EASE })
+    : panel.animate([shown, hidden], { duration: MOTION_CONTROL_MS, easing: MOTION_EASE, fill: "forwards" });
   const done = () => { delete panel.dataset.sliding; };
   slide.finished.then(done, done);
   return slide;

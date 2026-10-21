@@ -279,7 +279,7 @@ function KindGroup({ title, rows }: { title: string; rows: KindRow[] }) {
           type="button"
           aria-current={k.current ? "true" : undefined}
           onClick={k.onChoose}
-          className="flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent aria-[current=true]:bg-[var(--workbench-row-selected)] lg:min-h-0 lg:items-start lg:gap-2.5 lg:p-2.5"
+          className="flex min-h-14 w-full items-center gap-3 rounded-lg px-2 text-left transition-colors duration-120 hover:bg-accent/60 active:bg-accent aria-[current=true]:bg-[var(--workbench-row-selected)] lg:min-h-0 lg:items-start lg:gap-2.5 lg:p-2.5"
         >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted lg:size-auto lg:bg-transparent lg:pt-0.5">
             {typeof k.icon === "function" ? <k.icon className="size-5 lg:size-4" aria-hidden /> : k.icon}
@@ -355,7 +355,7 @@ function ChoiceList({ title, rows, empty }: { title: string; rows: ChoiceRow[]; 
       {rows.length === 0 && empty && <p className="py-2 text-subhead text-muted-foreground">{empty}</p>}
       {rows.map((r) => (
         <button key={r.key} type="button" onClick={r.onChoose}
-          className="-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent lg:min-h-12">
+          className="-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 text-left transition-colors duration-120 hover:bg-accent/60 active:bg-accent lg:min-h-12">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">{r.mark}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-body font-medium lg:text-subhead">{r.title}</span>
@@ -546,7 +546,7 @@ function ProjectPane({ data, readOnly, browsing, onBrowsing, onDone }: {
         {/* What the bridge runs, for whoever wants it in a terminal; folded away, and only on a desk. */}
         <details className="group min-w-0 flex-1 max-lg:hidden">
           <summary className="flex h-9 w-fit cursor-pointer list-none items-center gap-1 rounded-md text-footnote text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <ChevronRight className="size-3.5 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" aria-hidden />
+            <ChevronRight className="size-3.5 transition-transform duration-120 group-open:rotate-90 motion-reduce:transition-none" aria-hidden />
             Command
           </summary>
           <code aria-label="Command" className="block pb-1 font-mono text-code text-muted-foreground select-all [overflow-wrap:anywhere]">

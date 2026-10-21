@@ -337,7 +337,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk 
     {turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" />
       : <>{label} {duration && <span className="text-subtle-foreground">{duration}</span>}</>}
     {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
-    {hasDetails && <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-150 ease-out motion-reduce:transition-none",
+    {hasDetails && <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
       open ? "rotate-90" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
   </button>;
   const questions = tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
@@ -366,7 +366,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk 
       {/* Opened by a tap, the steps fade in under the line; opened on their own (a running turn, a
           search hit), they are simply there. */}
       {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live}
-        className={expanded ? "animate-in fade-in slide-in-from-top-1 duration-200 ease-out motion-reduce:animate-none" : undefined} />}
+        className={expanded ? "animate-in fade-in slide-in-from-top-1 duration-180 ease-out motion-reduce:animate-none" : undefined} />}
       {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     </div>}
     {answer}

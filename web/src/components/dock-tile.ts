@@ -18,7 +18,7 @@ export const SEGMENT_TRACK = "grid auto-cols-fr grid-flow-col gap-1 rounded-lg b
 
 export function segmentClass(selected: boolean): string {
   return cn(
-    "hit-area h-9 rounded-md border px-2 text-subhead font-medium transition-colors duration-150 ease-out motion-reduce:transition-none",
+    "hit-area h-9 rounded-md border px-2 text-subhead font-medium transition-colors duration-120 ease-out motion-reduce:transition-none",
     selected ? DOCK_TILE : "border-transparent text-muted-foreground hover:text-foreground",
   );
 }

@@ -232,7 +232,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
     </span>
     <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
       {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
-      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />}
+      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
     </span>
   </>;
   return (
