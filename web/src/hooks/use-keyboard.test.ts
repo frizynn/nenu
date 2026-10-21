@@ -1,7 +1,7 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { keyboardStep, useFocusInPlace, type KeyboardState } from "./use-keyboard";
+import { keyboardStep, useFocusInPlace, useKeyboardOpen, type KeyboardState } from "./use-keyboard";
 
 /** Feed visual-viewport samples through the machine, as the resize listener does. */
 function run(samples: Array<{ height: number; width?: number }>, start: KeyboardState = { open: false, baseline: 800, width: 390 }) {
@@ -52,6 +52,38 @@ describe("keyboardStep", () => {
     const states = run([{ height: 464 }, { height: 390, width: 844 }, { height: 200, width: 844 }]);
     expect(states[1]).toEqual({ open: false, baseline: 390, width: 844 });
     expect(states[2]!.open).toBe(true);
+  });
+});
+
+describe("useKeyboardOpen", () => {
+  afterEach(() => { vi.unstubAllGlobals(); document.querySelector("textarea")?.remove(); });
+
+  /** A focused field over a risen keyboard, as the viewport reported it. */
+  const typing = () => {
+    const viewport = Object.assign(new EventTarget(), { height: 844, width: 390 });
+    vi.stubGlobal("visualViewport", viewport);
+    const field = document.body.appendChild(document.createElement("textarea"));
+    const hook = renderHook(useKeyboardOpen);
+    act(() => {
+      field.focus();
+      viewport.height = 508;
+      viewport.dispatchEvent(new Event("resize"));
+    });
+    expect(hook.result.current).toBe(true);
+    return { viewport, field, hook };
+  };
+
+  it("reads closed once the field blurs, though the viewport never says the keyboard went down", () => {
+    const { field, hook } = typing();
+    act(() => field.blur());
+    expect(hook.result.current).toBe(false);
+  });
+
+  it("re-reads the viewport when the app comes back, with the field still focused", () => {
+    const { viewport, hook } = typing();
+    viewport.height = 844;
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(hook.result.current).toBe(false);
   });
 });
 
