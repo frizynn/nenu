@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import type { DemoHerd, OrgSeed } from "./scenario.ts";
 
-// Home's projects and the desk's chats, captured with Google Chrome headless at 1440 and 390 px over
+// Home's Projects tab and the desk's chats, captured with Google Chrome headless at 1440 and 390 px over
 // three projects shaped like a busy herd: one with twenty open threads that all moved today (asks,
 // work, reviews, pull requests in every state), one whose threads moved days and weeks ago, and a
 // paused one. Captures Home, the desk's bar folded, unfolding and unfolded, and the phone's Home; checks that
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
       const { page, context } = await open(PHONE);
       await shoot(page, "home-390");
       // Every word of a project's row fits a phone: a count cut to "11 worki…" reads as nothing.
-      seen.cutAt390 = await page.locator("section[aria-labelledby=home-projects] .truncate").evaluateAll((spans) =>
+      seen.cutAt390 = await page.locator("#home-list .truncate").evaluateAll((spans) =>
         spans.filter((span) => span.scrollWidth > span.clientWidth + 1).map((span) => span.textContent));
       for (const text of seen.cutAt390 as string[]) failures.push(`390: "${text}" is cut`);
       await page.evaluate(() => window.scrollTo(0, 0), null);
@@ -191,17 +191,15 @@ async function main(): Promise<void> {
       seen.homeText = (await page.locator("main").innerText()).split("\n").slice(0, 40);
       await context.close();
     }
-    // A project with asks opens where they are answered: its Waiting on you on a desk, the list with Answer on a phone.
-    for (const [name, device, want] of [["1440", DESKTOP, "/project/acme-shop?tab=waiting"], ["390", PHONE, "/asks?project=acme-shop"]] as const) {
+    // A project's row opens the project, asks or not (ADR 0109); its page leads to them.
+    for (const [name, device, want] of [["1440", DESKTOP, "/project/acme-shop"], ["390", PHONE, "/project/acme-shop"]] as const) {
       const { page, context } = await open(device);
-      await page.locator("section[aria-labelledby=home-projects]").getByRole("link", { name: /^Acme Shop/ }).click();
-      await page.getByText("¿Publicamos variantes nuevas antes del lunes?").first().waitFor({ timeout: 15_000 })
-        .catch(() => failures.push(`${name}: the asks row opened no ask`));
-      await page.waitForTimeout(800);
+      await page.locator("#home-list").getByRole("link", { name: /^Acme Shop/ }).click();
+      await page.waitForTimeout(2500);
       const landed = new URL(page.url()).pathname + new URL(page.url()).search;
-      seen[`asksOpen-${name}`] = landed;
-      if (landed !== want) failures.push(`${name}: the asks row landed on ${landed}, not ${want}`);
-      await shoot(page, `asks-from-home-${name}`);
+      seen[`projectOpen-${name}`] = landed;
+      if (landed !== want) failures.push(`${name}: the row landed on ${landed}, not ${want}`);
+      await shoot(page, `project-from-home-${name}`);
       await context.close();
     }
   } finally {

@@ -4070,7 +4070,7 @@ async function atRestBench(): Promise<void> {
         for (const scheme of ["dark", "light"] as const) {
           const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
           const page = await context.newPage();
-          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v1", "workspaces"); }, null);
+          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v2", "workspaces"); }, null);
           await page.clock.install({ time: bridge.now() });
           await page.goto(bridge.url + "/");
           await page.locator("h1.text-large-title").waitFor({ timeout: 15_000 });
