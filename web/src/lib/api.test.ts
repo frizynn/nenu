@@ -303,6 +303,13 @@ describe("api client — request timeouts", () => {
     expect(spy).toHaveBeenCalledWith(20_000);
   });
 
+  it("gives a send 110 s, past the bridge's 75 s budget for a loaded agent (ADR 0116)", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/send$/, () => HttpResponse.json({ ok: true, requestId: "r1", ack: "submitted" })));
+    const spy = vi.spyOn(AbortSignal, "timeout");
+    await sendMessage("w1:p1", { text: "hi", requestId: "r1" });
+    expect(spy).toHaveBeenCalledWith(110_000);
+  });
+
   it("applies UPLOAD_TIMEOUT_MS (60s) to image uploads", async () => {
     server.use(
       http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: true, path: "/x.png" })),

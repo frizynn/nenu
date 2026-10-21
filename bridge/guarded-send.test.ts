@@ -9,6 +9,9 @@ import {
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
   TRIGGER_PREFIX_MAX,
+  PASTING_CAP_MS,
+  SEND_BUDGET_MS,
+  WAIT_BUDGET_MS,
   WAIT_DELAYS_MS,
   WriteLedger,
   guardedSend,
@@ -61,7 +64,9 @@ class Term {
   pictures = 0;
   /** While a picture's token is on its way, the footer says "Pasting…" (Claude 2.1.306). */
   saysPasting = false;
-  lateTokens: Array<{ token: string; reads: number }> = [];
+  /** The box shows a pasted picture's path while it is read, and the token then takes its place. */
+  pathFirst = false;
+  lateTokens: Array<{ token: string; reads: number; path?: string }> = [];
   /** Runs before each read with its index, to change the screen between the send's reads. */
   onRead: ((n: number, term: Term) => void) | null = null;
   readonly calls: Call[] = [];
@@ -99,7 +104,7 @@ class Term {
     const n = this.reads++;
     this.onRead?.(n, this);
     if (this.echo === "immediate") this.land();
-    for (const late of this.lateTokens) if (late.reads-- === 0) this.draft += late.token;
+    for (const late of this.lateTokens) if (late.reads-- === 0) this.draft = late.path && this.draft.endsWith(late.path) ? this.draft.slice(0, -late.path.length) + late.token : this.draft + late.token;
     this.lateTokens = this.lateTokens.filter((late) => late.reads >= 0);
     return { pane_id: paneId, text: this.screen(), truncated: false, revision: 0 };
   };
@@ -110,7 +115,11 @@ class Term {
     if (!this.dialog && this.drawsPictures && /^\x1b\[200~\/\S+\.png\x1b\[201~$/.test(text)) {
       // Like Claude: the token shows a beat (a read) after the paste, unless it never does.
       this.land();
-      if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
+      if (this.pictureReads >= 0 && this.pathFirst) {
+        const path = text.replace(/\x1b\[20[01]~/g, "");
+        this.draft += path;
+        this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads, path });
+      } else if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
       else if (this.unattached === "text") this.pending += text.replace(/\x1b\[20[01]~/g, "");
       return;
     }
@@ -383,11 +392,41 @@ describe("guardedSend", () => {
     expect(term.lines.at(-1)).toContain("[Image #1]");
   });
 
-  test("Claude's Pasting… is read under its box, never from the thread", () => {
-    const claude = adapterFor("claude")!;
+  test("Claude's adapter tells the send it is pasting from the row under its box", () => {
     const screen = (rows: string[]) => splitLines(parseAnsi(rows.join("\n")));
-    expect(claude.pasting?.(screen(["output", RULE, "❯ look", RULE, "  Pasting…"]))).toBe(true);
-    expect(claude.pasting?.(screen(["Pasting… was slow yesterday", RULE, "❯ look", RULE, "  ? for shortcuts"]))).toBe(false);
+    expect(adapterFor("claude")!.pasting?.(screen(["output", RULE, "❯ look", RULE, "  Pasting…"]))).toBe(true);
+  });
+
+  test("a Pasting… that never ends stops the picture's wait at its cap, and the send clears what it typed", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pictureReads = 100_000;
+    const sleeps: number[] = [];
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void sleeps.push(ms) }, { text: placed, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    const total = sleeps.reduce((a, b) => a + b, 0);
+    // The cap held the wait, and the send's own budget the whole of it.
+    expect(total).toBeGreaterThanOrEqual(PASTING_CAP_MS);
+    expect(total).toBeLessThan(SEND_BUDGET_MS + 3 * WAIT_BUDGET_MS);
+  });
+
+  test("a path the box shows while Claude says Pasting… is not taken for the path staying text", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pathFirst = true;
+    term.pictureReads = 40;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toBe("> first the red one [Image #1] then the blue one [Image #2] and that is all");
+  });
+
+  test("a dialog reported after the first clear keeps the late watch from sweeping again", async () => {
+    const term = new Term();
+    term.pictureReads = 80;
+    const turn = () => (term.count("pane.send_keys") > 0 ? { running: true, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn }, { text: placed, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(1);
   });
 
   test("a picture's wait that ends while Claude reports a dialog presses no key at all", async () => {
@@ -877,6 +916,16 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     const term = new Term();
     term.enterClears = false;
     const received: LogReader = async () => (term.count("pane.send_keys") > 1 ? { kind: "queued" } : { kind: "none" });
+    const { outcome } = await guardedSend(deps(term, { received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("a starved Claude that logs the message well after the clear is answered sent, never \"send it again\"", async () => {
+    const term = new Term();
+    term.enterClears = false;
+    let afterClear = 0;
+    // Logged on the 30th look after the sweep: past the short window, inside the bound.
+    const received: LogReader = async () => (term.count("pane.send_keys") > 1 && ++afterClear >= 30 ? { kind: "logged", text } : { kind: "none" });
     const { outcome } = await guardedSend(deps(term, { received }), { text, requestId: "r1" });
     expect(outcome.ok).toBe(true);
   });

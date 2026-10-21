@@ -169,6 +169,19 @@ export function stripChrome(lines: StyledLine[]): StyledLine[] {
 }
 
 /**
+ * Claude says "Pasting…" on a row under its input box while it takes in a paste, a picture's file read
+ * included; meanwhile the box may show the path as text before it turns into `[Image #N]` (measured on
+ * 2.1.306 at 5% of a core, ADR 0116). Read only under the box locateInputBox finds, never the thread.
+ */
+export function claudePasting(lines: StyledLine[]): boolean {
+  const texts = lines.map(lineText);
+  let end = lines.length;
+  while (end > 0 && isBlank(texts[end - 1]!)) end--;
+  const box = end > 0 ? locateInputBox(lines, texts, end) : null;
+  return box !== null && texts.slice(box.bottomBorder + 1, end).some((row) => row.trimStart().startsWith("Pasting…"));
+}
+
+/**
  * The statusline RUN the agent draws just under its input box — model, ctx%, cwd, branch, tokens,
  * permission mode, whatever the user configured, plus the TUI's own hint row(s). We strip the box
  * off the mirror (stripChrome), so this re-surfaces those rows as app chrome above the composer

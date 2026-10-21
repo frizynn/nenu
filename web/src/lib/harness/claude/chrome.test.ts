@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseAnsi } from "../../ansi";
 import { splitLines, type StyledLine } from "../../blocks";
 import { draftCarriesSend } from "../../guarded-reply";
-import { extractAgentsFooter, extractInputDraft, extractStatusLines, hasInputBox, stripChrome } from "./chrome";
+import { claudePasting, extractAgentsFooter, extractInputDraft, extractStatusLines, hasInputBox, stripChrome } from "./chrome";
 import { lineText } from "./markers";
 
 /** The statusline run as plain text. extractStatusLines returns STYLED lines — a statusline tells
@@ -900,5 +900,18 @@ describe("real corpus — pinned so any change to the walk shows up as a diff", 
       expect(extractInputDraft(lines)).toContain(draft);
     }
     expect(lines.length - stripChrome(lines).length).toBe(stripped);
+  });
+});
+
+describe("claudePasting — Claude still taking in a paste (ADR 0116)", () => {
+  it("reads Pasting… under the box, on a narrow pane too", () => {
+    expect(claudePasting(boxBuffer("❯ look", "  Pasting…"))).toBe(true);
+    const narrow = "─".repeat(12);
+    expect(claudePasting(splitLines(parseAnsi([narrow, "❯ look", narrow, "Pasting…"].join("\n"))))).toBe(true);
+  });
+
+  it("never reads it from the thread, nor without a box", () => {
+    expect(claudePasting(splitLines(parseAnsi(["Pasting… was slow yesterday", ...["─".repeat(40), "❯ look", "─".repeat(40), "  ? for shortcuts"]].join("\n"))))).toBe(false);
+    expect(claudePasting(splitLines(parseAnsi("  Pasting…")))).toBe(false);
   });
 });

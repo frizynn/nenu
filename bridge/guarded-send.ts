@@ -142,6 +142,11 @@ export const WAIT_DELAYS_MS: readonly number[] = [...LOCAL_DELAYS_MS, ...Array<n
 export const PATH_SETTLED_MS = 1_000;
 /** The longest a picture's wait runs on while the CLI says it is still pasting. */
 export const PASTING_CAP_MS = 60_000;
+/**
+ * The waits of one whole send, pictures included: past it a picture's wait no longer runs on for
+ * Pasting…, so a send answers within the phone's timeout (web/src/lib/api.ts) and Bun's idle timeout.
+ */
+export const SEND_BUDGET_MS = 75_000;
 
 // ── The trigger regex ─────────────────────────────────────────────────────────────────────────────
 
@@ -239,6 +244,8 @@ class Send {
     unverified: false,
   };
   readonly sleep: Sleep;
+  /** The pauses this send has taken so far, against {@link SEND_BUDGET_MS}. */
+  slept = 0;
 
   constructor(
     private readonly deps: GuardedSendDeps,
@@ -246,7 +253,11 @@ class Send {
     private readonly adapter: HarnessAdapter | undefined,
     private readonly prior?: PriorAttempt,
   ) {
-    this.sleep = deps.sleep ?? defaultSleep;
+    const sleep = deps.sleep ?? defaultSleep;
+    this.sleep = (ms) => {
+      this.slept += ms;
+      return sleep(ms);
+    };
     if (prior?.typeAttempted) this.trace.typeAttempted = true;
     if (prior?.typedAt !== undefined) this.trace.typedAt = prior.typedAt;
   }
@@ -526,7 +537,8 @@ async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, 
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
-    if (pasting) pastingFor += delay;
+    // Past the send's whole budget, Pasting… no longer holds the bound back.
+    if (pasting && send.slept < SEND_BUDGET_MS) pastingFor += delay;
     else waited += delay;
   }
   return null;
