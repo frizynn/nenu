@@ -10,7 +10,8 @@ import { writeChatJournal } from "./scenario.ts";
 // keyboard's height: the app must fill the screen again. Desktop WebKit has no keyboard and no visual
 // viewport that moves, so the page gets a stand-in `visualViewport` and the probe plays iOS's part.
 //
-// - events: the keyboard goes down and `visualViewport` says so (the control).
+// - events: the keyboard goes down and `visualViewport` says so at once (the control).
+// - late: the order iOS sends them in: the field blurs, and the viewport says so once the keyboard is down.
 // - lost: the field blurs and the viewport is full again, but no `resize` or `scroll` arrives.
 // - stuck-offset: iOS 26 leaves `visualViewport.offsetTop` above 0 after the keyboard goes down, with no
 //   event (Apple forums 800125/800154, WebKit bug 297779): the screen shows the page from that offset.
@@ -70,14 +71,17 @@ const act = (page: Page, ...steps: Step[]) => page.evaluate((list: Step[]) => {
 }, steps);
 
 /** Where the app and the chat's header sit on the screen, the screen itself, and whether the chat
- * thinks the keyboard is up (it then hides the model row and the navigation band). */
+ * thinks the keyboard is up (it then hides the model row and the navigation band), and whether the
+ * thread left its tail. That last one is reported, not failed: main leaves it as the installed app's
+ * thread grows back, on the plain paths too, so it is the thread's own follow and not the viewport. */
 const onScreen = (page: Page) => page.evaluate(() => {
   const box = (window as unknown as { __kb: Kb }).__kb.box;
   const app = document.querySelector(".app-viewport")!.getBoundingClientRect();
   const header = document.querySelector("[data-chat-chrome]")?.getBoundingClientRect();
   return { top: Math.round(app.top - box.offsetTop), bottom: Math.round(app.bottom - box.offsetTop),
     header: header ? Math.round(header.top - box.offsetTop) : null, screen: box.height,
-    keyboard: document.querySelector("[data-keyboard-open]") !== null };
+    keyboard: document.querySelector("[data-keyboard-open]") !== null,
+    leftTail: document.querySelector('[aria-label^="Scroll to latest"]') !== null };
 }, null);
 
 const open = async (page: Page) => {
@@ -90,6 +94,11 @@ const blur = (page: Page) => page.evaluate(() => (document.activeElement as HTML
 const paths: Record<string, (page: Page) => Promise<void>> = {
   events: async (page) => {
     await blur(page);
+    await act(page, ["set", { height: SCREEN.height }], ["emit", ["resize", "scroll"]]);
+  },
+  late: async (page) => {
+    await blur(page);
+    await page.waitForTimeout(400);
     await act(page, ["set", { height: SCREEN.height }], ["emit", ["resize", "scroll"]]);
   },
   lost: async (page) => {
@@ -168,6 +177,7 @@ try {
 const summary = { label: values.label, model: { screen: SCREEN, keyboard: KEYBOARD, stuckOffset: STUCK_OFFSET }, results, failures, out: outDir };
 await writeFile(join(outDir, "keyboard-close.json"), JSON.stringify(summary, null, 2));
 for (const r of results) console.log(`${r.ok ? "ok  " : "FAIL"} ${String(r.shell).padEnd(6)} ${String(r.path).padEnd(12)} closed ${JSON.stringify(r.closed)}`);
+console.log(`thread left its tail on ${results.filter((r) => (r.closed as { leftTail: boolean }).leftTail).length} of ${results.length} (reported, not failed)`);
 console.log(failures.length ? `\n${failures.length} failures\n${failures.join("\n")}` : "\nall paths fill the screen");
 console.log(outDir);
 process.exit(failures.length ? 1 : 0);
