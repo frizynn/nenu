@@ -1094,6 +1094,8 @@ export interface QueueMessage {
   deliveryMode?: DeliveryMode;
   /** Why the row is still waiting, e.g. a dialog the operator has to answer first. */
   waitingFor?: QueueWaitReason;
+  /** With `limit`: when the usage limit holding it resets (epoch ms). */
+  until?: number;
   /** The row's pane or conversation went away; it waits for the operator. */
   stranded?: { reason: string; since: number };
   native?: NativeQueueState;

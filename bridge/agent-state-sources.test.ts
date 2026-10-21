@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   ClaudeTurnScan,
+  claudeLimit,
   claudeSessionDirs,
   claudeTurn,
   CodexTurnScan,
@@ -64,6 +65,14 @@ describe("Claude turn", () => {
     expect(claudeTurn(file("idle"), null)).toEqual({ running: false, source: "claude-session" });
     expect(claudeTurn(file("shell"), null)).toEqual({ running: false, background: true, source: "claude-session" });
     expect(claudeTurn(file("waiting", { waitingFor: "permission prompt" }), null)).toEqual({ running: false, waiting: "permission prompt", source: "claude-session" });
+  });
+
+  test("the usage limit holds only a Claude at rest", () => {
+    const limit = { resetsAt: 5_000 };
+    expect(claudeTurn(file("idle"), null, undefined, limit)).toEqual({ running: false, limit, source: "claude-session" });
+    expect(claudeTurn(file("shell"), null, undefined, limit)).toEqual({ running: false, background: true, limit, source: "claude-session" });
+    expect(claudeTurn(file("waiting", { waitingFor: "permission prompt" }), null, undefined, limit)).not.toHaveProperty("limit");
+    expect(claudeTurn(file("busy"), null, undefined, limit)).not.toHaveProperty("limit");
   });
 
   test("busy is a running turn until this busy spell's transcript ends one", () => {
@@ -165,5 +174,50 @@ describe("Codex turn", () => {
     const info = { foreground_process_group_id: 19413, foreground_processes: [{ argv: ["claude"], name: "2.1.296", pid: 19413 }, { pid: 77 }, { pid: -1 }], pane_id: "w1:p1", shell_pid: 19343 };
     expect(foregroundPids(info).sort()).toEqual([19413, 77].sort());
     expect(foregroundPids(null)).toEqual([]);
+  });
+});
+
+// Claude 2.1.306's own rows around a usage limit, from the operator's coordinator on 2026-10-21 (the
+// account hit its five-hour limit at 21:35, was switched, and the message at 22:00 went through).
+describe("Claude usage limit", () => {
+  const rows = lines("claude-2.1.306-transcript-usage-limit.jsonl");
+  const RESETS = 1792632000 * 1000;
+  const refusedAt = Date.parse("2026-10-21T21:40:08.786Z");
+
+  test("the limit row names when it resets; a refused retry moves it, a reply clears it", () => {
+    const scan = new ClaudeTurnScan();
+    for (const row of rows.slice(0, 4)) scan.line(row);
+    expect(scan.limit).toEqual({ at: Date.parse("2026-10-21T21:35:05.821Z"), resetsAt: RESETS });
+    for (const row of rows.slice(4, 8)) scan.line(row);
+    // The prompt at 21:40 was logged, and the limit refused it again.
+    expect(scan.limit).toEqual({ at: refusedAt, resetsAt: RESETS });
+    expect(scan.lastReply).toBe(-Infinity);
+    for (const row of rows.slice(8)) scan.line(row);
+    expect(scan.limit).toBeUndefined();
+    expect(scan.lastReply).toBe(Date.parse("2026-10-21T22:00:15.612Z"));
+  });
+
+  test("it holds until the reset, or until a reply on the same account after it", () => {
+    const scan = { limit: { at: refusedAt, resetsAt: RESETS } };
+    expect(claudeLimit(scan, -Infinity, refusedAt + 1)).toEqual({ resetsAt: RESETS });
+    expect(claudeLimit(scan, refusedAt - 1, refusedAt + 1)).toEqual({ resetsAt: RESETS });
+    expect(claudeLimit(scan, refusedAt + 5, refusedAt + 10)).toBeUndefined();
+    expect(claudeLimit(scan, -Infinity, RESETS)).toBeUndefined();
+    expect(claudeLimit(null, -Infinity, 0)).toBeUndefined();
+  });
+
+  test("a limit row without a reset time, or another API error, holds nothing and clears nothing", () => {
+    const scan = new ClaudeTurnScan();
+    const refused = JSON.parse(rows[1]!);
+    scan.line(JSON.stringify({ ...refused, quotaLimits: undefined, apiErrorParams: undefined }));
+    expect(scan.limit).toBeUndefined();
+    scan.line(rows[1]!);
+    scan.line(JSON.stringify({ ...refused, apiError: "overloaded", timestamp: "2026-10-21T21:36:00.000Z" }));
+    expect(scan.limit?.resetsAt).toBe(RESETS);
+    expect(scan.lastReply).toBe(-Infinity);
+    // Claude's own "No response requested." around a resume is no reply from the account (measured).
+    scan.line(JSON.stringify({ type: "assistant", timestamp: "2026-10-21T21:37:00.000Z", isApiErrorMessage: false, message: { model: "<synthetic>", content: [{ type: "text", text: "No response requested." }] } }));
+    expect(scan.limit?.resetsAt).toBe(RESETS);
+    expect(scan.lastReply).toBe(-Infinity);
   });
 });

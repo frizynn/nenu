@@ -31,6 +31,8 @@ export interface LocalSend {
   queueState?: "queued" | "sending" | "paused";
   deliveryMode?: DeliveryMode;
   waitingFor?: QueueWaitReason;
+  /** With `limit`: when the usage limit holding it resets. */
+  until?: number;
   stranded?: { reason: string; since: number };
   /** What the CLI's own queue did with it, once delivered. */
   native?: NativeQueueState;
