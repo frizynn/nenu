@@ -21,23 +21,23 @@ const project: ProjectView = {
 
 describe("headline", () => {
   it("leads with what needs you, never the pull requests, and says nothing does only once that was read", () => {
-    expect(homeHeadline({ needs: 2, review: 2, working: 5, idle: 0 }, 9, true).title).toBe("2 need you");
-    expect(homeHeadline({ needs: 1, review: 0, working: 5, idle: 0 }, 9, false).title).toBe("1 needs you");
-    expect(homeHeadline({ needs: 0, review: 17, working: 8, idle: 7 }, 15, true).title).toBe("Nothing needs you");
+    expect(homeHeadline({ needs: 2, review: 2, working: 5 }, 9, true).title).toBe("2 need you");
+    expect(homeHeadline({ needs: 1, review: 0, working: 5 }, 9, false).title).toBe("1 needs you");
+    expect(homeHeadline({ needs: 0, review: 17, working: 8 }, 15, true).title).toBe("Nothing needs you");
     // Until the dialogs were read on a live herd, it says what the herd is doing instead.
-    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 0 }, 9, false).title).toBe("3 agents at work");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 4 }, 9, false).title).toBe("All quiet");
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 0 }, 0, true).title).toBe("What should we work on?");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9, false).title).toBe("3 agents at work");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9, false).title).toBe("All quiet");
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 0, true).title).toBe("What should we work on?");
   });
 
-  it("puts the rest on a second line, idle agents last, and leaves it out when there is nothing else", () => {
-    expect(homeHeadline({ needs: 1, review: 1, working: 1, idle: 4 }, 9, true).detail).toBe("1 to review · 1 working · 4 idle");
-    expect(homeHeadline({ needs: 0, review: 17, working: 8, idle: 7 }, 15, true).detail).toBe("17 to review · 8 working · 7 idle");
-    expect(homeHeadline({ needs: 2, review: 0, working: 1, idle: 0 }, 9, true).detail).toBe("1 working");
-    expect(homeHeadline({ needs: 0, review: 1, working: 3, idle: 2 }, 9, false).detail).toBe("1 to review · 2 idle");
-    expect(homeHeadline({ needs: 0, review: 0, working: 2, idle: 0 }, 9, false).detail).toBeNull();
+  it("puts the live rest on a second line, never idle agents, and leaves it out when there is nothing else", () => {
+    expect(homeHeadline({ needs: 1, review: 1, working: 1 }, 9, true).detail).toBe("1 to review · 1 working");
+    expect(homeHeadline({ needs: 0, review: 17, working: 8 }, 15, true).detail).toBe("17 to review · 8 working");
+    expect(homeHeadline({ needs: 2, review: 0, working: 1 }, 9, true).detail).toBe("1 working");
+    expect(homeHeadline({ needs: 0, review: 1, working: 3 }, 9, false).detail).toBe("1 to review");
+    expect(homeHeadline({ needs: 0, review: 0, working: 2 }, 9, false).detail).toBeNull();
     // "All quiet" already says it: a count of idle agents under it would repeat it.
-    expect(homeHeadline({ needs: 0, review: 0, working: 0, idle: 3 }, 9, false).detail).toBeNull();
+    expect(homeHeadline({ needs: 0, review: 0, working: 0 }, 9, false).detail).toBeNull();
   });
 
   it("greets by the local hour", () => {

@@ -46,8 +46,8 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
   age?: string;
   current: boolean;
   onOpen: () => void;
-  /** What a tap opens, which the touch sheet names: the node's chat, or its detail page. */
-  opens?: "chat" | "details";
+  /** What a tap opens, which the touch sheet names: the node's chat, its detail, or a coordinator's page (with a ›). */
+  opens?: "chat" | "details" | "page";
   /** Close, or replace for the project coordinator. */
   actions?: RowAction[];
   /** Present on a resolved coordinator, whose threads fold under it. */
@@ -65,6 +65,7 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
             <span className="block truncate text-footnote text-muted-foreground">{detail}</span>
           </span>
           {age && <span className="task-age shrink-0 text-footnote leading-6 tabular-nums text-muted-foreground">{age}</span>}
+          {opens === "page" && <ChevronRight aria-hidden className="size-4 shrink-0 self-center text-muted-foreground" />}
         </button>
         {fold && <button type="button" className="task-fold" aria-label={`${title} threads`} aria-expanded={fold.open} onClick={fold.onToggle}>
           <ChevronRight aria-hidden className="size-4" />
@@ -84,7 +85,7 @@ const NO_HOVER = "(hover: none), (pointer: coarse)";
  * key reaches them); a screen that cannot hover keeps a ⋯ that opens them in an action sheet with
  * the row's own Open first. Only resolved work wears a check.
  */
-function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "chat" | "details"; onOpen: () => void; actions: RowAction[] }) {
+function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "chat" | "details" | "page"; onOpen: () => void; actions: RowAction[] }) {
   const touch = useMediaQuery(NO_HOVER);
   const [sheet, setSheet] = useState(false);
   if (!touch) {
@@ -102,7 +103,7 @@ function RowActions({ title, opens, onOpen, actions }: { title: string; opens: "
     </button>
     <BottomSheet open={sheet} onClose={() => setSheet(false)} title={title}>
       <div className="flex flex-col gap-1">
-        <ActionRow icon={<OpenIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />} label={opens === "chat" ? "Open chat" : "Open details"} onClick={() => run(onOpen)} />
+        <ActionRow icon={<OpenIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />} label={opens === "chat" ? "Open chat" : opens === "page" ? "Open coordinator" : "Open details"} onClick={() => run(onOpen)} />
         {actions.map((action) => <ActionRow key={action.name} icon={<action.icon aria-hidden className="size-4 shrink-0" />} label={action.menuLabel} destructive={action.destructive ?? true} onClick={() => run(action.run)} />)}
       </div>
     </BottomSheet>

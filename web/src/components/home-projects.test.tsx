@@ -18,18 +18,39 @@ const agent = (paneId: string, workspaceId: string, status: AgentView["status"])
   ({ paneId, workspaceId, workspaceLabel: workspaceId, workspaceNumber: 1, tabId: "t", agent: "claude", status, cwd: "/", focused: false });
 
 function show(projects: ProjectView[], agents: AgentView[] = []) {
-  const router = createMemoryRouter([{ path: "/", element: <HomeProjects projects={projects} agents={agents} now={now} /> }]);
+  // Home draws them as its Projects tab's panel.
+  const router = createMemoryRouter([{ path: "/", element: <section aria-label="Projects"><HomeProjects projects={projects} agents={agents} now={now} /></section> }]);
   render(<RouterProvider router={router} />);
-  const region = within(screen.getByRole("region", { name: /^Projects/ }));
+  const region = within(screen.getByRole("region", { name: "Projects" }));
   // A row's second child is its name, after the project's mark.
-  return { region, names: () => region.getAllByRole("link").filter((link) => link.textContent !== "See all").map((link) => link.children[1]?.textContent) };
+  return { region, names: () => region.getAllByRole("link").map((link) => link.children[1]?.textContent) };
 }
 
+const working = (slug: string, minutes: number, extra: Partial<ProjectView> = {}) =>
+  project(slug, minutes, { threads: [{ id: "t-1", title: "Work", parentId: "root", role: "worker", status: "open", group: "ready-for-review", updated: ago(minutes) }], ...extra });
+
 describe("Home's projects", () => {
-  it("names the region by its heading alone, with See all beside it", () => {
-    const { region } = show([project("a", 5)]);
-    expect(screen.getByRole("region", { name: /^Projects/ })).not.toHaveAccessibleName(/See all/);
-    expect(region.getByRole("link", { name: "See all" }).closest("h2")).toBeNull();
+  it("leads with the projects where something moves, and folds the quiet ones under one row at the end", async () => {
+    const { region, names } = show([project("idle", 1), working("busy", 5), project("paused", 2, { status: "paused" }), project("empty", 3, { threads: [] })]);
+    expect(names()).toEqual(["BUSY"]);
+    const quiet = region.getByRole("button", { name: /^Quiet/ });
+    expect(quiet).toHaveTextContent("Quiet 3");
+    expect(quiet).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(quiet);
+    // Quiet ones keep their order by last activity, paused ones last.
+    expect(names()).toEqual(["BUSY", "IDLE", "EMPTY", "PAUSED"]);
+  });
+
+  it("lists a paused project where something still moves once, with the live ones", async () => {
+    const { region, names } = show([working("busy", 5), project("paused", 9, { status: "paused", waitingAsks: 1 }), project("idle", 1)]);
+    expect(names()).toEqual(["BUSY", "PAUSED"]);
+    await userEvent.click(region.getByRole("button", { name: /^Quiet/ }));
+    expect(names()).toEqual(["BUSY", "PAUSED", "IDLE"]);
+  });
+
+  it("says so when nothing moves in any project", () => {
+    const { region } = show([project("a", 1)]);
+    expect(region.getByText("Nothing is running in your projects.")).toBeInTheDocument();
   });
 
   it("says what waits on you, what works and what to review, each in words; working counts agents, not threads", () => {
@@ -40,8 +61,8 @@ describe("Home's projects", () => {
     ] });
     const { region } = show([busy], [agent("p1", "w-a", "working"), agent("p2", "w-a", "working"), agent("p3", "w-a", "idle"), agent("p4", "w-other", "working")]);
     expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("2 asks2 working1 to review");
-    // Its asks open where they are answered: the project's Waiting on you on a desk, the list on a phone.
-    expect(region.getByRole("link", { name: /^A/ }).getAttribute("href")).toBe("/asks?project=a");
+    // A row always opens its project, whose page leads to its asks and its coordinators.
+    expect(region.getByRole("link", { name: /^A/ }).getAttribute("href")).toBe("/project/a");
   });
 
   it("says one ask in the singular, and calls waiting nodes waiting where Organizations lists no asks", () => {
@@ -53,18 +74,19 @@ describe("Home's projects", () => {
     expect(region.getByRole("link", { name: /^B/ }).getAttribute("href")).toBe("/project/b");
   });
 
-  it("says what a quiet project is: paused, nothing running, or nothing open", () => {
+  it("says what a quiet project is: paused, nothing running, or nothing open", async () => {
     const { region } = show([project("a", 1), project("b", 2, { status: "paused" }), project("c", 3, { threads: [] })]);
+    await userEvent.click(region.getByRole("button", { name: /^Quiet/ }));
     expect(region.getByRole("link", { name: /^A/ })).toHaveTextContent("Nothing running · 1 open thread");
     expect(region.getByRole("link", { name: /^B/ })).toHaveTextContent("Paused · 1 open thread");
     expect(region.getByRole("link", { name: /^C/ })).toHaveTextContent("No open threads");
   });
 
-  it("puts the one that moved last first, paused ones last, and folds past five behind Show all", async () => {
-    const many = [project("old", 50), project("paused", 1, { status: "paused" }), ...["b", "c", "d", "e", "f"].map((slug, i) => project(slug, 10 + i))];
+  it("puts the one that moved last first and folds past five behind Show all", async () => {
+    const many = [working("old", 50), ...["b", "c", "d", "e", "f"].map((slug, i) => working(slug, 10 + i))];
     const { region, names } = show(many);
     expect(names()).toEqual(["B", "C", "D", "E", "F"]);
-    await userEvent.click(region.getByRole("button", { name: "Show all 7" }));
-    expect(names()).toEqual(["B", "C", "D", "E", "F", "OLD", "PAUSED"]);
+    await userEvent.click(region.getByRole("button", { name: "Show all 6" }));
+    expect(names()).toEqual(["B", "C", "D", "E", "F", "OLD"]);
   });
 });

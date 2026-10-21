@@ -17,8 +17,8 @@ const CoordinatorWindow = lazy(() => import("@/components/coordinator-window").t
 
 /**
  * The project's own coordinator: its row, which can replace it with another agent, or a way to start
- * it. On a project that organizes coordinators (`organize`) it is the first of them, folded over its
- * card, and only while it runs: Start is then a small action beside New (StartProjectCoordinator).
+ * it. On a project that organizes coordinators (`organize`) it is the first of them, a row into its
+ * page, and only while it runs: Start is then a small action beside New (StartProjectCoordinator).
  */
 export function ProjectCoordinator({ project, panes, session, current, readOnly, onOpenPane, onChanged, organize }: {
   project: ProjectView;
@@ -31,7 +31,6 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   organize?: Organize;
 }) {
   const [replacing, setReplacing] = useState(false);
-  const [open, setOpen] = useState(false);
   const coordinator = runningCoordinator(project);
   if (!coordinator) return organize ? null : <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
   const doing = panes.find((pane) => pane.paneId === coordinator.paneId)?.terminalTitle ?? STATUS_LABEL[coordinator.liveStatus];
@@ -40,10 +39,8 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   const replaceable = !readOnly && project.nodeActions !== false;
   const row = <TaskRow state={coordinatorState(coordinator.liveStatus) ?? "idle"} title={organize ? "Project coordinator" : "Coordinator"}
     detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
-    current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat" fold={organize ? { open, onToggle: () => setOpen(!open) } : undefined}
-    actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined}>
-    {organize && open && <div className="task-branch task-fold-body" role="group" aria-label="Inside Project coordinator">{organize.card("root")}</div>}
-  </TaskRow>;
+    current={here} onOpen={() => organize ? organize.openCoordinator("root") : onOpenPane(coordinator.paneId)} opens={organize ? "page" : "chat"}
+    actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined} />;
   return <>
     {organize
       ? <section aria-label="Project coordinator" className="mb-1"><ul className="task-list">{row}</ul></section>

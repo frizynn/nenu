@@ -9,7 +9,7 @@ import { server } from "@/test/setup";
 import { __forgetSummaries } from "@/hooks/use-thread-summaries";
 import { ProjectRoute } from "./project";
 
-// A project that organizes coordinators (ADR 0092): each folds over its card and work, the project's
+// A project that organizes coordinators (ADR 0092): each a row into its page (ADR 0110), the project's
 // own first while it runs, the threads at the top level apart, and a node can move under another.
 
 // A desk: row actions show as words, not behind a ⋯.
@@ -57,6 +57,7 @@ function setup(data: HomeData, path = "/project/hub") {
       { path: "project/:projectSlug", element: <ProjectRoute /> },
       { path: "project/:projectSlug/node/:nodeId", element: <p>NODE</p> },
       { path: "pane/:paneId", element: <p>PANE</p> },
+      { path: "asks", element: <p>ASKS</p> },
     ],
   }], { initialEntries: [path] });
   render(<RouterProvider router={router} />);
@@ -67,11 +68,11 @@ function setup(data: HomeData, path = "/project/hub") {
 const titlesOf = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-main .font-medium")?.textContent);
 
 describe("a project that organizes coordinators", () => {
-  it("lists its coordinators, folded, and the threads at its top level apart, with no project coordinator as a header", async () => {
+  it("lists its coordinators, each one row, and the threads at its top level apart, with no project coordinator as a header", async () => {
     setup(home([project]));
     const coordinators = await screen.findByRole("list", { name: "Coordinators" });
     expect(titlesOf(coordinators)).toEqual(["Lead"]);
-    // Folded, the row says what it holds.
+    // The row says what it holds.
     expect(within(coordinators).getByRole("button", { name: /^Lead ?Idle/ })).toHaveTextContent("Idle · 3 open · 1 needs you");
     expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Hotfix"]);
     // No project coordinator to start as if it were missing, and not its empty STATUS.md on top.
@@ -91,33 +92,24 @@ describe("a project that organizes coordinators", () => {
     expect(coordinators).not.toHaveTextContent("Ready for review");
   });
 
-  it("opens a coordinator's row on its card, its work, and New under it", async () => {
+  it("opens a coordinator's page from its row, with a › that says so, and leaves its work to that page", async () => {
     const { user, router } = setup(home([project]));
-    await user.click(await screen.findByRole("button", { name: "Lead threads" }));
-    const inside = within(screen.getByRole("group", { name: "Inside Lead" }));
-    expect(await inside.findByRole("region", { name: "Coordinator card" })).toHaveTextContent("Launch wholesale");
-    // The tree beside the card lists its agents, so the card does not.
-    expect(inside.queryByRole("heading", { name: /^Agents/ })).not.toBeInTheDocument();
-    expect(titlesOf(inside.getByRole("list", { name: "Lead threads" }))).toEqual(["Checkout", "Docs"]);
-    // A nested coordinator folds the same way, closed until opened.
-    expect(inside.queryByRole("button", { name: /^Pay/ })).not.toBeInTheDocument();
-    await user.click(inside.getByRole("button", { name: "Checkout threads" }));
-    expect(within(screen.getByRole("group", { name: "Inside Checkout" })).getByRole("button", { name: /^Pay/ })).toBeInTheDocument();
-    expect(inside.getByRole("button", { name: "New thread under Lead" })).toBeInTheDocument();
-    expect(inside.getByRole("button", { name: "New coordinator under Lead" })).toBeInTheDocument();
-    // The row itself still opens the coordinator's chat.
-    await user.click(screen.getByRole("button", { name: /^Lead ?Idle/ }));
-    expect(router.state.location.pathname).toBe("/pane/lead");
+    const row = await screen.findByRole("button", { name: /^Lead ?Idle/ });
+    expect(row.querySelector("svg:last-child")).toBeInTheDocument();
+    // Its threads are its page's: the project lists none of them, and no card unfolds in place.
+    expect(screen.queryByRole("button", { name: "Lead threads" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Docs/ })).not.toBeInTheDocument();
+    await user.click(row);
+    expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
   });
 
-  it("keeps what was opened when the page is left and come back to", async () => {
-    const first = setup(home([project]));
-    await first.user.click(await screen.findByRole("button", { name: "Lead threads" }));
-    expect(screen.getByRole("group", { name: "Inside Lead" })).toBeInTheDocument();
-    first.router.dispose();
-    document.body.innerHTML = "";
-    setup(home([project]));
-    expect(await screen.findByRole("group", { name: "Inside Lead" })).toBeInTheDocument();
+  it("leads with what waits on you there, and leaves the goal to the desk", async () => {
+    const { user, router } = setup(home([{ ...project, waitingAsks: 2 }]));
+    const waiting = await screen.findByRole("link", { name: /2 asks wait on you/ });
+    expect(screen.queryByText("Ship it")).not.toBeInTheDocument();
+    await user.click(waiting);
+    expect(router.state.location.pathname).toBe("/asks");
+    expect(router.state.location.search).toBe("?project=hub");
   });
 
   it("heads the page with the project coordinator's STATUS.md while it says something, even with no coordinator running it", async () => {
@@ -137,10 +129,10 @@ describe("a project that organizes coordinators", () => {
     expect(titlesOf(screen.getByRole("list", { name: "Coordinators" }))).toEqual(["Lead", "Wholesale"]);
     expect(own.compareDocumentPosition(screen.getByRole("list", { name: "Coordinators" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start project coordinator" })).not.toBeInTheDocument();
-    // Its STATUS.md is under its own card now, not over the page.
+    // Its STATUS.md is on its own page, not over this one.
     expect(screen.queryByText("Objective: (none)")).not.toBeInTheDocument();
-    await user.click(within(own).getByRole("button", { name: "Project coordinator threads" }));
-    expect(screen.getByRole("group", { name: "Inside Project coordinator" })).toBeInTheDocument();
+    await user.click(within(own).getByRole("button", { name: /^Project coordinator/ }));
+    expect(router.state.location.pathname).toBe("/project/hub/node/root");
   });
 });
 
@@ -170,24 +162,22 @@ describe("Move to…", () => {
     let posted: unknown;
     server.use(http.post("/api/org/node/move", async ({ request }) => {
       posted = await request.json();
-      return HttpResponse.json({ ok: true, moved: { id: "t-4", parent: "t-5" } });
+      return HttpResponse.json({ ok: true, moved: { id: "t-7", parent: "t-5" } });
     }));
     const { user } = setup(home([{ ...project, nodeMoves: true }]));
-    await user.click(await screen.findByRole("button", { name: "Lead threads" }));
-    await user.click(screen.getByRole("button", { name: "Move Docs" }));
+    await user.click(await screen.findByRole("button", { name: "Move Hotfix" }));
     const dialog = within(screen.getByRole("dialog", { name: "Move this thread" }));
-    expect(dialog.getAllByRole("radio").map((radio) => radio.closest("label")?.textContent)).toEqual(["Hub, at the top level", "Checkout"]);
+    expect(dialog.getAllByRole("radio").map((radio) => radio.closest("label")?.textContent)).toEqual(["Lead", "Checkout"]);
     await user.click(dialog.getByRole("radio", { name: "Checkout" }));
     await user.click(dialog.getByRole("button", { name: "Move" }));
-    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "t-4", parent: "t-5" }));
+    await waitFor(() => expect(posted).toEqual({ project: "hub", id: "t-7", parent: "t-5" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Move this thread" })).not.toBeInTheDocument());
   });
 
   it("says why Organizations refused, and keeps the dialog open", async () => {
     server.use(http.post("/api/org/node/move", () => HttpResponse.json({ ok: false, error: "node `t-5` does not have permission to spawn" }, { status: 502 })));
     const { user } = setup(home([{ ...project, nodeMoves: true }]));
-    await user.click(await screen.findByRole("button", { name: "Lead threads" }));
-    await user.click(screen.getByRole("button", { name: "Move Docs" }));
+    await user.click(await screen.findByRole("button", { name: "Move Hotfix" }));
     const dialog = within(screen.getByRole("dialog", { name: "Move this thread" }));
     await user.click(dialog.getByRole("radio", { name: "Checkout" }));
     await user.click(dialog.getByRole("button", { name: "Move" }));

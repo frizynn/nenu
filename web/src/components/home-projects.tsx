@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { Link } from "react-router";
+import { ChevronRight } from "@/components/ui/icon";
 
-import { FoldedList, HomeHeading } from "@/components/home-panels";
+import { FoldedList } from "@/components/home-panels";
 import { NodeDot } from "@/components/node-row";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { projectPulse, type ProjectPulse } from "@/lib/desk-nav";
 import { timeAgo, timeAgoShort } from "@/lib/format";
-import { asksPath, projectPath, projectsPath } from "@/lib/nav";
+import { projectPath } from "@/lib/nav";
 import type { NodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -49,10 +51,14 @@ function PulseLine({ project, pulse, className }: { project: ProjectView; pulse:
 
 interface Entry { project: ProjectView; pulse: ProjectPulse }
 
+/** Whether anything runs or waits in a project: what Home's Projects tab shows before its Quiet fold. */
+const projectLive = (pulse: ProjectPulse) => pulse.waiting + pulse.working + pulse.review > 0;
+
 /**
- * Home's projects, each with what waits on you there, what is working, what is ready to review and
- * when it last moved; a tap opens the project. Ordered by last activity, paused ones last, held in
- * place while on screen like Recents (ADR 0094).
+ * Home's Projects tab: each project where something waits on you, works or is ready to review, with
+ * when it last moved; a tap opens the project. Ordered by last activity and held in place while on
+ * screen like Recents (ADR 0094). The quiet ones (nothing running; paused ones last) fold under one row at the
+ * end, so the tab leads with live work and the rest stays a tap away.
  */
 export function HomeProjects({ projects, agents, session, now }: {
   projects: readonly ProjectView[];
@@ -61,28 +67,33 @@ export function HomeProjects({ projects, agents, session, now }: {
   now: number;
 }) {
   const held = useHeldTime((entry: Entry) => entry.project.slug, (entry) => entry.pulse.at);
-  if (!projects.length) return null;
+  const [quietShown, setQuietShown] = useState(false);
   const entries = held.order(projects.map((project) => ({ project, pulse: projectPulse(project, agents, projects) })));
-  const ordered = [...entries.filter((entry) => entry.project.status !== "paused"), ...entries.filter((entry) => entry.project.status === "paused")];
-  return (
-    <section aria-labelledby="home-projects" className="flex flex-col gap-2">
-      <div className="flex items-center">
-        <HomeHeading id="home-projects" label="Projects" count={projects.length} />
-        <Link to={projectsPath(session)} className="ml-auto text-footnote text-muted-foreground hover:text-foreground">See all</Link>
-      </div>
-      <div className="sm:-mx-2.5">
-        <FoldedList items={ordered} rows={PROJECT_ROWS}>{(entry) => <ProjectRow key={entry.project.slug} {...entry} session={session} now={now} />}</FoldedList>
-      </div>
-    </section>
-  );
+  const live = entries.filter((entry) => projectLive(entry.pulse));
+  const rest = entries.filter((entry) => !live.includes(entry));
+  const quiet = [...rest.filter((entry) => entry.project.status !== "paused"), ...rest.filter((entry) => entry.project.status === "paused")];
+  const row = (entry: Entry) => <ProjectRow key={entry.project.slug} {...entry} session={session} now={now} />;
+  return <>
+    {live.length > 0
+      ? <FoldedList items={live} rows={PROJECT_ROWS}>{row}</FoldedList>
+      : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">Nothing is running in your projects.</p>}
+    {quiet.length > 0 && <>
+      <button type="button" aria-expanded={quietShown} aria-controls="home-quiet-projects" onClick={() => setQuietShown(!quietShown)}
+        className="mt-1 inline-flex min-h-9 items-center gap-1.5 self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
+        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform duration-150 motion-reduce:transition-none", quietShown && "rotate-90")} />
+        Quiet <span className="tabular-nums font-normal">{quiet.length}</span>
+      </button>
+      {quietShown && <ul id="home-quiet-projects" aria-label="Quiet projects" className="flex flex-col max-sm:divide-y max-sm:divide-border">{quiet.map(row)}</ul>}
+    </>}
+  </>;
 }
 
 /** A project as a row of Home's lists: its mark, its name, its state and when it last moved. */
 function ProjectRow({ project, pulse, session, now }: Entry & { session?: string; now: number }) {
   return (
     <li>
-      {/* A project with asks opens where they are answered: its Waiting on you on a desk, the list with Answer on a phone. */}
-      <Link to={pulse.asks && pulse.waiting > 0 ? asksPath(session, project.slug) : projectPath(project.slug, session)}
+      {/* Always the project: its page says what waits on you there, and leads to its coordinators. */}
+      <Link to={projectPath(project.slug, session)}
         className={cn("grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           project.status === "paused" && "text-muted-foreground")}>
         <span className="row-span-2 flex justify-center"><ProjectGlyph slug={project.slug} pick={project} size={16} /></span>

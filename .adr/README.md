@@ -112,6 +112,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Accepted |
 | [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted |
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted |
+| [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

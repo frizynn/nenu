@@ -62,6 +62,13 @@ it("opens a resolved node's detail from History on the project page, and walks u
   expect(within(screen.getByRole("list", { name: "History" })).getByRole("button", { name: /^Step/ })).toBeInTheDocument();
 });
 
+it("offers nothing to start under a coordinator that finished", async () => {
+  setup("/project/hub/node/t-1");
+  const main = within(await screen.findByRole("main"));
+  expect(await main.findByRole("heading", { name: "Plan" })).toBeInTheDocument();
+  expect(main.queryByRole("button", { name: /under Plan$/ })).not.toBeInTheDocument();
+});
+
 it("offers a live node's chat without jumping to it, and closes an open one after confirming", async () => {
   let posted: unknown;
   server.use(http.post("/api/org/node/resolve", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true }); }));
@@ -69,8 +76,10 @@ it("offers a live node's chat without jumping to it, and closes an open one afte
   const main = within(await screen.findByRole("main"));
   expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
   expect(within(main.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Docs/ })).toHaveTextContent("pane closed");
-  // Lead still runs Docs, so Close explains instead of closing.
-  await user.click(main.getByRole("button", { name: "Close coordinator" }));
+  // More work starts under it from its own page.
+  expect(main.getByRole("button", { name: "New thread under Lead" })).toBeInTheDocument();
+  // Lead still runs Docs, so Close (a quiet action at the end of its page) explains instead of closing.
+  await user.click(main.getByRole("button", { name: "Close coordinator…" }));
   expect(screen.getByRole("dialog", { name: "Close its work first" })).toHaveTextContent("Lead still has 1 open under it.");
   await user.click(screen.getByRole("button", { name: "OK" }));
   await user.click(main.getByRole("button", { name: "Open chat" }));

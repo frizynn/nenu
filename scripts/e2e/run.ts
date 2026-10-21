@@ -1728,21 +1728,21 @@ async function home(): Promise<void> {
         for (const scheme of ["dark", "light"] as const) {
           const { page, close } = await open(device, scheme);
           await shoot(page, `home-${name}-${scheme}`);
-          // The list itself, scrolled into view: the Recents / Workspaces control, else the older "Recent".
-          await scrollTo(page, '[role="tablist"][aria-label="Sessions"], #home-recent');
+          // The list itself, scrolled into view: the tabs' control, else the older "Recent".
+          await scrollTo(page, '[role="tablist"][aria-label="Your work"], #home-recent');
           await shoot(page, `home-${name}-${scheme}-list`);
           if (scheme === "dark") {
             // The pull requests: the PRs tab of the sessions' switcher, or the section they were before it.
             const prsTab = page.getByRole("tab", { name: "PRs" });
             const tabbed = (await prsTab.count()) > 0;
             if (tabbed) await prsTab.click();
-            await scrollTo(page, tabbed ? '[role="tablist"][aria-label="Sessions"]' : "#home-review");
+            await scrollTo(page, tabbed ? '[role="tablist"][aria-label="Your work"]' : "#home-review");
             await shoot(page, `home-${name}-prs`);
             if (tabbed) await page.getByRole("tab", { name: "Recents" }).click();
             const workspaces = page.getByRole("tab", { name: "Workspaces" });
             if (await workspaces.count()) {
               await workspaces.click();
-              await scrollTo(page, '[role="tablist"][aria-label="Sessions"]');
+              await scrollTo(page, '[role="tablist"][aria-label="Your work"]');
               await shoot(page, `home-${name}-workspaces`);
               const docs = page.locator("main").getByRole("button", { name: /^docs,/ });
               if (await docs.count()) {
@@ -2150,7 +2150,7 @@ async function motion(before: boolean): Promise<void> {
     // app's CSP refuses string evaluation, so the page tests it with `arrived`.
     type Target = { path: string; marker: string };
     const isPane = (href: string): Target => ({ path: href, marker: "textarea" });
-    const isHome: Target = { path: "/", marker: '[role="tablist"][aria-label="Sessions"], #home-recent' };
+    const isHome: Target = { path: "/", marker: '[role="tablist"][aria-label="Your work"], #home-recent' };
     const isSettings: Target = { path: "/settings", marker: "main" };
     const arrived = (t: Target) => location.pathname === t.path && document.querySelector(t.marker) !== null;
     const reach = (page: Page, t: Target) => page.waitForFunction(arrived, t, { timeout: 15_000 });
@@ -2365,18 +2365,18 @@ async function back(): Promise<void> {
       const entry = steps[0]!.len;
       // A phone reaches a project through the navigation the mark opens; a desk's bar lists it.
       if (device === PHONE) await page.getByRole("button", { name: "Open navigation" }).first().click({ timeout: 5000 });
-      await page.locator('a[href="/project/acme"] >> visible=true').first().click({ timeout: 5000 });
+      // The navigation's own row: Home's Projects tab links the same project.
+      await page.locator('nav[aria-label="Projects and chats"] a[href="/project/acme"] >> visible=true').first().click({ timeout: 5000 });
       await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
       await log("project");
       if (way.coordinator) {
-        // A desk's project opens a coordinator's page on a tap on its card's head (ADR 0109), and
-        // Open chat its chat (ADR 0102).
-        if (device === DESKTOP) {
-          await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
-          await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });
-          await log("coordinator-page");
-          await page.locator("main").getByRole("button", { name: "Open chat" }).click({ timeout: 5000 });
-        } else await open(way.coordinator.title);
+        // A desk's project opens a coordinator's page on a tap on its card's head (ADR 0109), a phone's
+        // on a tap on its row (ADR 0110), and Open chat its chat (ADR 0102).
+        if (device === DESKTOP) await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
+        else await open(way.coordinator.title);
+        await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });
+        await log("coordinator-page");
+        await page.locator("main").getByRole("button", { name: "Open chat" }).click({ timeout: 5000 });
         await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
         await log("coordinator");
         if (device === PHONE) {
@@ -3898,7 +3898,8 @@ async function phoneScroll(): Promise<void> {
     await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
-      { name: "home", path: "/" },
+      // Recents, the tall list: Projects, which Home opens on, folds the quiet projects and fits a phone.
+      { name: "home", path: "/", open: (page) => page.getByRole("tab", { name: "Recents" }).click() },
       { name: "projects", path: "/projects" },
       { name: "project", path: "/project/acme", open: (page) => page.getByText(/^History/).first().click() },
       { name: "node", path: "/project/acme/node/t-0101" },
@@ -4070,7 +4071,7 @@ async function atRestBench(): Promise<void> {
         for (const scheme of ["dark", "light"] as const) {
           const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
           const page = await context.newPage();
-          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v1", "workspaces"); }, null);
+          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v2", "workspaces"); }, null);
           await page.clock.install({ time: bridge.now() });
           await page.goto(bridge.url + "/");
           await page.locator("h1.text-large-title").waitFor({ timeout: 15_000 });

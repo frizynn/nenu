@@ -411,7 +411,7 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
   expect(nav.getByRole("link", { name: "Nenu home" })).toHaveClass("hit-area");
 
   const sections = nav.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
-  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Recent", "Projects", "Workspaces"]);
+  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces", "Recent"]);
   const needs = within(nav.getByRole("region", { name: "Needs you" })).getAllByRole("link");
   expect(needs.map((link) => [link.querySelector(".nav-pane-title")?.textContent, link.querySelector(".nav-pane-detail")?.textContent]))
     .toEqual([["Brief nenu-send", "Developer"]]);

@@ -17,8 +17,6 @@ export interface HomeCounts {
   /** Pull requests waiting to be looked at. */
   review: number;
   working: number;
-  /** Agents waiting at their prompt with nothing for you. */
-  idle: number;
 }
 
 /** Home's headline: what needs you, said with its noun, and the rest on a line under it. */
@@ -37,14 +35,14 @@ export const needYou = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you`;
  * is doing.
  */
 export function homeHeadline(counts: HomeCounts, total: number, calm: boolean): HomeHeadline {
-  const { needs, review, working, idle } = counts;
+  const { needs, review, working } = counts;
   const rest = (...parts: Array<string | false>) => parts.filter(Boolean).join(" · ") || null;
+  // Only live work: an idle agent waits on nobody, so the line leaves it out.
   const reviewing = review > 0 && `${review} to review`;
-  const idling = idle > 0 && `${idle} idle`;
-  if (needs) return { title: needYou(needs), detail: rest(reviewing, working > 0 && `${working} working`, idling) };
+  if (needs) return { title: needYou(needs), detail: rest(reviewing, working > 0 && `${working} working`) };
   if (!total) return { title: "What should we work on?", detail: null };
-  if (calm) return { title: "Nothing needs you", detail: rest(reviewing, working > 0 && `${working} working`, idling) };
-  if (working) return { title: `${plural(working, "agent")} at work`, detail: rest(reviewing, idling) };
+  if (calm) return { title: "Nothing needs you", detail: rest(reviewing, working > 0 && `${working} working`) };
+  if (working) return { title: `${plural(working, "agent")} at work`, detail: rest(reviewing) };
   return { title: "All quiet", detail: rest(reviewing) };
 }
 
@@ -92,12 +90,6 @@ export function needsYouItems<I extends { paneId: string; detectedAt: number }>(
  */
 export function needsYouCount(herd: { agents: readonly AgentView[]; projects?: readonly ProjectView[] }): number {
   return needsYouItems(herd.agents, [], herd.projects).length;
-}
-
-/** Agents at their prompt with nothing for you: not asking, and not a session a pull request to review rides on. */
-export function idleAgents(agents: readonly AgentView[], needs: readonly NeedsYouItem<unknown>[], reviews: readonly ReviewEntry[]): number {
-  const held = new Set([...needs.map((item) => item.paneId), ...reviews.flatMap((entry) => entry.open && "paneId" in entry.open ? [entry.open.paneId] : [])]);
-  return agents.filter((agent) => (agent.status === "idle" || agent.status === "done") && !held.has(agent.paneId)).length;
 }
 
 export interface ReviewItem {

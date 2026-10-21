@@ -9,6 +9,7 @@ import { CoordinatorStatus } from "@/components/coordinator-status";
 import { OwnReport } from "@/components/coordinator-summary";
 import { DeskCoordinator } from "@/components/desk-coordinator";
 import { NodeDot } from "@/components/node-row";
+import { NewNodeActions } from "@/components/node-start";
 import { ProjectMissing } from "@/components/project-missing";
 import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -107,6 +108,8 @@ function NodePage() {
     const ask = awaits(thread);
     const note = ask ? ASK[ask].label : thread.note;
     const status = summaries.get(thread.id)?.status;
+    // A coordinator's page leads with its work: closing it is a quiet action at the end.
+    const closable = state !== "resolved" && !readOnly;
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
@@ -126,18 +129,22 @@ function NodePage() {
         {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
         {failed && <p role="alert" className="mt-2 text-footnote text-muted-foreground">Could not read the reports: {failed}</p>}
-        {(running || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
+        {(running || (closable && !coordinator)) && <div className="mt-3 flex flex-wrap gap-2">
           {running && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
-          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
+          {closable && !coordinator && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
             className="border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive">
-            Close {coordinator ? "coordinator" : "thread"}</Button>}
+            Close thread</Button>}
         </div>}
       </section>
       {/* Its live work; what finished is the tree's one folded History line (ADR 0109). */}
       {coordinator && <OrgTreeList key={thread.id}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
+      {coordinator && !readOnly && state !== "resolved" && <div className="mt-3">
+        <NewNodeActions project={project} under={{ id: thread.id, title: thread.title }} session={data.session} onStarted={() => void refresh()} />
+      </div>}
+      {coordinator && closable && <button type="button" className="task-history-toggle text-destructive" onClick={() => setClosing(true)}>Close coordinator…</button>}
       <CloseNodeDialog project={project} node={closing ? node : null} session={data.session} onCancel={() => setClosing(false)}
         onClosed={() => { setClosing(false); void refresh(); }} />
     </>;
