@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- A project past 500 threads keeps every open one and drops only the oldest finished; a coordinator with work running no longer reads "Nothing running" (9d56fd04).
+- A project past 500 threads keeps every open one and drops only the oldest finished; a coordinator with work running no longer reads "Nothing running" (9d56fd04, 664472e5).
 
 ## [1.41.1] - 2026-10-21
 
