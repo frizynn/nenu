@@ -765,19 +765,25 @@ describe("TranscriptView — the work timeline", () => {
     step("now", "09:07", last, { turn: { status: "running", startedAt: at("09:05") } }),
   ];
 
-  it("says Working on the turn and puts the running step at the bottom, drawn once", async () => {
-    const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: "bun run test tab-strip" }])} activityStatus="working" />);
+  it("says Working on the turn and draws the running step in its run, where it stays, drawn once", async () => {
+    const { container, rerender } = render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: "bun run test tab-strip" }])} activityStatus="working" />);
     const header = screen.getByRole("button", { name: /^Working/, expanded: true });
     expect(header).not.toHaveTextContent("Thinking");
     const live = container.querySelector("[data-live-step]")!;
     expect(live).toHaveTextContent("Running");
     expect(live).toHaveTextContent("bun run test tab-strip");
     expect(screen.getAllByText("bun run test tab-strip")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: /^Read / })).toBeInTheDocument();
-    // Folding the turn keeps the live row: it is what the operator glances at.
+    // In its run, after the step before it, never in a row of its own under the turn.
+    const rows = [...container.querySelectorAll("[data-work-log] > li")];
+    expect(rows.at(-1)).toBe(live);
+    expect(rows.at(-2)).toHaveTextContent("tab-strip.tsx");
+    // Done, it is the same row, now in the past tense, and nothing says Running.
+    rerender(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: "bun run test tab-strip", result: { text: "ok" } }])} activityStatus="working" />);
+    expect(container.querySelectorAll("[data-work-log] > li").item(1)).toBe(live);
+    expect(live).not.toHaveAttribute("data-live-step");
+    expect(screen.getByRole("button", { name: "Ran bun run test tab-strip" })).toBeInTheDocument();
     await userEvent.click(header);
     await waitFor(() => expect(screen.queryByRole("button", { name: /^Read / })).not.toBeInTheDocument());
-    expect(container.querySelector("[data-live-step]")).toHaveTextContent("Running");
   });
 
   it("says Thinking with the thought's first line on the bottom row, never on the turn's line", () => {
@@ -849,9 +855,16 @@ describe("TranscriptView — the work timeline", () => {
     expect(onWorkToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("draws no bottom row between steps, where the turn's line already says it is working", () => {
+  it("says Thinking where the next step will land while no step is in flight", () => {
     const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Grep", summary: "chip", result: { text: "chip.tsx" } }])} activityStatus="working" />);
     expect(screen.getByRole("button", { name: /^Working/ })).toBeInTheDocument();
+    const thinking = container.querySelector('[data-live-step="thinking"]')!;
+    expect(thinking).toHaveTextContent("Thinking…");
+    expect(thinking.previousElementSibling).toHaveTextContent("Read 1 file, searched 1 pattern");
+  });
+
+  it("says nothing more once the turn has ended", () => {
+    const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
     expect(container.querySelector("[data-live-step]")).toBeNull();
   });
 
@@ -916,7 +929,7 @@ describe("TranscriptView — a turn waiting on the operator", () => {
     const running = blocked.map((entry) => entry.uuid === "a1" ? { ...entry, turn: { status: "running" as const, startedAt: at("09:00") } } : entry);
     const { container } = render(view("card", running, "working"));
     expect(within(container.querySelector<HTMLElement>("[data-live-step]")!).getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
-    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(container.querySelector<HTMLElement>("[data-live-step]")!.querySelector("[data-glow]")).toBeNull();
   });
 
   // Claude runs subagents side by side; when one of them asks for a permission, the dialog is the

@@ -259,21 +259,19 @@ describe("liveStep", () => {
 });
 
 describe("workSegments", () => {
-  it("cuts the work at the agent's words, one run of steps between two texts, the live step left out", () => {
+  it("cuts the work at the agent's words, one run of steps between two texts, the live step in its place", () => {
     const first = entry("a", { parts: [text("Looking"), tool, thought] });
     const second = entry("b", { parts: [tool, text("Found it"), text("And more"), tool] });
-    const segments = workSegments([first, second], { part: tool as WorkStep["part"], entry: "b", index: 3 });
+    const segments = workSegments([first, second]);
     expect(segments.map((s) => s.kind === "prose" ? s.parts.map((p) => p.index) : s.steps.map((p) => `${p.entry}:${p.index}`))).toEqual([
-      [0], ["a:1", "a:2", "b:0"], [1, 2],
+      [0], ["a:1", "a:2", "b:0"], [1, 2], ["b:3"],
     ]);
     expect(segments[1]).toMatchObject({ kind: "steps", id: "a:1" });
   });
 
-  it("keeps a run's id when its live call finishes after a later one", () => {
+  it("keeps a run's id and order when its first call finishes after a later one", () => {
     const parallel = entry("p", { parts: [text("Two at once"), tool, { ...tool, result: { text: "done" } }] });
-    const live = { part: tool as WorkStep["part"], entry: "p", index: 1 };
-    expect(workSegments([parallel], live)[1]).toMatchObject({ id: "p:1", steps: [{ index: 2 }] });
-    expect(workSegments([parallel], null)[1]).toMatchObject({ id: "p:1" });
+    expect(workSegments([parallel])[1]).toMatchObject({ id: "p:1", steps: [{ index: 1 }, { index: 2 }] });
   });
 });
 

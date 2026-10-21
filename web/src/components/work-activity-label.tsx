@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatElapsed } from "@/lib/activity";
 import { isLocked, useLocked } from "@/lib/idle";
 import { cn } from "@/lib/utils";
@@ -41,17 +41,69 @@ export function Elapsed({ since, prefix = "", fallback = "", fine = false, class
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 
-/** The live mark: a still dot in the working colour. The words say the state; nothing here moves. */
-export function LiveGlyph({ className }: { className?: string }) {
-  return <span data-live-glyph aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center text-status-working", className)}>
-    <span className="size-1.5 rounded-full bg-current" />
+// Every glow on the page shares one observer: a glow moves only while it is on screen, the page is
+// shown, the idle lock is down and motion is not reduced (ADR 0117). Otherwise its moving copy is not
+// even in the page, so a still glow costs nothing and its words are on the page once.
+const glows = new Map<Element, { visible: boolean; set: (running: boolean) => void }>();
+let observer: IntersectionObserver | null = null;
+let reduced: MediaQueryList | null = null;
+
+function syncGlows() {
+  const still = document.hidden || isLocked() || !!reduced?.matches;
+  for (const glow of glows.values()) glow.set(glow.visible && !still);
+}
+
+function watchGlow(element: Element, set: (running: boolean) => void): () => void {
+  if (typeof IntersectionObserver === "undefined") return () => {};
+  if (!observer) {
+    observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const glow = glows.get(entry.target);
+        if (glow) glow.visible = entry.isIntersecting;
+      }
+      syncGlows();
+    });
+    reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
+    reduced?.addEventListener("change", syncGlows);
+    document.addEventListener("visibilitychange", syncGlows);
+  }
+  glows.set(element, { visible: false, set });
+  observer.observe(element);
+  return () => {
+    glows.delete(element);
+    observer?.unobserve(element);
+    if (glows.size === 0 && observer) {
+      observer.disconnect();
+      observer = null;
+      reduced?.removeEventListener("change", syncGlows);
+      reduced = null;
+      document.removeEventListener("visibilitychange", syncGlows);
+    }
+  };
+}
+
+/**
+ * A live line, glowing: a light passes across its words while the agent works (ADR 0117). While it
+ * runs, the words are drawn a second time in the full ink behind a window that slides over them (the
+ * copy hidden from assistive tech); `layout` lays out both copies alike (a row's flex classes).
+ */
+export function Glow({ children, className, layout }: { children: ReactNode; className?: string; layout?: string }) {
+  const locked = useLocked();
+  const [running, setRunning] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => (ref.current ? watchGlow(ref.current, setRunning) : undefined), []);
+  useEffect(syncGlows, [locked]);
+  return <span ref={ref} data-glow={running ? "running" : "still"} className={cn("relative min-w-0 overflow-hidden", layout, className)}>
+    {children}
+    {running && <span aria-hidden="true" className="glow-window">
+      <span className="glow-copy"><span className={cn("block text-foreground", layout)}>{children}</span></span>
+    </span>}
   </span>;
 }
 
-/** "Working for 3m" with its live mark, where no turn line says it yet. */
+/** "Working for 3m", glowing, where no turn line says it yet. */
 export function WorkActivityLabel({ startedAt }: { startedAt?: string }) {
-  return <span className="inline-flex items-center gap-1.5 text-footnote text-muted-foreground">
-    <LiveGlyph className="size-3.5" />
+  return <Glow className="inline-flex text-footnote text-muted-foreground">
     <Elapsed since={startedAt} prefix="Working for " fallback="Working…" />
-  </span>;
+  </Glow>;
 }

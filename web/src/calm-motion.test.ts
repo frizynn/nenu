@@ -4,7 +4,9 @@ import { join, relative } from "node:path";
 // Two contracts the screen can't show in a test run. Every icon draws through components/ui/icon, so
 // the set changes in one file; and nothing in Nenu animates forever: a state that lasts (working,
 // busy, sending, loading) is a still glyph, and motion only answers a tap and ends. A spinner left on
-// for a whole turn cost about 1 s of CPU every 30 s on the bench (2026-10-15 audit).
+// for a whole turn cost about 1 s of CPU every 30 s on the bench (2026-10-15 audit). One exception,
+// asked for by the operator (ADR 0117): the glow across a running turn's live line, which moves by
+// transform alone, in steps, and is in the page only while it is on screen on a shown page.
 
 const src = import.meta.dirname;
 const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -22,9 +24,19 @@ it("draws every icon through the facade, with no icon package behind it", () => 
   expect(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }).filter((name) => /icon|lucide/.test(name))).toEqual([]);
 });
 
-it("runs no animation forever", () => {
-  expect(offenders(/\binfinite\b/)).toEqual([]);
+it("runs no animation forever but the live line's glow, and that one moves only a composited layer", () => {
+  expect(offenders(/\binfinite\b/)).toEqual(["index.css"]);
   expect(offenders(/\banimate-(spin|pulse|ping|bounce)\b/)).toEqual([]);
+  const css = code(files.find((f) => f.path === "index.css")!.text);
+  const forever = [...css.matchAll(/^\s*\.([\w-]+)\s*\{[^}]*\binfinite\b[^}]*\}/gm)].map((m) => m[1]);
+  expect(forever).toEqual(["glow-window", "glow-copy"]);
+  for (const name of ["glow-window", "glow-copy"]) {
+    const frames = new RegExp(`@keyframes ${name} \\{([^@]*?)\\}\\s*(?=@|\\.|$)`).exec(css)?.[1] ?? "";
+    expect(frames.match(/\b[a-z-]+(?=\s*:)/g)).toEqual(["transform", "transform"]);
+    expect(css).toMatch(new RegExp(`\\.${name} \\{[^}]*steps\\(30\\)`));
+  }
+  // Only the glow draws them, and only while it may move (work-activity-label.tsx).
+  expect(offenders(/glow-window/).filter((path) => path !== "index.css")).toEqual(["components/work-activity-label.tsx"]);
 });
 
 // One set of lengths and one curve (index.css --motion-*): a control 120 ms, a panel 180 ms, a page

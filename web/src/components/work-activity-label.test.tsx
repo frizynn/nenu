@@ -93,14 +93,14 @@ describe("WorkActivityLabel", () => {
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
   });
 
-  // A pulse on the words was the only live signal, and reduced motion took it away; a spinner then
-  // cost CPU for the whole turn. The mark is a steady dot in the working colour, for everyone.
-  it("marks the live state with a still dot beside the words, with nothing that moves", () => {
+  // The words glow while the agent works (ADR 0117): a light passes across them, nothing else moves.
+  // jsdom has no IntersectionObserver, so the glow stays still and its words are on the page once.
+  it("glows its words, with no spinner, no dot and no second copy while still", () => {
     const { container } = render(<WorkActivityLabel startedAt={startedAt} />);
-    const glyph = container.querySelector("[data-live-glyph]");
-    expect(glyph).toHaveAttribute("aria-hidden", "true");
-    expect(glyph).toHaveClass("text-status-working");
-    expect(glyph?.querySelector("svg")).toBeNull();
+    expect(container.querySelector("[data-glow]")).toHaveAttribute("data-glow", "still");
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("[class*='animate-']")).toBeNull();
+    expect(screen.getAllByText(/^Working for/)).toHaveLength(1);
   });
 });

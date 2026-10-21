@@ -15,7 +15,8 @@ import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Fold } from "./fold";
-import { LiveGlyph } from "./work-activity-label";
+import { Glow } from "./work-activity-label";
+import { useEnter } from "@/lib/enter";
 import { StateMark } from "@/components/status-badge";
 
 // A turn's work as a timeline, the same on a phone and a desk: one line per step, its icon and what it
@@ -107,14 +108,17 @@ function describeCall(part: ToolPart): ToolStepDescription & { text: string } {
 const ROW = "group -mx-1.5 flex w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-subhead min-h-6 coarse:min-h-11 pointer-fine:hover:bg-hover";
 const CHEVRON = "size-3 shrink-0 text-subtle-foreground transition-[rotate,color] duration-120 ease-out group-hover:text-foreground motion-reduce:transition-none";
 
-/** A step in progress: its line carries the live glyph for its icon; the turn's line says how long. */
+/** A step in progress: its words glow where it sits; the turn's line says how long. */
 type Live = Pick<LiveStep, "since">;
+
+const ROW_TEXT = "flex min-w-0 flex-1 items-center gap-2";
 
 /**
  * A step's line. With `onToggle` it is the button that opens the step's body; without, it keeps the
  * chevron's place, so whatever ends a line sits in one column down the timeline. A toggle reports
  * itself (`data-work-toggle`) so the thread holds still and stops following. The live step is the
- * tail the thread follows, so it opens without reporting and the thread keeps following it.
+ * tail the thread follows, so it opens without reporting and the thread keeps following it. Its icon
+ * stays the step's own, so nothing on the line changes but the words when it finishes.
  */
 function StepLine({ icon, live, label, title, expanded, controls, onToggle, children }: {
   icon: ReactNode;
@@ -126,12 +130,12 @@ function StepLine({ icon, live, label, title, expanded, controls, onToggle, chil
   onToggle?: () => void;
   children: ReactNode;
 }) {
-  const lead = live ? <LiveGlyph /> : icon;
   const chevron = <ChevronRight aria-hidden="true" className={cn(CHEVRON, expanded && "rotate-90", !onToggle && "invisible")} />;
-  if (!onToggle) return <div className={ROW} title={title}>{lead}{children}{chevron}</div>;
+  const text = live ? <Glow layout={ROW_TEXT}>{children}</Glow> : <span className={ROW_TEXT}>{children}</span>;
+  if (!onToggle) return <div className={ROW} title={title}>{icon}{text}{chevron}</div>;
   return <button type="button" data-work-toggle={live ? undefined : true} aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
     title={title} className={ROW}>
-    {lead}{children}{chevron}
+    {icon}{text}{chevron}
   </button>;
 }
 
@@ -272,15 +276,15 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
 }
 
 /**
- * The bottom line of a running turn: the step in progress, marked live. It opens like any step, so a
- * command or a thought cut short on a phone can be read whole while it runs. The call a live dialog
- * asks about (`waiting`) keeps this place and reads as waiting.
+ * The end of a running turn while no step is in flight: the agent is thinking or writing. It sits
+ * where the next step will appear, and glows like the step in progress does.
  */
-export function LiveStepRow({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
-  return <div data-live-step data-turn={marker} className={focused && marker ? "rounded ring-2 ring-primary/60" : undefined}>
-    {step.part.kind === "tool"
-      ? <ToolStep id={`${step.entry}:${step.index}`} part={step.part} owner={step.entry} query={query} active focused={focused} live={step} waiting={waiting} />
-      : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} live={step} />}
+export function ThinkingNow() {
+  const enter = useEnter();
+  return <div data-live-step="thinking" role="status" className={enter}>
+    <StepLine icon={<StepIcon kind="thinking" />} live={{}}>
+      <span className="shrink-0 text-muted-foreground">Thinking…</span>
+    </StepLine>
   </div>;
 }
 
@@ -295,20 +299,31 @@ function runIcon(steps: WorkStep[]): StepKind {
   return kinds.size === 1 ? [...kinds][0] as StepKind : "tool";
 }
 
+/** One step's row. One that joins the run while the thread is on screen eases in (lib/enter.ts). */
+function StepItem({ step, query, focused, active, asked, live, marker }: {
+  step: WorkStep; query: string; focused: boolean; active: boolean; asked?: string; live: LiveStep | null; marker?: string;
+}) {
+  const enter = useEnter();
+  const id = `${step.entry}:${step.index}`;
+  // The step in progress glows where it sits; one a dialog asks about reads as waiting there instead.
+  const now = live?.entry === step.entry && live.index === step.index ? live : undefined;
+  return <li data-turn={marker} data-live-step={now ? step.part.kind : undefined}
+    className={cn(enter, focused && "rounded ring-2 ring-inset ring-primary/60")}>
+    {step.part.kind === "tool"
+      ? <ToolStep id={id} part={step.part} owner={step.entry} query={query} active={active} focused={focused} live={now} waiting={asked === id} />
+      : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} live={now} />}
+  </li>;
+}
+
 /** Each step of a run as its own row; an entry's scroll marker sits on its first row, wherever its run is. */
-function StepRows({ steps, query, focusedUuid, active, asked }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string }) {
+function StepRows({ steps, query, focusedUuid, active, asked, live }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null }) {
   const marked = new Set<string>();
   return <ol data-work-log className="min-w-0 select-text">
     {steps.map((step) => {
       const first = !marked.has(step.entry);
       marked.add(step.entry);
-      const focused = step.entry === focusedUuid;
-      const id = `${step.entry}:${step.index}`;
-      return <li key={id} data-turn={first ? step.entry : undefined} className={focused ? "rounded ring-2 ring-inset ring-primary/60" : undefined}>
-        {step.part.kind === "tool"
-          ? <ToolStep id={id} part={step.part} owner={step.entry} query={query} active={active} focused={focused} waiting={asked === id} />
-          : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} />}
-      </li>;
+      return <StepItem key={`${step.entry}:${step.index}`} step={step} query={query} focused={step.entry === focusedUuid} active={active} asked={asked} live={live}
+        marker={first ? step.entry : undefined} />;
     })}
   </ol>;
 }
@@ -323,7 +338,7 @@ function StepRows({ steps, query, focusedUuid, active, asked }: { steps: WorkSte
  * folding them then would pull a line in above the rows and hide one the reader may have opened. It
  * folds the next time it is drawn whole.
  */
-export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; at?: string }) {
+export function WorkSteps({ steps, query, focusedUuid, active, asked, at, live = null }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; at?: string; live?: LiveStep | null }) {
   const [expanded, setExpanded] = useState(false);
   // A run whose calls still run is drawn as rows, and stays rows from the moment one joins it: its line
   // would say "Ran" of what has not finished.
@@ -332,7 +347,7 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { st
   if (folding && running) setFolding(false);
   const contentId = useId();
   const toolImages = useToolImages();
-  if (!folding || !foldsSteps(steps)) return <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />;
+  if (!folding || !foldsSteps(steps)) return <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} live={live} />;
   const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query) || asked === `${step.entry}:${step.index}`);
   const diff = stepsDiff(steps);
   const failures = steps.filter(({ part }) => part.kind === "tool" && part.result?.isError).length;
@@ -353,7 +368,7 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { st
     </button>
     <ImageStrip images={images} label="Images these steps returned" className="pb-1 pl-6" />
     <Fold value={open} animate={expanded}>{() => <div id={contentId}>
-      <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />
+      <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} live={live} />
     </div>}</Fold>
   </div>;
 }

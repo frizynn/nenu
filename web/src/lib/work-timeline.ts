@@ -155,7 +155,7 @@ export function commandLine(text: string): string {
 
 /**
  * What a running turn is doing now: a call still waiting for its result, or the thought being
- * written. `entry` and `index` name that part, so the timeline draws it once, as the turn's live row.
+ * written. `entry` and `index` name that part, so the timeline marks it live where it sits in its run.
  */
 export interface LiveStep {
   part: Extract<TranscriptPart, { kind: "tool" | "thinking" }>;
@@ -198,26 +198,24 @@ export type WorkSegment =
   | { kind: "steps"; id: string; at: string; steps: WorkStep[] };
 
 /**
- * `activity` cut at the agent's words. The live step is left out of its run, since it draws below as the
- * turn's last row, but it still opens the run it belongs to, so the run is named by it from the start; a
- * run holding nothing but the live step is left out.
+ * `activity` cut at the agent's words. The step in progress sits in its run where it will stay, so it
+ * turns from running to done in place.
  */
-export function workSegments(activity: TranscriptEntry[], live: LiveStep | null): WorkSegment[] {
+export function workSegments(activity: TranscriptEntry[]): WorkSegment[] {
   const segments: WorkSegment[] = [];
   for (const entry of activity) {
     entry.parts.forEach((part, index) => {
       if (part.kind === "image") return;
       const last = segments.at(-1);
       if (part.kind === "tool" || part.kind === "thinking") {
-        const step = { part, entry: entry.uuid, index };
         let run = last?.kind === "steps" ? last : null;
         if (!run) segments.push(run = { kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [] });
-        if (live?.entry !== entry.uuid || live.index !== index) run.steps.push(step);
+        run.steps.push({ part, entry: entry.uuid, index });
       } else if (last?.kind === "prose" && last.entry === entry) last.parts.push({ part, index });
       else segments.push({ kind: "prose", entry, parts: [{ part, index }] });
     });
   }
-  return segments.filter((segment) => segment.kind === "prose" || segment.steps.length > 0);
+  return segments;
 }
 
 /**
