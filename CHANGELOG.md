@@ -21,6 +21,10 @@ All notable changes to Nenu are recorded here. The format follows
 - Less on a phone's first screen: no idle count in Home's headline, no date, no History or task counts in the drawer, no workspace or agent counts in its footer, and Close coordinator moved to the end of its page (63be049c, 020e76e4).
 - A coordinator's page on a phone offers New thread and New coordinator under it (0060e6f9).
 
+### Fixed
+
+- A working thread without a pane no longer reads "not running" in the navigation (a9878c0c).
+
 ## [1.36.1] - 2026-10-21
 
 ### Fixed

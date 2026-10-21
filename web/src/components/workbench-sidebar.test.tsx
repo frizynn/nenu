@@ -483,7 +483,9 @@ describe("the sidebar", () => {
   });
 
   it("leads a phone's drawer with what waits on you, then the projects, each opening on its coordinators' pages and the work that moves", async () => {
-    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={herd} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
+    // A thread whose last group says working, in no pane: its dot says working, so no "not running" beside it.
+    const busy = { ...acme, threads: [...acme.threads, thread("t6", "cart", "root", { group: "working" })] };
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={{ ...herd, projects: [busy] }} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
     render(<RouterProvider router={router} />);
     const scroll = document.querySelector(".nav-scroll")!;
     expect([...scroll.querySelectorAll(":scope > section")].map((section) => section.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces", "Recent"]);
@@ -493,6 +495,10 @@ describe("the sidebar", () => {
     await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
     expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/project/acme/node/root");
     expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/project/acme/node/t1");
+    // A › says a coordinator's row leads to a page; a thread's does not.
+    expect(project.getByRole("link", { name: /^rediseño mobile/ }).lastElementChild?.tagName.toLowerCase()).toBe("svg");
+    expect(project.getByRole("link", { name: /^panel depo/ }).lastElementChild?.tagName.toLowerCase()).not.toBe("svg");
+    expect(project.getByRole("link", { name: /^cart/ })).not.toHaveTextContent("not running");
     expect(project.getByRole("link", { name: /^panel depo/ })).toHaveAttribute("href", "/pane/depo");
     expect(project.getByRole("link", { name: /^panel merca/ })).toBeInTheDocument();
     // An open thread that runs nowhere, a pane outside every thread and History stay on the project's page.

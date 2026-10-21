@@ -104,11 +104,12 @@ async function main(): Promise<void> {
     const reached = (path: string, slug: string) => path.startsWith(`/project/${slug}/node/`) || (slug === "nenu" && path.startsWith("/pane/"));
     // Each coordinator with the rows a person taps from the project page to it: a nested one goes
     // through its parent's page, one tap more.
-    const targets: ReadonlyArray<readonly [string, string, string, readonly string[]]> = [
-      ["acme", "Acme Shop", "Project coordinator", []], ["acme", "Acme Shop", "Migración de stock", []], ["acme", "Acme Shop", "Rediseño mobile", []],
-      ["acme", "Acme Shop", "Checkout", ["Rediseño mobile"]], ["nenu", "Nenu", "", []],
+    // The last field is the page a coordinator lands on; empty where the project opens on its chat.
+    const targets: ReadonlyArray<readonly [string, string, string, readonly string[], string]> = [
+      ["acme", "Acme Shop", "Project coordinator", [], "/node/root"], ["acme", "Acme Shop", "Migración de stock", [], "/node/t-0101"],
+      ["acme", "Acme Shop", "Rediseño mobile", [], "/node/t-0102"], ["acme", "Acme Shop", "Checkout", ["Rediseño mobile"], "/node/t-0105"], ["nenu", "Nenu", "", [], ""],
     ];
-    for (const [slug, project, coordinator, through] of targets) {
+    for (const [slug, project, coordinator, through, node] of targets) {
       const name = coordinator || `${project} coordinator`;
       const steps: Step[] = [];
       // From Home: its Projects tab, the project's row, then the coordinator's row.
@@ -125,13 +126,14 @@ async function main(): Promise<void> {
           if (await entry.count()) { await entry.click(); taps++; await page.waitForTimeout(2500); }
           steps.push({ at: `home → ${title}`, path: here(page), taps });
         }
-        const node = coordinator === "Checkout" ? "/node/t-0105" : "";
         if (!reached(here(page), slug) || !here(page).includes(node) || taps > 2 + through.length) failures.push(`home: ${name} took ${taps} taps and landed on ${here(page)}`);
         await shoot(page, `reach-${slug}-${(coordinator || "own").split(" ")[0]!.toLowerCase()}-home-390`);
         await context.close();
       }
-      // From the drawer: ☰, unfold the project, the coordinator's row.
-      if (through.length === 0) {
+      // From the drawer: ☰, unfold the project, the coordinator's row. A nested one is reached from its
+      // parent's page, measured above; the drawer's walk is recorded as skipped.
+      if (through.length > 0) steps.push({ at: "drawer: skip, nested", path: "", taps: 0 });
+      else {
         const { page, context } = await open(PHONE);
         let taps = 0;
         await page.getByRole("button", { name: "Open navigation" }).first().click(); taps++;
