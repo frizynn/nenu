@@ -4,7 +4,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 
 import { errorMessage } from "@/components/node-start";
 import { NodeDot, TaskRow } from "@/components/node-row";
-import type { Organize } from "@/components/project-tasks";
 import { openOrgProject, replaceOrgCoordinator, type CoordinatorChoice } from "@/lib/api";
 import { coordinatorState } from "@/lib/org-tree";
 import { runningCoordinator } from "@/lib/projects";
@@ -15,12 +14,8 @@ import { cn } from "@/lib/utils";
 // Drawn only when Start or Replace is tapped, so it stays out of the first load.
 const CoordinatorWindow = lazy(() => import("@/components/coordinator-window").then((module) => ({ default: module.CoordinatorWindow })));
 
-/**
- * The project's own coordinator: its row, which can replace it with another agent, or a way to start
- * it. On a project that organizes coordinators (`organize`) it is the first of them, a row into its
- * page, and only while it runs: Start is then a small action beside New (StartProjectCoordinator).
- */
-export function ProjectCoordinator({ project, panes, session, current, readOnly, onOpenPane, onChanged, organize }: {
+/** The project's own coordinator: its row, which can replace it with another agent, or a way to start it. */
+export function ProjectCoordinator({ project, panes, session, current, readOnly, onOpenPane, onChanged }: {
   project: ProjectView;
   panes: readonly AgentView[];
   session?: string;
@@ -28,23 +23,20 @@ export function ProjectCoordinator({ project, panes, session, current, readOnly,
   readOnly: boolean;
   onOpenPane: (paneId: string) => void;
   onChanged: () => Promise<void> | void;
-  organize?: Organize;
 }) {
   const [replacing, setReplacing] = useState(false);
   const coordinator = runningCoordinator(project);
-  if (!coordinator) return organize ? null : <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
+  if (!coordinator) return <CoordinatorStart project={project} session={session} readOnly={readOnly} onStarted={onChanged} />;
   const doing = panes.find((pane) => pane.paneId === coordinator.paneId)?.terminalTitle ?? STATUS_LABEL[coordinator.liveStatus];
   const here = current === coordinator.paneId;
   // Upstream herdr-projects has no `coordinator replace`.
   const replaceable = !readOnly && project.nodeActions !== false;
-  const row = <TaskRow state={coordinatorState(coordinator.liveStatus) ?? "idle"} title={organize ? "Project coordinator" : "Coordinator"}
+  const row = <TaskRow state={coordinatorState(coordinator.liveStatus) ?? "idle"} title="Coordinator"
     detail={[here && "You're here", coordinator.agent, doing].filter(Boolean).join(" · ")}
-    current={here} onOpen={() => organize ? organize.openCoordinator("root") : onOpenPane(coordinator.paneId)} opens={organize ? "page" : "chat"}
+    current={here} onOpen={() => onOpenPane(coordinator.paneId)} opens="chat"
     actions={replaceable ? [{ label: "Replace", name: "Replace coordinator", menuLabel: "Replace coordinator…", icon: RefreshCw, run: () => setReplacing(true) }] : undefined} />;
   return <>
-    {organize
-      ? <section aria-label="Project coordinator" className="mb-1"><ul className="task-list">{row}</ul></section>
-      : <ul className="task-list mb-2">{row}</ul>}
+    <ul className="task-list mb-2">{row}</ul>
     {replacing && <ReplaceCoordinator project={project} agent={coordinator.agent} session={session}
       onReplaced={() => { setReplacing(false); void onChanged(); }} onCancel={() => setReplacing(false)} />}
   </>;

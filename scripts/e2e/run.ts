@@ -2376,13 +2376,9 @@ async function back(): Promise<void> {
       await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
       await log("project");
       if (way.coordinator) {
-        // A desk's project opens a coordinator's page on a tap on its card's head (ADR 0109), a phone's
-        // on a tap on its row (ADR 0110), and Open chat its chat (ADR 0102).
+        // A tap on a coordinator's row enters its chat, a desk's and a phone's alike (ADR 0115).
         if (device === DESKTOP) await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
         else await open(way.coordinator.title);
-        await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });
-        await log("coordinator-page");
-        await page.locator("main").getByRole("button", { name: "Open chat" }).click({ timeout: 5000 });
         await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
         await log("coordinator");
         if (device === PHONE) {

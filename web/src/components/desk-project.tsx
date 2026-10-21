@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronDown, ChevronLeft, History, Plus, Search, Workflow } from "@/components/ui/icon";
 
 import { NodeDot } from "@/components/node-row";
-import { CoordinatorWorkCard, DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenNode, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
+import { CoordinatorWorkCard, DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenCoordinator, useOpenNode, WaitingByCoordinator, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -13,10 +13,10 @@ import { StartProjectCoordinator } from "@/components/project-coordinator";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useAsks } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
-import { coordinatorState, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
+import { coordinatorState, type OrgNode } from "@/lib/org-tree";
 import { finishedCount, historyDays, waitingGroups, workCards, type HistoryRow } from "@/lib/project-work";
 import { clockTime } from "@/lib/format";
-import { nodePath, panePath, projectsPath } from "@/lib/nav";
+import { panePath } from "@/lib/nav";
 import { runningCoordinator } from "@/lib/projects";
 import { isReadOnly, type AgentView, type DeviceAuth, type NodeRole, type ProjectView } from "@/lib/types";
 
@@ -51,10 +51,12 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
   const [tab, setTab] = useDeskTab(tabs);
   const coordinator = runningCoordinator(project);
   const openNode = useOpenNode(project, panes, session);
+  const openCoordinator = useOpenCoordinator(project, panes, session);
   const roles = readOnly ? [] : startableRoles(project);
 
   return <>
-    <DeskHead crumb={<Link to={projectsPath(session)} className="hover:text-foreground">Projects</Link>} title={project.name}
+    {/* The header's back says Projects: no crumb repeats it. */}
+    <DeskHead title={project.name}
       mark={<ProjectGlyph slug={project.slug} pick={project} size={20} />} subtitle={project.goal}
       actions={<>
         {coordinator
@@ -64,9 +66,8 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
       </>} />
     <DeskTabs label={project.name} tabs={tabs} tab={tab} onChange={setTab} />
     <div role="tabpanel" aria-label={tabs.find((candidate) => candidate.id === tab)!.label}>
-      {tab === "work" && <Work project={project} waiting={(id) => waiting.find((group) => group.coordinator.id === id)?.count ?? 0}
-        coordinator={coordinator} canStart={roles.includes("worker")} onOpenNode={openNode} onChanged={onChanged}
-        onOpenCoordinator={(id) => navigate(nodePath(project.slug, id, session))} />}
+      {tab === "work" && <ProjectWork project={project} waiting={(id) => waiting.find((group) => group.coordinator.id === id)?.count ?? 0}
+        canStart={roles.includes("worker")} onOpenNode={openNode} onChanged={onChanged} onOpenCoordinator={openCoordinator} />}
       {tab === "waiting" && (asks.list
         ? <WaitingByCoordinator list={asks.list} project={project} session={session} readOnly={readOnly} />
         : <p className="px-1 text-subhead text-muted-foreground">{!asks.loaded ? "Reading…" : asks.failed ?? "This Herdr Organizations can’t list asks yet; update it to see them here."}</p>)}
@@ -77,12 +78,12 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
 }
 
 /**
- * The open work, a card per coordinator; finished work is History (`?work=finished`), one quiet step away
- * (ADR 0106): by day, newest first, with a search.
+ * The open work, a row per coordinator that enters its chat, its threads folded under it (ADR 0115);
+ * finished work is History (`?work=finished`), one quiet step away (ADR 0106): by day, newest first,
+ * with a search. A desk's project page and a phone's draw it alike.
  */
-function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
+export function ProjectWork({ project, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
   project: ProjectView;
-  coordinator: ReturnType<typeof runningCoordinator>;
   waiting: (coordinatorId: string) => number;
   canStart: boolean;
   onOpenNode: (node: OrgNode) => void;
@@ -97,14 +98,15 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
     else { kept.delete("work"); kept.delete("q"); }
     return kept;
   }, { replace: true });
-  // Cards start open; a fold the person changed lasts while the page does.
-  const [folds, setFolds] = useState<Record<string, boolean>>({});
+  // Rows start folded; a fold the person opened lasts while the tab does, so a chat and back finds it open.
+  const [folds, setFolds] = useFolds(project.slug);
   // A fold re-renders Work; the tree is read again only when a poll brings new threads.
   const finished = useMemo(() => finishedCount(project), [project]);
   const cards = useMemo(() => workCards(project), [project]);
   if (history) return <WorkHistory project={project} count={finished} search={params.get("q") ?? ""} onBack={() => showHistory(false)} onOpenNode={onOpenNode} />;
 
-  const rootState = coordinator && coordinatorState(coordinator.liveStatus);
+  const root = runningCoordinator(project);
+  const rootState = root && coordinatorState(root.liveStatus);
   const newThread = (parent: string) => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent, onStarted: onChanged });
   const threads = cards.reduce((sum, card) => sum + card.rows.length, 0);
   return <>
@@ -113,10 +115,8 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
     </div>
     {cards.map((card) => {
       const id = card.coordinator?.thread.id ?? "root";
-      const open = folds[id] ?? true;
-      const own = card.coordinator ? (card.coordinator.state === "working" ? "working" : undefined)
-        : rootState ? `coordinator ${STATE_LABEL[rootState].toLowerCase()}` : undefined;
-      return <CoordinatorWorkCard key={id} card={card} waiting={waiting(id)} open={open} ownState={own}
+      const open = folds[id] ?? false;
+      return <CoordinatorWorkCard key={id} card={card} waiting={waiting(id)} open={open} own={card.coordinator ? card.coordinator.state : rootState}
         onToggle={() => setFolds((current) => ({ ...current, [id]: !open }))}
         onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
         onNewThread={canStart ? () => newThread(id) : undefined} />;
@@ -203,4 +203,27 @@ function NewMenu({ project, roles, onStarted }: { project: ProjectView; roles: r
       ))}
     </WorkbenchPopover>
   </>;
+}
+
+/** Which of a project's rows are unfolded, kept for the tab's session: a chat and back finds them as they were left. */
+function useFolds(project: string) {
+  const key = `nenu.folds.${project}`;
+  const [folds, setFolds] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved: unknown = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+      return saved && typeof saved === "object" && !Array.isArray(saved)
+        ? Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))
+        : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(folds));
+    } catch {
+      // Storage refused (a private window): the folds last as long as the page.
+    }
+  }, [key, folds]);
+  return [folds, setFolds] as const;
 }

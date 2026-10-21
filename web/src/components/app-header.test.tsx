@@ -163,8 +163,8 @@ describe("AppHeader — the phone's leading control", () => {
     expect(back).not.toHaveClass("lg:hidden");
   });
 
-  it("keeps a thread's way up to its coordinator on a desk, named, where the flat sidebar cannot climb", () => {
-    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "coord-arreglos", to: "/pane/c1" }}><span>AWA-476</span></AppHeader>);
+  it("keeps a way up a project's tree on a desk, named, where the flat sidebar cannot climb", () => {
+    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "coord-arreglos", to: "/pane/c1", desk: true }}><span>AWA-476</span></AppHeader>);
     const back = screen.getByRole("link", { name: "Back to coord-arreglos" });
     expect(back).not.toHaveClass("lg:hidden");
     expect(back).toHaveTextContent("coord-arreglos");

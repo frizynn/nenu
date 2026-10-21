@@ -43,11 +43,11 @@ function setup(path: string, loader: () => HomeData | Promise<HomeData> = () => 
 it("opens a resolved node's detail from History on the project page, and walks up to its coordinator", async () => {
   const { router, user } = setup("/project/hub");
   await user.click(await screen.findByRole("button", { name: /^History/ }));
-  await user.click(screen.getByRole("button", { name: "Plan threads" }));
-  await user.click(screen.getByRole("button", { name: /^Step/ }));
+  // History lists each finished thread by who ran it.
+  await user.click(await screen.findByRole("button", { name: /^Step\s*Plan/ }));
   expect(router.state.location.pathname).toBe("/project/hub/node/t-2");
+  expect((await screen.findAllByRole("heading", { name: "Step" })).length).toBeGreaterThan(0);
   const main = within(screen.getByRole("main"));
-  expect(main.getByRole("heading", { name: "Step" })).toBeInTheDocument();
   expect(main.getByRole("region", { name: "Node" })).toHaveTextContent("Resolved");
   expect(main.getByRole("region", { name: "Node" })).toHaveTextContent("PR #4 merged");
   expect(main.getByText("hp/step")).toBeInTheDocument();
@@ -69,22 +69,33 @@ it("offers nothing to start under a coordinator that finished", async () => {
   expect(main.queryByRole("button", { name: /under Plan$/ })).not.toBeInTheDocument();
 });
 
-it("offers a live node's chat without jumping to it, and closes an open one after confirming", async () => {
+it("enters a running coordinator at its chat", async () => {
+  const { router } = setup("/project/hub/node/t-3");
+  await waitFor(() => expect(router.state.location.pathname).toBe("/pane/lead"));
+  // Replaced, not pushed: Back leaves the chat for wherever came before.
+  expect(router.state.historyAction).toBe("REPLACE");
+});
+
+it("offers a live thread's chat without jumping to it, and closes an open one after confirming", async () => {
   let posted: unknown;
   server.use(http.post("/api/org/node/resolve", async ({ request }) => { posted = await request.json(); return HttpResponse.json({ ok: true }); }));
-  const { router, user } = setup("/project/hub/node/t-3");
+  // Lead's pane closed: its page stands in for its chat.
+  const stopped = { ...data, agents: [pane("docs")], projects: [{ ...project, threads: project.threads.map((thread) => thread.id === "t-4" ? { ...thread, paneId: "docs" } : thread) }] };
+  const { router, user } = setup("/project/hub/node/t-3", () => stopped);
   const main = within(await screen.findByRole("main"));
   expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
-  expect(within(main.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Docs/ })).toHaveTextContent("pane closed");
+  expect(within(main.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Docs/ })).toBeInTheDocument();
   // More work starts under it from its own page.
   expect(main.getByRole("button", { name: "New thread under Lead" })).toBeInTheDocument();
   // Lead still runs Docs, so Close (a quiet action at the end of its page) explains instead of closing.
   await user.click(main.getByRole("button", { name: "Close coordinator…" }));
   expect(screen.getByRole("dialog", { name: "Close its work first" })).toHaveTextContent("Lead still has 1 open under it.");
   await user.click(screen.getByRole("button", { name: "OK" }));
-  await user.click(main.getByRole("button", { name: "Open chat" }));
-  expect(router.state.location.pathname).toBe("/pane/lead");
+  expect(main.queryByRole("button", { name: "Open chat" })).not.toBeInTheDocument();
 
+  await router.navigate("/project/hub/node/t-4");
+  await user.click(await screen.findByRole("button", { name: "Open chat" }));
+  expect(router.state.location.pathname).toBe("/pane/docs");
   await router.navigate("/project/hub/node/t-4");
   // A node's own detail carries what Organizations noted about it.
   expect(await screen.findByRole("region", { name: "Node" })).toHaveTextContent("pane closed");

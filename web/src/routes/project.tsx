@@ -3,7 +3,11 @@ import { Link, Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderD
 import { ChevronRight } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
-import { DeskProject } from "@/components/desk-project";
+import { CoordinatorStatus } from "@/components/coordinator-status";
+import { useOpenCoordinator, useOpenNode } from "@/components/desk-pages";
+import { DeskProject, ProjectWork } from "@/components/desk-project";
+import { NewNodeActions, startableRoles } from "@/components/node-start";
+import { StartProjectCoordinator } from "@/components/project-coordinator";
 import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
 import { ProjectGlyph } from "@/components/project-glyph";
@@ -13,9 +17,10 @@ import { useDesk } from "@/hooks/use-desk";
 import { coordinatorAsks } from "@/lib/asks";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { asksPath, nodePath, panePath } from "@/lib/nav";
+import { asksPath, nodePath, panePath, projectsPath } from "@/lib/nav";
+import { waitingGroups } from "@/lib/project-work";
 import { organizes, orgTree } from "@/lib/org-tree";
-import { isReadOnly, type StatusFile } from "@/lib/types";
+import { isReadOnly, type ProjectView, type StatusFile } from "@/lib/types";
 import { projectChat, runningCoordinator } from "@/lib/projects";
 
 // On a desk a project is its own page, with tabs (ADR 0102); on a phone it is as before.
@@ -28,7 +33,7 @@ function DeskProjectRoute() {
   const { projectSlug = "" } = useParams();
   const revalidator = useRevalidator();
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
-  return <ColumnPage data={data} title={project?.name ?? "Project"}>
+  return <ColumnPage data={data} title={project?.name ?? "Project"} back={{ label: "Projects", to: projectsPath(data.session), desk: true }}>
     {!project ? <ProjectMissing session={data.session} />
       // Keyed by project: its folds and reads are its own.
       : <DeskProject key={project.slug} project={project} panes={data.agents} device={data.device} session={data.session} onChanged={() => void revalidator.revalidate()} />}
@@ -36,10 +41,11 @@ function DeskProjectRoute() {
 }
 
 // A project with only its own coordinator opens on that coordinator's conversation; the pane route
-// frames it with the task list. A project that organizes coordinators is their page (ADR 0092): each
-// one a row into its page (ADR 0110), the project's own first while it runs, and the threads at the
-// top level apart, under what waits on you there. Without a live coordinator either way, the project is
-// its organization: a way to start the coordinator, the open tree, History, and New.
+// frames it with the task list. A project that organizes coordinators is their page (ADR 0092), drawn
+// as a desk draws it: a row per coordinator that enters its chat, its threads folded under it, the
+// project's own last with the threads started from the project (ADR 0115). Without a live coordinator
+// and nothing to organize, the project is its organization: a way to start the coordinator, the open
+// tree, History, and New.
 function PhoneProjectRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "" } = useParams();
@@ -67,6 +73,7 @@ function PhoneProjectRoute() {
   const headStatus = !organizer || (project && !runningCoordinator(project) && rootStatus && says(rootStatus)) ? rootStatus : undefined;
 
   const waiting = project?.waitingAsks ?? 0;
+  const readOnly = isReadOnly(data.device);
 
   // The goal stays on the desk's page: on a phone the name, what waits on you and what runs come first.
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
@@ -78,12 +85,32 @@ function PhoneProjectRoute() {
         <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
       </Link>}
       {/* Keyed by project: its folds are its own, and node ids repeat across projects. */}
-      <ProjectTasks key={project.slug} project={project} bare status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
-        organize={{ openCoordinator: (id) => navigate(nodePath(project.slug, id, data.session)) }}
-        onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
-        onChanged={() => revalidator.revalidate()} />
+      {organizer
+        ? <PhoneWork key={project.slug} project={project} status={headStatus} data={data} waiting={(id) => asks.list ? waitingGroups(asks.list, project).find((group) => group.coordinator.id === id)?.count ?? 0 : 0} />
+        : <ProjectTasks key={project.slug} project={project} bare status={headStatus} panes={data.agents} session={data.session} readOnly={readOnly}
+          onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
+          onChanged={() => revalidator.revalidate()} />}
     </>}
   </ColumnPage>;
+}
+
+/** A phone's project that organizes coordinators: its rows, as a desk draws them, and New under them. */
+function PhoneWork({ project, status, data, waiting }: { project: ProjectView; status?: StatusFile; data: HomeData; waiting: (coordinatorId: string) => number }) {
+  const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const openNode = useOpenNode(project, data.agents, data.session);
+  const openCoordinator = useOpenCoordinator(project, data.agents, data.session);
+  const readOnly = isReadOnly(data.device);
+  const refresh = () => void revalidator.revalidate();
+  return <>
+    {status && <CoordinatorStatus status={status} project={project} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
+    <ProjectWork project={project} waiting={waiting} canStart={!readOnly && startableRoles(project).includes("worker")}
+      onOpenNode={openNode} onOpenCoordinator={openCoordinator} onChanged={refresh} />
+    {!readOnly && <div className="mt-4 flex flex-wrap gap-1">
+      <NewNodeActions project={project} session={data.session} onStarted={refresh} />
+      <StartProjectCoordinator project={project} session={data.session} onStarted={refresh} />
+    </div>}
+  </>;
 }
 
 /** How long a project page waits for what heads it before it draws without it. */

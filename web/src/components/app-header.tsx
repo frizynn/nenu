@@ -34,11 +34,10 @@ export interface HeaderBack {
   /** The parent is shown in place (a subagent's Main): its name sits beside the chevron, and the back
    *  stays on a desk, where the sidebar cannot reach it. */
   inPlace?: boolean;
+  /** Stays on a desk with the parent's name beside it: inside a project, where the way up is a level of
+   *  the project's own tree (coordinator → project → Projects, ADR 0115). */
+  desk?: boolean;
 }
-
-/** Parents the desk's flat sidebar cannot climb to, a thread's coordinator or a node's parent, so the
- *  back stays on a desk with their name beside it. */
-const UNLISTED_PARENTS = ["/pane/:paneId", "/project/:projectSlug/node/:nodeId"];
 
 interface AppHeaderProps {
   // Brief network failures do not animate the header. A sustained outage mutes the mark.
@@ -99,8 +98,8 @@ export function AppHeader({
   const mark = !back && home;
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const parent = back?.to ?? homePath(session);
-  // Only from a chat or a node: a page under a chat (its history) has its own way back on a desk.
-  const unlisted = !back?.onClick && [pathname, parent.split("?")[0]!].every((path) => UNLISTED_PARENTS.some((route) => matchPath(route, path) !== null));
+  // Inside a project the way up is a level of its tree, which the desk's flat sidebar cannot climb.
+  const unlisted = Boolean(back?.desk);
   const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : unlisted ? "lg:pr-2" : "lg:hidden");
   // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
   // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
