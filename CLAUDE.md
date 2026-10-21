@@ -231,7 +231,7 @@ the unit name; the Herdr action runs from anywhere.
   replaces itself with its parent (`useGoBack`). A move up to a named node is `navigate(-1)` when that node
   is the entry before and a replace otherwise (`useGoUp`); a sibling replaces, a coordinator's thread
   pushes, and a phone's tab is `?view=`, replaced. `bun scripts/e2e/run.ts back` must end three backs at
-  the entry length + 3 and `bun scripts/e2e/origin.ts` must land 12 of 12
+  the entry length + 3 (four and + 4 through a coordinator's page) and `bun scripts/e2e/origin.ts` must land 12 of 12
   ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
   [ADR 0097](./.adr/0097-the-back-control-returns-to-the-screen-you-came-from.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only

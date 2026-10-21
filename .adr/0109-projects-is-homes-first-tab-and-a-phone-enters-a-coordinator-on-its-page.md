@@ -25,9 +25,9 @@ running coordinator organizes two others, one whose coordinator only has workers
 | Project page, a coordinator's row | its chat; the › folded a card in place | its page (status, threads, Open chat): 1 tap |
 | Drawer (☰) | Recent before Projects; a coordinator opened its chat; History and open-task counts | Projects after Needs you; a coordinator opens its page: 3 taps |
 
-None of the 3 coordinators of the organizing project was reachable from Home before; all 4 are within
-2 taps after. A coordinator's chat is one more tap from its page, and the project with only its own
-coordinator still opens on that chat (ADR 0092).
+None of the 3 coordinators of the organizing project was reachable from Home before; after, each
+top-level one is 2 taps away and the nested one 3. A coordinator's chat is one more tap from its page,
+and the project with only its own coordinator still opens on that chat (ADR 0092).
 
 ## Decision
 
@@ -38,12 +38,13 @@ coordinator still opens on that chat (ADR 0092).
    review there. The rest (nothing running, paused last) fold under one "Quiet" row at its end. Each
    row is ADR 0107's, and always opens its project; the project page says what waits on you there.
 3. **On a phone a coordinator opens its page**, from the project page and from the drawer: its card,
-   its live threads and Open chat, Close as a quiet action at the end. Its threads are listed there and
-   not again on its card or on the project page.
+   its live threads, Open chat and New under it, Close as a quiet action at the end. Its threads are
+   listed there, not on the project page.
 4. **On a phone the project page and the drawer show only what is live first.** The project page drops
-   the goal and heads with "N wait on you"; History stays its folded last line. The drawer lists
-   Needs you, Projects, Workspaces, then Recent; a project opens on its coordinators and the threads
-   that wait on you, work or wait for a review, with no History and no open-task count. Home's headline
+   the goal and heads with "N asks wait on you"; History stays its folded last line. The drawer lists
+   Needs you, Projects, Workspaces, then Recent; there and on the Search sheet before anything is typed,
+   a project opens on its coordinators and the threads that wait on you, work or wait for a review,
+   with no History and no open-task count. Home's headline
    leaves idle agents out, a phone's Home leaves the date out, and no footer counts workspaces or agents.
 
 ## Consequences
