@@ -1496,6 +1496,30 @@ describe("Composer — terminal-draft preview", () => {
     }
   });
 
+  it("Take over moves the draft: copies it here and clears the terminal's input, bound to its prompt row", async () => {
+    // 2026-10-21: Take over left the text in the terminal, where it held up the queue, and Type into
+    // terminal refused while the composer held the copy, so the phone could neither type nor delete there.
+    const user = userEvent.setup();
+    const keyCalls: Array<{ keys: string[]; expected_prompt?: string }> = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        keyCalls.push((await request.json()) as { keys: string[]; expected_prompt?: string });
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const rule = "─".repeat(60);
+    renderDraftHarness({ text: ["some output", "", rule, "❯ take me over", rule, "  Opus 5.5 | Context 13% used", "  ← for agents"].join("\n") });
+    strandDraft("take me over");
+    await screen.findByText(/draft in terminal/i);
+
+    await user.click(screen.getByRole("button", { name: /take over/i }));
+    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("take me over");
+    await waitFor(() => expect(keyCalls).toHaveLength(1));
+    expect(keyCalls[0]!.keys[0]).toBe("ctrl+k");
+    expect(keyCalls[0]!.keys.filter((key) => key === "Backspace").length).toBeGreaterThanOrEqual("take me over".length);
+    expect(keyCalls[0]!.expected_prompt).toContain("take me over");
+  });
+
   it("Take over copies the CURRENT draft into the composer, marks it handled, and hides the preview", async () => {
     const user = userEvent.setup();
     const keyCalls: string[] = [];
@@ -1514,7 +1538,7 @@ describe("Composer — terminal-draft preview", () => {
     await user.click(screen.getByRole("button", { name: /take over/i }));
     expect(box).toHaveValue("take me over"); // the text lands, one-shot
     expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument(); // preview hidden
-    expect(keyCalls).toEqual([]); // takeover writes NOTHING to the terminal
+    expect(keyCalls).toEqual([]); // with no input box on screen to bind to, nothing is cleared
   });
 
   it("after Take over, a divergent host draft honestly re-shows the preview with the new text", async () => {
