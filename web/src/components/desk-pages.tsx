@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 // The parts a desk's project page and coordinator page share (ADR 0102): the heading, the tabs kept in
 // the address, a coordinator's card over its threads, and what waits on you by coordinator.
 
-/** Enters a coordinator (ADR 0114), `root` being the project's own: its chat while it runs, its page otherwise. */
+/** Enters a coordinator (ADR 0115), `root` being the project's own: its chat while it runs, its page otherwise. */
 export function useOpenCoordinator(project: ProjectView, panes: readonly AgentView[], session?: string): (id: string) => void {
   const navigate = useNavigate();
   return (id) => {
@@ -115,7 +115,7 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
 const CARD_ROWS = 20;
 
 /**
- * A coordinator's row on its project (ADR 0114): its name and what is live there, which enters its chat
+ * A coordinator's row on its project (ADR 0115): its name and what is live there, which enters its chat
  * wherever it is tapped; a chevron before it, on a row with threads, folds them down in place; + starts a
  * thread under it, shown on a desk's hover. The project coordinator's row holds the threads started from
  * the project.

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 // hot poll cadence (≤1.5s) this span means the same text was seen across at least two consecutive
 // polls before it can chip; a genuinely stranded draft persists across turns, so it still surfaces —
 // just a beat later.
-const STABLE_MIN_AGE_MS = 1_500;
+export const STABLE_MIN_AGE_MS = 1_500;
 
 /**
  * Debounce the raw per-snapshot terminal draft (extractInputDraft) into one that only becomes

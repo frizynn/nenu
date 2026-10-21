@@ -170,12 +170,29 @@ export function useLocalSendActions(scope: string): LocalSendActions | undefined
   return useSyncExternalStore(subscribe, () => actions.get(scope), () => undefined);
 }
 
+// Where the conversation keeps the rows of Nenu's queue that have no bubble of this device's (queued
+// on another device, or before the page loaded): an element at the thread's end, after its last turn.
+// The composer, which owns the queue, draws them into it, so they read as messages in the thread and
+// never as a strip over it.
+const queueSlots = new Map<string, HTMLElement>();
+
+export function setQueueSlot(scope: string, element: HTMLElement | null) {
+  if (element) queueSlots.set(scope, element);
+  else queueSlots.delete(scope);
+  emit();
+}
+
+export function useQueueSlot(scope: string): HTMLElement | null {
+  return useSyncExternalStore(subscribe, () => queueSlots.get(scope) ?? null, () => null);
+}
+
 /** Test seam: forget every bubble and timer. */
 export function resetLocalSends() {
   for (const timer of expiry.values()) clearTimeout(timer);
   expiry.clear();
   sends.clear();
   actions.clear();
+  queueSlots.clear();
   holdWhileUnsent();
   emit();
 }

@@ -18,24 +18,18 @@ import type { DeliveryMode, NativeQueueState, QueueWaitReason } from "@/lib/type
 
 export interface BusyChoice {
   name: string;
-  /** The mode "Send now" stores: Claude's Enter (its own queue) or Codex's Enter (a steer). */
+  /** The mode Send stores while a turn runs: Claude's Enter (its own queue) or Codex's Enter (a steer). */
   now: DeliveryMode;
-  nowHint: string;
-  laterHint: string;
 }
 
 const BUSY_CHOICES: Record<string, BusyChoice> = {
   claude: {
     name: "Claude",
     now: "asap",
-    nowHint: "Goes into Claude's queue. Claude reads it after the step it's on.",
-    laterHint: "Nenu holds it until Claude finishes this turn.",
   },
   codex: {
     name: "Codex",
     now: "steer",
-    nowHint: "Steers this turn. Codex reads it after the step it's on.",
-    laterHint: "Goes into Codex's queue and runs as the next turn.",
   },
 };
 
@@ -99,7 +93,7 @@ function waitingLabel(name: string, row: QueueRowView): string {
     case "dialog":
       return "Waiting. Answer the dialog first.";
     case "draft":
-      return "Waiting. The terminal's input box holds a draft.";
+      return `Waiting for the text in ${name}'s box: choose what to do with it above yours.`;
     case "disconnected":
       return "Waiting for the pane to reconnect.";
     case "stopped":

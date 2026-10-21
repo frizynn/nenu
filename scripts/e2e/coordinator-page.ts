@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
-// What a coordinator's page held, now inside its chat (ADR 0114), and the way in, at 1440 and 390 px with
+// What a coordinator's page held, now inside its chat (ADR 0115), and the way in, at 1440 and 390 px with
 // Google Chrome headless: a tap anywhere on a coordinator's row on the project page enters its chat; a
 // desk's panel and a phone's Status tab hold no report cards, a Waiting on you with only what waits on
 // you, the Asked lines read as requests with a state (done ones folded, ADR 0109), and an opened

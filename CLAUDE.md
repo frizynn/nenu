@@ -157,7 +157,7 @@ the unit name; the Herdr action runs from anywhere.
   each read only while on screen, folded with ⌘⌥B
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
-  cards (a coordinator's own also what its page held, ADR 0114); model and context come from the chat's own reading, and the project's own views are not in the panel
+  cards (a coordinator's own also what its page held, ADR 0115); model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
   `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
@@ -170,7 +170,7 @@ the unit name; the Herdr action runs from anywhere.
   only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status tab
   (`coordinator-sections.tsx`), and the back climbs coordinator → project → Projects on a desk too;
   `bun scripts/e2e/coordinator-chat.ts` must reach a running one in 2 taps from Home
-  ([ADR 0114](./.adr/0114-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
+  ([ADR 0115](./.adr/0115-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
   (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
   holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
   opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass
@@ -182,7 +182,7 @@ the unit name; the Herdr action runs from anywhere.
   itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
   coordinators: only while it says something, ADR 0092; on a desk, its chat's Status and never the
-  project page, ADR 0102, ADR 0114), drawn as written through
+  project page, ADR 0102, ADR 0115), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
   ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
   **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's
@@ -203,7 +203,7 @@ the unit name; the Herdr action runs from anywhere.
   waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
   where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
-  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0114), the
+  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0115), the
   project's own last and otherwise a small Start beside New; it never redirects to that chat. "+" goes
   project → coordinator → chat, and Move shows only where `node move --help` exits 0 and the node's
   `actions` list `move`
@@ -223,7 +223,7 @@ the unit name; the Herdr action runs from anywhere.
   are Home's first tab, before Recents, Workspaces and PRs, and absent with no project
   (`bun scripts/e2e/no-projects.ts` must pass): live projects first, the quiet ones folded at its end,
   and a row always opens its project. On a phone a coordinator opens its chat (its page where it has
-  none, ADR 0114), from the project and the drawer, and the drawer lists Projects after Needs you without
+  none, ADR 0115), from the project and the drawer, and the drawer lists Projects after Needs you without
   History or counts; `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
@@ -252,7 +252,7 @@ the unit name; the Herdr action runs from anywhere.
   replaces itself with its parent (`useGoBack`). A move up to a named node is `navigate(-1)` when that node
   is the entry before and a replace otherwise (`useGoUp`); a sibling replaces, a coordinator's thread
   pushes, and a phone's tab is `?view=`, replaced. `bun scripts/e2e/run.ts back` must end three backs at
-  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0114) and `bun scripts/e2e/origin.ts` must land 12 of 12
+  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0115) and `bun scripts/e2e/origin.ts` must land 12 of 12
   ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
   [ADR 0097](./.adr/0097-the-back-control-returns-to-the-screen-you-came-from.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
@@ -271,15 +271,17 @@ the unit name; the Herdr action runs from anywhere.
   Encoded history pages are reused only up to 256 KiB; larger history responses stay uncached in
   encoded form. `bun scripts/history-response-bench.ts <history-response.json>` measures this path
   without printing transcript content.
-- **"Type into terminal" is armed by a named choice and dies with the pane view.** It is a named row
-  of the phone's + menu and, beside a desk's session panel, a switch in its Terminal tab
-  ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)); no gesture
-  arms it. There the desk's keyboard is the keys, Ctrl chords and F-keys included, and the tab has no
-  Keys tray; Command stays the browser's ([ADR 0079](./.adr/0079-on-a-desk-the-keyboard-is-the-keys.md)).
-  It disarms on a pane switch, a composer lock (gone pane, read-only, idle pause), a hidden page, a
-  failed batch and, on a desk, the Terminal tab leaving the screen — never persisted, never restored.
-  Don't lift it, and don't add the reply guard's `composerReady` pre-flight to it; the reasoning for
-  both sits in `web/src/hooks/use-direct-typing.ts`'s header.
+- **"Type into terminal" is armed by a choice on screen and dies with the pane view.** It is a named
+  row of the phone's + menu, a switch in a desk's Terminal tab
+  ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)), and the
+  Terminal view itself: while the chat's Terminal view or a desk's Terminal tab is on screen the box is
+  the terminal, the chat's draft waits aside, and the switch turns it off for that view
+  ([ADR 0114](./.adr/0114-a-send-from-nenu-never-gets-stuck.md)); no gesture arms it. There the desk's
+  keyboard is the keys, Ctrl chords and F-keys included, and the tab has no Keys tray; Command stays the
+  browser's ([ADR 0079](./.adr/0079-on-a-desk-the-keyboard-is-the-keys.md)). It disarms on a pane
+  switch, a composer lock (gone pane, read-only, idle pause), a hidden page, a failed batch and the
+  view leaving the screen — never persisted. Don't add the reply guard's `composerReady` pre-flight to
+  it; the reasoning sits in `web/src/hooks/use-direct-typing.ts`'s header.
 - **The operator's rows in `commands.toml` replace the shipped command catalog on the panes they
   address, never merge into it** ([ADR 0018](./.adr/0018-operator-command-rows-replace-the-catalog.md));
   the bridge re-reads the file behind an mtime check, so edits are live and need no restart.
@@ -440,7 +442,7 @@ choice and never sends argv.
 The chat gallery also previews Nenu-generated raster uploads outside cwd through
 `bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under one of
 the uploads directories (`uploadDirs`) and the exact path in a user message from the current pane's contained
-journal. Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
+journal, or in one of Nenu's queue rows on that pane (a message still waiting, ADR 0114). Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
 never generalize it to arbitrary transcript paths or all files under the state directory.
 A picture travels where it sits in the message: a chip in the draft, its path in place on the wire,
 and Claude and Codex get it piece by piece, each path pasted alone after the last token showed; never
@@ -449,6 +451,12 @@ The queue types it the same way, each piece its own write. A picture left as its
 a send that stops before Enter clears the box when it holds only what it typed, and Take over clears the
 terminal's copy while it still holds that text; `bun scripts/e2e/run.ts take-over` must pass
 ([ADR 0112](./.adr/0112-a-send-that-stops-leaves-the-box-as-it-found-it.md)).
+**A send from Nenu never gets stuck** ([ADR 0114](./.adr/0114-a-send-from-nenu-never-gets-stuck.md)):
+Send while the agent works goes now, as its terminal's Enter (Send after this turn is a + row); text in
+the agent's box is settled beside the composer with Send it first, Add to my message or Discard, bound
+to the text shown, and a Send over it waits for that tap, never sweeping it or queueing behind it; a
+pending message is drawn in the thread at its end with its pictures, never over it;
+`bun scripts/e2e/run.ts send-always` must pass.
 The composer attaches any file up to 25 MB through `bridge/uploads.ts` `saveUpload`: the name is
 generated (an image by its bytes, anything else with a flat copy of its own name), only an image
 previews, and nothing in Nenu's own folders (`nenuDirs`: the state directory and the uploads

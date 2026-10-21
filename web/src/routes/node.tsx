@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
 
-// A coordinator that runs is entered at its chat, which holds what its page did (ADR 0114): its node
+// A coordinator that runs is entered at its chat, which holds what its page did (ADR 0115): its node
 // address, an old link or a status line's, lands there. One that does not run keeps its page: on a
 // desk with tabs (ADR 0102); a thread's page, and a phone's, are as before.
 export function NodeRoute() {

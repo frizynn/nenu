@@ -1,4 +1,4 @@
-# 0114. A tap on a coordinator enters its chat; its threads fold down where it is listed
+# 0115. A tap on a coordinator enters its chat; its threads fold down where it is listed
 
 - **Status:** Accepted (2026-10-21). Requested by the operator, who delegated the redesign. Amends
   [ADR 0109](./0109-a-coordinators-page-shows-live-work.md) point 2 (a tap on a coordinator's card

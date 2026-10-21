@@ -1,4 +1,4 @@
-import { busyChoiceFor, useMessageQueue, type BusyChoice } from "@/hooks/use-message-queue";
+import { busyChoiceFor, useMessageQueue } from "@/hooks/use-message-queue";
 import { useStopTurn } from "@/hooks/use-stop-turn";
 import { useOutageNoticeShown } from "@/lib/connection-health";
 import { MessageQueueStrip } from "./message-queue-strip";
@@ -6,7 +6,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useRevalidator } from "react-router";
-import { ArrowUp, Check, CircleAlert, Gauge, Keyboard, Pending, Paperclip, Plus, Settings2, Slash, TextCursorInput, Zap, type IconComponent } from "@/components/ui/icon";
+import { ArrowUp, Check, CircleAlert, Clock, Gauge, Keyboard, Pending, Paperclip, Plus, Settings2, Slash, TextCursorInput, Zap, type IconComponent } from "@/components/ui/icon";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -18,6 +18,7 @@ import { ChatInput } from "@/components/ui/chat/chat-input";
 import { SkillPicker } from "@/components/skill-picker";
 import { useSkillComposer } from "@/hooks/use-skill-composer";
 import { useFocusInPlace } from "@/hooks/use-keyboard";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { NavTray } from "@/components/nav-tray";
 import { CommandPalette } from "@/components/command-palette";
 import { QuickActionsContent } from "@/components/quick-actions";
@@ -25,7 +26,6 @@ import { DisplayPrefsContent } from "@/components/display-prefs";
 import { ListRow, ListSection } from "@/components/ui/list-group";
 import { Switch } from "@/components/ui/switch";
 import { PanelHeader } from "@/components/ui/panel-header";
-import { OptionButton, OptionList, SECONDARY_ACTION } from "@/components/option-button";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { ActionGroups, type ConversationActionGroup } from "@/components/conversation-actions";
 import * as api from "@/lib/api";
@@ -35,7 +35,7 @@ import { ctrlPresetsFor } from "@/lib/operator-keys";
 import { isDestructiveInput } from "@/lib/destructive";
 import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
-import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
+import { isSelfEcho, normalizeDraft, STABLE_MIN_AGE_MS } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
 import { holdsCliToken } from "@/lib/harness/inline-images";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
@@ -68,6 +68,7 @@ import {
   setLocalSendActions,
   updateLocalSend,
   useLocalSends,
+  useQueueSlot,
   type LocalSend,
   type LocalSendActions,
 } from "@/lib/local-sends";
@@ -92,7 +93,7 @@ export interface ComposerHandle {
  * panel's Terminal tab, where the desk's own keyboard is the keys.
  */
 export interface ComposerControl {
-  id: "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
+  id: "later" | "attach" | "quick" | "commands" | "keys" | "type" | "usage" | "display";
   group: (typeof MESSAGE_GROUPS)[number] | "View";
   label: string;
   icon: IconComponent;
@@ -103,7 +104,7 @@ export interface ComposerControl {
 }
 
 /** The + menu's groups, in the order it lists them. */
-const MESSAGE_GROUPS = ["Attach", "Replies", "Terminal", "Session"] as const;
+const MESSAGE_GROUPS = ["Send", "Attach", "Replies", "Terminal", "Session"] as const;
 
 interface ComposerProps {
   paneId: string;
@@ -176,6 +177,8 @@ interface ComposerProps {
   onControlsChange?: (controls: ComposerControl[]) => void;
   /** Beside a desk's session panel: Type into terminal lives in its Terminal tab, and the + has no Keys. */
   sessionPanel?: SessionPanelLink;
+  /** The chat shows its Terminal view in place of the conversation: the box is the terminal (ADR 0114). */
+  terminalView?: boolean;
 }
 
 // The composer cluster at the bottom of the pane view — everything a phone keyboard can't do on its
@@ -225,28 +228,6 @@ function ComposerDock({
   );
 }
 
-/**
- * The send-time choice for a busy agent: the question, then the cards' own option list and Cancel as
- * their quiet escape, as Home's sheet draws the same choice. No card around it: with the keyboard up
- * a frame and a headline cost the thread its last lines. It sits on the page gutter, where the
- * cards' lists do, rather than the box's bleed. The wording is the CLI's own measured behaviour, so
- * "now" never promises more than the CLI does (ADR 0056: asked at every send, never remembered).
- */
-function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onPick: (mode: DeliveryMode) => void; onCancel: () => void }) {
-  return (
-    <div role="group" aria-label={`${choice.name} is working`} className="mb-2 flex flex-col gap-2 max-lg:mx-2">
-      <p className="text-footnote text-pretty text-muted-foreground">{choice.name} is working. When should it read this?</p>
-      <OptionList className="bg-card">
-        <OptionButton label="Send now" description={choice.nowHint} onClick={() => onPick(choice.now)} />
-        <OptionButton label="Queue for later" description={choice.laterHint} onClick={() => onPick("afterTurn")} />
-      </OptionList>
-      <div className="-mx-2 flex">
-        <button type="button" className={SECONDARY_ACTION} onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
 const NO_CHIPS: ChipLine = { chips: [], open: null, onOpenChange: () => {} };
 
 /** A send that did not go through, said above the box until the next edit or send. */
@@ -262,6 +243,12 @@ interface SendFailure {
   quote?: string;
   /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
   retry: { text: string; isDraft: boolean } | null;
+}
+
+/** How a send goes: its mode while the agent works, and whether the agent's box's text was settled. */
+interface SendHow {
+  mode?: DeliveryMode;
+  draftSettled?: boolean;
 }
 
 const counted = (n: number, noun: string) => (n ? `${n} ${noun}${n === 1 ? "" : "s"}` : "");
@@ -284,7 +271,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -421,6 +408,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Pending bubbles in the conversation (lib/local-sends.ts) for what this composer sent.
   const sendScope = localSendScope(paneId, session);
   const localSends = useLocalSends(sendScope);
+  const queueSlot = useQueueSlot(sendScope);
   useEffect(() => {
     const accepted = queue.accepted;
     if (accepted) {
@@ -519,17 +507,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     } else failSend(started, "Couldn't queue this message");
     return rowId !== null;
   }
-  // A busy agent's Send waits here for the operator's pick: now, or after this turn (ADR 0056).
-  const [busyPick, setBusyPick] = useState<{ text: string; isDraft: boolean } | null>(null);
+  // A busy agent gets the message as its own terminal's Enter gives it: now, into the CLI's queue or
+  // the running turn. The other mode is the + menu's "Send after this turn" (ADR 0114).
   const busyChoice = nativeWorkbench && queue.page?.available ? busyChoiceFor(agent) : null;
-  useEffect(() => setBusyPick(null), [paneId, session, locked]);
-  function pickBusy(mode: DeliveryMode) {
-    const pick = busyPick;
-    setBusyPick(null);
-    if (!pick) return;
-    // A draft keeps what was typed while the choice was open; a quick reply sends what was tapped.
-    void enqueueDraft(pick.isDraft ? outgoing() : pick.text, pick.isDraft, mode);
-  }
   // "Read it now" backgrounds Claude's running command, so it takes a second tap.
   const readNowConfirm = usePendingConfirm(8_000);
   const readNowPrompt = useRef<number | undefined>(undefined);
@@ -630,12 +610,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The draft's picture chips: kept whole across edits, the cursor kept out of them (ADR 0104).
   const pictureChips = useDraftChips(inputRef);
   const fileRef = useRef<HTMLInputElement>(null);
+  const coarse = useMediaQuery("(pointer: coarse)");
   const direct = useDirectTyping({
     paneKey: `${session ?? ""}\0${paneId}`,
     inputRef,
-    // The ref, not `input`: the password-prompt handoff clears the draft and arms in one tick.
-    replyDraft: () => inputValueRef.current,
+    // A terminal view on screen makes the box that terminal (ADR 0114).
+    auto: terminalView || sessionPanel?.terminal != null,
+    autoFocus: !coarse,
     canActivate: () => !(locked || sending || attachments.uploading),
+    canArm: !(locked || sending || attachments.uploading),
     // `locked` covers a gone pane, a read-only device, and the idle pause. A LOST CONNECTION is
     // deliberately not added here: the mode already disarms on a failed batch, which is the same
     // event observed directly rather than inferred from a timer, and it fires whether or not any
@@ -780,6 +763,66 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Take over (a local text copy); only the actual Send stays gated.
   const showPreview =
     !gone && previewLatched && effectiveRaw !== null && normalizeDraft(effectiveRaw) !== handledKey;
+  // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0114).
+  const hostDraft = showPreview ? effectiveRaw : null;
+  // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
+  const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  useEffect(() => {
+    setDraftPick(null);
+    setSettledHere(false);
+    setDraftBusy(false);
+  }, [paneId, session, locked]);
+  // The pane a settle was asked for: an answer that lands after a pane switch belongs to no one here.
+  const paneNow = useRef(sendScope);
+  paneNow.current = sendScope;
+  // A pick dies with the page: a message must not go on its own while nobody is looking.
+  useEffect(() => {
+    const onHidden = () => { if (document.visibilityState === "hidden") setDraftPick(null); };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, []);
+  // The box's text was settled here, or the box itself has read empty for as long as a draft takes to
+  // show (the terminal sent or cleared it): the waiting message goes now, the draft as it then reads
+  // (Add to my message joined it). One read that missed the text is neither, so it holds.
+  const [boxEmpty, setBoxEmpty] = useState(false);
+  const rawEmpty = rawTerminalDraft === null;
+  useEffect(() => {
+    setBoxEmpty(false);
+    if (!rawEmpty) return;
+    const id = setTimeout(() => setBoxEmpty(true), STABLE_MIN_AGE_MS);
+    return () => clearTimeout(id);
+  }, [rawEmpty]);
+  // A settle here answered once the bridge read the box empty: nothing to wait for then.
+  const [settledHere, setSettledHere] = useState(false);
+  const boxSettled = boxEmpty || settledHere;
+  useEffect(() => {
+    // Not while Add to my message is still emptying the box: the message must carry its text.
+    if (!draftPick || !boxSettled || sending || draftBusy) return;
+    const pick = draftPick;
+    setDraftPick(null);
+    setSettledHere(false);
+    void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
+  }, [draftPick, boxSettled, sending, draftBusy]);
+
+  /** Send or discard the agent's box's text, bound to the text shown (ADR 0114). */
+  async function settleHostDraft(action: "send" | "discard") {
+    if (hostDraft === null || locked || draftBusy) return;
+    const draft = hostDraft;
+    setDraftBusy(true);
+    const scope = sendScope;
+    const res = await api.settleTerminalDraft(paneId, draft, session, action).catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+    if (paneNow.current !== scope) return;
+    setDraftBusy(false);
+    if (!res.ok) {
+      setStatus(res.error ?? "The agent's box was left as it is.", "error");
+      return;
+    }
+    if (action === "send") stop.turnSent();
+    setSettledHere(true);
+    setHandledKey(normalizeDraft(draft));
+    setPreviewLatched(false);
+  }
 
   // Take over: the explicit "I'll handle this on mobile now" action. It MOVES the current raw draft:
   // a copy into the composer (set on an empty input, else appended on a new line so mobile-typed work
@@ -788,16 +831,31 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // the composer held the copy (ADR 0112). The bridge clears it only while the box still holds this
   // exact text: if the host typed on, the line stays. A read-only device only copies. If the host
   // keeps typing and produces a DIFFERENT draft afterwards, the preview honestly reappears with it.
-  function takeOverDraft() {
+  async function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
+    // A message waiting on this text goes once it leaves the box, so the box empties first: the queue
+    // never sweeps a draft, and the copy must not go out while the original still sits there.
+    if (draftPick && !locked) {
+      if (draftBusy) return;
+      setDraftBusy(true);
+      const scope = sendScope;
+      const res = await api.settleTerminalDraft(paneId, draft, session, "take").catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+      if (paneNow.current !== scope) return;
+      setDraftBusy(false);
+      if (!res.ok) {
+        setStatus(res.error ?? "The agent's box was left as it is.", "error");
+        return;
+      }
+      setSettledHere(true);
+    }
     direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
-    if (locked) return;
-    api.clearTerminalDraft(paneId, draft, session).then(
+    if (locked || draftPick) return;
+    api.settleTerminalDraft(paneId, draft, session, "take").then(
       (res) => { if (!res.ok) setStatus(res.error ?? "The terminal still holds its copy.", "info"); },
       () => setStatus("The terminal still holds its copy: Nenu couldn't reach it.", "info"),
     );
@@ -820,7 +878,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Resolves true only on a VERIFIED send (the text was seen in the pane's input box before the
   // submit key went out). The quick-reply grid consumes the verdict to drive its own ✓ and to decide
   // whether to close its dock, so every early return below has to answer honestly.
-  async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact"): Promise<boolean> {
+  async function send(value: string, isDraft: boolean, force = false, action?: "model" | "compact", how: SendHow = {}): Promise<boolean> {
     const t = value.trim();
     if (!t || locked || sending) return false;
     setFailure(null);
@@ -831,11 +889,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // again reuses its row id, so the message is delivered once instead of also through /send.
     const unsaved = queueable ? queue.pendingAdd() : null;
     if (unsaved) return enqueueDraft(t, isDraft, unsaved.text === t ? unsaved.deliveryMode : "afterTurn");
-    // A busy agent: the operator picks now or after this turn. An idle one gets the message directly.
-    if (queueable && working && busyChoice) {
-      setBusyPick({ text: t, isDraft });
+    // Text in the agent's box: the operator says what becomes of it, right above the box, and this
+    // message goes the moment they do (ADR 0114). Never swept unseen, never waited on unsaid.
+    if (!action && !force && !how.draftSettled && hostDraft !== null) {
+      setDraftPick({ text: t, isDraft, mode: how.mode });
+      setSettledHere(false);
       return false;
     }
+    // A busy agent: into its own queue or turn, as the terminal's Enter. An idle one gets it directly.
+    if (queueable && working && busyChoice) return enqueueDraft(t, isDraft, how.mode ?? busyChoice.now);
     // Without the queue, a dialog on screen refuses the send: our text would be swallowed and the
     // submit key would ANSWER the dialog, approving whatever option was highlighted (#34). The input
     // is kept: the user answers the dialog with its own buttons, then taps Send again. We never
@@ -1005,7 +1067,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Send the draft through the destructive-input confirm: a matching command arms the "Really send?"
   // state instead of sending; the confirming second tap goes through. Non-destructive input sends
   // immediately (and any stray armed state is cleared).
-  function sendDraft() {
+  function sendDraft(how: SendHow = {}) {
     if (!attachmentsSettled()) return;
     const command = commands.find((candidate) => candidate.command === input.trimStart().split(/\s/, 1)[0]);
     const reason = isDestructiveInput(input) ?? (command?.dangerous ? command.command : null);
@@ -1014,7 +1076,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     sendConfirm.reset();
-    void send(outgoing(), true);
+    void send(outgoing(), true, false, undefined, how);
   }
 
   function onSendClick() {
@@ -1209,6 +1271,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
   const controls: ComposerControl[] = [
+    // While the agent works, Send goes now, as the terminal's Enter; this is the other mode (ADR 0114).
+    ...(working && busyChoice && hasDraft && !direct.active ? [{ id: "later", group: "Send", label: "Send after this turn", icon: Clock,
+      disabled: locked || sending || attachments.uploading, run: () => sendDraft({ mode: "afterTurn" }) } as const] : []),
     { id: "attach", group: "Attach", label: "Files and photos", icon: Paperclip, disabled: locked || direct.active, run: () => controlActions.current.attach() },
     { id: "quick", group: "Replies", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
     ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
@@ -1222,7 +1287,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   latestControls.current = controls;
   useEffect(() => {
     onControlsChange?.(latestControls.current);
-  }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls)]);
+  }, [onControlsChange, drawer, direct.active, locked, sending, commands.length, Boolean(usageControls), controls.length]);
   // Beside a desk's session panel the + keeps the message. Quick replies and Keys stay on the phone, and
   // Type into terminal sits in the panel's Terminal tab, beside the mirror it acts on.
   const inTerminalTab = (id: ComposerControl["id"]) => sessionPanel !== undefined && (id === "quick" || id === "keys" || id === "type");
@@ -1232,18 +1297,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }));
   const terminalTab = sessionPanel?.terminal ?? null;
 
-  // Armed from the Terminal tab, the mode leaves with it: another tab, ⋯ Project or folding the panel
-  // disarms it, as a hidden page does. An edge, not a state: the password notice's Use Type arms while
-  // it opens the tab (below), and the tab arrives a render later.
-  const tabShown = terminalTab !== null;
-  const tabWasShown = useRef(tabShown);
-  useEffect(() => {
-    if (tabWasShown.current && !tabShown && direct.active) {
-      direct.deactivate();
-      setStatus("Stopped typing into the terminal — the Terminal tab closed.", "info");
-    }
-    tabWasShown.current = tabShown;
-  }, [tabShown]);
   const [menuOpen, setMenuOpen] = useState(false);
   // The menu hangs from the box's leading column, which spans the box's full height: anchored there,
   // it opens above the box's top edge however tall the draft has grown, and never over the draft.
@@ -1342,20 +1395,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             />
           </ComposerDock>
         )}
-        {/* Terminal-draft preview: a read-only view of a stranded "❯"-line draft (a message queued
-            then recalled on the HOST, which stripChrome hides from the mirror). It appears only after
-            the draft stabilises (never a blip/self-echo), then its text tracks the live line — host
-            typing streams straight in. It NEVER writes into the phone-owned input; only the explicit
-            Take over copies the text here. No dismiss — it's honest state and persists until the user
-            takes over, sends, or the host line clears. Same quiet chrome as the "You sent:"
-            strip above. */}
+        {/* The text in the agent's own box, shown once it holds still, with what to do about it in one
+            tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0114). A Send while it
+            is there waits on that tap instead of sweeping it or queueing behind it. */}
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
             text={effectiveRaw}
             // No Take over when the line holds something only the CLI has (`holdsCliToken`): a copy
             // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
             // preview keeps showing it, and Type into terminal edits it in place.
-            onTakeOver={holdsCliToken(effectiveRaw) ? null : takeOverDraft}
+            onTakeOver={holdsCliToken(effectiveRaw) ? null : () => void takeOverDraft()}
+            name={busyChoiceFor(agent)?.name ?? "the agent"}
+            onSend={locked ? null : () => void settleHostDraft("send")}
+            onDiscard={locked ? null : () => void settleHostDraft("discard")}
+            busy={draftBusy}
+            waiting={draftPick !== null}
+            onCancel={() => setDraftPick(null)}
           />
         )}
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two
@@ -1409,8 +1464,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Too long to keep as a saved draft — it survives switching panes, but not closing the app.
           </p>
         )}
-        <Fold value={busyPick && busyChoice}>{(choice) => <BusyChoicePanel choice={choice} onPick={pickBusy} onCancel={() => setBusyPick(null)} />}</Fold>
-        {nativeWorkbench && (
+        {/* Rows of the queue with no bubble here, drawn in the thread at its end, never over it. */}
+        {nativeWorkbench && queueSlot && createPortal(
           <MessageQueueStrip
             agent={agent}
             messages={strayQueue}
@@ -1420,7 +1475,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             change={queue.mutate}
             readNow={readNow}
             readNowArmed={readNowConfirm.pending}
-          />
+          />,
+          queueSlot,
         )}
 
         <Fold value={failure}>{(failure) => (
@@ -1496,13 +1552,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                       if (skills.onKeyDown(e)) return;
                       // Esc in the empty composer is Stop, as at the terminal. A draft keeps Esc for
-                      // the browser, and an open dock or the busy choice keeps it for themselves.
-                      if (e.key === "Escape" && onEscape && drawer === null && !busyPick) {
+                      // the browser, an open dock keeps it, and a message waiting on the agent's
+                      // box's text takes it back.
+                      if (e.key === "Escape" && draftPick) {
+                        e.preventDefault();
+                        setDraftPick(null);
+                        return;
+                      }
+                      if (e.key === "Escape" && onEscape && drawer === null) {
                         e.preventDefault();
                         onEscape();
                         return;
                       }
-                      if (e.key === "Escape" && stop.offered && !hasDraft && drawer === null && !busyPick) {
+                      if (e.key === "Escape" && stop.offered && !hasDraft && drawer === null) {
                         e.preventDefault();
                         stop.stop();
                         return;
@@ -1582,7 +1644,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               >
                 {direct.active ? (
                   <Keyboard className="size-4" />
-                ) : sending ? (
+                ) : sending || draftPick ? (
                   <Pending className="size-4" />
                 ) : justSent ? (
                   <Check className="size-4" />
@@ -1613,7 +1675,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       {terminalTab && createPortal(
         <div className="p-3">
           <ListSection>
-            <ListRow title="Type into terminal" hint={direct.active ? "On. Keys go straight into this pane." : "Off. Arms for this pane only, ends when you leave it."}>
+            <ListRow title="Type into terminal" hint={direct.active ? "On. The box below types into this pane." : "Off. The box sends messages; turn it on to type here."}>
               <Switch checked={direct.active} disabled={locked || sending} aria-label="Type into terminal"
                 onCheckedChange={() => controlActions.current.type()} />
             </ListRow>

@@ -129,7 +129,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   }, { replace: true });
   const panelShown = desk && inspector.open && !docked;
 
-  // A coordinator's chat holds what its page did (ADR 0114): a desk's panel and a phone's Status tab.
+  // A coordinator's chat holds what its page did (ADR 0115): a desk's panel and a phone's Status tab.
   // A phone reads the asks for its Status tab's count; a desk's Overview reads them while it is on screen.
   const asks = useAsks(scope.coordinating && !desk ? [project] : undefined);
   const coordinatorId = thread?.id ?? "root";

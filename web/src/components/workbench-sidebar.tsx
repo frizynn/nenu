@@ -459,7 +459,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
   const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
   const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
-  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0114).
+  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0115).
   const coordinatorPaneId = coordinatorPane(project, "root", data.agents);
   const coordinatorTo = coordinatorPaneId ? panePath(coordinatorPaneId, session) : nodePath(project.slug, "root", session);
   return (

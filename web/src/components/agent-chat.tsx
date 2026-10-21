@@ -99,7 +99,7 @@ import type {
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /**
- * Where a project pane's back leads, one level up the project's tree (ADR 0114), shown on a desk too:
+ * Where a project pane's back leads, one level up the project's tree (ADR 0115), shown on a desk too:
  * a coordinator goes to its parent coordinator (its chat while that runs, else its page) or to the
  * project; a worker to the coordinator it runs under, the project's own for one at the root. A phone's
  * project that opens on its own coordinator's chat leaves that chat nothing above but Home, the caller's
@@ -1420,6 +1420,7 @@ export function AgentChat({
               returnFocus: actionsRef, onOpenChange: openChip }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
+            terminalView={conversationCapable && prefs.rawTerminal}
             prepareSend={showConversation ? panels.prepareSend : undefined}
             onInputFocus={() => { void panels.changePanel(null); }}
             dialogPresent={dialogPresent}

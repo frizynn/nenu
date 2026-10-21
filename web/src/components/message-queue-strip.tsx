@@ -10,8 +10,10 @@ import { QueuedMessage, type QueuedAction } from "./queued-message";
 /**
  * The messages waiting in Nenu's queue (and in Claude's own) that have no bubble in this device's
  * conversation: queued on another device, or before this page loaded. Each is drawn as the same
- * QueuedMessage this device uses for its own, with the same status copy, so a message reads the same
- * whichever device it was typed on. Delivery semantics are the queue's (ADR 0056); this only draws it.
+ * QueuedMessage this device uses for its own, with the same status copy, in the thread at its end
+ * (the composer portals it into the conversation's queue slot, lib/local-sends.ts), so a message
+ * reads the same whichever device it was typed on and never as a strip over the thread. Delivery
+ * semantics are the queue's (ADR 0056); this only draws it.
  */
 export function MessageQueueStrip({
   agent,
@@ -45,12 +47,8 @@ export function MessageQueueStrip({
   const editor = useRef<HTMLTextAreaElement>(null);
   const chips = useDraftChips(editor);
   if (!messages.length && !delivered.length && !error) return null;
-  // The strip sits in the composer, so every px it takes comes off the conversation: rows show three
-  // lines (Edit has the rest) and the strip stops at 13rem, less on a short screen. Below the desk
-  // breakpoint the composer sits 8px from the edges and the thread a page gutter in, so the strip's
-  // padding lines its bubbles up with the chat bubbles right above them.
   return (
-    <section aria-label="Queued messages" className="mb-2 max-h-[min(13rem,30dvh)] overflow-y-auto overscroll-contain max-lg:px-[calc(var(--page-gutter)-8px)]">
+    <section aria-label="Queued messages" className="mt-3">
       {error && (
         <p role="alert" className="px-1 pb-1 text-footnote text-destructive">
           {error}
@@ -93,7 +91,6 @@ export function MessageQueueStrip({
                 menuLabel={`Queued message ${index + 1} actions`}
                 menu={menu}
                 remedies={remedies}
-                clamp
                 editor={isEditing ? (
                   <div className="composer-field rounded-lg bg-background">
                     <DraftChipLayer text={draft.text} field={editor} />
@@ -125,7 +122,6 @@ export function MessageQueueStrip({
                 label={status.label}
                 menuLabel="Queued message actions"
                 menu={[]}
-                clamp
                 remedies={readNow && status.actions.includes("readNow")
                   ? [{ id: "readNow", label: armed ? "Tap again to read it now" : "Read it now", icon: Zap, disabled: busy, armed, run: () => readNow(row.id) }]
                   : []}

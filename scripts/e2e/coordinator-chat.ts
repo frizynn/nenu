@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import { herdSeed } from "./scenario.ts";
 
-// How many taps it takes to write to a coordinator, from Home, at 390 and 1440 px (ADR 0114): Home's
+// How many taps it takes to write to a coordinator, from Home, at 390 and 1440 px (ADR 0115): Home's
 // Projects tab, the project's row, the coordinator's row, and whatever else stands before its chat's box.
 // Then the back control from that chat, as far as it climbs (coordinator → project → Projects). Over
 // phone-nav.ts's herd: Acme organizes coordinators (its own and Rediseño mobile run in a pane,

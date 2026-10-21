@@ -74,7 +74,8 @@ export const filePaneActions: Record<string, PaneAction> = {
       const requestedPath = url.searchParams.get("path");
       const ifNoneMatch = req.headers.get("if-none-match");
       if (isChatUploadPath(uploadDirs(services.cfg.stateDir), requestedPath))
-        return secure(await chatUploadPreviewResponse(uploadDirs(services.cfg.stateDir), requestedPath, await journalEntries(), ifNoneMatch));
+        return secure(await chatUploadPreviewResponse(uploadDirs(services.cfg.stateDir), requestedPath, await journalEntries(), ifNoneMatch,
+          await services.queue.textsOn(request.rt.name, request.paneId)));
       return secure(await paneFileResponse(cwd, requestedPath, { range: req.headers.get("range"), ifNoneMatch, delivered, folders, nenuDirs: nenuDirs(services.cfg.stateDir) }));
     },
   },

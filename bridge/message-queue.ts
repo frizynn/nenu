@@ -169,6 +169,12 @@ export class MessageQueue {
       .filter((row) => row.state !== "sent" && (row.scope === scope || (!!pane && strandedOn(row, pane))))
       .map((row) => this.view(row));
   }
+  /** The text of every row on this pane, waiting or delivered: what its pending bubbles show. */
+  async textsOn(session: string, paneId: string): Promise<string[]> {
+    await this.ready;
+    await this.serial;
+    return this.rows.filter((row) => row.session === session && row.paneId === paneId).map((row) => row.text);
+  }
   /** Delivered rows of a scope from the last {@link DELIVERED_LIST_MS}, newest last. */
   async recent(scope: string) {
     await this.ready;

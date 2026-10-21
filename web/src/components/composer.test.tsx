@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,7 +11,7 @@ import { clearStatus, useStatus } from "@/lib/status";
 import { setOutageNoticeShown } from "@/lib/connection-health";
 import { isReloadHeld, __resetReloadGuard } from "@/lib/reload-guard";
 import { loadDraft, saveDraft } from "@/lib/drafts";
-import { listLocalSends, localSendScope } from "@/lib/local-sends";
+import { listLocalSends, localSendScope, setQueueSlot } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import { declarations } from "@/test/css-rules";
@@ -25,7 +25,11 @@ import { imageChip } from "@/lib/message-images";
 // the same menu rows beside the composer, without the popover, so every control is one tap away.
 function ComposerWithMenu(props: ComponentProps<typeof Composer>) {
   const [controls, setControls] = useState<ComposerControl[]>([]);
+  // The conversation's end, where the queue's rows without a bubble here are drawn (live-conversation.tsx).
+  const scope = localSendScope(props.paneId, props.session);
+  const slot = useCallback((element: HTMLDivElement | null) => setQueueSlot(scope, element), [scope]);
   return <>
+    <div data-testid="thread-end" ref={slot} />
     <div data-testid="controls"><ActionGroups groups={[{ label: "Controls", actions: controls }]} onRun={(run) => run()} /></div>
     <Composer {...props} onControlsChange={setControls} />
   </>;
@@ -575,12 +579,13 @@ describe("Composer — a refused send is said beside the draft", () => {
   it("goes away when the draft changes from outside the box, so Try again never sends what it did not refuse", async () => {
     const user = userEvent.setup();
     const sends = serveSend((body) => refusal(body, "verify", VERIFY, false));
-    renderDraftHarness({ terminalDraft: "rm -rf build" });
+    renderDraftHarness();
     const box = screen.getByPlaceholderText(/type a reply/i);
     await user.type(box, "hello");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    strandDraft("rm -rf build");
+    await user.click(await screen.findByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("hello\nrm -rf build");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(sends).toHaveLength(1);
@@ -1030,18 +1035,93 @@ describe("Composer — typing into the terminal", () => {
     expect(screen.getByTestId("status")).toHaveTextContent(/pane unavailable/i);
   });
 
-  it("refuses activation while a buffered reply exists", async () => {
+  it("keeps a buffered reply aside while armed, and gives it back on disarm (ADR 0114)", async () => {
     const user = userEvent.setup();
+    const sent: string[][] = [];
+    server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+      sent.push(((await request.json()) as { keys: string[] }).keys);
+      return HttpResponse.json({ ok: true });
+    }));
     renderComposerWithStatus();
-    const box = screen.getByPlaceholderText(/type a reply/i);
-    await user.type(box, "keep this draft");
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "keep this draft");
 
-    // The refusal belongs on the named choice, where there is somewhere to explain it.
     fireEvent.click(control(/^type into terminal$/i));
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    expect(field).toHaveValue("");
+    fireEvent.change(field, { target: { value: "y" } });
+    await waitFor(() => expect(sent.flat()).toEqual(["y"]));
 
+    fireEvent.click(screen.getByRole("button", { name: "Stop typing into terminal" }));
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("keep this draft");
+    expect(loadDraft(undefined, "w1:p1")).toBe("keep this draft");
+  });
+
+  it("a key batch that failed from the + row never keeps a Terminal view entered later from being the terminal", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: false, error: "gone" }, { status: 502 })));
+    function Harness() {
+      const [terminalView, setTerminalView] = useState(false);
+      const [controls, setControls] = useState<ComposerControl[]>([]);
+      return <>
+        <button type="button" onClick={() => setTerminalView(true)}>terminal view</button>
+        <div data-testid="controls"><ActionGroups groups={[{ label: "Controls", actions: controls }]} onRun={(run) => run()} /></div>
+        <Composer paneId="w1:p1" agent="claude" isShell={false} gone={false} readOnly={false} dialogPresent={false}
+          text="pane output" terminalDraft={null} rawTerminalDraft={null}
+          prefs={{ wrap: true, fontSize: 11, rawTerminal: terminalView, tapToFocus: true }}
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()}
+          terminalView={terminalView} onControlsChange={setControls} />
+      </>;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Harness /> }])} />);
+    fireEvent.click(control(/^type into terminal$/i));
+    fireEvent.change(screen.getByPlaceholderText(/type into the terminal/i), { target: { value: "x" } });
+    await waitFor(() => expect(screen.queryByPlaceholderText(/type into the terminal/i)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "terminal view" }));
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
+  });
+
+  it("a Terminal view entered while a send is on its way becomes the terminal once it lands", async () => {
+    let release = () => {};
+    serveSend((body) => new Promise((resolve) => { release = () => resolve({ ok: true, requestId: body.requestId, ack: "submitted" }); }));
+    function Harness() {
+      const [terminalView, setTerminalView] = useState(false);
+      return <>
+        <button type="button" onClick={() => setTerminalView(true)}>terminal view</button>
+        <ComposerWithMenu paneId="w1:p1" agent="claude" isShell={false} gone={false} readOnly={false} dialogPresent={false}
+          text="pane output" terminalDraft={null} rawTerminalDraft={null}
+          prefs={{ wrap: true, fontSize: 11, rawTerminal: terminalView, tapToFocus: true }}
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()}
+          terminalView={terminalView} />
+      </>;
+    }
+    const user = userEvent.setup();
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Harness /> }])} />);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "va");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(screen.getByRole("button", { name: "terminal view" }));
     expect(screen.queryByPlaceholderText(/type into the terminal/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("status")).toHaveTextContent(/send or clear the draft/i);
+    act(() => release());
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
+  });
+
+  it("is the box in the chat's Terminal view, and the chat's box again when the view goes (ADR 0114)", async () => {
+    function Harness() {
+      const [terminalView, setTerminalView] = useState(true);
+      return <>
+        <button type="button" onClick={() => setTerminalView((on) => !on)}>toggle view</button>
+        <ComposerWithMenu paneId="w1:p1" agent="claude" isShell={false} gone={false} readOnly={false} dialogPresent={false}
+          text="pane output" terminalDraft={null} rawTerminalDraft={null}
+          prefs={{ wrap: true, fontSize: 11, rawTerminal: terminalView, tapToFocus: true }}
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()}
+          terminalView={terminalView} />
+      </>;
+    }
+    const router = createMemoryRouter([{ path: "/", element: <Harness /> }]);
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "toggle view" }));
+    expect(await screen.findByPlaceholderText(/type a reply/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "toggle view" }));
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
   });
 
   it("resets when the composer changes panes", () => {
@@ -1402,7 +1482,7 @@ describe("Composer — input is phone-owned (never auto-written by the terminal 
     expect(box).toHaveValue("");
 
     setStableDraft("d"); // it stabilises (the preview may show) — input still untouched
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
     expect(box).toHaveValue("");
 
     // Live host typing: a distinct raw draft every poll. The input never oscillates.
@@ -1422,7 +1502,7 @@ describe("Composer — input is phone-owned (never auto-written by the terminal 
     await user.type(box, "my mobile message");
 
     strandDraft("host draft"); // a draft strands while the user is mid-compose
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
     expect(box).toHaveValue("my mobile message");
 
     setRawDraft("host draft grows"); // host keeps typing — preview follows, input does not
@@ -1436,18 +1516,18 @@ describe("Composer — input is phone-owned (never auto-written by the terminal 
 describe("Composer — terminal-draft preview", () => {
   it("does not render the preview when there is no stranded draft", () => {
     renderComposer({ terminalDraft: null, rawTerminalDraft: null });
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
   });
 
   it("appears only after the draft stabilises — a raw-only blip never flashes it", async () => {
     renderDraftHarness();
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     setRawDraft("blip"); // raw only (not yet stable) → no preview
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     setStableDraft("blip"); // stabilised → the preview promotes
-    expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
     expect(screen.getByText("blip")).toBeInTheDocument();
   });
 
@@ -1468,16 +1548,16 @@ describe("Composer — terminal-draft preview", () => {
   it("unmounts when the raw draft goes null (submitted or cleared on the host)", async () => {
     renderDraftHarness();
     strandDraft("gone soon");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
     setRawDraft(""); // → null: the host line was cleared/submitted
-    await waitFor(() => expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument());
   });
 
   it("renders no dismiss button — the preview has no user-facing dismiss", async () => {
     renderDraftHarness();
     strandDraft("no dismiss here");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
     expect(screen.queryByLabelText(/dismiss terminal draft/i)).not.toBeInTheDocument();
   });
@@ -1485,15 +1565,157 @@ describe("Composer — terminal-draft preview", () => {
   it("persists across subsequent polls of the same text with no user action", async () => {
     renderDraftHarness();
     strandDraft("still here");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
     // Repeated polls that just re-report the SAME raw text (no take-over, no send, no change) must
     // never hide the preview — it's honest state, not a one-shot notice.
     for (let i = 0; i < 3; i++) {
       setRawDraft("still here");
-      expect(screen.getByText(/draft in terminal/i)).toBeInTheDocument();
+      expect(screen.getByText(/text in .*'s box/i)).toBeInTheDocument();
       expect(screen.getByText("still here")).toBeInTheDocument();
     }
+  });
+
+  // 2026-10-21, 1.38.4: a draft in Claude's box held the queue for good, and a direct send swept a
+  // hand-typed one unseen. A Send now waits on the operator's call, made beside the box, and goes.
+  it.each([
+    ["send", "Send it first"],
+    ["discard", "Discard"],
+  ] as const)("a Send over text in the agent's box waits for %s, then goes on its own (ADR 0114)", async (action, button) => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    const settled: unknown[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async ({ request }) => {
+        settled.push(await request.json());
+        setRawDraft("");
+        setStableDraft("");
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderDraftHarness();
+    strandDraft("borrador escrito a mano");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "mensaje desde Nenu");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    // Nothing goes yet, and nothing sweeps the box: the choice sits right above it.
+    expect(sends).toEqual([]);
+    expect(screen.getByText(/your message goes as soon as you choose/i)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: button }));
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["mensaje desde Nenu"]));
+    expect(settled).toEqual([{ draft: "borrador escrito a mano", action }]);
+  });
+
+  it("a Send over text in the agent's box goes once the terminal itself empties the box", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("tecleado en la compu");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "lo mío");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(sends).toEqual([]);
+    setRawDraft("");
+    setStableDraft("");
+    // It reads empty for as long as a draft takes to show before the message goes.
+    expect(sends).toEqual([]);
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["lo mío"]), { timeout: 4000 });
+  });
+
+  it("Don't send mine takes the waiting message back, on a phone too, and keeps it in the box", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("algo");
+    await screen.findByText(/text in claude's box/i);
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "mejor no");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Don't send mine" }));
+    // The box empties at the terminal later: nothing goes on its own.
+    setRawDraft("");
+    setStableDraft("");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sends).toEqual([]);
+    expect(box).toHaveValue("mejor no");
+  });
+
+  it("one read that misses the box's text sends nothing: the text comes back and the message still waits", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("sigue acá");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "espero");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    strandDraft(""); // a read during a repaint finds no box text
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    strandDraft("sigue acá"); // the next read has it again
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    expect(sends).toEqual([]);
+  });
+
+  it("Add to my message carries the box's text even when a poll sees the box empty before the take answers", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    server.use(http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async () => {
+      // The bridge empties the box, and a poll sees it, before the answer reaches the composer.
+      strandDraft("");
+      await new Promise((resolve) => setTimeout(resolve, 1700));
+      return HttpResponse.json({ ok: true });
+    }));
+    renderDraftHarness();
+    strandDraft("primera parte");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "segunda");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["segunda\nprimera parte"]), { timeout: 4000 });
+  });
+
+  it("a message waiting on the box's text is dropped when the page is hidden", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("algo");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "luego");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    setRawDraft("");
+    setStableDraft("");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sends).toEqual([]);
+  });
+
+  it("Add to my message joins the box's text to the waiting message, which then goes as one", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    server.use(http.post(/\/api\/pane\/[^/]+\/clear-draft$/, () => HttpResponse.json({ ok: true })));
+    renderDraftHarness();
+    strandDraft("primera parte");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "segunda");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["segunda\nprimera parte"]));
+  });
+
+  it("Esc takes back a message waiting on the box's text, and keeps the draft", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("algo");
+    await screen.findByText(/text in claude's box/i);
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "espera");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.type(box, "{Escape}");
+    expect(screen.queryByText(/your message goes as soon as you choose/i)).not.toBeInTheDocument();
+    expect(box).toHaveValue("espera");
+    expect(sends).toEqual([]);
   });
 
   it("Take over moves the draft: copies it here and has the bridge clear the terminal's copy", async () => {
@@ -1509,11 +1731,11 @@ describe("Composer — terminal-draft preview", () => {
     );
     renderDraftHarness();
     strandDraft("take me over");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("take me over");
-    await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
+    await waitFor(() => expect(clears).toEqual([{ draft: "take me over", action: "take" }]));
   });
 
   it.each(["[Image #1] fix this", "fix this [Ima ge #1]", "why does this fail [Pasted text #1 +80 lines]"])(
@@ -1522,8 +1744,8 @@ describe("Composer — terminal-draft preview", () => {
       // A copy would carry the literal token, and its Send would sweep the real picture or paste.
       renderDraftHarness();
       strandDraft(held);
-      await screen.findByText(/draft in terminal/i);
-      expect(screen.queryByRole("button", { name: /take over/i })).not.toBeInTheDocument();
+      await screen.findByText(/text in .*'s box/i);
+      expect(screen.queryByRole("button", { name: /add to my message/i })).not.toBeInTheDocument();
       expect(screen.getByText(held)).toBeInTheDocument(); // the preview still says what the box holds
     },
   );
@@ -1539,13 +1761,13 @@ describe("Composer — terminal-draft preview", () => {
     );
     renderDraftHarness();
     strandDraft("take me over");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
     const box = screen.getByPlaceholderText(/type a reply/i);
     expect(box).toHaveValue(""); // never auto-written before the deliberate takeover
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("take me over"); // the text lands, one-shot
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument(); // preview hidden
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument(); // preview hidden
     expect(keyCalls).toEqual([]); // no keys from the phone: the bridge clears it, bound to the text
   });
 
@@ -1553,14 +1775,14 @@ describe("Composer — terminal-draft preview", () => {
     const user = userEvent.setup();
     renderDraftHarness();
     strandDraft("original");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     // The host keeps typing → a DIFFERENT draft → the preview returns with the new text.
     strandDraft("original plus more");
-    expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
     expect(screen.getByText("original plus more")).toBeInTheDocument();
   });
 
@@ -1570,14 +1792,14 @@ describe("Composer — terminal-draft preview", () => {
     const user = userEvent.setup();
     renderDraftHarness();
     strandDraft("continue");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     strandDraft(""); // the host line empties (submitted/wiped on the host)
     strandDraft("continue"); // …and later the very same text strands again
-    const label = await screen.findByText(/draft in terminal/i);
+    const label = await screen.findByText(/text in .*'s box/i);
     // Scope to the preview block — "continue" also sits in the composer input from the take-over.
     expect(label.parentElement).toHaveTextContent("continue");
   });
@@ -1588,9 +1810,9 @@ describe("Composer — terminal-draft preview", () => {
     const sends = serveSend();
     renderDraftHarness();
     strandDraft("adopted line");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     const box = screen.getByPlaceholderText(/type a reply/i);
     expect(box).toHaveValue("adopted line");
 
@@ -1612,11 +1834,11 @@ describe("Composer — terminal-draft preview", () => {
     );
     renderDraftHarness({ readOnly: true });
     strandDraft("read only draft");
-    expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
     const box = screen.getByPlaceholderText(/read-only/i);
     expect(box).toHaveValue(""); // never auto-written
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("read only draft"); // local copy landed
     expect(box).toBeDisabled(); // still locked — can't edit or send
     expect(keyCalls).toEqual([]); // no terminal writes at all
@@ -1678,7 +1900,7 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
 
     // The mirror now echoes the in-flight "/rename" back onto the ❯ line — no stranded-draft chip.
     await user.click(screen.getByRole("button", { name: "__set-draft" }));
-    expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     await user.type(box, "next message");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -1699,10 +1921,10 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
     // A draft that is NOT what we just sent is a real stranded draft — not suppressed. It shows in the
     // preview (never auto-written into the now-empty input).
     await user.click(screen.getByRole("button", { name: "__set-draft" }));
-    expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
     expect(box).toHaveValue("");
 
-    await user.click(screen.getByRole("button", { name: /take over/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("someone else's leftover");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends.map((send) => send.text)).toEqual(["hello", "someone else's leftover"]));
@@ -1732,7 +1954,7 @@ describe("Composer — reload-guard hold (no-SW self-update safety gate)", () =>
   it("a terminal draft alone (preview only, empty input) does NOT hold — it re-derives after a reload", async () => {
     renderDraftHarness();
     strandDraft("just a preview");
-    await screen.findByText(/draft in terminal/i);
+    await screen.findByText(/text in .*'s box/i);
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue(""); // nothing phone-owned to lose
     expect(isReloadHeld()).toBe(false);
   });
@@ -2333,8 +2555,7 @@ it.each([true, false])("resumes live following only when the queued message is s
   const props = renderComposer({ nativeWorkbench: true, agent: "codex", working: true });
   const input = screen.getByRole("textbox");
   await userEvent.type(input, "Continue this investigation");
-  await userEvent.click(screen.getByRole("button", { name: /^Send$/ }));
-  await userEvent.click(await screen.findByRole("button", { name: /queue for later/i }));
+  await userEvent.click(await waitFor(() => control(/send after this turn/i)));
   if (saved) {
     await waitFor(() => expect(input).toHaveValue(""));
     expect(props.onSent).toHaveBeenCalledOnce();
@@ -2401,8 +2622,7 @@ describe("Composer — images and the pending bubble", () => {
     }));
     renderComposer({ nativeWorkbench: true, working: true });
     const box = await attachAndType("see the edge");
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
-    await userEvent.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await userEvent.click(await waitFor(() => control(/send after this turn/i)));
 
     await waitFor(() => expect(adds).toEqual([`${UPLOAD} see the edge`]));
     expect(box).toHaveValue("");
@@ -2418,8 +2638,7 @@ describe("Composer — images and the pending bubble", () => {
     serveQueue(() => HttpResponse.json({ error: "down" }, { status: 503 }));
     renderComposer({ nativeWorkbench: true, working: true });
     const box = await attachAndType("keep me");
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
-    await userEvent.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await userEvent.click(await waitFor(() => control(/send after this turn/i)));
 
     await waitFor(() => expect(box).toHaveValue(`${imageChip(1)} keep me`));
     expect(screen.getByRole("button", { name: "Remove Image #1" })).toBeInTheDocument();
@@ -2476,7 +2695,7 @@ describe("Composer — images and the pending bubble", () => {
   });
 });
 
-describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () => {
+describe("Composer — a busy agent gets Send now, and Send after this turn in the + (ADR 0056, ADR 0114)", () => {
   type Row = { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; deliveryMode?: string; waitingFor?: string; stranded?: { reason: string; since: number }; device?: string | null };
   type Delivered = { id: string; text: string; sentAt: number; deliveryMode?: string; native?: string; readNowAt?: number };
   /** The bridge's queue route, stateful: rows added here are listed until a test moves them. */
@@ -2511,15 +2730,13 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(props.onSent).toHaveBeenCalledOnce());
     expect(wire).toEqual(["send"]);
-    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
   });
 
   it.each([
-    ["claude", "Send now", "asap", /claude's queue/i],
-    ["claude", "Queue for later", "afterTurn", /until claude finishes this turn/i],
-    ["codex", "Send now", "steer", /steers this turn/i],
-    ["codex", "Queue for later", "afterTurn", /codex's queue and runs as the next turn/i],
-  ] as const)("a busy %s: %s stores mode %s", async (agent, choice, mode, hint) => {
+    ["claude", "asap"],
+    ["codex", "steer"],
+  ] as const)("a busy %s gets Send as its terminal's Enter: now, mode %s, nothing asked (ADR 0114)", async (agent, mode) => {
     const user = userEvent.setup();
     const queue = serveQueueRoute();
     const wire = watchWrites();
@@ -2527,14 +2744,28 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     await user.type(screen.getByRole("textbox"), "one more thing");
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Send" }));
-    const panel = await screen.findByRole("group", { name: /is working/i });
-    expect(within(panel).getByText(hint)).toBeInTheDocument();
-    expect(wire).toEqual([]); // the question alone sends nothing
-    await user.click(within(panel).getByRole("button", { name: new RegExp(choice, "i") }));
     await waitFor(() => expect(queue.posts).toEqual([expect.objectContaining({ action: "add", text: "one more thing", deliveryMode: mode })]));
     expect(wire).toEqual(["queue"]);
-    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+  });
+
+  it.each(["claude", "codex"] as const)("a busy %s: Send after this turn, one row of the +, stores mode afterTurn", async (agent) => {
+    const user = userEvent.setup();
+    const queue = serveQueueRoute();
+    renderComposer({ nativeWorkbench: true, agent, working: true });
+    expect(() => control(/send after this turn/i)).toThrow(); // nothing to send yet
+    await user.type(screen.getByRole("textbox"), "after you finish");
+    await user.click(await waitFor(() => control(/send after this turn/i)));
+    await waitFor(() => expect(queue.posts).toEqual([expect.objectContaining({ action: "add", text: "after you finish", deliveryMode: "afterTurn" })]));
+  });
+
+  it("an idle agent's + has no Send after this turn", async () => {
+    const user = userEvent.setup();
+    serveQueueRoute();
+    renderComposer({ nativeWorkbench: true });
+    await user.type(screen.getByRole("textbox"), "hi");
+    expect(() => control(/send after this turn/i)).toThrow();
   });
 
   it("an idle Send of a message whose queue add never got an answer goes back through the queue, with the same row", async () => {
@@ -2577,20 +2808,7 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(queue.posts).toEqual([expect.objectContaining({ action: "add", deliveryMode: "afterTurn" })]));
-    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
-  });
-
-  it("Cancel keeps the draft and sends nothing", async () => {
-    const user = userEvent.setup();
-    serveQueueRoute();
-    const wire = watchWrites();
-    renderComposer({ nativeWorkbench: true, working: true });
-    await user.type(screen.getByRole("textbox"), "not yet");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    await user.click(await screen.findByRole("button", { name: "Cancel" }));
-    expect(screen.getByRole("textbox")).toHaveValue("not yet");
-    expect(wire).toEqual([]);
+    expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
   });
 
   it("without the queue (terminal view), a busy agent's Send types now, as at the keyboard", async () => {
@@ -2610,14 +2828,12 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     const scope = localSendScope("w1:p1", undefined);
     await user.type(screen.getByRole("textbox"), "lost one");
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await user.click(await waitFor(() => control(/send after this turn/i)));
     await waitFor(() => expect(listLocalSends(scope)[0]).toEqual(expect.objectContaining({ state: "queued" })));
     // A bridge restart on another state dir: the row is simply gone, and nothing says it was delivered.
     queue.rows = [];
     await user.type(screen.getByRole("textbox"), "x");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await user.click(await waitFor(() => control(/send after this turn/i)));
     await waitFor(() => expect(listLocalSends(scope)[0]).toEqual(expect.objectContaining({ state: "failed", textDelivered: true })));
     expect(listLocalSends(scope)[0]!.error).toMatch(/left the queue without being delivered/);
   });
@@ -2630,8 +2846,7 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     for (let n = 0; n < 2; n++) {
       await user.type(screen.getByRole("textbox"), "ok");
       await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: "Send" }));
-      await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+      await user.click(await waitFor(() => control(/send after this turn/i)));
       await waitFor(() => expect(queue.posts).toHaveLength(n + 1));
     }
     const [first, second] = queue.rows;
@@ -2641,8 +2856,7 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     queue.rows = [second!];
     queue.delivered = [{ id: first!.id, text: "ok", sentAt: 2, deliveryMode: "afterTurn", native: "absorbed" }];
     await user.type(screen.getByRole("textbox"), "x");
-    await user.click(screen.getByRole("button", { name: "Send" })); // any queue write re-reads the page
-    await user.click(await screen.findByRole("button", { name: /queue for later/i }));
+    await user.click(await waitFor(() => control(/send after this turn/i))); // any queue write re-reads the page
     await waitFor(() =>
       expect(listLocalSends(scope).slice(0, 2)).toEqual([
         expect.objectContaining({ queueId: first!.id, state: "sent", native: "absorbed" }),
@@ -2656,25 +2870,24 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     const queue = serveQueueRoute();
     renderComposer({ nativeWorkbench: true, working: true });
     const scope = localSendScope("w1:p1", undefined);
-    const queueOne = async (text: string, choice: RegExp) => {
+    const queueOne = async (text: string, later: boolean) => {
       await user.type(screen.getByRole("textbox"), text);
       await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: "Send" }));
-      await user.click(await screen.findByRole("button", { name: choice }));
+      await user.click(later ? control(/send after this turn/i) : screen.getByRole("button", { name: "Send" }));
     };
-    await queueOne("use staging", /^Send now(?!$)/);
+    await queueOne("use staging", false);
     await waitFor(() => expect(queue.rows).toHaveLength(1));
     const id = queue.rows[0]!.id;
     // The bridge typed it before answering the add: no row waits, the journal has not spoken yet.
     queue.rows = [];
     queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap" }];
-    await queueOne("later", /queue for later/i);
+    await queueOne("later", true);
     await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "sent" }));
     queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "enqueued" }];
-    await queueOne("again", /queue for later/i);
+    await queueOne("again", true);
     await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "queued", native: "enqueued" }));
     queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "absorbed" }];
-    await queueOne("once more", /queue for later/i);
+    await queueOne("once more", true);
     await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, state: "sent", native: "absorbed" }));
   });
 
@@ -2702,18 +2915,17 @@ describe("Composer — a busy agent gets a choice at send time (ADR 0056)", () =
     const queue = serveQueueRoute();
     renderComposer({ nativeWorkbench: true, working: true });
     const scope = localSendScope("w1:p1", undefined);
-    const queueOne = async (text: string, choice: RegExp) => {
+    const queueOne = async (text: string, later: boolean) => {
       await user.type(screen.getByRole("textbox"), text);
       await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: "Send" }));
-      await user.click(await screen.findByRole("button", { name: choice }));
+      await user.click(later ? control(/send after this turn/i) : screen.getByRole("button", { name: "Send" }));
     };
-    await queueOne("use staging", /^Send now(?!$)/);
+    await queueOne("use staging", false);
     await waitFor(() => expect(queue.rows).toHaveLength(1));
     const id = queue.rows[0]!.id;
     queue.rows = [];
     queue.delivered = [{ id, text: "use staging", sentAt: 1, deliveryMode: "asap", native: "enqueued", readNowAt: 2 }];
-    await queueOne("later", /queue for later/i);
+    await queueOne("later", true);
     await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, native: "enqueued", readNowAt: 2 }));
     expect(pendingStatus(listLocalSends(scope)[0]!).actions).toEqual([]);
   });
