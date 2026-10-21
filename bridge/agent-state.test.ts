@@ -158,6 +158,8 @@ describe("Claude panes at their usage limit", () => {
   const OTHER_ID = "0c3e2a6d-1b7a-4f1e-9d55-3c1f2e7a9b10";
   const RESETS = 1792632000 * 1000;
   const NOW = Date.parse("2026-10-21T21:45:00.000Z");
+  // A loaded machine can take longer than settle()'s fixed wait: these look until the state says so.
+  const until = async (test: () => boolean) => { for (let i = 0; i < 100 && !test(); i++) await settle(); };
   const limited = async () => (await readFile(join(import.meta.dirname, "test-support", "agent-state", "claude-2.1.306-transcript-usage-limit.jsonl"), "utf8")).split("\n").slice(0, 8).join("\n") + "\n";
 
   test("a Claude at rest reads its limit from the transcript, and a reply on its account clears it", async () => {
@@ -171,7 +173,7 @@ describe("Claude panes at their usage limit", () => {
     await writeFile(other, "");
     const herdrs = { processInfo: async (paneId: string) => ({ foreground_processes: [{ pid: paneId === "w1:p1" ? PID : OTHER_PID }] }) };
     service.sync("s", herdrs, [pane("claude"), pane("claude", { paneId: "w1:p2" })]);
-    await settle();
+    await until(() => service.get("s", "w1:p1")?.limit !== undefined && service.get("s", "w1:p2") !== undefined);
     expect(service.get("s", "w1:p1")).toEqual({ running: false, limit: { resetsAt: RESETS }, source: "claude-session" });
     expect(service.get("s", "w1:p2")).toEqual({ running: false, source: "claude-session" });
 
@@ -183,7 +185,7 @@ describe("Claude panes at their usage limit", () => {
     await settle();
     await appendFile(other, JSON.stringify({ type: "assistant", timestamp: "2026-10-21T22:00:15.612Z", message: { content: [{ type: "text", text: "on it" }] } }) + "\n");
     w.fire(other);
-    await settle();
+    await until(() => service.get("s", "w1:p1")?.limit === undefined);
     expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
     expect(events).toContainEqual({ session: "s", topic: "pane", paneId: "w1:p1" });
     service.close();
@@ -196,12 +198,12 @@ describe("Claude panes at their usage limit", () => {
     await writeFile(transcript, await limited());
     await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", NOW));
     service.sync("s", herdr([PID]), [pane("claude")]);
-    await settle();
+    await until(() => service.get("s", "w1:p1")?.limit !== undefined);
     expect(service.get("s", "w1:p1")?.limit).toEqual({ resetsAt: RESETS });
     now = RESETS + 1;
     // The timer is set for the reset plus a second; waiting it out here would be slow.
     service.poke("s", "w1:p1");
-    await settle();
+    await until(() => service.get("s", "w1:p1")?.limit === undefined);
     expect(service.get("s", "w1:p1")?.limit).toBeUndefined();
     service.close();
   });
