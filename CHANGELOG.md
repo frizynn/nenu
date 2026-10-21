@@ -8,15 +8,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.38.2] - 2026-10-21
+## [1.38.3] - 2026-10-21
 
 ### Changed
 
-- Needs you, Working and PRs sit in the row under the box, beside the model; no line above the box takes the thread's height. In a narrow box (a phone, a docked thread) only Needs you keeps its word, and the model's effort and context number step aside for them (1d576f22, 35381102, 289f8f7e).
+- Needs you, Working and PRs sit in the row under the box, beside the model; no line above the box takes the thread's height. In a narrow box (a phone, a docked thread) only Needs you keeps its word, and the model's effort and context number step aside for them (1d576f22, 35381102, 289f8f7e, 1bb500ed).
 
 ### Fixed
 
 - A picture pasted or attached with the phone's keyboard up no longer pushes the draft off the box's right edge (ebd2ccd6, 9c4b75bb).
+
+## [1.38.2] - 2026-10-21
+
+### Fixed
+
+- A picture sent while the agent works goes through the queue piece by piece, so Claude attaches it instead of leaving its path typed in the box (e576f3b0).
+- A picture the agent keeps as its path goes as that path; a send that stops before Enter clears what it typed, and a queued row it cleared goes again, three times at most (5c076acd).
+- Take over clears the terminal's copy of the draft while it still holds that text, so the queue and Type into terminal are no longer stuck behind it; a picture or paste only the CLI holds is left (55aed6e8, 7ebc9d44, ffd14340, d2aba238, fa27bb47).
 
 ## [1.38.1] - 2026-10-21
 

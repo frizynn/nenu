@@ -165,6 +165,7 @@ export const handlers = [
     recordReply((await request.json()) as { text?: string; submit?: boolean });
     return HttpResponse.json({ ok: true });
   }),
+  http.post(/\/api\/pane\/[^/]+\/clear-draft$/, () => HttpResponse.json({ ok: true })),
   // The one-request guarded send: it lands like a submitted reply, so the fake input line clears.
   http.post(/\/api\/pane\/[^/]+\/send$/, async ({ request }) => {
     const body = (await request.json()) as { text: string; requestId: string };

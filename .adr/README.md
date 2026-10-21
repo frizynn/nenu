@@ -107,12 +107,13 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted |
 | [0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) | On a desk, projects and coordinators are pages with tabs; asks and routines live on them (amends 0064, 0080, 0090, 0091, 0092 on a desk) | Accepted; amended by 0106 |
 | [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Accepted |
-| [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted |
+| [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted; amended by 0112 |
 | [0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md) | On a desk, finished work is a History by day, and a routine is edited where it is read (amends 0102) | Accepted |
 | [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Accepted |
 | [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted |
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted |
 | [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted |
+| [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

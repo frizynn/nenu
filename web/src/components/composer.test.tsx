@@ -1496,6 +1496,38 @@ describe("Composer — terminal-draft preview", () => {
     }
   });
 
+  it("Take over moves the draft: copies it here and has the bridge clear the terminal's copy", async () => {
+    // 2026-10-21: Take over left the text in the terminal, where it held up the queue, and Type into
+    // terminal refused while the composer held the copy, so the phone could neither type nor delete there.
+    const user = userEvent.setup();
+    const clears: unknown[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async ({ request }) => {
+        clears.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderDraftHarness();
+    strandDraft("take me over");
+    await screen.findByText(/draft in terminal/i);
+
+    await user.click(screen.getByRole("button", { name: /take over/i }));
+    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("take me over");
+    await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
+  });
+
+  it.each(["[Image #1] fix this", "fix this [Ima ge #1]", "why does this fail [Pasted text #1 +80 lines]"])(
+    "offers no Take over for a draft holding what only the CLI has: %s",
+    async (held) => {
+      // A copy would carry the literal token, and its Send would sweep the real picture or paste.
+      renderDraftHarness();
+      strandDraft(held);
+      await screen.findByText(/draft in terminal/i);
+      expect(screen.queryByRole("button", { name: /take over/i })).not.toBeInTheDocument();
+      expect(screen.getByText(held)).toBeInTheDocument(); // the preview still says what the box holds
+    },
+  );
+
   it("Take over copies the CURRENT draft into the composer, marks it handled, and hides the preview", async () => {
     const user = userEvent.setup();
     const keyCalls: string[] = [];
@@ -1514,7 +1546,7 @@ describe("Composer — terminal-draft preview", () => {
     await user.click(screen.getByRole("button", { name: /take over/i }));
     expect(box).toHaveValue("take me over"); // the text lands, one-shot
     expect(screen.queryByText(/draft in terminal/i)).not.toBeInTheDocument(); // preview hidden
-    expect(keyCalls).toEqual([]); // takeover writes NOTHING to the terminal
+    expect(keyCalls).toEqual([]); // no keys from the phone: the bridge clears it, bound to the text
   });
 
   it("after Take over, a divergent host draft honestly re-shows the preview with the new text", async () => {

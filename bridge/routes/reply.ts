@@ -9,7 +9,7 @@ import {
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
 import { claudeLogReader } from "../delivery-check.ts";
-import { guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { clearTakenDraft, guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
@@ -26,6 +26,7 @@ import { MAX_READ_LINES } from "./pane.ts";
 
 const MAX_EXPECTED_PROMPT_CHARS = 8192;
 const MAX_REPLY_REQUEST_ID_CHARS = 160;
+const MAX_CLEAR_DRAFT_CHARS = 64 * 1024;
 const PROMPT_BINDING_BLANK_LINE_HEADROOM = 6;
 
 // Terminal writes are serialised per pane with queue delivery (PaneWrites): a saved message being
@@ -64,6 +65,12 @@ export const replyPaneActions: Record<string, PaneAction> = {
     level: "write",
     marksSeen: true,
     handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => keysPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
+  },
+  // Take over on the phone (ADR 0112): the box's draft is cleared only while it still holds that text.
+  "clear-draft": {
+    level: "write",
+    marksSeen: true,
+    handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => clearDraftPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
   },
   // Not wrapped in `exclusive`: a Stop tapped right after Send waits for the turn to start, and must
   // not hold the pane while the queue types that message. It takes the lock for the final read + key.
@@ -427,6 +434,29 @@ function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, s
     ...(trace.screen !== null ? { screen: trace.screen } : {}),
   });
   if (detail) audit.record({ action: "reply.unsent", paneId, session, device, detail });
+}
+
+/** POST `{ draft }`: clear the input box while it holds exactly `draft` (guarded-send.ts clearTakenDraft). */
+export async function clearDraftPane(
+  herdr: HerdrClient,
+  cfg: Config,
+  paneId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+  session: string,
+): Promise<Response> {
+  let body: { draft?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return text("bad body", 400);
+  }
+  if (typeof body.draft !== "string" || !body.draft.trim() || body.draft.length > MAX_CLEAR_DRAFT_CHARS) return text("bad draft", 400);
+  const outcome = await clearTakenDraft({ herdr, paneId, readLines: cfg.readLines }, body.draft);
+  // The draft's length, not its words: the box may hold what was never meant to be sent.
+  audit.record({ action: "draft.clear", paneId, session, device, detail: { chars: body.draft.length, cleared: outcome.ok } });
+  return json(outcome satisfies ActionResponse, req.headers.get("accept-encoding"));
 }
 
 export async function keysPane(

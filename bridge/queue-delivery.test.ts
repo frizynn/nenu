@@ -102,6 +102,84 @@ test("types once through the audited route and confirms the box let go after Ent
   ]);
 });
 
+test("a picture goes piece by piece through the audited route, its path pasted alone (ADR 0104)", async () => {
+  // The 2026-10-21 report: a queued message with a picture was pasted whole, so Claude drew no
+  // `[Image #1]` and the path stayed in its box as text.
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const writes: { text: string; submit: boolean; id: string; paste: boolean }[] = [];
+  const result = await deliverQueuedMessage(
+    { ...row, text: `${path} look at this` },
+    terminal("claude", () => screen(draft)),
+    async (text, submit, id, paste) => {
+      writes.push({ text, submit, id, paste });
+      // Like Claude: a path pasted alone becomes its token, anything else lands as typed.
+      draft = submit ? "" : draft + (paste && text === path ? "[Image #1]" : text);
+      return { ok: true };
+    },
+    async () => true,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result.status).toBe("sent");
+  expect(writes.map(({ text, submit, paste }) => ({ text, submit, paste }))).toEqual([
+    { text: path, submit: false, paste: true },
+    { text: " look at this", submit: false, paste: false },
+    { text: "", submit: true, paste: false },
+  ]);
+  // Each write is its own request: one id for two payloads is a conflict at the reply route.
+  expect(new Set(writes.map((w) => w.id)).size).toBe(3);
+});
+
+test("a picture that never shows is cleared from the box, so the row may go again", async () => {
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const keys: string[][] = [];
+  const herdr = terminal("claude", () => screen(draft), keys);
+  herdr.sendPaneKeys = async (_id, sent) => {
+    keys.push(sent);
+    for (const key of sent) if (key === "Backspace") draft = draft.slice(0, -1);
+  };
+  const result = await deliverQueuedMessage(
+    { ...row, text: `look at this ${path} please` },
+    herdr,
+    async (text, submit) => {
+      // A paste that never lands: the words before it are all the box holds.
+      if (!submit && !text.startsWith("/")) draft += text;
+      return { ok: true };
+    },
+    async () => true,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result).toMatchObject({ status: "blocked", cleared: true });
+  expect(draft).toBe("");
+  expect(keys.flat()).not.toContain("Enter");
+});
+
+test("the queue's clear checks the conversation as its writes do", async () => {
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const keys: string[][] = [];
+  let looks = 0;
+  const result = await deliverQueuedMessage(
+    { ...row, text: `look at this ${path} please` },
+    terminal("claude", () => screen(draft), keys),
+    async (text, submit) => {
+      if (!submit && !text.startsWith("/")) draft += text;
+      return { ok: true };
+    },
+    // The two writes see the conversation; by the clear, the pane runs another one.
+    async () => ++looks <= 2,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result.status).toBe("uncertain");
+  expect(looks).toBe(3); // the refusal came at the clear, not at a write
+  expect(keys).toEqual([]);
+  expect(draft).toBe("look at this ");
+});
+
 test("Enter acknowledgement with a stranded draft is uncertain and never types twice", async () => {
   let draft = "";
   let types = 0;
