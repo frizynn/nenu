@@ -12,6 +12,7 @@ import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
 import { pasteImageBench } from "./paste-image.ts";
 import { sendAlwaysBench } from "./send-always.ts";
+import { liveJournalBench } from "./live-journal.ts";
 import { takeOverBench } from "./take-over.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
@@ -51,6 +52,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
 //   bun scripts/e2e/run.ts paste-image [--port 8797] [--out DIR]  Pictures pasted and picked between words, keyboard down and up: the draft spans the box
+//   bun scripts/e2e/run.ts live-journal [--journal LOG] [--port 8797] [--out DIR]  A chat on a 1, 10 and 40 MB log, phone and desk: ms from an append to its line on screen
 //   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
 //   bun scripts/e2e/run.ts send-always [--port 8797] [--out DIR]  A working Claude: queued rows in the thread with their pictures, Send asks nothing, text in its box never holds a send, the Terminal view types
 //   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
@@ -67,6 +69,7 @@ const { values, positionals } = parseArgs({
     seconds: { type: "string", default: "60" },
     sends: { type: "string", default: "5" },
     before: { type: "boolean", default: false },
+    journal: { type: "string" },
   },
 });
 
@@ -4159,6 +4162,17 @@ async function takeOver(): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
+/** A long log's chat on screen while its agent writes: each new line's latency, the bridge's CPU and memory. */
+async function liveJournal(source: string | undefined): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench((bridge, browser) => liveJournalBench(bridge, browser, outDir, source), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "live-journal.json"), JSON.stringify(result, null, 2));
+  for (const row of result.rows) console.log(`${row.sizeMb} MB ${row.view}: ${row.latenciesMs.join(" / ")} ms · bridge cpu ${row.bridgeCpuMs} ms, rss ${row.bridgeRssMb} MB`);
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  console.log(result.shots.join("\n"));
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 /** The command demo, desk and phone: the turn, its group, a command, a failure, a long output, a running turn. */
 async function commands(before: boolean): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -4215,10 +4229,11 @@ else if (command === "inline-images") await inlineImages(values.before === true)
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
+else if (command === "live-journal") await liveJournal(typeof values.journal === "string" ? values.journal : undefined);
 else if (command === "commands") await commands(values.before === true);
 else if (command === "send-always") await sendAlways();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|commands|send-always [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|live-journal|commands|send-always [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

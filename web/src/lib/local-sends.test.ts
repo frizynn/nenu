@@ -23,6 +23,31 @@ describe("local sends", () => {
     expect(listLocalSends(scope)).toHaveLength(0);
   });
 
+  // 2026-10-22: Nenu typed a message into a box that still held earlier text, Claude got both as one
+  // turn, and the failed bubble sat under every newer turn for good, so the chat's end never moved.
+  it("drops a bubble whose text a new user turn starts or ends with: the box held other text", () => {
+    const sent = "Haceme una foto diagrama con el fondo negro y una grilla cuadriculada";
+    const leftover = "Se cortó por el límite de la cuenta y ya cambió. Continuá desde donde quedaste.";
+    const id = addLocalSend(scope, sent);
+    updateLocalSend(scope, id, { state: "failed", error: "Your message didn't show in the agent's input box, so nothing was sent.", textDelivered: true });
+    reconcileLocalSends(scope, [user("u1", leftover)]);
+    expect(listLocalSends(scope)).toHaveLength(1);
+    reconcileLocalSends(scope, [user("u1", leftover), user("u2", `${sent}${leftover}`)]);
+    expect(listLocalSends(scope)).toHaveLength(0);
+
+    addLocalSend(scope, sent);
+    reconcileLocalSends(scope, []);
+    reconcileLocalSends(scope, [user("u3", `${leftover} ${sent}`)]);
+    expect(listLocalSends(scope)).toHaveLength(0);
+  });
+
+  it("still needs the whole turn to match a short message", () => {
+    addLocalSend(scope, "ok");
+    reconcileLocalSends(scope, []);
+    reconcileLocalSends(scope, [user("u1", "okay, now the next file")]);
+    expect(listLocalSends(scope)).toHaveLength(1);
+  });
+
   it("reuses a failed bubble when the same message is retried", () => {
     const id = addLocalSend(scope, "retry me");
     updateLocalSend(scope, id, { state: "failed", error: "nope" });
