@@ -73,6 +73,14 @@ describe("local sends", () => {
     expect(listLocalSends(scope)).toEqual([expect.objectContaining({ id, landed: "u1" })]);
   });
 
+  it("lands one only on the first new turn: the box's text left with its next Enter", () => {
+    failedInPane("si");
+    reconcileLocalSends(scope, []);
+    const later = [user("u1", "otra cosa"), user("u2", "seguí con lo siguiente")];
+    reconcileLocalSends(scope, later);
+    expect(pendingSends(listLocalSends(scope), later)).toHaveLength(1);
+  });
+
   it("never lands one on a turn that was already there", () => {
     failedInPane("dale, seguí");
     const earlier = [user("u1", "dale, seguí con el PR")];

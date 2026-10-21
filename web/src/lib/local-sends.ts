@@ -9,7 +9,7 @@ import type { DeliveryMode, NativeQueueState, QueueWaitReason, TranscriptEntry }
 // The transcript is read from the agent's own session log, which only gains the operator's message
 // after the harness writes it and the next history poll lands — seconds after the tap. Until then the
 // conversation shows the message as a pending bubble from here. A bubble lands when the journal gains a
-// matching user turn (`turnCarries`) that was not already there when the bubble first rendered, so an
+// matching user turn (`landing`) that was not already there when the bubble first rendered, so an
 // identical earlier "continue" can never swallow a new one. The conversation stops drawing it in the same render
 // that draws the journal's turn (`pendingSends`), so the message is never on screen twice; the landed
 // bubble stays in the store a while longer, holding its queue row, so that row is not drawn as a
@@ -128,15 +128,14 @@ export function removeLocalSend(scope: string, id: string) {
 }
 
 /**
- * Whether a journal user turn is this message. A failure whose text may be in the pane can still have
- * reached the agent joined to text the box held (a draft, a queued message the CLI put back), wherever
- * the caret was: its turn holds the message anywhere. Any other bubble must be the whole turn.
+ * Whether a journal user turn holds this message joined to other text. A failure whose text may be in
+ * the pane can have reached the agent with text the box held (a draft, a queued message the CLI put
+ * back), wherever the caret was. That text leaves the box with its next Enter, so only the first new
+ * turn can hold it: a later "seguí" must not land a failed "si".
  */
-function turnCarries(send: LocalSend, turn: string): boolean {
-  const sent = messageMatchKey(send.text);
-  if (turn === sent) return true;
+function joinedInto(send: LocalSend, turn: string): boolean {
   if (send.state !== "failed" || !send.textDelivered) return false;
-  const [prose = "", images = "0"] = sent.split("\u0000");
+  const [prose = "", images = "0"] = messageMatchKey(send.text).split("\u0000");
   const [turnProse = "", turnImages = "0"] = turn.split("\u0000");
   return prose !== "" && Number(turnImages) >= Number(images) && turnProse.includes(prose);
 }
@@ -154,7 +153,12 @@ function userKeys(entries: readonly TranscriptEntry[]) {
 /** The journal turn showing `send` that was not there when it was first reconciled. */
 function landing(send: LocalSend, users: ReturnType<typeof userKeys>): string | undefined {
   if (!send.baseline) return undefined;
-  return users.find((user) => !send.baseline!.includes(user.uuid) && turnCarries(send, user.key))?.uuid;
+  const baseline = new Set(send.baseline);
+  const fresh = users.filter((user) => !baseline.has(user.uuid));
+  const key = messageMatchKey(send.text);
+  const whole = fresh.find((user) => user.key === key);
+  if (whole) return whole.uuid;
+  return fresh[0] && joinedInto(send, fresh[0].key) ? fresh[0].uuid : undefined;
 }
 
 /**
