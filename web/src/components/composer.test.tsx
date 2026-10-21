@@ -2952,6 +2952,25 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
       expect(listLocalSends(scope)).toEqual([]);
     });
 
+    // The queue's last page still lists them in Claude's queue until its next read: they never come
+    // back as rows of their own (the bubbles were already gone).
+    it("does not draw the rows it took back as queued again before the queue reads them recalled", async () => {
+      const queue = serveQueueRoute();
+      queue.delivered = [
+        { id: "r0", text: "primero", sentAt: 1, deliveryMode: "asap", native: "enqueued" },
+        { id: "r1", text: "segundo\ncon dos líneas", sentAt: 2, deliveryMode: "asap", native: "enqueued" },
+      ];
+      renderComposer({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer(back);
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ native: "enqueued", state: "queued" }));
+      await act(async () => { await localSendActions(scope)!.edit(first!); });
+      expect(listLocalSends(scope)).toEqual([]);
+      expect(document.querySelectorAll("[data-queue-row]")).toHaveLength(0);
+      expect(screen.getByRole("textbox")).toHaveValue("primero\n\nsegundo\ncon dos líneas");
+    });
+
     it("Remove keeps the others in the box and says so", async () => {
       serveQueueRoute();
       renderComposerWithStatus({ nativeWorkbench: true, working: true });

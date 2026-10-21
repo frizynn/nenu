@@ -306,7 +306,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const over = turn.settled || turn.cut;
   const duration = over && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
   const worked = turn.continued ? "Continued" : "Worked";
-  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : over ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
+  // A part a message cut off was not stopped: only the part the stop ended says so.
+  const label = turn.interrupted && !turn.cut ? (duration ? `Stopped after ${duration}` : "Stopped") : over ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
   // One time per turn, when it finished, at the end of its line. The question's time is already under
   // its bubble, so a turn that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";

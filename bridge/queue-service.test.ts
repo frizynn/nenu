@@ -1,4 +1,4 @@
-import { describe, expect, it, test } from "bun:test";
+import { describe, expect, it, setSystemTime, test } from "bun:test";
 import { join } from "node:path";
 import { freshAgentView, QueueService } from "./queue-service.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -533,4 +533,25 @@ it("recalls the rows Claude's queue held on a take-back, and says whether the wo
     expect((await t.call()).body.delivered.filter((row: { native?: string }) => row.native === "enqueued")).toEqual([]);
     expect(await t.service.recallOn("session", "pane", "primero")).toEqual({ ours: false, messages: [] });
   } finally { await t.close(); }
+});
+
+it("recalls a row Claude's queue held for longer than ten minutes, and only rows whose words came back", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "primero", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    await t.add("two", "segundo", "asap");
+    await t.settle(() => t.pane.submitted.length === 2);
+    t.service.kick();
+    await Bun.sleep(30);
+    // A long build: Claude reads its queue only after the step it is on.
+    setSystemTime(new Date(Date.now() + 11 * 60_000));
+    // Claude had read "primero" already; only "segundo" came back.
+    expect(await t.service.recallOn("session", "pane", "segundo")).toEqual({ ours: true, messages: [{ id: "two", text: "segundo" }] });
+    const natives = (await t.call()).body.delivered.map((row: { id: string; native?: string }) => [row.id, row.native]);
+    expect(natives).toEqual([["one", "enqueued"], ["two", "recalled"]]);
+  } finally {
+    setSystemTime();
+    await t.close();
+  }
 });

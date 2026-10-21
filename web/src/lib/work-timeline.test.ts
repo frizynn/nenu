@@ -40,6 +40,14 @@ describe("buildWorkTimeline", () => {
       expect(below).toMatchObject({ continued: true, settled: true, durationMs: 10_000 });
     });
 
+    it("adds up when two messages are read back to back", () => {
+      const second = user("steer2", { turnId: "t", ts: "2026-09-08T12:00:21Z", parts: [text("y otra cosa")], turn: running });
+      const rows = buildWorkTimeline([user(), steps, steer, second, { ...after, ts: "2026-09-08T12:00:25Z" }], "working");
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ cut: true, durationMs: 19_000 });
+      expect(below).toMatchObject({ continued: true, startedAt: "2026-09-08T12:00:21Z" });
+    });
+
     it("does not continue a turn from a message that opened a new one", () => {
       const next = user("next", { turnId: "t2", ts: "2026-09-08T12:01:00Z" });
       const rows = buildWorkTimeline([user(), steps, next, entry("d", { turnId: "t2", parts: [tool] })], "done");

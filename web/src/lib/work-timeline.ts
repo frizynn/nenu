@@ -89,7 +89,9 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
     if (entry.role !== "assistant") {
       // A message Claude read from its queue mid-turn carries that turn's id: it sits between the work
       // it split, and the work after it continues the same turn (as T3 Code draws a steer).
-      const midTurn = entry.role === "user" && !!entry.turnId && group.at(-1)?.turnId === entry.turnId;
+      // Two read back to back: the second follows the first, still inside the same turn.
+      const midTurn: boolean = entry.role === "user" && !!entry.turnId &&
+        (group.at(-1)?.turnId === entry.turnId || (!group.length && continuing && userBoundary?.turnId === entry.turnId));
       flush(true, midTurn ? entry : undefined);
       rows.push({ kind: "message", entry });
       userBoundary = entry.role === "user" ? entry : undefined;

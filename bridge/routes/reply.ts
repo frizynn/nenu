@@ -83,7 +83,9 @@ export const replyPaneActions: Record<string, PaneAction> = {
     handle: exclusive(async ({ cfg, audit, queue }, { req, rt, paneId, device }) => {
       const outcome = await takeBackQueue({ herdr: rt.herdr, paneId, readLines: cfg.readLines });
       // The rows it held are recalled in the same step, so no page draws them as waiting there.
-      const answer = outcome.ok ? { ...outcome, ...(await queue.recallOn(rt.name, paneId, outcome.text)) } : outcome;
+      // The box is already empty: if the queue cannot say which rows they were, the words still go back.
+      const rows = outcome.ok ? await queue.recallOn(rt.name, paneId, outcome.text).catch(() => ({ messages: [], ours: false })) : null;
+      const answer = outcome.ok ? { ...outcome, ...rows } : outcome;
       // The words' length, not the words.
       audit.record({ action: "queue.take-back", paneId, session: rt.name, device, detail: { done: outcome.ok, chars: outcome.ok ? outcome.text.length : 0 } });
       return json(answer, req.headers.get("accept-encoding"));

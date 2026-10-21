@@ -1102,15 +1102,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // returns at once, and the bridge recalls their rows in the same step. Their bubbles leave, and what
   // is kept goes into the box as it was sent (takenBack). A second tap while one runs does nothing.
   const takingBack = useRef(false);
+  // Rows a take-back recalled: until the queue's next read says so, its last page still lists them in
+  // Claude's queue, and they must not come back as rows of their own.
+  const [recalled, setRecalled] = useState<ReadonlySet<string>>(() => new Set());
   async function takeBack(echo: LocalSend, keep: boolean) {
     if (takingBack.current) return;
     takingBack.current = true;
     try {
       const result = await api.takeBackQueue(paneId, session).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
       if (!result.ok) { setStatus(result.error, "info"); return; }
-      const ids = new Set(result.messages.map((message) => message.id));
+      // A bridge older than the rows' recall answers the words alone: every bubble waiting there leaves.
+      const rows = result.messages ?? listLocalSends(sendScope).flatMap((item) => !item.landed && item.native === "enqueued" && item.queueId ? [{ id: item.queueId, text: item.text }] : []);
+      const ids = new Set(rows.map((message) => message.id));
+      setRecalled((known) => new Set([...known, ...ids]));
       for (const item of listLocalSends(sendScope)) if (item.queueId && ids.has(item.queueId)) removeLocalSend(sendScope, item.id);
-      const back = takenBack(result, keep ? undefined : echo.queueId);
+      const back = takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId);
       if (back.text) restoreIntoComposer(back.text);
       if (back.note) setStatus(back.note, "info");
       focusInputEnd();
@@ -1156,7 +1162,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The queue strip lists only what has no bubble in the conversation, so nothing shows twice.
   const echoed = new Set(localSends.map((echo) => echo.queueId).filter(Boolean));
   const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.id));
-  const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id));
+  const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id) && !recalled.has(row.id));
 
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";

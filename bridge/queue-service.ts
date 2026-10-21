@@ -109,17 +109,30 @@ export class QueueService {
     void this.tick(force).catch(() => {});
   }
   /**
-   * What one take-back brought out of Claude's own queue on a pane (ADR 0118): the delivered rows it
-   * still held, in the order they went, now recalled, so no page draws them as waiting there. `ours`
-   * says the words that came back are exactly those rows' words, spacing aside: the box held nothing else.
+   * What one take-back brought out of Claude's own queue on a pane (ADR 0118): the rows of the pane's
+   * conversation the queue still says wait there, delivered in the last two hours as clients list them,
+   * whose words came back in the order they went. Those are recalled, so no page draws them as waiting
+   * there. `ours` says the words that came back are exactly theirs, spacing aside.
    */
   async recallOn(session: string, paneId: string, text: string): Promise<{ messages: Array<{ id: string; text: string }>; ours: boolean }> {
-    const rows = (await this.queue.unconfirmed())
-      .filter((row) => row.session === session && row.paneId === paneId && row.state === "sent" && row.native === "enqueued")
-      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
-    for (const row of rows) await this.queue.confirm(row.id, "recalled");
+    const current = await this.resolve(session, paneId).catch(() => null);
+    if (!current || !identity(current.pane)) return { messages: [], ours: false };
     const squash = (value: string) => value.replace(/\s+/g, "");
-    return { messages: rows.map(({ id, text: words }) => ({ id, text: words })), ours: rows.length > 0 && squash(rows.map((row) => row.text).join("")) === squash(text) };
+    const back = squash(text);
+    const waiting = (await this.queue.recent(scopeFor(session, current.pane)))
+      .filter((row) => row.native === "enqueued")
+      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
+    const matched: typeof waiting = [];
+    let at = 0;
+    for (const row of waiting) {
+      const words = squash(row.text);
+      const found = words ? back.indexOf(words, at) : -1;
+      if (found < 0) continue;
+      matched.push(row);
+      at = found + words.length;
+    }
+    for (const row of matched) await this.queue.confirm(row.id, "recalled", "enqueued");
+    return { messages: matched.map(({ id, text: words }) => ({ id, text: words })), ours: matched.length > 0 && squash(matched.map((row) => row.text).join("")) === back };
   }
   /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */
   textsOn(session: string, paneId: string): Promise<string[]> {

@@ -683,7 +683,7 @@ export function settleTerminalDraft(paneId: string, draft: string, session: stri
  * Take back what waits in the agent's own queue (ADR 0118): the bridge pulls it into the agent's box,
  * reads it, clears the box and recalls the rows it held, and answers with the words and those rows.
  */
-export function takeBackQueue(paneId: string, session: string | undefined): Promise<({ ok: true } & TakenBack) | { ok: false; error: string }> {
+export function takeBackQueue(paneId: string, session: string | undefined): Promise<({ ok: true } & Pick<TakenBack, "text"> & Partial<TakenBack>) | { ok: false; error: string }> {
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/take-back`, session), { method: "POST", body: "{}" });
 }
 
