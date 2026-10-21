@@ -8,6 +8,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-21
+
+### Added
+
+- Text in the agent's box shows beside the composer with Send it, Add to mine and Discard; a Send over it waits for that tap and then goes, instead of sweeping it or queueing behind it for good (14755815, 111c8994).
+- Send after this turn, a row of the + while the agent works (111c8994).
+
+### Changed
+
+- Send while the agent works goes now, as its terminal's Enter: no "When should it read this?" question (111c8994).
+- In the chat's Terminal view and a desk's Terminal tab the box types into the pane; back in the chat it is the chat's box, with its draft (111c8994).
+- A stopped send says what is left in the agent's box and which button settles it, not "check Terminal" (14755815).
+
+### Fixed
+
+- Messages waiting in the queue are drawn in the thread at its end, with their pictures, never as a section over the chat (14755815, 111c8994).
+
 ## [1.38.4] - 2026-10-21
 
 ### Changed
