@@ -56,7 +56,7 @@ import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffCommen
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
-import { WorkActivityLabel } from "@/components/work-activity-label";
+import { Fold } from "@/components/composer-fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
@@ -141,9 +141,7 @@ interface ComposerProps {
   /** Something beside the composer (the desk's details panel) that the empty composer's Esc closes
    *  before it would stop the turn. */
   onEscape?: () => void;
-  /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
-  workingSince?: string;
-  /** The chat's chips, on Stop's line above the box: the chips at its start, Stop at its end. */
+  /** The chat's chips, on the line above the box while one asks for you or runs. */
   chips?: ChipLine;
   usageControls?: ReactNode;
   /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
@@ -250,52 +248,6 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
 
 const NO_CHIPS: ChipLine = { chips: [], open: null, onOpenChange: () => {} };
 
-// How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
-const FOLD_OPEN_MS = 220;
-const FOLD_SHUT_MS = 150;
-// How long a chat takes to settle: its chips come from reads that answer after it mounts.
-const FOLD_SETTLE_MS = 2000;
-
-/**
- * A row above the box (Stop's, a notice) folds open and shut instead of appearing at once, so the
- * thread above moves with it rather than jumping. One already there on mount, or arriving while the
- * chat is still settling (the chips its first reads bring), is simply there: opening a chat must not
- * play a fold that walks the conversation up in steps. Folding shut, it keeps showing what it last
- * showed, out of reach: inert and hidden from assistive tech, so a Stop on its way out can never be
- * pressed.
- */
-function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
-  const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
-  const [mountedAt] = useState(() => Date.now());
-  const last = useRef<T | null>(null);
-  if (value) last.current = value;
-  const shown = Boolean(value);
-  useEffect(() => setPhase((current) => (shown
-    ? current === "open" ? current : Date.now() - mountedAt < FOLD_SETTLE_MS ? "open" : "opening"
-    : current === "shut" ? current : "shutting")), [shown, mountedAt]);
-  useEffect(() => {
-    if (phase !== "opening" && phase !== "shutting") return;
-    const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);
-    return () => clearTimeout(timer);
-  }, [phase]);
-  if (phase === "shut" || last.current === null) return null;
-  const shutting = phase === "shutting";
-  return (
-    <div className="composer-fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
-      <div>{children(last.current)}</div>
-    </div>
-  );
-}
-
-/** The chips' line, empty and unseen: the height it will take, kept while the chat settles. */
-function ChipLineHold() {
-  return (
-    <div aria-hidden className="composer-chips" data-hold="">
-      <div className="composer-line"><div className="composer-chip-row"><span className="composer-chip invisible">&nbsp;</span></div></div>
-    </div>
-  );
-}
-
 /** A send that did not go through, said above the box until the next edit or send. */
 interface SendFailure {
   error: string;
@@ -331,7 +283,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -711,15 +663,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
   const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
-  // A chat's chips come from reads that answer after it mounts. While it settles, a chat where they are
-  // likely keeps their line's height, so their arrival moves neither the box nor the thread; if none
-  // come, the hold ends, once. Elsewhere nothing is held: a hold there would mostly end in that jump.
-  const [chipsSettling, setChipsSettling] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setChipsSettling(false), FOLD_SETTLE_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
   // AND the destructive clear-prefix on the next Send. Applied to the raw and the stabilised value
@@ -1491,24 +1434,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
         )}</Fold>
-        {/* Stop lives on the line above the box for the whole turn, and never in the Send slot: a draft
-            appearing or clearing must not move the target under the thumb. The chips share that line,
-            at its start, so it folds open and shut only when both come or go; beside chips, Stop just
-            leaves. The conversation's live turn already says "Working for …" just above, so only the
-            terminal view repeats it here. */}
-        {chipsSettling && chips.likely && !chips.chips.length && !stop.offered ? <ChipLineHold /> :
-        <Fold value={(chips.chips.length > 0 || stop.offered) && { stop: stop.offered }}>{(line) => (
-          <ComposerChips {...chips} trailing={line.stop && (
-            <div role="group" aria-label="Agent working" className="composer-working">
-              {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
-              <StopControl stop={stop} disabled={locked} />
-            </div>
-          )} />
-        )}</Fold>}
+        {/* The line above the box holds only what asks for you or runs (ADR 0108): it folds open with a
+            live chip and shut when the last one goes. The open panel stays outside the fold, so a chip
+            leaving the line (opened from the ⋯ menu, or its work just ended) keeps it as it was. Stop
+            is in the box. */}
+        <ComposerChips {...chips} />
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
 
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
-            it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
+            it (Stop while a turn runs, then Send or its confirm pill). Quiet controls live in the row
             below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
@@ -1601,7 +1535,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             />
             </div>
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
+            {/* Stop sits beside Send for the whole turn, never in its place: a draft appearing or
+                clearing must not swap the target under the thumb (ADR 0108). 12px apart, their 44px
+                touch areas meet without overlapping. */}
+            {stop.offered && <div className="me-1.5 flex"><StopControl stop={stop} disabled={locked} /></div>}
+            {/* The Send slot holds Send and its confirmations, nothing else. */}
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the
