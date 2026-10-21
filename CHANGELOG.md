@@ -16,7 +16,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- A message Claude got joined to text already in its box, long or short, no longer stays as "nothing was sent" under every newer turn: the chat's end moves again, and the refusal above the box goes with it (f59d4d58, 9cf8116d).
+- A message Claude got joined to text already in its box, long or short, no longer stays as "nothing was sent" under every newer turn: the chat's end moves again, and the refusal above the box goes with it (f59d4d58, 9cf8116d, eff79ff0).
 
 ## [1.43.0] - 2026-10-22
 
