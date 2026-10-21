@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import type { OrgRun } from "./org-cli.ts";
-import { looseWorkspaceIds, ProjectRegistry, type ProjectRegistryOptions } from "./projects.ts";
+import { keptThreads, looseWorkspaceIds, ProjectRegistry, type ProjectRegistryOptions } from "./projects.ts";
 import type { AgentView, LiveEvent, WorkspaceView } from "./types.ts";
 
 const roots: string[] = [];
@@ -654,6 +654,68 @@ describe("ProjectRegistry: Organizations fields", () => {
     writeFileSync(join(root, "demo", "threads", "t-0002.toml"), `id = "t-0002"\ntitle = "New"\nstatus = "open"\n`);
     for (let i = 0; i < 40 && live.length === 0; i++) await Bun.sleep(50);
     expect(live).toEqual([{ session: "default", topic: "org" }]);
+  });
+});
+
+describe("keptThreads", () => {
+  const id = (n: number) => `t-${String(n).padStart(4, "0")}`;
+
+  test("past the cap it keeps every open thread and the newest resolved, in the contract's order", () => {
+    // 553 threads as awam-org had them: the old ones resolved, an old coordinator and the newest still open.
+    const threads = Array.from({ length: 553 }, (_, index) => ({ id: id(index + 1), status: index + 1 === 274 || index + 1 > 500 ? "open" : "resolved" }));
+    const kept = keptThreads(threads);
+    expect(kept).toHaveLength(500);
+    expect(kept.filter((thread) => thread.status === "open").map((thread) => thread.id)).toEqual([id(274), ...Array.from({ length: 53 }, (_, index) => id(501 + index))]);
+    // The resolved ones that go are the oldest.
+    expect(kept.some((thread) => thread.id === id(53))).toBe(false);
+    expect(kept.some((thread) => thread.id === id(54))).toBe(true);
+    expect(kept.map((thread) => thread.id)).toEqual([...kept.map((thread) => thread.id)].sort());
+  });
+
+  test("under the cap it keeps everything", () => {
+    const threads = [{ id: id(2), status: "resolved" }, { id: id(1), status: "open" }];
+    expect(keptThreads(threads)).toEqual(threads);
+  });
+});
+
+describe("ProjectRegistry: a project past the thread cap", () => {
+  test("the newest threads, the running ones, reach the snapshot", async () => {
+    const threads = Array.from({ length: 520 }, (_, index) => {
+      const n = index + 1;
+      return overviewThread({ id: `t-${String(n).padStart(4, "0")}`, parent_id: n > 500 ? "t-0010" : "root", status: n === 10 || n > 500 ? "open" : "resolved", role: n === 10 ? "coordinator" : "worker", pane_id: "" });
+    });
+    const registry = registryFor(fixture(), { run: overviewRun(threads) });
+    await registry.refresh();
+    const project = registry.list("default", true, [])[0]!;
+    expect(project.threads).toHaveLength(500);
+    expect(project.threads.filter((thread) => thread.parentId === "t-0010" && thread.status !== "resolved")).toHaveLength(20);
+    expect(project.threads.find((thread) => thread.id === "t-0520")).toMatchObject({ depth: 2 });
+  });
+
+  test("a change to an old open thread's file still re-reads the overview", async () => {
+    const root = fixture();
+    // t-0001 is open and older than the newest 500 files.
+    for (let n = 2; n <= 501; n++) writeFileSync(join(root, "demo", "threads", `t-${String(n).padStart(4, "0")}.toml`), `id = "t-${String(n).padStart(4, "0")}"\ntitle = "Old"\nstatus = "resolved"\n`);
+    let now = 1;
+    const calls: string[][] = [];
+    const registry = registryFor(root, { now: () => now, run: overviewRun([overviewThread({})], calls) });
+    const overviews = () => calls.filter((argv) => argv[0] === "overview").length;
+    await registry.refresh();
+    // The first overview names t-0001 open, which adds its file to what is watched: one read more, then quiet.
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    const before = overviews();
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(overviews()).toBe(before);
+
+    writeFileSync(join(root, "demo", "threads", "t-0001.toml"), `id = "t-0001"\ntitle = "Build UI, renamed"\nstatus = "open"\n`);
+    now += 10_000;
+    registry.list("default", true, []);
+    await Bun.sleep(0);
+    expect(overviews()).toBe(before + 1);
   });
 });
 

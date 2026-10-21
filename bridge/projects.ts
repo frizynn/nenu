@@ -331,6 +331,21 @@ const statusText = ({ text, updated, objective, needsDecision }: OrgStatusFile):
 /** What changes whenever a token reading does: when its last request was, and the caps it passed. */
 const usageStamp = (usage: TokenUsage) => `${usage.updated}|${usage.overCap.join(",")}`;
 
+/**
+ * At most MAX_THREADS of a project's threads, in Organizations' order: every open one, then the
+ * newest resolved. Cutting in id order would drop the newest, which are the ones still running.
+ */
+export function keptThreads<T extends { id: string; status: string }>(threads: readonly T[]): T[] {
+  if (threads.length <= MAX_THREADS) return [...threads];
+  const newestFirst = threads.map((thread, index) => ({ thread, index }))
+    .sort((a, b) => Number(a.thread.status === "resolved") - Number(b.thread.status === "resolved") || threadNumber(b.thread.id) - threadNumber(a.thread.id));
+  const kept = new Set(newestFirst.slice(0, MAX_THREADS).map(({ index }) => index));
+  return threads.filter((_, index) => kept.has(index));
+}
+
+/** `t-0042` → 42; an id outside the grammar sorts as the oldest. */
+const threadNumber = (id: string) => Number(/^t-(\d+)$/.exec(id)?.[1] ?? -1);
+
 /** Depth from the parent chain; an unknown parent or a cycle stops at the project root. */
 function withDepth(threads: Array<{ view: OrgThreadView; binding: Binding }>): void {
   const parents = new Map(threads.map(({ view }) => [view.id, view.parentId]));
@@ -746,8 +761,9 @@ export class ProjectRegistry {
       return readdirSync(join(dir, "threads"), { withFileTypes: true })
         .filter((entry) => entry.isFile() && THREAD_FILE_RE.test(entry.name))
         .map((entry) => entry.name)
-        .sort()
-        .slice(0, MAX_THREADS);
+        // The newest, numerically: past the cap the old ones are the finished ones.
+        .sort((a, b) => threadNumber(a.slice(0, -5)) - threadNumber(b.slice(0, -5)))
+        .slice(-MAX_THREADS);
     } catch {
       return [];
     }
@@ -769,7 +785,12 @@ export class ProjectRegistry {
       const dir = join(this.root, slug);
       add(join(dir, "PROJECT.md"));
       add(join(dir, "threads"));
-      for (const name of this.threadFiles(dir)) add(join(dir, "threads", name));
+      const names = new Set(this.threadFiles(dir));
+      // An open thread older than the newest files still changes what the overview prints.
+      for (const { view } of this.records.find((record) => record.slug === slug)?.threads ?? []) {
+        if (view.status !== "resolved" && THREAD_ID_RE.test(view.id)) names.add(`${view.id}.toml`);
+      }
+      for (const name of names) add(join(dir, "threads", name));
       for (const name of STATE_FILES) add(join(dir, ".state", name));
     }
     // A coordinator edits its STATUS.md outside Organizations' own files, and only a new overview carries the edit.
@@ -816,7 +837,7 @@ export class ProjectRegistry {
     return projects.flatMap((project) => {
       if (project.status === "archived") return [];
       const local = files.find((file) => file.slug === project.slug);
-      const threads = project.threads.slice(0, MAX_THREADS).map((thread) => ({
+      const threads = keptThreads(project.threads).map((thread) => ({
         view: jsonThread(thread, prActions), binding: binding(thread), summary: threadSummary(thread), ...(thread.report ? { report: thread.report } : {}),
       }));
       withDepth(threads);
