@@ -1524,7 +1524,7 @@ describe("Composer — terminal-draft preview", () => {
       strandDraft(held);
       await screen.findByText(/draft in terminal/i);
       expect(screen.queryByRole("button", { name: /take over/i })).not.toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("");
+      expect(screen.getByText(held)).toBeInTheDocument(); // the preview still says what the box holds
     },
   );
 

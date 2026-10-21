@@ -94,7 +94,14 @@ describe("what Nenu may clear from the box", () => {
     ["why does this fail [Pasted text #1 +80 lines]", true],
     ["[Pasted text #2]", true],
     ["summarise [Pasted Content 1204 chars] #2", true],
+    ["fix this [Ima ge #1]", true],
+    ["[Image #1 2] wrapped in its number", true],
+    ["x [Pasted Content 12 04 chars]", true],
+    ["[Pasted text #3 +3 li nes]", true],
+    ["[Pasted text #1][Pasted text #2 +4 lines]", true],
     ["plain words [Image] and #1", false],
+    ["please review the diff", false],
+    ["", false],
   ])("knows a box holding what only the CLI has: %s", (draft, held) => {
     expect(holdsCliToken(draft)).toBe(held);
   });

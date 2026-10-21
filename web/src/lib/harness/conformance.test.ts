@@ -108,7 +108,6 @@ describe("claude--draft-paste-placeholder.txt — a collapsed long send is compo
     expect(claudeAdapter.buildBlocks(lines).every((b) => b.kind === "raw")).toBe(true);
     const draft = claudeAdapter.extractInputDraft(lines)!;
     expect(claudeAdapter.draftCarriesSend!("one\ntwo\nthree\nfour", draft)).toBe(true);
-    expect(claudeAdapter.draftIsOpaque!(draft)).toBe(true);
   });
 });
 

@@ -111,8 +111,8 @@ export const ompAdapter: HarnessAdapter = {
   // tail on eight of the ten composer captures and behind at most five palette rows on the other
   // two, so it is well inside the tail window the bridge accepts a binding within.
   composerPrompt,
-  // `draftCarriesSend` / `draftIsOpaque` are deliberately ABSENT, which is the documented default:
+  // `draftCarriesSend` is deliberately ABSENT, which is the documented default:
   // omp echoes typed text back verbatim (see the draft-single / draft-wrapped captures) and has no
   // paste-collapse token of its own, so the reply guard's generic literal-substring match already sees
-  // what it needs and there is nothing extra for these hooks to read.
+  // what it needs and there is nothing extra for that hook to read.
 };

@@ -1356,7 +1356,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             // (Claude's `[Pasted text #N +M lines]`) or an attached picture's `[Image #N]`. A copy
             // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
             // preview keeps showing it, and Type into terminal edits it in place.
-            onTakeOver={adapter?.draftIsOpaque?.(effectiveRaw) || holdsCliToken(effectiveRaw) ? null : takeOverDraft}
+            onTakeOver={holdsCliToken(effectiveRaw) ? null : takeOverDraft}
           />
         )}
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two

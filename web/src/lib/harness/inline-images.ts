@@ -108,11 +108,15 @@ export function draftIsPartOfSend(sent: string, draft: string | null): boolean {
   return at === box.length;
 }
 
-// What a CLI draws for something only it holds: a picture it attached (Claude and Codex), a paste it
-// collapsed (Claude's `[Pasted text #N +M lines]`, Codex's `[Pasted Content N chars]`).
-const CLI_TOKEN = /\[(?:Image #\d+|Pasted text #\d+[^\]]*|Pasted Content \d+ chars)\]/;
+// What a CLI draws for something only it holds, without its whitespace: a picture it attached
+// (Claude and Codex), a paste it collapsed (Claude's `[Pasted text #N +M lines]`, Codex's
+// `[Pasted Content N chars]`).
+const CLI_TOKEN = /\[(?:Image#\d+|Pastedtext#\d+[^\]]*|PastedContent\d+chars)\]/;
 
-/** Whether the box holds something only the CLI has, which a copy of its text would not carry. */
+/**
+ * Whether the box holds something only the CLI has, which a copy of its text would not carry. The
+ * stranded-draft preview offers no Take over for it, and the bridge never clears it (ADR 0112).
+ */
 export function holdsCliToken(draft: string): boolean {
-  return CLI_TOKEN.test(draft);
+  return CLI_TOKEN.test(strip(draft));
 }

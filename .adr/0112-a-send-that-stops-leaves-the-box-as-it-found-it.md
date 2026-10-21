@@ -38,7 +38,8 @@ or mid-turn (`[Image #4]` in its own queue).
    a fresh read, under the pane's write lock, shows that exact text (`clear-draft`). A read-only
    device only copies. A draft holding `[Image #N]` or a collapsed paste offers no Take over at all: a
    copy would be only the token, and its Send would sweep the picture or paste that lives in the CLI
-   alone. Type into terminal edits it in place; the bridge refuses to clear it either way.
+   alone. Type into terminal edits it in place, and `clear-draft` refuses it too. A Send from the
+   phone still replaces any stranded draft, tokens included, as it did before this decision.
 
 ## Consequences
 

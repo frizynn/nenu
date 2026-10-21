@@ -175,6 +175,7 @@ test("the queue's clear checks the conversation as its writes do", async () => {
     { sleep: noSleep },
   );
   expect(result.status).toBe("uncertain");
+  expect(looks).toBe(3); // the refusal came at the clear, not at a write
   expect(keys).toEqual([]);
   expect(draft).toBe("look at this ");
 });

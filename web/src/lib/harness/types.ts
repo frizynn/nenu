@@ -82,16 +82,6 @@ export interface HarnessAdapter {
    */
   draftCarriesSend?(sent: string, draft: string): boolean;
   /**
-   * Whether the draft on the input line is the harness's OWN opaque token rather than the user's text
-   * — the same placeholder as above, sitting stranded. The stranded-draft preview keeps showing it
-   * (it is honestly what the screen says) but stands its "Take over" affordance down: copying
-   * `[Pasted text #1 +3 lines]` into the phone composer would make that string the message.
-   *
-   * OPTIONAL; absence means "it's all real text", which is what every harness without a paste
-   * heuristic gets, and is the pre-existing behaviour.
-   */
-  draftIsOpaque?(draft: string): boolean;
-  /**
    * Stop (ADR 0066): the key that interrupts this CLI's running turn, measured on the CLI, and how to
    * read from the screen whether a turn runs and what the key does to the CLI's own queue.
    *
