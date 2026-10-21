@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
+import { mayHoldKeyboard, watchViewport } from "@/hooks/use-app-viewport";
 
 // Detect whether the on-screen keyboard is open by watching the visual viewport height.
 //
@@ -44,13 +45,14 @@ export function useKeyboardOpen(): boolean {
     const vv = window.visualViewport;
     if (!vv) return;
     let state: KeyboardState = { open: false, baseline: vv.height, width: vv.width };
+    // Read on every moment the viewport may have changed, not only its own `resize`, which iOS can lose;
+    // and only a focused field (or frame, see mayHoldKeyboard) holds the keyboard up, whatever the last sample said.
     const update = () => {
       state = keyboardStep(state, { height: vv.height, width: vv.width });
-      setOpen(state.open);
+      setOpen(state.open && mayHoldKeyboard(document.activeElement));
     };
     update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
+    return watchViewport(vv, update);
   }, []);
   return open;
 }
