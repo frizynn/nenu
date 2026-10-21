@@ -3,7 +3,7 @@ import { ArrowUp, Pending, ChatCircle } from "@/components/ui/icon";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { thirdScrollTop } from "@/components/find-bar";
-import { TranscriptView } from "@/components/transcript-view";
+import { PendingTurnLine, TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
@@ -259,7 +259,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     : starting ? "working" : activityStatus;
   // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
   const labelUnderSend = activity === "working" && delivered !== null;
-  const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
+  const startingLabel = labelUnderSend && <div className="mt-3"><PendingTurnLine /></div>;
   const previousSendCount = useRef(localSendCount);
   useEffect(() => { onMatchCount?.(matches.length); }, [matches.length, onMatchCount]);
   useEffect(() => {

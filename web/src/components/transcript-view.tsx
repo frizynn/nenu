@@ -16,7 +16,7 @@ import { clockTime as formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { searchableText } from "@/lib/transcript-search";
 import { containsQuery, Highlight, ThinkingNow, ThinkingStep, ToolStep, relabel, useToolImages, WorkSteps } from "@/components/work-log-tools";
-import { Elapsed, Glow, WorkActivityLabel } from "@/components/work-activity-label";
+import { Elapsed, Glow } from "@/components/work-activity-label";
 import { EnterScope, useEnter } from "@/lib/enter";
 import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, workSegments, type WorkSegment, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -262,6 +262,27 @@ function askedCall(turn: WorkTurn): string | undefined {
   return (pending.find(({ part }) => part.questions?.length) ?? pending[0])?.id;
 }
 
+const TURN_LINE = "flex min-h-8 min-w-0 items-center gap-2 coarse:min-h-11";
+const TURN_WORDS = "flex min-h-8 min-w-0 items-center gap-1.5 text-subhead text-muted-foreground coarse:min-h-11";
+
+/** "Working for 9s", or "Continued for 4s" under a message read mid-turn: glowing, by the second. */
+function LiveTurnWords({ since, continued }: { since?: string; continued: boolean }) {
+  const prefix = continued ? "Continued for " : "Working for ";
+  return <Glow layout="truncate"><Elapsed since={since} prefix={prefix} fallback={continued ? "Continued…" : "Working…"} fine /></Glow>;
+}
+
+/**
+ * A turn's line before its log shows the turn: drawn as the turn's own line will be, in the same place,
+ * so when the turn arrives only its chevron joins it.
+ */
+export function PendingTurnLine({ since, continued = false }: { since?: string; continued?: boolean }) {
+  return <div className="pt-1" role="status">
+    <div className={cn(TURN_LINE, "border-b border-border/60")}>
+      <span className={TURN_WORDS}><LiveTurnWords since={since} continued={continued} /></span>
+    </div>
+  </div>;
+}
+
 /**
  * A turn: one line that says how long it worked ("Working for 9s", "Worked for 12s ⌄") and when it
  * finished, then what it did in order, the agent's words between its runs of steps, and its answer.
@@ -281,9 +302,11 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const asked = waiting ? askedCall(turn) : undefined;
   // The pictures its log holds are in the turn's gallery, folded or not, so they open nothing.
   const hasDetails = turn.activity.some((entry) => entry.parts.some((part) => part.kind !== "image"));
-  const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
+  // Work a message read mid-turn cut off is over at that message, though its turn runs on below it.
+  const over = turn.settled || turn.cut;
+  const duration = over && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
   const worked = turn.continued ? "Continued" : "Worked";
-  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
+  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : over ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
   // One time per turn, when it finished, at the end of its line. The question's time is already under
   // its bubble, so a turn that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
@@ -310,14 +333,14 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     {questions}
     {/* The line holds its toggle and the time; a hairline under it, while open, sets the turn's work
         apart from the conversation above. */}
-    <div className={cn("flex min-h-8 min-w-0 items-center gap-2 transition-[border-color] duration-180 ease-out coarse:min-h-11", open ? "border-b border-border/60" : "border-b border-transparent")}>
+    <div className={cn(TURN_LINE, "transition-[border-color] duration-180 ease-out", open ? "border-b border-border/60" : "border-b border-transparent")}>
       <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} disabled={!hasDetails} onClick={() => setExpanded(!open)}
-        className="group flex min-h-8 min-w-0 items-center gap-1.5 text-left text-subhead text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
-        {/* The turn's own line glows while its turn runs; the part after a message read mid-turn
-            counts on quietly under it, its live step glowing at its end. */}
-        {turn.alive && !turn.continued
-          ? <Glow layout="truncate"><Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" fine /></Glow>
-          : <span className="min-w-0 truncate">{turn.active ? <Elapsed since={turn.startedAt} prefix="Continued for " fallback="Continued" fine /> : label}</span>}
+        className={cn(TURN_WORDS, "group text-left hover:text-foreground disabled:opacity-100")}>
+        {/* The line of the part that runs now glows; one a message read mid-turn cut off says how
+            long it took, and the line under that message counts on. */}
+        {turn.active
+          ? <LiveTurnWords since={turn.startedAt} continued={turn.continued} />
+          : <span className="min-w-0 truncate">{label}</span>}
         {failures > 0 && <span className="shrink-0 whitespace-nowrap text-subtle-foreground">· {failures} failed</span>}
         {hasDetails && <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
           !open && "-rotate-90")} />}
@@ -380,9 +403,10 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
           : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
       </div>;
     })}
-    {/* Under a message the agent read mid-turn, the turn above still runs: it is thinking. */}
+    {/* Before the log shows the turn, its line stands where it will be. Under a message the agent read
+        mid-turn the turn above still runs: the line that continues it, and the agent thinking. */}
     {pending && (rows.some((row) => row.kind === "work" && row.alive)
-      ? <ThinkingNow />
-      : <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>)}
+      ? <div className="space-y-2"><PendingTurnLine since={last?.ts} continued /><ThinkingNow /></div>
+      : <PendingTurnLine since={last?.role === "user" ? last.ts : undefined} />)}
   </div></EnterScope>;
 }

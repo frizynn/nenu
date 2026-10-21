@@ -709,21 +709,25 @@ describe("TranscriptView — the work timeline", () => {
   const clock = (hm: string) => new Date(at(hm)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
   // Claude read a queued message mid-turn: it sits between the work it split (as T3 Code draws a steer).
-  it("keeps one Working line for a turn a queued message cut, the message between, the rest Continued", () => {
+  it("splits a turn a queued message cut at that message: each line its part, Continued there from the start", () => {
     const running = { status: "running" as const, startedAt: at("09:05") };
     const steer = turn({ uuid: "steer", ts: at("09:06"), turnId: "t1", parts: [{ kind: "text", text: "y al final decime cuántos archivos hay" }], turn: running });
     const { container, rerender } = render(<TranscriptView activityStatus="working" entries={[
       ask, step("grep", "09:05", [{ kind: "tool", name: "Grep", summary: "inset", result: { text: "x" } }], { turn: running }), steer,
     ]} />);
-    expect(screen.getAllByRole("button", { name: /^Working for/ })).toHaveLength(1);
-    expect(container.querySelector('[data-live-step="thinking"]')).toHaveTextContent("Thinking…");
+    // The part above is over at the message; the line that continues the turn is already under it.
+    expect(screen.getByRole("button", { name: /^Worked for 1m 0s/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Working for/ })).not.toBeInTheDocument();
+    const thinking = container.querySelector('[data-live-step="thinking"]')!;
+    expect(thinking.previousElementSibling).toHaveTextContent(/^Continued for/);
     const done = { status: "completed" as const, startedAt: at("09:05"), completedAt: at("09:08"), durationMs: 180_000 };
     rerender(<TranscriptView activityStatus="done" entries={[
       ask, step("grep", "09:05", [{ kind: "tool", name: "Grep", summary: "inset", result: { text: "x" } }], { turn: done }), { ...steer, turn: done },
       step("ls", "09:07", [{ kind: "tool", name: "Bash", summary: "ls", result: { text: "a b" } }], { turn: done }),
       step("final", "09:08", [{ kind: "text", text: "Hay 2." }], { phase: "final_answer", turn: done }),
     ]} />);
-    expect(screen.getByRole("button", { name: /^Worked for 3m 0s/ })).toBeInTheDocument();
+    // The two lines add up to the turn's 3m.
+    expect(screen.getByRole("button", { name: /^Worked for 1m 0s/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Continued for 2m 0s/ })).toBeInTheDocument();
     expect(screen.getByText("y al final decime cuántos archivos hay")).toBeInTheDocument();
   });

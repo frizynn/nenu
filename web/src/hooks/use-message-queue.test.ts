@@ -320,7 +320,7 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "dialog" }, "Waiting. Answer the dialog first."],
     ["codex", { state: "queued", deliveryMode: "steer" }, "Goes as soon as Codex's input box is free."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "turn-start" }, "Waiting for Claude to start on the previous message."],
-    ["claude", { state: "sent", native: "enqueued" }, "In Claude's queue. Claude reads it after the step it's on."],
+    ["claude", { state: "sent", native: "enqueued" }, "In Claude's queue, read after this step."],
     ["claude", { state: "sent", native: "absorbed" }, "Read by Claude"],
     ["claude", { state: "sent", native: "recalled" }, "Taken back into the terminal's input box"],
     ["codex", { state: "sent", deliveryMode: "steer" }, "Sent into Codex's current turn"],

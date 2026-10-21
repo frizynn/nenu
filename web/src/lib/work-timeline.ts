@@ -10,6 +10,8 @@ export interface WorkTurn {
   active: boolean;
   /** The CLI's turn this work belongs to still runs, though a message it read cut this part off. */
   alive: boolean;
+  /** A message the CLI read mid-turn ended this part: its time runs to that message. */
+  cut: boolean;
   /** This work follows a message the CLI read mid-turn: it continues the turn above it. */
   continued: boolean;
   settled: boolean;
@@ -39,7 +41,8 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
   const usedTurnIds = new Set<string>();
   const lastAssistant = entries.findLast((entry) => entry.role === "assistant");
 
-  function flush(bounded: boolean, cutMidTurn = false) {
+  function flush(bounded: boolean, cutBy?: TranscriptEntry) {
+    const cutMidTurn = cutBy !== undefined;
     if (!group.length) return;
     const original = group;
     const continued = continuing;
@@ -67,17 +70,18 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
       const parts = entry.parts.filter((part) => part.kind !== "text");
       return parts.length ? [{ ...entry, parts }] : [];
     });
-    // The part after a message read mid-turn counts from that message; the turn's line counts it all.
+    // A message read mid-turn splits the turn's time where it was read: the part above runs to it and
+    // the part below from it, so the two lines add up to the turn.
     const startedAt = continued ? validTime(userBoundary?.ts) : validTime(native?.startedAt) ?? validTime(userBoundary?.ts);
-    const end = validTime(native?.completedAt) ?? (settled ? validTime(last.ts) : undefined);
-    const measured = !continued && typeof native?.durationMs === "number" && Number.isFinite(native.durationMs) && native.durationMs >= 0 ? native.durationMs : undefined;
+    const end = cutMidTurn ? validTime(cutBy.ts) : validTime(native?.completedAt) ?? (settled ? validTime(last.ts) : undefined);
+    const measured = !continued && !cutMidTurn && typeof native?.durationMs === "number" && Number.isFinite(native.durationMs) && native.durationMs >= 0 ? native.durationMs : undefined;
     const elapsed = startedAt && end ? Date.parse(end) - Date.parse(startedAt) : undefined;
     const durationMs = measured ?? (elapsed !== undefined && elapsed >= 0 ? elapsed : undefined);
     const baseId = first.turnId ?? userBoundary?.uuid ?? `orphan:${first.uuid}`;
     const id = usedTurnIds.has(baseId) ? `${baseId}:after:${systemBoundary || first.uuid}` : baseId;
     usedTurnIds.add(baseId);
     rows.push({ kind: "work", id,
-      entries: original, activity, answer, active, alive, continued, settled, interrupted: native?.status === "aborted",
+      entries: original, activity, answer, active, alive, cut: cutMidTurn, continued, settled, interrupted: native?.status === "aborted",
       ...(startedAt ? { startedAt } : {}), ...(durationMs !== undefined ? { durationMs } : {}) });
   }
 
@@ -86,7 +90,7 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
       // A message Claude read from its queue mid-turn carries that turn's id: it sits between the work
       // it split, and the work after it continues the same turn (as T3 Code draws a steer).
       const midTurn = entry.role === "user" && !!entry.turnId && group.at(-1)?.turnId === entry.turnId;
-      flush(true, midTurn);
+      flush(true, midTurn ? entry : undefined);
       rows.push({ kind: "message", entry });
       userBoundary = entry.role === "user" ? entry : undefined;
       continuing = midTurn;

@@ -27,16 +27,16 @@ describe("buildWorkTimeline", () => {
       const rows = buildWorkTimeline([user(), steps, steer, after], "working");
       expect(rows.map((row) => row.kind === "message" ? row.entry.uuid : `work:${row.id}`)).toEqual(["user", "work:t", "steer", "work:t:after:steer"]);
       const [above, below] = rows.filter((row) => row.kind === "work");
-      expect(above).toMatchObject({ active: false, alive: true, continued: false, settled: false, startedAt: running.startedAt });
+      expect(above).toMatchObject({ active: false, alive: true, cut: true, continued: false, settled: false, startedAt: running.startedAt, durationMs: 19_000 });
       expect(below).toMatchObject({ active: true, alive: true, continued: true, startedAt: "2026-09-08T12:00:20Z" });
     });
 
-    it("keeps the whole turn's time on the line above and the rest on Continued once it ends", () => {
+    it("splits the turn's time at the message: the part above runs to it, the part below from it", () => {
       const done = { status: "completed" as const, startedAt: "2026-09-08T12:00:01Z", completedAt: "2026-09-08T12:00:30Z", durationMs: 29_000 };
       const final = entry("c", { turnId: "t", ts: "2026-09-08T12:00:30Z", phase: "final_answer", parts: [text("Hay 2.")], turn: done });
       const rows = buildWorkTimeline([user(), { ...steps, turn: done }, { ...steer, turn: done }, { ...after, turn: done }, final], "idle");
       const [above, below] = rows.filter((row) => row.kind === "work");
-      expect(above).toMatchObject({ alive: false, settled: true, durationMs: 29_000 });
+      expect(above).toMatchObject({ alive: false, cut: true, settled: true, durationMs: 19_000 });
       expect(below).toMatchObject({ continued: true, settled: true, durationMs: 10_000 });
     });
 
