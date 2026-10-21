@@ -34,6 +34,8 @@ export interface QueuedMessage {
 export type QueueOutcome = {
   status: "sent" | "blocked" | "uncertain";
   error?: string;
+  /** The delivery typed, stopped before Enter and cleared the box: safe to try again, a few times. */
+  cleared?: true;
   native?: NativeQueueState;
 };
 
@@ -67,6 +69,9 @@ export const DELIVERED_LIST_MS = 2 * 3600_000;
 // A waiting row is re-read on the fallback interval at most this often: 2 s, then 4 s, then 8 s.
 const BACKOFF_MS = [2_000, 4_000, 8_000];
 const STRANDED_RECHECK_MS = 30_000;
+// Deliveries that typed, stopped and cleared the box before a row pauses: a stop that repeats is
+// the message, not the moment, and typing it again forever would only fill the terminal.
+const CLEARED_TRIES = 3;
 
 /**
  * Single bridge writer. Persist before delivery; interrupted sends never replay after restart.
@@ -81,6 +86,8 @@ export class MessageQueue {
   private workers = new Map<string, { again: boolean; force: boolean; done: Promise<void> }>();
   private waiting = new Map<string, QueueWaitReason>();
   private backoff = new Map<string, { at: number; step: number }>();
+  /** Cleared deliveries per row, since the bridge started. */
+  private cleared = new Map<string, number>();
   private listeners = new Set<() => void>();
   /** `changed` hears every committed change to a row, after it is on disk, and every new wait reason. */
   constructor(
@@ -281,6 +288,8 @@ export class MessageQueue {
       return { ...row };
     });
     this.forget(row.id);
+    // An edit or a Send from the operator starts its tries over; a removed row needs none.
+    this.cleared.delete(row.id);
     this.notify(row);
   }
   /**
@@ -456,13 +465,20 @@ export class MessageQueue {
           error: "Delivery could not be confirmed. Check Terminal before retrying.",
         };
       }
+      const tries = outcome.cleared ? (this.cleared.get(claimed.id) ?? 0) + 1 : 0;
+      const again = outcome.status === "blocked" && tries < CLEARED_TRIES;
+      if (outcome.cleared && again) this.cleared.set(claimed.id, tries);
+      else if (!again) this.cleared.delete(claimed.id);
       await this.settle(claimed, (row) => {
-        row.state = outcome.status === "sent" ? "sent" : outcome.status === "blocked" ? "queued" : "paused";
+        row.state = outcome.status === "sent" ? "sent" : again ? "queued" : "paused";
         if (outcome.status === "sent") row.sentAt = this.now();
         if (outcome.native) row.native = outcome.native;
-        row.error = outcome.error;
+        row.error = outcome.cleared && !again ? `It didn't go after ${CLEARED_TRIES} tries, and each time Nenu cleared what it had typed. Remove it and send it again.` : outcome.error;
       });
-      if (outcome.status === "blocked") this.backoff.set(claimed.id, { at: this.now() + BACKOFF_MS[0]!, step: 0 });
+      if (again) {
+        const step = Math.min(tries, BACKOFF_MS.length - 1);
+        this.backoff.set(claimed.id, { at: this.now() + BACKOFF_MS[step]!, step });
+      }
       return outcome.status === "sent";
     });
     return !run.busy && run.value;

@@ -16,7 +16,7 @@ import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "../web/src/lib/blocks.ts";
 import { draftCarriesSend } from "../web/src/lib/guarded-reply.ts";
 import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts";
-import { hasPlacedPictures, imageTokens, sendPieces } from "../web/src/lib/harness/inline-images.ts";
+import { draftIsPartOfSend, hasPlacedPictures, imageTokens, pathShows, sendPieces } from "../web/src/lib/harness/inline-images.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
 import { deliveryVerdict } from "./delivery-check.ts";
@@ -83,8 +83,10 @@ const NO_ECHO_TYPED =
   "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.";
 const UNREAD =
   "Couldn't read the terminal to confirm your message. Nothing was submitted; the text may already be typed, so check Terminal before retrying.";
-const UNSEEN = "Your message wasn't seen in the agent's input box. Nothing was submitted; it may still be typed, so check Terminal before retrying.";
-const MOVED = "The input box changed right before Enter. Nothing was submitted; check Terminal before retrying.";
+// A stop after typing names why, then either what is left in the box or that Nenu cleared it.
+type Stopped = { why: string; left: string };
+const UNSEEN: Stopped = { why: "Your message wasn't seen in the agent's input box.", left: "Nothing was submitted; it may still be typed, so check Terminal before retrying." };
+const MOVED: Stopped = { why: "The input box changed right before Enter.", left: "Nothing was submitted; check Terminal before retrying." };
 const UNCONFIRMED = "Enter went out, but the message is still in the input box. Check Terminal before retrying.";
 const UNCHECKED =
   "Couldn't read the terminal to check the earlier try of this message. Nothing was typed; check Terminal before retrying.";
@@ -94,8 +96,11 @@ const MAYBE_SENT =
   "The earlier try of this message is no longer in the input box, so it may already have been sent. Nothing was typed; check Terminal.";
 const NOT_SUBMITTED = "Typed into the pane but not submitted — check the pane before resending.";
 const ESCAPES = "The message contains terminal escape sequences, which a paste cannot carry. Nothing was typed.";
-const PICTURE_UNSEEN =
-  "A picture didn't show in the agent's input box where it goes. Nothing was submitted; part of the message may be typed, so check Terminal before retrying.";
+const PICTURE_UNSEEN: Stopped = {
+  why: "A picture didn't show in the agent's input box where it goes.",
+  left: "Nothing was submitted; part of the message may be typed, so check Terminal before retrying.",
+};
+const CLEARED = "Nothing was submitted, and Nenu cleared what it had typed, so the input box is empty: send it again.";
 const incomplete = (sent: number, received: number) =>
   `Your message reached the agent incomplete: it logged ${received} of ${sent} characters. The agent may be answering that part; send the whole message again if it needs it.`;
 
@@ -325,7 +330,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     send.trace.phase = "type";
     send.trace.typeAttempted = true;
     if (pieces !== null) {
-      const typed = await typePieces(send, deps, pieces, pasted);
+      const typed = await typePieces(send, deps, adapter, pieces, pasted);
       if (typed) return typed;
     } else {
       try {
@@ -342,7 +347,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     if (send.trace.noEcho) return send.fail(NO_ECHO_TYPED, true);
     const unread = send.trace.attempts.length > 0 && send.trace.attempts.every((read) => read === "read-failed");
     // The text went out (or an earlier attempt's was already there): a resend could duplicate it.
-    return send.fail(unread ? UNREAD : UNSEEN, true);
+    return unread ? send.fail(UNREAD, true) : await unsent(send, deps, adapter, UNSEEN);
   }
 
   // The last word before Enter: a fresh read must still show this message in the input box.
@@ -351,10 +356,10 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   try {
     last = await send.read();
   } catch {
-    return send.fail(MOVED, true);
+    return await unsent(send, deps, adapter, MOVED);
   }
   // A forced send already overrode "no input box": the text in the box is the evidence it trusts.
-  if ((last.composer === false && !request.force) || !send.carries(last)) return send.fail(MOVED, true);
+  if ((last.composer === false && !request.force) || !send.carries(last)) return await unsent(send, deps, adapter, MOVED);
   const submittedAt = (deps.now ?? Date.now)();
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
@@ -378,10 +383,11 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
  * Type a message with pictures in its places (ADR 0104): each text piece as the adapter types any
  * text, each picture's path as a bracketed paste of its own, and before the next piece a read that
  * shows the CLI drew that picture's `[Image #N]` — Claude attaches it a beat after the paste, so text
- * sent on its heels would land before the token. Returns a failure, or null once every piece is in.
+ * sent on its heels would land before the token. A picture the CLI keeps as its path goes as that
+ * path, which the agent reads. Returns a failure, or null once every piece is in.
  */
-async function typePieces(send: Send, deps: GuardedSendDeps, pieces: ReturnType<typeof sendPieces>, pasted: (text: string) => boolean): Promise<GuardedSendResult | null> {
-  let pictures = 0;
+async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, pieces: ReturnType<typeof sendPieces>, pasted: (text: string) => boolean): Promise<GuardedSendResult | null> {
+  let attached = 0;
   let wrote = false;
   for (const piece of pieces) {
     const text = piece.kind === "image" ? `\x1b[200~${piece.path}\x1b[201~` : pasted(piece.text) ? `\x1b[200~${piece.text}\x1b[201~` : piece.text;
@@ -393,23 +399,46 @@ async function typePieces(send: Send, deps: GuardedSendDeps, pieces: ReturnType<
     }
     wrote = true;
     if (piece.kind !== "image") continue;
-    pictures++;
-    if (!(await pictureDrawn(send, pictures))) return send.fail(PICTURE_UNSEEN, true);
+    const drawn = await pictureDrawn(send, attached + 1, piece.path);
+    if (drawn === "token") attached++;
+    else if (drawn === null) return await unsent(send, deps, adapter, PICTURE_UNSEEN);
   }
   return null;
 }
 
-/** Wait, within the verify window, for the box to show `count` `[Image #N]` tokens. */
-async function pictureDrawn(send: Send, count: number): Promise<boolean> {
+/**
+ * Wait, within the verify window, for the box to show `count` `[Image #N]` tokens: "token". When the
+ * window ends with the picture's path as text at the end of the box, "path"; else null.
+ */
+async function pictureDrawn(send: Send, count: number, path: string): Promise<"token" | "path" | null> {
+  let last: string | null = null;
   for (const delay of LOCAL_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     try {
-      if (imageTokens((await send.read()).draft) >= count) return true;
+      last = (await send.read()).draft;
+      if (imageTokens(last) >= count) return "token";
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
   }
-  return false;
+  return pathShows(last, path) ? "path" : null;
+}
+
+/**
+ * A send that typed and stops before Enter. When the box holds only what this send typed, clear it
+ * (the sweep, bound to the prompt row it reads), so neither the next send nor the queue, which
+ * never clears a draft, finds it there. Anything else in the box may be the operator's, and stays.
+ */
+async function unsent(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: Stopped): Promise<GuardedSendResult> {
+  try {
+    const seen = await send.read();
+    if (seen.composer === true && draftIsPartOfSend(send.request.text, seen.draft) && (await sweep(send, deps, adapter, seen)) === null) {
+      return send.fail(`${stopped.why} ${CLEARED}`, false);
+    }
+  } catch {
+    // Unread, the box is left as it is.
+  }
+  return send.fail(`${stopped.why} ${stopped.left}`, true);
 }
 
 /**

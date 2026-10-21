@@ -169,7 +169,7 @@ test("a delivery that cleared what it typed goes again, and the third such try p
     await queue.add(row);
     await queue.add({ ...row, id: "two", text: "After it" });
     let calls = 0;
-    const cleared = async () => (calls++, { status: "blocked" as const, cleared: true, error: "A picture didn't show." });
+    const cleared = async () => (calls++, { status: "blocked" as const, cleared: true as const, error: "A picture didn't show." });
     await queue.tick(readyNow, cleared, { force: true });
     const [first, second] = await queue.list("scope");
     expect(first!.state).toBe("queued");

@@ -19,8 +19,9 @@ const TAB: string[] = ["Tab"];
  * Deliver one claimed row through the guarded send (guarded-send.ts): pre-flight, type, verify on a
  * fresh read, re-read right before the submit key, then confirm the input box let go of it.
  *
- * Three things differ from a phone send. The queue never clears a draft: one in the box is the
- * operator's own typing at the terminal, so the row waits instead of sweeping it. Text and Enter go
+ * Three things differ from a phone send. The queue never clears a draft it did not type: one in the
+ * box is the operator's own typing at the terminal, so the row waits instead of sweeping it. What
+ * the guarded send typed and then cleared (it stopped before Enter) leaves the row free to go again. Text and Enter go
  * through `write`, the reply route, so each lands in the audit trail as before. And the submit key
  * follows the row's mode: Enter, or Tab for Codex's next-turn queue (queue-native.ts), pressed on
  * `herdr`, which the queue service hands in already audited. With `received`, the CLI's log has the
@@ -51,6 +52,8 @@ export async function deliverQueuedMessage(
   let wrote = false;
   // A message with pictures is typed in pieces (ADR 0104): each write is its own request.
   let pieces = 0;
+  // Whether the send cleared what it had typed, which it does only into an empty box it typed.
+  let swept = false;
   const checked = async (step: () => Promise<ActionResponse>) => {
     if (!(await sameConversation())) throw new Error("The connected conversation changed.");
     wrote = true;
@@ -70,8 +73,11 @@ export async function deliverQueuedMessage(
     async sendPaneKeys(id, keys) {
       if (keys === ENTER) return checked(() => write("", true, `${base}:submit`, false));
       if (keys === TAB) return checked(async () => (await herdr.sendPaneKeys(id, keys), { ok: true }));
-      // Only a sweep asks for other keys, and the queue never clears the operator's draft.
-      throw new Error("The terminal input changed. Check it before sending.");
+      // Only a sweep asks for other keys. Before the queue typed, the draft is the operator's; after,
+      // it is the send clearing its own typing.
+      if (!wrote) throw new Error("The terminal input changed. Check it before sending.");
+      swept = true;
+      return herdr.sendPaneKeys(id, keys);
     },
   };
   const { outcome } = await guardedSend(
@@ -79,6 +85,7 @@ export async function deliverQueuedMessage(
     { text: row.text, requestId: base },
   );
   if (outcome.ok) return { status: "sent" };
+  if (swept && !outcome.textDelivered) return { status: "blocked", cleared: true, error: outcome.error };
   return {
     status: !wrote && !outcome.textDelivered ? "blocked" : "uncertain",
     error: outcome.error,
