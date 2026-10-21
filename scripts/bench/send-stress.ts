@@ -66,6 +66,13 @@ function sessionFile(pid: number): SessionFile | null {
   }
 }
 
+/** The pane's turn as the bridge reads it from Claude's session file (ADR 0067), background aside. */
+function turnOf(pid: number) {
+  const file = sessionFile(pid);
+  if (!file) return undefined;
+  return { running: file.status === "busy", ...(file.status === "waiting" ? { waiting: file.waitingFor ?? "dialog" } : {}) };
+}
+
 function transcriptPath(cwd: string, sessionId: string): string | null {
   const dir = join(homedir(), ".claude/projects", cwd.replace(/[^A-Za-z0-9]/g, "-"));
   const path = join(dir, `${sessionId}.jsonl`);
@@ -154,7 +161,8 @@ async function settleIdle(pid: number) {
     if (b.composer && b.draft === null) return;
     if (!b.composer) await herdr.sendPaneKeys(pane, ["Escape"]);
     else await herdr.sendPaneKeys(pane, ["ctrl+k", ...Array<string>([...(b.draft ?? "")].length + 32).fill("Backspace")]);
-    await sleep(500);
+    // A loaded Claude takes a while to close a menu or clear the box: wait for it, never press twice.
+    await until(async () => { const now = await box(); return now.composer && now.draft === null; }, 10_000, 200);
   }
 }
 
@@ -232,12 +240,12 @@ async function trial(variant: string, round: number): Promise<Trial> {
       else await herdr.sendPaneText(pane, paste ? `\x1b[200~${wire}\x1b[201~` : wire);
       return { ok: true as const };
     };
-    const outcome = await deliverQueuedMessage(row, herdr, write, async () => true, "enter", { received: claudeLogReader(log) });
+    const outcome = await deliverQueuedMessage(row, herdr, write, async () => true, "enter", { received: claudeLogReader(log), turn: () => turnOf(pid) });
     ok = outcome.status === "sent";
     said = ok ? "sent" : `${outcome.status}: ${outcome.error ?? ""}`;
   } else {
     const { outcome } = await guardedSend(
-      { herdr, paneId: pane, readLines: READ_LINES, submitKeys: ["Enter"], trigger: new OutputTrigger(), received: claudeLogReader(log) },
+      { herdr, paneId: pane, readLines: READ_LINES, submitKeys: ["Enter"], trigger: new OutputTrigger(), received: claudeLogReader(log), turn: () => turnOf(pid) },
       { text, requestId: nonce },
     );
     ok = outcome.ok;
@@ -250,7 +258,8 @@ async function trial(variant: string, round: number): Promise<Trial> {
   // A send that said it failed gets as long: a late row is the duplicate a resend would make.
   await until(() => deliveries(rows(path), nonce).length > 0, 20_000, 100);
   const afterBox = await box();
-  if (variant.startsWith("dialog")) await herdr.sendPaneKeys(pane, ["Escape"]);
+  // Escape only on a dialog still up: on an empty box a second one opens Claude's rewind.
+  if (variant.startsWith("dialog") && !afterBox.composer) await herdr.sendPaneKeys(pane, ["Escape"]);
   const found = deliveries(rows(path ?? (session ? transcriptPath(cwd, session.sessionId) : null)), nonce);
   const left = afterBox.draft !== null && afterBox.draft.replace(/\s+/g, "").includes(nonce) ? afterBox.draft.slice(0, 120) : null;
   const strip = (s: string) => s.replace(/\[Image #\d+\]/g, "").replace(/<\/?pasted_content[^>]*>/g, "").replace(/\s+/g, "");
