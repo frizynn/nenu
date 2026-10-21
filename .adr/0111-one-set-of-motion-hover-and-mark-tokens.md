@@ -30,21 +30,25 @@ another "200 ms feels right here".
    tooltip, any exit); a panel arrives or folds in 180 ms (sheets, popovers, revealed rows, a docked
    column); a page slides in 280 ms. All on `cubic-bezier(0.2, 0, 0, 1)`, Ovis's curve. Stylesheets
    name `--motion-*`; components use `duration-120/180/280` and `ease-out`, which index.css points at
-   the same tokens; script motion reads `lib/motion.ts`'s constants. Reduced motion keeps its own
-   rules, and nothing animates forever (calm-motion.test).
-2. **One hover fill.** `hover:bg-hover` and `var(--workbench-row-hover)` light a row or a control; a
-   press steps up to `accent`. Only a control that rests on a fill hovers above it.
+   the same tokens; a script's timer for an exit or an arrival reads `lib/motion.ts`'s constants.
+   Reduced motion keeps its own rules, and nothing animates forever (calm-motion.test). A gesture's
+   own physics (the image viewer's hand-off and settle) keeps its curves: it follows the finger, not
+   a token.
+2. **One hover fill.** `hover:bg-hover` and `var(--workbench-row-hover)` light a row or a control.
+   Only a control that rests on a fill hovers above it. Press fills (`active:bg-accent`,
+   `active:bg-muted`) were left as they were: in light accent equals the hover and in dark muted sits
+   just under it, so a press token of its own is the next step, not part of this one.
 3. **One status mark, 6 px.** `StatusDot` and `NodeDot` own the size; only an avatar's corner badge
    passes its own.
 4. **A desk's page tabs are underlined** (`desk-tab`), Home's too; pills (`panel-tab`) are for the
    session panel's tabs. A phone keeps its segmented track.
-5. **Buttons are on the type scale:** footnote at a desk, subhead on a coarse pointer, body for the
-   large ones.
+5. **Buttons are on the type scale:** one step, `text-control` (13 px at a desk, 15 px on a coarse
+   pointer), body for the large ones; one class, so a caller's own size replaces it on every pointer.
 
 ## Consequences
 
-- `calm-motion.test` fails on a literal duration or curve in a stylesheet and on any other duration
-  class; `design-system.test` fails on another hover tint. A new motion picks a length by what it
+- `calm-motion.test` fails on a literal duration or curve in a stylesheet, on any other duration
+  class and on a numeric `*_OPEN/SHUT/EXIT/ENTER/FADE/SLIDE_MS` timer; `design-system.test` fails on another hover tint. A new motion picks a length by what it
   answers, not by feel.
 - The page slide's iOS curve `(0.32, 0.72, 0, 1)` is gone; the shared curve starts as fast and settles
   a little sooner. Revisit only with a measured reason that applies to every slide, not one page.
