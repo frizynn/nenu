@@ -91,6 +91,16 @@ describe("POST send", () => {
     expect(lines[0]?.detail).toMatchObject({ submitted: true, textDelivered: true });
   });
 
+  test("a dialog Claude's own state reports refuses the send before anything is typed (ADR 0117)", async () => {
+    const box = new Box();
+    const { audit } = recorder();
+    const turn = () => ({ running: false, waiting: "permission prompt" });
+    const res = await sendPane(runtime(box), cfg, new PaneWrites(), "w1:send-dialog", post({ text: "ship the release", requestId: "a9" }), audit, null, undefined, turn);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ ok: false, code: "not_ready", textDelivered: false });
+    expect(box.count("pane.send_text")).toBe(0);
+  });
+
   test("a retry of a delivered send is answered from the ledger and types nothing", async () => {
     const box = new Box();
     const { audit } = recorder();

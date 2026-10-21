@@ -27,6 +27,7 @@ import {
   hasInputBox,
   inputBoxTail,
   readClaudeTurn,
+  claudePasting,
 } from "./chrome";
 import { withoutDialogClosingRule } from "./markers";
 import { claudeDraftCarriesSend, sendsAsOnePaste } from "./paste";
@@ -167,6 +168,7 @@ export const claudeAdapter: HarnessAdapter = {
   // The reply path's pre-flight: Claude's input box is exactly what `hasInputBox` finds, and its
   // absence is exactly the condition under which typing lands in a modal instead (#34's shape).
   composerReady: hasInputBox,
+  pasting: claudePasting,
   // Long sends never appear in the box as themselves — Claude collapses them into `[Pasted text #N
   // +M lines]`, and attaches the image paths of a pasted message as `[Image #N]` — so the reply
   // guard's literal match can't verify them and the send stalls. This reads those tokens as send

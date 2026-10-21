@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { deliveryVerdict, loggedMessage } from "./delivery-check.ts";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { claudeLogReader, deliveryVerdict, loggedMessage, sameMessage } from "./delivery-check.ts";
 
 // Shapes measured on Claude Code 2.1.296, 2.1.299 and 2.1.300 under Herdr 0.9.3 on macOS. The PTY
 // hands a 1 500-character send to Claude as two reads, 1 022 and 478 bytes; Claude takes the first
@@ -51,5 +55,54 @@ describe("deliveryVerdict", () => {
     expect(deliveryVerdict(`look at this /tmp/up/w1_p1-shot.png ${sent}`, `[Image #1] look at this ${sent}`)).toEqual({ verdict: "unknown" });
     // A log longer than the message, or different in content, is a rewrite this check does not model.
     expect(deliveryVerdict("short", "short and then some")).toEqual({ verdict: "unknown" });
+  });
+});
+
+describe("claudeLogReader (ADR 0117)", () => {
+  const at = (ms: number) => new Date(ms).toISOString();
+  const typed = (text: string, ms: number) => JSON.stringify({ type: "user", timestamp: at(ms), message: { role: "user", content: text } });
+  const enqueue = (text: string, ms: number) => JSON.stringify({ type: "queue-operation", operation: "enqueue", timestamp: at(ms), content: text });
+  async function logFile(lines: string[]) {
+    const dir = await mkdtemp(join(tmpdir(), "nenu-log-"));
+    const path = join(dir, "s.jsonl");
+    await writeFile(path, lines.map((line) => `${line}\n`).join(""));
+    return { path, dir, add: (line: string) => appendFile(path, `${line}\n`) };
+  }
+  const sent = "deploy the staging build and tell me when it is up";
+
+  test("answers this message logged, and skips another one logged in the same window", async () => {
+    const log = await logFile([typed("someone else typed this at the terminal", 2_000)]);
+    const read = claudeLogReader(async () => log.path);
+    expect(await read(1_000, sent)).toEqual({ kind: "none" });
+    await log.add(typed(sent, 3_000));
+    expect(await read(1_000, sent)).toEqual({ kind: "logged", text: sent });
+    await rm(log.dir, { recursive: true });
+  });
+
+  test("answers queued for this message enqueued mid-turn, never for another", async () => {
+    const log = await logFile([enqueue("another message", 2_000)]);
+    const read = claudeLogReader(async () => log.path);
+    expect(await read(1_000, sent)).toEqual({ kind: "none" });
+    await log.add(enqueue(sent, 3_000));
+    expect(await read(1_000, sent)).toEqual({ kind: "queued" });
+    await rm(log.dir, { recursive: true });
+  });
+
+  test("a logged tail a dropped head left is this message; pictures are compared without their paths", async () => {
+    expect(sameMessage(words(240), words(240).slice(1022))).toBe(true);
+    expect(sameMessage(words(240), "word239")).toBe(false);
+    expect(sameMessage("look /s/uploads/a-k3-0a1b2c3d.png here", "look [Image #4] here")).toBe(true);
+    // Pictures alone carry no words to tell one message from another.
+    expect(sameMessage("/s/uploads/a-k3-0a1b2c3d.png", "[Image #1]")).toBe(false);
+  });
+
+  test("says nothing about a moment its first look did not read back to, nor without a log", async () => {
+    // Over 1 MiB of rows after the moment asked about: the first look starts past it.
+    const filler = Array.from({ length: 3_000 }, (_, i) => typed(`filler ${"x".repeat(400)} ${i}`, 5_000 + i));
+    const log = await logFile(filler);
+    expect(await claudeLogReader(async () => log.path)(1_000, sent)).toEqual({ kind: "unreadable" });
+    expect(await claudeLogReader(async () => log.path)(9_000, sent)).toEqual({ kind: "none" });
+    expect(await claudeLogReader(async () => null)(1_000, sent)).toEqual({ kind: "unreadable" });
+    await rm(log.dir, { recursive: true });
   });
 });

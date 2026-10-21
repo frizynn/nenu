@@ -50,6 +50,9 @@ export interface HarnessAdapter {
    * withheld either way; the pre-flight just avoids depositing the text in a menu first.
    */
   composerReady?(lines: StyledLine[]): boolean;
+  /** The CLI is still taking in a paste (Claude's "Pasting…" under its box): what the box shows of
+   *  it is not final yet. OPTIONAL: a harness that never says so omits it. */
+  pasting?(lines: StyledLine[]): boolean;
   /**
    * Literal on-screen text from the composer's prompt/draft tail — the region a DESTRUCTIVE write
    * aimed at that composer may be bound to. Null = no composer at the tail (the same screens

@@ -33,7 +33,7 @@ export async function deliverQueuedMessage(
   write: QueueWrite,
   sameConversation: () => Promise<boolean>,
   submit: "enter" | "tab" = "enter",
-  deps: Pick<GuardedSendDeps, "sleep" | "received"> = {},
+  deps: Pick<GuardedSendDeps, "sleep" | "received" | "turn"> = {},
 ): Promise<QueueOutcome> {
   const adapter = adapterFor(row.agent);
   if (!adapter?.composerReady)

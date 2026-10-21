@@ -1,6 +1,7 @@
 # 0048 — The input box is found by its own frame
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0117](./0117-enter-follows-the-text-and-claudes-log-is-the-witness.md): on a Claude pane with a log, the read that shows the text is no longer the last look before Enter.
 - **Date:** 2026-09-17
 - **Shipped in:** _(set at the release commit)_
 - **Amends:** [ADR 0004](./0004-the-statusline-run-is-bounded.md). The 8-row statusline bound stays,

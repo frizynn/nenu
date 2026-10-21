@@ -323,6 +323,12 @@ the unit name; the Herdr action runs from anywhere.
   drop the first piece; after Enter, Claude's own log decides whether it arrived whole, and a log
   holding less is answered as incomplete, never "Sent"
   ([ADR 0076](./.adr/0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md)).
+- **At an idle Claude with a log, Enter follows the text and the log is the witness** — one paste and
+  Enter with no read between; mid-turn, Enter still waits to see the text. Claude's `waiting` refuses
+  or stops the send, the log confirms this message (logged or queued) and its silence is never "sent",
+  a retry types nothing the log cannot place, and every wait is bounded at 15 s and ends on the event;
+  `bun scripts/bench/send-stress.ts <your own test pane>` must show 0 stuck and 0
+  duplicated sends ([ADR 0117](./.adr/0117-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
 - **A password prompt is recognised so Nenu can SAY what it is, never so it can send** — no
   automatic Enter, no relaxed verification, no secret channel; the remedy offered is the operator's
   own tap on "Type" ([ADR 0017](./.adr/0017-recognising-a-password-prompt-changes-what-collie-says.md)).
