@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOutageNoticeShown } from "@/lib/connection-health";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
+import { reducedMotion } from "@/lib/motion";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
   AnswerOutcome,
@@ -772,7 +773,7 @@ function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, cla
 function ConfirmPill() {
   const ring = useRef<SVGCircleElement>(null);
   useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (reducedMotion()) return;
     const animation = ring.current?.animate?.([{ strokeDashoffset: 0 }, { strokeDashoffset: 38 }], { duration: CONFIRM_MS, easing: "linear", fill: "forwards" });
     return () => animation?.cancel();
   }, []);

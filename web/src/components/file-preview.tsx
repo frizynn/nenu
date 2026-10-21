@@ -30,8 +30,6 @@ const isImage = (item: PreviewItem | undefined) => item?.kind === "journal" || (
 const keyOf = (item: PreviewItem | undefined) => item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${item?.path ?? ""}`;
 const fileName = (path: string) => path.split("/").pop() || "Document";
 
-/** How long the layer stays mounted for its exit: a fade and a fall, or the fade alone. */
-
 /** The folder that holds a file, from the folder of the pane it is read through; "" at its top. */
 function folderOf(path: string, cwd: string | undefined): string {
   const { dir } = displayPath(path, cwd, Infinity);

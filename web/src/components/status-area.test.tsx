@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { StatusArea, TOAST_EXIT_MS, TOAST_EXIT_REDUCED_MS } from "./status-area";
+import { StatusArea, TOAST_EXIT_MS } from "./status-area";
 import { clearStatus, setStatus } from "@/lib/status";
 
 /** Past the exit: a dismissed notice stays mounted for its fade, then leaves. */
@@ -84,7 +84,7 @@ describe("workbench notifications", () => {
     render(<StatusArea />);
     act(() => setStatus("Tab closed", "info"));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
-    act(() => vi.advanceTimersByTime(TOAST_EXIT_REDUCED_MS));
+    act(() => vi.advanceTimersByTime(TOAST_EXIT_MS));
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
     vi.unstubAllGlobals();
   });
