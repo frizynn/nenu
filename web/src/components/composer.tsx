@@ -1453,6 +1453,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             <AttachmentChips items={attachments.items} onRemove={removeAttachment} onRetry={attachments.retry} disabled={locked} />
+            {/* The +, the draft and Send on a row of their own, under the files: never laid out beside
+                them, where a + folded to nothing let the draft in at no width (paste-image bench). */}
+            <div className="composer-row">
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
               <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message actions" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onClick={toggleMenu}>
@@ -1584,6 +1587,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 )}
               </Button>
             )}
+            </div>
             </div>
           </div>
         </div>
