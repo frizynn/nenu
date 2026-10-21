@@ -34,10 +34,11 @@ swaps Stop for Send under the thumb, the reason Stop never took the Send slot.
    with the first and shut with the last.
 2. **Finished work and routines are rows of the chat's ⋯ menu** ("Finished work · N", "Published · N",
    "Routines · N"). A row opens the same panel the chip did, floating from the box's top edge with no
-   line under it. The panel sits outside the line's fold, so work that ends while it is open leaves it
+   line under it, its finished rows unfolded. The panel sits outside the line's fold, so work that ends while it is open leaves it
    as it was.
 3. **Stop is a round button in the box, beside Send**, for the whole turn: never in Send's slot.
-   "Really stop?" and "Stopping…" take its place there. Esc in the empty box still stops.
+   The two sit 12 px apart, so their 44 px touch areas meet without overlapping. "Really stop?" and
+   "Stopping…" take its place there. Esc in the empty box still stops.
 4. **The terminal view says nothing of its own about the turn**: the mirror shows the CLI's own
    "Working… (Ns)".
 5. **A chat holds no line while it settles.** The hold kept the line's height for chips that answer
@@ -49,5 +50,5 @@ swaps Stop for Send under the thumb, the reason Stop never took the Send slot.
 ## Consequences
 
 A turn with nothing else around it costs no height above the box. Finished work is one tap further
-(⋯, then the row) and no longer seen at a glance. The draft is 38 px narrower while a turn runs.
+(⋯, then the row) and no longer seen at a glance. The draft is 44 px narrower while a turn runs.
 Revisit if the operator reads finished work often enough to want it back in sight.

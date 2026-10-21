@@ -1573,8 +1573,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
             {/* Stop sits beside Send for the whole turn, never in its place: a draft appearing or
-                clearing must not swap the target under the thumb (ADR 0108). */}
-            {stop.offered && <StopControl stop={stop} disabled={locked} />}
+                clearing must not swap the target under the thumb (ADR 0108). 12px apart, their 44px
+                touch areas meet without overlapping. */}
+            {stop.offered && <div className="me-1.5 flex"><StopControl stop={stop} disabled={locked} /></div>}
             {/* The Send slot holds Send and its confirmations, nothing else. */}
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it

@@ -987,8 +987,8 @@ export function AgentChat({
   const published = activity.data?.available ? activity.data.artifacts : [];
   // The row above the composer: what needs you and what works, this session's background work beside
   // the project's threads around it, then the project's open PRs and its routines.
-  const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"]) => (
-    <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} now={processesNow} stale={activity.stale || subagents.stale}
+  const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"], quiet = false) => (
+    <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} quiet={quiet} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
       onOpenSubagent={(item) => {
         if (!subagents.list?.available) return;
@@ -1030,7 +1030,7 @@ export function AgentChat({
       {around && threadRows(around.working)}
       {(sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) || (around?.resolved.length ?? 0) > 0) &&
         processList({ running: processes.running, done: processes.done }, published,
-          around && around.resolved.length > 0 ? { count: around.resolved.length, rows: threadRows(around.resolved) } : undefined)}
+          around && around.resolved.length > 0 ? { count: around.resolved.length, rows: threadRows(around.resolved) } : undefined, workingCount === 0)}
     </> }] : []),
     ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, content: <div className="flex flex-col gap-2">
       <PrList project={projectChips.project} threads={projectChips.threads} session={projectChips.session} readOnly={projectChips.readOnly}

@@ -107,8 +107,9 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
   await fromMenu(user, /^Finished work · \d+$/);
   const sheet = screen.getByRole("dialog", { name: "Finished work" });
-  expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
-  await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
+  // It opens on what was asked for: the finished rows, unfolded, with nothing about what runs.
+  expect(within(sheet).queryByText("Nothing running in the background.")).not.toBeInTheDocument();
+  expect(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ })).toHaveAttribute("aria-expanded", "true");
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
 });
 
