@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-21
+
+### Changed
+
+- A chat's work reads as T3 Code draws it, on a phone and a desk alike: "Worked for 12s" folds the turn with its time, several calls fold under "Ran 3 commands", a command is its row and opens in a shell's colours over its output in grey, a failure as "Error: Exit code 1"; thoughts are a row with a brain (0b29b720, 3aadc6af).
+
+### Added
+
+- Opening and closing a turn, a group, a command or a thought folds open in 180 ms and shut in 120 ms; under reduced motion it only fades (0b29b720, 3aadc6af).
+- `bun scripts/e2e/run.ts commands` replays the command demo at 1440×900 and 390×844 and checks the grouping (c5f2088b).
+
 ## [1.38.4] - 2026-10-21
 
 ### Changed
