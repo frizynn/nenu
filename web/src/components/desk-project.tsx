@@ -109,7 +109,7 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   const threads = cards.reduce((sum, card) => sum + card.rows.length, 0);
   return <>
     <div className="desk-toolbar">
-      <span className="min-w-0 flex-1 truncate">{plural(cards.length - 1, "coordinator")} · {plural(threads, "thread")} open</span>
+      <span className="min-w-0 flex-1 truncate">{cards.length > 1 && `${plural(cards.length - 1, "coordinator")} · `}{plural(threads, "thread")} open</span>
       {finished > 0 && <button type="button" className="quiet-action" onClick={() => showHistory(true)}>
         <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>
       </button>}
@@ -185,7 +185,7 @@ function NewMenu({ project, roles, onStarted }: { project: ProjectView; roles: r
     { role: "coordinator", label: "Coordinator", detail: "Owns a front and starts its threads", icon: Workflow },
   ];
   return <>
-    <DeskAction primary ref={trigger} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <DeskAction ref={trigger} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
       <Plus aria-hidden className="size-4" />New<ChevronDown aria-hidden className="-mr-0.5 size-3.5 opacity-60" />
     </DeskAction>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="New" className="w-72 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">

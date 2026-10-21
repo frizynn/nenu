@@ -7,7 +7,7 @@ import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
 import { coordinatorName } from "@/lib/asks";
-import type { OrgNode } from "@/lib/org-tree";
+import { MERGED_TO_CLOSE, mergedToClose, type OrgNode } from "@/lib/org-tree";
 import { cardSummary, waitingGroups, type WorkCard } from "@/lib/project-work";
 import { nodePath, panePath } from "@/lib/nav";
 import type { AgentView, AsksList, ProjectView } from "@/lib/types";
@@ -36,11 +36,11 @@ export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb: Rea
 }
 
 /**
- * A page's header action: every one the same box (height, radius, padding), the page's one primary in
- * ink and the rest on a quiet fill, so the pair reads as one family whatever their labels.
+ * A page's header action: every one the same button (height, radius, padding and fill), so Open chat
+ * and New thread read as a pair and neither looks like another kind of control (ADR 0108).
  */
-export function DeskAction({ primary = false, className, ...props }: ComponentProps<typeof Button> & { primary?: boolean }) {
-  return <Button type="button" variant={primary ? "default" : "secondary"} className={cn("desk-head-action", !primary && "desk-head-action-quiet", className)} {...props} />;
+export function DeskAction({ className, ...props }: ComponentProps<typeof Button>) {
+  return <Button type="button" variant="secondary" className={cn("desk-head-action desk-head-action-quiet", className)} {...props} />;
 }
 
 export interface DeskTab<T extends string> {
@@ -75,22 +75,24 @@ export function DeskTabs<T extends string>({ label, tabs, tab, onChange }: { lab
   </div>;
 }
 
-/** What a row says at its end: needs you, to review, idle and how long, or how long ago it moved. */
+/** What a row says at its end: needs you, to review (or merged, about to close), idle and how long, or how long ago it moved. */
 function rowEnd(node: OrgNode, now: number): string | undefined {
   const age = threadAge(node.thread, now);
   if (node.state === "needs") return "needs you";
+  if (mergedToClose(node.thread, node.state)) return MERGED_TO_CLOSE;
   if (node.state === "review") return "to review";
   if (node.state === "idle") return age && `idle ${age}`;
   return age;
 }
 
 /** A thread in a card: its state as a dot, its name, its open pull request, and its end. */
-export function WorkRow({ node, onOpen, now = Date.now() }: { node: OrgNode; onOpen: (node: OrgNode) => void; now?: number }) {
+export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: OrgNode; onOpen: (node: OrgNode) => void; depth?: number; now?: number }) {
   const { thread } = node;
   // A pull request that merged or closed still shows, with its state: without it the row read as work left to do.
   const pr = thread.pr;
-  const settled = pr && pr.state !== "open" && pr.state !== "draft" ? pr.state : undefined;
-  return <button type="button" className="desk-row" onClick={() => onOpen(node)}>
+  const settled = pr && pr.state !== "open" && pr.state !== "draft" && !mergedToClose(thread, node.state) ? pr.state : undefined;
+  // A thread under a nested coordinator sits one step in, as the tree draws it.
+  return <button type="button" className="desk-row" style={depth ? { paddingLeft: 22 + depth * 20 } : undefined} onClick={() => onOpen(node)}>
     <NodeDot state={node.state} className="size-1.5" />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
@@ -102,9 +104,9 @@ export function WorkRow({ node, onOpen, now = Date.now() }: { node: OrgNode; onO
 const CARD_ROWS = 20;
 
 /**
- * A coordinator's card: its fold, its name and what its threads are doing, + to start a thread under it
- * and › to open its page; its threads under it. The project coordinator's card holds the threads started
- * from the project.
+ * A coordinator's card: its fold, then its name and what its threads are doing, which opens its page
+ * wherever it is tapped (ADR 0108), and + to start a thread under it; its threads under it. The project
+ * coordinator's card holds the threads started from the project.
  */
 export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, ownState }: {
   card: WorkCard;
@@ -127,7 +129,7 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   const foldable = card.rows.length > 0;
   const head = <>
     <span className="desk-card-mark"><Mark aria-hidden size={15} /></span>
-    <span className="min-w-0">
+    <span className="min-w-0 flex-1">
       <span className="block truncate text-subhead font-medium">{name}</span>
       <span className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
         {!card.coordinator && <span>{foldable ? "Threads started straight from the project" : "No threads started from the project"}</span>}
@@ -140,12 +142,14 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   return <section aria-label={name} className="desk-card">
     <div className="desk-card-head">
       {foldable
-        ? <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left" aria-expanded={open} onClick={onToggle}>
-          <ChevronRight aria-hidden className={cn("desk-fold size-3.5 shrink-0 text-muted-foreground", open && "rotate-90")} />{head}
+        ? <button type="button" className="desk-icon-button -mr-1.5" aria-label={`${open ? "Hide" : "Show"} ${name} threads`} aria-expanded={open} onClick={onToggle}>
+          <ChevronRight aria-hidden className={cn("desk-fold size-3.5", open && "rotate-90")} />
         </button>
-        : <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-6">{head}</div>}
+        : <span aria-hidden className="w-5.5 shrink-0" />}
+      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} onClick={onOpenCoordinator}>{head}</button>
       {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={15} /></button>}
-      <button type="button" className="desk-icon-button" aria-label={`Open ${name}`} onClick={onOpenCoordinator}><ChevronRight aria-hidden size={15} /></button>
+      {/* The head already opens the page; the chevron only says so, and is not a second stop for the keyboard. */}
+      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={15} /></button>
     </div>
     {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal">
       {card.rows.slice(0, limit).map((node) => <WorkRow key={node.thread.id} node={node} onOpen={onOpenNode} />)}

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { moveOrgNode, resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, openUnder, organizes, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, mergedToClose, moveTargets, nodeState, openUnder, organizes, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest } from "@/lib/types";
 
@@ -45,6 +45,7 @@ export function threadDetail(thread: ProjectThreadView, panes: readonly AgentVie
   const ask = awaits(thread);
   if (ask) return ASK[ask].label;
   if (state === "needs") return title ?? thread.note ?? "Needs you";
+  if (mergedToClose(thread, state)) return `${prSummary(thread.pr!)}, closes on its own`;
   if (state === "review" && thread.pr) return prSummary(thread.pr);
   // Organizations' own note (pane closed, session unreachable, a remote agent's state) says more than Nenu can.
   if (!thread.paneId) return thread.note || (thread.status !== "open" ? thread.status : state === "working" ? "working" : "not running");
