@@ -12,9 +12,9 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- A Claude at its account's usage limit says so: "Usage limit · resets 6:40 PM" over the box with Continue now, a grey hourglass in the bar and Home, and the bar says when it resets; read from Claude's own log, lifted at the reset or when any Claude of the same account gets a reply (6ffde34d, 0f08fb15).
+- A Claude at its account's usage limit says so: "Usage limit · resets 6:40 PM" over the box with Continue now, a grey hourglass in the bar and Home, and the bar says when it resets; read from Claude's own log, lifted at the reset or when any Claude of the same account gets a reply (6ffde34d, 0f08fb15, b1309d6b).
 - A message sent to it waits in Nenu's queue, "Goes when Claude is back, ~6:40 PM", and goes by itself once the limit lifts; Send now on the row sends it anyway (6ffde34d, 0f08fb15).
-- Continue now types the continue prompt Claude itself sends at the reset, for when the account was switched (0f08fb15).
+- Continue now types the continue prompt Claude itself sends at the reset, for when the account was switched (0f08fb15, b1309d6b).
 - `bun scripts/e2e/run.ts usage-limit` walks it on a desk and a phone (c8dfe068).
 
 ### Fixed
