@@ -38,7 +38,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
-//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips and Stop above the box: four moments, phone and desk, the height they take
+//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips above the box and Stop in it: seven moments, phone and desk, the height they take
 //   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; what opening a panel moves
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
@@ -3225,11 +3225,13 @@ async function composerAround(): Promise<void> {
 }
 
 /**
- * The chips and Stop above the box, on a phone and a desk, dark and light, in four moments: a working
- * chat with one background command (Working 1 and Stop), the same with none (Stop alone), a chat at
- * rest with a command still running (chips alone), and homeOrg's worker with everything around it
- * (more chips than a phone fits, and Stop). Each capture measures what sits between the last message
- * and the box's top edge; the phone's first moment is also read with the keyboard up.
+ * The chips above the box and Stop in it (ADR 0108), on a phone and a desk, dark and light: a working
+ * chat with one background command (Background 1 and Stop), the same with none (Stop alone), a chat at
+ * rest with a command still running (chips alone), finished work only while working and at rest (no
+ * line: it is a row of the ⋯ menu, opened from there), homeOrg's worker with everything around it
+ * (more chips than a phone fits, and Stop) and the terminal view. Each capture measures what sits
+ * between the last message and the box's top edge; the phone's first moment is also read with the
+ * keyboard up.
  */
 async function chipLine(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -3246,6 +3248,9 @@ async function chipLine(): Promise<void> {
     const background = { sessionKey: "bench", available: true, workflows: [], artifacts: [], tasks: [running("b0001", "bun run build && bun run deploy")] };
     const everything = { ...background, tasks: [...background.tasks, running("b0002", "bun test --watch")] };
     const none = { ...background, tasks: [] };
+    // Only finished work: what the row said as "Done 2" while nothing ran.
+    const finished = (id: string, title: string) => ({ id, kind: "bash", title, status: "completed", exitCode: 0, at: now - 600_000, hasOutput: true });
+    const done = { ...background, tasks: [finished("b0003", "bun run build"), finished("b0004", "bun test")] };
     const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
       { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
       { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
@@ -3256,8 +3261,10 @@ async function chipLine(): Promise<void> {
       { name: "chips-stop", paneId: "w1:line", status: "working", activity: background },
       { name: "stop", paneId: "w1:stop", status: "working", activity: none },
       { name: "chips", paneId: "w1:rest", status: "done", activity: background },
+      { name: "done-stop", paneId: "w1:donestop", status: "working", activity: done },
+      { name: "done", paneId: "w1:done", status: "done", activity: done },
       { name: "many", paneId: herd.working, status: "working", activity: everything },
-      // The terminal view, where Stop's group also says how long the turn has run.
+      // The terminal view, whose mirror says how long the turn has run.
       { name: "terminal", paneId: "w1:line", status: "working", activity: background, raw: true },
     ] as const;
     for (const [i, moment] of moments.entries()) {
@@ -3317,16 +3324,36 @@ async function chipLine(): Promise<void> {
             shots.push(panel);
             seen[`${key}-working-panel`] = await page.locator("#composer-chip-panel").innerText().catch(() => null);
           }
+          if (moment.name === "done" && scheme === "dark") {
+            // Finished work is off the line: the ⋯ menu opens the same panel, and the box stays put.
+            await page.getByRole("button", { name: "Conversation actions" }).click();
+            await page.waitForTimeout(400);
+            const menu = join(outDir, `${key}-menu.png`);
+            await page.screenshot({ path: menu, animations: "disabled" });
+            shots.push(menu);
+            await page.getByRole("button", { name: /^Finished work/ }).click();
+            await page.waitForTimeout(500);
+            const panel = join(outDir, `${key}-finished-panel.png`);
+            await page.screenshot({ path: panel, animations: "disabled" });
+            shots.push(panel);
+            seen[`${key}-finished-panel`] = { text: await page.locator("#composer-chip-panel").innerText().catch(() => null), box: (await page.evaluate(measureAboveBox, null))?.boxTop };
+          }
           await context.close();
         }
       }
     }
-    // Chips beside Stop share its line (their centres within 2px), Stop stays on screen whatever the
-    // chips need, and nothing pushes the page sideways.
+    // Stop sits in the box whenever a turn runs, keyboard up or not; with no live chip nothing sits
+    // between the thread and the box; and nothing pushes the page sideways.
     type Seen = ReturnType<typeof measureAboveBox>;
-    const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel")).filter(([, m]) => !m || m.pageScrollsSideways
+    const working = new Set(moments.filter((m) => m.status === "working").map((m) => m.name));
+    const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel") && !key.endsWith("-menu")).filter(([key, m]) => !m || m.pageScrollsSideways
+      || (working.has(key.replace(/-keyboard$/, "").split("-").slice(0, -2).join("-")) && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
-      || (m.chips && m.stop && Math.abs((m.chips.top + m.chips.bottom) / 2 - (m.stop.top + m.stop.bottom) / 2) > 2)).map(([key]) => key);
+      || (m.chipLabels.length === 0 && m.aboveBox !== null && m.aboveBox > 0)).map(([key]) => key);
+    // Opened from the ⋯ menu, finished work's panel floats: the box stays where it was.
+    for (const [key, value] of Object.entries(seen)) {
+      if (key.endsWith("-finished-panel") && (value as { box?: number }).box !== (seen[key.replace(/-finished-panel$/, "")] as Seen)?.boxTop) failed.push(key);
+    }
     return { shots, seen, failed, unexpectedWrites: fake.writes() };
   }, CAPTURE_EPOCH, (herd, now) => {
     const seed = homeOrg(herd, now, size);
@@ -3369,6 +3396,7 @@ function measureAboveBox() {
   const sr = stop?.getBoundingClientRect();
   const reach = sr && sr.height > 0 ? [-21, 21].map((dy) => document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2 + dy)?.closest("button") === stop) : null;
   const chipsRect = rect(chipRow);
+  const inBox = stop?.closest(".composer-box") !== null && stop !== null && sr !== undefined && sr.height > 0;
   return {
     gap: last === null ? null : Math.round(box.top - last),
     aboveBox: thread ? Math.round(box.top - thread.bottom) : null,
@@ -3377,6 +3405,7 @@ function measureAboveBox() {
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     stop: rect(stop),
+    stopInBox: inBox,
     stopReach: reach,
     pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     viewportWidth: document.documentElement.clientWidth,

@@ -1,5 +1,5 @@
 import { useState, type ComponentProps } from "react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -49,34 +49,31 @@ function setup(overrides: Partial<Props> = {}) {
 
 const stopButton = () => screen.queryByRole("button", { name: "Stop" });
 
-it("keeps Stop in one place on the Working row while Claude works, draft or not; the round button is only Send", async () => {
+// A line of its own for Stop alone took 40 px between the thread and the box for the whole turn
+// (ADR 0108). Stop sits in the box beside Send instead, and Send keeps its own slot.
+it("keeps Stop beside Send in the box while Claude works, draft or not, and draws no line above it", async () => {
   const { user } = setup();
-  const row = screen.getByRole("group", { name: "Agent working" });
-  expect(within(row).getByText(/^Working/)).toBeVisible();
-  const stop = within(row).getByRole("button", { name: "Stop" });
-  // Send keeps its slot, waiting for a draft, so nothing else ever sits under the thumb there.
+  const stop = stopButton()!;
+  expect(stop.closest(".composer-box")).not.toBeNull();
+  expect(document.querySelector(".composer-fold")).toBeNull();
+  expect(screen.queryByText(/^Working/)).not.toBeInTheDocument();
+  // Send keeps its slot, waiting for a draft, so a draft never swaps the target under the thumb.
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   await user.type(screen.getByRole("textbox"), "and the tests");
   expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
-  // The same Stop, in the same row: typing never moves it.
-  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
   expect(screen.getAllByRole("button", { name: "Stop" })).toEqual([stop]);
   await user.click(stop);
   await waitFor(() => expect(bodies).toEqual([{}]));
   await user.clear(screen.getByRole("textbox"));
-  expect(screen.getByRole("group", { name: "Agent working" })).toBe(row);
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 });
 
-// The row comes and goes with every turn; appearing or vanishing at once jerked the thread 40 px.
-it("folds the Working row shut when the turn ends, out of reach while it goes", async () => {
+it("takes Stop out of the box when the turn ends, and nothing folds", () => {
   const { rerender } = setup();
-  const row = screen.getByRole("group", { name: "Agent working" });
+  expect(stopButton()).toBeVisible();
   rerender({ working: false });
-  // Still on screen while it folds, but nothing in it can be pressed or announced.
-  expect(row).toBeInTheDocument();
-  expect(row.closest("[inert]")).not.toBeNull();
   expect(stopButton()).not.toBeInTheDocument();
-  await waitFor(() => expect(row).not.toBeInTheDocument());
+  expect(document.querySelector(".composer-fold")).toBeNull();
 });
 
 // Opening a chat, its chips arrive a moment after it mounts; folding them open walked the conversation
@@ -84,16 +81,18 @@ it("folds the Working row shut when the turn ends, out of reach while it goes", 
 it("draws a row that arrives while the chat settles at once, and folds open one that comes later", async () => {
   const start = Date.now();
   const now = vi.spyOn(Date, "now").mockReturnValue(start);
+  const none = { chips: [], open: null, onOpenChange: vi.fn() };
+  const live = { ...none, chips: [{ id: "working" as const, label: "Working", count: 1, content: "bun run build" }] };
   try {
-    const { rerender } = setup({ working: false });
-    rerender({ working: true });
-    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    const { rerender } = setup({ working: false, chips: none });
+    rerender({ chips: live });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Status" })).toBeInTheDocument());
     expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
-    rerender({ working: false });
-    await waitFor(() => expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument());
+    rerender({ chips: none });
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument());
     now.mockReturnValue(start + 5000);
-    rerender({ working: true });
-    await waitFor(() => expect(screen.getByRole("group", { name: "Agent working" })).toBeInTheDocument());
+    rerender({ chips: live });
+    await waitFor(() => expect(screen.getByRole("group", { name: "Status" })).toBeInTheDocument());
     expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "opening");
   } finally {
     now.mockRestore();
@@ -101,22 +100,32 @@ it("draws a row that arrives while the chat settles at once, and folds open one 
 });
 
 // Folding at once still moved the box by the line's height when the chips landed. A project's chat keeps
-// that height while it settles, so they land in place; a hold that meets no chip ends, and a chat where
-// chips are unlikely holds nothing.
+// that height while it settles, so they land in place; a hold that meets no chip folds shut rather than
+// vanishing, a tucked chip never takes it, and a chat where chips are unlikely holds nothing.
 it("keeps the chips' line height while a project's chat settles, hands it to the chips, and lets go if none come", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
-    const chip = { id: "routines" as const, label: "Routines", count: 1, content: "nightly" };
+    const chip = { id: "working" as const, label: "Working", count: 1, content: "bun run build" };
+    const tucked = { id: "routines" as const, label: "Routines", count: 1, content: "nightly", tucked: true };
     const hold = () => document.querySelector("[data-hold]");
-    const { rerender } = setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
+    const { rerender } = setup({ working: false, chips: { chips: [tucked], open: null, onOpenChange: vi.fn(), likely: true } });
     expect(hold()).toHaveAttribute("aria-hidden", "true");
-    rerender({ chips: { chips: [chip], open: null, onOpenChange: vi.fn(), likely: true } });
+    rerender({ chips: { chips: [chip, tucked], open: null, onOpenChange: vi.fn(), likely: true } });
     expect(hold()).toBeNull();
-    expect(screen.getByRole("button", { name: "Routines, 1" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Working, 1" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Routines/ })).not.toBeInTheDocument();
     expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
-    rerender({ chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
+    rerender({ chips: { chips: [tucked], open: null, onOpenChange: vi.fn(), likely: true } });
     await act(async () => { vi.advanceTimersByTime(2000); });
+    await act(async () => { vi.advanceTimersByTime(200); });
     expect(hold()).toBeNull();
+    // A hold no chip took folds shut instead of vanishing.
+    setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
+    const held = hold()!;
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(held.closest(".composer-fold")).toHaveAttribute("data-phase", "shutting");
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(held).not.toBeInTheDocument();
   } finally {
     vi.useRealTimers();
   }
@@ -206,17 +215,17 @@ it("a Stop the bridge answers after the pane went idle does not leave 'Stopping�
   expect(stopButton()).not.toBeInTheDocument();
 });
 
-// Beside the chips the line stays for them: when the turn ends only Stop leaves, at once, and nothing folds.
-it("shares the line with the chips, and when the turn ends only Stop leaves it", async () => {
-  const chips = { chips: [{ id: "working" as const, label: "Working", count: 1, content: <p>bun run build</p> }], open: null, onOpenChange: vi.fn() };
-  const { rerender } = setup({ nativeWorkbench: true, chips });
-  const status = screen.getByRole("group", { name: "Status" });
-  expect(screen.getByRole("group", { name: "Agent working" }).parentElement).toBe(status.parentElement);
-  rerender({ working: false });
-  expect(stopButton()).not.toBeInTheDocument();
-  expect(screen.queryByRole("group", { name: "Agent working" })).not.toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "Status" })).toBe(status);
-  expect(status.closest("[inert]")).toBeNull();
+// What asks nothing of you is off the line (ADR 0108): opened from the ⋯ menu, its panel floats over the
+// thread from the box's top edge, and no line opens under it.
+it("never draws a tucked chip on the line, and opens its panel without one", () => {
+  const tucked = { id: "working" as const, label: "Done", title: "Finished work", count: 2, content: <p>bun run build</p>, tucked: true };
+  const { rerender } = setup({ working: false, chips: { chips: [tucked], open: null, onOpenChange: vi.fn() } });
+  expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
+  expect(document.querySelector(".composer-line")).toBeNull();
+  rerender({ chips: { chips: [tucked], open: "working", onOpenChange: vi.fn() } });
+  expect(screen.getByRole("dialog", { name: "Finished work" })).toHaveTextContent("bun run build");
+  expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
+  expect(document.querySelector(".composer-line")).toBeNull();
 });
 
 it("when stopping sent Claude's own queue, the new turn gets a Stop of its own", async () => {
@@ -226,11 +235,4 @@ it("when stopping sent Claude's own queue, the new turn gets a Stop of its own",
   expect(await screen.findByText("Claude stopped and is reading your queued message.")).toBeVisible();
   expect(screen.queryByText("Stopping…")).not.toBeInTheDocument();
   expect(stopButton()).toBeVisible();
-});
-
-it("leaves the elapsed time to the conversation's own live turn, so the row above the box holds only Stop", () => {
-  setup({ nativeWorkbench: true });
-  const row = screen.getByRole("group", { name: "Agent working" });
-  expect(within(row).getByRole("button", { name: "Stop" })).toBeVisible();
-  expect(within(row).queryByText(/^Working/)).not.toBeInTheDocument();
 });

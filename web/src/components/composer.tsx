@@ -56,7 +56,6 @@ import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffCommen
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
-import { WorkActivityLabel } from "@/components/work-activity-label";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
@@ -141,9 +140,7 @@ interface ComposerProps {
   /** Something beside the composer (the desk's details panel) that the empty composer's Esc closes
    *  before it would stop the turn. */
   onEscape?: () => void;
-  /** When the running turn started (ISO), for the "Working for …" row shown while typing. */
-  workingSince?: string;
-  /** The chat's chips, on Stop's line above the box: the chips at its start, Stop at its end. */
+  /** The chat's chips, on the line above the box while one asks for you or runs. */
   chips?: ChipLine;
   usageControls?: ReactNode;
   /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
@@ -290,8 +287,8 @@ function Fold<T>({ value, children }: { value: T | null | false; children: (valu
 /** The chips' line, empty and unseen: the height it will take, kept while the chat settles. */
 function ChipLineHold() {
   return (
-    <div aria-hidden className="composer-chips" data-hold="">
-      <div className="composer-line"><div className="composer-chip-row"><span className="composer-chip invisible">&nbsp;</span></div></div>
+    <div aria-hidden className="composer-line" data-hold="">
+      <div className="composer-chip-row"><span className="composer-chip invisible">&nbsp;</span></div>
     </div>
   );
 }
@@ -331,7 +328,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, workingSince, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -719,6 +716,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const timer = setTimeout(() => setChipsSettling(false), FOLD_SETTLE_MS);
     return () => clearTimeout(timer);
   }, []);
+
+  const holdLine = chipsSettling && chips.likely && !chips.chips.some((chip) => !chip.tucked);
 
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -1491,24 +1490,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
         )}</Fold>
-        {/* Stop lives on the line above the box for the whole turn, and never in the Send slot: a draft
-            appearing or clearing must not move the target under the thumb. The chips share that line,
-            at its start, so it folds open and shut only when both come or go; beside chips, Stop just
-            leaves. The conversation's live turn already says "Working for …" just above, so only the
-            terminal view repeats it here. */}
-        {chipsSettling && chips.likely && !chips.chips.length && !stop.offered ? <ChipLineHold /> :
-        <Fold value={(chips.chips.length > 0 || stop.offered) && { stop: stop.offered }}>{(line) => (
-          <ComposerChips {...chips} trailing={line.stop && (
-            <div role="group" aria-label="Agent working" className="composer-working">
-              {!nativeWorkbench && <span className="min-w-0 flex-1"><WorkActivityLabel startedAt={workingSince} /></span>}
-              <StopControl stop={stop} disabled={locked} />
-            </div>
-          )} />
-        )}</Fold>}
+        {/* The line above the box holds only what asks for you or runs (ADR 0108): it folds open with a
+            live chip and shut when the last one goes. The open panel stays outside the fold, so a chip
+            leaving the line (opened from the ⋯ menu, or its work just ended) keeps it as it was. Stop
+            is in the box. */}
+        <ComposerChips {...chips} fold={(line) => <Fold value={line ?? (holdLine && <ChipLineHold />)}>{(shown) => shown}</Fold>} />
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
 
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
-            it (Send or its confirm pill; Stop has the row above). Quiet controls live in the row
+            it (Stop while a turn runs, then Send or its confirm pill). Quiet controls live in the row
             below it. */}
         <div className="relative">
           {skills.open && (skills.skills.length === 0 && (skills.loading || skills.error) ? (
@@ -1601,7 +1591,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             />
             </div>
             <div className="flex shrink-0 items-center gap-1.5 self-end p-1.5 md:p-1">
-            {/* The Send slot holds Send and its confirmations, nothing else; Stop has its own row. */}
+            {/* Stop sits beside Send for the whole turn, never in its place: a draft appearing or
+                clearing must not swap the target under the thumb (ADR 0108). */}
+            {stop.offered && <StopControl stop={stop} disabled={locked} />}
+            {/* The Send slot holds Send and its confirmations, nothing else. */}
             {!direct.active && forcingSend ? (
               // The pre-flight refused and the user is being offered the override. Labelled for what it
               // actually does — TYPE the text into whatever is on screen — not "send", because the

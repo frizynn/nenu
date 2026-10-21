@@ -62,7 +62,13 @@ function renderChat(overrides: Partial<ComponentProps<typeof AgentChat>> = {}) {
 
 const row = () => screen.findByRole("group", { name: "Status" });
 const chip = async (name: RegExp) => within(await row()).getByRole("button", { name });
-const working = () => chip(/^(Background|Done|Published), \d+$/);
+const working = () => chip(/^Background, \d+$/);
+// Finished work asks nothing of you: it leaves the line for the ⋯ menu (ADR 0108).
+const lineGone = () => waitFor(() => expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument());
+const fromMenu = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
+  await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+  await user.click(await screen.findByRole("button", { name }));
+};
 const needs = () => chip(/^Needs you, \d+$/);
 
 it("names what waits on you and what runs in two chips, each listing only its own", async () => {
@@ -95,14 +101,12 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   activityList = { ...list, workflows: list.workflows.filter((w) => w.status !== "running"), tasks: [] };
   subagentList = subagents([{ ...explorer, status: "completed" }]);
   const { user } = renderChat();
-  const button = await working();
-  // Nothing runs, so the chip does not say Background: it says what finished.
-  expect(button).toHaveAccessibleName(/^Done, \d+$/);
-  // …quietly: finished work never stands beside live work at the same weight.
-  expect(button).toHaveAttribute("data-quiet");
-  expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
-  await user.click(button);
-  const sheet = screen.getByRole("dialog", { name: "Done" });
+  await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
+  await act(async () => {});
+  // Nothing runs, so nothing takes the line above the box: finished work is a row of the ⋯ menu.
+  expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
+  await fromMenu(user, /^Finished work · \d+$/);
+  const sheet = screen.getByRole("dialog", { name: "Finished work" });
   expect(within(sheet).getByText("Nothing running in the background.")).toBeVisible();
   await user.click(within(sheet).getByRole("button", { name: /^Done \(\d+\)$/ }));
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
@@ -112,9 +116,8 @@ it("says Published when all the session left is pages it published", async () =>
   activityList = { ...list, workflows: [], tasks: [] };
   subagentList = subagents([]);
   const { user } = renderChat();
-  const button = await working();
-  expect(button).toHaveAccessibleName("Published, 1");
-  await user.click(button);
+  await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
+  await fromMenu(user, /^Published · 1$/);
   expect(within(screen.getByRole("dialog", { name: "Published" })).getByRole("button", { name: "Published (1)" })).toBeVisible();
 });
 
@@ -135,8 +138,8 @@ it("on a desk, the list stays open while you read it when the last process ends"
   activityList = { ...list, workflows: list.workflows.map((w) => ({ ...w, status: w.status === "running" ? "completed" : w.status, durationMs: w.durationMs ?? 1 })), tasks: [] };
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
-  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
-  expect(screen.getByRole("dialog", { name: "Done" })).toBeVisible();
+  await lineGone();
+  expect(screen.getByRole("dialog", { name: "Finished work" })).toBeVisible();
   expect(screen.getByRole("list", { name: "Done" })).toBeVisible();
 });
 
@@ -273,8 +276,8 @@ it("does not present a stale subagent as running after a refresh fails", async (
   await needs();
   subagentList = 503;
   act(() => { window.dispatchEvent(new Event("online")); });
-  // Nothing it cannot vouch for still counts as waiting or working: the chip only says what finished.
-  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
+  // Nothing it cannot vouch for still counts as waiting or working: what is left is finished work.
+  await lineGone();
   expect(screen.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
 });
 
@@ -301,7 +304,7 @@ it("does not read subagents behind the idle cover and reads again on resume", as
   } finally { setLocked(false); }
 });
 
-it("keeps a run's details open on a phone when the last process ends, and the chip goes quiet", async () => {
+it("keeps a run's details open on a phone when the last process ends, and the line goes", async () => {
   const { user } = renderChat();
   await user.click(await working());
   await user.click(screen.getByRole("button", { name: `Expand ${runningRun.name}` }));
@@ -309,6 +312,6 @@ it("keeps a run's details open on a phone when the last process ends, and the ch
   activityList = { ...list, workflows: [{ ...runningRun, status: "completed", durationMs: 1 }], tasks: [] };
   subagentList = subagents([]);
   act(() => { window.dispatchEvent(new Event("online")); });
-  await waitFor(async () => expect(await working()).toHaveAccessibleName(/^Done, \d+$/));
+  await lineGone();
   expect(screen.getByRole("dialog", { name: runningRun.name })).toBeVisible();
 });

@@ -1,0 +1,48 @@
+# 0108. The line above the box holds only live work, and Stop sits in the box
+
+- **Status:** Accepted (2026-10-21). Requested by the operator. Reverses the chips' line of
+  `17dfd095` (a quiet Done or Published chip once nothing ran, a Routines chip whenever a project had
+  routines) and `b2b463e6` (Stop at the end of that line, on a line of its own when alone), which no
+  ADR recorded.
+- **Trail:** `web/src/components/composer.tsx` · `web/src/components/composer-chips.tsx` ·
+  `web/src/components/stop-control.tsx` · `web/src/components/agent-chat.tsx` ·
+  `scripts/e2e/run.ts chip-line`
+
+## Context
+
+A coordinator's chat at rest drew "Done 6" on a line of its own between the conversation and the box,
+and "Stop" at the end of it while a turn ran. The operator: "it's clunky and takes space for nothing,
+and maybe it isn't needed." Finished work asks nothing of anyone, and a project's routines run on
+their own clock; the line's other chips (Needs you, Working or Background, PRs) are what waits or
+moves. Stop alone kept the line open for every turn.
+
+Three places for Stop were built over the same seven moments (`chip-line`, 390×844 and 1440×900, dark
+and light), with finished work already off the line:
+
+| Stop | Above the box, Stop alone | Keyboard up (phone) | Box moves when Stop comes |
+|---|---|---|---|
+| Its own line (as before) | 40 px | stays | the line folds open, 40 px |
+| In the box, beside Send | 0 px | stays | 0 px |
+| Row under the box | 0 px | hidden with the row | 2 px |
+
+Ovis (herdr-web-ui) puts Stop in Send's slot while the draft is empty. Not taken: a draft appearing
+swaps Stop for Send under the thumb, the reason Stop never took the Send slot.
+
+## Decision
+
+1. **The line holds only chips for live work:** Needs you, Working or Background, PRs. It folds open
+   with the first and shut with the last.
+2. **Finished work and routines are rows of the chat's ⋯ menu** ("Finished work · N", "Published · N",
+   "Routines · N"). A row opens the same panel the chip did, floating from the box's top edge with no
+   line under it. The panel sits outside the line's fold, so work that ends while it is open leaves it
+   as it was.
+3. **Stop is a round button in the box, beside Send**, for the whole turn: never in Send's slot.
+   "Really stop?" and "Stopping…" take its place there. Esc in the empty box still stops.
+4. **The terminal view says nothing of its own about the turn**: the mirror shows the CLI's own
+   "Working… (Ns)".
+
+## Consequences
+
+A turn with nothing else around it costs no height above the box. Finished work is one tap further
+(⋯, then the row) and no longer seen at a glance. The draft is 38 px narrower while a turn runs.
+Revisit if the operator reads finished work often enough to want it back in sight.

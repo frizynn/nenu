@@ -17,7 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from "react-dom";
 import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
+import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Clock, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { agentName } from "@/hooks/use-message-queue";
 import { StartAgent } from "@/components/start-agent";
@@ -924,15 +924,6 @@ export function AgentChat({
     composerRef.current?.focusInput();
   }
 
-  // When the running turn started, for the composer's "Working for …" row: the turn's own start when
-  // the journal records one, else the user message that opened it.
-  const workingSince = useMemo(() => {
-    const entries = conversation.history?.available ? conversation.history.entries : [];
-    const last = entries.at(-1);
-    if (last?.turn?.status === "running" && last.turn.startedAt) return last.turn.startedAt;
-    return entries.findLast((entry) => entry.role === "user")?.ts;
-  }, [conversation.history]);
-
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
   const report = sessionPanel?.report;
@@ -1027,14 +1018,15 @@ export function AgentChat({
       {around && threadRows(around.needs)}
       {sessionWork && processes.waiting.length > 0 && processList({ waiting: processes.waiting })}
     </> }] : []),
-    // Nothing runs: the chip says what finished instead, quietly, so done work stays one tap away
-    // without standing beside what is live. Resolved threads around the chat fold in with it, but
-    // never raise the chip on their own: a project's history would keep it up for good.
+    // Nothing runs: what finished asks nothing of you, so it leaves the line for the ⋯ menu, one tap
+    // from the same panel. Resolved threads around the chat fold in with it, but never raise it on
+    // their own: a project's history would keep it there for good.
     ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
       // The chat's own turn is never in this count: the session's work alone reads as Background.
       label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Done" : "Published",
       count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined,
-      quiet: workingCount === 0, content: <>
+      title: workingCount > 0 ? undefined : finished > 0 ? "Finished work" : "Published",
+      tucked: workingCount === 0, content: <>
       {around && threadRows(around.working)}
       {(sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) || (around?.resolved.length ?? 0) > 0) &&
         processList({ running: processes.running, done: processes.done }, published,
@@ -1047,9 +1039,12 @@ export function AgentChat({
         <PrChecks project={projectChips.project} thread={ownPr} session={projectChips.session} readOnly={projectChips.readOnly} onChanged={projectChips.onChanged} />
       </div>}
     </div> }] : []),
-    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length,
+    // Routines run on their own clock and ask nothing of you here: the ⋯ menu opens them.
+    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length, tucked: true,
       content: <RoutineRows routines={routines} now={Date.now()} /> }] : []),
   ];
+  const tuckedActions: ConversationAction[] = chips.filter((c) => c.tucked).map((c) => ({ id: `chip-${c.id}`,
+    label: c.count > 0 ? `${c.title ?? c.label} · ${c.count}` : c.title ?? c.label, icon: c.id === "routines" ? Clock : ListChecks, run: () => setChip(c.id) }));
   const chipDetail = !desktop && processDetail && processDetailContent
     ? { title: detailTitle(processDetail, activity), content: <RunNamedAbove value>{processDetailContent}</RunNamedAbove>, onBack: () => setProcessDetail(null) }
     : null;
@@ -1065,7 +1060,7 @@ export function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions
-    groups={[{ label: "View", actions: viewActions }, { label: "Tab and pane", actions: paneActions }]}
+    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;
@@ -1417,8 +1412,7 @@ export function AgentChat({
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
-            workingSince={workingSince}
-            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail, likely: Boolean(projectChips),
+            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail, likely: Boolean(projectChips) && agent?.status === "working",
               onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
