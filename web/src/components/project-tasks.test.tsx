@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
-import { ProjectTasks, coordinatedThreads, prSummary, threadTree } from "./project-tasks";
+import { ProjectTasks, coordinatedThreads, prSummary, threadDetail, threadTree } from "./project-tasks";
 
 const project: ProjectView = {
   slug: "hub", name: "Hub", goal: "Ship it", status: "active",
@@ -331,4 +331,9 @@ it("a thread waiting for your reply says so instead of its terminal's state, and
   expect(row).not.toHaveTextContent("Copy brief");
   await user.click(row);
   expect(onOpenPane).toHaveBeenCalledWith("b");
+});
+
+it("says a thread whose pull request merged closes on its own, with its number", () => {
+  const thread: ProjectThreadView = { id: "t-9", title: "Copy", parentId: "root", role: "worker", status: "open", group: "ready-for-review", pr: { state: "merged", number: 9 } };
+  expect(threadDetail(thread, [])).toBe("Merged, closes on its own · PR #9");
 });

@@ -415,6 +415,7 @@ describe("the sidebar", () => {
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
     expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs reply");
+    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
   });
 
   it("shows a coordinator thread's own state beside its threads' dots", async () => {
@@ -423,6 +424,7 @@ describe("the sidebar", () => {
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs you");
     expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs you");
+    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
   });
 
   it("counts what needs you on Home, and keeps no Needs you list of its own", () => {

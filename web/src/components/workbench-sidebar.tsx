@@ -417,8 +417,9 @@ interface TreeFolds {
 }
 
 /** A tree row's word and its tone: red asks for you, blue is to review, green has merged and closes on its own. */
+const NEEDS_TONE = "text-status-blocked";
 const STATE_WORD: Partial<Record<NodeState, { word: string; tone: string }>> = {
-  needs: { word: "needs you", tone: "text-status-blocked" }, review: { word: "review", tone: "text-primary" }, closing: { word: "merged", tone: "text-status-done" },
+  needs: { word: "needs you", tone: NEEDS_TONE }, review: { word: "review", tone: "text-primary" }, closing: { word: "merged", tone: "text-status-done" },
 };
 
 function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }: TreeFolds & {
@@ -554,7 +555,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
-  const word = ask ? { word: ASK[ask].word, tone: STATE_WORD.needs!.tone } : STATE_WORD[state];
+  const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
   const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
