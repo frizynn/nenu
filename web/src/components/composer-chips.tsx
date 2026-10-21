@@ -65,7 +65,7 @@ export function threadsAround(source: ProjectChipsSource, paneId: string) {
 
 export const NEEDS_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
 export const WORKING_MARK = <StatusDot status="working" />;
-/** What a phone shows of PRs, which has no room for the word. */
+/** PRs' mark: beside the word on a desk, in its place on a phone. */
 export const PRS_MARK = <GitPullRequest aria-hidden className="size-3.5 shrink-0" />;
 const ENDED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
 
@@ -147,7 +147,7 @@ export interface ChipLine {
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
-  /** Where focus goes when a panel closes with no chip on the line to take it (the ⋯ trigger). */
+  /** Where focus goes when a panel closes with no chip in the row to take it (the ⋯ trigger). */
   returnFocus?: RefObject<HTMLElement | null>;
 }
 
@@ -273,12 +273,12 @@ export function ComposerPlace({ branch, machine }: { branch?: string; machine?: 
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const host = machine ?? machineName();
-  const branchItem = branch && <span className="composer-place-item" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>;
-  const hostItem = <span className="composer-place-item shrink-0"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>;
+  const branchItem = branch && <span className="composer-place-item composer-place-branch" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>;
+  const hostItem = <span className="composer-place-item"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>;
   if (!compact) return <span className="composer-place">{branchItem}{hostItem}</span>;
   const label = branch ? `${branch} on ${host}` : host;
   return (
-    <span className="composer-place justify-end">
+    <span className="composer-place composer-place-compact justify-end">
       <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
         onClick={() => setOpen(!open)}>
         {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}

@@ -54,7 +54,7 @@ export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, 
         <circle cx="12" cy="12" r={radius} fill="none" stroke="color-mix(in oklab, var(--muted-foreground) 24%, transparent)" strokeWidth="3" />
         <circle cx="12" cy="12" r={radius} fill="none" stroke={usageColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} />
       </svg>
-      <span className="tabular-nums">{Math.round(percentage)}%</span>
+      <span className="workbench-context-number tabular-nums">{Math.round(percentage)}%</span>
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window">
       <div className="space-y-3 text-footnote">

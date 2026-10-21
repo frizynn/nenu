@@ -118,7 +118,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
         title={modelAvailable ? [telemetry?.model, telemetry?.effort].filter(Boolean).join(" · ") || "Open the agent's model picker" : "This agent does not expose a model picker"}
       >
         <span className="truncate">{model ?? "Choose model"}</span>
-        {telemetry?.effort && <span className="shrink-0 capitalize">{telemetry.effort}</span>}
+        {telemetry?.effort && <span className="workbench-effort shrink-0 capitalize">{telemetry.effort}</span>}
       </button>}
       {/* The composer row carries the context ring and its number (and its Compact action). */}
       <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}

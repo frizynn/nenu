@@ -111,7 +111,7 @@ it("opens a project on its coordinator's chat, and switches Chat, Threads and PR
   const own = within(screen.getByRole("tablist", { name: "Project" }));
   expect(own.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("navigation", { name: "Threads" })).not.toBeInTheDocument();
-  // Its PR, siblings and background work ride in the row above the composer.
+  // Its PR, siblings and background work ride in the row under the composer's box.
   expect(screen.getByTestId("chips")).toHaveTextContent("chips for Build");
 
   // A sibling from the thread's Threads tab takes the thread's place, so the history keeps one entry per level.

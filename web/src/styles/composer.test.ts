@@ -25,4 +25,14 @@ describe("the composer", () => {
   it("grows the meta row's touch targets down, away from the + above them", () => {
     expect(declarations(css, ".composer-meta .hit-area::before", ["@media (pointer: coarse)"])).toMatchObject({ top: "-2px", transform: "translateX(-50%)" });
   });
+
+  // A picture pasted with the phone's keyboard up laid the draft out beside the thumbnails at no width:
+  // in a wrapping box the + (folded to nothing while typing) and the draft (no basis) fit on their line,
+  // and the words ran off the box's right edge (bench: run.ts paste-image). The files and the row of +,
+  // draft and Send are stacked, never wrapped.
+  it("stacks the files over the row of +, draft and Send instead of wrapping them", () => {
+    expect(declarations(css, ".composer-box")).toMatchObject({ "flex-direction": "column" });
+    expect(declarations(css, ".composer-box")["flex-wrap"]).toBeUndefined();
+    expect(declarations(css, ".composer-row")).toMatchObject({ display: "flex" });
+  });
 });

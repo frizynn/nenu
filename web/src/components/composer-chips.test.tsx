@@ -163,16 +163,18 @@ it("floats the panel over the thread: the box and the conversation stay where th
   scroller.scrollTop = 120;
   // The chips sit under the box, in the row the model is in; nothing of theirs is above the box.
   expect(screen.getByRole("group", { name: "Message tools" })).toContainElement(chips);
-  const above = box.parentElement!.previousElementSibling;
+  const dock = box.closest(".composer-dock")!;
+  const above = dock.previousElementSibling;
   await user.click(within(chips).getByRole("button", { name: "Working, 1" }));
   const panel = screen.getByRole("dialog", { name: "Working" });
   // The panel is an overlay anchored to the box's dock, not a row of the composer.
-  expect(panel.closest(".composer-dock")).toBe(box.closest(".composer-dock"));
-  expect(box.parentElement!.previousElementSibling).toBe(above);
+  expect(panel.closest(".composer-dock")).toBe(dock);
+  expect(dock.previousElementSibling).toBe(above);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "Working" })).not.toBeInTheDocument();
+  expect(dock.previousElementSibling).toBe(above);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
 });
