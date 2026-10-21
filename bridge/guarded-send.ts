@@ -328,6 +328,13 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const retry = prior?.typeAttempted === true && prior.typedAt !== undefined;
   const first = deps.received && (logFirst || retry) ? await look(deps.received, prior?.typedAt ?? now(), request.text) : null;
   if (first?.kind === "unreadable") logFirst = false;
+  // Logged or queued, an earlier try reached the agent (ADR 0116): it is sent, and nothing is typed or
+  // refused, whatever the screen or the CLI shows now. Its silence proves nothing: the bytes may still
+  // be on their way.
+  if (retry && first) {
+    const earlier = answer(send, first);
+    if (earlier) return earlier;
+  }
   // With Enter right behind it, typed text goes as a paste whatever its length: 760 characters typed
   // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0116).
   const pasted = (text: string) => logFirst || request.paste === true || paste === true || (typeof paste === "function" && paste(text));
@@ -356,19 +363,12 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     if (!seen.composer && !request.force) return send.fail(send.trace.noEcho ? NO_ECHO : NO_BOX, false, "not_ready");
   }
   // A dialog the CLI itself reports owns the keyboard whatever the screen shows (ADR 0067).
-  if (turn?.waiting !== undefined && !request.force && request.expectedPrompt === undefined) return send.fail(DIALOG_OPEN, false, "not_ready");
+  if (dialogReported(turn, request)) return send.fail(DIALOG_OPEN, false, "not_ready");
 
   // An earlier attempt with this id may have typed before it failed (an ack lost after the bytes
   // reached the PTY). Its text, still in the box, is this send's text: submit it rather than type a
   // second copy. Text it delivered that is no longer in the box may have been submitted by an Enter
   // whose ack was lost, so nothing is typed; neither when the box cannot be read to tell.
-  // The CLI's log says whether an earlier try reached the agent (ADR 0116): logged or queued, it is
-  // sent and nothing is typed again, even when the box cannot be read. Its silence proves nothing:
-  // the bytes may still be on their way.
-  if (retry && first) {
-    const earlier = answer(send, first);
-    if (earlier) return earlier;
-  }
   if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
   const alreadyTyped = prior?.typeAttempted === true && seen !== null && send.carries(seen);
   if (prior?.textDelivered && !alreadyTyped) return send.fail(MAYBE_SENT, true);
@@ -400,12 +400,11 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
 
   // The CLI's state once more before Enter: a dialog it reports stops the send, and a turn that
   // started meanwhile (a sweep or a picture's wait can take seconds) sends it the mid-turn way.
-  const atEnter = deps.turn?.();
-  if (atEnter?.waiting !== undefined && !request.force && request.expectedPrompt === undefined) {
-    send.trace.phase = "submit";
-    return await unsent(send, deps, adapter, DIALOG_UP);
+  if (logFirst && deps.received) {
+    const atEnter = deps.turn?.();
+    if (dialogReported(atEnter, request)) return dialogUp(send);
+    if (idle(atEnter)) return await submitAndLog(send, deps, adapter, deps.received, since);
   }
-  if (logFirst && deps.received && idle(atEnter)) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {
@@ -415,7 +414,9 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     return unread ? send.fail(UNREAD, true) : await unsent(send, deps, adapter, UNSEEN);
   }
 
-  // The last word before Enter: a fresh read must still show this message in the input box.
+  // The last word before Enter: no dialog the CLI reports, and a fresh read that still shows this
+  // message in the input box.
+  if (dialogReported(deps.turn?.(), request)) return dialogUp(send);
   send.trace.phase = "submit";
   let last: Seen;
   try {
@@ -561,7 +562,8 @@ function answer(send: Send, seen: LogLook): GuardedSendResult | null {
  * so a log holding less than was sent turns "sent" into "incomplete". No log in time is no verdict.
  */
 async function logged(send: Send, deps: GuardedSendDeps, since: number): Promise<GuardedSendResult> {
-  if (!deps.received) return send.done();
+  // Pictures alone give the log no words to find them by.
+  if (!deps.received || !hasWords(send.request.text)) return send.done();
   for (const delay of LOCAL_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     const seen = await look(deps.received, since, send.request.text);
@@ -580,6 +582,20 @@ const NOT_LOGGED = /^\s*(?:!|\/[^\s/]+(?:\s|$))/;
  */
 function logWitnesses(request: SendRequest): boolean {
   return request.expectedPrompt === undefined && !request.force && !NOT_LOGGED.test(request.text) && hasWords(request.text);
+}
+
+/** A dialog the CLI reports, for a send its keyboard would reach: not one bound to a dialog or forced. */
+function dialogReported(turn: ReturnType<NonNullable<GuardedSendDeps["turn"]>>, request: SendRequest): boolean {
+  return turn?.waiting !== undefined && !request.force && request.expectedPrompt === undefined;
+}
+
+/**
+ * Stop before Enter for a dialog the CLI reports. The box is left as it is, text included: the sweep's
+ * keys would reach a dialog that may be opening over it. What stays shows above the composer (ADR 0114).
+ */
+function dialogUp(send: Send): GuardedSendResult {
+  send.trace.phase = "submit";
+  return send.fail(`${DIALOG_UP.why} ${DIALOG_UP.left}`, true);
 }
 
 /** Claude with no turn, no background work and no dialog: then only the operator opens a dialog. */

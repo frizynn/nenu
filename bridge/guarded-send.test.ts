@@ -9,6 +9,7 @@ import {
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
   TRIGGER_PREFIX_MAX,
+  WAIT_DELAYS_MS,
   WriteLedger,
   guardedSend,
   settleAfterType,
@@ -739,13 +740,31 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     expect(term.count("pane.send_text")).toBe(0);
   });
 
-  test("a dialog the CLI reports between the text and Enter: no Enter, and the box is left as it was found", async () => {
+  test.each([
+    ["at an idle Claude", idle],
+    ["mid-turn", { running: true }],
+  ] as const)("a dialog the CLI reports between the text and Enter, %s: no key at all reaches it", async (_case, before) => {
     const term = new Term();
-    const turn = () => (term.count("pane.send_text") > 0 ? { running: false, waiting: "permission prompt" } : idle);
+    const turn = () => (term.count("pane.send_text") > 0 ? { running: false, waiting: "permission prompt" } : before);
     const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
-    expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: false });
-    expect(term.keys().some((keys) => keys.includes("Enter"))).toBe(false);
-    expect(term.draft).toBe("");
+    expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: true });
+    // Neither Enter nor the sweep's keys: the dialog may be opening over the box.
+    expect(term.count("pane.send_keys")).toBe(0);
+    // What the terminal holds, painted or still on its way: the text, untouched.
+    expect(term.draft + term.pending).toBe(text);
+  });
+
+  test("a retry whose earlier try the log has is sent, even with a dialog up now or the box unread", async () => {
+    const dialog = new Term();
+    const waiting = () => ({ running: false, waiting: "permission prompt" });
+    const prior = { typeAttempted: true, textDelivered: true, typedAt: 1 };
+    expect((await guardedSend(deps(dialog, { received: log(0).received, turn: waiting }), { text, requestId: "r1" }, prior)).outcome.ok).toBe(true);
+    const unread = new Term();
+    unread.readPane = async () => {
+      throw new Error("herdr request timed out");
+    };
+    expect((await guardedSend(deps(unread, { received: log(0).received }), { text, requestId: "r1" }, prior)).outcome.ok).toBe(true);
+    expect(unread.count("pane.send_text") + dialog.count("pane.send_text")).toBe(0);
   });
 
   test("a menu that takes the keys, with the log silent, is never called sent", async () => {
@@ -846,16 +865,20 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     expect(term.lines.at(-1)).toBe("> [Image #1]");
   });
 
-  test("one read with the box gone, mid-redraw, decides nothing", async () => {
+  test("one read with the box gone, mid-redraw, counts for neither held nor gone", async () => {
     const term = new Term();
-    const witness = log(4);
+    term.enterClears = false;
+    // The text sits in the box throughout; the confirm's last read catches a redraw.
+    let confirmReads = 0;
     term.onRead = (_n, t) => {
-      // The read right after Enter catches a redraw; the next ones see the box again.
-      t.dialog = t.count("pane.send_keys") > 0 && t.count("pane.read") === 3 ? "redrawing" : null;
+      const enter = t.count("pane.send_keys") > 0;
+      if (enter) confirmReads++;
+      t.dialog = enter && confirmReads === WAIT_DELAYS_MS.length ? "redrawing" : null;
     };
-    const { outcome } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
-    expect(outcome.ok).toBe(true);
-    expect(witness.asked.length).toBeGreaterThanOrEqual(5);
+    const { outcome } = await guardedSend(deps(term, { received: log(10_000).received }), { text, requestId: "r1" });
+    // Held at the bound, so Claude never took the Enter: cleared, not "may still arrive".
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
   });
 
   test("a retry the log says nothing about types nothing either: the earlier bytes may still arrive", async () => {

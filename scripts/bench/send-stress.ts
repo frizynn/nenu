@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { claudeTurn, decodeClaudeSession } from "../../bridge/agent-state-sources.ts";
 import { claudeLogReader } from "../../bridge/delivery-check.ts";
 import { guardedSend, OutputTrigger } from "../../bridge/guarded-send.ts";
 import { HerdrClient } from "../../bridge/herdr-client.ts";
@@ -66,11 +67,16 @@ function sessionFile(pid: number): SessionFile | null {
   }
 }
 
-/** The pane's turn as the bridge reads it from Claude's session file (ADR 0067), background aside. */
+/** The pane's turn by the bridge's own rule over Claude's session file (ADR 0067); no transcript scan. */
 function turnOf(pid: number) {
-  const file = sessionFile(pid);
-  if (!file) return undefined;
-  return { running: file.status === "busy", ...(file.status === "waiting" ? { waiting: file.waitingFor ?? "dialog" } : {}) };
+  let text: string;
+  try {
+    text = readFileSync(join(homedir(), ".claude/sessions", `${pid}.json`), "utf8");
+  } catch {
+    return undefined;
+  }
+  const file = decodeClaudeSession(text, pid);
+  return file ? claudeTurn(file, null) : undefined;
 }
 
 function transcriptPath(cwd: string, sessionId: string): string | null {
