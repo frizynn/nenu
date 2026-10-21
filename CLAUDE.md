@@ -227,6 +227,11 @@ the unit name; the Herdr action runs from anywhere.
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped
   notification opens in place. `bun scripts/e2e/run.ts motion` must count 0 transitions while quiet
   ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
+- **Motion, hover and status marks come from one set of tokens** (`web/src/index.css`): 120 ms for a
+  control, 180 ms for a panel, 280 ms for a page, all on `--motion-ease`; one hover fill
+  (`hover:bg-hover`); one 6 px status dot; a desk's page tabs underlined. `calm-motion.test` and
+  `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
+  with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
