@@ -532,6 +532,22 @@ it("folds a project to the mark it picked in Organizations in the rail", async (
   expect(glyph.style.color).toBe("var(--glyph-red)");
 });
 
+it("says Projects on the desk's bar and its rail only while there is a project", async () => {
+  desktop();
+  const bare = setup(data, "/?s=work");
+  expect(bare.sidebar.queryByRole("link", { name: "Projects" })).toBeNull();
+  expect(bare.sidebar.queryByRole("region", { name: "Projects" })).toBeNull();
+  await bare.user.click(bare.sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  expect(within(screen.getByRole("navigation", { name: "Collapsed sidebar" })).queryByRole("link", { name: "Projects" })).toBeNull();
+  bare.unmount();
+  localStorage.clear();
+  const { sidebar, user } = setup(projectData, "/?s=work");
+  expect(sidebar.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects?s=work");
+  expect(sidebar.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
+  expect(within(screen.getByRole("navigation", { name: "Collapsed sidebar" })).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects?s=work");
+});
+
 /** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */
 async function railNamed() {
   desktop();

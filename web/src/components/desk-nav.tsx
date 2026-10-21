@@ -65,7 +65,7 @@ function DeskProjects({ data, now, onNewProject }: { data: HomeData; now: number
   const projects = data.projects ?? [];
   const current = (project: ProjectView) => (projectSlug === project.slug && !nodeId) || (paneId !== undefined && paneId === project.coordinator?.paneId);
   const extra = folded(projects, PROJECTS_SHOWN, current);
-  if (!projects.length && !onNewProject) return null;
+  if (!projects.length) return null;
   return (
     <section aria-label="Projects" className="nav-group nav-desk">
       <div className="nav-label">
