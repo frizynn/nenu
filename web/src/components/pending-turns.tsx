@@ -28,15 +28,15 @@ export function pendingStatus(send: LocalSend): {
   });
 }
 
-// Managing the message lives behind its ⋯; a remedy for what went wrong (or a read it can still get)
-// stays on the status line.
+// What a waiting message can do is one tap away on its status line (Edit and Remove included, ADR
+// 0117); only Send now, which skips the wait the operator chose, stays behind the ⋯.
 const ACTION: Record<keyof LocalSendActions, { label: string; icon: IconComponent; remedy: boolean }> = {
   retry: { label: "Retry", icon: RotateCcw, remedy: true },
   openTerminal: { label: "Open Terminal", icon: SquareTerminal, remedy: true },
   readNow: { label: "Read it now", icon: Zap, remedy: true },
   sendNow: { label: "Send now", icon: Send, remedy: false },
-  edit: { label: "Edit", icon: Pencil, remedy: false },
-  remove: { label: "Remove", icon: Trash2, remedy: false },
+  edit: { label: "Edit", icon: Pencil, remedy: true },
+  remove: { label: "Remove", icon: Trash2, remedy: true },
 };
 
 /**

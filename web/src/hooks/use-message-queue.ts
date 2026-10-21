@@ -70,7 +70,8 @@ export function queueRowStatus(
   if (row.state === "paused") return { tone: "problem", label: row.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
   if (row.state === "sent") {
     if (row.native === "enqueued" && row.readNowAt !== undefined) return { tone: "busy", label: `Asked ${name} to read it now.`, actions: [] };
-    if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue. ${name} reads it after the step it's on.`, actions: agent === "claude" ? ["readNow"] : [] };
+    // Claude hands its queue back on Up (ADR 0117), so a message waiting there can still be edited or removed.
+    if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue. ${name} reads it after the step it's on.`, actions: agent === "claude" ? ["readNow", "edit", "remove"] : [] };
     if (row.native === "absorbed") return { tone: "done", label: `Read by ${name}`, actions: [] };
     if (row.native === "recalled") return { tone: "problem", label: "Taken back into the terminal's input box", actions: [] };
     if (agent === "codex" && row.deliveryMode === "steer") return { tone: "done", label: "Sent into Codex's current turn", actions: [] };

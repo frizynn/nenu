@@ -99,6 +99,18 @@ export interface HarnessAdapter {
    * the reported effort without offering a way to change it.
    */
   modelEffort?: "arrows" | "after-model";
+  /** OPTIONAL: absent, Nenu takes nothing back from the CLI's own queue (ADR 0117). */
+  queueRecall?: QueueRecall;
+}
+
+/**
+ * How the CLI hands back what waits in its own queue: the keys that pull it into the empty input box,
+ * and what says they reached its history instead (the queue was read first). Measured on Claude Code
+ * 2.1.306: Up brings every queued message back at once, one per line.
+ */
+export interface QueueRecall {
+  keys: string[];
+  history(lines: StyledLine[]): boolean;
 }
 
 export interface TurnInterrupt {

@@ -59,7 +59,7 @@ import { StopControl } from "@/components/stop-control";
 import { ComposerChips, rowChips, type ChipLine } from "@/components/composer-chips";
 import { Fold } from "@/components/fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
-import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
+import { draftFromWire, draftWords, insertImageChips, isSlashCommand, messageMatchKey, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
   addLocalSend,
   listLocalSends,
@@ -1097,9 +1097,25 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const queueRow = (echo: LocalSend): QueueMessage | undefined =>
     echo.queueId ? queue.page?.messages.find((message) => message.id === echo.queueId) : undefined;
   const bubbleActions = useRef<LocalSendActions | null>(null);
+  // A message already in Claude's own queue comes back from it (ADR 0117): every message waiting there
+  // returns at once, so the bubbles that stood for them all leave, and what is kept goes into the box
+  // as Nenu sent it. Words the queue held beyond Nenu's (typed at the terminal) come back as they were.
+  async function takeBack(echo: LocalSend, keep: boolean) {
+    const result = await api.takeBackQueue(paneId, session).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
+    if (!result.ok) { setStatus(result.error, "info"); return; }
+    const waiting = listLocalSends(sendScope).filter((item) => !item.landed && item.native === "enqueued");
+    for (const item of waiting) removeLocalSend(sendScope, item.id);
+    const ours = messageMatchKey(waiting.map((item) => item.text).join(" ")) === messageMatchKey(result.text);
+    const kept = ours ? waiting.filter((item) => keep || item.id !== echo.id).map((item) => item.text).join("\n\n") : result.text;
+    if (kept) restoreIntoComposer(kept);
+    if (!ours) setStatus("Claude's queue held more than your message: all of it is back in your box.", "info");
+    else if (!keep && kept) setStatus("Removed. The other queued messages are back in your box.", "info");
+    focusInputEnd();
+  }
   bubbleActions.current = {
     retry: (echo) => { if (!sending) void send(echo.text, false); },
     edit: async (echo) => {
+      if (echo.native === "enqueued") return takeBack(echo, true);
       const row = echo.state === "queued" ? queueRow(echo) : undefined;
       if (row && !(await queue.mutate("remove", undefined, row))) return;
       removeLocalSend(sendScope, echo.id);
@@ -1107,6 +1123,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       focusInputEnd();
     },
     remove: async (echo) => {
+      if (echo.native === "enqueued") return takeBack(echo, false);
       const row = queueRow(echo);
       if (row && !(await queue.mutate("remove", undefined, row))) return;
       removeLocalSend(sendScope, echo.id);

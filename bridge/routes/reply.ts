@@ -9,7 +9,7 @@ import {
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
 import { claudeLogReader } from "../delivery-check.ts";
-import { guardedSend, settleDraft, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { guardedSend, settleDraft, settleAfterType, takeBackQueue, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
@@ -72,6 +72,17 @@ export const replyPaneActions: Record<string, PaneAction> = {
     level: "write",
     marksSeen: true,
     handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => clearDraftPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
+  },
+  // What waits in the CLI's own queue, back to the phone to edit or drop (ADR 0117).
+  "take-back": {
+    level: "write",
+    marksSeen: true,
+    handle: exclusive(async ({ cfg, audit }, { req, rt, paneId, device }) => {
+      const outcome = await takeBackQueue({ herdr: rt.herdr, paneId, readLines: cfg.readLines });
+      // The words' length, not the words.
+      audit.record({ action: "queue.take-back", paneId, session: rt.name, device, detail: { done: outcome.ok, chars: outcome.ok ? outcome.text.length : 0 } });
+      return json(outcome, req.headers.get("accept-encoding"));
+    }),
   },
   // Not wrapped in `exclusive`: a Stop tapped right after Send waits for the turn to start, and must
   // not hold the pane while the queue types that message. It takes the lock for the final read + key.

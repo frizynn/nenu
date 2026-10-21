@@ -27,6 +27,7 @@ import {
   hasInputBox,
   inputBoxTail,
   readClaudeTurn,
+  inputBoxShowsHistory,
 } from "./chrome";
 import { withoutDialogClosingRule } from "./markers";
 import { claudeDraftCarriesSend, sendsAsOnePaste } from "./paste";
@@ -176,4 +177,7 @@ export const claudeAdapter: HarnessAdapter = {
   // Measured on 2.1.296: Escape stops a tool call or streamed text and the pane goes idle in ~300 ms.
   interrupt: { keys: ["Escape"], read: (text) => readClaudeTurn(splitLines(parseAnsi(text))) },
   modelEffort: "arrows",
+  // Measured on 2.1.306: Up in the empty box under "Press up to edit queued messages" brings the whole
+  // queue back into it; once Claude has read the queue, Up shows its history instead.
+  queueRecall: { keys: ["Up"], history: inputBoxShowsHistory },
 };

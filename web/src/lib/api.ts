@@ -674,6 +674,14 @@ export function settleTerminalDraft(paneId: string, draft: string, session: stri
 }
 
 /**
+ * Take back what waits in the agent's own queue (ADR 0117): the bridge pulls it into the agent's box,
+ * reads it and clears the box, and answers with the words, every queued message together.
+ */
+export function takeBackQueue(paneId: string, session: string | undefined): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/take-back`, session), { method: "POST", body: "{}" });
+}
+
+/**
  * Stop the agent's running turn (ADR 0066). The bridge picks the CLI's key and presses it only while
  * the live screen shows a turn; `confirm` accepts that the CLI sends its queued messages on stopping.
  */
