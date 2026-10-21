@@ -14,6 +14,21 @@ export function atTail(el: HTMLElement, offset = 24): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= offset;
 }
 
+/**
+ * The list can no longer reach where it last stood: it grew (the phone keyboard going down) or its
+ * content shrank, so the browser clamped scrollTop. The move up its scroll event reports is the
+ * layout's, and it may arrive after the list changed again: the closed keyboard's composer rows come
+ * back in between, so the event lands short of the tail. A reader's own scroll never changes the range.
+ */
+export function clamped(el: HTMLElement, lastTop: number): boolean {
+  return el.scrollHeight - el.clientHeight < lastTop;
+}
+
+/** Where the list stands, short of an iOS bounce past the bottom, which no clamp can follow. */
+export function standing(el: HTMLElement): number {
+  return Math.min(el.scrollTop, el.scrollHeight - el.clientHeight);
+}
+
 /** A field the operator types in: keys there edit text, they do not scroll a list. */
 export function isTextField(node: EventTarget | null): node is HTMLElement {
   return node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement || (node instanceof HTMLElement && node.isContentEditable === true);
@@ -67,7 +82,7 @@ export function useEditShift(scrollRef: RefObject<HTMLElement | null>): () => bo
 // and output that grows meanwhile makes that event report a gap nobody scrolled; read as the user
 // leaving, it froze the view at the bottom behind the arrow. So `lastTop` keeps where the list last
 // stood, set by every pin, and an event that did not move above it re-pins instead. A move up an edit
-// caused re-pins too (useEditShift).
+// caused (useEditShift) or a clamp (clamped) re-pins too.
 export function useAutoScroll<T extends HTMLElement = HTMLDivElement>(
   options: UseAutoScrollOptions = {},
 ) {
@@ -101,10 +116,11 @@ export function useAutoScroll<T extends HTMLElement = HTMLDivElement>(
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const up = el.scrollTop < lastTop.current;
-    lastTop.current = el.scrollTop;
+    const top = lastTop.current;
+    const up = el.scrollTop < top;
+    lastTop.current = standing(el);
     const bottom = atTail(el, offset);
-    if (!bottom && (!up || (autoScroll.current && editShift()))) {
+    if (!bottom && (!up || (autoScroll.current && (editShift() || clamped(el, top))))) {
       if (autoScroll.current) pin(el);
       return;
     }
