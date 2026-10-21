@@ -184,6 +184,8 @@ async function run(): Promise<void> {
 
       await page.goto(bridge.url + "/");
       await page.locator('[role="tab"]:has-text("Recents")').first().waitFor({ timeout: 15_000 });
+      // Home opens on Projects (ADR 0109); the sessions this measures are Recents'.
+      await page.getByRole("tab", { name: "Recents" }).first().click();
       await page.waitForTimeout(1500);
       out.phoneHomeQuiet = await quiet(page, '#home-list a[href^="/pane/"]', quietMs);
       await shoot(page, "phone-home");

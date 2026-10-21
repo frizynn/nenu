@@ -98,13 +98,19 @@ try {
     }
   };
   const click = (selector: string) => async (page: Page) => { await page.locator(`${selector} >> visible=true`).first().click({ timeout: 5000 }); };
+  // Home opens on its Projects tab (ADR 0109); a session's row is under Recents.
+  const fromRecents = (selector: string) => async (page: Page) => {
+    await page.getByRole("tab", { name: "Recents" }).first().click({ timeout: 5000 });
+    await click(selector)(page);
+  };
   const toProject = async (page: Page) => {
     await page.getByRole("button", { name: "Open navigation" }).first().click({ timeout: 5000 });
-    await click('a[href="/project/acme"]')(page);
+    // The drawer's own row: Home's Projects tab under it links the same project.
+    await click('nav[aria-label="Projects and chats"] a[href="/project/acme"]')(page);
   };
 
   // Threads.
-  await walk("Home → thread (Recents)", "/", click(`a[href="${pane(herd.working)}"]`), "/");
+  await walk("Home → thread (Recents)", "/", fromRecents(`a[href="${pane(herd.working)}"]`), "/");
   await walk("Coordinator → Threads → thread", `${pane(herd.idle)}?view=threads`, async (page) => {
     await page.locator(".project-overlay").getByText("Landing a 390 px").first().click({ timeout: 5000 });
   }, `${pane(herd.idle)}?view=threads`);
@@ -125,7 +131,7 @@ try {
     await page.locator("header").first().waitFor({ timeout: 15_000 });
   }, new RegExp(`^${pane(herd.idle).replace(/[%]/g, "%")}`));
   // Coordinators.
-  await walk("Home → coordinator (Recents)", "/", click(`a[href="${pane(herd.idle)}"]`), "/");
+  await walk("Home → coordinator (Recents)", "/", fromRecents(`a[href="${pane(herd.idle)}"]`), "/");
   await walk("Project → coordinator", "/project/acme", click('main >> text="Rediseño mobile"'), "/project/acme");
   await walk("Your asks → coordinator", "/asks?project=acme", click('a[href="/project/acme/node/root"]'), "/asks?project=acme");
   // Projects.

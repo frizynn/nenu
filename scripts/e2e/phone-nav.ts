@@ -9,7 +9,8 @@ import { orgTreeSeed, type DemoHerd, type OrgSeed } from "./scenario.ts";
 // How a phone reaches a coordinator, over projects shaped like the operator's on 2026-10-21: one
 // whose running project coordinator organizes open coordinators (one nested), one whose running
 // coordinator only has workers, and a quiet one. Walks Home, the drawer, the project and each
-// coordinator at 390x844, counting taps from Home, and captures every screen, plus Home at 1440.
+// coordinator at 390x844, counting taps from Home (2, and one more per coordinator it is nested in)
+// and from the drawer (3), and captures every screen, plus Home at 1440. Exits 1 on any failure.
 //
 //   bun scripts/e2e/phone-nav.ts [--port 8871] [--out DIR] [--tag before|after]
 
@@ -101,8 +102,13 @@ async function main(): Promise<void> {
     // coordinator is its own, on that coordinator's chat, which the project opens on (ADR 0092).
     const walks: Record<string, Step[]> = {};
     const reached = (path: string, slug: string) => path.startsWith(`/project/${slug}/node/`) || (slug === "nenu" && path.startsWith("/pane/"));
-    const targets = [["acme", "Acme Shop", "Project coordinator"], ["acme", "Acme Shop", "Migración de stock"], ["acme", "Acme Shop", "Rediseño mobile"], ["nenu", "Nenu", ""]] as const;
-    for (const [slug, project, coordinator] of targets) {
+    // Each coordinator with the rows a person taps from the project page to it: a nested one goes
+    // through its parent's page, one tap more.
+    const targets: ReadonlyArray<readonly [string, string, string, readonly string[]]> = [
+      ["acme", "Acme Shop", "Project coordinator", []], ["acme", "Acme Shop", "Migración de stock", []], ["acme", "Acme Shop", "Rediseño mobile", []],
+      ["acme", "Acme Shop", "Checkout", ["Rediseño mobile"]], ["nenu", "Nenu", "", []],
+    ];
+    for (const [slug, project, coordinator, through] of targets) {
       const name = coordinator || `${project} coordinator`;
       const steps: Step[] = [];
       // From Home: its Projects tab, the project's row, then the coordinator's row.
@@ -114,17 +120,18 @@ async function main(): Promise<void> {
         const row = page.locator("[role=tabpanel] a, section[aria-labelledby=home-projects] a").filter({ hasText: project }).first();
         if (await row.count()) { await row.click(); taps++; await page.waitForTimeout(2500); }
         steps.push({ at: "home → project", path: here(page), taps });
-        if (coordinator && !reached(here(page), slug)) {
-          const entry = page.locator(".task-main", { hasText: coordinator }).first();
+        for (const title of coordinator ? [...through, coordinator] : []) {
+          const entry = page.locator(".task-main", { hasText: title }).first();
           if (await entry.count()) { await entry.click(); taps++; await page.waitForTimeout(2500); }
-          steps.push({ at: `home → ${coordinator}`, path: here(page), taps });
+          steps.push({ at: `home → ${title}`, path: here(page), taps });
         }
-        if (!reached(here(page), slug) || taps > 2) failures.push(`home: ${name} took ${taps} taps and landed on ${here(page)}`);
+        const node = coordinator === "Checkout" ? "/node/t-0105" : "";
+        if (!reached(here(page), slug) || !here(page).includes(node) || taps > 2 + through.length) failures.push(`home: ${name} took ${taps} taps and landed on ${here(page)}`);
         await shoot(page, `reach-${slug}-${(coordinator || "own").split(" ")[0]!.toLowerCase()}-home-390`);
         await context.close();
       }
       // From the drawer: ☰, unfold the project, the coordinator's row.
-      {
+      if (through.length === 0) {
         const { page, context } = await open(PHONE);
         let taps = 0;
         await page.getByRole("button", { name: "Open navigation" }).first().click(); taps++;
@@ -158,6 +165,7 @@ async function main(): Promise<void> {
   const result = { tag, shots, seen, failures };
   await writeFile(join(outDir, `${tag}-phone-nav.json`), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
 }
 
 if (import.meta.main) await main();
