@@ -71,8 +71,12 @@ chat (a worker with Needs you, Background and PRs; WebKit, 390×844 and 1440×90
 under the box, between the model and the place. That row is there on every chat, so they cost no height
 and no width of the draft. They are as quiet as the row's other controls; on a phone only Needs you
 keeps its word, the rest are a mark and a count (a dot, a pull-request icon), named in full to a screen
-reader. Their 44 px reach grows down, away from the box. The panel a chip opens still floats over the
+reader. Each is at least 44 px wide on a touch screen, and its 44 px reach grows down, away from the
+box. When the row is full on a phone the model gives way: while chips are there its effort word and
+the context's number step aside (the picker and the ring's panel still say them), then its name
+truncates; the chips and the place keep their width. On a desk the place gives way: the branch and the
+machine truncate side by side inside it. The panel a chip opens still floats over the
 thread from the box's top edge. With the phone's keyboard up the row gives its height back, chips
 included, as the line did; an open panel stays. Nothing folds: the row does not change height.
-`run.ts chip-line` fails when anything sits between the thread and the box, when a chip is not under
-the box, or when it touches the model or the place.
+`run.ts chip-line` (with a model reported, as in a real session) fails when anything sits between the
+thread and the box, when a chip is not under the box, or when any two controls of that row touch.
