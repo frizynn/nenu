@@ -101,6 +101,8 @@ describe("a desk's project page", () => {
     await user.click(lead.getByRole("button", { name: "Hide Lead threads" }));
     expect(lead.queryByRole("button", { name: /Docs/ })).toBeNull();
     expect(router.state.location.pathname).toBe("/project/hub");
+    // Named for what it does, it still says what its threads do.
+    expect(lead.getByRole("button", { name: "Open Lead" })).toHaveAccessibleDescription(/1 waiting on you/);
     await user.click(lead.getByText("1 waiting on you"));
     expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
   });

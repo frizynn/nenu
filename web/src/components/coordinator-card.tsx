@@ -9,7 +9,7 @@ import { formatContextTokens } from "@/components/workbench-context-meter";
 import { askSections, coordinatorAsks } from "@/lib/asks";
 import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { timeAgo } from "@/lib/format";
-import { flatten, mergedDetail, mergedToClose, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
+import { flatten, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
 import type { AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
 
 // A coordinator's card (ADR 0091), as Herdr Organizations' popup draws one: its objective, what waits
@@ -57,17 +57,20 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   return <>
     {printed && (says || usage || listed.length > 0 || prs.length > 0) &&
       <CoordinatorCard status={status} usage={usage} agents={listed} prs={prs} summaries={summaries} onOpenNode={onOpenNode}
+        asksTitled={sections.some((section) => section.group !== "waiting")}
         asks={asks.list && sections.length > 0 && <AskSections compact whose={false} session={session} answers={asks.list.answers === true} readOnly={readOnly}
           sections={sections} />} />}
     {status && asks.loaded && <CoordinatorStatus status={status} project={project} closed={says} onOpenNode={onOpenStatusNode} />}
   </>;
 }
 
-function CoordinatorCard({ status, usage, asks, agents, prs, summaries, onOpenNode, now = Date.now() }: {
+function CoordinatorCard({ status, usage, asks, asksTitled, agents, prs, summaries, onOpenNode, now = Date.now() }: {
   status?: StatusFile;
   usage?: TokenUsage;
   /** Its asks, as Your asks draws them, narrowed to this coordinator. */
   asks: ReactNode;
+  /** Titled "Your asks" only beside what waits on you: alone, Waiting on you and its kind already say it. */
+  asksTitled: boolean;
   /** Its open nodes, as the tree orders them; none where the tree beside it lists them. */
   agents: OrgNode[];
   /** Those of its open nodes with a pull request. */
@@ -86,16 +89,14 @@ function CoordinatorCard({ status, usage, asks, agents, prs, summaries, onOpenNo
       </div>
       <p className="mt-0.5 break-words text-subhead">{status.objective}</p>
     </div>}
-    {asks && <div>
-      <h3 className="mb-1 text-footnote font-semibold text-muted-foreground">Your asks</h3>
-      {asks}
-    </div>}
+    {asks && (asksTitled
+      ? <div><h3 className="mb-1 text-footnote font-semibold text-muted-foreground">Your asks</h3>{asks}</div>
+      : asks)}
     {agents.length > 0 && <CardList label="Agents" count={agents.length}>
       {agents.slice(0, MOST).map((node) => {
         const { thread } = node;
         const overCap = (summaries.get(thread.id)?.usage?.overCap.length ?? 0) > 0;
-        const state = thread.pr && mergedToClose(node) ? mergedDetail(thread.pr) : STATE_LABEL[node.state];
-        const detail = [state, thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");
+        const detail = [STATE_LABEL[node.state], thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");
         return <li key={thread.id}>
           <button type="button" className="flex w-full min-w-0 items-start gap-2.5 rounded-lg py-1 text-left hover:bg-muted/50" onClick={() => onOpenNode(node)}>
             <span className="flex size-4 shrink-0 items-center justify-center pt-1"><NodeDot state={node.state} /></span>

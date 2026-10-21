@@ -51,7 +51,7 @@ export interface ChipView {
   content: ReactNode;
 }
 
-const ENDED: ReadonlySet<NodeState> = new Set(["merging", "resolved"]);
+const ENDED: ReadonlySet<NodeState> = new Set(["merging", "closing", "resolved"]);
 
 /** The threads around a chat, the chat's own left out: it is on screen already. */
 export function threadsAround(source: ProjectChipsSource, paneId: string) {

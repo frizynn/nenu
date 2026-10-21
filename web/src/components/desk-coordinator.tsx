@@ -18,7 +18,7 @@ import { useRoutines } from "@/hooks/use-routines";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { askSections } from "@/lib/asks";
 import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { routinesFor, waitingGroups } from "@/lib/project-work";
+import { historyDays, routinesFor, waitingGroups } from "@/lib/project-work";
 import { nodePath, panePath, projectHistoryPath, projectPath } from "@/lib/nav";
 import { isOpenThread } from "@/lib/projects";
 import { isReadOnly, type AgentView, type DeviceAuth, type ProjectThreadView, type ProjectView, type RoutineView } from "@/lib/types";
@@ -45,8 +45,10 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   const id = thread?.id ?? "root";
   // The project coordinator runs the threads started from the project; another, its whole subtree.
   const work = thread ? threadTree(project, thread.id) : coordinatedThreads(project).filter((candidate) => candidate.role !== "coordinator");
-  // Only its own report and STATUS.md are read here: the page draws no other thread's report (ADR 0109).
+  // Read again when its own report or STATUS.md moves: the page draws no other thread's report (ADR 0109).
   const read = useThreadSummaries(project, thread ? [thread] : []);
+  // As many as the History "N finished" opens lists, searched for this coordinator's name.
+  const finished = historyDays(project, thread?.title ?? "").reduce((sum, day) => sum + day.rows.length, 0);
   const asks = useAsks([project]);
   const routines = useRoutines(project.slug, session);
   // Only what waits on you: what it is doing and what it did are its Status (ADR 0109).
@@ -103,7 +105,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
           <NodeDot state="needs" className="size-1.5" /><span className="flex-1">{waiting} {waiting === 1 ? "decision waits" : "decisions wait"} on you</span>
           <span className="inline-flex items-center gap-1 text-footnote text-muted-foreground">Review<ChevronRight aria-hidden className="size-3.5" /></span>
         </button>}
-        <LiveWork threads={work} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session, thread?.title))} />
+        <LiveWork threads={work} finished={finished} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session, thread?.title))} />
       </>}
       {tab === "waiting" && (asks.list
         ? mine.length > 0
@@ -131,11 +133,16 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
  * A coordinator's live work: its open threads, the most urgent first, each a row that opens it; what
  * finished is one line that opens the project's History, never cards on this page (ADR 0109).
  */
-function LiveWork({ threads, onOpenNode, onHistory }: { threads: readonly ProjectThreadView[]; onOpenNode: (node: OrgNode) => void; onHistory: () => void }) {
+function LiveWork({ threads, finished, onOpenNode, onHistory }: {
+  threads: readonly ProjectThreadView[];
+  /** The rows the History it opens lists. */
+  finished: number;
+  onOpenNode: (node: OrgNode) => void;
+  onHistory: () => void;
+}) {
   const walk = (nodes: readonly OrgNode[], depth: number): Array<{ node: OrgNode; depth: number }> =>
     nodes.flatMap((node) => [{ node, depth }, ...walk(node.children, depth + 1)]);
   const rows = walk(orgTree(threads).open, 0);
-  const finished = threads.filter((thread) => thread.status === "resolved").length;
   return <>
     <div className="desk-toolbar">
       <span className="min-w-0 flex-1 truncate">{rows.length === 0 ? "Nothing running" : `${rows.length} open`}</span>

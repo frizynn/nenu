@@ -7,7 +7,7 @@ import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
 import { coordinatorName } from "@/lib/asks";
-import { MERGED_TO_CLOSE, mergedToClose, type OrgNode } from "@/lib/org-tree";
+import { STATE_LABEL, type OrgNode } from "@/lib/org-tree";
 import { cardSummary, waitingGroups, type WorkCard } from "@/lib/project-work";
 import { nodePath, panePath } from "@/lib/nav";
 import type { AgentView, AsksList, ProjectView } from "@/lib/types";
@@ -79,7 +79,7 @@ export function DeskTabs<T extends string>({ label, tabs, tab, onChange }: { lab
 function rowEnd(node: OrgNode, now: number): string | undefined {
   const age = threadAge(node.thread, now);
   if (node.state === "needs") return "needs you";
-  if (mergedToClose(node)) return MERGED_TO_CLOSE;
+  if (node.state === "closing") return STATE_LABEL.closing.toLowerCase();
   if (node.state === "review") return "to review";
   if (node.state === "idle") return age && `idle ${age}`;
   return age;
@@ -90,11 +90,11 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
   const { thread } = node;
   // A pull request that merged or closed still shows, with its state: without it the row read as work left to do.
   const pr = thread.pr;
-  const merging = mergedToClose(node);
-  const settled = pr && pr.state !== "open" && pr.state !== "draft" && !merging ? pr.state : undefined;
+  // A merged one's end already says so.
+  const settled = pr && pr.state !== "open" && pr.state !== "draft" && node.state !== "closing" ? pr.state : undefined;
   // A thread under a nested coordinator sits one step in, as the tree draws it.
   return <button type="button" className="desk-row" style={depth ? { paddingLeft: 22 + depth * 20 } : undefined} onClick={() => onOpen(node)}>
-    <NodeDot state={merging ? "merging" : node.state} className="size-1.5" />
+    <NodeDot state={node.state} className="size-1.5" />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
     <span className="desk-row-end">{rowEnd(node, now)}</span>

@@ -7,7 +7,7 @@
   (what a card lists of its asks).
 - **Trail:** `web/src/components/desk-coordinator.tsx` · `web/src/components/desk-pages.tsx` ·
   `web/src/lib/asks.ts` (`unmarked`) · `web/src/components/ask-list.tsx` · `web/src/components/coordinator-status.tsx` ·
-  `web/src/lib/org-tree.ts` (`mergedToClose`) · `scripts/e2e/coordinator-page.ts`
+  `web/src/lib/org-tree.ts` (`nodeState`: `closing`) · `scripts/e2e/coordinator-page.ts`
 
 ## Context
 
@@ -49,7 +49,7 @@ too short to scroll, so a wheel over it moved nothing and only a faint Show all 
    page unasked.
 7. **A node in the review group whose pull request merged reads "merged, closes on its own"**, and
    nothing counts it as to review (a card, Home's projects and Ready to review): Organizations resolves
-   it shortly. `org-tree.ts` (`mergedToClose`, `toReview`) is the one place that decides it.
+   it shortly. The tree decides it once: `nodeState` reads such a node as `closing`, its own state.
 
 ## Consequences
 

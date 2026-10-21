@@ -3,7 +3,7 @@
 // finished work as one History by day (ADR 0106); the routines by whom they reach. It reads the one
 // tree (org-tree.ts) and never re-judges a node's state.
 import { askSections, type AskEntry } from "./asks";
-import { flatten, openCoordinators, orgTree, toReview, type NodeState, type OrgNode } from "./org-tree";
+import { flatten, openCoordinators, orgTree, type NodeState, type OrgNode } from "./org-tree";
 import type { AskCoordinator, AsksList, ProjectThreadView, ProjectView, RoutineEdit, RoutineView } from "./types";
 
 export interface WorkCard {
@@ -90,9 +90,9 @@ export function historyDays(project: ProjectView, query = "", now = new Date()):
   return days;
 }
 
-/** A card's second line: what waits on you there, then what its threads are doing; a merged one closes on its own and is not counted. */
+/** A card's second line: what waits on you there, then what its threads are doing. */
 export function cardSummary(rows: readonly OrgNode[], waiting: number): Array<{ text: string; state: NodeState }> {
-  const count = (state: NodeState) => rows.filter((row) => state === "review" ? toReview(row) : row.state === state).length;
+  const count = (state: NodeState) => rows.filter((row) => row.state === state).length;
   const needs = count("needs");
   return [
     waiting > 0 && { text: `${waiting} waiting on you`, state: "needs" as const },
