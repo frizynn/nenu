@@ -282,6 +282,18 @@ export function extractInputDraft(lines: StyledLine[]): string | null {
 }
 
 /**
+ * Whether the box shows a message from Claude's history ("History 6/6" in its top border): Up reached
+ * a past message because the queue it was pressed for had already been read.
+ */
+export function inputBoxShowsHistory(lines: StyledLine[]): boolean {
+  const texts = lines.map(lineText);
+  let end = lines.length;
+  while (end > 0 && isBlank(texts[end - 1]!)) end--;
+  const box = end === 0 ? null : locateInputBox(lines, texts, end);
+  return box !== null && /\bHistory \d+\/\d+\b/.test(texts[box.top]!);
+}
+
+/**
  * Stop's reading of the screen (ADR 0066). A turn runs while the statusline under the live input box
  * names the interrupt key (RUNNING_TURN_HINT). Claude drops that hint while the box holds a draft,
  * and then nothing on screen says a turn runs, so Stop is refused rather than guessed. The empty
@@ -546,6 +558,9 @@ function isOwnKeyHint(segment: string): boolean {
 // refusing it refused every send long enough to wrap. The plan dialog's footer says the same words
 // beside its plan file, so only a field that is the hint and nothing else is Claude's own.
 const EDITOR_HINT = /^ctrl\+g to edit in [^·/]+$/i;
+// A statusline that fills the row leaves the hint one space after its last field (2.1.306, a draft of
+// two lines under a long custom statusline). Never after a "·": that is a dialog footer's list of keys.
+const GLUED_EDITOR_HINT = /(?<!·)\s+ctrl\+g to edit in [^·/]+$/i;
 
 /** A statusline row without Claude's own editor hint, which would read as the plan dialog's footer. */
 function withoutEditorHint(row: string): string {
@@ -553,7 +568,8 @@ function withoutEditorHint(row: string): string {
     .trim()
     .split(/\s{2,}/)
     .filter((field) => !EDITOR_HINT.test(field))
-    .join("  ");
+    .join("  ")
+    .replace(GLUED_EDITOR_HINT, "");
 }
 
 /**
