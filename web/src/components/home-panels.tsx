@@ -156,17 +156,20 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   );
 }
 
-export type SessionList = "recents" | "workspaces" | "prs";
+export type SessionList = "projects" | "recents" | "workspaces" | "prs";
 
-const LISTS: ReadonlyArray<[SessionList, string]> = [["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
-const LIST_KEY = "nenu:home-list:v1";
+const LISTS: ReadonlyArray<[SessionList, string]> = [["projects", "Projects"], ["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
+// v2 since Projects became the first tab: a choice remembered before it existed opens on Projects once.
+/** The phone's segmented track for as many tabs: one column each, as wide as their words need. */
+const SEGMENTS: Record<number, string> = { 1: "grid-cols-1 sm:w-32", 2: "grid-cols-2 sm:w-60", 3: "grid-cols-3 sm:w-80", 4: "grid-cols-4 sm:w-[28rem]" };
+const LIST_KEY = "nenu:home-list:v2";
 
 function readList(): SessionList {
   try {
     const list = localStorage.getItem(LIST_KEY);
-    return list === "workspaces" || list === "prs" ? list : "recents";
+    return LISTS.some(([key]) => key === list) ? list as SessionList : "projects";
   } catch {
-    return "recents";
+    return "projects";
   }
 }
 function rememberList(list: SessionList): void {
@@ -273,16 +276,19 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
 }
 
 /**
- * Home's one list of sessions under a control that reorders it: Recents, everything that moved last
- * first (what Needs you shows stays out), Workspaces, one row per Herdr workspace that opens in place
- * on its sessions, or PRs, every pull request, drawn by `pullRequests`; that tab is there only while
- * there is one. A desk narrows each to one project. All read the snapshot Home already has; the list
- * is remembered on this device, the project is not.
+ * Home's lists under one control: Projects, drawn by `projectRows`, what moves in each project and the
+ * quiet ones folded last; Recents, every session that moved last first (what Needs you shows stays out);
+ * Workspaces, one row per Herdr workspace that opens in place on its sessions; or PRs, every pull
+ * request, drawn by `pullRequests`. Projects and PRs are there only while there is one. A desk narrows
+ * the session lists to one project. All read the snapshot Home already has; the list is remembered on
+ * this device, the project is not.
  */
-export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, reviews: everyReview, pullRequests, projects, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, reviews: everyReview, projectRows, pullRequests, projects, session, now, opening }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
   reviews: readonly ReviewEntry[];
+  /** The Projects tab's rows, while there is a project. */
+  projectRows?: ReactNode;
   pullRequests: (entries: readonly ReviewEntry[]) => ReactNode;
   projects: readonly ProjectView[];
   session?: string;
@@ -290,8 +296,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   opening: string | null;
 }) {
   const [chosen, setList] = useState<SessionList>(readList);
-  const lists = everyReview.length ? LISTS : LISTS.filter(([key]) => key !== "prs");
-  const list = lists.some(([key]) => key === chosen) ? chosen : "recents";
+  const lists = LISTS.filter(([key]) => (key !== "prs" || everyReview.length > 0) && (key !== "projects" || projects.length > 0));
+  const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
   // A desk narrows both lists to one project's sessions; "" is every project.
   const [only, setOnly] = useState("");
   // The workspaces opened in place; none until a tap opens one.
@@ -303,7 +309,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
   const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
-  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length) return null;
+  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length && !projects.length) return null;
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
@@ -319,21 +325,24 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
-    <section aria-label="Sessions" className="flex flex-col gap-2">
-      <div className="flex items-center gap-2.5">
-        <div role="tablist" aria-label="Sessions"
-          className={desk ? "-ml-2 flex items-center gap-1" : cn("project-segmented mx-0 max-sm:flex-1", lists.length === 3 ? "grid-cols-3 sm:w-80" : "grid-cols-2 sm:w-60")}>
+    <section aria-label="Your work" className="flex flex-col gap-2">
+      <div className="relative flex items-center gap-2.5">
+        <div role="tablist" aria-label="Your work"
+          className={desk ? "-ml-2 flex items-center gap-1" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
               onClick={() => { setList(key); rememberList(key); }} className={desk ? "panel-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
-        {/* Always laid out, so its arrival moves neither the tabs nor the rows. */}
+        {/* Always laid out beside the tabs, so its arrival moves neither them nor the rows; a phone gives the
+            tabs the row's width and floats it over the list's top instead. */}
         <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
-          className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground max-sm:min-w-[6.5rem]", !updates && "invisible", projects.length === 0 && "ml-auto")}>
+          className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground",
+            "max-sm:absolute max-sm:left-1/2 max-sm:top-full max-sm:z-10 max-sm:mt-2 max-sm:-translate-x-1/2 max-sm:bg-background max-sm:shadow-md",
+            !updates && "invisible", projects.length === 0 && "ml-auto")}>
           {Math.max(updates, 1)} {updates <= 1 ? "update" : "updates"}
         </button>
-        {projects.length > 0 && (
+        {projects.length > 0 && list !== "projects" && (
           <label className={cn("relative ml-auto min-w-0 focus-within:ring-2 focus-within:ring-ring max-sm:hidden",
             desk ? "quiet-action -mr-2" : "inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground hover:text-foreground")}>
             <ListFilter aria-hidden className="size-3.5 shrink-0" />
@@ -347,7 +356,9 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
         )}
       </div>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
-        {list === "prs"
+        {list === "projects"
+          ? projectRows
+          : list === "prs"
           ? reviews.length
             ? pullRequests(reviews)
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">No pull request in {project?.name}.</p>

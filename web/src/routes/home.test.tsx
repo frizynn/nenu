@@ -138,7 +138,7 @@ it("answers a dialog in place from Needs you", async () => {
   // One row: who asks, where, and what it would run, so the lists under it stay in the first screen.
   expect(await needs.findByRole("link", { name: "Review changes, Nenu, Run bun run test?" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
   expect(headline()).toBe("1 needs you");
-  expect(subline()).toBe("1 idle");
+  expect(subline()).toBeUndefined();
   await user.click(needs.getByRole("button", { name: "Yes" }));
   expect(answers).toEqual([{ pane: "w1:p2", body: { signature: "sig-1", optionIndex: 0 } }]);
   expect(await needs.findByText("Approved · bun run test")).toBeInTheDocument();
@@ -181,7 +181,8 @@ it("says a session is ready to review on its own row, with its pull request and 
   const { user, router, main } = await setup(projectData);
   expect(headline()).toBe("1 needs you");
   // The session under review is counted there, not again as idle.
-  expect(subline()).toBe("1 to review · 1 working · 2 idle");
+  expect(subline()).toBe("1 to review · 1 working");
+  await user.click(main.getByRole("tab", { name: "Recents" }));
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
   expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
@@ -206,6 +207,10 @@ describe("Recents and Workspaces", () => {
 
   it("lists every session that moved last, shells included, each with its state and place, and opens one in a tap", async () => {
     const { user, router, main } = await setup(recentData);
+    // Projects is the tab Home opens on; Recents is one tap away.
+    expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Projects", "Recents", "Workspaces", "PRs"]);
+    expect(main.getByRole("tab", { name: "Projects" })).toHaveAttribute("aria-selected", "true");
+    await user.click(main.getByRole("tab", { name: "Recents" }));
     const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
     expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
     // "Review changes" is waiting on you, so Needs you shows it and Recents does not.
@@ -375,6 +380,7 @@ describe("Recents and Workspaces", () => {
     // Home's icon counts the same two, in the phone's tab bar and the desk's sidebar.
     expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Home, 2 need you" })).toBeInTheDocument();
     expect(within(screen.getByRole("complementary", { name: "Workspace sidebar" })).getByRole("link", { name: "Home, 2 need you" })).toBeInTheDocument();
+    await user.click(main.getByRole("tab", { name: "Recents" }));
     expect(within(main.getByRole("tabpanel", { name: "Recents" })).queryByRole("link", { name: /^Landing,/ })).not.toBeInTheDocument();
     await user.click(needs.getByRole("link", { name: "Reply" }));
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
@@ -383,11 +389,14 @@ describe("Recents and Workspaces", () => {
   it("draws the sessions' control on a desk as text tabs, the open one on a soft grey, and the project filter with no box", async () => {
     desk();
     try {
-      const { main } = await setup(recentData);
+      const { user, main } = await setup(recentData);
       const recents = main.getByRole("tab", { name: "Recents" });
       expect(recents).toHaveClass("panel-tab");
       expect(recents).not.toHaveClass("project-segment");
-      expect(main.getByRole("tablist", { name: "Sessions" })).not.toHaveClass("project-segmented");
+      expect(main.getByRole("tablist", { name: "Your work" })).not.toHaveClass("project-segmented");
+      // The project filter narrows sessions: the Projects tab has none.
+      expect(main.queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
+      await user.click(recents);
       const filter = main.getByRole("combobox", { name: "Project" }).closest("label");
       expect(filter).toHaveClass("quiet-action");
       expect(filter).not.toHaveClass("border");
@@ -400,13 +409,14 @@ describe("Recents and Workspaces", () => {
   it("keeps a phone's sessions control the segmented one, on its track", async () => {
     const { main } = await setup(recentData);
     expect(main.getByRole("tab", { name: "Recents" })).toHaveClass("project-segment");
-    expect(main.getByRole("tablist", { name: "Sessions" })).toHaveClass("project-segmented");
+    expect(main.getByRole("tablist", { name: "Your work" })).toHaveClass("project-segmented", "grid-cols-4");
   });
 
   it("narrows the list to one project on a desk, from the snapshot it already has", async () => {
     let reads = 0;
     server.use(http.get("/api/snapshot", () => { reads++; return HttpResponse.json({}); }));
     const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Recents" }));
     const filter = main.getByRole("combobox", { name: "Project" });
     // A phone's Home shows every project: the filter is the desk's.
     expect(filter.closest("label")).toHaveClass("max-sm:hidden");
@@ -521,14 +531,13 @@ it("marks a Needs you row as opening too", async () => {
   await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
-it("lists each project with what works and what is ready to review there, and leaves search to the sidebar", async () => {
+it("lists each project with what works and what is ready to review there under the tab it opens on, and leaves search to the sidebar", async () => {
   const { main } = await setup(projectData);
-  const projects = within(main.getByRole("region", { name: /^Projects/ }));
+  const projects = within(main.getByRole("tabpanel", { name: "Projects" }));
   const row = projects.getByRole("link", { name: /^Hub/ });
   expect(row.getAttribute("href")).toMatch(/^\/project\/hub(\?|$)/);
   expect(row).toHaveTextContent("1 working");
   expect(row).toHaveTextContent("1 to review");
-  expect(projects.getByRole("link", { name: "See all" }).getAttribute("href")).toMatch(/^\/projects(\?|$)/);
   expect(main.queryByRole("searchbox")).not.toBeInTheDocument();
   const sidebar = within(screen.getByRole("complementary", { name: "Workspace sidebar" }));
   expect(sidebar.getByText("Hub")).toBeInTheDocument();
@@ -539,7 +548,7 @@ it("says in its headline that nothing needs you, never the pull requests, only w
     pullRequests: [{ repo: "a/b", number: 7, title: "PR 7", url: "https://github.com/a/b/pull/7", branch: "x", draft: false, paneIds: [] }] };
   const { main } = await setup(quiet);
   await waitFor(() => expect(headline()).toBe("Nothing needs you"));
-  expect(subline()).toBe("1 to review · 2 idle");
+  expect(subline()).toBe("1 to review");
   expect(main.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
   expect(main.queryByRole("region", { name: /^Needs you/ })).not.toBeInTheDocument();
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Home" })).toBeInTheDocument();
@@ -611,7 +620,8 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("5 to review");
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
-  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces", "PRs"]);
+  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Projects", "Recents", "Workspaces", "PRs"]);
+  await user.click(main.getByRole("tab", { name: "Recents" }));
   // A session's row still carries its pull request.
   expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
   await user.click(main.getByRole("tab", { name: "PRs" }));
@@ -642,11 +652,11 @@ it("shows the first pull requests and the rest on request, and remembers the tab
   expect(review.getAllByRole("link")).toHaveLength(5);
   await user.click(review.getByRole("button", { name: "Show all 9" }));
   expect(review.getAllByRole("link")).toHaveLength(9);
-  expect(localStorage.getItem("nenu:home-list:v1")).toBe("prs");
+  expect(localStorage.getItem("nenu:home-list:v2")).toBe("prs");
 });
 
 it("has no PRs tab when there is no pull request, and falls back to Recents from a remembered one", async () => {
-  localStorage.setItem("nenu:home-list:v1", "prs");
+  localStorage.setItem("nenu:home-list:v2", "prs");
   const { main } = await setup();
   expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces"]);
   expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");

@@ -14,7 +14,7 @@ import { PullRequestList, useHomeActivity } from "@/components/ready-to-review-l
 import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { useInteractions } from "@/hooks/use-interactions";
 import { isConnecting } from "@/lib/connection";
-import { greeting, homeHeadline, idleAgents, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
+import { greeting, homeHeadline, needsYouItems, recentChats, reviewQueue, runningWorkflows, workspaceChats } from "@/lib/home-stats";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { openNewAgent } from "@/lib/spawn";
 import { isReadOnly } from "@/lib/types";
@@ -22,10 +22,10 @@ import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
-// (answered in place), then one list of every session that reads as Recents or by Workspace, each row
-// carrying its pull request, with every pull request (ready to merge first) as that list's PRs tab,
-// and the workflows still running. Above that list, every project with what waits on you there, what
-// works, what is ready to review and when it last moved. Starting something is New's; writing to a
+// (answered in place), then one list under tabs: Projects first, each with what waits on you there,
+// what works, what is ready to review and when it last moved, the quiet ones folded last; every session
+// as Recents or by Workspace, each row carrying its pull request; every pull request (ready to merge
+// first) as PRs. Then the workflows still running. Starting something is New's; writing to a
 // coordinator is its own chat's. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
@@ -66,14 +66,14 @@ export function HomeRoute() {
   // A pane Needs you holds (asking, or just answered) stays out of Recents.
   const recent = recentChats(panes, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
   const running = runningWorkflows(activity);
-  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length, idle: idleAgents(data.agents, needs, reviews) };
+  const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length, calm);
 
-  // On a phone the date sits right under the header, so the first screen holds more of the list.
+  // A phone leaves the date out and starts on the headline, so the first screen holds more of the list.
   return <ColumnPage data={data} title="Home" bodyClassName="max-sm:pt-2">
     <div className="flex flex-col gap-6 lg:gap-7">
       <div className="flex flex-col gap-1">
-        <p className="text-footnote text-muted-foreground">
+        <p className="text-footnote text-muted-foreground max-sm:hidden">
           {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
           <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
         </p>
@@ -85,8 +85,8 @@ export function HomeRoute() {
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
         <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
-        <HomeProjects projects={data.projects ?? []} agents={data.agents} session={data.session} now={now} />
         <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} reviews={reviews}
+          projectRows={<HomeProjects projects={data.projects ?? []} agents={data.agents} session={data.session} now={now} />}
           pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
           projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
         <MachinesSlot data={data} place="home" />
