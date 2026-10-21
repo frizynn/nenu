@@ -81,11 +81,14 @@ export const replyPaneActions: Record<string, PaneAction> = {
     level: "write",
     marksSeen: true,
     handle: exclusive(async ({ cfg, audit, queue }, { req, rt, paneId, device }) => {
+      // Which rows wait there is read before Up: Claude logs the recall at once, and the journal may
+      // call them recalled before the take-back ends.
+      const waiting = await queue.waitingOn(rt.name, paneId).catch(() => null);
       const outcome = await takeBackQueue({ herdr: rt.herdr, paneId, readLines: cfg.readLines });
-      // The rows it held are recalled in the same step, so no page draws them as waiting there.
-      // The box is already empty: if the queue cannot say which rows they were, the words still go back.
-      const rows = outcome.ok ? await queue.recallOn(rt.name, paneId, outcome.text).catch(() => ({ messages: [], ours: false })) : null;
-      const answer = outcome.ok ? { ...outcome, ...rows } : outcome;
+      // The rows it held are recalled in the same step, so no page draws them as waiting there. The box
+      // is already empty: if the queue cannot say which rows they were, the words go back alone.
+      const rows = outcome.ok && waiting ? await queue.recallOn(waiting, outcome.text).catch(() => null) : null;
+      const answer = outcome.ok ? { ...outcome, ...(rows ?? {}) } : outcome;
       // The words' length, not the words.
       audit.record({ action: "queue.take-back", paneId, session: rt.name, device, detail: { done: outcome.ok, chars: outcome.ok ? outcome.text.length : 0 } });
       return json(answer, req.headers.get("accept-encoding"));

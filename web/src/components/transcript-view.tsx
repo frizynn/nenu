@@ -272,10 +272,13 @@ const TURN_WORDS = "flex min-h-8 min-w-0 items-center gap-1.5 text-subhead text-
  * the whole line glowing and over T3 Code's still line among three captured variants (ADR 0118).
  */
 function LiveTurnWords({ since, continued }: { since?: string; continued: boolean }) {
+  // With no start to count from (none, or one ahead of this device's clock), the word alone, still going.
+  const start = since ? Date.parse(since) : NaN;
+  const timed = Number.isFinite(start) && start <= Date.now();
+  const word = continued ? "Continued" : "Working";
   return <span className="flex min-w-0 items-baseline gap-2">
-    {/* With no start to count from, the word alone, still going. */}
-    <Glow className="shrink-0">{`${continued ? "Continued" : "Working"}${since ? "" : "…"}`}</Glow>{" "}
-    <span className="truncate text-footnote tabular-nums text-subtle-foreground"><span className="sr-only">for </span><Elapsed since={since} fine /></span>
+    <Glow className="shrink-0">{timed ? word : `${word}…`}</Glow>{" "}
+    {timed && <span className="truncate text-footnote tabular-nums text-subtle-foreground"><span className="sr-only">for </span><Elapsed since={since} fine /></span>}
   </span>;
 }
 

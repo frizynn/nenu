@@ -21,7 +21,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Changed
 
 - A message Claude reads mid-turn sits between the work it split: "Worked for 4s" above it and "Continued for 11s" under it add up to the turn (b028cbff, e0e3a118).
-- A turn's line stands where it will be before Claude's log shows the turn; a queued message reads "Claude reads it after this step." (e0e3a118).
+- A turn's line stands where it will be before Claude's log shows the turn; a queued message reads "Claude reads it after this step." (e0e3a118, ab79be90).
 - A message Claude reads mid-turn is dated when Claude read it, not when it was queued (ab79be90).
 - "Working for" counts seconds through its first minute everywhere (b028cbff).
 

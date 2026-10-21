@@ -528,10 +528,10 @@ it("recalls the rows Claude's queue held on a take-back, and says whether the wo
     await Bun.sleep(30);
     expect((await t.call()).body.delivered.map((row: { native?: string }) => row.native)).toEqual(["enqueued", "enqueued"]);
     // Claude hands them back on one line each; the box reads them joined by spaces.
-    const back = await t.service.recallOn("session", "pane", "primero segundo con dos líneas");
+    const back = await t.service.recallOn(await t.service.waitingOn("session", "pane"), "primero segundo con dos líneas");
     expect(back).toEqual({ ours: true, messages: [{ id: "one", text: "primero" }, { id: "two", text: "segundo\ncon dos líneas" }] });
     expect((await t.call()).body.delivered.filter((row: { native?: string }) => row.native === "enqueued")).toEqual([]);
-    expect(await t.service.recallOn("session", "pane", "primero")).toEqual({ ours: false, messages: [] });
+    expect(await t.service.waitingOn("session", "pane")).toEqual([]);
   } finally { await t.close(); }
 });
 
@@ -547,11 +547,47 @@ it("recalls a row Claude's queue held for longer than ten minutes, and only rows
     // A long build: Claude reads its queue only after the step it is on.
     setSystemTime(new Date(Date.now() + 11 * 60_000));
     // Claude had read "primero" already; only "segundo" came back.
-    expect(await t.service.recallOn("session", "pane", "segundo")).toEqual({ ours: true, messages: [{ id: "two", text: "segundo" }] });
+    expect(await t.service.recallOn(await t.service.waitingOn("session", "pane"), "segundo")).toEqual({ ours: true, messages: [{ id: "two", text: "segundo" }] });
     const natives = (await t.call()).body.delivered.map((row: { id: string; native?: string }) => [row.id, row.native]);
     expect(natives).toEqual([["one", "enqueued"], ["two", "recalled"]]);
   } finally {
     setSystemTime();
     await t.close();
   }
+});
+
+// Claude's queue is first in, first out: what came back ends with the newest rows that waited.
+it("matches what came back from its end, newest first, and never past the rows that waited", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    for (const [id, text] of [["one", "ok"], ["two", "si"], ["three", "decisión final"], ["four", "ok"]] as const) {
+      await t.add(id, text, "asap");
+      await t.settle(() => t.pane.submitted.includes(text) && t.pane.submitted.filter((s) => s === text).length === (id === "four" ? 2 : 1));
+    }
+    t.service.kick();
+    await Bun.sleep(30);
+    const waiting = await t.service.waitingOn("session", "pane");
+    // "ok" and "si" were read long ago and never confirmed; the queue held the last two.
+    expect(await t.service.recallOn(waiting, "decisión final ok")).toEqual({ ours: true, messages: [{ id: "three", text: "decisión final" }, { id: "four", text: "ok" }] });
+    const natives = Object.fromEntries((await t.call()).body.delivered.map((row: { id: string; native?: string }) => [row.id, row.native]));
+    expect(natives).toEqual({ one: "enqueued", two: "enqueued", three: "recalled", four: "recalled" });
+  } finally { await t.close(); }
+});
+
+// Claude logs popAll as Up lands; the journal may call the rows recalled before the take-back reads
+// them. The rows read before Up are still the take-back's.
+it("keeps the rows read before Up when the journal recalled them first", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "primero", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    t.service.kick();
+    await Bun.sleep(30);
+    const waiting = await t.service.waitingOn("session", "pane");
+    t.pane.journal.push({ kind: "popAll", ts: new Date().toISOString() });
+    t.service.kick();
+    await Bun.sleep(30);
+    expect((await t.call()).body.delivered[0]).toMatchObject({ id: "one", native: "recalled" });
+    expect(await t.service.recallOn(waiting, "primero")).toEqual({ ours: true, messages: [{ id: "one", text: "primero" }] });
+  } finally { await t.close(); }
 });

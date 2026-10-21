@@ -109,30 +109,38 @@ export class QueueService {
     void this.tick(force).catch(() => {});
   }
   /**
-   * What one take-back brought out of Claude's own queue on a pane (ADR 0118): the rows of the pane's
-   * conversation the queue still says wait there, delivered in the last two hours as clients list them,
-   * whose words came back in the order they went. Those are recalled, so no page draws them as waiting
-   * there. `ours` says the words that came back are exactly theirs, spacing aside.
+   * The rows of the pane's conversation the queue says wait in Claude's own queue, delivered within
+   * the two hours clients list them, oldest first. Read before a take-back presses Up (ADR 0118):
+   * Claude logs the recall at once, and the journal may mark them recalled before the take-back ends.
    */
-  async recallOn(session: string, paneId: string, text: string): Promise<{ messages: Array<{ id: string; text: string }>; ours: boolean }> {
+  async waitingOn(session: string, paneId: string): Promise<Array<{ id: string; text: string }>> {
     const current = await this.resolve(session, paneId).catch(() => null);
-    if (!current || !identity(current.pane)) return { messages: [], ours: false };
-    const squash = (value: string) => value.replace(/\s+/g, "");
-    const back = squash(text);
-    const waiting = (await this.queue.recent(scopeFor(session, current.pane)))
+    if (!current || !identity(current.pane)) return [];
+    return (await this.queue.recent(scopeFor(session, current.pane)))
       .filter((row) => row.native === "enqueued")
-      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
+      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
+      .map(({ id, text }) => ({ id, text }));
+  }
+  /**
+   * What one take-back brought out of Claude's own queue (ADR 0118), from the rows that waited there
+   * before it (`waitingOn`). Claude's queue is first in, first out, so what came back ends with the
+   * newest of them: they are matched from the end of the words, newest first, while each one ends
+   * what is left; an older row already read never matches past the ones that waited. Those are
+   * recalled (a row the journal recalled first stays so), so no page draws them as waiting there.
+   * `ours` says the words that came back are exactly theirs, spacing aside.
+   */
+  async recallOn(waiting: Array<{ id: string; text: string }>, text: string): Promise<{ messages: Array<{ id: string; text: string }>; ours: boolean }> {
+    const squash = (value: string) => value.replace(/\s+/g, "");
+    let left = squash(text);
     const matched: typeof waiting = [];
-    let at = 0;
-    for (const row of waiting) {
+    for (const row of [...waiting].reverse()) {
       const words = squash(row.text);
-      const found = words ? back.indexOf(words, at) : -1;
-      if (found < 0) continue;
-      matched.push(row);
-      at = found + words.length;
+      if (!words || !left.endsWith(words)) break;
+      matched.unshift(row);
+      left = left.slice(0, -words.length);
     }
     for (const row of matched) await this.queue.confirm(row.id, "recalled", "enqueued");
-    return { messages: matched.map(({ id, text: words }) => ({ id, text: words })), ours: matched.length > 0 && squash(matched.map((row) => row.text).join("")) === back };
+    return { messages: matched, ours: matched.length > 0 && left === "" };
   }
   /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */
   textsOn(session: string, paneId: string): Promise<string[]> {
