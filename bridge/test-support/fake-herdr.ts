@@ -451,6 +451,10 @@ export class FakeHerdr {
     } else if (key === "ctrl+u") {
       pane.draft = "";
       pane.revision++;
+    } else if ([...key].length === 1) {
+      // A printable key types itself, as Type into terminal sends each character.
+      pane.draft += key;
+      pane.revision++;
     } else if (key === "Escape" && pane.status === "working") {
       this.interrupted.push({ paneId, at: now });
       setTimeout(() => {

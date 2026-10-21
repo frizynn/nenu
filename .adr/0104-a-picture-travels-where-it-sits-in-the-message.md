@@ -1,6 +1,7 @@
 # 0104. A picture travels where it sits in the message
 
-- **Status:** Accepted (2026-10-20). Amends how [ADR 0074](./0074-an-attached-file-is-saved-for-the-agent-and-never-served.md)
+- **Status:** Accepted (2026-10-20); decision 2's stop on a missing token amended by
+  [ADR 0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md). Amends how [ADR 0074](./0074-an-attached-file-is-saved-for-the-agent-and-never-served.md)
   puts a picture on the wire (`serializeMessage`, every path after the prose); other files keep it.
 - **Trail:** `web/src/lib/message-images.ts` (`imageChip`, `serializeDraft`, `draftFromWire`,
   `keepChipsWhole`, `tokenPieces`, `pathPieces`) · `web/src/lib/harness/inline-images.ts` ·
