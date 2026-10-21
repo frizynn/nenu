@@ -809,6 +809,25 @@ describe("ProjectRegistry: asks", () => {
     expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(1);
   });
 
+  test("a resolved coordinator past the thread cap still stops its decisions waiting", async () => {
+    const root = fixture();
+    // t-0003 resolved and older than the 500 threads kept: the cap drops it, its decisions stay closed.
+    const threads = [
+      overviewThread({ id: "t-0003", title: "Old lead", role: "coordinator", status: "resolved", group: "resolved" }),
+      ...Array.from({ length: 500 }, (_, index) => overviewThread({ id: `t-${String(index + 10).padStart(4, "0")}`, status: "resolved", group: "resolved", pane_id: "" })),
+    ];
+    const overview = overviewRun(threads);
+    const run: OrgRun = async (argv, opts) => argv[0] !== "asks" ? overview(argv, opts) : { code: 0, stderr: "", stdout: JSON.stringify({ schema_version: 1,
+      asks: [askRow(OLD, "needs-decision", "Stale ask", { actions: ["answer"] })],
+      decisions: [{ project: "demo", coordinator: OLD, actions: ["answer"], line: 3, text: "Stale", links: [] }] }) };
+    const registry = registryFor(root, { run });
+    await registry.refresh();
+    expect(registry.list("default", true, [])[0]!.threads.some((thread) => thread.id === "t-0003")).toBe(false);
+    expect(registry.asks()!.decisions).toEqual([]);
+    expect(registry.asks()!.asks.map((ask) => ask.group)).not.toContain("waiting");
+    expect(registry.list("default", true, [])[0]!.waitingAsks).toBe(0);
+  });
+
   test("an answered ask waits on no one: it is in progress and leaves the count", async () => {
     const root = fixture();
     const overview = overviewRun([overviewThread({})]);

@@ -396,6 +396,8 @@ interface ProjectRecord extends FileProject {
   waitingAsks?: number;
   /** Where Organizations keeps its reports and library (`recordsFolder`); `--json` only. */
   recordsDir?: string;
+  /** Every resolved coordinator, past MAX_THREADS too, so its asks stop waiting; `--json` only. */
+  resolvedCoordinators?: string[];
 }
 
 export class ProjectRegistry {
@@ -761,8 +763,9 @@ export class ProjectRegistry {
       return readdirSync(join(dir, "threads"), { withFileTypes: true })
         .filter((entry) => entry.isFile() && THREAD_FILE_RE.test(entry.name))
         .map((entry) => entry.name)
-        // The newest, numerically: past the cap the old ones are the finished ones.
-        .sort((a, b) => threadNumber(a.slice(0, -5)) - threadNumber(b.slice(0, -5)))
+        // The newest, numerically: past the cap the old ones are mostly the finished ones. An old open
+        // one is missed here only until the first overview, which keeps every open thread (keptThreads).
+        .sort((a, b) => threadNumber(a.slice(0, -".toml".length)) - threadNumber(b.slice(0, -".toml".length)))
         .slice(-MAX_THREADS);
     } catch {
       return [];
@@ -860,6 +863,7 @@ export class ProjectRegistry {
         ...(project.usage ? { usage: project.usage } : {}),
         ...(project.coordinator ? { coordinatorAgent: project.coordinator } : {}),
         recordsDir: recordsFolder(project, this.root),
+        resolvedCoordinators: project.threads.flatMap((thread) => thread.role === "coordinator" && thread.status === "resolved" ? [thread.id] : []),
       };
       return [asks ? { ...record, waitingAsks: waitingAsks(record, asks) } : record];
     });
@@ -882,7 +886,7 @@ function recordsFolder(project: OrgOverviewProject, root: string): string {
 
 /** Whether coordinator `id` of a project is resolved; the project's own (`root`) never is. */
 function resolvedCoordinator(record: ProjectRecord, id: string): boolean {
-  return record.threads.some(({ view }) => view.id === id && view.status === "resolved");
+  return record.resolvedCoordinators?.includes(id) ?? record.threads.some(({ view }) => view.id === id && view.status === "resolved");
 }
 
 /**
