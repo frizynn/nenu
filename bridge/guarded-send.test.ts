@@ -355,6 +355,18 @@ describe("guardedSend", () => {
     expect(term.keys().flat()).not.toContain("Enter");
   });
 
+  test("a picture that shows only after the send gave up and cleared the box is cleared too (ADR 0116)", async () => {
+    const term = new Term();
+    // Past the picture's bound and the sweep: a starved Claude draws the token late.
+    term.pictureReads = 80;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(term.pictures).toBe(1);
+    expect(term.lateTokens).toHaveLength(0);
+    expect(term.draft).toBe("");
+    expect(term.keys().flat()).not.toContain("Enter");
+  });
+
   test("a send that stops after typing leaves alone a box holding more than it typed", async () => {
     const term = new Term();
     term.pictureReads = -1;

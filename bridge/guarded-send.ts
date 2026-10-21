@@ -466,9 +466,39 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
     if (piece.kind !== "image") continue;
     const drawn = await pictureDrawn(send, attached + 1, piece.path);
     if (drawn === "token") attached++;
-    else if (drawn === null) return await unsent(send, deps, adapter, PICTURE_UNSEEN);
+    else if (drawn === null) return await afterLatePicture(send, deps, adapter, await unsent(send, deps, adapter, PICTURE_UNSEEN));
   }
   return null;
+}
+
+/**
+ * A picture that never showed may still be on its way: a starved Claude reads it for longer than the
+ * bound and then draws its token or path into the box the send just cleared (measured at 5% of a core,
+ * ADR 0116). Watch the box for one more bound and clear what of this send arrives late; anything else
+ * there is the operator's and stays, and then the box is no longer as the send found it.
+ */
+async function afterLatePicture(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: GuardedSendResult): Promise<GuardedSendResult> {
+  if (stopped.outcome.ok || stopped.outcome.textDelivered) return stopped;
+  for (const delay of WAIT_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    let seen: Seen;
+    try {
+      seen = await send.read();
+    } catch {
+      continue;
+    }
+    if (seen.draft === null || seen.composer !== true) continue;
+    if (!draftIsPartOfSend(send.request.text, seen.draft) && !onlyItsPictures(send.request.text, seen.draft)) return send.fail(`${PICTURE_UNSEEN.why} ${PICTURE_UNSEEN.left}`, true);
+    if ((await sweep(send, deps, adapter, seen)) !== null) return send.fail(`${PICTURE_UNSEEN.why} ${PICTURE_UNSEEN.left}`, true);
+  }
+  return stopped;
+}
+
+/** A box holding nothing but `[Image #N]` tokens and this send's own picture paths. */
+function onlyItsPictures(sent: string, draft: string): boolean {
+  let rest = strip(draft).replace(/\[Image#\d+\]/g, "");
+  for (const piece of sendPieces(sent)) if (piece.kind === "image") rest = rest.replaceAll(strip(piece.path), "");
+  return rest === "";
 }
 
 /**
