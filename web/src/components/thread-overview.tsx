@@ -1,16 +1,17 @@
 import { useRef, type ReactNode } from "react";
 import { ChevronRight, FileCode, History, Plus } from "@/components/ui/icon";
 
-import { OverviewCard } from "@/components/coordinator-sections";
+import { useCoordinatorSections, type CoordinatorSectionsProps } from "@/components/coordinator-sections";
 import { DiffStat } from "@/components/diff-stat";
 import { useDiffRead, type DiffRead } from "@/components/diff-viewer";
 import { NodeDot } from "@/components/node-row";
-import { threadAge } from "@/components/project-tasks";
+import { PanelSections, type PanelSection } from "@/components/panel-sections";
+import { threadAge, threadDetail } from "@/components/project-tasks";
 import type { SessionPr, SessionReading } from "@/components/session-inspector";
 import { fetchSessionDiff } from "@/lib/api";
 import { shortCwd } from "@/lib/format";
 import { modelDisplayName } from "@/lib/model-display";
-import { coordinatorState, nodeState, STATE_LABEL, type NodeState } from "@/lib/org-tree";
+import { coordinatorState, nodeState, STATE_LABEL, workUnder, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
 import { agentLabel } from "@/lib/spawn";
 import type { AgentView, ProjectThreadView } from "@/lib/types";
@@ -29,42 +30,57 @@ export interface ThreadOverviewProps {
   thread?: ProjectThreadView;
   /** The pane as Herdr lists it, for the agent and, without a thread, its state. */
   pane?: AgentView;
+  /** Live panes, so a running thread can say what it is doing right now. */
+  panes?: readonly AgentView[];
   paneId: string;
   session?: string;
   pr?: SessionPr;
   reading: SessionReading;
   /** Who this pane answers to; absent on the project coordinator's own pane. */
   parent?: CoordinatorLink;
-  /** The threads of the coordinator in the last card: this one's siblings, or a coordinator's own. */
+  /** A thread's: its siblings under its coordinator. A coordinator's: everything under it, nested coordinators' work too. */
   threads: readonly ProjectThreadView[];
-  /** The pane is a coordinator: the last card lists its own threads, not its parent's. */
+  /** The pane is a coordinator: its Threads section lists the work under it, not its parent's. */
   coordinating: boolean;
   onShowChanges: () => void;
   onOpenThread: (thread: ProjectThreadView) => void;
-  /** A coordinator's: start a thread under it, from its Threads card. */
+  /** A coordinator's: start a thread under it, from its Threads section. */
   onNewThread?: () => void;
   /** A coordinator's: how many of its threads finished, and the project's History that lists them. */
   finished?: { count: number; open: () => void };
-  /** A coordinator's: what its page held, drawn around its Threads and Changes cards (CoordinatorSections). */
-  around?: (cards: ReactNode) => ReactNode;
+  /** A coordinator's: what its page held (CoordinatorSections), as sections of their own and what goes under them. */
+  extra?: { sections: PanelSection[]; footer?: ReactNode };
   now?: number;
 }
+
+/** A coordinator's sections, live work first; ids the operator's layout remembers (lib/panel-layout). */
+const COORDINATOR_ORDER = ["threads", "waiting", "changes", "this", "routines", "status"];
 
 /**
  * A project pane's Overview, the first tab of its panel on a desk: this thread (its state, who it
  * answers to, its pull request, its agent and context), what it changed, and the threads of the
- * coordinator it belongs to. Each card answers one question; the diff is read only while it is shown.
+ * coordinator it belongs to; a coordinator's also what its page held. Each section answers one
+ * question, folds under its head and keeps the place the operator gave it; the diff is read only
+ * while it is shown.
  */
 export function ThreadOverview(props: ThreadOverviewProps) {
   // Read again when the thread or its agent moves: a turn that ends has usually changed files.
-  const changes = <ChangesCard paneId={props.paneId} session={props.session} stamp={`${props.thread?.updated ?? ""}\0${props.pane?.status ?? ""}`} onShow={props.onShowChanges} />;
+  const changes = useChangesSection(props.paneId, props.session, `${props.thread?.updated ?? ""}\0${props.pane?.status ?? ""}`, props.onShowChanges);
+  const own = [thisSection(props), changes, ...(props.coordinating ? [threadsSection(props)] : siblingsSection(props))];
+  const sections = props.coordinating
+    ? [...own, ...(props.extra?.sections ?? [])].sort((a, b) => COORDINATOR_ORDER.indexOf(a.id) - COORDINATOR_ORDER.indexOf(b.id))
+    : own;
   return (
-    <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
-      <ThisThread {...props} />
-      {/* A coordinator's own threads come before what it changed; a thread's coordinator after. */}
-      {props.around ? props.around(<><CoordinatorCard {...props} />{changes}</>) : <>{changes}<CoordinatorCard {...props} /></>}
+    <div className="px-3 pb-8 pt-3">
+      <PanelSections kind={props.coordinating ? "coordinator" : "thread"} sections={sections} footer={props.extra?.footer} />
     </div>
   );
+}
+
+/** A coordinator's Overview: its own sections and what its page held, read only while the panel shows it. */
+export function CoordinatorOverview({ coordinator, ...props }: Omit<ThreadOverviewProps, "extra" | "coordinating"> & { coordinator: CoordinatorSectionsProps }) {
+  const extra = useCoordinatorSections(coordinator);
+  return <ThreadOverview {...props} coordinating extra={extra} />;
 }
 
 function Row({ name, children }: { name: string; children: ReactNode }) {
@@ -76,38 +92,40 @@ function Row({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Date.now() }: ThreadOverviewProps) {
+function thisSection({ thread, pane, pr, reading, parent, coordinating, now = Date.now() }: ThreadOverviewProps): PanelSection {
   const state: NodeState = thread ? nodeState(thread) : (pane && coordinatorState(pane.status)) ?? "idle";
   const age = thread && threadAge(thread, now);
   const agent = thread?.agent ?? pane?.agent;
   const agentName = agent && agentLabel(agent);
   const model = reading.model && modelDisplayName(reading.model);
   const percent = reading.contextPercent;
-  return (
-    <OverviewCard label={coordinating ? "This coordinator" : "This thread"}>
-      <dl className="overview-body">
-        <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
-        {parent && <Row name="Coordinator">
-          <button type="button" onClick={parent.open} className="overview-link">
-            <span className="truncate">{parent.title}</span><ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        </Row>}
-        {/* The project coordinator opens no pull request of its own, and a coordinator rarely does. */}
-        {thread && (!coordinating || pr) && <Row name="Pull request">
-          {!pr ? <span className="text-muted-foreground">Not opened yet</span>
-            : pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" className="overview-link">{prName(pr)}</a>
-            : <span>{prName(pr)}</span>}
-        </Row>}
-        {agentName && <Row name="Agent"><span className="truncate">{[agentName, model].filter(Boolean).join(" · ")}</span></Row>}
-        {percent !== undefined && <Row name="Context">
-          <span className="text-xs tabular-nums text-muted-foreground">{percent}%</span>
-          <span role="progressbar" aria-label="Context used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="overview-meter">
-            <span style={{ width: `${percent}%` }} />
-          </span>
-        </Row>}
-      </dl>
-    </OverviewCard>
-  );
+  return {
+    id: "this",
+    label: coordinating ? "This coordinator" : "This thread",
+    // Folded, it still says how it is.
+    badge: <span className="panel-section-meta"><NodeDot state={state} />{STATE_LABEL[state]}</span>,
+    body: <dl className="overview-body">
+      <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
+      {parent && <Row name="Coordinator">
+        <button type="button" onClick={parent.open} className="overview-link">
+          <span className="truncate">{parent.title}</span><ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      </Row>}
+      {/* The project coordinator opens no pull request of its own, and a coordinator rarely does. */}
+      {thread && (!coordinating || pr) && <Row name="Pull request">
+        {!pr ? <span className="text-muted-foreground">Not opened yet</span>
+          : pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" className="overview-link">{prName(pr)}</a>
+          : <span>{prName(pr)}</span>}
+      </Row>}
+      {agentName && <Row name="Agent"><span className="truncate">{[agentName, model].filter(Boolean).join(" · ")}</span></Row>}
+      {percent !== undefined && <Row name="Context">
+        <span className="text-xs tabular-nums text-muted-foreground">{percent}%</span>
+        <span role="progressbar" aria-label="Context used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="overview-meter">
+          <span style={{ width: `${percent}%` }} />
+        </span>
+      </Row>}
+    </dl>,
+  };
 }
 
 function prName(pr: SessionPr): string {
@@ -116,9 +134,9 @@ function prName(pr: SessionPr): string {
 }
 
 /** What the branch changed against where it started: the total and the first files, the diff a tap away. */
-function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; session?: string; stamp: string; onShow: () => void }) {
+function useChangesSection(paneId: string, session: string | undefined, stamp: string, onShow: () => void): PanelSection {
   const latest = useDiffRead(`${paneId}\0${session ?? ""}\0${stamp}`, true, (signal) => fetchSessionDiff(paneId, "branch", session, signal));
-  // A read again keeps the last one on screen until it lands, so the card does not blink on every turn.
+  // A read again keeps the last one on screen until it lands, so the section does not blink on every turn.
   const settled = useRef<DiffRead>(latest);
   if (latest.state !== "loading") settled.current = latest;
   const read = settled.current;
@@ -126,70 +144,111 @@ function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; sessi
   const files = diff?.files ?? [];
   const rest = (diff?.totals.files ?? 0) - Math.min(files.length, FILES_SHOWN);
   const failure = read.state === "failed" ? read.message : read.state === "read" && !read.diff.ok ? read.diff.message : undefined;
-  return (
-    <OverviewCard label="Changes" head={<button type="button" onClick={onShow} className="overview-card-action">
-      <span className="flex-1 text-left">Changes</span>
-      {diff && diff.totals.files > 0 && <DiffStat diff={diff.totals} className="text-xs" />}
-      <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
-    </button>}>
-      <div className="overview-body">
-        {read.state === "loading" && <p role="status" className="overview-note">Reading the branch…</p>}
-        {diff?.repo && <p className="overview-note">In the project's repository, <code className="font-mono">{shortCwd(diff.repo)}</code>.</p>}
-        {failure && <p className="overview-note">{failure}</p>}
-        {diff && diff.totals.files === 0 && <p className="overview-note">Nothing changed on this branch.</p>}
-        {files.length > 0 && <ul aria-label="Changed files">
-          {files.slice(0, FILES_SHOWN).map((file) => <li key={file.path}>
-            <button type="button" onClick={onShow} title={file.path} className="overview-file">
-              <FileCode aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              {/* Right-to-left so a long path keeps its file name and loses its folders. */}
-              <span className="min-w-0 flex-1 truncate text-left [direction:rtl]"><bdi>{file.path}</bdi></span>
-              <DiffStat diff={file} className="text-xs" />
-            </button>
-          </li>)}
-        </ul>}
-        {rest > 0 && <button type="button" onClick={onShow} className="overview-note overview-more">{rest} more {rest === 1 ? "file" : "files"}</button>}
-      </div>
-    </OverviewCard>
-  );
+  return {
+    id: "changes",
+    label: "Changes",
+    badge: diff && diff.totals.files > 0 && <DiffStat diff={diff.totals} className="text-xs" />,
+    action: <button type="button" onClick={onShow} aria-label="Open the Changes tab" className="overview-link text-xs text-muted-foreground">
+      Open<ChevronRight aria-hidden className="size-3.5" />
+    </button>,
+    body: <div className="overview-body">
+      {read.state === "loading" && <p role="status" className="overview-note">Reading the branch…</p>}
+      {diff?.repo && <p className="overview-note">In the project's repository, <code className="font-mono">{shortCwd(diff.repo)}</code>.</p>}
+      {failure && <p className="overview-note">{failure}</p>}
+      {diff && diff.totals.files === 0 && <p className="overview-note">Nothing changed on this branch.</p>}
+      {files.length > 0 && <ul aria-label="Changed files">
+        {files.slice(0, FILES_SHOWN).map((file) => <li key={file.path}>
+          <button type="button" onClick={onShow} title={file.path} className="overview-file">
+            <FileCode aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            {/* Right-to-left so a long path keeps its file name and loses its folders. */}
+            <span className="min-w-0 flex-1 truncate text-left [direction:rtl]"><bdi>{file.path}</bdi></span>
+            <DiffStat diff={file} className="text-xs" />
+          </button>
+        </li>)}
+      </ul>}
+      {rest > 0 && <button type="button" onClick={onShow} className="overview-note overview-more">{rest} more {rest === 1 ? "file" : "files"}</button>}
+    </div>,
+  };
 }
 
-/** The coordinator this thread belongs to and its other open threads, this one marked. */
-function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps) {
+/** A thread's: the coordinator it belongs to and its other open threads, this one marked. */
+function siblingsSection({ thread, threads, parent, paneId, onOpenThread, now = Date.now() }: ThreadOverviewProps): PanelSection[] {
   const open = threads.filter(isOpenThread);
-  // A coordinator's own card stays, empty, for its New thread and its History.
-  if (open.length === 0 && !coordinating) return null;
-  const coordinator = coordinating ? undefined : parent;
-  return (
-    <OverviewCard label={coordinator ? `Coordinator ${coordinator.title}` : "Threads"} head={coordinator ? <>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-xs font-normal text-muted-foreground">Coordinator</span>
-        <span className="truncate">{coordinator.title}</span>
-      </span>
-      <button type="button" onClick={coordinator.open} className="overview-link text-xs text-muted-foreground">
-        Open<ChevronRight aria-hidden className="size-3.5" />
+  if (open.length === 0 || !parent) return [];
+  return [{
+    id: "coordinator",
+    label: `Coordinator ${parent.title}`,
+    action: <button type="button" onClick={parent.open} className="overview-link text-xs text-muted-foreground">
+      Open<ChevronRight aria-hidden className="size-3.5" />
+    </button>,
+    body: <ul className="overview-threads">
+      {open.map((candidate) => {
+        const current = candidate.id === thread?.id || candidate.paneId === paneId;
+        return <li key={candidate.id} aria-current={current ? "true" : undefined}>
+          <button type="button" onClick={() => onOpenThread(candidate)} className="overview-thread">
+            <NodeDot state={nodeState(candidate)} />
+            <span className="min-w-0 flex-1 truncate text-left">{candidate.title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">{current ? "this one" : threadAge(candidate, now) ?? ""}</span>
+          </button>
+        </li>;
+      })}
+    </ul>,
+  }];
+}
+
+/** threadDetail's words that only restate a row's mark. */
+const PLAIN_DETAIL = new Set(["working", "idle", "not running", "done"]);
+
+/** What is alive in a coordinator's work, in words, most urgent first: `1 needs you · 2 working`. */
+const LIVE_STATES = ["needs", "review", "working"] as const;
+const LIVE_WORD: Record<(typeof LIVE_STATES)[number], string> = { needs: "needs you", review: "to review", working: "working" };
+
+/**
+ * A coordinator's: the open work under it, its own threads first and then each coordinator under it
+ * with its own, every row its state, what it is doing and a tap to open it. What finished is a link
+ * to History.
+ */
+function threadsSection({ threads, panes = [], paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps): PanelSection {
+  const groups = workUnder(threads);
+  const open = groups.flatMap((group) => [...(group.coordinator ? [group.coordinator] : []), ...group.rows.map(({ node }) => node)]);
+  const live = LIVE_STATES.map((state) => [state, open.filter((node) => node.state === state).length] as const).filter(([, n]) => n > 0);
+  const row = (node: OrgNode, depth: number, coordinator = false) => {
+    const { thread } = node;
+    const current = thread.paneId === paneId;
+    // Its mark already says it works, rests or runs nowhere: the line is only for what it says beyond that.
+    const said = threadDetail(thread, panes);
+    const detail = coordinator ? `Coordinator · ${node.children.length} open` : PLAIN_DETAIL.has(said.toLowerCase()) ? "" : said;
+    return <li key={thread.id} aria-current={current ? "true" : undefined}>
+      <button type="button" onClick={() => onOpenThread(thread)} className="overview-work" data-coordinator={coordinator || undefined}
+        style={depth ? { paddingInlineStart: `${14 + depth * 16}px` } : undefined}>
+        <span className="flex h-5 shrink-0 items-center"><NodeDot state={node.state} /></span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block truncate">{thread.title}</span>
+          {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">{threadAge(thread, now) ?? ""}</span>
       </button>
-    </> : <>
-      <span className="flex-1">Threads</span>
-      {onNewThread && <button type="button" onClick={onNewThread} aria-haspopup="dialog" className="overview-link text-xs text-muted-foreground">
-        <Plus aria-hidden className="size-3.5" />New thread
-      </button>}
-    </>}>
-      {open.length === 0 && <p className="overview-note px-3.5 pb-3">Nothing running</p>}
-      {open.length > 0 && <ul className="overview-threads">
-        {open.map((candidate) => {
-          const current = candidate.id === thread?.id || candidate.paneId === paneId;
-          return <li key={candidate.id} aria-current={current ? "true" : undefined}>
-            <button type="button" onClick={() => onOpenThread(candidate)} className="overview-thread">
-              <NodeDot state={nodeState(candidate)} />
-              <span className="min-w-0 flex-1 truncate text-left">{candidate.title}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{current ? "this one" : threadAge(candidate, now) ?? ""}</span>
-            </button>
-          </li>;
-        })}
-      </ul>}
-      {finished && finished.count > 0 && <button type="button" onClick={finished.open} className="overview-note overview-more mx-3.5 mb-3 inline-flex items-center gap-1">
+    </li>;
+  };
+  return {
+    id: "threads",
+    label: "Threads",
+    badge: <span className="panel-section-meta">
+      {live.length ? live.map(([state, n]) => `${n} ${LIVE_WORD[state]}`).join(" · ") : open.length ? `${open.length} open` : ""}
+    </span>,
+    action: onNewThread && <button type="button" onClick={onNewThread} aria-haspopup="dialog" className="overview-link text-xs text-muted-foreground">
+      <Plus aria-hidden className="size-3.5" />New thread
+    </button>,
+    body: <div className="pb-2">
+      {open.length === 0 && <div className="overview-body pb-0"><p className="overview-note">Nothing running</p></div>}
+      {groups.map((group) => <ul key={group.coordinator?.thread.id ?? "own"} className="overview-threads overview-group"
+        aria-label={group.coordinator ? `${group.coordinator.thread.title} threads` : "Its own threads"}>
+        {group.coordinator && row(group.coordinator, 0, true)}
+        {group.rows.map(({ node, depth }) => row(node, depth + (group.coordinator ? 1 : 0), node.thread.role === "coordinator"))}
+      </ul>)}
+      {finished && finished.count > 0 && <button type="button" onClick={finished.open} className="overview-note overview-more mx-3.5 inline-flex items-center gap-1">
         <History aria-hidden className="size-3.5" />{finished.count} finished<ChevronRight aria-hidden className="size-3.5" />
       </button>}
-    </OverviewCard>
-  );
+    </div>,
+  };
 }

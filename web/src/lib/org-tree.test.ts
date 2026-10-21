@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, orgTree, STATE_LABEL, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, orgTree, STATE_LABEL, workUnder, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -185,4 +185,24 @@ it("reads a review whose pull request merged as closing: no work to review, abou
   expect(nodeState(thread({ state: "merged", number: 9 }))).toBe("closing");
   expect(nodeState(thread({ state: "open", number: 9 }))).toBe("review");
   expect(STATE_LABEL.closing).toBe("Merged, closes on its own");
+});
+
+it("groups the open work under a coordinator: its own threads first, then each coordinator under it, the most urgent first", () => {
+  // Everything under t-1, three levels deep, as threadTree hands it over.
+  const groups = workUnder([
+    node("t-2", "t-1"),
+    node("t-3", "t-1", { role: "coordinator" }),
+    node("t-4", "t-3"),
+    node("t-5", "t-1", { role: "coordinator" }),
+    node("t-6", "t-5", { role: "coordinator" }),
+    node("t-7", "t-6", { group: "working" }),
+    node("t-8", "t-1", { group: "ready-for-review" }),
+    node("t-9", "t-3", { status: "resolved" }),
+  ]);
+  expect(groups.map((group) => [group.coordinator?.thread.id ?? "own", group.rows.map(({ node: row, depth }) => `${row.thread.id}@${depth}`)])).toEqual([
+    ["own", ["t-8@0", "t-2@0"]],
+    ["t-5", ["t-6@0", "t-7@1"]],
+    ["t-3", ["t-4@0"]],
+  ]);
+  expect(workUnder([])).toEqual([]);
 });

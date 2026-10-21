@@ -7,6 +7,7 @@ import { CoordinatorHead } from "@/components/coordinator-card";
 import { OwnReport } from "@/components/coordinator-summary";
 import { useOpenNode } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
+import { PanelSections, type PanelSection } from "@/components/panel-sections";
 import { canMove, CloseNodeDialog, MoveNodeDialog } from "@/components/project-tasks";
 import { useAsks, type AsksRead } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
@@ -17,23 +18,7 @@ import { flatten, orgTree } from "@/lib/org-tree";
 import { routinesFor } from "@/lib/project-work";
 import type { AgentView, AsksList, ProjectThreadView, ProjectView, RoutineView } from "@/lib/types";
 
-/** A card of a chat's panel or tab: its head, which may be a control, over what it says. */
-export function OverviewCard({ label, head, children }: { label: string; head?: ReactNode; children: ReactNode }) {
-  return (
-    <section aria-label={label} className="overview-card">
-      <header className="overview-card-head">{head ?? label}</header>
-      {children}
-    </section>
-  );
-}
-
-/**
- * What a coordinator's page held, inside its chat (ADR 0115): what waits on you there, answered in
- * place; then `children` (a desk's panel puts its threads and changes here); the routines that reach
- * it; its Status (its card, what was asked of it, STATUS.md, its own report); and Move and Close. A
- * desk draws it in the chat's panel, under This coordinator; a phone in the chat's Status tab.
- */
-export function CoordinatorSections({ project, thread, asks: given, panes, session, readOnly, onChanged, children }: {
+export interface CoordinatorSectionsProps {
   project: ProjectView;
   /** Every coordinator's asks, where the chat already reads them for its tab's count; else read here, while this is on screen. */
   asks?: AsksRead;
@@ -43,8 +28,15 @@ export function CoordinatorSections({ project, thread, asks: given, panes, sessi
   session?: string;
   readOnly: boolean;
   onChanged: () => void;
-  children?: ReactNode;
-}) {
+}
+
+/**
+ * What a coordinator's page held, inside its chat (ADR 0115), as sections of its panel: what waits on
+ * you there, answered in place; the routines that reach it; its Status (its card, what was asked of it,
+ * STATUS.md, its own report). Move and Close go under them all. A desk draws them in the chat's panel
+ * beside its threads and changes; a phone in the chat's Status tab.
+ */
+export function useCoordinatorSections({ project, thread, asks: given, panes, session, readOnly, onChanged }: CoordinatorSectionsProps): { sections: PanelSection[]; footer: ReactNode } {
   const navigate = useNavigate();
   const [closing, setClosing] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -64,36 +56,50 @@ export function CoordinatorSections({ project, thread, asks: given, panes, sessi
   const node = thread && flatten(whole.open).find((candidate) => candidate.thread.id === thread.id);
   const movable = node !== undefined && !readOnly && canMove(project, whole, node);
 
-  return <>
-    {count > 0 && <OverviewCard label="Waiting on you" head={<>Waiting on you<span className="desk-tab-count" data-waiting="">{count}</span></>}>
-      <div className="px-3.5 pb-1">
+  const sections: PanelSection[] = [
+    ...(count > 0 ? [{
+      id: "waiting", label: "Waiting on you",
+      badge: <span className="desk-tab-count" data-waiting="">{count}</span>,
+      body: <div className="px-3.5 pb-1">
         <AskSections sections={waiting} headings={false} session={session} whose={false} answers={asks.list?.answers === true} readOnly={readOnly} />
-      </div>
-    </OverviewCard>}
-    {children}
-    {reached > 0 && <OverviewCard label="Routines">
-      <div className="px-3 pb-3">
+      </div>,
+    }] : []),
+    ...(reached > 0 ? [{
+      id: "routines", label: "Routines",
+      badge: <span className="panel-section-meta">{reached}</span>,
+      body: <div className="px-3 pb-3">
         <RoutinesPanel routines={routines} shown={reaching} threads={project.threads} readOnly={readOnly} empty="No routine reaches this coordinator." narrow />
-      </div>
-    </OverviewCard>}
-    {/* Its card and STATUS.md are cards of their own: no frame around them. Named apart from the
-        STATUS.md region inside. */}
-    <section aria-label="Coordinator status">
-      <CoordinatorHead project={project} coordinatorId={id} status={status} usage={usage} listsAgents={false} waitingApart
-        asks={asks} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
-        onOpenStatusNode={(node) => navigate(nodePath(project.slug, node, session))} />
-      {thread && <OwnReport project={project} thread={thread} summary={read.summaries.get(thread.id)} />}
-      {!status && !thread?.verdict && <p className="px-1 text-footnote text-muted-foreground">This coordinator has no STATUS.md yet.</p>}
-    </section>
-    {node && !readOnly && <div className="flex flex-wrap gap-1 px-1">
+      </div>,
+    }] : []),
+    {
+      // Named apart from the STATUS.md region inside.
+      id: "status", label: "Coordinator status",
+      body: <div className="overview-status">
+        <CoordinatorHead project={project} coordinatorId={id} status={status} usage={usage} listsAgents={false} waitingApart
+          asks={asks} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
+          onOpenStatusNode={(node) => navigate(nodePath(project.slug, node, session))} />
+        {thread && <OwnReport project={project} thread={thread} summary={read.summaries.get(thread.id)} />}
+        {!status && !thread?.verdict && <p className="overview-note">This coordinator has no STATUS.md yet.</p>}
+      </div>,
+    },
+  ];
+  const footer = <>
+    {node && !readOnly && <>
       {movable && <button type="button" className="quiet-action" aria-haspopup="dialog" onClick={() => setMoving(true)}><ArrowRight aria-hidden className="size-4" />Move…</button>}
       <button type="button" className="quiet-action text-destructive" aria-haspopup="dialog" onClick={() => setClosing(true)}>Close coordinator…</button>
-    </div>}
+    </>}
     {node && <CloseNodeDialog project={project} node={closing ? node : null} session={session}
       onCancel={() => setClosing(false)} onClosed={() => { setClosing(false); onChanged(); }} />}
     {node && moving && <MoveNodeDialog project={project} tree={whole} node={node} session={session}
       onCancel={() => setMoving(false)} onMoved={() => { setMoving(false); onChanged(); }} />}
   </>;
+  return { sections, footer };
+}
+
+/** A phone's Status tab: the coordinator's sections, arranged as its desk panel's are. */
+export function CoordinatorSections(props: CoordinatorSectionsProps) {
+  const { sections, footer } = useCoordinatorSections(props);
+  return <PanelSections kind="coordinator" sections={sections} footer={footer} />;
 }
 
 /**
