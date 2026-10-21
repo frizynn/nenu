@@ -55,9 +55,9 @@ function historyRows(project: ProjectView): HistoryRow[] {
       : { node, by: titles.get(node.thread.parentId) ?? "Project" });
 }
 
-/** How many rows History holds. */
-export function finishedCount(project: ProjectView): number {
-  return historyRows(project).length;
+/** How many rows History holds, or lists searched for `query`. */
+export function finishedCount(project: ProjectView, query = ""): number {
+  return historyDays(project, query).reduce((sum, day) => sum + day.rows.length, 0);
 }
 
 /** Case and accents aside: `calidad` finds `Calidad y orden del código`, `codigo` finds `código`. */

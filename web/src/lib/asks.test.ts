@@ -1,4 +1,4 @@
-import { askHeadline, askKind, askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, type AskEntry } from "./asks";
+import { askHeadline, askKind, askSections, asksHeadline, contextThread, coordinatorAsks, coordinatorName, foldRelated, linkChip, partText, reportBody, unclosed, unmarked, type AskEntry } from "./asks";
 import type { AskRow, AsksList, ProjectView } from "./types";
 
 // Rows as `asks --json` prints them (Organizations docs/json.md, Asks), each placed by the bridge.
@@ -25,7 +25,7 @@ const projects = [project("shop", "Shop"), project("research", "Research")];
 it("groups the asks in Organizations' order, the decisions after the asks that wait on you, and only projects on screen", () => {
   const sections = askSections(list, projects);
   expect(sections.map((section) => [section.label, section.entries.map((entry) => entry.text)])).toEqual([
-    ["Wait on you", ["Pilot with batch 2", "Install the new binary : yes or later"]],
+    ["Waiting on you", ["Pilot with batch 2", "Install the new binary : yes or later"]],
     ["Does not close", ["Ship the checkout", "Land the copy fix"]],
     ["In progress", ["Card tokens", "Compare two vendors"]],
     ["Done", ["Does it cut cost?"]],
@@ -163,4 +163,12 @@ describe("askHeadline", () => {
     expect(askKind({ group: "waiting", detail: "" })).toBe("ask");
     expect(askKind({ group: "progress", detail: "decision" })).toBeUndefined();
   });
+});
+
+it("reads an Asked line outside the format as the request it is: done by its own word, else in progress, its brackets gone", () => {
+  expect(unmarked("[in-progress] Faster docs : thread at work (t-0004)")).toEqual({ group: "progress", text: "Faster docs", detail: "thread at work (t-0004)" });
+  expect(unmarked("[Merged] Copy fix : #12")).toEqual({ group: "done", text: "Copy fix", detail: "#12" });
+  expect(unmarked("No brackets at all")).toEqual({ group: "progress", text: "No brackets at all", detail: "" });
+  // Never waiting on you: Organizations did not read it as a decision.
+  expect(unmarked("[needs-you] Pick one : a or b").group).toBe("progress");
 });

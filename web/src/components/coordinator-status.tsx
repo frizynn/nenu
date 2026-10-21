@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 // A coordinator's STATUS.md (ADR 0090): what the operator asked and where each thing stands, kept by
 // the agent and drawn as it wrote it, through the transcript's Markdown renderer. It adds two touches
 // and nothing else: a known `[state]` opening a line is a chip, and a thread id this project lists
-// opens its node. A long file folds under Show all. Under a coordinator's card, which already says
-// what the file says, it starts closed (ADR 0091).
+// opens its node. A long file shown unasked folds under Show all. Under a coordinator's card, which
+// already says what the file says, it starts closed (ADR 0091), and the person's tap opens all of it:
+// a fold there was a clipped box the wheel could not move (ADR 0109).
 
 type AskState = "open" | "working" | "needs-decision" | "answered" | "done";
 const ASK_STATE: Record<AskState, { label: string; tone: string }> = {
@@ -34,7 +35,8 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
 }) {
   const [opened, setOpened] = useState(false);
   const shown = opened || !closed;
-  const [open, setOpen] = useState(false);
+  const [unfolded, setUnfolded] = useState(false);
+  const open = unfolded || closed;
   const [overflows, setOverflows] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const text = status.text.replace(TITLE, "");
@@ -92,7 +94,7 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
       !open && overflows && "[mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-1.5rem))]")}>
       <TextTokensContext.Provider value={tokens}><MarkdownText text={text} className="text-subhead" /></TextTokensContext.Provider>
     </div>
-    {overflows && <button type="button" className={cn("quiet-action -ml-2", open ? "mt-1" : "-mt-6")} onClick={() => setOpen(!open)}>
+    {overflows && !closed && <button type="button" className={cn("quiet-action -ml-2", open ? "mt-1" : "-mt-6")} onClick={() => setUnfolded(!open)}>
       {open ? "Show less" : "Show all"}
     </button>}
   </section>;

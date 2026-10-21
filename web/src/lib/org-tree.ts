@@ -6,14 +6,19 @@ import type { AgentStatus, ProjectThreadView } from "./types";
 
 /** What an open node waits on. */
 export type OpenState = "needs" | "review" | "working" | "idle";
-/** `merging`: finished, its own pull request open and its pane gone, so only the merge is left. */
-export type NodeState = OpenState | "merging" | "resolved";
+/**
+ * `merging`: finished, its own pull request open and its pane gone, so only the merge is left.
+ * `closing`: in the review group with its pull request merged, so Organizations resolves it shortly
+ * and it is no work to review (ADR 0109).
+ */
+export type NodeState = OpenState | "merging" | "closing" | "resolved";
 /** Most urgent first: the order open nodes are listed in. */
-const URGENCY: Record<NodeState, number> = { needs: 0, review: 1, working: 2, idle: 3, merging: 4, resolved: 5 };
+const URGENCY: Record<NodeState, number> = { needs: 0, review: 1, working: 2, idle: 3, merging: 4, closing: 4, resolved: 5 };
 
 export const STATE_LABEL: Record<NodeState, string> = {
-  needs: "Needs you", review: "Ready for review", working: "Working", idle: "Idle", merging: "Awaiting merge", resolved: "Resolved",
+  needs: "Needs you", review: "Ready for review", working: "Working", idle: "Idle", merging: "Awaiting merge", closing: "Merged, closes on its own", resolved: "Resolved",
 };
+
 
 /** A live agent's state in the tree's terms; undefined while Herdr cannot tell. */
 export function liveState(status: AgentStatus): OpenState | undefined {
@@ -49,9 +54,14 @@ const talks = (thread: ProjectThreadView) => thread.conversation === true && thr
  * conversation are the exception: neither reads as ready for review, which Organizations groups them
  * as once a report has a verdict and Herdr's `done` would say after every turn; each works, needs you
  * (a dialog, a failed start, a lost pane), or is idle. A conversation's own pull request, approved or
- * landing, still reads as review.
+ * landing, still reads as review. A review whose pull request merged is `closing` (ADR 0109).
  */
 export function nodeState(thread: ProjectThreadView): NodeState {
+  const state = groupState(thread);
+  return state === "review" && thread.pr?.state === "merged" ? "closing" : state;
+}
+
+function groupState(thread: ProjectThreadView): NodeState {
   if (thread.status === "resolved") return "resolved";
   const live = thread.paneId && thread.liveStatus ? liveState(thread.liveStatus) : undefined;
   if (thread.status === "failed" || live === "needs" || (thread.group === "waiting-on-you" && !atRest(thread, live))) return "needs";

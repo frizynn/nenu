@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, STATE_LABEL, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -183,4 +183,11 @@ describe("a project's coordinators", () => {
     expect(openUnder(find("lead"))).toEqual({ open: 3, needs: 1 });
     expect(openUnder(find("hotfix"))).toEqual({ open: 0, needs: 0 });
   });
+});
+
+it("reads a review whose pull request merged as closing: no work to review, about to resolve", () => {
+  const thread = (pr: ProjectThreadView["pr"]): ProjectThreadView => ({ id: "t-1", title: "Copy", parentId: "root", role: "worker", status: "open", group: "ready-for-review", pr });
+  expect(nodeState(thread({ state: "merged", number: 9 }))).toBe("closing");
+  expect(nodeState(thread({ state: "open", number: 9 }))).toBe("review");
+  expect(STATE_LABEL.closing).toBe("Merged, closes on its own");
 });
