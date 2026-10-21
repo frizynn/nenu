@@ -432,6 +432,41 @@
   .fold { transition: opacity var(--motion-control) var(--motion-ease); }
 }
 
+/* A row that joins the thread while it is read (a step, a thought, the agent's words, a message on its
+   way) eases in as a panel arrives: a fade and a short rise, transform and opacity only, so nothing
+   around it moves and the line being read stays put. Rows already there when the thread is drawn never
+   move (lib/enter.ts decides). Under reduced motion only the fade remains. */
+@keyframes row-enter { from { opacity: 0; transform: translateY(0.375rem); } }
+@keyframes row-fade { from { opacity: 0; } }
+.row-enter { animation: row-enter var(--motion-panel) var(--motion-ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .row-enter { animation-name: row-fade; }
+}
+
+/* The live line's glow (Glow in work-activity-label.tsx, after T3 Code's): a copy of the line in the
+   full ink, seen through a soft window that slides across it. The window steps one way and the copy
+   inside it the other, by transform alone, drawn by lib/live-motion.ts's one timer, so a frame is drawn
+   only when it moved. It is in the page only while it may move. */
+.glow-window {
+  --glow-width: 4.5rem;
+  position: absolute;
+  inset-block: 0;
+  left: calc(-1 * var(--glow-width));
+  width: calc(100% + 2 * var(--glow-width));
+  pointer-events: none;
+  user-select: none;
+  mask-image: linear-gradient(to right, transparent 0, rgb(0 0 0 / 12%) 0.675rem, rgb(0 0 0 / 55%) 1.575rem, black 2.25rem,
+    rgb(0 0 0 / 55%) 2.925rem, rgb(0 0 0 / 12%) 3.825rem, transparent var(--glow-width), transparent 100%);
+  mask-repeat: no-repeat;
+  will-change: transform;
+}
+.glow-copy { display: block; width: 100%; will-change: transform; }
+/* The working mark while it turns (WorkingMark in status-badge.tsx): its own layer, so a step is composited, not painted. */
+[data-node-state="working"][data-moving] { will-change: transform; }
+.glow-copy > * { width: calc(100% - 2 * var(--glow-width)); margin-left: var(--glow-width); }
+/* The copy is the line in the full ink: words that carry their own grey (a step's verb and target) take it too. */
+.glow-copy > * * { color: inherit; }
+
 /* A sub-16px editable field makes iOS zoom the entire app on focus. Keep browser zoom available
    for accessibility; make touch fields readable instead of disabling scaling in the viewport. */
 @media (max-width: 1023px), (pointer: coarse) {

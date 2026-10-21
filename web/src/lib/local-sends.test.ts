@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import {
-  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, reconcileLocalSends,
+  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, pendingSends, reconcileLocalSends, takenBack,
   rememberLocalImage, removeLocalSend, resetLocalSends, updateLocalSend, useLocalSends,
 } from "./local-sends";
 import { isWorkHeld } from "./reload-guard";
@@ -12,15 +12,37 @@ const scope = localSendScope("w1:p1", undefined);
 const user = (uuid: string, text: string): TranscriptEntry => ({ uuid, ts: "2026-10-06T10:00:00Z", role: "user", parts: [{ kind: "text", text }] });
 
 describe("local sends", () => {
-  it("keeps a bubble until the journal gains a NEW matching user turn", () => {
+  it("draws a bubble until the journal gains a NEW matching user turn", () => {
     const earlier = [user("u1", "continue")];
     addLocalSend(scope, "continue");
     reconcileLocalSends(scope, earlier); // the old "continue" is baseline, not this send
-    expect(listLocalSends(scope)).toHaveLength(1);
-    reconcileLocalSends(scope, [...earlier, user("u2", "something else")]);
-    expect(listLocalSends(scope)).toHaveLength(1);
-    reconcileLocalSends(scope, [...earlier, user("u3", "  continue ")]);
-    expect(listLocalSends(scope)).toHaveLength(0);
+    expect(pendingSends(listLocalSends(scope), earlier)).toHaveLength(1);
+    const other = [...earlier, user("u2", "something else")];
+    reconcileLocalSends(scope, other);
+    expect(pendingSends(listLocalSends(scope), other)).toHaveLength(1);
+    const landed = [...earlier, user("u3", "  continue ")];
+    // The render that draws the journal's turn no longer draws the bubble, before any effect runs.
+    expect(pendingSends(listLocalSends(scope), landed)).toHaveLength(0);
+    reconcileLocalSends(scope, landed);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ landed: "u3" })]);
+    expect(pendingSends(listLocalSends(scope), earlier)).toHaveLength(0);
+  });
+
+  it("keeps a landed bubble's queue row claimed for a while, then forgets it", () => {
+    vi.useFakeTimers();
+    try {
+      const id = addLocalSend(scope, "queued words");
+      updateLocalSend(scope, id, { state: "queued", queueId: "row-1", native: "enqueued" });
+      reconcileLocalSends(scope, []);
+      reconcileLocalSends(scope, [user("u9", "queued words")]);
+      // The queue still reports the row in Claude's queue: it stays this bubble's, so it is not drawn alone.
+      updateLocalSend(scope, id, { native: "enqueued" });
+      expect(listLocalSends(scope)).toEqual([expect.objectContaining({ queueId: "row-1", landed: "u9" })]);
+      vi.advanceTimersByTime(SENT_TTL_MS);
+      expect(listLocalSends(scope)).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reuses a failed bubble when the same message is retried", () => {
@@ -76,7 +98,7 @@ describe("what a pending bubble says", () => {
   it("follows its queue row: waiting per mode, then the CLI's own queue, then read", () => {
     const queued = send({ state: "queued", queueId: "q", agent: "claude", queueState: "queued", deliveryMode: "afterTurn", waitingFor: "working" });
     expect(pendingStatus(queued)).toMatchObject({ label: "Waiting for Claude to finish this turn.", actions: ["sendNow", "edit", "remove"] });
-    expect(pendingStatus({ ...queued, native: "enqueued", queueState: undefined })).toMatchObject({ label: expect.stringMatching(/^In Claude's queue/), actions: ["readNow"] });
+    expect(pendingStatus({ ...queued, native: "enqueued", queueState: undefined })).toMatchObject({ label: "Claude reads it after this step.", actions: ["readNow", "edit", "remove"] });
     expect(pendingStatus({ ...queued, state: "sent", native: "absorbed" })).toMatchObject({ tone: "done", label: "Read by Claude" });
   });
 });
@@ -109,5 +131,23 @@ describe("a message without its answer is unsent work", () => {
     const typed = addLocalSend(scope, "typed");
     updateLocalSend(scope, typed, { state: "failed", textDelivered: true });
     expect(isWorkHeld()).toBe(false);
+  });
+});
+
+describe("what a take-back puts in the composer", () => {
+  const messages = [{ id: "a", text: "primero" }, { id: "b", text: "segundo\ncon dos líneas" }];
+
+  it("puts back the rows' own words, line breaks kept, when the box held only them", () => {
+    expect(takenBack({ text: "primero segundo con dos líneas", messages, ours: true })).toEqual({ text: "primero\n\nsegundo\ncon dos líneas" });
+  });
+
+  it("leaves out the removed one and says the others are back", () => {
+    expect(takenBack({ text: "", messages, ours: true }, "a")).toEqual({ text: "segundo\ncon dos líneas", note: expect.stringMatching(/^Removed/) });
+    expect(takenBack({ text: "", messages: [messages[0]!], ours: true }, "a")).toEqual({ text: "" });
+  });
+
+  it("puts back the box as the screen showed it, and says so, when it held more than Nenu sent", () => {
+    expect(takenBack({ text: "primero y algo tecleado", messages: [messages[0]!], ours: false }, "a"))
+      .toEqual({ text: "primero y algo tecleado", note: expect.stringMatching(/held more than Nenu sent/) });
   });
 });

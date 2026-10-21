@@ -16,6 +16,45 @@ function work(entries: TranscriptEntry[], status: Parameters<typeof buildWorkTim
 }
 
 describe("buildWorkTimeline", () => {
+  // Claude reads a queued message mid-turn and writes it with that turn's id (measured, 2.1.306).
+  describe("a message the CLI read mid-turn", () => {
+    const running = { status: "running" as const, startedAt: "2026-09-08T12:00:01Z" };
+    const steps = entry("a", { turnId: "t", parts: [{ kind: "tool", name: "Bash", summary: "sleep 4 && ls", result: { text: "ok" } }], turn: running });
+    const steer = user("steer", { turnId: "t", ts: "2026-09-08T12:00:20Z", parts: [text("y al final decime cuántos archivos hay")], turn: running });
+    const after = entry("b", { turnId: "t", ts: "2026-09-08T12:00:25Z", parts: [{ kind: "tool", name: "Bash", summary: "ls" }], turn: running });
+
+    it("sits between the work it split, the work above still alive and the work below continuing", () => {
+      const rows = buildWorkTimeline([user(), steps, steer, after], "working");
+      expect(rows.map((row) => row.kind === "message" ? row.entry.uuid : `work:${row.id}`)).toEqual(["user", "work:t", "steer", "work:t:after:steer"]);
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ active: false, alive: true, cut: true, continued: false, settled: false, startedAt: running.startedAt, durationMs: 19_000 });
+      expect(below).toMatchObject({ active: true, alive: true, continued: true, startedAt: "2026-09-08T12:00:20Z" });
+    });
+
+    it("splits the turn's time at the message: the part above runs to it, the part below from it", () => {
+      const done = { status: "completed" as const, startedAt: "2026-09-08T12:00:01Z", completedAt: "2026-09-08T12:00:30Z", durationMs: 29_000 };
+      const final = entry("c", { turnId: "t", ts: "2026-09-08T12:00:30Z", phase: "final_answer", parts: [text("Hay 2.")], turn: done });
+      const rows = buildWorkTimeline([user(), { ...steps, turn: done }, { ...steer, turn: done }, { ...after, turn: done }, final], "idle");
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ alive: false, cut: true, settled: true, durationMs: 19_000 });
+      expect(below).toMatchObject({ continued: true, settled: true, durationMs: 10_000 });
+    });
+
+    it("adds up when two messages are read back to back", () => {
+      const second = user("steer2", { turnId: "t", ts: "2026-09-08T12:00:21Z", parts: [text("y otra cosa")], turn: running });
+      const rows = buildWorkTimeline([user(), steps, steer, second, { ...after, ts: "2026-09-08T12:00:25Z" }], "working");
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ cut: true, durationMs: 19_000 });
+      expect(below).toMatchObject({ continued: true, startedAt: "2026-09-08T12:00:21Z" });
+    });
+
+    it("does not continue a turn from a message that opened a new one", () => {
+      const next = user("next", { turnId: "t2", ts: "2026-09-08T12:01:00Z" });
+      const rows = buildWorkTimeline([user(), steps, next, entry("d", { turnId: "t2", parts: [tool] })], "done");
+      expect(rows.filter((row) => row.kind === "work").map((row) => row.continued)).toEqual([false, false]);
+    });
+  });
+
   it("uses native completion and phase to keep the final answer outside folded work", () => {
     const progress = entry("progress", { turnId: "native-turn", phase: "commentary", parts: [text("Checking the code"), tool] });
     const final = entry("final", { turnId: "native-turn", phase: "final_answer", parts: [text("The fix is ready.")],
@@ -259,21 +298,19 @@ describe("liveStep", () => {
 });
 
 describe("workSegments", () => {
-  it("cuts the work at the agent's words, one run of steps between two texts, the live step left out", () => {
+  it("cuts the work at the agent's words, one run of steps between two texts, the live step in its place", () => {
     const first = entry("a", { parts: [text("Looking"), tool, thought] });
     const second = entry("b", { parts: [tool, text("Found it"), text("And more"), tool] });
-    const segments = workSegments([first, second], { part: tool as WorkStep["part"], entry: "b", index: 3 });
+    const segments = workSegments([first, second]);
     expect(segments.map((s) => s.kind === "prose" ? s.parts.map((p) => p.index) : s.steps.map((p) => `${p.entry}:${p.index}`))).toEqual([
-      [0], ["a:1", "a:2", "b:0"], [1, 2],
+      [0], ["a:1", "a:2", "b:0"], [1, 2], ["b:3"],
     ]);
     expect(segments[1]).toMatchObject({ kind: "steps", id: "a:1" });
   });
 
-  it("keeps a run's id when its live call finishes after a later one", () => {
+  it("keeps a run's id and order when its first call finishes after a later one", () => {
     const parallel = entry("p", { parts: [text("Two at once"), tool, { ...tool, result: { text: "done" } }] });
-    const live = { part: tool as WorkStep["part"], entry: "p", index: 1 };
-    expect(workSegments([parallel], live)[1]).toMatchObject({ id: "p:1", steps: [{ index: 2 }] });
-    expect(workSegments([parallel], null)[1]).toMatchObject({ id: "p:1" });
+    expect(workSegments([parallel])[1]).toMatchObject({ id: "p:1", steps: [{ index: 1 }, { index: 2 }] });
   });
 });
 

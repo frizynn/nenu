@@ -3,14 +3,14 @@ import { ArrowUp, Pending, ChatCircle } from "@/components/ui/icon";
 
 import { WorkActivityLabel } from "@/components/work-activity-label";
 import { thirdScrollTop } from "@/components/find-bar";
-import { TranscriptView } from "@/components/transcript-view";
+import { PendingTurnLine, TranscriptView } from "@/components/transcript-view";
 import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
 import { atTail, clamped, isTextField, standing, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
-import { localSendScope, reconcileLocalSends, setQueueSlot, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
+import { localSendScope, pendingSends, reconcileLocalSends, setQueueSlot, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { RecoveryLeads } from "@/components/connect-conversation";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -218,15 +218,18 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   // This client's sends the journal has not caught up with yet. Reconciled against the LIVE window,
   // not a frozen one, so scrolling back to read never holds a delivered bubble on screen.
   const sendScope = localSendScope(paneId, session);
-  const localSends = useLocalSends(sendScope);
+  const allSends = useLocalSends(sendScope);
+  const liveEntries = history?.available ? history.entries : null;
+  // Only those the journal does not show yet, decided in this render: the frame that draws the
+  // journal's turn never draws its bubble too.
+  const localSends = useMemo(() => pendingSends(allSends, liveEntries), [allSends, liveEntries]);
   const localSendActions = useLocalSendActions(sendScope);
   const queueSlot = useCallback((element: HTMLDivElement | null) => setQueueSlot(sendScope, element), [sendScope]);
-  const liveEntries = history?.available ? history.entries : null;
   useEffect(() => {
     if (liveEntries) reconcileLocalSends(sendScope, liveEntries);
-  }, [sendScope, liveEntries, localSends]);
+  }, [sendScope, liveEntries, allSends]);
   // A new bubble is the operator's own action: bring the tail into view even if they had scrolled up.
-  const localSendCount = localSends.length;
+  const localSendCount = allSends.length;
   // A message the agent received starts its turn, as Stop already counts it in the composer: Working…
   // shows at once and holds until the agent's state has reported the turn and then its end. The
   // journal row and that state arrive on separate reads, in either order. Gives up like Stop does if
@@ -256,7 +259,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     : starting ? "working" : activityStatus;
   // Under this client's bubble while the journal does not show it yet; the transcript's own after that.
   const labelUnderSend = activity === "working" && delivered !== null;
-  const startingLabel = labelUnderSend && <div className="mt-3 px-0.5 py-1" role="status"><WorkActivityLabel /></div>;
+  const startingLabel = labelUnderSend && <div className="mt-3"><PendingTurnLine /></div>;
   const previousSendCount = useRef(localSendCount);
   useEffect(() => { onMatchCount?.(matches.length); }, [matches.length, onMatchCount]);
   useEffect(() => {

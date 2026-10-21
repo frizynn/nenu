@@ -70,7 +70,8 @@ export function queueRowStatus(
   if (row.state === "paused") return { tone: "problem", label: row.error || "Paused. Check the terminal.", actions: ["edit", "remove"] };
   if (row.state === "sent") {
     if (row.native === "enqueued" && row.readNowAt !== undefined) return { tone: "busy", label: `Asked ${name} to read it now.`, actions: [] };
-    if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue. ${name} reads it after the step it's on.`, actions: agent === "claude" ? ["readNow"] : [] };
+    // Claude hands its queue back on Up (ADR 0118), so a message waiting there can still be edited or removed.
+    if (row.native === "enqueued") return { tone: "waiting", label: `${name} reads it after this step.`, actions: agent === "claude" ? ["readNow", "edit", "remove"] : [] };
     if (row.native === "absorbed") return { tone: "done", label: `Read by ${name}`, actions: [] };
     if (row.native === "recalled") return { tone: "problem", label: "Taken back into the terminal's input box", actions: [] };
     if (agent === "codex" && row.deliveryMode === "steer") return { tone: "done", label: "Sent into Codex's current turn", actions: [] };
@@ -374,7 +375,7 @@ export function useMessageQueue(
    * Resolves the row id, or null when it was not saved.
    */
   const add = useCallback(
-    async (text: string, deliveryMode: DeliveryMode): Promise<string | null> => {
+    async (text: string, deliveryMode: DeliveryMode, claim?: (id: string) => void): Promise<string | null> => {
       if (!page?.available || mutating.current) return null;
       const waiting = pendingFor(page.scope);
       if (waiting && waiting.text !== text) {
@@ -390,6 +391,9 @@ export function useMessageQueue(
           : { id: crypto.randomUUID(), text, scope: page.scope, createdAt: Date.now(), deliveryMode };
       pending.current = row;
       savePending(storageKey, row);
+      // The bubble that stands for this message owns its row before the row can reach the page, so
+      // the row is never drawn as a message of its own beside it.
+      claim?.(row.id);
       const key = current.current;
       // Only a lost answer keeps the row for a resend. A refusal (too long, terminal controls, a full
       // queue) would be refused again, and would hold every later send in this conversation.

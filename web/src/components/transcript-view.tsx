@@ -15,9 +15,10 @@ import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { searchableText } from "@/lib/transcript-search";
-import { containsQuery, Highlight, LiveStepRow, ThinkingStep, ToolStep, relabel, useToolImages, WorkSteps } from "@/components/work-log-tools";
-import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
-import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, workSegments, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
+import { containsQuery, Highlight, ThinkingNow, ThinkingStep, ToolStep, relabel, useToolImages, WorkSteps } from "@/components/work-log-tools";
+import { Elapsed, Glow } from "@/components/work-activity-label";
+import { EnterScope, useEnter } from "@/lib/enter";
+import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, workSegments, type WorkSegment, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
 
 // Renders an agent transcript — the conversation history a Claude pane's terminal structurally
@@ -189,6 +190,8 @@ function Turn({
 }) {
   const time = clockTime(entry.ts);
   const inline = journalImages(entry).length > 0;
+  // The agent's words ease in when they arrive; your own message was already on screen as its bubble.
+  const enter = useEnter();
 
   // Neither of these is speech, so each is one quiet line, attributed to neither party, its body
   // folded behind it. Their file names stay text: a recap or an injected note names files relative
@@ -196,7 +199,7 @@ function Turn({
   if (entry.role === "summary" || entry.role === "note") {
     const recap = entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n\n").trim();
     return (
-      <div title={time || undefined}>
+      <div>
         {entry.role === "summary"
           ? <CompactionLine text={recap} time={time}
               truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
@@ -209,12 +212,13 @@ function Turn({
   // A chat, not a log: your messages are soft bubbles on the right, raised a step off the page as the
   // composer is, and the agent's are plain text on the left. The header already names the agent, so
   // neither side repeats a speaker label; the time sits under your bubble, at the end of a finished
-  // turn's line, and on hover for the agent.
+  // turn's line. No row carries a hover title: the system's tooltip faded in over the thread as a ghost
+  // of its time (a desk, macOS, 1.41.1).
   // What a command of theirs loaded (a skill's body) is not their words: a line beside the bubble.
   if (entry.role === "user") {
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
-      <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
+      <div data-speaker="user" className="flex flex-col items-end">
         <div className="max-w-[min(85%,28rem)] min-w-0 space-y-1.5 rounded-xl border bg-card px-3.5 py-2.5 [overflow-wrap:anywhere] select-text">
           <UserWords entry={entry} query={query} focused={focused} inline={inline} />
         </div>
@@ -226,7 +230,7 @@ function Turn({
   // Their words, as they wrote them (Markdown), for pasting anywhere else.
   const words = entry.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n\n");
   return (
-    <div data-speaker="assistant" className="space-y-1.5 px-0.5 select-text" title={time || undefined}>
+    <div data-speaker="assistant" className={cn("space-y-1.5 px-0.5 select-text", enter)}>
       {entry.parts.map((part, i) => (
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
@@ -239,9 +243,13 @@ function Turn({
   );
 }
 
-/** The parts of an entry that draw as steps: images go to one gallery, the live step to the bottom row. */
-function stepParts(entry: TranscriptEntry, live: LiveStep | null) {
-  return entry.parts.flatMap((part, index) => part.kind === "image" || (live?.entry === entry.uuid && live.index === index) ? [] : [{ part, index }]);
+/** The agent's words between two runs of steps; words that arrive while the turn is read ease in. */
+function ProseSegment({ segment, query, focusedUuid }: { segment: Extract<WorkSegment, { kind: "prose" }>; query: string; focusedUuid?: string }) {
+  const enter = useEnter();
+  return <div data-turn={segment.entry.uuid} data-speaker="assistant"
+    className={cn("space-y-1.5 px-0.5 py-1 select-text", enter, segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
+    {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
+  </div>;
 }
 
 /**
@@ -253,6 +261,37 @@ function askedCall(turn: WorkTurn): string | undefined {
   const pending = turn.activity.flatMap((entry) => entry.parts.flatMap((part, index) =>
     part.kind === "tool" && !part.result && describeTool(part.name).kind !== "agent" ? [{ part, id: `${entry.uuid}:${index}` }] : []));
   return (pending.find(({ part }) => part.questions?.length) ?? pending[0])?.id;
+}
+
+const TURN_LINE = "flex min-h-8 min-w-0 items-center gap-2 coarse:min-h-11";
+const TURN_WORDS = "flex min-h-8 min-w-0 items-center gap-1.5 text-subhead text-muted-foreground coarse:min-h-11";
+
+/**
+ * "Working 9s", or "Continued 4s" under a message read mid-turn: the word glows and the time sits
+ * beside it in the quiet ink, by the second (it reads "Working for 9s" to assistive tech). Chosen over
+ * the whole line glowing and over T3 Code's still line among three captured variants (ADR 0118).
+ */
+function LiveTurnWords({ since, continued }: { since?: string; continued: boolean }) {
+  // With no start to count from (none, or one ahead of this device's clock), the word alone, still going.
+  const start = since ? Date.parse(since) : NaN;
+  const timed = Number.isFinite(start) && start <= Date.now();
+  const word = continued ? "Continued" : "Working";
+  return <span className="flex min-w-0 items-baseline gap-2">
+    <Glow className="shrink-0">{timed ? word : `${word}…`}</Glow>{" "}
+    {timed && <span className="truncate text-footnote tabular-nums text-subtle-foreground"><span className="sr-only">for </span><Elapsed since={since} fine /></span>}
+  </span>;
+}
+
+/**
+ * A turn's line before its log shows the turn: drawn as the turn's own line will be, in the same place,
+ * so when the turn arrives only its chevron joins it.
+ */
+export function PendingTurnLine({ since, continued = false }: { since?: string; continued?: boolean }) {
+  return <div className="pt-1" role="status">
+    <div className={cn(TURN_LINE, "border-b border-border/60")}>
+      <span className={TURN_WORDS}><LiveTurnWords since={since} continued={continued} /></span>
+    </div>
+  </div>;
 }
 
 /**
@@ -273,17 +312,18 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   // A turn held up by a dialog has not ended: the call the dialog asks about waits, the others run on.
   const asked = waiting ? askedCall(turn) : undefined;
   // The pictures its log holds are in the turn's gallery, folded or not, so they open nothing.
-  const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0);
-  const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
-  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `Worked for ${duration}` : "Worked") : "Work log";
+  const hasDetails = turn.activity.some((entry) => entry.parts.some((part) => part.kind !== "image"));
+  // Work a message read mid-turn cut off is over at that message, though its turn runs on below it.
+  const over = turn.settled || turn.cut;
+  const duration = over && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
+  const worked = turn.continued ? "Continued" : "Worked";
+  // A part a message cut off was not stopped: only the part the stop ended says so.
+  const label = turn.interrupted && !turn.cut ? (duration ? `Stopped after ${duration}` : "Stopped") : over ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
   // One time per turn, when it finished, at the end of its line. The question's time is already under
   // its bubble, so a turn that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
   const finished = clockTime(end);
   const endTime = finished !== clockTime(turn.startedAt ?? "") ? finished : "";
-  // The live step's own entry may have nothing else to draw; the live row then carries its scroll marker.
-  const liveEntry = live?.entry ? turn.activity.find((entry) => entry.uuid === live.entry) : undefined;
-  const liveMarker = liveEntry && !stepParts(liveEntry, live).length && !journalImages(liveEntry).length ? liveEntry.uuid : undefined;
   const viewer = useContext(MediaViewerContext);
   const toolImages = useToolImages();
   // What the agent looked at stays in reach as one gallery for the turn: the pictures its log holds,
@@ -305,10 +345,14 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     {questions}
     {/* The line holds its toggle and the time; a hairline under it, while open, sets the turn's work
         apart from the conversation above. */}
-    <div className={cn("flex min-h-8 min-w-0 items-center gap-2 transition-[border-color] duration-180 ease-out coarse:min-h-11", open ? "border-b border-border/60" : "border-b border-transparent")}>
+    <div className={cn(TURN_LINE, "transition-[border-color] duration-180 ease-out", open ? "border-b border-border/60" : "border-b border-transparent")}>
       <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} disabled={!hasDetails} onClick={() => setExpanded(!open)}
-        className="group flex min-h-8 min-w-0 items-center gap-1.5 text-left text-subhead text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
-        <span className="min-w-0 truncate">{turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" fine /> : label}</span>
+        className={cn(TURN_WORDS, "group text-left hover:text-foreground disabled:opacity-100")}>
+        {/* The line of the part that runs now glows; one a message read mid-turn cut off says how
+            long it took, and the line under that message counts on. */}
+        {turn.active
+          ? <LiveTurnWords since={turn.startedAt} continued={turn.continued} />
+          : <span className="min-w-0 truncate">{label}</span>}
         {failures > 0 && <span className="shrink-0 whitespace-nowrap text-subtle-foreground">· {failures} failed</span>}
         {hasDetails && <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
           !open && "-rotate-90")} />}
@@ -317,14 +361,12 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
       {endTime && <time dateTime={end} className="shrink-0 text-footnote text-subtle-foreground">{endTime}</time>}
     </div>
     <Fold value={open} animate={expanded === true}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
-        {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
-          ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
-          : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
-              className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
-              {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
-            </div>)}
+        {workSegments(turn.activity).map((segment) => segment.kind === "steps"
+          ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live} />
+          : <ProseSegment key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} segment={segment} query={query} focusedUuid={focusedUuid} />)}
+        {/* Between steps the agent is thinking or writing: said where its next step will land. */}
+        {turn.active && !waiting && !live && <ThinkingNow />}
     </div>}</Fold>
-    {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     {answer}
     <ArtifactCards paths={delivered} />
     <ImageStrip images={turnImages} max={3} label="Images from this turn" />
@@ -355,7 +397,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   const last = entries.at(-1);
   const pending = activityLabel && activityStatus === "working" && !rows.some((row) => row.kind === "work" && row.active) &&
     (!last || last.role === "user" || (last.role === "assistant" && last.phase !== "final_answer" && last.turn?.status !== "completed" && last.turn?.status !== "aborted"));
-  return <div className="space-y-3" onClickCapture={(event) => {
+  return <EnterScope><div className="space-y-3" onClickCapture={(event) => {
     const anchor = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-work-toggle]") : null;
     if (anchor) onWorkToggle?.(anchor);
   }}>
@@ -373,6 +415,10 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
           : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
       </div>;
     })}
-    {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
-  </div>;
+    {/* Before the log shows the turn, its line stands where it will be. Under a message the agent read
+        mid-turn the turn above still runs: the line that continues it, and the agent thinking. */}
+    {pending && (rows.some((row) => row.kind === "work" && row.alive)
+      ? <div className="space-y-2"><PendingTurnLine since={last?.ts} continued /><ThinkingNow /></div>
+      : <PendingTurnLine since={last?.role === "user" ? last.ts : undefined} />)}
+  </div></EnterScope>;
 }

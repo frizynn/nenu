@@ -19,13 +19,13 @@ function visibility(value: boolean) {
 }
 
 describe("WorkActivityLabel", () => {
-  it("updates only the elapsed text, once a minute, without causing React commits for the surrounding transcript", () => {
+  it("updates only the elapsed text, each second of the first minute and then once a minute, without causing React commits for the surrounding transcript", () => {
     const committed = vi.fn();
     render(<Profiler id="transcript" onRender={committed}><WorkActivityLabel startedAt={startedAt} /></Profiler>);
-    expect(screen.getByText("Working for <1m")).toBeVisible();
+    expect(screen.getByText("Working for 5s")).toBeVisible();
     const initialCommits = committed.mock.calls.length;
     act(() => { vi.advanceTimersByTime(54_000); });
-    expect(screen.getByText("Working for <1m")).toBeVisible();
+    expect(screen.getByText("Working for 59s")).toBeVisible();
     act(() => { vi.advanceTimersByTime(1000); });
     expect(screen.getByText("Working for 1m")).toBeVisible();
     act(() => { vi.advanceTimersByTime(60_000); });
@@ -39,7 +39,7 @@ describe("WorkActivityLabel", () => {
     visibility(true);
     expect(vi.getTimerCount()).toBe(0);
     act(() => { vi.advanceTimersByTime(120_000); });
-    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
+    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
     visibility(false);
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
     visibility(false);
@@ -61,7 +61,7 @@ describe("WorkActivityLabel", () => {
     act(() => setLocked(true));
     expect(vi.getTimerCount()).toBe(0);
     act(() => { vi.advanceTimersByTime(60_000); });
-    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
+    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
     act(() => setLocked(false));
     expect(screen.getByText("Working for 1m")).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(1);
@@ -93,14 +93,14 @@ describe("WorkActivityLabel", () => {
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
   });
 
-  // A pulse on the words was the only live signal, and reduced motion took it away; a spinner then
-  // cost CPU for the whole turn. The mark is a steady dot in the working colour, for everyone.
-  it("marks the live state with a still dot beside the words, with nothing that moves", () => {
+  // The words glow while the agent works (ADR 0118): a light passes across them, nothing else moves.
+  // jsdom has no IntersectionObserver, so the glow stays still and its words are on the page once.
+  it("glows its words, with no spinner, no dot and no second copy while still", () => {
     const { container } = render(<WorkActivityLabel startedAt={startedAt} />);
-    const glyph = container.querySelector("[data-live-glyph]");
-    expect(glyph).toHaveAttribute("aria-hidden", "true");
-    expect(glyph).toHaveClass("text-status-working");
-    expect(glyph?.querySelector("svg")).toBeNull();
+    expect(container.querySelector("[data-glow]")).toHaveAttribute("data-glow", "still");
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("[class*='animate-']")).toBeNull();
+    expect(screen.getAllByText(/^Working for/)).toHaveLength(1);
   });
 });

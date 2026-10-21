@@ -1,7 +1,7 @@
 import { queueReadiness } from "./queue-readiness.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { join } from "node:path";
-import { MessageQueue, type Exclusive, type QueuedMessage, type Verdict } from "./message-queue.ts";
+import { MessageQueue, RECENT_MS, type Exclusive, type QueuedMessage, type Verdict } from "./message-queue.ts";
 import { deliverQueuedMessage, sendQueuedNow, type QueueWrite } from "./queue-delivery.ts";
 import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMode, sendNowKeys, submitKind } from "./queue-native.ts";
 import { computeEtag } from "./http-cache.ts";
@@ -107,6 +107,45 @@ export class QueueService {
    */
   kick(force = true): void {
     void this.tick(force).catch(() => {});
+  }
+  /**
+   * The rows of the pane's conversation that may wait in Claude's own queue, in the order they went:
+   * those the journal saw enqueued, within the two hours clients list them, and those it has not placed
+   * yet, within the ten minutes it looks; null when the pane's conversation is unknown.
+   * Read before a take-back presses Up (ADR 0118): Claude logs the recall at once, and the journal may
+   * mark them recalled before the take-back ends.
+   */
+  async waitingOn(session: string, paneId: string): Promise<Array<{ id: string; text: string }> | null> {
+    const current = await this.resolve(session, paneId).catch(() => null);
+    if (!current || !identity(current.pane)) return null;
+    // A row just delivered may be there before the journal said so; the words decide whether it came
+    // back. Only a recent one: a row sent to an idle Claude never gets a queue state at all.
+    const recently = Date.now() - RECENT_MS;
+    return (await this.queue.recent(scopeFor(session, current.pane)))
+      .filter((row) => row.native === "enqueued" || (row.native === undefined && row.agent === "claude" && (row.sentAt ?? 0) > recently))
+      .sort((a, b) => (a.claimedAt ?? a.sentAt ?? 0) - (b.claimedAt ?? b.sentAt ?? 0))
+      .map(({ id, text }) => ({ id, text }));
+  }
+  /**
+   * What one take-back brought out of Claude's own queue (ADR 0118), from the rows that waited there
+   * before it (`waitingOn`). Claude's queue is first in, first out, so what came back ends with the
+   * newest of them: they are matched from the end of the words, newest first, while each one ends
+   * what is left; an older row already read never matches past the ones that waited. Those are
+   * recalled (a row the journal recalled first stays so), so no page draws them as waiting there.
+   * `ours` says the words that came back are exactly theirs, spacing aside.
+   */
+  async recallOn(waiting: Array<{ id: string; text: string }>, text: string): Promise<{ messages: Array<{ id: string; text: string }>; ours: boolean }> {
+    const squash = (value: string) => value.replace(/\s+/g, "");
+    let left = squash(text);
+    const matched: typeof waiting = [];
+    for (const row of [...waiting].reverse()) {
+      const words = squash(row.text);
+      if (!words || !left.endsWith(words)) break;
+      matched.unshift(row);
+      left = left.slice(0, -words.length);
+    }
+    for (const row of matched) await this.queue.confirm(row.id, "recalled", [undefined, "enqueued"]);
+    return { messages: matched, ours: matched.length > 0 && left === "" };
   }
   /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */
   textsOn(session: string, paneId: string): Promise<string[]> {

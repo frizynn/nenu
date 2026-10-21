@@ -14,7 +14,7 @@ const queued: LocalSend = {
 };
 
 describe("PendingTurns", () => {
-  it("marks a queued message with a Queued badge and keeps Send now, Edit and Remove behind one ⋯", async () => {
+  it("marks a queued message with a Queued badge, Edit and Remove one tap away and Send now behind the ⋯", async () => {
     const user = userEvent.setup();
     const handlers = actions();
     render(<PendingTurns sends={[queued]} actions={handlers} />);
@@ -23,16 +23,27 @@ describe("PendingTurns", () => {
     const status = screen.getByRole("status");
     expect(within(status).getByText("Queued")).toBeInTheDocument();
     expect(status).toHaveTextContent("Queued Waiting for Claude to finish this turn.");
-    // Nothing to tap on the line itself: the row's management lives in its menu.
+    // Edit and Remove are on the line: one tap each (ADR 0118).
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(handlers.remove).toHaveBeenCalledExactlyOnceWith(queued);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(handlers.edit).toHaveBeenCalledExactlyOnceWith(queued);
+    // Skipping the wait the operator chose stays a deliberate second step.
     expect(screen.queryByRole("button", { name: "Send now" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
-
     await user.click(screen.getByRole("button", { name: "Queued message actions" }));
     const menu = screen.getByRole("dialog", { name: "Queued message" });
-    expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Send now", "Edit", "Remove"]);
-    await user.click(within(menu).getByRole("button", { name: "Remove" }));
-    expect(handlers.remove).toHaveBeenCalledExactlyOnceWith(queued);
-    expect(screen.queryByRole("dialog", { name: "Queued message" })).toBeNull();
+    expect(within(menu).getAllByRole("button").map((b) => b.textContent).filter(Boolean)).toEqual(["Send now"]);
+  });
+
+  it("lets a message in Claude's own queue be edited or removed with one tap, beside Read it now", async () => {
+    const user = userEvent.setup();
+    const handlers = actions();
+    const inClaude: LocalSend = { ...queued, native: "enqueued", queueState: undefined };
+    render(<PendingTurns sends={[inClaude]} actions={handlers} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Claude reads it after this step.");
+    expect(screen.getByRole("button", { name: "Read it now" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(handlers.edit).toHaveBeenCalledExactlyOnceWith(inClaude);
   });
 
   it("closes the open ⋯ when the message starts going, and does not reopen it on its own", async () => {
@@ -68,8 +79,7 @@ describe("PendingTurns", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(handlers.retry).toHaveBeenCalledExactlyOnceWith(failed);
-    await user.click(screen.getByRole("button", { name: "Queued message actions" }));
-    expect(within(screen.getByRole("dialog", { name: "Queued message" })).getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("says Sending… with nothing to tap while the send is in flight", () => {
