@@ -879,6 +879,18 @@ describe("TranscriptView — the work timeline", () => {
     expect(onWorkToggle).toHaveBeenCalledTimes(1);
   });
 
+  // The system's tooltip of a hover title faded in over the bubble as a ghost of its time (1.41.1).
+  it("gives the operator's bubble no hover title", () => {
+    const { container } = render(<TranscriptView entries={[ask]} activityStatus="done" />);
+    expect(container.querySelector('[data-speaker="user"]')).not.toHaveAttribute("title");
+  });
+
+  it("draws the live line as its word glowing beside a quiet time, read as Working for", () => {
+    render(<TranscriptView entries={working([{ kind: "tool", name: "Bash", summary: "ls" }])} activityStatus="working" />);
+    const line = screen.getByRole("button", { name: /^Working for/ });
+    expect(line.querySelector("[data-glow]")).toHaveTextContent(/^Working$/);
+  });
+
   it("says Thinking where the next step will land while no step is in flight", () => {
     const { container } = render(<TranscriptView entries={working([{ kind: "tool", name: "Grep", summary: "chip", result: { text: "chip.tsx" } }])} activityStatus="working" />);
     expect(screen.getByRole("button", { name: /^Working/ })).toBeInTheDocument();

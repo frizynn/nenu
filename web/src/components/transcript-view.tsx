@@ -217,7 +217,9 @@ function Turn({
   if (entry.role === "user") {
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
-      <div data-speaker="user" className="flex flex-col items-end" title={time || undefined}>
+      // No hover title: the system's tooltip faded in over the bubble as a ghost of its time (a desk,
+      // macOS, 1.41.1), and the run's time is already under its first bubble.
+      <div data-speaker="user" className="flex flex-col items-end">
         <div className="max-w-[min(85%,28rem)] min-w-0 space-y-1.5 rounded-xl border bg-card px-3.5 py-2.5 [overflow-wrap:anywhere] select-text">
           <UserWords entry={entry} query={query} focused={focused} inline={inline} />
         </div>
@@ -265,10 +267,17 @@ function askedCall(turn: WorkTurn): string | undefined {
 const TURN_LINE = "flex min-h-8 min-w-0 items-center gap-2 coarse:min-h-11";
 const TURN_WORDS = "flex min-h-8 min-w-0 items-center gap-1.5 text-subhead text-muted-foreground coarse:min-h-11";
 
-/** "Working for 9s", or "Continued for 4s" under a message read mid-turn: glowing, by the second. */
+/**
+ * "Working 9s", or "Continued 4s" under a message read mid-turn: the word glows and the time sits
+ * beside it in the quiet ink, by the second (it reads "Working for 9s" to assistive tech). Chosen over
+ * the whole line glowing and over T3 Code's still line among three captured variants (ADR 0118).
+ */
 function LiveTurnWords({ since, continued }: { since?: string; continued: boolean }) {
-  const prefix = continued ? "Continued for " : "Working for ";
-  return <Glow layout="truncate"><Elapsed since={since} prefix={prefix} fallback={continued ? "Continued…" : "Working…"} fine /></Glow>;
+  return <span className="flex min-w-0 items-baseline gap-2">
+    {/* With no start to count from, the word alone, still going. */}
+    <Glow className="shrink-0">{`${continued ? "Continued" : "Working"}${since ? "" : "…"}`}</Glow>{" "}
+    <span className="truncate text-footnote tabular-nums text-subtle-foreground"><span className="sr-only">for </span><Elapsed since={since} fine /></span>
+  </span>;
 }
 
 /**
