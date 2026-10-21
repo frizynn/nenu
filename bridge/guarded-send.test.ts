@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   OutputTrigger,
@@ -17,7 +20,7 @@ import {
   type PriorAttempt,
 } from "./guarded-send.ts";
 import type { OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
-import type { LogLook, LogReader } from "./delivery-check.ts";
+import { claudeLogReader, type LogLook, type LogReader } from "./delivery-check.ts";
 import type { SendRequest } from "./types.ts";
 
 // A terminal with an input box, in memory: Claude's frame (rule / `❯ draft` / rule / statusline) or
@@ -789,6 +792,30 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     expect(outcome.ok).toBe(true);
     expect(term.count("pane.send_text")).toBe(0);
     expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("at an idle Claude, a retry finds its earlier try in the real log and types nothing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nenu-retry-"));
+    const path = join(dir, "s.jsonl");
+    await writeFile(path, `${JSON.stringify({ type: "user", timestamp: new Date(5_000).toISOString(), message: { role: "user", content: text } })}\n`);
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: claudeLogReader(async () => path) }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 4_000 });
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_text")).toBe(0);
+    await rm(dir, { recursive: true });
+  });
+
+  test("background work alone is not idle: Enter waits to see the text", async () => {
+    const term = new Term();
+    await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, background: true }) }), { text, requestId: "r1" });
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+  });
+
+  test("a turn that starts before Enter sends this one the mid-turn way", async () => {
+    const term = new Term();
+    const turn = () => ({ running: term.count("pane.send_text") > 0 });
+    await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
   });
 
   test("a retry the log says nothing about types nothing either: the earlier bytes may still arrive", async () => {

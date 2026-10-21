@@ -92,6 +92,8 @@ describe("claudeLogReader (ADR 0116)", () => {
     expect(sameMessage(words(240), words(240).slice(1022))).toBe(true);
     expect(sameMessage(words(240), "word239")).toBe(false);
     expect(sameMessage("look /s/uploads/a-k3-0a1b2c3d.png here", "look [Image #4] here")).toBe(true);
+    // Pictures alone carry no words to tell one message from another.
+    expect(sameMessage("/s/uploads/a-k3-0a1b2c3d.png", "[Image #1]")).toBe(false);
   });
 
   test("says nothing about a moment its first look did not read back to, nor without a log", async () => {

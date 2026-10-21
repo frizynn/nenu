@@ -6,7 +6,7 @@ import { deliverQueuedMessage, sendQueuedNow, type QueueWrite } from "./queue-de
 import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMode, sendNowKeys, submitKind } from "./queue-native.ts";
 import { computeEtag } from "./http-cache.ts";
 import { object } from "./subagent-files.ts";
-import type { ActionResponse, AgentView, DeliveryMode } from "./types.ts";
+import type { ActionResponse, AgentView, DeliveryMode, TurnState } from "./types.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
 import type { AuditLog } from "./audit.ts";
@@ -30,7 +30,7 @@ export type QueueExtras = {
   /** A fresh look at the log of the conversation a pane runs, as the phone send gets one. */
   log?: (session: string, paneId: string) => GuardedSendDeps["received"];
   /** The CLI's own state of a pane (ADR 0067): whether a turn runs, and a dialog it reports. */
-  turn?: (session: string, paneId: string) => ReturnType<NonNullable<GuardedSendDeps["turn"]>>;
+  turn?: (session: string, paneId: string) => TurnState | undefined;
 };
 
 const identity = (pane: AgentView) =>

@@ -43,7 +43,7 @@ export interface GuardedSendDeps {
    */
   received?: LogReader;
   /** The CLI's own state of the pane (ADR 0067): whether a turn runs, and a dialog it reports. */
-  turn?: () => Pick<TurnState, "running" | "waiting"> | undefined;
+  turn?: () => Pick<TurnState, "running" | "waiting" | "background"> | undefined;
 }
 
 /** What earlier attempts with the same request id left behind, when they failed. */
@@ -318,12 +318,16 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const paste = adapter?.bracketedPaste;
   const now = deps.now ?? Date.now;
   const turn = deps.turn?.();
-  // Enter right behind the text (ADR 0116) where the log can witness the send and no turn runs: at an
-  // idle Claude nothing but the operator opens a dialog, and the pre-flight read is the last look.
-  // Mid-turn a tool's permission prompt may open under the text, so Enter waits to see it there.
-  let logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request) && turn?.running === false && turn.waiting === undefined;
-  // The log must be readable now for its silence to mean anything later; this look also reads its tail.
-  if (logFirst && (await look(deps.received!, now(), request.text)).kind === "unreadable") logFirst = false;
+  // Enter right behind the text (ADR 0116) where the log can witness the send and Claude is idle, no
+  // turn and no background work: then nothing but the operator opens a dialog, and the pre-flight read
+  // is the last look. Mid-turn a tool's permission prompt may open under the text, so Enter waits.
+  let logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request) && turn?.running === false && turn.waiting === undefined && !turn.background;
+  // One first look at the log, from an earlier try's first write if there was one: it says whether that
+  // try arrived, and the log must be readable now for its silence to mean anything later. The reader
+  // reads only what was appended since its last look, so a second first look would miss that row.
+  const retry = prior?.typeAttempted === true && prior.typedAt !== undefined;
+  const first = deps.received && (logFirst || retry) ? await look(deps.received, prior?.typedAt ?? now(), request.text) : null;
+  if (first?.kind === "unreadable") logFirst = false;
   // With Enter right behind it, typed text goes as a paste whatever its length: 760 characters typed
   // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0116).
   const pasted = (text: string) => logFirst || request.paste === true || paste === true || (typeof paste === "function" && paste(text));
@@ -361,10 +365,9 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
   // The CLI's log says whether an earlier try reached the agent (ADR 0116): logged or queued, it is
   // sent and nothing is typed again. Its silence proves nothing: the bytes may still be on their way.
-  if (prior?.typeAttempted && prior.typedAt !== undefined && deps.received) {
-    const earlier = await look(deps.received, prior.typedAt, request.text);
-    if (earlier.kind === "logged") return judged(send, earlier.text);
-    if (earlier.kind === "queued") return send.done();
+  if (retry && first) {
+    const earlier = answer(send, first);
+    if (earlier) return earlier;
   }
   const alreadyTyped = prior?.typeAttempted === true && seen !== null && send.carries(seen);
   if (prior?.textDelivered && !alreadyTyped) return send.fail(MAYBE_SENT, true);
@@ -394,7 +397,8 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     }
   }
 
-  if (logFirst && deps.received) return await submitAndLog(send, deps, adapter, deps.received, since);
+  // A turn that started meanwhile (the sweep can take seconds) sends this one the mid-turn way.
+  if (logFirst && deps.received && deps.turn?.()?.running === false) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {
@@ -505,6 +509,15 @@ function look(received: LogReader, since: number, sent: string): Promise<LogLook
   return received(since, sent).catch(() => ({ kind: "unreadable" as const }));
 }
 
+/** What a look that found this message makes of the send, or null when it found nothing. */
+function answer(send: Send, seen: LogLook): GuardedSendResult | null {
+  if (seen.kind === "queued") return send.done();
+  if (seen.kind !== "logged") return null;
+  // All of it is sent, less is incomplete (ADR 0076).
+  const check = deliveryVerdict(send.request.text, seen.text);
+  return check.verdict === "incomplete" ? send.fail(incomplete(check.sentChars, check.receivedChars), true, "incomplete") : send.done();
+}
+
 /**
  * The box let go of the message; the CLI's log says what it received. The box only proves a long
  * send by Claude's paste token, or by a literal slice that may be all that is left of it (ADR 0076),
@@ -515,16 +528,9 @@ async function logged(send: Send, deps: GuardedSendDeps, since: number): Promise
   for (const delay of LOCAL_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     const seen = await look(deps.received, since, send.request.text);
-    if (seen.kind === "logged") return judged(send, seen.text);
-    if (seen.kind !== "none") return send.done();
+    if (seen.kind !== "none") return answer(send, seen) ?? send.done();
   }
   return send.done();
-}
-
-/** What the CLI logged for this send: all of it is sent, less is incomplete (ADR 0076). */
-function judged(send: Send, text: string): GuardedSendResult {
-  const check = deliveryVerdict(send.request.text, text);
-  return check.verdict === "incomplete" ? send.fail(incomplete(check.sentChars, check.receivedChars), true, "incomplete") : send.done();
 }
 
 /** A slash command (`/name`, not a path) or a `!` shell line: Claude logs either as something else. */
@@ -561,19 +567,21 @@ async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessA
   let held = false;
   let shown = false;
   let goneFor: number | null = null;
+  let taken = 0;
   for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
-    const seen = await look(received, since, sent);
-    if (seen.kind === "logged") return judged(send, seen.text);
-    if (seen.kind === "queued") return send.done();
+    const logged = answer(send, await look(received, since, sent));
+    if (logged) return logged;
     let box: Seen;
     try {
       box = await send.read();
     } catch {
       continue;
     }
-    // Something took the keyboard with the message neither logged nor in sight: Enter may have gone to it.
-    if (box.composer === false) return send.fail(TAKEN, true);
+    // Something took the keyboard with the message neither logged nor in sight: Enter may have gone to
+    // it. Two looks in a row, so one read caught mid-redraw decides nothing.
+    taken = box.composer === false ? taken + 1 : 0;
+    if (taken >= 2) return send.fail(TAKEN, true);
     held = send.carries(box);
     if (held) shown = true;
     goneFor = held || !shown ? null : goneFor === null ? 0 : goneFor + delay;
@@ -585,9 +593,8 @@ async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessA
   // The sweep's keys reach Claude after the Enter, so a Claude slow enough may have taken it after all.
   for (const delay of LOCAL_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
-    const late = await look(received, since, sent);
-    if (late.kind === "logged") return judged(send, late.text);
-    if (late.kind === "queued") return send.done();
+    const late = answer(send, await look(received, since, sent));
+    if (late) return late;
   }
   return left;
 }

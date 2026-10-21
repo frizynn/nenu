@@ -82,7 +82,8 @@ const TAIL_MIN = 32;
 export function sameMessage(sent: string, logged: string): boolean {
   const want = words(sent);
   const got = words(logged);
-  return got === want || (got.length >= TAIL_MIN && want.endsWith(got));
+  // A message of pictures alone has no words to tell it from another: the box decides that one.
+  return want.length > 0 && (got === want || (got.length >= TAIL_MIN && want.endsWith(got)));
 }
 
 /** What one look at Claude's log found for a message. */
