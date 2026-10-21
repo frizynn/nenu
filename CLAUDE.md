@@ -232,9 +232,14 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
 - **Motion, hover and status marks come from one set of tokens** (`web/src/index.css`): 120 ms for a
   control, 180 ms for a panel, 280 ms for a page, all on `--motion-ease`; one hover fill
-  (`hover:bg-hover`); one 6 px status dot; a desk's page tabs underlined. `calm-motion.test` and
+  (`hover:bg-hover`); one status mark (ADR 0113); a desk's page tabs underlined. `calm-motion.test` and
   `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
+- **A state is a still glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
+  `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
+  nothing at rest. Colour only for what asks for you, nothing spins, and a resting chat in the desk's
+  bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
+  ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
