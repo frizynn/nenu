@@ -502,6 +502,36 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   return send.fail("The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready.", false);
 }
 
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+
+/**
+ * Clear the input box while it still holds `expected`, a draft the operator took over on the phone
+ * (ADR 0112): a fresh read must show the input box holding exactly that draft, then the send's own
+ * sweep clears it and a read confirms the box emptied. A changed draft, a dialog or no input box is
+ * left alone. The caller holds the pane's write lock.
+ */
+export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep">, expected: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const kept = { ok: false as const, error: "The terminal's input changed, so it was left as it is." };
+  let adapter: HarnessAdapter | undefined;
+  try {
+    adapter = adapterFor((await deps.herdr.getPane(deps.paneId)).agent ?? undefined);
+  } catch (err) {
+    return { ok: false, error: `herdr pane.get failed: ${message(err)}` };
+  }
+  if (!adapter?.composerReady) return { ok: false, error: "Nenu can't read this agent's input box, so it was left as it is." };
+  const full = { ...deps, submitKeys: [] };
+  const send = new Send(full, { text: expected, requestId: "clear-draft" }, adapter);
+  let seen: Seen;
+  try {
+    seen = await send.read();
+  } catch (err) {
+    return { ok: false, error: `herdr read failed: ${message(err)}` };
+  }
+  if (seen.composer !== true || seen.draft === null || oneLine(seen.draft) !== oneLine(expected)) return kept;
+  const failed = await sweep(send, full, adapter, seen);
+  return failed && !failed.outcome.ok ? { ok: false, error: failed.outcome.error } : { ok: true };
+}
+
 /**
  * Wait until the adapter sees the message in the input box. `pane.wait_for_output` wakes the loop
  * when the trigger regex matches, and every wake (match or miss) ends in a fresh read the adapter

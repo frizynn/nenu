@@ -780,12 +780,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const showPreview =
     !gone && previewLatched && effectiveRaw !== null && normalizeDraft(effectiveRaw) !== handledKey;
 
-  // Take over: the explicit "I'll handle this on mobile now" action. One-shot COPY of the current raw
-  // draft into the composer (set on an empty input, else appended on a new line so mobile-typed work
-  // survives), mark that exact text handled (so it can't instantly re-latch the preview — the raw line
-  // still holds it until the host clears it), and hide the preview. No keys touch the terminal here —
-  // the stranded line is only ever swept by the send()-time pre-clear. If the host keeps typing and
-  // produces a DIFFERENT draft afterwards, the preview honestly reappears with the new text.
+  // Take over: the explicit "I'll handle this on mobile now" action. It MOVES the current raw draft:
+  // a copy into the composer (set on an empty input, else appended on a new line so mobile-typed work
+  // survives), the preview marked handled and hidden, and the terminal's line cleared. Left there, the
+  // line held up the queue, which never clears a draft, and nothing on the phone could remove it once
+  // the composer held the copy (ADR 0112). The bridge clears it only while the box still holds this
+  // exact text: if the host typed on, the line stays. A read-only device only copies. If the host
+  // keeps typing and produces a DIFFERENT draft afterwards, the preview honestly reappears with it.
   function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
@@ -794,6 +795,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
+    if (locked) return;
+    const kept = "The terminal still holds its copy: its input changed. Yours is here.";
+    api.clearTerminalDraft(paneId, draft, session).then(
+      (res) => { if (!res.ok) setStatus(kept, "info"); },
+      () => setStatus(kept, "info"),
+    );
   }
 
   // The Keys tray's preset row, resolved the same way from the same one-shot read of /api/config.
