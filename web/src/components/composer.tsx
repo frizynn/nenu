@@ -177,7 +177,7 @@ interface ComposerProps {
   onControlsChange?: (controls: ComposerControl[]) => void;
   /** Beside a desk's session panel: Type into terminal lives in its Terminal tab, and the + has no Keys. */
   sessionPanel?: SessionPanelLink;
-  /** The chat shows its Terminal view in place of the conversation: the box is the terminal (ADR 0113). */
+  /** The chat shows its Terminal view in place of the conversation: the box is the terminal (ADR 0114). */
   terminalView?: boolean;
 }
 
@@ -508,7 +508,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     return rowId !== null;
   }
   // A busy agent gets the message as its own terminal's Enter gives it: now, into the CLI's queue or
-  // the running turn. The other mode is the + menu's "Send after this turn" (ADR 0113).
+  // the running turn. The other mode is the + menu's "Send after this turn" (ADR 0114).
   const busyChoice = nativeWorkbench && queue.page?.available ? busyChoiceFor(agent) : null;
   // "Read it now" backgrounds Claude's running command, so it takes a second tap.
   const readNowConfirm = usePendingConfirm(8_000);
@@ -614,7 +614,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const direct = useDirectTyping({
     paneKey: `${session ?? ""}\0${paneId}`,
     inputRef,
-    // A terminal view on screen makes the box that terminal (ADR 0113).
+    // A terminal view on screen makes the box that terminal (ADR 0114).
     auto: terminalView || sessionPanel?.terminal != null,
     autoFocus: !coarse,
     canActivate: () => !(locked || sending || attachments.uploading),
@@ -763,7 +763,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Take over (a local text copy); only the actual Send stays gated.
   const showPreview =
     !gone && previewLatched && effectiveRaw !== null && normalizeDraft(effectiveRaw) !== handledKey;
-  // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0113).
+  // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0114).
   const hostDraft = showPreview ? effectiveRaw : null;
   // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
   const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
@@ -798,7 +798,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
   }, [draftPick, boxSettled, sending, draftBusy]);
 
-  /** Send or discard the agent's box's text, bound to the text shown (ADR 0113). */
+  /** Send or discard the agent's box's text, bound to the text shown (ADR 0114). */
   async function settleHostDraft(action: "send" | "discard") {
     if (hostDraft === null || locked || draftBusy) return;
     const draft = hostDraft;
@@ -879,7 +879,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const unsaved = queueable ? queue.pendingAdd() : null;
     if (unsaved) return enqueueDraft(t, isDraft, unsaved.text === t ? unsaved.deliveryMode : "afterTurn");
     // Text in the agent's box: the operator says what becomes of it, right above the box, and this
-    // message goes the moment they do (ADR 0113). Never swept unseen, never waited on unsaid.
+    // message goes the moment they do (ADR 0114). Never swept unseen, never waited on unsaid.
     if (!action && !force && !how.draftSettled && hostDraft !== null) {
       setDraftPick({ text: t, isDraft, mode: how.mode });
       setSettledHere(false);
@@ -1260,7 +1260,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     disabled, on: drawer === id, run: () => controlActions.current.toggleDock(id),
   });
   const controls: ComposerControl[] = [
-    // While the agent works, Send goes now, as the terminal's Enter; this is the other mode (ADR 0113).
+    // While the agent works, Send goes now, as the terminal's Enter; this is the other mode (ADR 0114).
     ...(working && busyChoice && hasDraft && !direct.active ? [{ id: "later", group: "Send", label: "Send after this turn", icon: Clock,
       disabled: locked || sending || attachments.uploading, run: () => sendDraft({ mode: "afterTurn" }) } as const] : []),
     { id: "attach", group: "Attach", label: "Files and photos", icon: Paperclip, disabled: locked || direct.active, run: () => controlActions.current.attach() },
@@ -1385,7 +1385,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </ComposerDock>
         )}
         {/* The text in the agent's own box, shown once it holds still, with what to do about it in one
-            tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0113). A Send while it
+            tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0114). A Send while it
             is there waits on that tap instead of sweeping it or queueing behind it. */}
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview

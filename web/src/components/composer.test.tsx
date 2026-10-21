@@ -1035,7 +1035,7 @@ describe("Composer — typing into the terminal", () => {
     expect(screen.getByTestId("status")).toHaveTextContent(/pane unavailable/i);
   });
 
-  it("keeps a buffered reply aside while armed, and gives it back on disarm (ADR 0113)", async () => {
+  it("keeps a buffered reply aside while armed, and gives it back on disarm (ADR 0114)", async () => {
     const user = userEvent.setup();
     const sent: string[][] = [];
     server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
@@ -1080,7 +1080,7 @@ describe("Composer — typing into the terminal", () => {
     expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
   });
 
-  it("is the box in the chat's Terminal view, and the chat's box again when the view goes (ADR 0113)", async () => {
+  it("is the box in the chat's Terminal view, and the chat's box again when the view goes (ADR 0114)", async () => {
     function Harness() {
       const [terminalView, setTerminalView] = useState(true);
       return <>
@@ -1558,7 +1558,7 @@ describe("Composer — terminal-draft preview", () => {
   it.each([
     ["send", "Send it first"],
     ["discard", "Discard"],
-  ] as const)("a Send over text in the agent's box waits for %s, then goes on its own (ADR 0113)", async (action, button) => {
+  ] as const)("a Send over text in the agent's box waits for %s, then goes on its own (ADR 0114)", async (action, button) => {
     const user = userEvent.setup();
     const sends = serveSend();
     const settled: unknown[] = [];
@@ -2672,7 +2672,7 @@ describe("Composer — images and the pending bubble", () => {
   });
 });
 
-describe("Composer — a busy agent gets Send now, and Send after this turn in the + (ADR 0056, ADR 0113)", () => {
+describe("Composer — a busy agent gets Send now, and Send after this turn in the + (ADR 0056, ADR 0114)", () => {
   type Row = { id: string; text: string; state: "queued" | "sending" | "paused"; createdAt: number; revision: number; deliveryMode?: string; waitingFor?: string; stranded?: { reason: string; since: number }; device?: string | null };
   type Delivered = { id: string; text: string; sentAt: number; deliveryMode?: string; native?: string; readNowAt?: number };
   /** The bridge's queue route, stateful: rows added here are listed until a test moves them. */
@@ -2713,7 +2713,7 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
   it.each([
     ["claude", "asap"],
     ["codex", "steer"],
-  ] as const)("a busy %s gets Send as its terminal's Enter: now, mode %s, nothing asked (ADR 0113)", async (agent, mode) => {
+  ] as const)("a busy %s gets Send as its terminal's Enter: now, mode %s, nothing asked (ADR 0114)", async (agent, mode) => {
     const user = userEvent.setup();
     const queue = serveQueueRoute();
     const wire = watchWrites();

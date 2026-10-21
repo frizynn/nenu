@@ -4161,7 +4161,7 @@ async function takeOver(): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
-/** ADR 0113 on a phone and a desk: nothing Nenu sends gets stuck or drawn over the thread. */
+/** ADR 0114 on a phone and a desk: nothing Nenu sends gets stuck or drawn over the thread. */
 async function sendAlways(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench((bridge, browser) => sendAlwaysBench(bridge, browser, outDir), CAPTURE_EPOCH);

@@ -19,14 +19,14 @@ interface TerminalDraftPreviewProps {
   onDiscard: (() => void) | null;
   /** A Send or Discard is on its way. */
   busy: boolean;
-  /** A message from this composer waits on the operator's call (ADR 0113). */
+  /** A message from this composer waits on the operator's call (ADR 0114). */
   waiting: boolean;
   /** Take the waiting message back: it stays in the composer, unsent. */
   onCancel: () => void;
 }
 
 // The text in the agent's own input box, which a send must neither sweep unseen nor wait on unsaid
-// (ADR 0113): typed at the terminal, recalled from the CLI's queue, or left by a send that stopped.
+// (ADR 0114): typed at the terminal, recalled from the CLI's queue, or left by a send that stopped.
 // The composer input stays phone-owned — a host draft is never written into it implicitly — and the
 // operator settles it here in one tap: Send it first (Enter in the terminal), Add to my message (Take
 // over: it joins the composer's draft and leaves the terminal) or Discard. A message sent while it is

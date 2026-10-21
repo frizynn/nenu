@@ -896,14 +896,14 @@ describe("settleDraft", () => {
   test.each([
     ["words", "borrador escrito a mano"],
     ["a paste the CLI collapsed", "[Pasted text #37 +27 lines]"],
-  ])("discards a draft holding %s the operator saw and chose to drop (ADR 0113)", async (_case, held) => {
+  ])("discards a draft holding %s the operator saw and chose to drop (ADR 0114)", async (_case, held) => {
     const term = new Term();
     term.draft = held;
     expect(await settleDraft(deps(term), held, "discard")).toEqual({ ok: true });
     expect(term.draft).toBe("");
   });
 
-  test("sends the draft with the submit key and waits for the box to let go of it (ADR 0113)", async () => {
+  test("sends the draft with the submit key and waits for the box to let go of it (ADR 0114)", async () => {
     const term = new Term();
     term.draft = "[Pasted text #37 +27 lines]";
     expect(await settleDraft(deps(term), "[Pasted text #37 +27 lines]", "send")).toEqual({ ok: true });

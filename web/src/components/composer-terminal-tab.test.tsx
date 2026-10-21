@@ -10,7 +10,7 @@ import { Composer } from "./composer";
 // On a desk the session panel's Terminal tab holds the "Type into terminal" switch under the mirror,
 // and the desk's own keyboard is the keys; the + menu keeps the message-side rows only. The composer
 // still owns the switch: the tab is a place it draws into while the tab is on screen (agent-chat.tsx
-// hands it over as `sessionPanel`). The tab on screen makes the box the terminal (ADR 0113); the
+// hands it over as `sessionPanel`). The tab on screen makes the box the terminal (ADR 0114); the
 // switch turns that off for as long as the tab stays.
 
 beforeAll(() => {

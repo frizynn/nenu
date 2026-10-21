@@ -265,7 +265,7 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0077](./.adr/0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md)), and the
   Terminal view itself: while the chat's Terminal view or a desk's Terminal tab is on screen the box is
   the terminal, the chat's draft waits aside, and the switch turns it off for that view
-  ([ADR 0113](./.adr/0113-a-send-from-nenu-never-gets-stuck.md)); no gesture arms it. There the desk's
+  ([ADR 0114](./.adr/0114-a-send-from-nenu-never-gets-stuck.md)); no gesture arms it. There the desk's
   keyboard is the keys, Ctrl chords and F-keys included, and the tab has no Keys tray; Command stays the
   browser's ([ADR 0079](./.adr/0079-on-a-desk-the-keyboard-is-the-keys.md)). It disarms on a pane
   switch, a composer lock (gone pane, read-only, idle pause), a hidden page, a failed batch and the
@@ -431,7 +431,7 @@ choice and never sends argv.
 The chat gallery also previews Nenu-generated raster uploads outside cwd through
 `bridge/chat-upload-preview.ts`. This exception requires a generated filename directly under one of
 the uploads directories (`uploadDirs`) and the exact path in a user message from the current pane's contained
-journal, or in one of Nenu's queue rows on that pane (a message still waiting, ADR 0113). Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
+journal, or in one of Nenu's queue rows on that pane (a message still waiting, ADR 0114). Keep bounded reads, image sniffing, no-symlink checks, and the existing upload retention;
 never generalize it to arbitrary transcript paths or all files under the state directory.
 A picture travels where it sits in the message: a chip in the draft, its path in place on the wire,
 and Claude and Codex get it piece by piece, each path pasted alone after the last token showed; never
@@ -440,7 +440,7 @@ The queue types it the same way, each piece its own write. A picture left as its
 a send that stops before Enter clears the box when it holds only what it typed, and Take over clears the
 terminal's copy while it still holds that text; `bun scripts/e2e/run.ts take-over` must pass
 ([ADR 0112](./.adr/0112-a-send-that-stops-leaves-the-box-as-it-found-it.md)).
-**A send from Nenu never gets stuck** ([ADR 0113](./.adr/0113-a-send-from-nenu-never-gets-stuck.md)):
+**A send from Nenu never gets stuck** ([ADR 0114](./.adr/0114-a-send-from-nenu-never-gets-stuck.md)):
 Send while the agent works goes now, as its terminal's Enter (Send after this turn is a + row); text in
 the agent's box is settled beside the composer with Send it first, Add to my message or Discard, bound
 to the text shown, and a Send over it waits for that tap, never sweeping it or queueing behind it; a

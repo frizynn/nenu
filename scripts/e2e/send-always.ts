@@ -6,7 +6,7 @@ import { DESKTOP, PHONE, type Browser, type Page } from "./browser.ts";
 import type { TestBridge } from "./bridge.ts";
 import type { Check } from "./inline-images.ts";
 
-// The send-always bench (ADR 0113), on a phone and a desk in WebKit, against a Claude pane that is
+// The send-always bench (ADR 0114), on a phone and a desk in WebKit, against a Claude pane that is
 // working. What the 2026-10-21 reports found on 1.38.4, each one a check:
 //   1. A message waiting in Nenu's queue with a picture, opened on a page that has no bubble of its
 //      own for it (queued before a reload): drawn in the thread at its end, never in a section over
@@ -141,7 +141,7 @@ export async function sendAlwaysBench(bridge: TestBridge, browser: Browser, outD
     // 3. Text in Claude's box: Send waits beside the box, Discard settles it, and the message goes.
     fake.setStatus(pane, "idle");
     await client.sendPaneText(pane, `typed at the desk (${device})`);
-    // A build before ADR 0113 draws "Draft in terminal" with only Take over: the checks record it.
+    // A build before ADR 0114 draws "Draft in terminal" with only Take over: the checks record it.
     await page.waitForFunction(() => document.querySelector('[aria-label="Text in Claude\'s box"]') !== null || document.body.innerText.includes("Draft in terminal"), null, { timeout: 15_000 });
     const before = fake.submitted.length;
     await box.fill(`mine goes after (${device})`);

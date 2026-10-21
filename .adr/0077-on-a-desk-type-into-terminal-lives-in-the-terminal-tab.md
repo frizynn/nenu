@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-14). The operator chose it with the desk redesign; it fills the
   Terminal tab ADR 0075 reserved.
-- **Amended by:** [ADR 0113](./0113-a-send-from-nenu-never-gets-stuck.md): the tab on screen arms the
+- **Amended by:** [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md): the tab on screen arms the
   mode; the switch turns it off.
 - **Amended by:** [ADR 0079](./0079-on-a-desk-the-keyboard-is-the-keys.md): the tab keeps the mirror
   and the switch, the desk's keyboard is the keys, and Keys stay on the phone.

@@ -57,7 +57,7 @@ function queuedUpload(texts: readonly string[], dirs: readonly string[], path: s
  * Uploads live outside the workspace. A contained journal for the CURRENT pane must prove the
  * user shared this exact generated path before it can be previewed, or one of Nenu's own queue rows
  * on that pane must name it: a message still waiting is drawn in the thread with its pictures (ADR
- * 0113). This is not host-file access and does not alter project-file containment or the upload
+ * 0114). This is not host-file access and does not alter project-file containment or the upload
  * retention policy.
  */
 export async function chatUploadPreviewResponse(

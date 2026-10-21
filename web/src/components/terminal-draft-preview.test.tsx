@@ -13,7 +13,7 @@ it("lets a finger reach every action at 44 px", () => {
   for (const name of ["Send it first", "Add to my message", "Discard"]) expect(screen.getByRole("button", { name })).toHaveClass("hit-area");
 });
 
-it("settles the box's text in one tap each: send it, add it to mine, discard it (ADR 0113)", async () => {
+it("settles the box's text in one tap each: send it, add it to mine, discard it (ADR 0114)", async () => {
   const onSend = vi.fn();
   const onTakeOver = vi.fn();
   const onDiscard = vi.fn();

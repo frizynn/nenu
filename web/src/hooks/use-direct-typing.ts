@@ -67,7 +67,7 @@ interface DirectTypingOptions {
    *  device, or the idle pause. Arming survives none of them — see the disarm effect below. */
   suspended: boolean;
   /** A terminal view is on screen (the chat's Terminal view, or a desk's Terminal tab): the box is the
-   *  terminal while it is, unless the operator turned that off in this view (ADR 0113). */
+   *  terminal while it is, unless the operator turned that off in this view (ADR 0114). */
   auto: boolean;
   /** Whether arming by `auto` takes focus: on a desk, so the keys go in at once; never on a phone,
    *  where a keyboard nobody asked for would cover the mirror. */
@@ -86,7 +86,7 @@ interface DirectTypingOptions {
 // Arming is a choice the operator can read on screen, never a gesture: the "Type into terminal" row
 // in the composer's + menu on a phone, the switch of that name in a desk's Terminal tab, or a
 // terminal view itself (`auto`): while the chat's Terminal view or a desk's Terminal tab is on screen,
-// the box is that terminal, and leaving the view gives the chat its box back (ADR 0113, amending
+// the box is that terminal, and leaving the view gives the chat its box back (ADR 0114, amending
 // ADR 0077 and ADR 0079). The chat's draft is never touched: it waits in the store and comes back
 // with the chat. Turned off by the operator inside a view, the mode stays off until the view is
 // left and entered again.

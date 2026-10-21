@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-21). Amends [ADR 0104](./0104-a-picture-travels-where-it-sits-in-the-message.md)
   decision 2 ("a token that never shows stops the send"). Decision 4's last sentence (a Send replaces
-  a stranded draft) amended by [ADR 0113](./0113-a-send-from-nenu-never-gets-stuck.md), which also
+  a stranded draft) amended by [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md), which also
   replaced `clearTakenDraft` with `settleDraft`. Reported by the operator from an iPhone on
   1.38.1: a picture left its path typed in Claude's box, the queue stuck behind it, and the phone
   could neither type nor delete in the terminal.

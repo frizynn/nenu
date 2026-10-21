@@ -87,7 +87,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0053](./0053-an-unread-dialog-still-has-a-way-out.md) | An unread dialog still has a way out: a footer phrase never silences a grammar (only that half is in Nenu) | Proposed |
 | [0054](./0054-the-browser-hears-what-changed-not-the-state.md) | The browser hears what changed, never the state | Accepted; amended by 0058 |
 | [0055](./0055-the-folder-picker-lists-names-under-home-only.md) | The folder picker lists folder names under home, and nothing else | Accepted |
-| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted; send-time choice amended by 0113 |
+| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted; send-time choice amended by 0114 |
 | [0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md) | The bridge reads and answers dialogs; the screen is the actuator and hooks only observe | Accepted |
 | [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted |
 | [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted; amended by 0063 |
@@ -99,9 +99,9 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
 | [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted |
 | [0076](./0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md) | A long Claude send is one bracketed paste, and Claude's log has the last word (amends 0010) | Accepted |
-| [0077](./0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md) | On a desk, Keys and Type into terminal live in the Terminal tab | Accepted; Keys amended by 0079, arming by 0113 |
+| [0077](./0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md) | On a desk, Keys and Type into terminal live in the Terminal tab | Accepted; Keys amended by 0079, arming by 0114 |
 | [0078](./0078-page-motion-runs-only-on-navigations-the-app-starts.md) | Page motion runs only on navigations the app starts (React Router's `viewTransition` flag was rejected) | Accepted |
-| [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted; amended by 0113 |
+| [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted; amended by 0114 |
 | [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md) | On a desk, the project is the session panel's first tab (supersedes 0075 point 2) | Superseded by 0101 |
 | [0082](./0082-a-codex-with-no-turn-has-nothing-to-link.md) | A Codex with no turn has nothing to link; one holding its rollout is that conversation (narrows 0022, adds to 0028) | Accepted |
 | [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted |
@@ -113,8 +113,8 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted |
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted |
 | [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted |
-| [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0113 |
-| [0113](./0113-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
+| [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0114 |
+| [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

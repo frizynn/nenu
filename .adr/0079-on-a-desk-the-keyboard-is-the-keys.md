@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-15). Amends 0077: the Terminal tab keeps the mirror and the switch,
   and Keys stay on the phone.
-- **Amended by:** [ADR 0113](./0113-a-send-from-nenu-never-gets-stuck.md): the Terminal tab, and the
+- **Amended by:** [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md): the Terminal tab, and the
   chat's Terminal view, arm the keyboard while they are on screen.
 - **Trail:** `web/src/hooks/use-direct-typing.ts` · `web/src/components/composer.tsx` ·
   `web/src/components/session-inspector.tsx` · `scripts/e2e/run.ts terminal`

@@ -66,7 +66,7 @@ export const replyPaneActions: Record<string, PaneAction> = {
     marksSeen: true,
     handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => keysPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
   },
-  // A draft in the agent's box, settled from the phone (ADR 0112, ADR 0113): taken over, discarded or
+  // A draft in the agent's box, settled from the phone (ADR 0112, ADR 0114): taken over, discarded or
   // sent, only while the box still holds the text the phone showed.
   "clear-draft": {
     level: "write",

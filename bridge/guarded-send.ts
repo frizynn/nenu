@@ -82,7 +82,7 @@ const NO_ECHO =
 const NO_ECHO_TYPED =
   "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.";
 // Whatever a stopped send leaves in the agent's box is drawn above the composer with Send it first,
-// Add to my message and Discard (ADR 0113), so the way forward is a tap there, never a trip to the terminal.
+// Add to my message and Discard (ADR 0114), so the way forward is a tap there, never a trip to the terminal.
 const LEFT_IN_BOX = "If any of it is in the agent's box, it shows above yours with Send it first and Discard.";
 const UNREAD = `Nenu couldn't read the terminal to confirm your message, so it didn't press Enter. ${LEFT_IN_BOX}`;
 // A stop after typing names why, then either what is left in the box or that Nenu cleared it.
@@ -510,7 +510,7 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   return send.fail("The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready.", false);
 }
 
-/** What the operator chose for a draft in the agent's input box (ADR 0113). */
+/** What the operator chose for a draft in the agent's input box (ADR 0114). */
 export type DraftAction = "take" | "discard" | "send";
 
 /**

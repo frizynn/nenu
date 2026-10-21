@@ -35,7 +35,7 @@ describe("chat upload previews", () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
   });
 
-  test("serves a picture a message still waiting in Nenu's queue on this pane names, before the journal has it (ADR 0113)", async () => {
+  test("serves a picture a message still waiting in Nenu's queue on this pane names, before the journal has it (ADR 0114)", async () => {
     expect((await chatUploadPreviewResponse(uploads, path, [], null)).status).toBe(404);
     expect((await chatUploadPreviewResponse(uploads, path, [], null, [`mira esto ${path} se ve mal`])).status).toBe(200);
     // Only a whole token names it: a longer name that starts with it does not.

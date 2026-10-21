@@ -1,4 +1,4 @@
-# 0113. A send from Nenu never gets stuck, and the Terminal view is the terminal
+# 0114. A send from Nenu never gets stuck, and the Terminal view is the terminal
 
 - **Status:** Accepted (2026-10-21). Reported by the operator on a desk with 1.38.1 and again on
   1.38.4. Amends [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md) decision 3 (the
