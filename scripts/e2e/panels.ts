@@ -183,6 +183,8 @@ try {
   // …and the row under its box, its chips beside the model, inside the column (ADR 0108).
   await shoot(page, "8b-docked-narrowest-row", { x: 1440 - 340, y: 900 - 140, width: 340, height: 140 });
   result.rowsNarrowest = await page.evaluate(brokenRows, null);
+  // The docked thread's row holds chips, or the narrow box's rules were never put to the test.
+  result.dockedChips = await page.evaluate(() => document.querySelectorAll(".composer-meta .composer-chip").length, null);
   await page.keyboard.press("End");
   await shoot(page, "8c-docked-widest");
   result.rowsWidest = await page.evaluate(brokenRows, null);
@@ -247,6 +249,10 @@ console.log(JSON.stringify(result, null, 2));
 console.log(shots.join("\n"));
 // No row under a box spills or crowds, the docked thread's at its narrowest and widest included (ADR 0108).
 const broken = [...(result.rowsNarrowest as string[] ?? []), ...(result.rowsWidest as string[] ?? [])];
+if (!result.dockedChips) {
+  console.error("✗ the docked thread's row held no chip");
+  process.exitCode = 1;
+}
 if (broken.length) {
   console.error(`✗ a row under the box spills or crowds: ${broken.join(" | ")}`);
   process.exitCode = 1;

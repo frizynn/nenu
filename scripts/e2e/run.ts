@@ -3443,7 +3443,7 @@ function measureAboveBox() {
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
     // A branch named in the row keeps some of its name: never a bare icon.
-    rowBroken: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getBoundingClientRect().width < 24),
+    rowBroken: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().width < 24),
     stop: rect(stop),
     stopInBox: inBox,
     stopReach: reach,

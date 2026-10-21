@@ -157,7 +157,7 @@ export async function reportModel(page: Page, usedPercent = 11): Promise<void> {
   });
 }
 
-/** In the page: each row under a box that is wider inside than it is drawn, or whose controls touch. */
+/** In the page: each row under a box that is wider inside than it is drawn, whose controls touch, or whose branch is cut to its icon. */
 export function brokenRows(): string[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".composer-meta")).flatMap((meta) => {
     const row = meta.getBoundingClientRect();
@@ -166,6 +166,8 @@ export function brokenRows(): string[] {
       .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
     const touch = controls.some((r, i) => controls.some((o, j) => j !== i && r.left < o.right - 1 && r.right > o.left + 1));
     const out = controls.some((r) => r.left < row.left - 1 || r.right > row.right + 1);
-    return meta.scrollWidth > meta.clientWidth + 1 || touch || out ? [meta.innerText.replace(/\s+/g, " ")] : [];
+    // A branch drawn in the row keeps some of its name: never a bare icon.
+    const bare = Array.from(meta.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().width < 24);
+    return meta.scrollWidth > meta.clientWidth + 1 || touch || out || bare ? [meta.innerText.replace(/\s+/g, " ")] : [];
   });
 }
