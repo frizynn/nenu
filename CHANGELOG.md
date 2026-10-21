@@ -31,6 +31,12 @@ All notable changes to Nenu are recorded here. The format follows
 - Your message's bubble no longer shows its time as a faint tooltip over itself on a desk, nor does any row of the thread (721a6df7, f2006acc).
 - Nenu again sees Claude's box when a draft of two lines puts "ctrl+g to edit in Vim" right after a long statusline; until now it refused to send and hid the text left there (b9d83a54).
 
+## [1.41.2] - 2026-10-21
+
+### Fixed
+
+- A project past 500 threads keeps every open one and drops only the oldest finished; a coordinator with work running no longer reads "Nothing running" (9d56fd04, 664472e5).
+
 ## [1.41.1] - 2026-10-21
 
 ### Fixed
