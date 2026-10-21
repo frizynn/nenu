@@ -21,6 +21,16 @@ All notable changes to Nenu are recorded here. The format follows
 - Less on a phone's first screen: no idle count in Home's headline, no date, no History or task counts in the drawer, no workspace or agent counts in its footer, and Close coordinator moved to the end of its page (63be049c, 020e76e4).
 - A coordinator's page on a phone offers New thread and New coordinator under it (0060e6f9).
 
+## [1.36.1] - 2026-10-21
+
+### Fixed
+
+- iPhone: closing the keyboard no longer drops the chat off its latest line behind the ↓ button; the terminal mirror follows the same rule (c12a566f, 38b922e0).
+
+### Changed
+
+- `bun scripts/e2e/keyboard-close.ts` fails when the thread leaves its tail (7e11cbca).
+
 ## [1.36.0] - 2026-10-21
 
 ### Changed

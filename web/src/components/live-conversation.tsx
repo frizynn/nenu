@@ -8,7 +8,7 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
-import { atTail, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
+import { atTail, clamped, isTextField, standing, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
@@ -419,10 +419,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   function onScroll() {
     const el = scrollRef.current;
     if (!el) return;
-    const up = el.scrollTop < lastTop.current;
-    // Our own pins leave scrollTop where they put it; any other move is the reader's.
-    if (Math.abs(el.scrollTop - lastTop.current) >= 1) onCap.current = false;
-    lastTop.current = el.scrollTop;
+    const top = lastTop.current;
+    const up = el.scrollTop < top;
+    // Our own pins leave scrollTop where they put it; any other move is the reader's or a clamp's.
+    if (Math.abs(el.scrollTop - top) >= 1) onCap.current = false;
+    lastTop.current = standing(el);
     // Paging and a tapped step move the list to keep the reader's place; the line is measured again.
     if (restoring.current) {
       reading.current = following.current ? null : lineAt(el, contentRef.current);
@@ -432,7 +433,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     const cap = stopCap(el);
     if (atTail(el) || (cap !== null && el.scrollTop >= cap - 1)) {
       if (!following.current) followLatest();
-    } else if (up && !(following.current && editShift())) {
+    } else if (up && !(following.current && (editShift() || clamped(el, top)))) {
       following.current = false;
       setPaused(true);
       setFrozen((current) => current ?? history);

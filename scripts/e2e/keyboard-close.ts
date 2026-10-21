@@ -70,10 +70,9 @@ const act = (page: Page, ...steps: Step[]) => page.evaluate((list: Step[]) => {
   for (const [op, arg] of list) (k[op] as (a: unknown) => void)(arg);
 }, steps);
 
-/** Where the app and the chat's header sit on the screen, the screen itself, and whether the chat
- * thinks the keyboard is up (it then hides the model row and the navigation band), and whether the
- * thread left its tail. That last one is reported, not failed: main leaves it as the installed app's
- * thread grows back, on the plain paths too, so it is the thread's own follow and not the viewport. */
+/** Where the app and the chat's header sit on the screen, the screen itself, whether the chat thinks
+ * the keyboard is up (it then hides the model row and the navigation band), and whether the thread left
+ * its tail: it was following before the keyboard went down, and a list growing back is no reader's move. */
 const onScreen = (page: Page) => page.evaluate(() => {
   const box = (window as unknown as { __kb: Kb }).__kb.box;
   const app = document.querySelector(".app-viewport")!.getBoundingClientRect();
@@ -163,9 +162,9 @@ try {
       await page.evaluate(() => { document.documentElement.style.translate = `0 ${-(window as unknown as { __kb: Kb }).__kb.box.offsetTop}px`; }, null);
       await page.screenshot({ path: join(outDir, `${shell}-${name}.png`) });
       await context.close();
-      const ok = closed.top === 0 && closed.bottom === closed.screen && closed.header !== null && closed.header >= 0 && !closed.keyboard;
+      const ok = closed.top === 0 && closed.bottom === closed.screen && closed.header !== null && closed.header >= 0 && !closed.keyboard && !closed.leftTail;
       const opened = typing.bottom === SCREEN.height - KEYBOARD && typing.keyboard;
-      if (!ok) failures.push(`${shell} ${name}: app ${closed.top}..${closed.bottom} on a ${closed.screen} px screen, header at ${closed.header}${closed.keyboard ? ", keyboard still read as up" : ""}`);
+      if (!ok) failures.push(`${shell} ${name}: app ${closed.top}..${closed.bottom} on a ${closed.screen} px screen, header at ${closed.header}${closed.keyboard ? ", keyboard still read as up" : ""}${closed.leftTail ? ", thread left its tail" : ""}`);
       if (!opened) failures.push(`${shell} ${name}: with the keyboard up the app ends at ${typing.bottom}, not ${SCREEN.height - KEYBOARD}${typing.keyboard ? "" : ", keyboard not read as up"}`);
       results.push({ shell, path: name, rest, typing, closed, ok: ok && opened });
     }
@@ -177,7 +176,6 @@ try {
 const summary = { label: values.label, model: { screen: SCREEN, keyboard: KEYBOARD, stuckOffset: STUCK_OFFSET }, results, failures, out: outDir };
 await writeFile(join(outDir, "keyboard-close.json"), JSON.stringify(summary, null, 2));
 for (const r of results) console.log(`${r.ok ? "ok  " : "FAIL"} ${String(r.shell).padEnd(6)} ${String(r.path).padEnd(12)} closed ${JSON.stringify(r.closed)}`);
-console.log(`thread left its tail on ${results.filter((r) => (r.closed as { leftTail: boolean }).leftTail).length} of ${results.length} (reported, not failed)`);
 console.log(failures.length ? `\n${failures.length} failures\n${failures.join("\n")}` : "\nall paths fill the screen");
 console.log(outDir);
 process.exit(failures.length ? 1 : 0);

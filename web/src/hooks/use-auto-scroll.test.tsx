@@ -210,6 +210,43 @@ describe("useAutoScroll — resize re-pin", () => {
     expect(box.top).toBe(2706);
   });
 
+  // The phone keyboard going down: the list grows and the browser clamps scrollTop, then the composer's
+  // rows come back before that clamp's scroll event is dispatched (see live-conversation.test.tsx).
+  it("keeps following when the list grows and shrinks back before its scroll event", () => {
+    const onAtBottomChange = vi.fn();
+    function Following() {
+      const { scrollRef, onScroll, isAtBottom } = useAutoScroll<HTMLDivElement>({ onAtBottomChange });
+      return <div ref={scrollRef} onScroll={onScroll} data-testid="scroll" data-at-bottom={String(isAtBottom)} />;
+    }
+    const { getByTestId } = render(<Following />);
+    const el = getByTestId("scroll");
+    const box = { height: 1851, client: 453, top: 0 };
+    Object.defineProperties(el, {
+      scrollHeight: { configurable: true, get: () => box.height },
+      clientHeight: { configurable: true, get: () => box.client },
+      scrollTop: { configurable: true, get: () => box.top, set: (v: number) => { box.top = Math.max(0, Math.min(v, box.height - box.client)); } },
+    });
+    el.scrollTo = ((o: ScrollToOptions) => { el.scrollTop = o.top ?? 0; }) as HTMLElement["scrollTo"];
+    act(() => { el.scrollTo({ top: box.height }); fireEvent.scroll(el); });
+
+    box.client = 789;
+    el.scrollTop = box.top;
+    box.client = 757;
+    fireEvent.scroll(el);
+
+    expect(el.dataset.atBottom).toBe("true");
+    expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
+    expect(box.top).toBe(1094);
+
+    // A bounce past the bottom, then the reader's flick up from it.
+    box.top = 1150;
+    fireEvent.scroll(el);
+    box.top = 900;
+    fireEvent.scroll(el);
+    expect(el.dataset.atBottom).toBe("false");
+    expect(box.top).toBe(900);
+  });
+
   // The mirror's Find and the History search are one-line inputs: a keystroke there never resizes
   // anything, and the jump to the match it starts is a move up the list has to make.
   it("lets a jump to a search match leave the tail right after a keystroke in a search box", () => {
