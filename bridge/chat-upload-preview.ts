@@ -21,6 +21,12 @@ export function isChatUploadPath(dirs: readonly string[], path: string | null): 
 
 const referencedCache = new WeakMap<readonly TranscriptEntry[], { key: string; paths: Set<string> }>();
 
+function referencePattern(dirs: readonly string[]): RegExp {
+  const escaped = dirs.map((dir) => resolve(dir).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return new RegExp(
+    `(?:^|[\\s\\[('"\x60<])((?:${escaped})/${UPLOAD_NAME_SOURCE})(?=$|[\\s\\])'"\x60>]|[.,](?=\\s|$))`, "g");
+}
+
 /**
  * Every generated upload path a user message names as a whole token. The set is memoized per
  * parsed journal window, so a message with several photos scans the journal once, not per photo.
@@ -29,9 +35,7 @@ function referencedUploads(entries: readonly TranscriptEntry[], dirs: readonly s
   const key = dirs.map((dir) => resolve(dir)).join("\0");
   const cached = referencedCache.get(entries);
   if (cached?.key === key) return cached.paths;
-  const escaped = dirs.map((dir) => resolve(dir).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  const reference = new RegExp(
-    `(?:^|[\\s\\[('"\x60<])((?:${escaped})/${UPLOAD_NAME_SOURCE})(?=$|[\\s\\])'"\x60>]|[.,](?=\\s|$))`, "g");
+  const reference = referencePattern(dirs);
   const paths = new Set<string>();
   for (const entry of entries) {
     if (entry.role !== "user") continue;
@@ -43,21 +47,30 @@ function referencedUploads(entries: readonly TranscriptEntry[], dirs: readonly s
   return paths;
 }
 
+/** Whether one of Nenu's own queue rows on this pane names `path` as a whole token. */
+function queuedUpload(texts: readonly string[], dirs: readonly string[], path: string): boolean {
+  const reference = referencePattern(dirs);
+  return texts.some((text) => [...text.matchAll(reference)].some((match) => match[1] === path));
+}
+
 /**
  * Uploads live outside the workspace. A contained journal for the CURRENT pane must prove the
- * user shared this exact generated path before it can be previewed. This is not host-file access
- * and does not alter project-file containment or the upload retention policy.
+ * user shared this exact generated path before it can be previewed, or one of Nenu's own queue rows
+ * on that pane must name it: a message still waiting is drawn in the thread with its pictures (ADR
+ * 0113). This is not host-file access and does not alter project-file containment or the upload
+ * retention policy.
  */
 export async function chatUploadPreviewResponse(
   dirs: readonly string[],
   path: string,
   entries: readonly TranscriptEntry[],
   ifNoneMatch: string | null = null,
+  queued: readonly string[] = [],
 ): Promise<Response> {
   const unavailable = () => new Response("Photo unavailable in this conversation.", {
     status: 404, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
-  if (!isChatUploadPath(dirs, path) || !referencedUploads(entries, dirs).has(path)) return unavailable();
+  if (!isChatUploadPath(dirs, path) || !(referencedUploads(entries, dirs).has(path) || queuedUpload(queued, dirs, path))) return unavailable();
   const root = await realpath(dirname(path)).catch(() => null);
   if (!root) return unavailable();
   const resolved = await containedRealpath(path, root);

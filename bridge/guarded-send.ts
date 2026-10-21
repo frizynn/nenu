@@ -81,15 +81,17 @@ const NO_ECHO =
   "That's a password prompt — it shows nothing as you type, so Send can never confirm the text arrived. Nothing was typed.";
 const NO_ECHO_TYPED =
   "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.";
-const UNREAD =
-  "Couldn't read the terminal to confirm your message. Nothing was submitted; the text may already be typed, so check Terminal before retrying.";
+// Whatever a stopped send leaves in the agent's box is drawn above the composer with Send it, Add to
+// mine and Discard (ADR 0113), so the way forward is a tap there, never a trip to the terminal.
+const LEFT_IN_BOX = "If any of it is in the agent's box, it shows above yours: tap Send it or Discard.";
+const UNREAD = `Nenu couldn't read the terminal to confirm your message, so it didn't press Enter. ${LEFT_IN_BOX}`;
 // A stop after typing names why, then either what is left in the box or that Nenu cleared it.
 type Stopped = { why: string; left: string };
-const UNSEEN: Stopped = { why: "Your message wasn't seen in the agent's input box.", left: "Nothing was submitted; it may still be typed, so check Terminal before retrying." };
-const MOVED: Stopped = { why: "The input box changed right before Enter.", left: "Nothing was submitted; check Terminal before retrying." };
-const UNCONFIRMED = "Enter went out, but the message is still in the input box. Check Terminal before retrying.";
+const UNSEEN: Stopped = { why: "Your message didn't show in the agent's input box, so nothing was sent.", left: LEFT_IN_BOX };
+const MOVED: Stopped = { why: "The agent's input box changed right before Enter, so nothing was sent.", left: LEFT_IN_BOX };
+const UNCONFIRMED = "Enter went out, but the message still shows in the agent's input box. If it stays, tap Send it above yours.";
 const UNCHECKED =
-  "Couldn't read the terminal to check the earlier try of this message. Nothing was typed; check Terminal before retrying.";
+  "Nenu couldn't read the terminal to check the earlier try of this message, so it typed nothing. Try again in a moment.";
 const NO_READBACK =
   "This agent's input box can't be read back, so the earlier try of this message can't be checked. Nothing was typed; check Terminal.";
 const MAYBE_SENT =
@@ -97,10 +99,10 @@ const MAYBE_SENT =
 const NOT_SUBMITTED = "Typed into the pane but not submitted — check the pane before resending.";
 const ESCAPES = "The message contains terminal escape sequences, which a paste cannot carry. Nothing was typed.";
 const PICTURE_UNSEEN: Stopped = {
-  why: "A picture didn't show in the agent's input box where it goes.",
-  left: "Nothing was submitted; part of the message may be typed, so check Terminal before retrying.",
+  why: "A picture didn't show in the agent's input box where it goes, so nothing was sent.",
+  left: LEFT_IN_BOX,
 };
-const CLEARED = "Nothing was submitted, and Nenu cleared what it had typed, so the input box is empty: send it again.";
+const CLEARED = "Nenu cleared what it had typed, so the box is empty: send it again.";
 const incomplete = (sent: number, received: number) =>
   `Your message reached the agent incomplete: it logged ${received} of ${sent} characters. The agent may be answering that part; send the whole message again if it needs it.`;
 
@@ -508,15 +510,25 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   return send.fail("The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready.", false);
 }
 
+/** What the operator chose for a draft in the agent's input box (ADR 0113). */
+export type DraftAction = "take" | "discard" | "send";
+
 /**
- * Clear the input box while it still holds `expected`, a draft the operator took over on the phone
- * (ADR 0112): a fresh read must show the input box holding exactly that draft, then the send's own
- * sweep clears it and a read confirms the box emptied. A changed draft, a dialog or no input box is
- * left alone, and so is a draft holding a picture or a paste the CLI collapsed: the phone's copy is
- * only its token, so clearing would lose it. The caller holds the pane's write lock.
+ * Act on the input box while it still holds `expected`, the draft the phone showed: a fresh read must
+ * show the box holding exactly that draft, or nothing is pressed. `take` and `discard` clear it with
+ * the send's own sweep and a read that shows it empty; `send` presses the submit key and waits for the
+ * box to let go of it. Take over (`take`) leaves a draft holding a picture or a paste the CLI
+ * collapsed (ADR 0112): the phone's copy is only its token. Discard and Send act on it whole, which is
+ * what the operator chose on seeing it. A dialog or no input box is left alone. The caller holds the
+ * pane's write lock.
  */
-export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep">, expected: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const kept = { ok: false as const, error: "The terminal's input changed, so it was left as it is." };
+export async function settleDraft(
+  deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep">,
+  expected: string,
+  action: DraftAction = "take",
+  submitKeys: string[] = ["Enter"],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const kept = { ok: false as const, error: "The text in the agent's box changed, so Nenu left it as it is." };
   let adapter: HarnessAdapter | undefined;
   try {
     adapter = adapterFor((await deps.herdr.getPane(deps.paneId)).agent ?? undefined);
@@ -525,7 +537,7 @@ export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "pan
   }
   if (!adapter?.composerReady) return { ok: false, error: "Nenu can't read this agent's input box, so it was left as it is." };
   const full = { ...deps, submitKeys: [] };
-  const send = new Send(full, { text: expected, requestId: "clear-draft" }, adapter);
+  const send = new Send(full, { text: expected, requestId: `draft-${action}` }, adapter);
   let seen: Seen;
   try {
     seen = await send.read();
@@ -533,9 +545,25 @@ export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "pan
     return { ok: false, error: `herdr read failed: ${message(err)}` };
   }
   if (seen.composer !== true || seen.draft === null || strip(seen.draft) !== strip(expected)) return kept;
-  if (holdsCliToken(seen.draft)) return { ok: false, error: "The terminal's input holds a picture or a paste only the agent has, so it was left as it is." };
-  const failed = await sweep(send, full, adapter, seen);
-  return failed ? { ok: false, error: "The terminal's input didn't clear; check Terminal." } : { ok: true };
+  if (action === "take" && holdsCliToken(seen.draft)) return { ok: false, error: "The agent's box holds a picture or a paste only the agent has, so it was left as it is." };
+  if (action !== "send") {
+    const failed = await sweep(send, full, adapter, seen);
+    return failed ? { ok: false, error: "The agent's box didn't empty. Try Discard again." } : { ok: true };
+  }
+  try {
+    await deps.herdr.sendPaneKeys(deps.paneId, submitKeys);
+  } catch (err) {
+    return { ok: false, error: `Couldn't press Enter in the terminal: ${message(err)}` };
+  }
+  for (const delay of LOCAL_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    try {
+      if ((await send.read()).draft === null) return { ok: true };
+    } catch {
+      // A failed read decides nothing; the next one may.
+    }
+  }
+  return { ok: false, error: "Enter went in, but the agent's box still shows the text." };
 }
 
 /**
