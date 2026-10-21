@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   OutputTrigger,
+  clearTakenDraft,
   SETTLE_CAP_MS,
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
@@ -44,6 +45,9 @@ class Term {
   /** The CLI attaches a picture pasted alone: its token lands `pictureReads` reads later (-1: never). */
   drawsPictures = true;
   pictureReads = 1;
+  /** A picture that never draws its token leaves its path in the box as text, as Claude does when it
+   *  cannot attach the file (measured 2.1.306, a path to no file), or leaves nothing (a lost paste). */
+  unattached: "text" | "lost" = "lost";
   pictures = 0;
   lateTokens: Array<{ token: string; reads: number }> = [];
   /** Runs before each read with its index, to change the screen between the send's reads. */
@@ -87,6 +91,7 @@ class Term {
       // Like Claude: the token shows a beat (a read) after the paste, unless it never does.
       this.land();
       if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
+      else if (this.unattached === "text") this.pending += text.replace(/\x1b\[20[01]~/g, "");
       return;
     }
     if (!this.dialog) this.pending += text.replace(/\x1b\[20[01]~/g, "");
@@ -288,13 +293,56 @@ describe("guardedSend", () => {
     expect(outcome.ok).toBe(true);
   });
 
-  test("a picture that never shows stops the send before the next piece, with nothing submitted", async () => {
+  test("a picture the CLI leaves as its path goes as that path, which the agent reads (2026-10-21)", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    term.unattached = "text";
+    const { outcome } = await run(term, { text: `${red} what is this?` });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    expect(term.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([`\x1b[200~${red}\x1b[201~`, " what is this?"]);
+    expect(term.lines.at(-1)).toBe(`> ${red} what is this?`);
+  });
+
+  test("a picture past one left as its path still waits for its own token", async () => {
+    const term = new Term();
+    let pastes = 0;
+    const send = term.sendPaneText;
+    term.sendPaneText = async (paneId, text) => {
+      // The first picture stays text; the second attaches.
+      const picture = text.startsWith("\x1b[200~/");
+      if (picture && ++pastes === 1) {
+        term.pictureReads = -1;
+        term.unattached = "text";
+      } else term.pictureReads = 1;
+      return send(paneId, text);
+    };
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toBe(`> first the red one ${red} then the blue one [Image #1] and that is all`);
+  });
+
+  test("a picture that never shows stops the send and clears what it typed, with nothing submitted", async () => {
     const term = new Term();
     term.pictureReads = -1;
     const { outcome } = await run(term, { text: placed });
-    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: true });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    if (!outcome.ok) expect(outcome.error).toContain("cleared");
     expect(term.count("pane.send_text")).toBe(2);
+    expect(term.draft).toBe("");
+    expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a send that stops after typing leaves alone a box holding more than it typed", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    // The operator types at the terminal while the picture is awaited.
+    term.onRead = (n, t) => {
+      if (n === 3) t.draft += "and mine";
+    };
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
     expect(term.keys()).toEqual([]);
+    expect(term.draft).toContain("and mine");
   });
 
   test("a write that fails after the first piece says the text may be in the box", async () => {
@@ -310,15 +358,39 @@ describe("guardedSend", () => {
     expect(term.keys()).toEqual([]);
   });
 
-  test("a retry after a picture that never showed types nothing: part of it is already in the box", async () => {
+  test("a retry after a picture that never showed and was not cleared types nothing", async () => {
     const term = new Term();
     term.pictureReads = -1;
-    await run(term, { text: placed });
-    const typed = term.count("pane.send_text");
+    term.draft = "first the red one ";
     const { outcome } = await run(term, { text: placed }, { prior: { typeAttempted: true, textDelivered: true } });
     expect(outcome).toMatchObject({ ok: false, textDelivered: true });
-    expect(term.count("pane.send_text")).toBe(typed);
+    expect(term.count("pane.send_text")).toBe(0);
     expect(term.keys()).toEqual([]);
+  });
+
+  test("a retry whose earlier text may have gone never clears the box it stops on", async () => {
+    // "Send it again" would contradict the retry's own answer: the earlier text may be submitted.
+    // With a picture only the whole message carries it, so a part of it stops the send at Enter.
+    const term = new Term();
+    term.draft = "[Image #1] what is this?";
+    term.onRead = (n, t) => {
+      if (n === 2) t.draft = "[Image #1] what";
+    };
+    const { outcome } = await run(term, { text: `${red} what is this?` }, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    if (!outcome.ok) expect(outcome.error).toContain("check Terminal");
+    expect(term.keys()).toEqual([]);
+  });
+
+  test("a retry after a cleared send types it again", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    const first = await run(term, { text: placed });
+    expect(first.outcome).toMatchObject({ ok: false, textDelivered: false });
+    term.pictureReads = 1;
+    const { outcome } = await run(term, { text: placed }, { prior: { typeAttempted: true, textDelivered: false } });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toBe("> first the red one [Image #1] then the blue one [Image #2] and that is all");
   });
 
   test("a retry never takes a long first piece's paste token for the whole message (Claude collapses it)", async () => {
@@ -778,5 +850,46 @@ describe("WriteLedger", () => {
     expect(await l.run("k", "other", async () => ({ ok: true, n: 1 }))).toMatchObject({ replayed: false });
     now = WriteLedger.TTL_MS;
     expect(await l.run("k", "f", async () => ({ ok: true, n: 2 }))).toEqual({ outcome: { ok: true, n: 2 }, replayed: false });
+  });
+});
+
+describe("clearTakenDraft", () => {
+  const deps = (term: Term) => ({ herdr: term, paneId: "w1:p1", readLines: 200, sleep: noSleep });
+
+  test("clears the box while it holds exactly the draft taken over, and confirms it emptied (ADR 0112)", async () => {
+    const term = new Term();
+    term.draft = "mira como se ve";
+    // As the phone read it: a word cut where the box wrapped comes back with a space in it.
+    expect(await clearTakenDraft(deps(term), "mira co mo se ve")).toEqual({ ok: true });
+    expect(term.draft).toBe("");
+    expect(term.keys()[0]![0]).toBe("ctrl+k");
+  });
+
+  test("leaves a box that changed since the phone read it", async () => {
+    const term = new Term();
+    term.draft = "mira como se ve y algo más";
+    expect((await clearTakenDraft(deps(term), "mira como se ve")).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+    expect(term.draft).toBe("mira como se ve y algo más");
+  });
+
+  test.each([
+    ["a picture the CLI attached", "[Image #1] fix this"],
+    ["a paste the CLI collapsed", "why does this fail [Pasted text #1 +80 lines]"],
+    ["a picture cut where the box wrapped", "fix this [Ima ge #1]"],
+  ])("leaves a draft holding %s: only the CLI has it, and the phone's copy is its token", async (_case, held) => {
+    const term = new Term();
+    term.draft = held;
+    expect((await clearTakenDraft(deps(term), held)).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+    expect(term.draft).toBe(held);
+  });
+
+  test("presses nothing into a dialog", async () => {
+    const term = new Term();
+    term.draft = "mira";
+    term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    expect((await clearTakenDraft(deps(term), "mira")).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
   });
 });

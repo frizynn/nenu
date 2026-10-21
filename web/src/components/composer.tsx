@@ -37,6 +37,7 @@ import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
 import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
+import { holdsCliToken } from "@/lib/harness/inline-images";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
@@ -780,12 +781,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const showPreview =
     !gone && previewLatched && effectiveRaw !== null && normalizeDraft(effectiveRaw) !== handledKey;
 
-  // Take over: the explicit "I'll handle this on mobile now" action. One-shot COPY of the current raw
-  // draft into the composer (set on an empty input, else appended on a new line so mobile-typed work
-  // survives), mark that exact text handled (so it can't instantly re-latch the preview — the raw line
-  // still holds it until the host clears it), and hide the preview. No keys touch the terminal here —
-  // the stranded line is only ever swept by the send()-time pre-clear. If the host keeps typing and
-  // produces a DIFFERENT draft afterwards, the preview honestly reappears with the new text.
+  // Take over: the explicit "I'll handle this on mobile now" action. It MOVES the current raw draft:
+  // a copy into the composer (set on an empty input, else appended on a new line so mobile-typed work
+  // survives), the preview marked handled and hidden, and the terminal's line cleared. Left there, the
+  // line held up the queue, which never clears a draft, and nothing on the phone could remove it once
+  // the composer held the copy (ADR 0112). The bridge clears it only while the box still holds this
+  // exact text: if the host typed on, the line stays. A read-only device only copies. If the host
+  // keeps typing and produces a DIFFERENT draft afterwards, the preview honestly reappears with it.
   function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
@@ -794,6 +796,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
+    if (locked) return;
+    api.clearTerminalDraft(paneId, draft, session).then(
+      (res) => { if (!res.ok) setStatus(res.error ?? "The terminal still holds its copy.", "info"); },
+      () => setStatus("The terminal still holds its copy: Nenu couldn't reach it.", "info"),
+    );
   }
 
   // The Keys tray's preset row, resolved the same way from the same one-shot read of /api/config.
@@ -1345,10 +1352,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
             text={effectiveRaw}
-            // No Take over when the line is only the harness's own opaque token (Claude's
-            // `[Pasted text #N +M lines]`): pulling that into the composer would send the literal
-            // string. The preview keeps showing it — the screen really does say that.
-            onTakeOver={adapter?.draftIsOpaque?.(effectiveRaw) ? null : takeOverDraft}
+            // No Take over when the line holds something only the CLI has (`holdsCliToken`): a copy
+            // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
+            // preview keeps showing it, and Type into terminal edits it in place.
+            onTakeOver={holdsCliToken(effectiveRaw) ? null : takeOverDraft}
           />
         )}
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPastePlaceholderOnly, pasteCarriesSend } from "./paste";
+import { pasteCarriesSend } from "./paste";
 
 // The paste-placeholder grammar (.adr/0010). Every shape below was live-probed on 2026-08-06 in the
 // collie-demo sandbox; the rejections are the load-bearing half — a `true` here fires the submit key
@@ -122,16 +122,3 @@ describe("pasteCarriesSend — rejections (the guard stays shut)", () => {
   });
 });
 
-describe("isPastePlaceholderOnly", () => {
-  it("is true for token-only drafts, including a wrapped one", () => {
-    expect(isPastePlaceholderOnly("[Pasted text #3 +3 lines]")).toBe(true);
-    expect(isPastePlaceholderOnly("[Pasted text #3 +3 li nes]")).toBe(true);
-    expect(isPastePlaceholderOnly("[Pasted text #1][Pasted text #2 +4 lines]")).toBe(true);
-  });
-
-  it("is false once the user's own text sits beside the token, and for a plain draft", () => {
-    expect(isPastePlaceholderOnly("[Pasted text #1 +3 lines] and the tail")).toBe(false);
-    expect(isPastePlaceholderOnly("please review the diff")).toBe(false);
-    expect(isPastePlaceholderOnly("")).toBe(false);
-  });
-});

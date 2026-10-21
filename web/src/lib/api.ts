@@ -662,6 +662,14 @@ export function sendKeys(
   );
 }
 
+/** Clear the agent's input box while it still holds `draft`, which the phone took over (ADR 0112). */
+export function clearTerminalDraft(paneId: string, draft: string, session?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/clear-draft`, session), {
+    method: "POST",
+    body: JSON.stringify({ draft }),
+  });
+}
+
 /**
  * Stop the agent's running turn (ADR 0066). The bridge picks the CLI's key and presses it only while
  * the live screen shows a turn; `confirm` accepts that the CLI sends its queued messages on stopping.

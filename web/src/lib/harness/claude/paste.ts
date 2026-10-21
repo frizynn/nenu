@@ -163,18 +163,6 @@ export function pasteCarriesSend(sent: string, draft: string): boolean {
 }
 
 /**
- * Whether the draft on the "❯" line is NOTHING but Claude's own paste token(s) — no literal text of
- * the user's beside them. The stranded-draft preview asks this before offering "Take over": copying
- * `[Pasted text #1 +3 lines]` into the phone composer as literal text is never what anyone wants, and
- * sending it would type that string at the agent. The preview still SHOWS the token (it is honestly
- * what the screen says); only the take-over affordance stands down.
- */
-export function isPastePlaceholderOnly(draft: string): boolean {
-  const { tokens, fragments } = scan(stripWhitespace(draft));
-  return tokens > 0 && fragments.length === 0;
-}
-
-/**
  * Claude takes a single terminal read of more than this many characters as a paste (2.1.299, read in
  * the binary; on 2.1.300 a 790-character bracketed paste is typed and an 810-character one collapses).
  */

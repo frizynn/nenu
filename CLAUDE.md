@@ -433,6 +433,10 @@ never generalize it to arbitrary transcript paths or all files under the state d
 A picture travels where it sits in the message: a chip in the draft, its path in place on the wire,
 and Claude and Codex get it piece by piece, each path pasted alone after the last token showed; never
 one paste, never the paths at the end ([ADR 0104](./.adr/0104-a-picture-travels-where-it-sits-in-the-message.md)).
+The queue types it the same way, each piece its own write. A picture left as its path goes as that path;
+a send that stops before Enter clears the box when it holds only what it typed, and Take over clears the
+terminal's copy while it still holds that text; `bun scripts/e2e/run.ts take-over` must pass
+([ADR 0112](./.adr/0112-a-send-that-stops-leaves-the-box-as-it-found-it.md)).
 The composer attaches any file up to 25 MB through `bridge/uploads.ts` `saveUpload`: the name is
 generated (an image by its bytes, anything else with a flat copy of its own name), only an image
 previews, and nothing in Nenu's own folders (`nenuDirs`: the state directory and the uploads
