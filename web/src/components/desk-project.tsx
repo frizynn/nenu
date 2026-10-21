@@ -110,9 +110,6 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   return <>
     <div className="desk-toolbar">
       <span className="min-w-0 flex-1 truncate">{cards.length > 1 && `${plural(cards.length - 1, "coordinator")} · `}{plural(threads, "thread")} open</span>
-      {finished > 0 && <button type="button" className="quiet-action" onClick={() => showHistory(true)}>
-        <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>
-      </button>}
     </div>
     {cards.map((card) => {
       const id = card.coordinator?.thread.id ?? "root";
@@ -124,6 +121,10 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
         onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
         onNewThread={canStart ? () => newThread(id) : undefined} />;
     })}
+    {/* What finished is reachable, never in the way: one quiet line after the live work (ADR 0108). */}
+    {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={() => showHistory(true)}>
+      <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>
+    </button>}
   </>;
 }
 

@@ -139,10 +139,10 @@ function LiveWork({ threads, onOpenNode, onHistory }: { threads: readonly Projec
   return <>
     <div className="desk-toolbar">
       <span className="min-w-0 flex-1 truncate">{rows.length === 0 ? "Nothing running" : `${rows.length} open`}</span>
-      {finished > 0 && <button type="button" className="quiet-action" onClick={onHistory}>
-        <History aria-hidden className="size-3.5" />{finished} finished<ChevronRight aria-hidden className="size-3.5" />
-      </button>}
     </div>
     {rows.length > 0 && <div className="desk-card">{rows.map(({ node, depth }) => <WorkRow key={node.thread.id} node={node} depth={depth} onOpen={onOpenNode} />)}</div>}
+    {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={onHistory}>
+      <History aria-hidden className="size-3.5" />{finished} finished<ChevronRight aria-hidden className="size-3.5" />
+    </button>}
   </>;
 }

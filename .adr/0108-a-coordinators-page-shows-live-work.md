@@ -30,7 +30,8 @@ too short to scroll, so a wheel over it moved nothing and only a faint Show all 
 1. **A coordinator's page lists only its live work.** Its open threads, the most urgent first, as rows
    that open them; a thread under a nested coordinator one step in. What finished is one line, "N
    finished", to the project's History (ADR 0106) searched for the coordinator's name; on a phone, the
-   tree's folded History. No Summary,
+   tree's folded History. That line, and the project page's History, sit after the live work, never
+   beside it: "lo que se está trabajando ahora, y el historial en otro lugar, lejano". No Summary,
    no report cards: a thread's report is on its own page.
 2. **A tap anywhere on a coordinator card's head opens its page.** The fold is its own chevron button;
    + still starts a thread under it.
