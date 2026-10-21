@@ -261,6 +261,45 @@ describe("a coordinator under the project", () => {
     expect(router.state.location.search).toBe("?view=threads");
   });
 
+  // What its page held is in its chat (ADR 0113): what waits on you, its status and Close.
+  const asking = () => server.use(
+    http.get("/api/org/asks", () => HttpResponse.json({ ok: true, answers: true, decisions: [], asks: [
+      { project: "hub", coordinator: { id: "L", title: "Lead" }, line: 4, text: "Which plan?", answer: "", links: [], group: "waiting", state: "needs-decision", answerable: true },
+      { project: "hub", coordinator: { id: "L", title: "Lead" }, line: 5, text: "Old plan", answer: "shipped", links: [], group: "done", state: "done" },
+    ] })),
+    http.get("/api/org/summary", () => HttpResponse.json({ ok: true, coordinator: null, usage: null, status: null, threads: [] })),
+  );
+
+  it("holds on a phone what its page held, in a Status tab that counts what waits on you", async () => {
+    asking();
+    const { router, user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [{ ...org, waitingAsks: 1 }]));
+    const status = await screen.findByRole("tab", { name: /^Status/ });
+    await waitFor(() => expect(status).toHaveTextContent("Status1"));
+    await user.click(status);
+    expect(router.state.location.search).toBe("?view=status");
+    const waiting = within((await screen.findAllByRole("region", { name: "Waiting on you" }))[0]!);
+    expect(waiting.getByText("Which plan?")).toBeInTheDocument();
+    // The waiting ask is not said twice: the status card lists the others.
+    expect(screen.getAllByText("Which plan?")).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Coordinator status" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close coordinator…" })).toBeInTheDocument();
+    // Its Threads start new work under it.
+    await user.click(screen.getAllByRole("tab", { name: /^Threads/ })[0]!);
+    expect(await screen.findByRole("button", { name: "New thread under Lead" })).toBeInTheDocument();
+  });
+
+  it("holds on a desk what its page held, in the panel's Overview", async () => {
+    wide = true;
+    asking();
+    const { user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [{ ...org, waitingAsks: 1 }]));
+    const panel = await overviewPanel(user);
+    expect(await panel.findByText("Which plan?")).toBeInTheDocument();
+    expect(panel.getByRole("region", { name: "Coordinator status" })).toBeInTheDocument();
+    expect(within(panel.getByRole("region", { name: "Threads" })).getByRole("button", { name: "New thread" })).toBeInTheDocument();
+    // A desk's chat has no Status tab: the panel is beside it.
+    expect(screen.queryByRole("tab", { name: /^Status/ })).not.toBeInTheDocument();
+  });
+
   it("names the project above it and its own threads in the panel beside it on a wide screen", async () => {
     wide = true;
     const { user } = setup("/pane/lead", home([pane("lead"), pane("worker")], [org]));

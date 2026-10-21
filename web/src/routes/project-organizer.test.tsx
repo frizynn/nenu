@@ -1,16 +1,17 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { createMemoryRouter, MemoryRouter, Outlet, RouterProvider } from "react-router";
 
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
 import { __forgetSummaries } from "@/hooks/use-thread-summaries";
+import { ProjectTasks } from "@/components/project-tasks";
 import { ProjectRoute } from "./project";
 
-// A project that organizes coordinators (ADR 0092): each a row into its page (ADR 0110), the project's
-// own first while it runs, the threads at the top level apart, and a node can move under another.
+// A project that organizes coordinators (ADR 0092): a row per coordinator that enters its chat, its
+// threads folded under it (ADR 0113), and a node can move under another from the tree its chat lists.
 
 // A desk: row actions show as words, not behind a ⋯.
 vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: () => false }));
@@ -68,16 +69,18 @@ function setup(data: HomeData, path = "/project/hub") {
 const titlesOf = (list: HTMLElement) => [...list.children].map((item) => item.querySelector(".task-main .font-medium")?.textContent);
 
 describe("a project that organizes coordinators", () => {
-  it("lists its coordinators, each one row, and the threads at its top level apart, with no project coordinator as a header", async () => {
+  it("is a row per coordinator, the project coordinator's last with the threads started from the project, each folded", async () => {
     setup(home([project]));
-    const coordinators = await screen.findByRole("list", { name: "Coordinators" });
-    expect(titlesOf(coordinators)).toEqual(["Lead"]);
-    // The row says what it holds.
-    expect(within(coordinators).getByRole("button", { name: /^Lead ?Idle/ })).toHaveTextContent("Idle · 3 open · 1 needs you");
-    expect(titlesOf(screen.getByRole("list", { name: "Open threads" }))).toEqual(["Hotfix"]);
+    const lead = await screen.findByRole("region", { name: "Lead" });
+    expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")).filter((name) => name !== "Status"))
+      .toEqual(["Lead", "Checkout", "Project coordinator"]);
+    // The row says what is live there, in one line.
+    expect(within(lead).getByRole("button", { name: /^Open Lead/ })).toHaveAccessibleDescription("1 needs you");
+    // Folded: no thread shows until its row unfolds.
+    expect(screen.queryByRole("button", { name: /^Docs/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Hotfix/ })).not.toBeInTheDocument();
     // No project coordinator to start as if it were missing, and not its empty STATUS.md on top.
     expect(screen.queryByText("Not running")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Project coordinator" })).not.toBeInTheDocument();
     expect(screen.queryByText("Objective: (none)")).not.toBeInTheDocument();
     // Starting it is one small action beside New.
     expect(screen.getByRole("button", { name: "Start project coordinator" })).toBeInTheDocument();
@@ -87,20 +90,33 @@ describe("a project that organizes coordinators", () => {
   it("says what a coordinator is doing, never that it is ready for review", async () => {
     const reported = threads.map((thread) => thread.id === "t-3" ? { ...thread, liveStatus: "done" as const, group: "ready-for-review", verdict: "done" as const } : thread);
     setup(home([{ ...project, threads: reported }]));
-    const coordinators = await screen.findByRole("list", { name: "Coordinators" });
-    expect(within(coordinators).getByRole("button", { name: /^Lead ?Idle/ })).toHaveTextContent("Idle · 3 open · 1 needs you");
-    expect(coordinators).not.toHaveTextContent("Ready for review");
+    const lead = await screen.findByRole("region", { name: "Lead" });
+    expect(lead).not.toHaveTextContent(/review/i);
   });
 
-  it("opens a coordinator's page from its row, with a › that says so, and leaves its work to that page", async () => {
+  it("enters a coordinator's chat on a tap anywhere on its row; one with no chat opens its page", async () => {
     const { user, router } = setup(home([project]));
-    const row = await screen.findByRole("button", { name: /^Lead ?Idle/ });
-    expect(row.querySelector("svg:last-child")).toBeInTheDocument();
-    // Its threads are its page's: the project lists none of them, and no card unfolds in place.
-    expect(screen.queryByRole("button", { name: "Lead threads" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Docs/ })).not.toBeInTheDocument();
-    await user.click(row);
-    expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
+    await user.click(await screen.findByRole("button", { name: /^Open Lead/ }));
+    expect(router.state.location.pathname).toBe("/pane/lead");
+    await router.navigate(-1);
+    await user.click(await screen.findByRole("button", { name: /^Open Checkout/ }));
+    expect(router.state.location.pathname).toBe("/project/hub/node/t-5");
+  });
+
+  it("unfolds a row's threads in place, where it has some, and keeps the fold for the tab", async () => {
+    const { user } = setup(home([project]));
+    const lead = await screen.findByRole("region", { name: "Lead" });
+    await user.click(within(lead).getByRole("button", { name: "Show Lead threads" }));
+    expect(within(lead).getByRole("group", { name: "Lead threads" })).toHaveTextContent("Docs");
+    // + shows on a desk's hover; a touch screen hides it (project.css) and starts a thread inside the chat.
+    expect(within(lead).getByRole("button", { name: "New thread under Lead" })).toHaveClass("desk-card-add");
+    expect(JSON.parse(sessionStorage.getItem("nenu.folds.hub") ?? "{}")).toEqual({ "t-3": true });
+    // A row with no thread has no chevron.
+    const lone: ProjectView = { ...project, threads: [...threads, node("t-8", "Wholesale", "root", { role: "coordinator", group: "idle" })] };
+    cleanup();
+    setup(home([lone]));
+    const wholesale = await screen.findByRole("region", { name: "Wholesale" });
+    expect(within(wholesale).queryByRole("button", { name: /threads$/ })).not.toBeInTheDocument();
   });
 
   it("leads with what waits on you there, and leaves the goal to the desk", async () => {
@@ -119,20 +135,20 @@ describe("a project that organizes coordinators", () => {
     expect(await screen.findByRole("region", { name: "Status" })).toHaveTextContent("Stock layout");
   });
 
-  it("puts the project coordinator first while it runs, instead of opening its chat", async () => {
+  it("keeps its page while the project coordinator runs, which its own row enters", async () => {
     const running: ProjectView = { ...project, coordinator: { paneId: "coord", agent: "codex", liveStatus: "working" },
       threads: [...threads, node("t-8", "Wholesale", "root", { role: "coordinator", group: "idle" })] };
     const { router, user } = setup(home([running], [pane("coord"), pane("lead")]));
     const own = await screen.findByRole("region", { name: "Project coordinator" });
     expect(router.state.location.pathname).toBe("/project/hub");
-    expect(titlesOf(within(own).getByRole("list"))).toEqual(["Project coordinator"]);
-    expect(titlesOf(screen.getByRole("list", { name: "Coordinators" }))).toEqual(["Lead", "Wholesale"]);
-    expect(own.compareDocumentPosition(screen.getByRole("list", { name: "Coordinators" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")).filter((name) => name !== "Status"))
+      .toEqual(["Lead", "Checkout", "Wholesale", "Project coordinator"]);
+    expect(within(own).getByRole("button", { name: /^Open Project coordinator/ })).toHaveAccessibleDescription("working");
     expect(screen.queryByRole("button", { name: "Start project coordinator" })).not.toBeInTheDocument();
-    // Its STATUS.md is on its own page, not over this one.
+    // Its STATUS.md is in its chat, not over this page.
     expect(screen.queryByText("Objective: (none)")).not.toBeInTheDocument();
-    await user.click(within(own).getByRole("button", { name: /^Project coordinator/ }));
-    expect(router.state.location.pathname).toBe("/project/hub/node/root");
+    await user.click(within(own).getByRole("button", { name: /^Open Project coordinator/ }));
+    expect(router.state.location.pathname).toBe("/pane/coord");
   });
 });
 
@@ -157,6 +173,12 @@ describe("a project with no coordinator under it", () => {
   });
 });
 
+// Move is a row action of the tree a coordinator's chat lists under Threads (ProjectTasks).
+function tree(shown: ProjectView) {
+  const view = render(<MemoryRouter><ProjectTasks project={shown} panes={[pane("lead")]} readOnly={false} onOpenPane={() => {}} onOpenNode={() => {}} onChanged={() => {}} /></MemoryRouter>);
+  return { ...view, user: userEvent.setup() };
+}
+
 describe("Move to…", () => {
   it("offers the top level and the open coordinators outside the node, and moves it there", async () => {
     let posted: unknown;
@@ -164,7 +186,7 @@ describe("Move to…", () => {
       posted = await request.json();
       return HttpResponse.json({ ok: true, moved: { id: "t-7", parent: "t-5" } });
     }));
-    const { user } = setup(home([{ ...project, nodeMoves: true }]));
+    const { user } = tree({ ...project, nodeMoves: true });
     await user.click(await screen.findByRole("button", { name: "Move Hotfix" }));
     const dialog = within(screen.getByRole("dialog", { name: "Move this thread" }));
     expect(dialog.getAllByRole("radio").map((radio) => radio.closest("label")?.textContent)).toEqual(["Lead", "Checkout"]);
@@ -176,7 +198,7 @@ describe("Move to…", () => {
 
   it("says why Organizations refused, and keeps the dialog open", async () => {
     server.use(http.post("/api/org/node/move", () => HttpResponse.json({ ok: false, error: "node `t-5` does not have permission to spawn" }, { status: 502 })));
-    const { user } = setup(home([{ ...project, nodeMoves: true }]));
+    const { user } = tree({ ...project, nodeMoves: true });
     await user.click(await screen.findByRole("button", { name: "Move Hotfix" }));
     const dialog = within(screen.getByRole("dialog", { name: "Move this thread" }));
     await user.click(dialog.getByRole("radio", { name: "Checkout" }));
@@ -185,20 +207,19 @@ describe("Move to…", () => {
   });
 
   it("offers no Move where there is nowhere to go, or where Organizations has no node move", async () => {
-    const first = setup(home([{ ...project, nodeMoves: true }]));
+    const first = tree({ ...project, nodeMoves: true });
     // Lead sits at the top level and the only other coordinator is its own.
     expect(await screen.findByRole("button", { name: "Move Hotfix" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move Lead" })).not.toBeInTheDocument();
-    first.router.dispose();
-    document.body.innerHTML = "";
-    setup(home([project]));
+    first.unmount();
+    tree(project);
     expect(await screen.findByRole("button", { name: "Close Hotfix" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Move/ })).not.toBeInTheDocument();
   });
 
   it("offers Move only on a node whose actions Organizations lists it in", async () => {
     const fixed = threads.map((thread) => thread.id === "t-7" ? { ...thread, movable: undefined } : thread);
-    setup(home([{ ...project, nodeMoves: true, threads: fixed }]));
+    tree({ ...project, nodeMoves: true, threads: fixed });
     expect(await screen.findByRole("button", { name: "Close Hotfix" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move Hotfix" })).not.toBeInTheDocument();
   });

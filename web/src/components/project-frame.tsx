@@ -2,6 +2,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 
 import type { ProjectChipsSource } from "@/components/composer-chips";
+import { CoordinatorSections, waitingAt } from "@/components/coordinator-sections";
+import { openNewDialog } from "@/components/new-agent-sheet";
+import { startableRoles } from "@/components/node-start";
 import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/project-tasks";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
@@ -9,7 +12,9 @@ import { PrList, prLists } from "@/components/threads-panel";
 import { loadThreadOverview } from "@/lib/desk-chunks";
 import type { HomeData } from "@/lib/loaders";
 import { armMotion, useGoUp } from "@/lib/motion";
-import { nodePath, panePath } from "@/lib/nav";
+import { useAsks } from "@/hooks/use-asks";
+import { nodePath, panePath, projectHistoryPath } from "@/lib/nav";
+import { finishedCount } from "@/lib/project-work";
 import { isOpenThread, type PaneProject } from "@/lib/projects";
 import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 
@@ -34,7 +39,7 @@ export const SPLIT_PARAM = "thread";
 /** The search param naming a phone's tab, so a reload or a way back lands on the list you left. */
 export const VIEW_PARAM = "view";
 
-const PHONE_VIEWS = ["chat", "threads", "prs"] as const;
+const PHONE_VIEWS = ["chat", "threads", "prs", "status"] as const;
 type PhoneView = (typeof PHONE_VIEWS)[number];
 
 /** Who a pane answers to and which threads sit beside it. */
@@ -123,6 +128,15 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   }, { replace: true });
   const panelShown = desk && inspector.open && !docked;
 
+  // A coordinator's chat holds what its page did (ADR 0113): a desk's panel and a phone's Status tab.
+  const asks = useAsks(scope.coordinating ? [project] : undefined);
+  const coordinatorId = thread?.id ?? "root";
+  const waiting = scope.coordinating ? waitingAt(asks.list, project, coordinatorId).count : 0;
+  const sections = (children?: ReactNode) => <CoordinatorSections project={project} thread={thread} asks={asks} panes={data.agents} session={data.session}
+    readOnly={readOnly} onChanged={refresh}>{children}</CoordinatorSections>;
+  const canStart = !readOnly && startableRoles(project).includes("worker");
+  const finished = scope.coordinating ? finishedCount(project, thread?.title) : 0;
+
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;
   const pr = sessionPr(data, paneId, thread);
@@ -137,9 +151,9 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const phoneTabs = !desk ? (
     <div className="project-segmented-band">
       <div role="tablist" aria-label="Project" className="project-segmented">
-        {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount]] as const).map(([key, label, count]) => (
+        {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount], ...(scope.coordinating ? [["status", "Status", waiting]] as const : [])] as const).map(([key, label, count]) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className="project-segment">
-            {label}{count !== null && count > 0 && <span className="project-segment-count">{count}</span>}
+            {label}{count !== null && count > 0 && <span className="project-segment-count" data-waiting={key === "status" ? "" : undefined}>{count}</span>}
           </button>
         ))}
       </div>
@@ -156,7 +170,9 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
-      {view === "threads" ? tasks : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
+      {view === "threads" ? tasks
+        : view === "status" && scope.coordinating ? <div className="flex flex-col gap-3">{sections()}</div>
+        : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
     </div></div>
   ) : undefined;
 
@@ -183,6 +199,9 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
           overview={<Suspense fallback={null}><ThreadOverview key={paneId} thread={thread} pane={data.agents.find((pane) => pane.paneId === paneId)} paneId={paneId}
             session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinating={scope.coordinating}
             onShowChanges={() => inspector.setTab("changes")}
+            around={scope.coordinating ? sections : undefined}
+            onNewThread={scope.coordinating && canStart ? () => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent: coordinatorId, onStarted: refresh }) : undefined}
+            finished={scope.coordinating ? { count: finished, open: () => navigate(projectHistoryPath(project.slug, data.session, thread?.title)) } : undefined}
             onOpenThread={(candidate) => {
               if (!candidate.paneId) openNode(candidate.id);
               else if (scope.coordinating && live(candidate.paneId)) setDocked(candidate.paneId);

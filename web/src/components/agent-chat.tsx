@@ -99,24 +99,25 @@ import type {
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /**
- * Where a project pane's back leads, one level up as its node page's does: the coordinator a thread
- * runs under (its chat while that runs, else its page), the project's own coordinator for a thread at
- * the root (likewise), and for that coordinator the project's page when the project organizes
- * coordinators (ADR 0092). A project that opens on its coordinator's chat leaves it nothing above but
- * Home, the caller's default.
+ * Where a project pane's back leads, one level up the project's tree (ADR 0113), shown on a desk too:
+ * a coordinator goes to its parent coordinator (its chat while that runs, else its page) or to the
+ * project; a worker to the coordinator it runs under, the project's own for one at the root. A phone's
+ * project that opens on its own coordinator's chat leaves that chat nothing above but Home, the caller's
+ * default; a desk's project is a page, so its coordinator goes up to it.
  */
-function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], session?: string): HeaderBack | undefined {
+function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], desktop: boolean, session?: string): HeaderBack | undefined {
   const owner = projectForPane(projects, paneId);
   if (!owner) return undefined;
   const { project, thread } = owner;
-  if (!thread) return projectChat(project, panes) ? undefined : { label: project.name, to: projectPath(project.slug, session) };
+  const page = { label: project.name, to: projectPath(project.slug, session), desk: true };
+  if (!thread) return desktop || !projectChat(project, panes) ? page : undefined;
   const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
   if (!parent) {
-    const chat = liveCoordinator(project, panes);
-    return { label: project.name, to: chat ? panePath(chat, session) : projectPath(project.slug, session) };
+    const chat = thread.role === "coordinator" ? undefined : liveCoordinator(project, panes);
+    return chat ? { label: project.name, to: panePath(chat, session), desk: true } : page;
   }
   const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
-  return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session) };
+  return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session), desk: true };
 }
 
 /** A worker thread takes steering; a coordinator takes questions and new work. */
@@ -1110,7 +1111,7 @@ export function AgentChat({
           find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
           bridge={bridge}
           error={error}
-          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : threadBack(projects, paneId, agents, session) ?? { label: "Home", onClick: onBack }}
+          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : threadBack(projects, paneId, agents, desktop, session) ?? { label: "Home", onClick: onBack }}
           override={subagent ? undefined : findBar}
           rightLead={
             subagent ? undefined : agent ? (

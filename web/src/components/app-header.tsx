@@ -34,6 +34,9 @@ export interface HeaderBack {
   /** The parent is shown in place (a subagent's Main): its name sits beside the chevron, and the back
    *  stays on a desk, where the sidebar cannot reach it. */
   inPlace?: boolean;
+  /** Stays on a desk with the parent's name beside it: inside a project, where the way up is a level of
+   *  the project's own tree (coordinator → project → Projects, ADR 0113). */
+  desk?: boolean;
 }
 
 /** Parents the desk's flat sidebar cannot climb to, a thread's coordinator or a node's parent, so the
@@ -100,7 +103,7 @@ export function AppHeader({
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const parent = back?.to ?? homePath(session);
   // Only from a chat or a node: a page under a chat (its history) has its own way back on a desk.
-  const unlisted = !back?.onClick && [pathname, parent.split("?")[0]!].every((path) => UNLISTED_PARENTS.some((route) => matchPath(route, path) !== null));
+  const unlisted = back?.desk || (!back?.onClick && [pathname, parent.split("?")[0]!].every((path) => UNLISTED_PARENTS.some((route) => matchPath(route, path) !== null)));
   const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : unlisted ? "lg:pr-2" : "lg:hidden");
   // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
   // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
@@ -120,7 +123,7 @@ export function AppHeader({
             />
           ) : back?.onClick ? (
             <button type="button" onClick={() => { armMotion("pop"); back.onClick?.(); }} aria-label={`Back to ${back.label}`} className={backClass}>
-              {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
+              {icon}{back.inPlace ? <span className="text-body">{back.label}</span> : unlisted && <span className="hidden max-w-48 truncate text-body lg:inline">{back.label}</span>}
             </button>
           ) : (
             // A tap goes back to where you came from (useGoBack).

@@ -51,6 +51,15 @@ export function liveCoordinator(project: ProjectView | undefined, panes: readonl
 }
 
 /**
+ * The live pane of one of a project's coordinators, `root` being the project's own: a tap on a
+ * coordinator enters this chat, and only a coordinator without one opens its page (ADR 0113).
+ */
+export function coordinatorPane(project: ProjectView, id: string, panes: readonly AgentView[]): string | undefined {
+  const paneId = id === "root" ? runningCoordinator(project)?.paneId : project.threads.find((thread) => thread.id === id && thread.role === "coordinator")?.paneId;
+  return paneId && panes.some((pane) => pane.paneId === paneId) ? paneId : undefined;
+}
+
+/**
  * The chat a project's page opens on: its own coordinator's while it runs, unless the project organizes
  * coordinators and is their page (ADR 0092). Whatever goes up to the project lands there.
  */

@@ -4,7 +4,7 @@ import { errorMessage } from "@/components/node-start";
 import { fetchOrgAsks } from "@/lib/api";
 import type { AsksList, ProjectView } from "@/lib/types";
 
-interface Read { list: AsksList | null; loaded: boolean; failed: string | null }
+export interface AsksRead { list: AsksList | null; loaded: boolean; failed: string | null }
 
 /** Whether this Organizations lists asks: the snapshot then counts what waits on you per project. */
 export function asksAvailable(projects: readonly ProjectView[] | undefined): boolean {
@@ -17,8 +17,8 @@ export function asksAvailable(projects: readonly ProjectView[] | undefined): boo
  * state or pull request (what an ask's links confirm). An Organizations that cannot list asks is
  * never asked. A failed read keeps what was shown and says why.
  */
-export function useAsks(projects: readonly ProjectView[] | undefined): Read {
-  const [read, setRead] = useState<Read>({ list: null, loaded: false, failed: null });
+export function useAsks(projects: readonly ProjectView[] | undefined): AsksRead {
+  const [read, setRead] = useState<AsksRead>({ list: null, loaded: false, failed: null });
   const enabled = asksAvailable(projects);
   const moved = (projects ?? []).map((project) => `${project.slug}:${project.statusUpdated ?? ""}:${project.waitingAsks ?? "-"}:${project.threads.map((thread) =>
     `${thread.id}:${thread.status}:${thread.group ?? ""}:${thread.pr?.state ?? ""}:${thread.statusUpdated ?? ""}`).join(",")}`).join(";");

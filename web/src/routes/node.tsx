@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 import { ExternalLink, ChatCircle, ChatCircleSlash } from "@/components/ui/icon";
 
 import type { HeaderBack } from "@/components/app-header";
@@ -20,13 +20,16 @@ import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { homePath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { ASK, STATE_LABEL, awaits, coordinatorState, flatten, orgTree, type OrgNode } from "@/lib/org-tree";
-import { isReadOnly } from "@/lib/types";
+import { coordinatorPane } from "@/lib/projects";
+import { isReadOnly, type ProjectThreadView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** The node id Organizations gives the project's own coordinator; its page is its card. */
 const ROOT = "root";
 
-// On a desk a coordinator's page has tabs (ADR 0102); a thread's page, and a phone's, are as before.
+// A coordinator that runs is entered at its chat, which holds what its page did (ADR 0113): its node
+// address, an old link or a status line's, lands there. One that does not run keeps its page: on a
+// desk with tabs (ADR 0102); a thread's page, and a phone's, are as before.
 export function NodeRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "", nodeId = "" } = useParams();
@@ -34,12 +37,19 @@ export function NodeRoute() {
   const desk = useDesk();
   const project = data.projects?.find((candidate) => candidate.slug === projectSlug);
   const thread = project?.threads.find((candidate) => candidate.id === nodeId);
+  const chat = project && coordinatorPane(project, nodeId, data.agents);
+  if (chat) return <Navigate to={panePath(chat, data.session)} replace />;
   if (!desk || !project || (nodeId !== ROOT && thread?.role !== "coordinator")) return <NodePage />;
-  const parent = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
-  const back: HeaderBack = parent ? { to: nodePath(project.slug, parent.id, data.session), label: parent.title } : { to: projectPath(project.slug, data.session), label: project.name };
+  const back = upTo(project, thread, data.session);
   return <ColumnPage data={data} title={thread?.title ?? "Project coordinator"} back={back}>
     <DeskCoordinator key={nodeId} project={project} thread={thread} panes={data.agents} device={data.device} session={data.session} onChanged={() => void revalidator.revalidate()} />
   </ColumnPage>;
+}
+
+/** One level up from a node, as its chat's back goes: its coordinator, else its project. */
+function upTo(project: ProjectView, thread: ProjectThreadView | undefined, session?: string): HeaderBack {
+  const parent = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
+  return parent ? { to: nodePath(project.slug, parent.id, session), label: parent.title, desk: true } : { to: projectPath(project.slug, session), label: project.name, desk: true };
 }
 
 // What a tap on a node with no live pane opens: the node itself, inside Nenu. A coordinator lists
@@ -70,7 +80,7 @@ function NodePage() {
 
   let body;
   // Back climbs one level: to the node's parent, else to its project, else Home.
-  let back: HeaderBack | undefined = project && { to: projectPath(project.slug, data.session), label: project.name };
+  let back: HeaderBack | undefined = project && upTo(project, undefined, data.session);
   if (!project) {
     body = <ProjectMissing session={data.session} />;
   } else if (isRoot) {
@@ -101,7 +111,7 @@ function NodePage() {
   } else {
     const { thread, state } = node;
     const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
-    if (parent) back = { to: nodePath(project.slug, parent.id, data.session), label: parent.title };
+    back = upTo(project, thread, data.session);
     const running = live(thread.paneId);
     const coordinator = thread.role === "coordinator";
     const age = threadAge(thread, Date.now());

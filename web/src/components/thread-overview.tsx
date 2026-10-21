@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
-import { ChevronRight, FileCode } from "@/components/ui/icon";
+import { ChevronRight, FileCode, History, Plus } from "@/components/ui/icon";
 
+import { OverviewCard } from "@/components/coordinator-sections";
 import { DiffStat } from "@/components/diff-stat";
 import { useDiffRead, type DiffRead } from "@/components/diff-viewer";
 import { NodeDot } from "@/components/node-row";
@@ -40,6 +41,12 @@ export interface ThreadOverviewProps {
   coordinating: boolean;
   onShowChanges: () => void;
   onOpenThread: (thread: ProjectThreadView) => void;
+  /** A coordinator's: start a thread under it, from its Threads card. */
+  onNewThread?: () => void;
+  /** A coordinator's: how many of its threads finished, and the project's History that lists them. */
+  finished?: { count: number; open: () => void };
+  /** A coordinator's: what its page held, drawn around its Threads and Changes cards (CoordinatorSections). */
+  around?: (cards: ReactNode) => ReactNode;
   now?: number;
 }
 
@@ -49,22 +56,14 @@ export interface ThreadOverviewProps {
  * coordinator it belongs to. Each card answers one question; the diff is read only while it is shown.
  */
 export function ThreadOverview(props: ThreadOverviewProps) {
+  // Read again when the thread or its agent moves: a turn that ends has usually changed files.
+  const changes = <ChangesCard paneId={props.paneId} session={props.session} stamp={`${props.thread?.updated ?? ""}\0${props.pane?.status ?? ""}`} onShow={props.onShowChanges} />;
   return (
     <div className="flex flex-col gap-3 px-3 pb-8 pt-3">
       <ThisThread {...props} />
-      {/* Read again when the thread or its agent moves: a turn that ends has usually changed files. */}
-      <ChangesCard paneId={props.paneId} session={props.session} stamp={`${props.thread?.updated ?? ""}\0${props.pane?.status ?? ""}`} onShow={props.onShowChanges} />
-      <CoordinatorCard {...props} />
+      {/* A coordinator's own threads come before what it changed; a thread's coordinator after. */}
+      {props.around ? props.around(<><CoordinatorCard {...props} />{changes}</>) : <>{changes}<CoordinatorCard {...props} /></>}
     </div>
-  );
-}
-
-function Card({ label, head, children }: { label: string; head?: ReactNode; children: ReactNode }) {
-  return (
-    <section aria-label={label} className="overview-card">
-      <header className="overview-card-head">{head ?? label}</header>
-      {children}
-    </section>
   );
 }
 
@@ -85,7 +84,7 @@ function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Dat
   const model = reading.model && modelDisplayName(reading.model);
   const percent = reading.contextPercent;
   return (
-    <Card label={coordinating ? "This coordinator" : "This thread"}>
+    <OverviewCard label={coordinating ? "This coordinator" : "This thread"}>
       <dl className="overview-body">
         <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
         {parent && <Row name="Coordinator">
@@ -107,7 +106,7 @@ function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Dat
           </span>
         </Row>}
       </dl>
-    </Card>
+    </OverviewCard>
   );
 }
 
@@ -128,7 +127,7 @@ function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; sessi
   const rest = (diff?.totals.files ?? 0) - Math.min(files.length, FILES_SHOWN);
   const failure = read.state === "failed" ? read.message : read.state === "read" && !read.diff.ok ? read.diff.message : undefined;
   return (
-    <Card label="Changes" head={<button type="button" onClick={onShow} className="overview-card-action">
+    <OverviewCard label="Changes" head={<button type="button" onClick={onShow} className="overview-card-action">
       <span className="flex-1 text-left">Changes</span>
       {diff && diff.totals.files > 0 && <DiffStat diff={diff.totals} className="text-xs" />}
       <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
@@ -150,17 +149,18 @@ function ChangesCard({ paneId, session, stamp, onShow }: { paneId: string; sessi
         </ul>}
         {rest > 0 && <button type="button" onClick={onShow} className="overview-note overview-more">{rest} more {rest === 1 ? "file" : "files"}</button>}
       </div>
-    </Card>
+    </OverviewCard>
   );
 }
 
 /** The coordinator this thread belongs to and its other open threads, this one marked. */
-function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpenThread, now = Date.now() }: ThreadOverviewProps) {
+function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps) {
   const open = threads.filter(isOpenThread);
-  if (open.length === 0) return null;
+  // A coordinator's own card stays, empty, for its New thread and its History.
+  if (open.length === 0 && !coordinating) return null;
   const coordinator = coordinating ? undefined : parent;
   return (
-    <Card label={coordinator ? `Coordinator ${coordinator.title}` : "Threads"} head={coordinator ? <>
+    <OverviewCard label={coordinator ? `Coordinator ${coordinator.title}` : "Threads"} head={coordinator ? <>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-xs font-normal text-muted-foreground">Coordinator</span>
         <span className="truncate">{coordinator.title}</span>
@@ -168,8 +168,14 @@ function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpen
       <button type="button" onClick={coordinator.open} className="overview-link text-xs text-muted-foreground">
         Open<ChevronRight aria-hidden className="size-3.5" />
       </button>
-    </> : undefined}>
-      <ul className="overview-threads">
+    </> : <>
+      <span className="flex-1">Threads</span>
+      {onNewThread && <button type="button" onClick={onNewThread} aria-haspopup="dialog" className="overview-link text-xs text-muted-foreground">
+        <Plus aria-hidden className="size-3.5" />New thread
+      </button>}
+    </>}>
+      {open.length === 0 && <p className="overview-note px-3.5 pb-3">Nothing running</p>}
+      {open.length > 0 && <ul className="overview-threads">
         {open.map((candidate) => {
           const current = candidate.id === thread?.id || candidate.paneId === paneId;
           return <li key={candidate.id} aria-current={current ? "true" : undefined}>
@@ -180,7 +186,10 @@ function CoordinatorCard({ thread, threads, parent, coordinating, paneId, onOpen
             </button>
           </li>;
         })}
-      </ul>
-    </Card>
+      </ul>}
+      {finished && finished.count > 0 && <button type="button" onClick={finished.open} className="overview-note overview-more mx-3.5 mb-3 inline-flex items-center gap-1">
+        <History aria-hidden className="size-3.5" />{finished.count} finished<ChevronRight aria-hidden className="size-3.5" />
+      </button>}
+    </OverviewCard>
   );
 }

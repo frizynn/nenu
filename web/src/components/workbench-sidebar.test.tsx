@@ -493,7 +493,7 @@ describe("the sidebar", () => {
     expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
-  it("leads a phone's drawer with what waits on you, then the projects, each opening on its coordinators' pages and the work that moves", async () => {
+  it("leads a phone's drawer with what waits on you, then the projects, each opening on its coordinators' chats and the work that moves", async () => {
     // A thread whose last group says working, in no pane: its dot says working, so no "not running" beside it.
     const busy = { ...acme, threads: [...acme.threads, thread("t6", "cart", "root", { group: "working" })] };
     const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={{ ...herd, projects: [busy] }} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
@@ -504,11 +504,10 @@ describe("the sidebar", () => {
     // No count of open tasks beside the name: what moves is inside.
     expect(screen.getByRole("region", { name: "Acme" }).querySelector(".nav-project .nav-count")).toBeNull();
     await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
-    expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/project/acme/node/root");
-    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/project/acme/node/t1");
-    // A › says a coordinator's row leads to a page; a thread's does not.
-    expect(project.getByRole("link", { name: /^rediseño mobile/ }).lastElementChild?.tagName.toLowerCase()).toBe("svg");
-    expect(project.getByRole("link", { name: /^panel depo/ }).lastElementChild?.tagName.toLowerCase()).not.toBe("svg");
+    // A coordinator that runs is entered at its chat, as on the project page (ADR 0113): no › to a page.
+    expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/pane/c");
+    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/pane/lead");
+    expect(project.getByRole("link", { name: /^rediseño mobile/ }).lastElementChild?.tagName.toLowerCase()).not.toBe("svg");
     expect(project.getByRole("link", { name: /^cart/ })).not.toHaveTextContent("not running");
     expect(project.getByRole("link", { name: /^panel depo/ })).toHaveAttribute("href", "/pane/depo");
     expect(project.getByRole("link", { name: /^panel merca/ })).toBeInTheDocument();

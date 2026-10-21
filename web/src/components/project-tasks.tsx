@@ -1,16 +1,16 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronRight, CircleX } from "@/components/ui/icon";
 
 import { TaskRow } from "@/components/node-row";
 import { CoordinatorStatus } from "@/components/coordinator-status";
 import { NewNodeActions, errorMessage } from "@/components/node-start";
-import { ProjectCoordinator, StartProjectCoordinator } from "@/components/project-coordinator";
+import { ProjectCoordinator } from "@/components/project-coordinator";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { moveOrgNode, resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
-import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, openUnder, organizes, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
@@ -53,14 +53,9 @@ export function threadDetail(thread: ProjectThreadView, panes: readonly AgentVie
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** A tree row's second line: what an open node is doing, or what a resolved one was; a coordinator on the project page says what it holds. */
-function nodeDetail(node: OrgNode, panes: readonly AgentView[], organized = false): string {
+/** A tree row's second line: what an open node is doing, or what a resolved one was. */
+function nodeDetail(node: OrgNode, panes: readonly AgentView[]): string {
   const { thread } = node;
-  if (organized) {
-    const { open, needs } = openUnder(node);
-    // The Coordinators heading, or the chevron of one nested in another, already says what it is.
-    return [STATE_LABEL[node.state], open > 0 && `${open} open`, needs > 0 && `${needs} need${needs === 1 ? "s" : ""} you`].filter(Boolean).join(" · ");
-  }
   if (node.state !== "resolved") return thread.role === "coordinator" ? `Coordinator · ${threadDetail(thread, panes)}` : threadDetail(thread, panes);
   const kind = thread.role !== "coordinator" ? "Thread" : node.children.length ? `Coordinator · ${plural(node.children.length, "thread")}` : "Coordinator";
   return [kind, thread.pr && prSummary(thread.pr)].filter(Boolean).join(" · ");
@@ -113,16 +108,6 @@ interface OrgTreeProps {
   onOpenNode: (id: string) => void;
   onChanged: () => Promise<void> | void;
   now?: number;
-  /**
-   * The phone's project page (ADR 0092, ADR 0110): each open coordinator is one row that opens its page,
-   * and the threads at the project's top level sit apart from the coordinators.
-   */
-  organize?: Organize;
-}
-
-export interface Organize {
-  /** Opens a coordinator's page; the project's own is `root`. */
-  openCoordinator: (coordinatorId: string) => void;
 }
 
 interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
@@ -145,11 +130,8 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
  * detail; an open one can be closed and the coordinator replaced. Under a coordinator below the
  * project, that coordinator heads the list instead of the project's own.
  */
-export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, status, organize, ...tree }: ProjectTasksProps) {
+export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, status, ...tree }: ProjectTasksProps) {
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
-  // The project as an organizer: its own coordinator is one of its coordinators, a row into its page
-  // like the rest while it runs and a small Start beside New otherwise.
-  const organizer = organize && !coordinator && !threads && organizes(orgTree(project.threads)) ? organize : undefined;
   return (
     <div className="project-tasks">
       {!bare && <TasksHeader title={title ?? project.name} subtitle={subtitle ?? project.goal} paused={project.status === "paused"}
@@ -157,12 +139,11 @@ export function ProjectTasks({ threads, coordinator, title, subtitle, bare = fal
       {status && <CoordinatorStatus status={status} project={project} onOpenNode={onOpenNode} />}
       {coordinator
         ? <ul className="task-list mb-2"><CoordinatorRow thread={coordinator} panes={panes} currentPaneId={currentPaneId} onOpenPane={onOpenPane} onOpenNode={onOpenNode} /></ul>
-        : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged}
-          organize={organizer} />}
-      <OrgTreeList {...tree} threads={threads ?? project.threads} organize={organizer} />
+        : <ProjectCoordinator project={project} panes={panes} session={session} current={currentPaneId} readOnly={readOnly} onOpenPane={onOpenPane} onChanged={onChanged} />}
+      <OrgTreeList {...tree} threads={threads ?? project.threads} />
+      {/* Under a coordinator below the project, what starts here goes under it. */}
       {!readOnly && <div className="mt-3 flex flex-wrap gap-1">
-        <NewNodeActions project={project} session={session} onStarted={() => void onChanged()} />
-        {organizer && <StartProjectCoordinator project={project} session={session} onStarted={onChanged} />}
+        <NewNodeActions project={project} under={coordinator && { id: coordinator.id, title: coordinator.title }} session={session} onStarted={() => void onChanged()} />
       </div>}
     </div>
   );
@@ -176,6 +157,13 @@ function CoordinatorRow({ thread, panes, currentPaneId, onOpenPane, onOpenNode }
     onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} />;
 }
 
+/** Organizations says which nodes have another parent; Move shows only where one has somewhere to go. */
+export function canMove(project: ProjectView, whole: OrgTree, node: OrgNode): boolean {
+  if (!project.nodeMoves || !node.thread.movable) return false;
+  const targets = moveTargets(whole, node);
+  return targets.root || targets.coordinators.length > 0;
+}
+
 /** History rows drawn at a time: a long-running project resolves a hundred nodes. */
 const HISTORY_PAGE = 20;
 
@@ -184,26 +172,21 @@ const HISTORY_PAGE = 20;
  * grey behind one row that starts closed, each resolved coordinator folded over the threads it ran,
  * and draws twenty rows at a time; what holds the pane on screen opens by itself.
  */
-export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, organize, now = Date.now() }: OrgTreeProps) {
+export function OrgTreeList({ project, threads, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged, now = Date.now() }: OrgTreeProps) {
   const tree = orgTree(threads);
   const onScreen = (node: OrgNode) => currentPaneId !== undefined && node.thread.paneId === currentPaneId;
   const [closing, setClosing] = useState<OrgNode | null>(null);
   const [moving, setMoving] = useState<OrgNode | null>(null);
-  // Organizations says which nodes have another parent; the dialog lists every coordinator of the
-  // project a node could go under, not only the ones this view lists.
+  // The dialog lists every coordinator of the project a node could go under, not only the ones this view lists.
   const whole = orgTree(project.threads);
-  const movable = (node: OrgNode) => {
-    if (!project.nodeMoves || !node.thread.movable) return false;
-    const targets = moveTargets(whole, node);
-    return targets.root || targets.coordinators.length > 0;
-  };
+  const movable = (node: OrgNode) => canMove(project, whole, node);
   const [historyShown, setHistoryShown] = useState(() => tree.history.some((node) => holds(node, onScreen)));
   const [historyLimit, setHistoryLimit] = useState(() => {
     const held = tree.history.findIndex((node) => holds(node, onScreen));
     return Math.max(HISTORY_PAGE, Math.ceil((held + 1) / HISTORY_PAGE) * HISTORY_PAGE);
   });
   const hidden = tree.history.length - historyLimit;
-  const [folds, setFolds] = useFolds(organize ? project.slug : undefined);
+  const [folds, setFolds] = useState<Record<string, boolean>>({});
   // Show more hands focus to the first row it brought: the last page takes the button with it.
   const historyList = useRef<HTMLUListElement>(null);
   const firstShown = useRef<number | null>(null);
@@ -217,19 +200,13 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   const branch = (node: OrgNode): ReactNode => {
     const { thread, state } = node;
     const resolved = state === "resolved";
-    // On the project page an open coordinator is a way into its page, which lists its work.
-    const organized = !resolved && thread.role === "coordinator" ? organize : undefined;
-    // Elsewhere open coordinators always show their work; a resolved one folds until opened.
+    // Open coordinators always show their work; a resolved one folds until opened.
     const open = !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
     const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
     const actions = resolved || readOnly ? undefined : [
       ...(movable(node) ? [{ label: "Move", name: `Move ${thread.title}`, icon: ArrowRight, run: () => setMoving(node), menuLabel: "Move to…", destructive: false }] : []),
       { label: "Close", name: `Close ${thread.title}`, icon: CircleX, run: () => setClosing(node), menuLabel: thread.role === "coordinator" ? "Close coordinator…" : "Close thread…" },
     ];
-    if (organized) {
-      return <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, true)} age={threadAge(thread, now)} current={onScreen(node)}
-        onOpen={() => organized.openCoordinator(thread.id)} opens="page" actions={actions} />;
-    }
     return (
       <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
         onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
@@ -238,16 +215,8 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
       </TaskRow>
     );
   };
-  // On the project page the coordinators come first under their own heading, and the threads at the
-  // top level apart under theirs; the tree already orders coordinators first.
-  const coordinators = organize ? tree.open.filter((node) => node.thread.role === "coordinator") : [];
-  const loose = organize ? tree.open.filter((node) => node.thread.role !== "coordinator") : tree.open;
-
   return <>
-    {coordinators.length > 0 && <TreeSection title="Coordinators">{coordinators.map(branch)}</TreeSection>}
-    {loose.length > 0 && (organize
-      ? <TreeSection title="Threads" list="Open threads">{loose.map(branch)}</TreeSection>
-      : <ul className="task-list mb-2" aria-label="Open threads">{loose.map(branch)}</ul>)}
+    {tree.open.length > 0 && <ul className="task-list mb-2" aria-label="Open threads">{tree.open.map(branch)}</ul>}
     {tree.history.length > 0 && <>
       <button type="button" className="task-history-toggle" aria-expanded={historyShown} onClick={() => setHistoryShown(!historyShown)}>
         <ChevronRight aria-hidden className="size-3.5" />History · {historyCount(tree.resolved)}
@@ -267,20 +236,11 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   </>;
 }
 
-/** A titled list of the project page's tree: its coordinators, or the threads at its top level. */
-function TreeSection({ title, list = title, children }: { title: string; list?: string; children: ReactNode }) {
-  const id = useId();
-  return <section aria-labelledby={id} className="mb-2">
-    <h3 id={id} className="task-section">{title}</h3>
-    <ul className="task-list" aria-label={list}>{children}</ul>
-  </section>;
-}
-
 /**
  * Which rows of a tree are open. The project page keeps them for the tab's session, so going into a
  * chat and back finds the tree as it was left; every other view starts fresh.
  */
-function useFolds(project: string | undefined) {
+export function useFolds(project: string | undefined) {
   const key = project && `nenu.folds.${project}`;
   const [folds, setFolds] = useState<Record<string, boolean>>(() => {
     if (!key) return {};
@@ -308,7 +268,7 @@ function useFolds(project: string | undefined) {
  * Choose where an open node goes (Organizations' `node move`): the project's top level or an open
  * coordinator that is not the node or one of its own. On failure it stays open with the cause.
  */
-function MoveNodeDialog({ project, tree, node, session, onMoved, onCancel }: {
+export function MoveNodeDialog({ project, tree, node, session, onMoved, onCancel }: {
   project: ProjectView;
   tree: OrgTree;
   node: OrgNode;
