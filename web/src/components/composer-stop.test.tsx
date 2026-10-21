@@ -99,43 +99,6 @@ it("draws a row that arrives while the chat settles at once, and folds open one 
   }
 });
 
-// Folding at once still moved the box by the line's height when the chips landed. A project's chat keeps
-// that height while it settles, so they land in place; a hold that meets no chip folds shut rather than
-// vanishing, a tucked chip never takes it, and a chat where chips are unlikely holds nothing.
-it("keeps the chips' line height while a project's chat settles, hands it to the chips, and lets go if none come", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  try {
-    const chip = { id: "working" as const, label: "Working", count: 1, content: "bun run build" };
-    const tucked = { id: "routines" as const, label: "Routines", count: 1, content: "nightly", tucked: true };
-    const hold = () => document.querySelector("[data-hold]");
-    const { rerender } = setup({ working: false, chips: { chips: [tucked], open: null, onOpenChange: vi.fn(), likely: true } });
-    expect(hold()).toHaveAttribute("aria-hidden", "true");
-    rerender({ chips: { chips: [chip, tucked], open: null, onOpenChange: vi.fn(), likely: true } });
-    expect(hold()).toBeNull();
-    expect(screen.getByRole("button", { name: "Working, 1" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Routines/ })).not.toBeInTheDocument();
-    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
-    rerender({ chips: { chips: [tucked], open: null, onOpenChange: vi.fn(), likely: true } });
-    await act(async () => { vi.advanceTimersByTime(2000); });
-    await act(async () => { vi.advanceTimersByTime(200); });
-    expect(hold()).toBeNull();
-    // A hold no chip took folds shut instead of vanishing.
-    setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn(), likely: true } });
-    const held = hold()!;
-    await act(async () => { vi.advanceTimersByTime(2000); });
-    expect(held.closest(".composer-fold")).toHaveAttribute("data-phase", "shutting");
-    await act(async () => { vi.advanceTimersByTime(200); });
-    expect(held).not.toBeInTheDocument();
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("holds nothing in a chat where chips are unlikely", () => {
-  setup({ working: false, chips: { chips: [], open: null, onOpenChange: vi.fn() } });
-  expect(document.querySelector("[data-hold]")).toBeNull();
-});
-
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
   const { user, rerender } = setup();
   await user.click(stopButton()!);

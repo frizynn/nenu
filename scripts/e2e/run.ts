@@ -3345,7 +3345,7 @@ async function chipLine(): Promise<void> {
     // Stop sits in the box whenever a turn runs, keyboard up or not; with no live chip nothing sits
     // between the thread and the box; and nothing pushes the page sideways.
     type Seen = ReturnType<typeof measureAboveBox>;
-    const working = new Set(moments.filter((m) => m.status === "working").map((m) => m.name));
+    const working = new Set<string>(moments.filter((m) => m.status === "working").map((m) => m.name));
     const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel") && !key.endsWith("-menu")).filter(([key, m]) => !m || m.pageScrollsSideways
       || (working.has(key.replace(/-keyboard$/, "").split("-").slice(0, -2).join("-")) && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))

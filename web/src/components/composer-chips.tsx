@@ -144,8 +144,6 @@ export interface ChipLine {
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
-  /** Chips are likely here (a project's chat): while it settles, the line keeps its height for them. */
-  likely?: boolean;
 }
 
 /** A press that belongs to something the panel opened, such as a confirmation or a diff over the page. */

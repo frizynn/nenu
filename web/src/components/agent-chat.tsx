@@ -1412,7 +1412,7 @@ export function AgentChat({
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
-            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail, likely: Boolean(projectChips) && agent?.status === "working",
+            chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
               onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
