@@ -548,7 +548,7 @@ export async function settleDraft(
   if (action === "take" && holdsCliToken(seen.draft)) return { ok: false, error: "The agent's box holds a picture or a paste only the agent has, so it was left as it is." };
   if (action !== "send") {
     const failed = await sweep(send, full, adapter, seen);
-    return failed ? { ok: false, error: "The agent's box didn't empty. Try Discard again." } : { ok: true };
+    return failed ? { ok: false, error: "The agent's box didn't empty. Try again." } : { ok: true };
   }
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, submitKeys);

@@ -1056,6 +1056,30 @@ describe("Composer — typing into the terminal", () => {
     expect(loadDraft(undefined, "w1:p1")).toBe("keep this draft");
   });
 
+  it("a Terminal view entered while a send is on its way becomes the terminal once it lands", async () => {
+    let release = () => {};
+    serveSend((body) => new Promise((resolve) => { release = () => resolve({ ok: true, requestId: body.requestId, ack: "submitted" }); }));
+    function Harness() {
+      const [terminalView, setTerminalView] = useState(false);
+      return <>
+        <button type="button" onClick={() => setTerminalView(true)}>terminal view</button>
+        <ComposerWithMenu paneId="w1:p1" agent="claude" isShell={false} gone={false} readOnly={false} dialogPresent={false}
+          text="pane output" terminalDraft={null} rawTerminalDraft={null}
+          prefs={{ wrap: true, fontSize: 11, rawTerminal: terminalView, tapToFocus: true }}
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()}
+          terminalView={terminalView} />
+      </>;
+    }
+    const user = userEvent.setup();
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Harness /> }])} />);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "va");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(screen.getByRole("button", { name: "terminal view" }));
+    expect(screen.queryByPlaceholderText(/type into the terminal/i)).not.toBeInTheDocument();
+    act(() => release());
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
+  });
+
   it("is the box in the chat's Terminal view, and the chat's box again when the view goes (ADR 0113)", async () => {
     function Harness() {
       const [terminalView, setTerminalView] = useState(true);
@@ -1570,7 +1594,9 @@ describe("Composer — terminal-draft preview", () => {
     expect(sends).toEqual([]);
     setRawDraft("");
     setStableDraft("");
-    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["lo mío"]));
+    // It reads empty for as long as a draft takes to show before the message goes.
+    expect(sends).toEqual([]);
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["lo mío"]), { timeout: 4000 });
   });
 
   it("Don't send mine takes the waiting message back, on a phone too, and keeps it in the box", async () => {
@@ -1591,7 +1617,7 @@ describe("Composer — terminal-draft preview", () => {
     expect(box).toHaveValue("mejor no");
   });
 
-  it("a preview that only hides for a poll, with the text still in the box, sends nothing", async () => {
+  it("one read that misses the box's text sends nothing: the text comes back and the message still waits", async () => {
     const user = userEvent.setup();
     const sends = serveSend();
     renderDraftHarness();
@@ -1599,9 +1625,29 @@ describe("Composer — terminal-draft preview", () => {
     await screen.findByText(/text in claude's box/i);
     await user.type(screen.getByPlaceholderText(/type a reply/i), "espero");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    setStableDraft(""); // the stabilised value drops for a read; the raw line still holds the text
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    strandDraft(""); // a read during a repaint finds no box text
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    strandDraft("sigue acá"); // the next read has it again
+    await new Promise((resolve) => setTimeout(resolve, 1800));
     expect(sends).toEqual([]);
+  });
+
+  it("Add to my message carries the box's text even when a poll sees the box empty before the take answers", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    server.use(http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async () => {
+      // The bridge empties the box, and a poll sees it, before the answer reaches the composer.
+      strandDraft("");
+      await new Promise((resolve) => setTimeout(resolve, 1700));
+      return HttpResponse.json({ ok: true });
+    }));
+    renderDraftHarness();
+    strandDraft("primera parte");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "segunda");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["segunda\nprimera parte"]), { timeout: 4000 });
   });
 
   it("a message waiting on the box's text is dropped when the page is hidden", async () => {

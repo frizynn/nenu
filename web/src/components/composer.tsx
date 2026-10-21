@@ -35,7 +35,7 @@ import { ctrlPresetsFor } from "@/lib/operator-keys";
 import { isDestructiveInput } from "@/lib/destructive";
 import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
-import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
+import { isSelfEcho, normalizeDraft, STABLE_MIN_AGE_MS } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
 import { holdsCliToken } from "@/lib/harness/inline-images";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
@@ -775,16 +775,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     document.addEventListener("visibilitychange", onHidden);
     return () => document.removeEventListener("visibilitychange", onHidden);
   }, []);
-  // The box's text was settled here, or the box itself is empty again (the terminal sent or cleared
-  // it): the waiting message goes now, the draft as it then reads (Add to my message joined it). A
-  // preview that only hid for a poll is neither, so it holds.
-  const boxSettled = rawTerminalDraft === null || (effectiveRaw !== null && normalizeDraft(effectiveRaw) === handledKey);
+  // The box's text was settled here, or the box itself has read empty for as long as a draft takes to
+  // show (the terminal sent or cleared it): the waiting message goes now, the draft as it then reads
+  // (Add to my message joined it). One read that missed the text is neither, so it holds.
+  const [boxEmpty, setBoxEmpty] = useState(false);
+  const rawEmpty = rawTerminalDraft === null;
   useEffect(() => {
-    if (!draftPick || !boxSettled || sending) return;
+    setBoxEmpty(false);
+    if (!rawEmpty) return;
+    const id = setTimeout(() => setBoxEmpty(true), STABLE_MIN_AGE_MS);
+    return () => clearTimeout(id);
+  }, [rawEmpty]);
+  // A settle here answered once the bridge read the box empty: nothing to wait for then.
+  const [settledHere, setSettledHere] = useState(false);
+  const boxSettled = boxEmpty || settledHere || (effectiveRaw !== null && normalizeDraft(effectiveRaw) === handledKey);
+  useEffect(() => {
+    // Not while Add to my message is still emptying the box: the message must carry its text.
+    if (!draftPick || !boxSettled || sending || draftBusy) return;
     const pick = draftPick;
     setDraftPick(null);
+    setSettledHere(false);
     void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
-  }, [draftPick, boxSettled, sending]);
+  }, [draftPick, boxSettled, sending, draftBusy]);
 
   /** Send or discard the agent's box's text, bound to the text shown (ADR 0113). */
   async function settleHostDraft(action: "send" | "discard") {
@@ -798,6 +810,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return;
     }
     if (action === "send") stop.turnSent();
+    setSettledHere(true);
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
   }
@@ -823,6 +836,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setStatus(res.error ?? "The agent's box was left as it is.", "error");
         return;
       }
+      setSettledHere(true);
     }
     direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
@@ -868,6 +882,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // message goes the moment they do (ADR 0113). Never swept unseen, never waited on unsaid.
     if (!action && !force && !how.draftSettled && hostDraft !== null) {
       setDraftPick({ text: t, isDraft, mode: how.mode });
+      setSettledHere(false);
       return false;
     }
     // A busy agent: into its own queue or turn, as the terminal's Enter. An idle one gets it directly.

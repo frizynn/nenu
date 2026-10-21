@@ -93,7 +93,7 @@ function waitingLabel(name: string, row: QueueRowView): string {
     case "dialog":
       return "Waiting. Answer the dialog first.";
     case "draft":
-      return `Waiting for the text in ${name}'s box: send it or discard it above yours.`;
+      return `Waiting for the text in ${name}'s box: choose what to do with it above yours.`;
     case "disconnected":
       return "Waiting for the pane to reconnect.";
     case "stopped":
