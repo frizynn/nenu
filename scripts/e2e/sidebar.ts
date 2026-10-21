@@ -10,7 +10,7 @@ import { deskOrg, type OrgSeed } from "./scenario.ts";
 // row ends inside the bar, a long name ends in an ellipsis, and the chats' "N updates" sits at the bar's
 // own edge. A chat with a name wider than the bar stands in for the one that pushed the list sideways
 // (21/10: the projects read "M" and "r Org" and "8 updates" floated past the rows). Captures each width
-// and the drawer in dark and light. Exits 1 on any failure.
+// and the drawer in dark and light, with Home and a project's page at the default width. Exits 1 on any failure.
 //
 //   bun scripts/e2e/sidebar.ts [--port 8877] [--out DIR] [--tag before|after]
 
@@ -84,6 +84,12 @@ async function main(): Promise<void> {
           const full = `${values.tag}-desk-full-${scheme}.png`;
           await page.screenshot({ path: join(outDir, full), animations: "disabled" });
           shots.push(full);
+          await page.goto(bridge.url + "/project/acme-shop");
+          await page.locator("main >> visible=true").first().waitFor({ timeout: 30_000 });
+          await page.waitForTimeout(600);
+          const project = `${values.tag}-desk-project-${scheme}.png`;
+          await page.screenshot({ path: join(outDir, project), animations: "disabled" });
+          shots.push(project);
         }
         await context.close();
       }
