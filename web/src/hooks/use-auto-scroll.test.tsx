@@ -237,6 +237,14 @@ describe("useAutoScroll — resize re-pin", () => {
     expect(el.dataset.atBottom).toBe("true");
     expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
     expect(box.top).toBe(1094);
+
+    // A bounce past the bottom, then the reader's flick up from it.
+    box.top = 1150;
+    fireEvent.scroll(el);
+    box.top = 900;
+    fireEvent.scroll(el);
+    expect(el.dataset.atBottom).toBe("false");
+    expect(box.top).toBe(900);
   });
 
   // The mirror's Find and the History search are one-line inputs: a keystroke there never resizes

@@ -265,6 +265,29 @@ describe("LiveConversation", () => {
 
     expect(screen.queryByRole("button", { name: /^Scroll to latest/ })).not.toBeInTheDocument();
     expect(box.top).toBe(1094);
+
+    box.top = 900;
+    fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+    expect(box.top).toBe(900);
+  });
+
+  // iOS reports a scrollTop past the bottom while the list bounces there; a flick up from it is the
+  // reader's, not a clamp.
+  it("lets a flick up from a bounce past the bottom leave the tail", () => {
+    const history: PaneHistoryResponse = { paneId: "w1:p1", available: true, entries: fixtureTranscript, hasMore: false, total: 2, fileTruncated: false };
+    const { container } = render(<MemoryRouter><LiveConversation paneId="w1:p1" history={history} loading={false} error={false} /></MemoryRouter>);
+    const scroller = container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    const box = scrollBox(scroller, { height: 1851, client: 453 });
+    act(() => { scroller.scrollTo({ top: box.height }); fireEvent.scroll(scroller); });
+
+    box.top = 1450;
+    fireEvent.scroll(scroller);
+    box.top = 1300;
+    fireEvent.scroll(scroller);
+
+    expect(screen.getByRole("button", { name: /^Scroll to latest/ })).toBeInTheDocument();
+    expect(box.top).toBe(1300);
   });
 
   // A screen reader or the browser's own find moves the list without touching it: long after an edit,
