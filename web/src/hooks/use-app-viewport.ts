@@ -7,7 +7,8 @@ import { isTextField } from "@/hooks/use-auto-scroll";
 const SETTLE_MS = 1000;
 
 /** Whether the focused element can be holding the on-screen keyboard up: a text field, or a frame
- * (a preview's form) whose own field we cannot see into. */
+ * (a preview's form) whose own field we cannot see into. A frame stays focused after its keyboard goes
+ * down, so there the viewport's own reading is the only guard left, as it was for every field before. */
 export function mayHoldKeyboard(element: Element | null): boolean {
   return isTextField(element) || element instanceof HTMLIFrameElement;
 }

@@ -46,7 +46,7 @@ export function useKeyboardOpen(): boolean {
     if (!vv) return;
     let state: KeyboardState = { open: false, baseline: vv.height, width: vv.width };
     // Read on every moment the viewport may have changed, not only its own `resize`, which iOS can lose;
-    // and only a focused field holds the keyboard up, whatever the last sample said.
+    // and only a focused field (or frame, see mayHoldKeyboard) holds the keyboard up, whatever the last sample said.
     const update = () => {
       state = keyboardStep(state, { height: vv.height, width: vv.width });
       setOpen(state.open && mayHoldKeyboard(document.activeElement));
