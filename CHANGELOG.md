@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.38.2] - 2026-10-21
+
+### Fixed
+
+- A picture sent while the agent works goes through the queue piece by piece, so Claude attaches it instead of leaving its path typed in the box (e576f3b0).
+- A picture the agent keeps as its path goes as that path; a send that stops before Enter clears what it typed, and a queued row it cleared goes again, three times at most (5c076acd).
+- Take over clears the terminal's copy of the draft while it still holds that text, so the queue and Type into terminal are no longer stuck behind it; a picture or paste only the CLI holds is left (55aed6e8, 7ebc9d44, ffd14340, d2aba238, fa27bb47).
+
 ## [1.38.1] - 2026-10-21
 
 ### Changed

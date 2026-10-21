@@ -162,6 +162,30 @@ test("waits through a pre-type dialog and continues once without a second Send",
   }
 });
 
+test("a delivery that cleared what it typed goes again, and the third such try pauses", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nenu-cleared-"));
+  try {
+    const queue = new MessageQueue(join(dir, "queue.json"));
+    await queue.add(row);
+    await queue.add({ ...row, id: "two", text: "After it" });
+    let calls = 0;
+    const cleared = async () => (calls++, { status: "blocked" as const, cleared: true as const, error: "A picture didn't show." });
+    await queue.tick(readyNow, cleared, { force: true });
+    const [first, second] = await queue.list("scope");
+    expect(first!.state).toBe("queued");
+    expect(first!.error).toBe("A picture didn't show.");
+    expect(second!.state).toBe("queued");
+    await queue.tick(readyNow, cleared, { force: true });
+    await queue.tick(readyNow, cleared, { force: true });
+    expect(calls).toBe(3);
+    expect((await queue.list("scope"))[0]!.state).toBe("paused");
+    await queue.tick(readyNow, cleared, { force: true });
+    expect(calls).toBe(3);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("uncertain delivery cannot be edited or resent without checking the terminal", async () => {
   const dir = await mkdtemp(join(tmpdir(), "nenu-paused-"));
   try {

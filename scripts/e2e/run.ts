@@ -9,6 +9,7 @@ import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
+import { takeOverBench } from "./take-over.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
@@ -46,6 +47,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
 //   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
+//   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
 //   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -4121,6 +4123,16 @@ async function inlineImages(before: boolean): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
+/** A draft left in Claude's input box, on a phone: Take over, then typing into the terminal. */
+async function takeOver(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench((bridge, browser) => takeOverBench(bridge, browser, outDir), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "take-over.json"), JSON.stringify(result, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  console.log(result.shots.join("\n"));
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -4155,8 +4167,9 @@ else if (command === "pin") await pin();
 else if (command === "at-rest") await atRestBench();
 else if (command === "inline-images") await inlineImages(values.before === true);
 else if (command === "phone-scroll") await phoneScroll();
+else if (command === "take-over") await takeOver();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|phone-scroll [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|phone-scroll|take-over [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

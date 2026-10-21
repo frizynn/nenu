@@ -47,14 +47,25 @@ export function imageTokens(draft: string | null): number {
   return draft?.match(TOKEN)?.length ?? 0;
 }
 
-const strip = (s: string) => s.replace(/\s+/g, "");
+/** A text without its whitespace: a box wraps, and its reading joins a word cut at the edge with a space. */
+export const strip = (s: string) => s.replace(/\s+/g, "");
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
+ * Whether the box ends with `path` as text: the CLI kept the pasted path instead of attaching it
+ * (Claude 2.1.306 does for a path to no file). The agent reads a path it is given, so the picture
+ * still goes, as its path. Whitespace is not compared: a long path wraps.
+ */
+export function pathShows(draft: string | null, path: string): boolean {
+  return draft !== null && strip(draft).endsWith(strip(path));
+}
+
+/**
  * Whether the input box shows `sent` typed piece by piece: its words in order, an `[Image #N]` where
- * each picture's path was and nothing else. A piece the CLI may collapse into a paste token of its
- * own matches that token too, from `collapsed` (a whitespace-free regex source, or null when the
- * piece stays literal). Whitespace is not compared: the box wraps, and Codex spaces its tokens.
+ * each picture's path was (or the path itself, when the CLI kept it as text) and nothing else. A
+ * piece the CLI may collapse into a paste token of its own matches that token too, from `collapsed`
+ * (a whitespace-free regex source, or null when the piece stays literal). Whitespace is not
+ * compared: the box wraps, and Codex spaces its tokens.
  */
 export function placedPicturesCarrySend(sent: string, draft: string, collapsed: (piece: string) => string | null = () => null): boolean {
   const pieces = sendPieces(sent);
@@ -62,7 +73,7 @@ export function placedPicturesCarrySend(sent: string, draft: string, collapsed: 
   let pattern = "";
   for (const piece of pieces) {
     if (piece.kind === "image") {
-      pattern += "\\[Image#\\d+\\]";
+      pattern += `(?:\\[Image#\\d+\\]|${escape(strip(piece.path))})`;
       continue;
     }
     const literal = strip(piece.text);
@@ -71,4 +82,41 @@ export function placedPicturesCarrySend(sent: string, draft: string, collapsed: 
     pattern += token ? `(?:${escape(literal)}|${token})` : escape(literal);
   }
   return new RegExp(`^${pattern}$`).test(strip(draft));
+}
+
+/**
+ * Whether the box holds only the start of `sent` as typed piece by piece (its whole, at most): the
+ * words in order, each picture as its token or its path. A box that does is Nenu's own typing, so a
+ * send that stops before Enter may clear it; anything else may be the operator's and stays.
+ */
+export function draftIsPartOfSend(sent: string, draft: string | null): boolean {
+  const box = strip(draft ?? "");
+  if (!box) return false;
+  let at = 0;
+  for (const piece of sendPieces(sent)) {
+    if (at === box.length) return true;
+    const rest = box.slice(at);
+    const token = piece.kind === "image" ? /^\[Image#\d+\]/.exec(rest)?.[0] : undefined;
+    if (token) {
+      at += token.length;
+      continue;
+    }
+    const literal = strip(piece.kind === "image" ? piece.path : piece.text);
+    if (!rest.startsWith(literal)) return literal.startsWith(rest);
+    at += literal.length;
+  }
+  return at === box.length;
+}
+
+// What a CLI draws for something only it holds, without its whitespace: a picture it attached
+// (Claude and Codex), a paste it collapsed (Claude's `[Pasted text #N +M lines]`, Codex's
+// `[Pasted Content N chars]`).
+const CLI_TOKEN = /\[(?:Image#\d+|Pastedtext#\d+[^\]]*|PastedContent\d+chars)\]/;
+
+/**
+ * Whether the box holds something only the CLI has, which a copy of its text would not carry. The
+ * stranded-draft preview offers no Take over for it, and the bridge never clears it (ADR 0112).
+ */
+export function holdsCliToken(draft: string): boolean {
+  return CLI_TOKEN.test(strip(draft));
 }
