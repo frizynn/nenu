@@ -196,7 +196,7 @@ the unit name; the Herdr action runs from anywhere.
   waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
   where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
-  page, each a row folding over its card and work, the project's own first while it runs and otherwise a
+  page, each a row into its own page (ADR 0109), the project's own first while it runs and otherwise a
   small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
   shows only where `node move --help` exits 0 and the node's `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
@@ -210,7 +210,12 @@ the unit name; the Herdr action runs from anywhere.
   only under periods that hold one on screen, and More folds them with motion, mounted.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
-  which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)).
+  which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)). They
+  are Home's first tab, before Recents, Workspaces and PRs: live projects first, the quiet ones folded at
+  its end, and a row always opens its project. On a phone a coordinator opens its page, from the project
+  and the drawer, and the drawer lists Projects after Needs you without History or counts;
+  `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
+  ([ADR 0109](./.adr/0109-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **The line above a chat's box holds only live work** (`composer-chips.tsx`): Needs you, Working, PRs;
   finished work and routines are rows of the ⋯ menu. Stop sits in the box beside Send, never in its
   slot, so a draft never swaps it under the thumb
