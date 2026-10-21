@@ -304,7 +304,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
-  // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
+  // A desk draws the switcher as a page's underlined tabs (DeskTabs) and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
@@ -326,12 +326,12 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
     <section aria-label="Your work" className="flex flex-col gap-2">
-      <div className="relative flex items-center gap-2.5">
+      <div className={cn("relative flex items-center gap-2.5", desk && "border-b border-border")}>
         <div role="tablist" aria-label="Your work"
-          className={desk ? "-ml-2 flex items-center gap-1" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
+          className={desk ? "flex items-center gap-5" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-              onClick={() => { setList(key); rememberList(key); }} className={desk ? "panel-tab" : "project-segment"}>{label}</button>
+              onClick={() => { setList(key); rememberList(key); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
         {/* Always laid out beside the tabs, so its arrival moves neither them nor the rows; a phone gives the

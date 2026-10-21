@@ -386,12 +386,12 @@ describe("Recents and Workspaces", () => {
     expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
   });
 
-  it("draws the sessions' control on a desk as text tabs, the open one on a soft grey, and the project filter with no box", async () => {
+  it("draws the sessions' control on a desk as a page's underlined tabs, and the project filter with no box", async () => {
     desk();
     try {
       const { user, main } = await setup(recentData);
       const recents = main.getByRole("tab", { name: "Recents" });
-      expect(recents).toHaveClass("panel-tab");
+      expect(recents).toHaveClass("desk-tab");
       expect(recents).not.toHaveClass("project-segment");
       expect(main.getByRole("tablist", { name: "Your work" })).not.toHaveClass("project-segmented");
       // The project filter narrows sessions: the Projects tab has none.
