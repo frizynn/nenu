@@ -20,7 +20,7 @@ Three shapes were drawn over the same coordinator at 390×844 (the band from the
 | | Band in the chat | Band in a view | Chat → a view | A view → Chat | A view → another |
 | --- | --- | --- | --- | --- | --- |
 | Before: the 52 px track | 60 px | 60 px | 1 tap | 1 tap | 1 tap |
-| The ⋯'s rows, a 32 px switch in an open view | 0 | 40 px | 2 taps | 1 tap | 1 tap |
+| The ⋯'s rows, a 32 px switch in an open view | 0 | 44 px | 2 taps | 1 tap | 1 tap |
 | The ⋯'s rows, a "‹ Chat" line in an open view | 0 | 40 px | 2 taps | 1 tap | 2 taps |
 | A 32 px track, always shown | 40 px | 40 px | 1 tap | 1 tap | 1 tap |
 
@@ -33,9 +33,12 @@ line saves nothing over the small switch and costs a tap between views.
    (with its count) and, on a coordinator, Status are the first rows of the header's ⋯ menu, under
    Show, the open one checked. A desk is unchanged: its panel holds them.
 2. **What waits on you is counted on the ⋯ itself**, in red, so it shows with the menu shut, and on the
-   Status row. Nothing else is counted there: a thread's or a PR's count is not a request.
-3. **An open view draws the same switch at 32 px** under the title (44 px of target on a coarse pointer
-   through its band), so Chat and the other views stay one tap away. It leaves with the view.
+   Status row: the asks Status answers, as its tab did. Nothing else is counted there: a thread's or a
+   PR's count is not a request, and the threads that need you keep their own Needs you chip under the
+   box, which counts threads, not asks, so the two numbers can differ.
+3. **An open view draws the same switch at 32 px** in a 44 px band under the title, which each tab's
+   touch reach fills (measured: 44 px down a tab's centre; in a 40 px band the header took the top 2),
+   so Chat and the other views stay one tap away. It leaves with the view.
 4. The view stays in the URL (`?view=`), replaced, as before.
 
 ## Consequences
@@ -45,4 +48,4 @@ line saves nothing over the small switch and costs a tap between views.
 - The ⋯ menu grows by four rows on a coordinator's chat. Its other groups keep their order.
 - `bun scripts/e2e/coordinator-chat.ts` fails when a phone's chat draws views under its title, a view
   takes more than 2 taps, or Acme's waiting ask is not on its ⋯; `bun scripts/e2e/phone-nav.ts` fails
-  when an open view's switch is taller than 32 px.
+  when an open view's switch is taller than 32 px or its Chat takes a finger over less than 44 px.

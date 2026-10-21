@@ -10,7 +10,7 @@ import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/proje
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { PrList, prLists } from "@/components/threads-panel";
-import { ChatCircleText, FolderTree, GitPullRequest, Inbox } from "@/components/ui/icon";
+import { ChatCircleText, FolderTree, GitPullRequest, Inbox, type IconComponent } from "@/components/ui/icon";
 import { loadThreadOverview } from "@/lib/desk-chunks";
 import type { HomeData } from "@/lib/loaders";
 import { armMotion, useGoUp } from "@/lib/motion";
@@ -31,8 +31,8 @@ export interface ProjectChatSlots {
   headerTrail?: ReactNode;
   overlay?: ReactNode;
   strip?: ReactNode;
-  /** A phone's views as the ⋯ menu's first rows, and what waits on you behind them. */
-  menu?: ConversationActionGroup & { waiting?: number };
+  /** A phone's views as the ⋯ menu's first rows; what waits on you behind them is counted on the ⋯. */
+  menu?: ConversationActionGroup;
   projectChips?: ProjectChipsSource;
   /** The desk's session panel beside the chat, absent while a thread is docked there instead. */
   sessionPanel?: SessionPanelLink;
@@ -46,6 +46,9 @@ export const VIEW_PARAM = "view";
 
 const PHONE_VIEWS = ["chat", "threads", "prs", "status"] as const;
 type PhoneView = (typeof PHONE_VIEWS)[number];
+
+/** A phone's view as its ⋯ row and its switch's tab draw it; `waiting` marks a count of what waits on you. */
+interface PhoneViewRow { key: PhoneView; label: string; icon: IconComponent; count: number; waiting?: boolean }
 
 /** Who a pane answers to and which threads sit beside it. */
 export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">) {
@@ -134,8 +137,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   }, { replace: true });
   const panelShown = desk && inspector.open && !docked;
 
-  // A coordinator's chat holds what its page did (ADR 0115): a desk's panel and a phone's Status tab.
-  // A phone reads the asks for its Status tab's count; a desk's Overview reads them while it is on screen.
+  // A coordinator's chat holds what its page did (ADR 0115): a desk's panel and a phone's Status view.
+  // A phone reads the asks for its Status view's count; a desk's Overview reads them while it is on screen.
   const asks = useAsks(scope.coordinating && !desk ? [project] : undefined);
   const coordinatorId = thread?.id ?? "root";
   const waiting = scope.coordinating ? waitingAt(asks.list, project, coordinatorId).count : 0;
@@ -166,18 +169,22 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
   // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0120).
-  const phoneViews = !desk ? ([["chat", "Chat", ChatCircleText, null], ["threads", "Threads", FolderTree, openCount], ["prs", "PRs", GitPullRequest, prCount],
-    ...(scope.coordinating ? [["status", "Status", Inbox, waiting]] as const : [])] as const) : undefined;
-  const menu = phoneViews ? { label: "Show", waiting, actions: phoneViews.map(([key, label, icon, count]) => ({
-    id: `view-${key}`, label: count && key !== "status" ? `${label} · ${count}` : label, icon, on: view === key,
-    waiting: key === "status" ? count ?? 0 : undefined, run: () => setView(key) })) } : undefined;
+  // Status counts what waits on you; the others only how many there are.
+  const phoneViews: PhoneViewRow[] | undefined = !desk ? [
+    { key: "chat", label: "Chat", icon: ChatCircleText, count: 0 },
+    { key: "threads", label: "Threads", icon: FolderTree, count: openCount },
+    { key: "prs", label: "PRs", icon: GitPullRequest, count: prCount },
+    ...(scope.coordinating ? [{ key: "status" as const, label: "Status", icon: Inbox, count: waiting, waiting: true }] : []),
+  ] : undefined;
+  const menu: ConversationActionGroup | undefined = phoneViews && { label: "Show", actions: phoneViews.map(({ key, label, icon, count, waiting: asks }) => ({
+    id: `view-${key}`, label: count && !asks ? `${label} · ${count}` : label, icon, on: view === key, waiting: asks ? count : undefined, run: () => setView(key) })) };
   // An open view keeps the same switch, at a chat line's height, so Chat and the other views stay a tap away.
   const phoneTabs = phoneViews && view !== "chat" ? (
-    <div className="project-segmented-band">
+    <div className="project-segmented-band project-segmented-band-compact">
       <div role="tablist" aria-label="Project" className="project-segmented project-segmented-compact">
-        {phoneViews.map(([key, label, , count]) => (
+        {phoneViews.map(({ key, label, count, waiting: asks }) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className="project-segment">
-            {label}{count !== null && count > 0 && <span className="project-segment-count" data-waiting={key === "status" ? "" : undefined}>{count}</span>}
+            {label}{count > 0 && <span className="project-segment-count" data-waiting={asks ? "" : undefined}>{count}</span>}
           </button>
         ))}
       </div>
@@ -190,7 +197,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
-  // A coordinator's own Threads tab sits under its chat's title, which already names it; a paused project keeps its heading for the mark.
+  // A coordinator's own Threads view sits under its chat's title, which already names it; a paused project keeps its heading for the mark.
   const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} bare={scope.coordinating && project.status !== "paused"} panes={data.agents} session={data.session}
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs ? (

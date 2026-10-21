@@ -14,14 +14,14 @@ import { DetailRoute } from "./detail";
 import { ProjectRoute } from "./project";
 
 // The chat itself is covered elsewhere; this stub shows what the project frame hands it.
-interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; headerTrail?: ReactNode; overlay?: ReactNode; strip?: ReactNode; menu?: { label: string; waiting?: number; actions: Array<{ id: string; label: string; on?: boolean; waiting?: number; run: () => void }> }; conversationFooter?: ReactNode; projectChips?: { thread?: { title: string }; threads: unknown[] }; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
+interface StubProps { paneId: string; project?: { role: string }; title?: string; headerAction?: ReactNode; headerTrail?: ReactNode; overlay?: ReactNode; strip?: ReactNode; menu?: { label: string; actions: Array<{ id: string; label: string; on?: boolean; waiting?: number; run: () => void }> }; conversationFooter?: ReactNode; projectChips?: { thread?: { title: string }; threads: unknown[] }; docked?: { header: (view: { terminal: boolean; canToggle: boolean; setTerminal: (t: boolean) => void; menu?: ReactNode }) => ReactNode } }
 vi.mock("@/components/agent-chat", () => ({
   AgentChat: ({ paneId, project, title, headerAction, headerTrail, overlay, strip, menu, conversationFooter, projectChips, docked }: StubProps) => (
     <div data-testid={docked ? "docked" : "chat"} data-role={project?.role}>
       {docked ? docked.header({ terminal: false, canToggle: true, setTerminal: () => {}, menu: <button type="button">More actions</button> }) : <header><h1>{title ?? "untitled"}</h1>{headerAction}{headerTrail}</header>}
       {strip === undefined ? <nav aria-label="Workspace tabs" /> : strip}
       {/* The ⋯ menu's project rows, always open here, and the count on the ⋯ itself. */}
-      {menu && <nav aria-label={`Menu ${menu.label}`} data-waiting={menu.waiting}>{menu.actions.map((action) => (
+      {menu && <nav aria-label={`Menu ${menu.label}`} data-waiting={menu.actions.reduce((sum, action) => sum + (action.waiting ?? 0), 0)}>{menu.actions.map((action) => (
         <button key={action.id} type="button" aria-pressed={action.on} onClick={action.run}>{action.label}{action.waiting ? ` (${action.waiting} waiting)` : ""}</button>
       ))}</nav>}
       {overlay ?? <div data-testid="conversation">{`conversation:${paneId}`}{conversationFooter}</div>}
@@ -297,7 +297,7 @@ describe("a coordinator under the project", () => {
     const status = menuRow(/^Status/);
     expect(status).toHaveTextContent("Status (1 waiting)");
     await user.click(status);
-    expect(within(screen.getByRole("tablist", { name: "Project" })).getByRole("tab", { name: /^Status/ })).toHaveTextContent("Status1");
+    expect(within(await screen.findByRole("tablist", { name: "Project" })).getByRole("tab", { name: /^Status/ })).toHaveTextContent("Status1");
     expect(router.state.location.search).toBe("?view=status");
     const waiting = within((await screen.findAllByRole("region", { name: "Waiting on you" }))[0]!);
     expect(waiting.getByText("Which plan?")).toBeInTheDocument();

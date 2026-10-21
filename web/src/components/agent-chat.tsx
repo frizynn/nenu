@@ -154,9 +154,8 @@ interface AgentChatProps {
   overlay?: ReactNode;
   /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
   strip?: ReactNode;
-  /** A project's own rows at the head of the ⋯ menu (a phone's Chat, Threads, PRs and Status), and
-   *  what waits on you behind them, counted on the ⋯ itself. */
-  menu?: ConversationActionGroup & { waiting?: number };
+  /** A project's own rows at the head of the ⋯ menu (a phone's Chat, Threads, PRs and Status). */
+  menu?: ConversationActionGroup;
   /** The project around this chat, counted in the row of chips above the composer. */
   projectChips?: ProjectChipsSource;
   /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
@@ -1069,7 +1068,6 @@ export function AgentChat({
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
     groups={[...(menu ? [menu] : []), { label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
-    waiting={menu?.waiting}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;

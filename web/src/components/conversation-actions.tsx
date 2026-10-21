@@ -12,7 +12,7 @@ export interface ConversationAction {
   disabled?: boolean;
   /** An open dock or an armed mode, shown as a check. */
   on?: boolean;
-  /** What waits on you behind this row, as a red count at its end. */
+  /** What waits on you behind this row, as a red count at its end and on the ⋯ while the menu is shut. */
   waiting?: number;
 }
 
@@ -26,16 +26,15 @@ interface Props {
   recovery?: ReactNode;
   /** The pane's folder, as a quiet line at the foot of the menu: the header names the place instead. */
   folder?: string;
-  /** What waits on you behind the menu's rows, as a red count on the ⋯ so it shows with the menu shut. */
-  waiting?: number;
 }
 
 /** The pane's one ⋯ menu: the pane's views, grouped and named when there is more than one group. */
-export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder, waiting = 0 }, ref) {
+export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder }, ref) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   useImperativeHandle(ref, () => trigger.current!, []);
   const run = (action: () => void) => { setOpen(false); action(); };
+  const waiting = groups.reduce((sum, group) => sum + group.actions.reduce((rows, action) => rows + (action.waiting ?? 0), 0), 0);
   return <>
     <button ref={trigger} type="button" aria-label={waiting > 0 ? `Conversation actions, ${waiting} waiting on you` : "Conversation actions"} aria-haspopup="dialog" aria-expanded={open}
       onClick={() => setOpen(!open)} className="relative flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted lg:size-8">
@@ -66,7 +65,7 @@ export function ActionGroups({ groups, onRun }: { groups: ConversationActionGrou
           className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
-          {waiting !== undefined && waiting > 0 && <span className="waiting-count">{waiting}</span>}
+          {waiting !== undefined && waiting > 0 && <span className="waiting-count"><span aria-hidden="true">{waiting}</span><span className="sr-only">{`, ${waiting} waiting on you`}</span></span>}
           {on && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
         </button>
       ))}

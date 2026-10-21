@@ -132,6 +132,17 @@ async function main(): Promise<void> {
         seen[`${name}Views`] = { inChrome: chrome, switchPx: open && Math.round(open.height) };
         if (chrome > 0) failures.push(`${name}: the chat draws its views under its title`);
         if (path.includes("view=") && (!open || open.height > 32)) failures.push(`${name}: the open view's switch is ${open ? Math.round(open.height) : "missing"}px`);
+        // What a finger reaches on its Chat: the px down the tab's centre that land on it (44 on a coarse pointer).
+        const reach = await page.evaluate(() => {
+          const tab = document.querySelector<HTMLElement>("[role=tablist][aria-label='Project'] [role=tab]");
+          if (!tab) return 0;
+          const box = tab.getBoundingClientRect();
+          let px = 0;
+          for (let y = Math.floor(box.top) - 12; y <= box.bottom + 12; y++) if (document.elementFromPoint(box.left + box.width / 2, y)?.closest("[role=tab]") === tab) px++;
+          return px;
+        }, null);
+        seen[`${name}Views`] = { ...(seen[`${name}Views`] as object), chatTargetPx: reach };
+        if (path.includes("view=") && reach < 44) failures.push(`${name}: the open view's Chat takes a finger over ${reach}px`);
       }
       await context.close();
     }

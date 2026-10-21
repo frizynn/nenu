@@ -196,7 +196,7 @@ describe("AgentChat — header title block", () => {
   // A phone's project views (ADR 0120): its rows head the menu, and what waits on you shows on the ⋯ while shut.
   it("heads the ⋯ menu with a project's rows and counts what waits on you on the ⋯ itself", async () => {
     const show = vi.fn();
-    renderChat({ agent: named, agents: [named], menu: { label: "Show", waiting: 2, actions: [
+    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [
       { id: "view-chat", label: "Chat", icon: Search, on: true, run: () => {} },
       { id: "view-status", label: "Status", icon: Search, waiting: 2, run: show },
     ] } });
@@ -207,12 +207,13 @@ describe("AgentChat — header title block", () => {
     const groups = menu.getAllByRole("region");
     expect(groups[0]).toHaveAccessibleName("Show");
     expect(within(groups[0]!).getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(within(groups[0]!).getByRole("button", { name: /^Status/ }));
+    // The row says what its count is, not only the digit.
+    await userEvent.click(within(groups[0]!).getByRole("button", { name: "Status, 2 waiting on you" }));
     expect(show).toHaveBeenCalledOnce();
   });
 
   it("keeps the ⋯ plain when nothing waits on you", () => {
-    renderChat({ agent: named, agents: [named], menu: { label: "Show", waiting: 0, actions: [] } });
+    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [{ id: "view-status", label: "Status", icon: Search, waiting: 0, run: () => {} }] } });
     expect(screen.getByRole("button", { name: "Conversation actions" })).not.toHaveTextContent(/\d/);
   });
 
