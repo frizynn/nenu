@@ -268,31 +268,34 @@ export function machineName(hostname = window.location.hostname): string {
 
 /**
  * Under the box: the branch the chat works on, when known, and the machine it runs on (Herdr's name
- * for it, with more than one). A desk has the room to say both whole. A phone gives the row to the
- * model and the context, and keeps the two behind one tap, so neither is ever cut mid-word.
+ * for it, with more than one). A wide box says both, truncating them side by side when the row is
+ * full. A narrow one (a phone, a docked thread: composer.css reads the box's own width) gives the row
+ * to the model and the chips, and keeps the two behind one tap, so neither is ever cut to nothing.
  */
 export function ComposerPlace({ branch, machine }: { branch?: string; machine?: string }) {
-  const compact = !useMediaQuery("(min-width: 768px)");
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const host = machine ?? machineName();
-  const branchItem = branch && <span className="composer-place-item composer-place-branch" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>;
-  const hostItem = <span className="composer-place-item"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>;
-  if (!compact) return <span className="composer-place">{branchItem}{hostItem}</span>;
   const label = branch ? `${branch} on ${host}` : host;
   return (
-    <span className="composer-place composer-place-compact justify-end">
-      <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
-        onClick={() => setOpen(!open)}>
-        {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}
-        <Laptop aria-hidden className="size-3.5 shrink-0" />
-      </button>
-      <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchor} label="Where this runs">
-        <dl className="composer-place-detail">
-          {branch && <><dt>Branch</dt><dd className="font-mono">{branch}</dd></>}
-          <dt>Machine</dt><dd>{host}</dd>
-        </dl>
-      </WorkbenchPopover>
+    <span className="composer-place">
+      <span className="composer-place-whole">
+        {branch && <span className="composer-place-item composer-place-branch" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>}
+        <span className="composer-place-item" title={host}><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>
+      </span>
+      <span className="composer-place-tap">
+        <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
+          onClick={() => setOpen(!open)}>
+          {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}
+          <Laptop aria-hidden className="size-3.5 shrink-0" />
+        </button>
+        <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchor} label="Where this runs">
+          <dl className="composer-place-detail">
+            {branch && <><dt>Branch</dt><dd className="font-mono">{branch}</dd></>}
+            <dt>Machine</dt><dd>{host}</dd>
+          </dl>
+        </WorkbenchPopover>
+      </span>
     </span>
   );
 }

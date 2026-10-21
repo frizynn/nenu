@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ComponentProps } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
+import { declarations } from "@/test/css-rules";
 import { fixtureAgents } from "@/test/handlers";
 import { server } from "@/test/setup";
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
@@ -132,23 +135,28 @@ afterEach(() => { window.matchMedia = originalMatchMedia; });
 
 const LONG_BRANCH = "fix/meli-contracargos-reintentos-webhook";
 
-it("on a desk, says under the box which branch and which machine the chat runs on", async () => {
-  setMedia("(min-width: 768px)");
+it("in a wide box, says under it which branch and which machine the chat runs on", async () => {
   renderChat();
   const place = await screen.findByRole("group", { name: "Message tools" });
   expect(within(place).getByText("checkout-coupon")).toBeInTheDocument();
   expect(within(place).getByText(window.location.hostname)).toBeInTheDocument();
 });
 
-// At 390px the branch and the machine were cut mid-word ("fix/meli-contr…  r."): the row gives its
-// width to the model and the context, and keeps where it runs one tap away, whole.
-it("on a phone, keeps a long branch and the machine behind one tap, never cut in the row", async () => {
-  setMedia("(pointer: coarse)");
+// At 390px the branch and the machine were cut mid-word ("fix/meli-contr…  r."): a narrow box (a phone,
+// a docked thread) gives the row to the model and the chips, and keeps where it runs one tap away,
+// whole. Which form shows is the box's width's to say (composer.css); jsdom lays nothing out, so the
+// rule is read and the tap is pressed.
+it("in a narrow box, keeps a long branch and the machine behind one tap, never cut in the row", async () => {
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  const narrow = ["@container composer (max-width: 479px)"];
+  expect(declarations(css, ".composer-place-tap").display).toBe("none");
+  expect(declarations(css, ".composer-place-whole", narrow).display).toBe("none");
+  expect(declarations(css, ".composer-place-tap", narrow).display).toBe("flex");
   const thread = { ...own, branch: LONG_BRANCH };
   const { user } = renderChat({ thread, threads: threads.map((t) => (t.id === own.id ? thread : t)) });
   const place = await screen.findByRole("group", { name: "Message tools" });
-  expect(within(place).queryByText(LONG_BRANCH)).not.toBeInTheDocument();
   const where = within(place).getByRole("button", { name: `Where this runs: ${LONG_BRANCH} on ${window.location.hostname}` });
+  expect(where.closest(".composer-place-tap")).not.toBeNull();
   await user.click(where);
   const detail = screen.getByRole("dialog", { name: "Where this runs" });
   expect(within(detail).getByText(LONG_BRANCH)).toBeVisible();

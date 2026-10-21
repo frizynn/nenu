@@ -106,7 +106,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
       {(model || modelAvailable || modelOpen) && <button
         ref={modelTriggerRef}
         type="button"
-        className="workbench-model composer-quiet hit-area flex min-w-0 max-w-[13rem] items-center gap-2.5 md:max-w-[18rem]"
+        className="composer-quiet hit-area flex min-w-0 max-w-[13rem] items-center gap-2.5 md:max-w-[18rem]"
         disabled={(disabled && !modelOpen) || !modelAvailable}
         onClick={() => {
           if (controlledPanel === undefined) setLocalPanel(null);

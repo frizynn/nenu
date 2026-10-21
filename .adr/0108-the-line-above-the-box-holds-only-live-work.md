@@ -75,9 +75,10 @@ full to a screen reader. Each is at least 44 px wide on a touch screen, and its 
 box. What gives way is read off the box's own width (a container query), so a phone and a thread
 docked beside its coordinator take the same row: under 480 px only Needs you keeps its word and, while
 chips are there, the model's effort and the context's number step aside (the picker and the ring's
-panel still say them), then the model's name truncates, and under 300 px it steps aside too; the chips
-and the place keep their width. On a desk the place gives way: the branch and the machine truncate side
-by side inside it. The panel a chip opens still floats over the
+panel still say them), then the model's name truncates, and the place is one button that opens the
+branch and the machine; under 300 px the context's ring steps aside too (the session panel says it),
+never the model's button, from which the model panel opens on its own. In a wide box the branch and
+the machine truncate side by side when the row is full. The panel a chip opens still floats over the
 thread from the box's top edge. With the phone's keyboard up the row gives its height back, chips
 included, as the line did; an open panel stays. Nothing folds: the row does not change height.
 `run.ts chip-line` (with a model reported, as in a real session) fails when anything sits between the
