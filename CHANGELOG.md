@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.38.3] - 2026-10-21
+## [1.38.4] - 2026-10-21
 
 ### Changed
 
@@ -17,6 +17,12 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - A picture pasted or attached with the phone's keyboard up no longer pushes the draft off the box's right edge (ebd2ccd6, 9c4b75bb).
+
+## [1.38.3] - 2026-10-21
+
+### Fixed
+
+- Without a project, a desk's bar, its heading and the folded rail no longer say Projects; Home already opened on Recents (6411b5cf).
 
 ## [1.38.2] - 2026-10-21
 

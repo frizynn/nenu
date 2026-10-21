@@ -37,7 +37,7 @@ export interface SidebarRequest {
 
 /**
  * Where the navigation is drawn. The desk's sidebar is Cursor's: New chat, Search, Home (which counts
- * what needs you) and Projects (ADR 0102), then its projects as flat rows and its chats by when they last moved;
+ * what needs you) and Projects (ADR 0102) while there is one, then its projects as flat rows and its chats by when they last moved;
  * the tree of projects and workspaces is its Search's, under the box until something is typed
  * (ADR 0080). A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
  * something is typed, every project and workspace folded, the sessions and the host. Its drawer
@@ -176,7 +176,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
           {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{attention}</span>}
         </Link>}
-        {!phone && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
+        {!phone && !!data.projects?.length && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
           <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
         </Link>}
       </div>}

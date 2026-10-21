@@ -205,7 +205,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
       <Link className="workbench-icon-button rail-attention" to={homePath(data.session)} aria-label={attention ? `Home, ${needYou(attention)}` : "Home"} data-rail-tip="Home">
         <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </Link>
-      <Link className="workbench-icon-button" to={projectsPath(data.session)} aria-label="Projects" data-rail-tip="Projects"><LayoutGrid aria-hidden size={16} /></Link>
+      {projects.length > 0 && <Link className="workbench-icon-button" to={projectsPath(data.session)} aria-label="Projects" data-rail-tip="Projects"><LayoutGrid aria-hidden size={16} /></Link>}
       <span className="rail-divider" aria-hidden />
       {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} pick={data.projects?.[i]} />} />)}
       {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}
