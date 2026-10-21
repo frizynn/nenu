@@ -76,7 +76,7 @@ describe("workbench notifications", () => {
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
   });
 
-  it("shortens the exit to an opacity fade under reduced motion", () => {
+  it("still leaves after TOAST_EXIT_MS under reduced motion, as a fade alone", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query.includes("prefers-reduced-motion"), media: query, onchange: null,
       addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),

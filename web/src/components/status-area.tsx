@@ -15,7 +15,8 @@ const TONE: Record<StatusTone, string> = {
 };
 const ICONS = { info: Info, success: CircleCheck, warn: TriangleAlert, error: CircleAlert } as const;
 
-/** A dismissed toast stays drawn this long while it fades and drifts 8px back up; under reduced motion it only fades, as long. */
+/** A dismissed toast stays drawn this long while it fades and drifts 8px back up; under reduced
+ *  motion it only fades, as long. */
 export const TOAST_EXIT_MS = MOTION_CONTROL_MS;
 /** An upward drag past this dismisses; anything shorter springs back. */
 const SWIPE_DISMISS_PX = 24;
