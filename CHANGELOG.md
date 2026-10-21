@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- Text in the agent's box shows beside the composer with Send it, Add to mine and Discard; a Send over it waits for that tap and then goes, instead of sweeping it or queueing behind it for good (14755815, 111c8994).
+- Text in the agent's box shows beside the composer with Send it first, Add to my message and Discard; a Send over it waits for that tap and then goes, instead of sweeping it or queueing behind it for good; Don't send mine takes it back (14755815, 111c8994, b60eed62).
 - Send after this turn, a row of the + while the agent works (111c8994).
 
 ### Changed
