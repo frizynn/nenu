@@ -129,6 +129,8 @@ async function tour(bridge: TestBridge, browser: Browser, device: "desk" | "phon
   await page.clock.install({ time: bridge.now() });
   const shot = async (name: string) => {
     const key = `${device}-${scheme}-${name}`;
+    // A pointer left on a row after a click reads as a selection in the capture.
+    if (device === "desk") await page.mouse.move(1439, 899);
     await page.waitForTimeout(900);
     await page.screenshot({ path: join(outDir, `${key}.png`), animations: "disabled" });
     report[key] = await styles(page);
