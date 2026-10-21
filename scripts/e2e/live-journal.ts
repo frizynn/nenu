@@ -45,7 +45,7 @@ async function grow(to: string, bytes: number, at: number): Promise<number> {
   return (await readFile(to)).length;
 }
 
-/** CPU time (ms) and resident memory (MB) of a process, from /proc. */
+/** CPU time (ms) and resident memory (MB) of a process, from /proc: Linux only, reported and never checked. */
 async function usage(pid: number): Promise<{ cpuMs: number; rssMb: number }> {
   const stat = (await readFile(`/proc/${pid}/stat`, "utf8")).split(") ")[1]!.split(" ");
   const tick = 1000 / 100; // USER_HZ

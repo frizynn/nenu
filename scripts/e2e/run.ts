@@ -4229,7 +4229,7 @@ else if (command === "inline-images") await inlineImages(values.before === true)
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
-else if (command === "live-journal") await liveJournal(typeof values.journal === "string" ? values.journal : undefined);
+else if (command === "live-journal") await liveJournal(values.journal);
 else if (command === "commands") await commands(values.before === true);
 else if (command === "send-always") await sendAlways();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);

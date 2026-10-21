@@ -413,9 +413,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const localSends = useLocalSends(sendScope);
   const queueSlot = useQueueSlot(sendScope);
   // A refusal that says nothing was sent goes with its bubble: the journal showed the message.
-  useEffect(() => {
-    if (failure?.bubble && !localSends.some((send) => send.id === failure.bubble && !send.landed)) setFailure(null);
-  }, [failure, localSends]);
+  const shownFailure = failure?.bubble && !localSends.some((send) => send.id === failure.bubble && !send.landed) ? null : failure;
   useEffect(() => {
     const accepted = queue.accepted;
     if (accepted) {
@@ -1016,7 +1014,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setDelivering(false);
         // A toolbar action is not a message: its failure is a toast, with nothing to "try again".
         if (action) setStatus(res.error, "error");
-        else if (!secret) refused(res.error, delivered, t, isDraft, false, delivered ? started.id : null);
+        else if (!secret) refused(res.error, delivered, t, isDraft, false, started.id);
         return false;
       }
     } catch (e) {
@@ -1029,7 +1027,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       failSend(started, error, false, unknown);
       setDelivering(false);
       if (action) setStatus(error, "error");
-      else refused(error, unknown, t, isDraft, false, unknown ? started.id : null);
+      else refused(error, unknown, t, isDraft, false, started.id);
       return false;
     } finally {
       setSending(false);
@@ -1041,7 +1039,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false, bubble: string | null = null) {
     const inPlace = !isDraft || outgoing() === text;
     setFailure({
-      ...(bubble ? { bubble } : {}),
+      bubble: delivered ? bubble ?? undefined : undefined,
       error,
       delivered,
       hint: delivered ? "Check the terminal before sending again." : undefined,
@@ -1517,7 +1515,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           queueSlot,
         )}
 
-        <Fold value={failure}>{(failure) => (
+        <Fold value={shownFailure}>{(failure) => (
           <ComposerNotice
             icon={CircleAlert}
             tone="error"

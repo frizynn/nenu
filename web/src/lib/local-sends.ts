@@ -9,8 +9,8 @@ import type { DeliveryMode, NativeQueueState, QueueWaitReason, TranscriptEntry }
 // The transcript is read from the agent's own session log, which only gains the operator's message
 // after the harness writes it and the next history poll lands — seconds after the tap. Until then the
 // conversation shows the message as a pending bubble from here. A bubble lands when the journal gains a
-// matching user turn that was not already there when the bubble first rendered, so an identical
-// earlier "continue" can never swallow a new one. The conversation stops drawing it in the same render
+// matching user turn (`turnCarries`) that was not already there when the bubble first rendered, so an
+// identical earlier "continue" can never swallow a new one. The conversation stops drawing it in the same render
 // that draws the journal's turn (`pendingSends`), so the message is never on screen twice; the landed
 // bubble stays in the store a while longer, holding its queue row, so that row is not drawn as a
 // message of its own while the queue catches up.
@@ -43,7 +43,7 @@ export interface LocalSend {
   /** A failed send whose text may already be in the terminal: check it there rather than resend. */
   textDelivered?: boolean;
   error?: string;
-  /** Journal user turns that already matched when this bubble was first reconciled. */
+  /** Journal user turns already there when this bubble was first reconciled: none of them can be it. */
   baseline?: string[];
   /** The journal turn that now shows this message: the bubble is no longer drawn. */
   landed?: string;
@@ -128,21 +128,17 @@ export function removeLocalSend(scope: string, id: string) {
 }
 
 /**
- * Below this many characters a message must be a whole turn to match: "ok" may well start a later
- * message the operator typed in the terminal.
+ * Whether a journal user turn is this message. A failure whose text may be in the pane can still have
+ * reached the agent joined to text the box held (a draft, a queued message the CLI put back), wherever
+ * the caret was: its turn holds the message anywhere. Any other bubble must be the whole turn.
  */
-const PARTIAL_MATCH_CHARS = 20;
-
-/**
- * Whether a journal user turn is this message. Typed into a box that still held text (a draft, a
- * queued message the CLI put back), it reaches the agent joined to that text, before or after it.
- */
-function turnCarries(turn: string, sent: string): boolean {
+function turnCarries(send: LocalSend, turn: string): boolean {
+  const sent = messageMatchKey(send.text);
   if (turn === sent) return true;
+  if (send.state !== "failed" || !send.textDelivered) return false;
   const [prose = "", images = "0"] = sent.split("\u0000");
   const [turnProse = "", turnImages = "0"] = turn.split("\u0000");
-  return prose.length >= PARTIAL_MATCH_CHARS && Number(turnImages) >= Number(images)
-    && (turnProse.startsWith(prose) || turnProse.endsWith(prose));
+  return prose !== "" && Number(turnImages) >= Number(images) && turnProse.includes(prose);
 }
 
 /** The journal's user turns as the bubbles match them: by their words and their pictures. */
@@ -158,8 +154,7 @@ function userKeys(entries: readonly TranscriptEntry[]) {
 /** The journal turn showing `send` that was not there when it was first reconciled. */
 function landing(send: LocalSend, users: ReturnType<typeof userKeys>): string | undefined {
   if (!send.baseline) return undefined;
-  const key = messageMatchKey(send.text);
-  return users.find((user) => turnCarries(user.key, key) && !send.baseline!.includes(user.uuid))?.uuid;
+  return users.find((user) => !send.baseline!.includes(user.uuid) && turnCarries(send, user.key))?.uuid;
 }
 
 /**
@@ -179,10 +174,10 @@ export function reconcileLocalSends(scope: string, entries: readonly TranscriptE
   let changed = false;
   const next = list.map((send) => {
     if (send.landed) return send;
+    // Every turn already there predates the send, so none of them can be it.
     if (!send.baseline) {
       changed = true;
-      const key = messageMatchKey(send.text);
-      return { ...send, baseline: users.filter((user) => turnCarries(user.key, key)).map((user) => user.uuid) };
+      return { ...send, baseline: users.map((user) => user.uuid) };
     }
     const landed = landing(send, users);
     if (!landed) return send;
