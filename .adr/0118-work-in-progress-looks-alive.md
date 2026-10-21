@@ -50,7 +50,9 @@ did, because a running CSS animation keeps the compositor drawing at the display
 ## Decision
 
 1. **Only what shows an agent works now may move for as long as it lasts**: the glow across a running
-   turn's "Working for 9s", its step in progress and its "Thinking…", and the working mark's dashed
+   turn's "Working" (its time beside it in the quiet ink, "9s", read "Working for 9s"; chosen over the
+   whole line glowing and over T3 Code's still line among three variants captured against a real
+   Claude), its step in progress and its "Thinking…", and the working mark's dashed
    circle turning a sixth of a turn per 2.2 s pass (its six dashes land where the next were). They step
    by hand: one shared timer in `lib/live-motion.ts` writes a `transform` per step (the glow 20 steps a
    pass, the mark 10, on the same ticks), each on its own layer, and only while it may move: on screen,
