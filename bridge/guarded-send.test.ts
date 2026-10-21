@@ -9,7 +9,6 @@ import {
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
   TRIGGER_PREFIX_MAX,
-  PASTING_CAP_MS,
   PICTURES_BY_MS,
   WAIT_BUDGET_MS,
   WAIT_DELAYS_MS,
@@ -397,17 +396,33 @@ describe("guardedSend", () => {
     expect(adapterFor("claude")!.pasting?.(screen(["output", RULE, "❯ look", RULE, "  Pasting…"]))).toBe(true);
   });
 
-  test("a Pasting… that never ends stops the picture's wait at its cap, and the send clears what it typed", async () => {
+  test("a Pasting… that never ends stops at the send's clock, and the send clears what it typed", async () => {
     const term = new Term();
     term.saysPasting = true;
     term.pictureReads = 100_000;
-    const sleeps: number[] = [];
-    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void sleeps.push(ms) }, { text: placed, requestId: "r1" });
+    let clock = 0;
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: placed, requestId: "r1" },
+    );
     expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
-    const total = sleeps.reduce((a, b) => a + b, 0);
-    // The cap held the wait: about a minute of it, then the clear and the late watch.
-    expect(total).toBeGreaterThanOrEqual(PICTURES_BY_MS);
-    expect(total).toBeLessThan(PASTING_CAP_MS + 3 * WAIT_BUDGET_MS);
+    // Waited past the 15 s bound while Claude said Pasting…, then stopped at the clock.
+    expect(clock).toBeGreaterThanOrEqual(PICTURES_BY_MS);
+    expect(clock).toBeLessThan(PICTURES_BY_MS + 3 * WAIT_BUDGET_MS + 250);
+  });
+
+  test("a picture pasted after the send's clock ran out still gets one look", async () => {
+    const term = new Term();
+    term.pictureReads = 0;
+    // The send starts at 0 by its clock, and its first pause lands it 60 s in: past PICTURES_BY_MS
+    // before its first picture's first look.
+    let clock = 60_000;
+    const start = clock;
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => (clock === start ? 0 : clock) },
+      { text: placed, requestId: "r1" },
+    );
+    expect(outcome.ok).toBe(true);
   });
 
   test("the send's pictures stop by its clock: a second picture pasting forever after a slow first fits the phone's wait", async () => {

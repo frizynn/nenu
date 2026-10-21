@@ -140,11 +140,9 @@ export const WAIT_BUDGET_MS = 15_000;
 export const WAIT_DELAYS_MS: readonly number[] = [...LOCAL_DELAYS_MS, ...Array<number>(Math.ceil((WAIT_BUDGET_MS - VERIFY_BUDGET_MS) / 250)).fill(250)];
 /** How long a picture's path must sit in the box as text before the send takes it as staying text. */
 export const PATH_SETTLED_MS = 1_000;
-/** The longest a picture's wait runs on while the CLI says it is still pasting. */
-export const PASTING_CAP_MS = 60_000;
 /**
  * When, from the send's start by the clock, its pictures stop being waited for. What can follow is at
- * most three bounded waits (a clear, a late picture, its clear: 45 s of pauses), so on a host whose
+ * most three bounded waits on any path (45 s of pauses, plus the pause under way), so on a host whose
  * reads are quick the send answers inside the phone's 110 s (web/src/lib/api.ts). On a starved one the
  * reads themselves can push it past that; the phone then says it had no answer, and its retry, with
  * the same request id, joins this send instead of typing again (WriteLedger).
@@ -524,15 +522,15 @@ function onlyItsPictures(sent: string, draft: string): boolean {
  * Wait for the box to show `count` `[Image #N]` tokens: "token". Claude reads a pasted picture before
  * it attaches it and may show its path meanwhile; a path that sits at the end of the box for
  * {@link PATH_SETTLED_MS} once the CLI no longer says it is pasting is "path". While it says so the
- * bound does not run, up to {@link PASTING_CAP_MS}: a starved Claude reads a picture for longer than
- * 15 s (ADR 0117). Neither: null.
+ * bound does not run: a starved Claude reads a picture for longer than 15 s (ADR 0117). The send's
+ * clock ends every picture's wait {@link PICTURES_BY_MS} in, after one look at least. Neither: null.
  */
 async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string): Promise<"token" | "path" | null> {
   let shownFor: number | null = null;
   let waited = 0;
-  let pastingFor = 0;
-  // The bound, the Pasting… cap, and the send's own clock for all its pictures together.
-  for (let i = 0; waited < WAIT_BUDGET_MS && pastingFor < PASTING_CAP_MS && send.elapsed() < PICTURES_BY_MS; i++) {
+  // The bound while Claude is not pasting, and the send's own clock for all its pictures together,
+  // checked after a look so a picture pasted late still gets one.
+  for (let i = 0; waited < WAIT_BUDGET_MS && (i === 0 || send.elapsed() < PICTURES_BY_MS); i++) {
     const delay = WAIT_DELAYS_MS[Math.min(i, WAIT_DELAYS_MS.length - 1)]!;
     if (delay > 0) await send.sleep(delay);
     let pasting = false;
@@ -545,8 +543,7 @@ async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, 
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
-    if (pasting) pastingFor += delay;
-    else waited += delay;
+    if (!pasting) waited += delay;
   }
   return null;
 }

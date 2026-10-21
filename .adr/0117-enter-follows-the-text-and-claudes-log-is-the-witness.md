@@ -77,8 +77,8 @@ Measured on 2026-10-21, Herdr 0.9.3 on Linux, Claude Code 2.1.306 (haiku) in a p
    the box emptying and the sweep clearing wait up to 15 s counted in the pauses between looks (on a
    loaded host the looks themselves are slow, so the wait only grows) and end on the first look that
    sees it. While Claude says "Pasting…" under its box (it is still reading a pasted picture, and may
-   show the path in the box meanwhile) a picture's bound does not run, up to 60 s and never past 55 s
-   into the send; a path that sits in the box for 1 s once it no longer says so is taken as staying
+   show the path in the box meanwhile) a picture's bound does not run, though never past 55 s into
+   the send (each picture still gets one look); a path that sits in the box for 1 s once it no longer says so is taken as staying
    text (measured: a path shown during "Pasting…" stayed text every time; none turned into a token). A picture that shows after the
    send gave up and cleared the box is cleared too, once, through the same stop.
 
