@@ -611,3 +611,19 @@ it("takes back a row Claude's queue holds before the journal says so, and never 
     expect(natives.one).not.toBe("recalled");
   } finally { await t.close(); }
 });
+
+// A row sent to an idle Claude never gets a queue state: past the journal's ten minutes it is not a
+// row that may wait in Claude's queue.
+it("leaves out a row with no queue state once the journal stopped looking at it", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "viejo", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    expect((await t.service.waitingOn("session", "pane"))!.map((row) => row.id)).toEqual(["one"]);
+    setSystemTime(new Date(Date.now() + 11 * 60_000));
+    expect(await t.service.waitingOn("session", "pane")).toEqual([]);
+  } finally {
+    setSystemTime();
+    await t.close();
+  }
+});

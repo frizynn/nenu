@@ -109,8 +109,9 @@ export class QueueService {
     void this.tick(force).catch(() => {});
   }
   /**
-   * The rows of the pane's conversation that may wait in Claude's own queue, delivered within the two
-   * hours clients list them, in the order they went; null when the pane's conversation is unknown.
+   * The rows of the pane's conversation that may wait in Claude's own queue, in the order they went:
+   * those the journal saw enqueued, within the two hours clients list them, and those it has not placed
+   * yet, within the ten minutes it looks; null when the pane's conversation is unknown.
    * Read before a take-back presses Up (ADR 0118): Claude logs the recall at once, and the journal may
    * mark them recalled before the take-back ends.
    */
