@@ -144,9 +144,8 @@ function LiveWork({ threads, finished, onOpenNode, onHistory }: {
     nodes.flatMap((node) => [{ node, depth }, ...walk(node.children, depth + 1)]);
   const rows = walk(orgTree(threads).open, 0);
   return <>
-    <div className="desk-toolbar">
-      <span className="min-w-0 flex-1 truncate">{rows.length === 0 ? "Nothing running" : `${rows.length} open`}</span>
-    </div>
+    {/* The tab already counts the open threads; only their absence needs a line. */}
+    {rows.length === 0 && <div className="desk-toolbar"><span className="min-w-0 flex-1 truncate">Nothing running</span></div>}
     {rows.length > 0 && <div className="desk-card">{rows.map(({ node, depth }) => <WorkRow key={node.thread.id} node={node} depth={depth} onOpen={onOpenNode} />)}</div>}
     {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={onHistory}>
       <History aria-hidden className="size-3.5" />{finished} finished<ChevronRight aria-hidden className="size-3.5" />
