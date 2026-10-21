@@ -10,7 +10,7 @@ import { detectOverlayMenu } from "./overlay-menu";
 // on it could mis-lift a menu, strip real output as "chrome", or paint a bogus status strip.
 
 import { parseAnsi } from "../../ansi";
-import { splitLines, trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
+import { lineText, splitLines, trimTrailingBlank, type Block, type StyledLine } from "../../blocks";
 import type { HarnessAdapter } from "../types";
 import { detectPreviewSelectRegion } from "./preview-select";
 import { detectWizardRegion } from "./wizard";
@@ -156,6 +156,21 @@ export function claudeBuildBlocks(screen: StyledLine[]): Block[] {
 
 export { extractStatusLines, extractAgentsFooter, extractInputDraft };
 
+/** A rule row of Claude's input box frame. */
+const BOX_RULE = /^\s*─{20,}\s*$/;
+
+/**
+ * Claude says "Pasting…" on the row under its input box while it takes in a paste, a picture's file
+ * read included; meanwhile the box may show the path as text before it turns into `[Image #N]`
+ * (measured 2.1.306 at 5% of a core, ADR 0116). Read only below the box's last rule, never the thread.
+ */
+function pasting(lines: StyledLine[]): boolean {
+  const texts = lines.map(lineText);
+  let below = texts.length;
+  while (below > 0 && !BOX_RULE.test(texts[below - 1]!)) below--;
+  return below > 0 && texts.slice(below).some((row) => row.trimStart().startsWith("Pasting…"));
+}
+
 export const claudeAdapter: HarnessAdapter = {
   agent: "claude",
   bracketedPaste: sendsAsOnePaste,
@@ -167,6 +182,7 @@ export const claudeAdapter: HarnessAdapter = {
   // The reply path's pre-flight: Claude's input box is exactly what `hasInputBox` finds, and its
   // absence is exactly the condition under which typing lands in a modal instead (#34's shape).
   composerReady: hasInputBox,
+  pasting,
   // Long sends never appear in the box as themselves — Claude collapses them into `[Pasted text #N
   // +M lines]`, and attaches the image paths of a pasted message as `[Image #N]` — so the reply
   // guard's literal match can't verify them and the send stalls. This reads those tokens as send

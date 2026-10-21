@@ -22,6 +22,9 @@ import {
 } from "./guarded-send.ts";
 import type { OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
 import { claudeLogReader, type LogLook, type LogReader } from "./delivery-check.ts";
+import { parseAnsi } from "../web/src/lib/ansi.ts";
+import { splitLines } from "../web/src/lib/blocks.ts";
+import { adapterFor } from "../web/src/lib/harness/index.ts";
 import type { SendRequest } from "./types.ts";
 
 // A terminal with an input box, in memory: Claude's frame (rule / `❯ draft` / rule / statusline) or
@@ -56,6 +59,8 @@ class Term {
    *  cannot attach the file (measured 2.1.306, a path to no file), or leaves nothing (a lost paste). */
   unattached: "text" | "lost" = "lost";
   pictures = 0;
+  /** While a picture's token is on its way, the footer says "Pasting…" (Claude 2.1.306). */
+  saysPasting = false;
   lateTokens: Array<{ token: string; reads: number }> = [];
   /** Runs before each read with its index, to change the screen between the send's reads. */
   onRead: ((n: number, term: Term) => void) | null = null;
@@ -67,7 +72,8 @@ class Term {
     if (this.agent === "codex") {
       return [...this.lines, this.draft ? `\x1b[0m\x1b[1m› \x1b[0m${this.draft}` : PLACEHOLDER, "", "  GPT-6.1-Sol low · /tmp/p · Context 0% used", "  ? for shortcuts"].join("\n");
     }
-    return [...this.lines, RULE, `❯ ${this.draft}`, RULE, "  Opus 5.5 | Context 13% used", "  ← for agents"].join("\n");
+    const footer = this.saysPasting && this.lateTokens.length > 0 ? "  Pasting…" : "  Opus 5.5 | Context 13% used";
+    return [...this.lines, RULE, `❯ ${this.draft}`, RULE, footer, "  ← for agents"].join("\n");
   }
 
   /** Keys sent while typed text has not landed yet: they reach the box after it, never before. */
@@ -366,6 +372,48 @@ describe("guardedSend", () => {
     expect(term.lateTokens).toHaveLength(0);
     expect(term.draft).toBe("");
     expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a picture read for longer than the bound while Claude says Pasting… is still attached (ADR 0116)", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pictureReads = 150;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toContain("[Image #1]");
+  });
+
+  test("Claude's Pasting… is read under its box, never from the thread", () => {
+    const claude = adapterFor("claude")!;
+    const screen = (rows: string[]) => splitLines(parseAnsi(rows.join("\n")));
+    expect(claude.pasting?.(screen(["output", RULE, "❯ look", RULE, "  Pasting…"]))).toBe(true);
+    expect(claude.pasting?.(screen(["Pasting… was slow yesterday", RULE, "❯ look", RULE, "  ? for shortcuts"]))).toBe(false);
+  });
+
+  test("a picture's wait that ends while Claude reports a dialog presses no key at all", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    const turn = () => (term.count("pane.send_text") > 1 ? { running: true, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn }, { text: placed, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("the late-picture watch stops at the clear: it never watches over what the operator types next", async () => {
+    const term = new Term();
+    term.pictureReads = 80;
+    let cleared = -1;
+    let last = -1;
+    term.onRead = (n, t) => {
+      last = n;
+      if (cleared < 0 && t.lateTokens.length === 0 && t.pictures === 1 && t.draft === "" && t.count("pane.send_keys") > 1) cleared = n;
+    };
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
+    // The read that saw the late sweep's box empty is the last one.
+    expect(cleared).toBeGreaterThan(0);
+    expect(last).toBe(cleared);
   });
 
   test("a send that stops after typing leaves alone a box holding more than it typed", async () => {

@@ -140,6 +140,8 @@ export const WAIT_BUDGET_MS = 15_000;
 export const WAIT_DELAYS_MS: readonly number[] = [...LOCAL_DELAYS_MS, ...Array<number>(Math.ceil((WAIT_BUDGET_MS - VERIFY_BUDGET_MS) / 250)).fill(250)];
 /** How long a picture's path must sit in the box as text before the send takes it as staying text. */
 export const PATH_SETTLED_MS = 1_000;
+/** The longest a picture's wait runs on while the CLI says it is still pasting. */
+export const PASTING_CAP_MS = 60_000;
 
 // ── The trigger regex ─────────────────────────────────────────────────────────────────────────────
 
@@ -463,7 +465,7 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
     }
     wrote = true;
     if (piece.kind !== "image") continue;
-    const drawn = await pictureDrawn(send, attached + 1, piece.path);
+    const drawn = await pictureDrawn(send, adapter, attached + 1, piece.path);
     if (drawn === "token") attached++;
     else if (drawn === null) return await afterLatePicture(send, deps, adapter, await unsent(send, deps, adapter, PICTURE_UNSEEN));
   }
@@ -473,11 +475,12 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
 /**
  * A picture that never showed may still be on its way: a starved Claude reads it for longer than the
  * bound and then draws its token or path into the box the send just cleared (measured at 5% of a core,
- * ADR 0116). Watch the box for one more bound and clear what of this send arrives late; anything else
- * there is the operator's and stays, and then the box is no longer as the send found it.
+ * ADR 0116). Watch the box for one more bound and clear what of this send arrives late, through
+ * `unsent` as any stop does; anything else there is the operator's and stays.
  */
 async function afterLatePicture(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: GuardedSendResult): Promise<GuardedSendResult> {
   if (stopped.outcome.ok || stopped.outcome.textDelivered) return stopped;
+  const ours = (draft: string | null) => draftIsPartOfSend(send.request.text, draft) || (draft !== null && onlyItsPictures(send.request.text, draft));
   for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     let seen: Seen;
@@ -486,11 +489,8 @@ async function afterLatePicture(send: Send, deps: GuardedSendDeps, adapter: Harn
     } catch {
       continue;
     }
-    if (seen.draft === null || seen.composer !== true) continue;
-    if (!draftIsPartOfSend(send.request.text, seen.draft) && !onlyItsPictures(send.request.text, seen.draft)) return leftInBox(send, PICTURE_UNSEEN);
-    if (dialogReported(deps.turn?.(), send.request)) return leftInBox(send, PICTURE_UNSEEN);
-    // Only the one picture the send stopped at can still be on its way: once it is cleared, done.
-    return (await sweep(send, deps, adapter, seen)) === null ? stopped : leftInBox(send, PICTURE_UNSEEN);
+    // Only the one picture the send stopped at can still be on its way: what shows first is all of it.
+    if (seen.draft !== null && seen.composer === true) return await unsent(send, deps, adapter, PICTURE_UNSEEN, seen, ours);
   }
   return stopped;
 }
@@ -504,37 +504,55 @@ function onlyItsPictures(sent: string, draft: string): boolean {
 
 /**
  * Wait for the box to show `count` `[Image #N]` tokens: "token". Claude reads a pasted picture before
- * it draws anything, and draws the path as text only when it cannot attach it, so a path that sits at
- * the end of the box for {@link PATH_SETTLED_MS} is "path". Neither within the bound: null.
+ * it attaches it and may show its path meanwhile; a path that sits at the end of the box for
+ * {@link PATH_SETTLED_MS} once the CLI no longer says it is pasting is "path". While it says so the
+ * bound does not run, up to {@link PASTING_CAP_MS}: a starved Claude reads a picture for longer than
+ * 15 s (ADR 0116). Neither: null.
  */
-async function pictureDrawn(send: Send, count: number, path: string): Promise<"token" | "path" | null> {
+async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string): Promise<"token" | "path" | null> {
   let shownFor: number | null = null;
-  for (const delay of WAIT_DELAYS_MS) {
+  let waited = 0;
+  let pastingFor = 0;
+  for (let i = 0; waited < WAIT_BUDGET_MS && pastingFor < PASTING_CAP_MS; i++) {
+    const delay = WAIT_DELAYS_MS[Math.min(i, WAIT_DELAYS_MS.length - 1)]!;
     if (delay > 0) await send.sleep(delay);
+    let pasting = false;
     try {
-      const draft = (await send.read()).draft;
-      if (imageTokens(draft) >= count) return "token";
-      shownFor = !pathShows(draft, path) ? null : shownFor === null ? 0 : shownFor + delay;
+      const seen = await send.read();
+      if (imageTokens(seen.draft) >= count) return "token";
+      pasting = adapter.pasting?.(seen.lines) === true;
+      shownFor = pasting || !pathShows(seen.draft, path) ? null : shownFor === null ? 0 : shownFor + delay;
       if (shownFor !== null && shownFor >= PATH_SETTLED_MS) return "path";
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
+    if (pasting) pastingFor += delay;
+    else waited += delay;
   }
   return null;
 }
 
 /**
- * A send that typed and stops before Enter. When the box holds only what this send typed, clear it
- * (the sweep, bound to the prompt row it reads), so neither the next send nor the queue, which
- * never clears a draft, finds it there. Anything else in the box may be the operator's, and stays.
+ * A send that typed and stops before Enter. When the box holds only what this send typed (`ours`,
+ * on `read` or a fresh read), clear it (the sweep, bound to the prompt row it reads), so neither the
+ * next send nor the queue, which never clears a draft, finds it there. Anything else in the box may be
+ * the operator's, and stays, and so does everything while the CLI reports a dialog: the sweep's keys
+ * would reach it.
  */
-async function unsent(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: Stopped): Promise<GuardedSendResult> {
+async function unsent(
+  send: Send,
+  deps: GuardedSendDeps,
+  adapter: HarnessAdapter,
+  stopped: Stopped,
+  read?: Seen,
+  ours: (draft: string | null) => boolean = (draft) => draftIsPartOfSend(send.request.text, draft),
+): Promise<GuardedSendResult> {
   // An earlier try's text may already have gone: "send it again" would contradict the retry's answer.
   // Every sweep after typing comes through here, so a dialog the CLI reports gets none of its keys.
   if (send.priorDelivered || dialogReported(deps.turn?.(), send.request)) return leftInBox(send, stopped);
   try {
-    const seen = await send.read();
-    if (seen.composer === true && draftIsPartOfSend(send.request.text, seen.draft) && (await sweep(send, deps, adapter, seen)) === null) {
+    const seen = read ?? (await send.read());
+    if (seen.composer === true && ours(seen.draft) && (await sweep(send, deps, adapter, seen)) === null) {
       return send.fail(`${stopped.why} ${CLEARED}`, false);
     }
   } catch {
@@ -656,8 +674,9 @@ async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessA
   if (!held) return send.fail(UNLOGGED, true);
   const left = await unsent(send, deps, adapter, NEVER_TAKEN);
   if (left.outcome.ok || left.outcome.textDelivered) return left;
-  // The sweep's keys reach Claude after the Enter, so a Claude slow enough may have taken it after all.
-  for (const delay of LOCAL_DELAYS_MS) {
+  // The sweep's keys reach Claude after the Enter, so a Claude slow enough may have taken it after all,
+  // and a starved one logs it seconds later (measured at 5% of a core): wait the whole bound.
+  for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
     const late = answer(send, await look(received, since, sent));
     if (late) return late;
