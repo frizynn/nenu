@@ -310,7 +310,10 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const adapter = adapterFor(agent ?? undefined);
   const send = new Send(deps, request, adapter, prior);
   const paste = adapter?.bracketedPaste;
-  const pasted = (text: string) => request.paste === true || paste === true || (typeof paste === "function" && paste(text));
+  // With Enter right behind it, typed text goes as a paste whatever its length: 760 characters typed
+  // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0114).
+  const logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request);
+  const pasted = (text: string) => logFirst || request.paste === true || paste === true || (typeof paste === "function" && paste(text));
   // Pictures in their places go piece by piece, each path pasted alone (ADR 0104); else one write.
   const pieces = adapter?.pastesImagePaths && hasPlacedPictures(request.text) ? sendPieces(request.text) : null;
   const bracketed = pieces !== null || pasted(request.text);
@@ -379,7 +382,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     }
   }
 
-  if (deps.received && logWitnesses(request)) return await submitAndLog(send, deps, adapter, deps.received, since);
+  if (logFirst && deps.received) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {

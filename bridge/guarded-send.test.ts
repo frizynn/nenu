@@ -655,6 +655,12 @@ describe("guardedSend: Enter behind the text, the log as witness (ADR 0114)", ()
     expect(trace.typedAt).toBeNumber();
   });
 
+  test("typed text goes as one paste when Enter follows it, short or not", async () => {
+    const term = new Term();
+    await run(term, {}, { received: log().received });
+    expect(term.calls.find((call) => call.method === "pane.send_text")?.arg).toBe(`\x1b[200~${text}\x1b[201~`);
+  });
+
   test("a terminal too loaded to paint the text in time still gets it, and Enter, in order", async () => {
     const term = new Term();
     term.echoAfter = 40;
