@@ -3,6 +3,7 @@ import { lockReasonOf, QuestionCard } from "@/components/question-card";
 import { useInteractions } from "@/hooks/use-interactions";
 import { paneDisplayScope } from "@/lib/raw-terminal";
 import { agentBusy, turnRunning } from "@/lib/turn";
+import { limitLine, usageLimitOf } from "@/lib/usage-limit";
 import { useHoldReload } from "@/lib/reload-guard";
 import { SubagentConversation, SubagentSubtitle } from "@/components/subagent-conversation";
 import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
@@ -19,6 +20,7 @@ import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "r
 import { useNavigate, useRevalidator } from "react-router";
 import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Clock, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
+import { Button } from "@/components/ui/button";
 import { agentName } from "@/hooks/use-message-queue";
 import { StartAgent } from "@/components/start-agent";
 import { SpawnStatus } from "@/components/spawn-status";
@@ -388,6 +390,7 @@ export function AgentChat({
     : null;
   const unknownInteraction = wait?.kind === "interaction";
   const waitNotice = wait?.kind === "notice" ? wait.text : null;
+  const limit = usageLimitOf(agent);
   const dialogPresent = liveBlocks.some(blockOwnsKeyboard) || unknownInteraction;
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
@@ -1341,7 +1344,19 @@ export function AgentChat({
             <TerminalWaitRow key={wait.hint} hint={wait.hint} agent={agent?.agent} onShow={() => setRawTerminal(true)}
               onKeys={openKeys} />
           )}
-          {!subagent && showConversation && waitNotice !== null && (
+          {!subagent && showConversation && limit && (
+            <div data-usage-limit className="flex min-w-0 items-center gap-2 px-4 pb-1 text-footnote text-muted-foreground">
+              <StateMark state="limit" />
+              <span role="status" className="min-w-0 flex-1 truncate">{limitLine(limit)}</span>
+              {/* Typing past the limit is safe: Claude logs the message, and the limit only refuses it
+                  again and re-arms its own continue (measured 2026-10-21, ADR 0118). */}
+              <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-footnote"
+                disabled={readOnly || gone || connecting} onClick={() => { void composerRef.current?.continueNow(); }}>
+                Continue now
+              </Button>
+            </div>
+          )}
+          {!subagent && showConversation && !limit && waitNotice !== null && (
             <p data-terminal-notice className="flex min-w-0 items-center gap-2 px-4 pb-1 text-footnote text-muted-foreground">
               <Hourglass aria-hidden className="size-3.5 shrink-0" />
               <span className="truncate">{waitNotice}</span>
@@ -1407,6 +1422,7 @@ export function AgentChat({
             isShell={isShell}
             placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
             working={turnRunning(agent, modelSource.text)}
+            limit={limit}
             gone={gone}
             readOnly={readOnly || Boolean(subagent)}
             disconnected={unavailable}

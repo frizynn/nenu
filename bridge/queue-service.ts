@@ -345,6 +345,8 @@ export class QueueService {
         await this.queue.until(added, (row) => (row.state !== "queued" && row.state !== "sending") || !!row.waitingFor || !!row.stranded, ADD_SETTLE_MS);
       const rows = await this.queue.list(scope, { session, paneId });
       const delivered = await this.queue.recent(scope);
+      // A row the usage limit holds says until when (ADR 0118).
+      const limit = current.pane.turn?.limit;
       return Response.json({
         available: true,
         scope,
@@ -358,6 +360,7 @@ export class QueueService {
             error: error ?? stranded?.reason,
             deliveryMode,
             waitingFor,
+            ...(waitingFor === "limit" && limit ? { until: limit.resetsAt } : {}),
             stranded,
             device,
           }),

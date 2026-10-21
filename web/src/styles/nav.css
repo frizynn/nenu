@@ -169,6 +169,8 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-label-updates { height: 22px; margin-right: -6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; cursor: pointer; }
 @media (hover: hover) { .nav-label-updates:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 /* An agent that finished or asked since you last looked: a quiet count, never a toast over the page. */
+/* A chat held by its usage limit: when it resets, quiet, in place of the row's state word (ADR 0118). */
+.nav-limit { flex-shrink: 0; color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .nav-unread { flex-shrink: 0; color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* A phone's sheet and drawer: row content on the 16px gutter the sheet's title sits on. */

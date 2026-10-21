@@ -21,6 +21,7 @@ export function pendingStatus(send: LocalSend): {
     state: send.state === "sent" || send.native ? "sent" : (send.queueState ?? "queued"),
     deliveryMode: send.deliveryMode,
     waitingFor: send.waitingFor,
+    until: send.until,
     stranded: send.stranded,
     native: send.native,
     readNowAt: send.readNowAt,

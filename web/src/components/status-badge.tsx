@@ -1,4 +1,4 @@
-import { Check, CircleAlert, CircleCheck, CircleDashed, GitMerge, type IconComponent } from "@/components/ui/icon";
+import { Check, CircleAlert, CircleCheck, CircleDashed, GitMerge, Hourglass, type IconComponent } from "@/components/ui/icon";
 import type { NodeState } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 import type { AgentStatus } from "@/lib/types";
@@ -13,17 +13,21 @@ export const AGENT_STATE: Record<AgentStatus, NodeState> = { blocked: "needs", w
  * resting node draws nothing, so a list shows at a glance only what is alive. Nothing spins: a state
  * that lasts a whole turn is a still glyph (calm-motion.test).
  */
-const MARK: Record<Exclude<NodeState, "idle">, { glyph: IconComponent; tone: string }> = {
+/** A node's state, or an agent held by its usage limit until a time (ADR 0118): grey, it resumes by itself. */
+export type MarkState = NodeState | "limit";
+
+const MARK: Record<Exclude<MarkState, "idle">, { glyph: IconComponent; tone: string }> = {
   needs: { glyph: CircleAlert, tone: "text-status-blocked" },
   review: { glyph: CircleCheck, tone: "text-primary" },
   working: { glyph: CircleDashed, tone: "text-muted-foreground" },
   merging: { glyph: GitMerge, tone: "text-muted-foreground" },
   closing: { glyph: GitMerge, tone: "text-muted-foreground" },
   resolved: { glyph: Check, tone: "text-muted-foreground" },
+  limit: { glyph: Hourglass, tone: "text-muted-foreground" },
 };
 
 /** A state's mark, 14px; a resting one keeps the box empty so the names beside it stay in line. */
-export function StateMark({ state, className }: { state: NodeState; className?: string }) {
+export function StateMark({ state, className }: { state: MarkState; className?: string }) {
   if (state === "idle") return <span aria-hidden data-node-state="idle" className={cn("inline-flex size-3.5 shrink-0", className)} />;
   const { glyph: Glyph, tone } = MARK[state];
   // A 2px stroke: at 14px the icon set's 1.5 left the dashed circle at 3:1 on the light bar.

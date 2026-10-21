@@ -10,6 +10,7 @@ import {
   type QueueMessage,
 } from "@/lib/api";
 import type { DeliveryMode, NativeQueueState, QueueWaitReason } from "@/lib/types";
+import { resetTime } from "@/lib/usage-limit";
 
 // ── What each CLI does with a message that meets it busy (ADR 0056) ────────────────────────────────
 //
@@ -47,6 +48,8 @@ export interface QueueRowView {
   state: "queued" | "sending" | "paused" | "sent";
   deliveryMode?: DeliveryMode;
   waitingFor?: QueueWaitReason;
+  /** With `limit`: when the usage limit holding it resets. */
+  until?: number;
   stranded?: { reason: string; since: number };
   native?: NativeQueueState;
   /** When the bridge pressed "Read it now" for it. */
@@ -78,7 +81,7 @@ export function queueRowStatus(
   }
   // "Send now" lifts the wait for the turn; a row already going as soon as it can has nothing to lift.
   // A dialog, a draft in the box or a lost pane still holds it after the tap, so the button would do nothing.
-  const holds = row.waitingFor === "stopped" || ((row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor));
+  const holds = row.waitingFor === "stopped" || row.waitingFor === "limit" || ((row.deliveryMode === undefined || row.deliveryMode === "afterTurn") && !blockedBeyondTurn(row.waitingFor));
   return { tone: "waiting", label: waitingLabel(name, row), actions: holds ? ["sendNow", "edit", "remove"] : ["edit", "remove"] };
 }
 
@@ -98,6 +101,8 @@ function waitingLabel(name: string, row: QueueRowView): string {
       return "Waiting for the pane to reconnect.";
     case "stopped":
       return "Held: you stopped the turn. It goes when you send it.";
+    case "limit":
+      return row.until === undefined ? `Goes when ${name} is back from its usage limit.` : `Goes when ${name} is back, ~${resetTime(row.until)}.`;
     case "turn-start":
       return `Waiting for ${name} to start on the previous message.`;
     case "working":
