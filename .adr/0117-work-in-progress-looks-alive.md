@@ -60,9 +60,12 @@ did, because a running CSS animation keeps the compositor drawing at the display
 2. **The step in progress sits where it will stay.** It is a row of its run, its own icon, its words
    glowing, and it turns done in place. Between steps a "Thinking…" row stands where the next step
    lands. A thought being written shows its first line there. A message Claude read from its queue
-   mid-turn (it carries that turn's id) sits between the work it split: the turn's line keeps the
-   whole turn's time and its glow, and the work after it folds under its own "Continued for" line,
-   as T3 Code draws a steer.
+   mid-turn (it carries that turn's id) sits between the work it split, as T3 Code draws a steer,
+   and splits the turn's time there: the line above says how long its part took ("Worked for 4s"),
+   and a "Continued for" line, drawn with the message, counts on from it and glows. T3 Code keeps
+   the whole turn's time on the line above; read beside "Continued for 21s", "Worked for 25s" was
+   added up by its reader (visual review), so here the two lines add up to the turn.
+   Before the log shows a turn, its line is drawn as the turn's own line will be, in its place.
 3. **What joins the thread while it is read eases in** (a step, a thought, the agent's words, a
    message on its way): a fade and a short rise, 180 ms, transform and opacity only. What was there
    when the thread or a fold was drawn never moves. The operator's own message does not ease in when
