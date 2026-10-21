@@ -15,7 +15,7 @@ All notable changes to Nenu are recorded here. The format follows
 - A running turn looks alive: "Working" glows with its time beside it in a quiet ink (9s), the step in progress and "Thinking…" glow, and the working mark turns slowly in the bar, Home, a project and the chips; only on screen, never under reduced motion (e6fc4d17, 5ebe2770, ab86cb45, f0bf4605, 721a6df7, cf053b5a).
 - Between steps a "Thinking…" row stands where the next step lands; the step in progress sits in its run and turns done in place, with no row jumping up (e6fc4d17).
 - Steps, thoughts and the agent's words that arrive while you read ease in (e6fc4d17).
-- A waiting message has Edit and Remove on its line, one tap each; one already in Claude's own queue is taken back from it, its words kept whole (a7f47870, 14060638, 62814399, cf053b5a, a1b53d11).
+- A waiting message has Edit and Remove on its line, one tap each; one already in Claude's own queue is taken back from it, its words kept whole (a7f47870, 14060638, 62814399, cf053b5a, a1b53d11, b732a95a).
 - `bun scripts/e2e/one-bubble.ts` fails when a sent message is on screen twice in any frame; `bun scripts/e2e/live-motion.ts` measures what the live motion costs (e89703c0, ab86cb45).
 
 ### Changed
