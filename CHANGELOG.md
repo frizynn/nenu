@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.38.2] - 2026-10-21
+
+### Fixed
+
+- Without a project, a desk's bar, its heading and the folded rail no longer say Projects; Home already opened on Recents (6411b5cf).
+
 ## [1.38.1] - 2026-10-21
 
 ### Changed
