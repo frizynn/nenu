@@ -4,7 +4,7 @@
   captures of T3 Code). Reverses the desk's own work log of `c16199e7` (a turn never folds on a desk;
   each run of steps a bordered table of verb and target rows), which no ADR recorded.
 - **Trail:** `web/src/components/transcript-view.tsx` (`WorkTurnView`) ·
-  `web/src/components/work-log-tools.tsx` · `web/src/components/reveal.tsx` ·
+  `web/src/components/work-log-tools.tsx` · `web/src/components/fold.tsx` (`.fold` in `index.css`) ·
   `web/src/lib/work-timeline.ts` (`foldsSteps`, `workSegments`) · `web/src/lib/shell-tokens.ts` ·
   `web/src/components/live-conversation.tsx` (`onWorkToggle`) · `scripts/e2e/commands.ts`
 
@@ -41,9 +41,12 @@ the colouring could not come that way.
    Open, it shows the command coloured by `lib/shell-tokens.ts` (program, flags, arguments, strings,
    variables, keywords; text nodes only) and its output in grey, "Error: Exit code N" first. A failed
    step marks only its icon in the destructive hue and says Failed in grey.
-5. **Folds move as panels** (ADR 0111): `Reveal` grows a fold's height from nothing in 180 ms on the
-   shared curve and shrinks it before it leaves the page; chevrons turn in 120 ms; under reduced
-   motion nothing moves. The chat holds the tapped line in place for the whole motion.
+5. **Folds move as the box's rows already did** (ADR 0111): the composer's `Fold`, now `fold.tsx`
+   with its `.fold` rules in `index.css`, grows a fold's height from nothing in 180 ms and shrinks it
+   in 120 ms on the shared curve, inert while it leaves; chevrons turn in 120 ms; under reduced motion
+   only the fade remains. T3 Code animates only its chevron (measured, 200 ms); the operator asked for
+   more ("faltan animaciones, como desplegar los comandos"). The chat holds the tapped line in place for
+   the whole motion.
 
 ## Consequences
 
@@ -51,6 +54,8 @@ the colouring could not come that way.
   pointer (`max-h-80`) and runs whole under a finger, so the chat stays the one box that scrolls.
 - A call's own description (Claude's Bash `description`) is no longer drawn; it is the row's tooltip.
 - A turn opened by search or focus is simply there; only a tap animates.
+- A run of calls has no chevron, as in T3 Code: its line is the toggle, its time where a row's
+  chevron sits on a desk.
 - A running turn may hold an unfolded run that a reload would fold. That is the price of rule 3;
   revisit only with a measured jump that folding live runs would not cause.
 - A syntax highlighter that emits HTML (Shiki, Prism, highlight.js) stays out of the transcript; a new

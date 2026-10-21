@@ -426,14 +426,14 @@ describe("TranscriptView — work folding", () => {
   it("animates the work it opens only when you open it, never on its own", async () => {
     const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
     // Open by itself while it runs: it draws in place.
-    const turnBody = () => container.querySelector("[data-work-turn] > [data-reveal]");
-    expect(turnBody()).toHaveAttribute("data-reveal", "open");
+    const turnBody = () => container.querySelector("[data-work-turn] > .fold");
+    expect(turnBody()).toHaveAttribute("data-phase", "open");
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
     await waitFor(() => expect(turnBody()).toBeNull());
     await userEvent.click(screen.getByRole("button", { name: "Worked for 21s" }));
-    expect(turnBody()).toHaveAttribute("data-reveal", "growing");
-    expect(turnBody()).toHaveClass("duration-180", "ease-out", "motion-reduce:transition-none");
-    await waitFor(() => expect(turnBody()).toHaveAttribute("data-reveal", "open"));
+    // Tapped, it folds open as a panel does (index.css's .fold), then settles.
+    expect(turnBody()).toHaveAttribute("data-phase", "opening");
+    await waitFor(() => expect(turnBody()).toHaveAttribute("data-phase", "open"));
   });
 
   it("opens active work, then collapses it automatically on completion", async () => {

@@ -419,6 +419,19 @@
   .sheet-bottom-panel, .side-sheet-panel { transition: none; }
 }
 
+/* What folds open and shut in place (fold.tsx): a row above the box, a turn's work, a command's output.
+   Its height grows from nothing as a panel arrives and shrinks as a control exits, so what sits below
+   moves with it instead of jumping. Clipped only while it moves, so a settled row keeps its 44px hits;
+   no min-width either, so a wide row scrolls inside its column instead of widening it. */
+.fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
+.fold > div { min-height: 0; min-width: 0; }
+.fold:not([data-phase="open"]) > div { overflow: hidden; }
+.fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: var(--motion-control); }
+@starting-style { .fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .fold { transition: opacity var(--motion-control) var(--motion-ease); }
+}
+
 /* A sub-16px editable field makes iOS zoom the entire app on focus. Keep browser zoom available
    for accessibility; make touch fields readable instead of disabling scaling in the viewport. */
 @media (max-width: 1023px), (pointer: coarse) {

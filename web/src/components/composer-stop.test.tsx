@@ -55,7 +55,7 @@ it("keeps Stop beside Send in the box while Claude works, draft or not, and draw
   const { user } = setup();
   const stop = stopButton()!;
   expect(stop.closest(".composer-box")).not.toBeNull();
-  expect(document.querySelector(".composer-fold")).toBeNull();
+  expect(document.querySelector(".fold")).toBeNull();
   expect(screen.queryByText(/^Working/)).not.toBeInTheDocument();
   // Send keeps its slot, waiting for a draft, so a draft never swaps the target under the thumb.
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -73,7 +73,7 @@ it("takes Stop out of the box when the turn ends, and nothing folds", () => {
   expect(stopButton()).toBeVisible();
   rerender({ working: false });
   expect(stopButton()).not.toBeInTheDocument();
-  expect(document.querySelector(".composer-fold")).toBeNull();
+  expect(document.querySelector(".fold")).toBeNull();
 });
 
 // The chips never take a line between the thread and the box (ADR 0108): they sit in the row under
@@ -88,7 +88,7 @@ it("draws the chips in the row under the box, never on a line above it", async (
   expect(screen.getByRole("group", { name: "Message tools" })).toContainElement(chips);
   // Under the box in the document, inside the dock the box opens, and nothing of it above the box.
   expect(box.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(chips.closest(".composer-fold")).toBeNull();
+  expect(chips.closest(".fold")).toBeNull();
   rerender({ chips: none });
   await waitFor(() => expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument());
   expect(document.querySelector(".composer-box")).toBe(box);

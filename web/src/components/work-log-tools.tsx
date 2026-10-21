@@ -14,7 +14,7 @@ import { DiffStat } from "./diff-stat";
 import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
-import { Reveal } from "./reveal";
+import { Fold } from "./fold";
 import { Elapsed, LiveGlyph } from "./work-activity-label";
 
 // A turn's work as a timeline, the same on a phone and a desk: one line per step, its icon and what it
@@ -101,10 +101,10 @@ function describeCall(part: ToolPart): ToolStepDescription & { text: string } {
   return { ...step, text: step.target === "title" ? planTitle(part.summary) : part.summary };
 }
 
-// 32px on a mouse, 44px under a finger, both from padding around one 20px line. The row lights on hover
-// as every row does (ADR 0111), its fill reaching past the icon so the icon column stays where it is.
-const ROW = "group -mx-1.5 flex w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-subhead min-h-8 coarse:min-h-11 pointer-fine:hover:bg-hover";
-const CHEVRON = "size-3.5 shrink-0 text-subtle-foreground transition-[rotate,color] duration-120 ease-out group-hover:text-foreground motion-reduce:transition-none";
+// 24px on a mouse, as T3 Code's rows are, 44px under a finger. The row lights on hover as every row
+// does (ADR 0111), its fill reaching past the icon so the icon column stays where it is.
+const ROW = "group -mx-1.5 flex w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-subhead min-h-6 coarse:min-h-11 pointer-fine:hover:bg-hover";
+const CHEVRON = "size-3 shrink-0 text-subtle-foreground transition-[rotate,color] duration-120 ease-out group-hover:text-foreground motion-reduce:transition-none";
 
 /** A step in progress: its line carries the live glyph for its icon, and how long it has run. */
 type Live = Pick<LiveStep, "since">;
@@ -136,7 +136,7 @@ function StepLine({ icon, live, label, expanded, controls, onToggle, children }:
 
 function StepIcon({ kind, failed = false }: { kind: StepKind | "thinking"; failed?: boolean }) {
   const Icon = STEP_ICONS[kind];
-  return <Icon aria-hidden="true" className={cn("size-4 shrink-0", failed ? "text-destructive" : "text-muted-foreground")} />;
+  return <Icon aria-hidden="true" className={cn("size-4 shrink-0", failed ? "text-destructive opacity-50" : "text-muted-foreground")} />;
 }
 
 /**
@@ -239,9 +239,9 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
         {asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-subtle-foreground">{status}</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
-      <Reveal open={open} id={contentId}>
+      <Fold value={open}>{() => <div id={contentId}>
         <StepBody part={part} kind={step.kind} query={query} focused={focused} pending={asking ? "Waiting on you" : active ? "Running…" : "No output recorded"} />
-      </Reveal>
+      </div>}</Fold>
     </div>
   );
 }
@@ -261,12 +261,12 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
       {(live || !shown) && <span className="shrink-0 text-muted-foreground">{live || !preview ? "Thinking" : "Thought"}</span>}
       <StepTarget text={shown} format="thought" query={query} current={focused} />
     </StepLine>
-    {preview && <Reveal open={open} id={contentId}>
+    {preview && <Fold value={open}>{() => <div id={contentId}>
       <div className="min-w-0 pb-2 pl-6 text-subhead text-muted-foreground [overflow-wrap:anywhere]">
         <MarkdownText text={text} query={query} current={focused} />
         {truncated && <p className="text-footnote">… truncated</p>}
       </div>
-    </Reveal>}
+    </div>}</Fold>}
   </div>;
 }
 
@@ -340,11 +340,11 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { st
       {diff && <DiffStat diff={diff} className="text-caption" />}
       {failures > 0 && <span className="shrink-0 text-caption text-subtle-foreground">{failures} failed</span>}
       <span className="flex-1" />
+      {/* The line is the toggle, as T3 Code draws it: no chevron, the time where a row's chevron sits. */}
       {time && <time dateTime={at} className="hidden shrink-0 text-footnote text-subtle-foreground pointer-fine:inline">{time}</time>}
-      <ChevronRight aria-hidden="true" className={cn(CHEVRON, open && "rotate-90")} />
     </button>
-    <Reveal open={open} id={contentId}>
+    <Fold value={open}>{() => <div id={contentId}>
       <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />
-    </Reveal>
+    </div>}</Fold>
   </div>;
 }

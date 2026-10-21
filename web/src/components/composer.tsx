@@ -57,7 +57,7 @@ import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffCommen
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, rowChips, type ChipLine } from "@/components/composer-chips";
-import { Fold } from "@/components/composer-fold";
+import { Fold } from "@/components/fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {

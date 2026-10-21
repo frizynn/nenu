@@ -38,14 +38,6 @@
 .composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
-/* A row above the box (a notice, the busy choice) folds open and shut, so the thread moves with it
-   instead of jumping (composer-fold.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
-.composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
-/* No min-width either: a row scrolls inside the composer's width instead of widening it. */
-.composer-fold > div { min-height: 0; min-width: 0; }
-.composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
-.composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: var(--motion-control); }
-@starting-style { .composer-fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
 /* The + leads the box: a 32px circle at the draft's last line, its column spanning the box so the
    menu it opens hangs above the box, never over the draft. */
 .composer-lead { display: flex; align-items: flex-end; align-self: stretch; flex-shrink: 0; width: 38px; padding: 6px 0 6px 6px; transition: width var(--motion-control) var(--motion-ease), padding var(--motion-control) var(--motion-ease), opacity var(--motion-control) var(--motion-ease), visibility 0s; }
@@ -174,7 +166,6 @@
 @media (prefers-reduced-motion: reduce) {
   .composer-plus, .composer-lead, .workbench-chat[data-keyboard-open] .composer-input,
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-lead { transition: none; }
-  .composer-fold { transition: opacity var(--motion-control) var(--motion-ease); }
   .composer-plus:active { scale: none; }
   .composer-chip, .composer-chip-panel { transition: none; }
   .composer-chip:active { scale: none; }

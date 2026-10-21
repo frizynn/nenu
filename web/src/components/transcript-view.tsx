@@ -8,7 +8,7 @@ import { MediaViewerContext } from "./file-preview-provider";
 import { ImageStrip, JournalImages, journalStripImages, pathImages, PlacedMessage, type StripImage } from "./message-images";
 import { useContext, useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "@/components/ui/icon";
-import { Reveal } from "./reveal";
+import { Fold } from "./fold";
 
 import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { MarkdownText } from "@/components/markdown-text";
@@ -315,16 +315,14 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
       <span className="flex-1" />
       {endTime && <time dateTime={end} className="shrink-0 text-footnote text-subtle-foreground">{endTime}</time>}
     </div>
-    <Reveal open={open} id={contentId}>
-      <div className="min-w-0 space-y-1 pb-1">
+    <Fold value={open}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
         {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
           ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
           : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
               className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
               {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
             </div>)}
-      </div>
-    </Reveal>
+    </div>}</Fold>
     {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     {answer}
     <ArtifactCards paths={delivered} />
