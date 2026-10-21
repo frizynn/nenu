@@ -10,6 +10,7 @@ import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
 import { pasteImageBench } from "./paste-image.ts";
+import { sendAlwaysBench } from "./send-always.ts";
 import { takeOverBench } from "./take-over.ts";
 import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
@@ -50,6 +51,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
 //   bun scripts/e2e/run.ts paste-image [--port 8797] [--out DIR]  Pictures pasted and picked between words, keyboard down and up: the draft spans the box
 //   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
+//   bun scripts/e2e/run.ts send-always [--port 8797] [--out DIR]  A working Claude: queued rows in the thread with their pictures, Send asks nothing, text in its box never holds a send, the Terminal view types
 //   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -940,8 +942,8 @@ async function stop(): Promise<void> {
       let queued = 0;
       if (deviceName === "phone") {
         // Queued for after the turn, the row waits in Nenu while Claude works.
-        await page.getByRole("button", { name: "Send", exact: true }).click();
-        await page.getByRole("button", { name: /Queue for later/ }).click({ timeout: 5000 });
+        await page.getByRole("button", { name: "Message actions" }).click();
+        await page.getByRole("button", { name: "Send after this turn" }).click({ timeout: 5000 });
         queued = fake.submitted.length;
         await page.waitForTimeout(800);
       } else {
@@ -4159,6 +4161,16 @@ async function takeOver(): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
+/** ADR 0113 on a phone and a desk: nothing Nenu sends gets stuck or drawn over the thread. */
+async function sendAlways(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench((bridge, browser) => sendAlwaysBench(bridge, browser, outDir), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "send-always.json"), JSON.stringify(result, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  console.log(result.shots.join("\n"));
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 if (command === "smoke") await smoke();
 else if (command === "project") await project();
 else if (command === "org") await org();
@@ -4195,8 +4207,9 @@ else if (command === "inline-images") await inlineImages(values.before === true)
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
+else if (command === "send-always") await sendAlways();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|send-always [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
