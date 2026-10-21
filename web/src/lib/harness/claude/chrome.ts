@@ -527,8 +527,16 @@ function steppedMarksAreStatusline(
  *  walk (its footer split off by a blank, like the background-agents footer), and only these rows
  *  tell it apart. A popup tail is exempt, because its grammar named every row. */
 function tailNamesAMenu(text: string): boolean {
+  if (AUTO_CONTINUE_NOTICE.test(text.trim())) return false;
   return NUMBERED_OPTION_ROW.test(text) || text.split(/\s+·\s+/).some(namesAModalKey);
 }
+
+// Claude's usage-limit pause, in each of its three wordings (2.1.307, read in code: "Continuing
+// automatically {when}", "Usage limit reached · continuing automatically {when}", the same "again"),
+// prints "esc to cancel" under a live box. Escape cancels the automatic continue; the box takes typing
+// and Enter submits (measured 2026-10-21: logged 13 s after Nenu typed it). Refusing it refused every
+// send until the limit reset, and hid a message already typed (ADR 0118).
+const AUTO_CONTINUE_NOTICE = /^(?:⚠\s*)?(?:Usage limit reached(?: again)?\s+·\s+)?continuing automatically\b[^·]*\s+·\s+esc to cancel$/i;
 
 /** A hint segment naming a key that is not one of Claude's own. Claude right-aligns indicators such
  *  as "/rc" two or more spaces after the row's last hint, so after its own hint those are fields of
