@@ -102,7 +102,7 @@ function RoutineDetail({ routine, threads, editable, onSave, onClose }: {
   const last = Date.parse(routine.lastRun);
   const next = Date.parse(routine.nextRun);
   const rows: Array<[string, string]> = [
-    ["Runs when", routine.trigger === "pr" ? routineWhen(routine) : `${routine.schedule}${Number.isNaN(next) ? "" : `, next in ${timeUntilShort(next)}`}`],
+    ["Runs when", routine.trigger === "pr" ? routineWhen(routine) : `${routine.schedule}${Number.isNaN(next) ? "" : `, next ${timeUntilShort(next)}`}`],
     ["Goes to", routineRecipient(routine, threads)],
     ["Last run", routine.trigger === "pr" ? "Not recorded for pull-request routines" : Number.isNaN(last) ? "Not yet" : timeAgo(last, now)],
   ];
