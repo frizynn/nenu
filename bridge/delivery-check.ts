@@ -75,6 +75,11 @@ const words = (s: string) => strip(unwrapPastes(s).replace(PICTURE, " "));
 /** Characters a logged tail needs before it can stand for a message whose head was dropped. */
 const TAIL_MIN = 32;
 
+/** Whether `sent` has words its log can be told by; pictures alone do not. */
+export function hasWords(sent: string): boolean {
+  return words(sent).length > 0;
+}
+
 /**
  * Whether `logged` is `sent` as Claude logs it: the same words, pictures aside, or the tail a dropped
  * head leaves (ADR 0076). Another message, the operator's at the terminal or a second device's, is not.

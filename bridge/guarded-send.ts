@@ -19,7 +19,7 @@ import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts
 import { draftIsPartOfSend, hasPlacedPictures, holdsCliToken, imageTokens, pathShows, sendPieces, strip } from "../web/src/lib/harness/inline-images.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
-import { deliveryVerdict, type LogLook, type LogReader } from "./delivery-check.ts";
+import { deliveryVerdict, hasWords, type LogLook, type LogReader } from "./delivery-check.ts";
 import type { EventPoker } from "./event-poker.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import { verifyExpectedPrompt } from "./prompt-binding.ts";
@@ -321,7 +321,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   // Enter right behind the text (ADR 0116) where the log can witness the send and Claude is idle, no
   // turn and no background work: then nothing but the operator opens a dialog, and the pre-flight read
   // is the last look. Mid-turn a tool's permission prompt may open under the text, so Enter waits.
-  let logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request) && turn?.running === false && turn.waiting === undefined && !turn.background;
+  let logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request) && idle(turn);
   // One first look at the log, from an earlier try's first write if there was one: it says whether that
   // try arrived, and the log must be readable now for its silence to mean anything later. The reader
   // reads only what was appended since its last look, so a second first look would miss that row.
@@ -362,13 +362,14 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   // reached the PTY). Its text, still in the box, is this send's text: submit it rather than type a
   // second copy. Text it delivered that is no longer in the box may have been submitted by an Enter
   // whose ack was lost, so nothing is typed; neither when the box cannot be read to tell.
-  if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
   // The CLI's log says whether an earlier try reached the agent (ADR 0116): logged or queued, it is
-  // sent and nothing is typed again. Its silence proves nothing: the bytes may still be on their way.
+  // sent and nothing is typed again, even when the box cannot be read. Its silence proves nothing:
+  // the bytes may still be on their way.
   if (retry && first) {
     const earlier = answer(send, first);
     if (earlier) return earlier;
   }
+  if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
   const alreadyTyped = prior?.typeAttempted === true && seen !== null && send.carries(seen);
   if (prior?.textDelivered && !alreadyTyped) return send.fail(MAYBE_SENT, true);
 
@@ -397,8 +398,14 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     }
   }
 
-  // A turn that started meanwhile (the sweep can take seconds) sends this one the mid-turn way.
-  if (logFirst && deps.received && deps.turn?.()?.running === false) return await submitAndLog(send, deps, adapter, deps.received, since);
+  // The CLI's state once more before Enter: a dialog it reports stops the send, and a turn that
+  // started meanwhile (a sweep or a picture's wait can take seconds) sends it the mid-turn way.
+  const atEnter = deps.turn?.();
+  if (atEnter?.waiting !== undefined && !request.force && request.expectedPrompt === undefined) {
+    send.trace.phase = "submit";
+    return await unsent(send, deps, adapter, DIALOG_UP);
+  }
+  if (logFirst && deps.received && idle(atEnter)) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {
@@ -538,11 +545,16 @@ const NOT_LOGGED = /^\s*(?:!|\/[^\s/]+(?:\s|$))/;
 
 /**
  * Whether the CLI's log can witness this send. A slash command or a `!` shell line is logged as
- * something else, so its Enter still waits for the box to show it; so does a send bound to a dialog
- * or forced past a screen the adapter misreads.
+ * something else, and a message of pictures alone has no words to find it by, so its Enter still waits
+ * for the box to show it; so does a send bound to a dialog or forced past a screen the adapter misreads.
  */
 function logWitnesses(request: SendRequest): boolean {
-  return request.expectedPrompt === undefined && !request.force && !NOT_LOGGED.test(request.text);
+  return request.expectedPrompt === undefined && !request.force && !NOT_LOGGED.test(request.text) && hasWords(request.text);
+}
+
+/** Claude with no turn, no background work and no dialog: then only the operator opens a dialog. */
+function idle(turn: ReturnType<NonNullable<GuardedSendDeps["turn"]>>): boolean {
+  return turn?.running === false && turn.waiting === undefined && !turn.background;
 }
 
 /**
@@ -556,7 +568,6 @@ function logWitnesses(request: SendRequest): boolean {
  */
 async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, received: LogReader, since: number): Promise<GuardedSendResult> {
   send.trace.phase = "submit";
-  if (deps.turn?.()?.waiting !== undefined) return await unsent(send, deps, adapter, DIALOG_UP);
   try {
     await deps.herdr.sendPaneKeys(deps.paneId, deps.submitKeys);
   } catch {
@@ -570,8 +581,8 @@ async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessA
   let taken = 0;
   for (const delay of WAIT_DELAYS_MS) {
     if (delay > 0) await send.sleep(delay);
-    const logged = answer(send, await look(received, since, sent));
-    if (logged) return logged;
+    const found = answer(send, await look(received, since, sent));
+    if (found) return found;
     let box: Seen;
     try {
       box = await send.read();
@@ -579,9 +590,12 @@ async function submitAndLog(send: Send, deps: GuardedSendDeps, adapter: HarnessA
       continue;
     }
     // Something took the keyboard with the message neither logged nor in sight: Enter may have gone to
-    // it. Two looks in a row, so one read caught mid-redraw decides nothing.
-    taken = box.composer === false ? taken + 1 : 0;
-    if (taken >= 2) return send.fail(TAKEN, true);
+    // it. Two looks in a row, so one read caught mid-redraw decides nothing, held or gone included.
+    if (box.composer === false) {
+      if (++taken >= 2) return send.fail(TAKEN, true);
+      continue;
+    }
+    taken = 0;
     held = send.carries(box);
     if (held) shown = true;
     goneFor = held || !shown ? null : goneFor === null ? 0 : goneFor + delay;

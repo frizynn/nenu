@@ -798,24 +798,52 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     const dir = await mkdtemp(join(tmpdir(), "nenu-retry-"));
     const path = join(dir, "s.jsonl");
     await writeFile(path, `${JSON.stringify({ type: "user", timestamp: new Date(5_000).toISOString(), message: { role: "user", content: text } })}\n`);
-    const term = new Term();
-    const { outcome } = await guardedSend(deps(term, { received: claudeLogReader(async () => path) }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 4_000 });
-    expect(outcome.ok).toBe(true);
-    expect(term.count("pane.send_text")).toBe(0);
-    await rm(dir, { recursive: true });
+    try {
+      const term = new Term();
+      const { outcome } = await guardedSend(deps(term, { received: claudeLogReader(async () => path) }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 4_000 });
+      expect(outcome.ok).toBe(true);
+      expect(term.count("pane.send_text")).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
   });
 
   test("background work alone is not idle: Enter waits to see the text", async () => {
     const term = new Term();
-    await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, background: true }) }), { text, requestId: "r1" });
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, background: true }) }), { text, requestId: "r1" });
     expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_keys")).toBe(1);
   });
 
   test("a turn that starts before Enter sends this one the mid-turn way", async () => {
     const term = new Term();
     const turn = () => ({ running: term.count("pane.send_text") > 0 });
-    await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
     expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_keys")).toBe(1);
+  });
+
+  test("a message of pictures alone waits to be seen in the box: the log has no words to find it by", async () => {
+    const term = new Term();
+    const path = "/state/uploads/shot-k3j9x2-0a1b2c3d.png";
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text: path, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(term.lines.at(-1)).toBe("> [Image #1]");
+  });
+
+  test("one read with the box gone, mid-redraw, decides nothing", async () => {
+    const term = new Term();
+    const witness = log(4);
+    term.onRead = (_n, t) => {
+      // The read right after Enter catches a redraw; the next ones see the box again.
+      t.dialog = t.count("pane.send_keys") > 0 && t.count("pane.read") === 3 ? "redrawing" : null;
+    };
+    const { outcome } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+    expect(witness.asked.length).toBeGreaterThanOrEqual(5);
   });
 
   test("a retry the log says nothing about types nothing either: the earlier bytes may still arrive", async () => {
