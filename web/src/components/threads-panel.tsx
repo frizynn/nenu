@@ -103,7 +103,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
         <button type="button" className="task-main" onClick={() => opensPr ? onOpenPr(thread) : openThread(thread)}>
           <span data-pr-status={status} className="mt-0.5 flex shrink-0"><Icon aria-hidden className={cn("size-3.5", tone)} /></span>
           <span className="min-w-0 flex-1">
-            <span data-task-title className={cn("block break-words text-footnote font-medium", past && "text-muted-foreground")}>{thread.title}</span>
+            <span data-task-title className={cn("block break-words text-subhead font-medium", past && "text-muted-foreground")}>{thread.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{!pr ? "No PR" : pr.number !== undefined ? `PR #${pr.number}` : "PR"} · {label}{!past && thread.autoMerge && " · Auto-merge"}</span>
           </span>
           {pr?.diff ? !diffPane && <DiffStat diff={pr.diff} className="text-xs" /> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}

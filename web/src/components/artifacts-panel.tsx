@@ -83,7 +83,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
           <FileLink path={target} onOpen={() => onOpen(target)} label={`Open ${board ?? file.name}`} title={file.path} className={ROW}>
             <span className={cn(TILE, board && "text-primary")}><Icon aria-hidden="true" className="size-4" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-footnote font-medium">{board ?? file.name}</span>
+              <span className="block truncate text-footnote font-medium coarse:text-subhead">{board ?? file.name}</span>
               <span className="block truncate text-xs text-muted-foreground">{caption(kind, when(file.lastSeen.timestamp))}</span>
             </span>
           </FileLink>
@@ -99,7 +99,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
             <img src={paneFileUrl(paneId, file.src, session)} alt="" loading="lazy" className="size-full object-contain"
               onError={() => setBroken((known) => new Set(known).add(file.path))} />
           </span>
-          <span className="mt-1.5 block truncate text-footnote font-medium">{file.name}</span>
+          <span className="mt-1.5 block truncate text-footnote font-medium coarse:text-subhead">{file.name}</span>
           <span className="block truncate text-xs text-muted-foreground">{caption(fileExtension(file).toUpperCase(), when(file.lastSeen.timestamp))}</span>
         </FileLink>)}
       </div>
@@ -118,7 +118,7 @@ export function ArtifactsPanel({ paneId, session, references, published = [], re
         <FileOpenButton paneId={paneId} session={session} path={file.path} label={`Open ${file.name}`} className={ROW}>
           <span className={TILE}><ImageIcon aria-hidden="true" className="size-4" /></span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-footnote font-medium">{file.name}</span>
+            <span className="block truncate text-footnote font-medium coarse:text-subhead">{file.name}</span>
             <span className="block truncate font-mono text-caption text-muted-foreground">{file.path}</span>
           </span>
         </FileOpenButton>

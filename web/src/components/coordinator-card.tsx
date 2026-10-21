@@ -137,7 +137,7 @@ function CardList({ label, count, children }: { label: string; count: number; ch
 
 function RowText({ title, detail }: { title: string; detail?: string }) {
   return <span className="min-w-0 flex-1">
-    <span className="block break-words">{title}</span>
+    <span className="block break-words text-subhead">{title}</span>
     {detail && <span className="block break-words text-footnote text-muted-foreground">{detail}</span>}
   </span>;
 }

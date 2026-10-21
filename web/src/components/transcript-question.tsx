@@ -15,7 +15,7 @@ export function TranscriptQuestion({ title, options, descriptions, active }: { t
   if (active && live === "card") return null;
   const described = descriptions?.some(Boolean) ?? false;
   return <section aria-label="Agent question" className="space-y-2 rounded-lg border bg-muted/30 p-3">
-    <p className="text-footnote font-medium">{title}</p>
+    <p className="text-subhead font-medium">{title}</p>
     {/* Options that say what they mean read as rows, label over meaning, like the live card's answers. */}
     {options.length > 0 && <div className={described ? "flex flex-col gap-2" : "flex flex-wrap gap-2"}>
       {options.map((option, index) => {

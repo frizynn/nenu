@@ -27,7 +27,7 @@ export function ArtifactCard({ path, name = path, designboard, open }: { path: s
   const body = <>
     <span className="grid h-12 w-[4.5rem] shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
-      <span className="truncate text-footnote font-medium">{title}</span>
+      <span className="truncate text-subhead font-medium">{title}</span>
       <span className="truncate text-xs text-muted-foreground">{sub}</span>
     </span>
     {open && <span className="shrink-0 px-1 text-xs text-muted-foreground">Open</span>}
