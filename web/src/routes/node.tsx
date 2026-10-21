@@ -59,7 +59,7 @@ function NodePage() {
   const coordinating = isRoot || node?.thread.role === "coordinator";
   const subtree = project && coordinating ? threadTree(project, isRoot ? undefined : node?.thread.id) : [];
   const read = useThreadSummaries(project, node ? [node.thread, ...subtree] : subtree);
-  const { summaries } = read;
+  const { summaries, failed } = read;
   // Only a coordinator has a card to fill.
   const asks = useAsks(coordinating ? data.projects : undefined);
   const live = (paneId: string | undefined) => paneId !== undefined && data.agents.some((pane) => pane.paneId === paneId);
@@ -125,6 +125,7 @@ function NodePage() {
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
         {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
+        {failed && <p role="alert" className="mt-2 text-footnote text-muted-foreground">Could not read the reports: {failed}</p>}
         {(running || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
           {running && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}

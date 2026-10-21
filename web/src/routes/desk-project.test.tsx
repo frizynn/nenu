@@ -195,7 +195,10 @@ describe("a desk's coordinator page", () => {
     const [chat, start] = [main.getByRole("button", { name: /Open chat/ }), main.getByRole("button", { name: /New thread/ })];
     expect(chat.className).toBe(start.className);
     await user.click(panel.getByRole("button", { name: /1 finished/ }));
-    expect(`${router.state.location.pathname}${router.state.location.search}`).toBe("/project/hub?work=finished");
+    expect(`${router.state.location.pathname}${router.state.location.search}`).toBe("/project/hub?work=finished&q=Lead");
+    // History opens searching for this coordinator's own threads.
+    expect(await screen.findByRole("searchbox", { name: "Search finished work" })).toHaveValue("Lead");
+    expect(screen.getByRole("button", { name: /Shipped\s*Lead/ })).toBeInTheDocument();
   });
 
   it("waits on you only for what does; Status reads every ask as a request with its state, done ones folded", async () => {

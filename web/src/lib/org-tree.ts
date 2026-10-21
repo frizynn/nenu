@@ -17,14 +17,18 @@ export const STATE_LABEL: Record<NodeState, string> = {
 
 /**
  * A node in the review group whose pull request already merged: Organizations resolves it on its own
- * shortly, so it is not work to review (ADR 0108).
+ * shortly, so it is not work to review (ADR 0108). Every "to review" count and word asks `toReview`.
  */
-export function mergedToClose(thread: Pick<ProjectThreadView, "pr">, state: NodeState): boolean {
+export function mergedToClose({ thread, state }: { thread: Pick<ProjectThreadView, "pr">; state: NodeState }): boolean {
   return state === "review" && thread.pr?.state === "merged";
 }
 
-/** What a merged node in the review group says instead of "to review". */
+/** Ready for review and not merged on its way to closing. */
+export const toReview = (node: { thread: Pick<ProjectThreadView, "pr">; state: NodeState }) => node.state === "review" && !mergedToClose(node);
+
+/** What a merged node in the review group says instead of "to review": short beside its PR chip, whole elsewhere. */
 export const MERGED_TO_CLOSE = "merged, closes on its own";
+export const mergedDetail = (pr: { number?: number }) => `PR${pr.number !== undefined ? ` #${pr.number}` : ""} ${MERGED_TO_CLOSE}`;
 
 /** A live agent's state in the tree's terms; undefined while Herdr cannot tell. */
 export function liveState(status: AgentStatus): OpenState | undefined {

@@ -35,7 +35,7 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
 }) {
   const [opened, setOpened] = useState(false);
   const shown = opened || !closed;
-  const [unfolded, setOpen] = useState(false);
+  const [unfolded, setUnfolded] = useState(false);
   const open = unfolded || closed;
   const [overflows, setOverflows] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -94,7 +94,7 @@ export function CoordinatorStatus({ status, project, onOpenNode, closed = false,
       !open && overflows && "[mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-1.5rem))]")}>
       <TextTokensContext.Provider value={tokens}><MarkdownText text={text} className="text-subhead" /></TextTokensContext.Provider>
     </div>
-    {overflows && <button type="button" className={cn("quiet-action -ml-2", open ? "mt-1" : "-mt-6")} onClick={() => setOpen(!open)}>
+    {overflows && !closed && <button type="button" className={cn("quiet-action -ml-2", open ? "mt-1" : "-mt-6")} onClick={() => setUnfolded(!open)}>
       {open ? "Show less" : "Show all"}
     </button>}
   </section>;

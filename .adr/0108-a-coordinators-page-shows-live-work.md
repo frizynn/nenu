@@ -29,7 +29,8 @@ too short to scroll, so a wheel over it moved nothing and only a faint Show all 
 
 1. **A coordinator's page lists only its live work.** Its open threads, the most urgent first, as rows
    that open them; a thread under a nested coordinator one step in. What finished is one line, "N
-   finished", to the project's History (ADR 0106); on a phone, the tree's folded History. No Summary,
+   finished", to the project's History (ADR 0106) searched for the coordinator's name; on a phone, the
+   tree's folded History. No Summary,
    no report cards: a thread's report is on its own page.
 2. **A tap anywhere on a coordinator card's head opens its page.** The fold is its own chevron button;
    + still starts a thread under it.
@@ -45,8 +46,9 @@ too short to scroll, so a wheel over it moved nothing and only a faint Show all 
    should still write the documented states.
 6. **A STATUS.md the person opens is drawn whole.** The Show all fold stays only where the file heads a
    page unasked.
-7. **A node in the review group whose pull request merged reads "merged, closes on its own"**, and a
-   card does not count it as to review: Organizations resolves it shortly.
+7. **A node in the review group whose pull request merged reads "merged, closes on its own"**, and
+   nothing counts it as to review (a card, Home's projects and Ready to review): Organizations resolves
+   it shortly. `org-tree.ts` (`mergedToClose`, `toReview`) is the one place that decides it.
 
 ## Consequences
 

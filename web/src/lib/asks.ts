@@ -10,7 +10,8 @@ import type { AskCoordinator, AskDecision, AskGroup, AskLink, AskRow, AskState, 
 export const ASK_GROUP_LABEL: Record<AskGroup, string> = {
   waiting: "Waiting on you", unclosed: "Does not close", progress: "In progress", done: "Done", other: "Not marked",
 };
-const ORDER: readonly AskGroup[] = ["waiting", "unclosed", "progress", "done", "other"];
+// `other` never comes out: such a line is read as a request (`unmarked`).
+const ORDER: readonly AskGroup[] = ["waiting", "unclosed", "progress", "done"];
 
 /** One row of Your asks: an ask, or a decision line that waits on you. */
 export interface AskEntry {
@@ -47,7 +48,7 @@ export function askSections(list: AsksList, projects: readonly ProjectView[], fi
   const bySlug = new Map(projects.map((project) => [project.slug, project]));
   const asks = (list.asks ?? []).flatMap((row, index): AskEntry[] => {
     const project = bySlug.get(row.project);
-    const read = row.group === "other" ? unmarked(row.text) : { group: row.group, text: row.text, detail: row.answer };
+    const read = row.group === "other" ? unmarked(row.text, row.answer) : { group: row.group, text: row.text, detail: row.answer };
     return project && matches(filter, row) ? [{ key: `ask:${row.project}:${row.coordinator.id}:${row.line}:${index}`, group: read.group, project,
       coordinator: row.coordinator, text: read.text, detail: read.detail, links: row.links, line: row.line, state: row.state, mismatch: row.mismatch,
       answerable: row.answerable === true, ...(row.answeredAt ? { answeredAt: row.answeredAt } : {}), parts: [] }] : [];
@@ -76,7 +77,7 @@ const FINISHED = new Set(["finished", "closed", "merged", "complete", "completed
  * in progress, never a waiting one; its words split at the format's ` : ` into the ask and its answer
  * (ADR 0108). Its links stay unread: Organizations confirmed none.
  */
-export function unmarked(line: string): { group: AskGroup; text: string; detail: string } {
+export function unmarked(line: string, answer = ""): { group: AskGroup; text: string; detail: string } {
   const lead = /^\[([^\]]*)\]\s*/.exec(line);
   const word = lead?.[1]!.trim().toLowerCase().replace(/[\s_]+/g, "-") ?? "";
   const rest = lead ? line.slice(lead[0].length) : line;
@@ -84,7 +85,7 @@ export function unmarked(line: string): { group: AskGroup; text: string; detail:
   return {
     group: FINISHED.has(word) ? "done" : "progress",
     text: (at > 0 ? rest.slice(0, at) : rest).trim(),
-    detail: at > 0 ? rest.slice(at + 3).trim() : "",
+    detail: at > 0 ? rest.slice(at + 3).trim() : answer,
   };
 }
 

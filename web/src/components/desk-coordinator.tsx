@@ -45,7 +45,8 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   const id = thread?.id ?? "root";
   // The project coordinator runs the threads started from the project; another, its whole subtree.
   const work = thread ? threadTree(project, thread.id) : coordinatedThreads(project).filter((candidate) => candidate.role !== "coordinator");
-  const read = useThreadSummaries(project, thread ? [thread, ...work] : work);
+  // Only its own report and STATUS.md are read here: the page draws no other thread's report (ADR 0108).
+  const read = useThreadSummaries(project, thread ? [thread] : []);
   const asks = useAsks([project]);
   const routines = useRoutines(project.slug, session);
   // Only what waits on you: what it is doing and what it did are its Status (ADR 0108).
@@ -102,7 +103,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
           <NodeDot state="needs" className="size-1.5" /><span className="flex-1">{waiting} {waiting === 1 ? "decision waits" : "decisions wait"} on you</span>
           <span className="inline-flex items-center gap-1 text-footnote text-muted-foreground">Review<ChevronRight aria-hidden className="size-3.5" /></span>
         </button>}
-        <LiveWork threads={work} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session))} />
+        <LiveWork threads={work} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session, thread?.title))} />
       </>}
       {tab === "waiting" && (asks.list
         ? mine.length > 0

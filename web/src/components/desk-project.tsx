@@ -94,7 +94,7 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   const showHistory = (on: boolean) => setParams((current) => {
     const kept = new URLSearchParams(current);
     if (on) kept.set("work", "finished");
-    else kept.delete("work");
+    else { kept.delete("work"); kept.delete("q"); }
     return kept;
   }, { replace: true });
   // Cards start open; a fold the person changed lasts while the page does.
@@ -102,7 +102,7 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
   // A fold re-renders Work; the tree is read again only when a poll brings new threads.
   const finished = useMemo(() => finishedCount(project), [project]);
   const cards = useMemo(() => workCards(project), [project]);
-  if (history) return <WorkHistory project={project} count={finished} onBack={() => showHistory(false)} onOpenNode={onOpenNode} />;
+  if (history) return <WorkHistory project={project} count={finished} search={params.get("q") ?? ""} onBack={() => showHistory(false)} onOpenNode={onOpenNode} />;
 
   const rootState = coordinator && coordinatorState(coordinator.liveStatus);
   const newThread = (parent: string) => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent, onStarted: onChanged });
@@ -130,8 +130,13 @@ function Work({ project, coordinator, waiting, canStart, onOpenNode, onOpenCoord
 /** Rows History draws before Show more: a project finishes hundreds of threads. */
 const HISTORY_ROWS = 100;
 
-function WorkHistory({ project, count, onBack, onOpenNode }: { project: ProjectView; count: number; onBack: () => void; onOpenNode: (node: OrgNode) => void }) {
-  const [query, setQuery] = useState("");
+function WorkHistory({ project, count, search, onBack, onOpenNode }: {
+  project: ProjectView; count: number;
+  /** What a coordinator's "N finished" opened it searching: its own name (ADR 0108). */
+  search: string;
+  onBack: () => void; onOpenNode: (node: OrgNode) => void;
+}) {
+  const [query, setQuery] = useState(search);
   const [limit, setLimit] = useState(HISTORY_ROWS);
   const days = useMemo(() => historyDays(project, query), [project, query]);
   const shown = days.reduce((sum, day) => sum + day.rows.length, 0);

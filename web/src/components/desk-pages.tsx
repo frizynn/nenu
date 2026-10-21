@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useState, type ComponentProps, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronRight, GitPullRequest, Plus, Workflow } from "@/components/ui/icon";
 
@@ -79,7 +79,7 @@ export function DeskTabs<T extends string>({ label, tabs, tab, onChange }: { lab
 function rowEnd(node: OrgNode, now: number): string | undefined {
   const age = threadAge(node.thread, now);
   if (node.state === "needs") return "needs you";
-  if (mergedToClose(node.thread, node.state)) return MERGED_TO_CLOSE;
+  if (mergedToClose(node)) return MERGED_TO_CLOSE;
   if (node.state === "review") return "to review";
   if (node.state === "idle") return age && `idle ${age}`;
   return age;
@@ -90,10 +90,11 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
   const { thread } = node;
   // A pull request that merged or closed still shows, with its state: without it the row read as work left to do.
   const pr = thread.pr;
-  const settled = pr && pr.state !== "open" && pr.state !== "draft" && !mergedToClose(thread, node.state) ? pr.state : undefined;
+  const merging = mergedToClose(node);
+  const settled = pr && pr.state !== "open" && pr.state !== "draft" && !merging ? pr.state : undefined;
   // A thread under a nested coordinator sits one step in, as the tree draws it.
   return <button type="button" className="desk-row" style={depth ? { paddingLeft: 22 + depth * 20 } : undefined} onClick={() => onOpen(node)}>
-    <NodeDot state={node.state} className="size-1.5" />
+    <NodeDot state={merging ? "merging" : node.state} className="size-1.5" />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
     <span className="desk-row-end">{rowEnd(node, now)}</span>
@@ -121,6 +122,7 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   ownState?: string;
 }) {
   const [limit, setLimit] = useState(CARD_ROWS);
+  const summaryId = useId();
   const name = card.coordinator?.thread.title ?? "Project coordinator";
   const parts = cardSummary(card.rows, waiting);
   const Mark = card.coordinator ? Workflow : ChatCircle;
@@ -131,7 +133,7 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
     <span className="desk-card-mark"><Mark aria-hidden size={15} /></span>
     <span className="min-w-0 flex-1">
       <span className="block truncate text-subhead font-medium">{name}</span>
-      <span className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
+      <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
         {!card.coordinator && <span>{foldable ? "Threads started straight from the project" : "No threads started from the project"}</span>}
         {card.coordinator && parts.length === 0 && <span>{foldable ? `${card.rows.length} ${card.rows.length === 1 ? "thread" : "threads"}` : "No open threads"}</span>}
         {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} className="size-1.5" />{part.text}</span>)}
@@ -142,11 +144,12 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   return <section aria-label={name} className="desk-card">
     <div className="desk-card-head">
       {foldable
-        ? <button type="button" className="desk-icon-button -mr-1.5" aria-label={`${open ? "Hide" : "Show"} ${name} threads`} aria-expanded={open} onClick={onToggle}>
+        ? <button type="button" className="desk-icon-button -mr-2 -ml-1.5" aria-label={`${open ? "Hide" : "Show"} ${name} threads`} aria-expanded={open} onClick={onToggle}>
           <ChevronRight aria-hidden className={cn("desk-fold size-3.5", open && "rotate-90")} />
         </button>
-        : <span aria-hidden className="w-5.5 shrink-0" />}
-      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} onClick={onOpenCoordinator}>{head}</button>
+        : <span aria-hidden className="w-3.5 shrink-0" />}
+      {/* Named for what it does; what its threads are doing is said as its description. */}
+      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>{head}</button>
       {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={15} /></button>}
       {/* The head already opens the page; the chevron only says so, and is not a second stop for the keyboard. */}
       <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={15} /></button>

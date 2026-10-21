@@ -110,9 +110,11 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
   // Once answered here, an ask's old answer from its coordinator no longer says anything.
   const said = kind === "ask" && answer !== undefined ? "" : body;
   const line = kind ? "" : [owner, answer === undefined && entry.detail].filter(Boolean).join(" · ");
+  // On a card, what does not wait on you reads at a glance: two lines of each, the rest on its links.
+  const clamped = compact && !kind;
   const words = whose
     ? <Link to={coordinator} className={cn("block break-words text-subhead hover:underline underline-offset-2", kind && "font-medium")}>{title}</Link>
-    : <p className={cn("break-words text-subhead", kind && "font-medium")}>{title}</p>;
+    : <p className={cn("break-words text-subhead", kind && "font-medium", clamped && "line-clamp-2")}>{title}</p>;
   return (
     <li className={cn("flex min-w-0 items-start gap-2.5", kind ? "ask-waiting" : "rounded-lg py-2", !compact && "px-2.5")}>
       {!kind && <span className="pt-0.5">{answer === undefined ? <AskMark group={entry.group} /> : <AskMark group="done" />}</span>}
@@ -122,7 +124,7 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
         </p>}
         {words}
         {said && <p className="mt-0.5 break-words text-subhead text-muted-foreground">{said}</p>}
-        {line && <p className="break-words text-footnote text-muted-foreground">{line}</p>}
+        {line && <p className={cn("break-words text-footnote text-muted-foreground", clamped && "line-clamp-2")}>{line}</p>}
         <Answered answer={answer} at={entry.answeredAt} />
         {why && <Why why={why} entry={entry} session={session} readOnly={readOnly} />}
         {entry.links.length > 0 && <Chips entry={entry} links={entry.links} session={session} />}

@@ -1,6 +1,6 @@
 # 0091. Your asks and a coordinator's card come from Organizations' fields
 
-- **Status:** Accepted (2026-10-16). Amended by [ADR 0093](./0093-asks-are-answered-and-narrowed-where-they-are-read.md):
+- **Status:** Accepted (2026-10-16). A card's asks list amended by [ADR 0108](./0108-a-coordinators-page-shows-live-work.md). Amended by [ADR 0093](./0093-asks-are-answered-and-narrowed-where-they-are-read.md):
   a line that is only a parenthesis is a placeholder, Answer writes the person's words through `asks
   answer`, and the card draws its asks as Your asks does. Amended by [ADR 0096](./0096-a-question-carries-its-context.md):
   rows about the same thread or task fold into one question, which opens its report in place. Requested by the operator. Amends

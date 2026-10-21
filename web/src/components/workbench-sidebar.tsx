@@ -26,7 +26,7 @@ import { needsYouCount, needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { asksPath, homePath, nodePath, panePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
-import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
+import { ASK, STATE_LABEL, awaits, historyCount, holds, mergedToClose, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
@@ -551,7 +551,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
-  const word = ask ? ASK[ask].word : STATE_WORD[state];
+  const word = ask ? ASK[ask].word : mergedToClose(node) ? "merged" : STATE_WORD[state];
   const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (

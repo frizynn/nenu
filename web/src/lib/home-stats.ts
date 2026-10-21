@@ -1,7 +1,7 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { awaits, nodeState, type Ask } from "./org-tree";
+import { awaits, nodeState, toReview, type Ask } from "./org-tree";
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
 import { byRecency, chatRecency, isOpenThread, projectForPane } from "./projects";
 import { isUnseen } from "./triage";
@@ -112,7 +112,7 @@ export interface ReviewItem {
 export function reviewItems(projects: readonly ProjectView[] | undefined): ReviewItem[] {
   return (projects ?? []).flatMap((project) => project.threads
     .filter((thread) => isOpenThread(thread) && (thread.group
-      ? nodeState(thread) === "review"
+      ? toReview({ thread, state: nodeState(thread) })
       : thread.pr?.state === "open" && thread.liveStatus !== "working" && thread.liveStatus !== "blocked"))
     .map((thread) => ({ project, thread })));
 }

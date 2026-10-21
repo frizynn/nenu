@@ -1,6 +1,6 @@
 # 0102. On a desk, projects and coordinators are pages with tabs; asks and routines live on them
 
-- **Status:** Accepted (2026-10-20); points 3 and 5 amended by [ADR 0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md). Requested by the operator, with the approved design
+- **Status:** Accepted (2026-10-20); points 3 and 5 amended by [ADR 0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md); the coordinator card and page amended by [ADR 0108](./0108-a-coordinators-page-shows-live-work.md). Requested by the operator, with the approved design
   (designboard `nenu-desktop`, artboards Projects, Project, ProjectAsks, ProjectRoutines, Coordinator).
   Amends [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md) point 1,
   [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md) point 4,

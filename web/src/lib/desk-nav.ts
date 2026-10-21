@@ -2,7 +2,7 @@
 // flat row each, and every conversation in a project or outside one as a chat, dated by when it last
 // moved. Kept free of React so the rows' rules stay unit-testable.
 import { displayName } from "./display-name";
-import { flatten, openCoordinators, orgTree, type NodeState } from "./org-tree";
+import { flatten, openCoordinators, orgTree, toReview, type NodeState } from "./org-tree";
 import { chatRecency, isOpenThread, looseChats, projectForPane } from "./projects";
 import type { AgentStatus, AgentView, ProjectThreadView, ProjectView } from "./types";
 
@@ -83,7 +83,7 @@ export function projectPulse(project: ProjectView, agents: readonly AgentView[],
   const coordinators = openCoordinators(tree).length;
   const count = (state: NodeState) => open.filter((node) => node.state === state).length;
   return {
-    waiting: project.waitingAsks ?? count("needs"), review: count("review"),
+    waiting: project.waitingAsks ?? count("needs"), review: open.filter(toReview).length,
     working: projectAgents(project, agents, projects).filter((pane) => pane.status === "working").length,
     coordinators, threads: open.length - coordinators, open: open.length, asks: project.waitingAsks !== undefined, at: projectActivity(project, agents),
   };
