@@ -5,26 +5,21 @@ import { MOTION_CONTROL_MS, MOTION_PANEL_MS } from "@/lib/motion";
 // How long a row above the box takes to fold open and to fold shut: composer.css's .composer-fold.
 const FOLD_OPEN_MS = MOTION_PANEL_MS;
 const FOLD_SHUT_MS = MOTION_CONTROL_MS;
-// How long a chat takes to settle: its chips come from reads that answer after it mounts.
-const FOLD_SETTLE_MS = 2000;
 
 /**
- * A row above the box (the chips' line, a notice) folds open and shut instead of appearing at once, so the
- * thread above moves with it rather than jumping. One already there on mount, or arriving while the
- * chat is still settling (the chips its first reads bring), is simply there: opening a chat must not
- * play a fold that walks the conversation up in steps. Folding shut, it keeps showing what it last
- * showed, out of reach: inert and hidden from assistive tech, so a control on its way out can never
- * be pressed.
+ * A row above the box (a notice, the busy choice) folds open and shut instead of appearing at once, so
+ * the thread above moves with it rather than jumping. One already there on mount is simply there.
+ * Folding shut, it keeps showing what it last showed, out of reach: inert and hidden from assistive
+ * tech, so a control on its way out can never be pressed.
  */
 export function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
   const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
-  const [mountedAt] = useState(() => Date.now());
   const last = useRef<T | null>(null);
   if (value) last.current = value;
   const shown = Boolean(value);
   useEffect(() => setPhase((current) => (shown
-    ? current === "open" ? current : Date.now() - mountedAt < FOLD_SETTLE_MS ? "open" : "opening"
-    : current === "shut" ? current : "shutting")), [shown, mountedAt]);
+    ? current === "open" ? current : "opening"
+    : current === "shut" ? current : "shutting")), [shown]);
   useEffect(() => {
     if (phase !== "opening" && phase !== "shutting") return;
     const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);

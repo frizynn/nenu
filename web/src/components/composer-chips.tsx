@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
-import { Fold } from "@/components/composer-fold";
 import { StatusDot } from "@/components/status-badge";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
@@ -13,12 +12,11 @@ import { nodeState, type NodeState } from "@/lib/org-tree";
 import type { AgentView, ProjectThreadView, ProjectView, RoutineView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// The row above the composer (issue: Cursor-style chips): what needs you, what works, the open pull
-// requests and the routines around this chat, one chip each, and the chip's panel floating over the
-// thread. It takes the place of the PR bar and of the Background chip that sat under the box. Only
-// what asks for you or runs takes the line; finished work and routines open from the ⋯ menu
-// (ADR 0108). Every mark is still: a working state is a dot, never a
-// spinner, so an idle page draws nothing.
+// The chips under the composer's box (issue: Cursor-style chips): what needs you, what works and the
+// open pull requests around this chat, one chip each in the row the model sits in, and the chip's
+// panel floating over the thread. Only what asks for you or runs is a chip; finished work and routines
+// open from the ⋯ menu, and no line of their own ever sits between the thread and the box (ADR 0108).
+// Every mark is still: a working state is a dot, never a spinner, so an idle page draws nothing.
 
 export type ChipId = "needs" | "working" | "prs" | "routines";
 
@@ -51,6 +49,9 @@ export interface ChipView {
   content: ReactNode;
 }
 
+/** The chips drawn in the row: every one but those tucked into the ⋯ menu. */
+export const rowChips = (chips: readonly ChipView[]) => chips.filter((chip) => !chip.tucked);
+
 const ENDED: ReadonlySet<NodeState> = new Set(["merging", "closing", "resolved"]);
 
 /** The threads around a chat, the chat's own left out: it is on screen already. */
@@ -67,6 +68,8 @@ export function threadsAround(source: ProjectChipsSource, paneId: string) {
 
 export const NEEDS_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
 export const WORKING_MARK = <StatusDot status="working" />;
+/** PRs' mark: beside the word on a desk, in its place on a phone. */
+export const PRS_MARK = <GitPullRequest aria-hidden className="size-3.5 shrink-0" />;
 const ENDED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
 
 /** One row per thread: its mark, its name, what it is doing and since when. A tap opens it. */
@@ -147,7 +150,7 @@ export interface ChipLine {
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
-  /** Where focus goes when a panel closes with no chip on the line to take it (the ⋯ trigger). */
+  /** Where focus goes when a panel closes with no chip in the row to take it (the ⋯ trigger). */
   returnFocus?: RefObject<HTMLElement | null>;
 }
 
@@ -157,12 +160,12 @@ const inLayerAbove = (target: Element) => target.closest('[role="dialog"], [role
 const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
- * The line above the box: its live chips, and the open chip's panel floating over the thread, anchored
- * to the line (a tucked chip's panel, opened from the ⋯ menu, floats from the same place). The line
- * folds open and shut; the panel stays outside the fold, so a chip leaving the line keeps it as it was. The panel takes no height, so
- * opening it moves neither the box nor the conversation. One panel at a time; the chip toggles it, and
+ * The live chips, in the row under the box, and the open chip's panel floating over the thread from
+ * the box's top edge (a tucked chip's panel, opened from the ⋯ menu, floats from the same place). The
+ * panel belongs to the composer, not to the row, so a chip leaving the row keeps it as it was, and it
+ * takes no height, so opening it moves neither the box nor the conversation. One panel at a time; the chip toggles it, and
  * ✕, Escape, a press outside it or, on a phone, Back close it. While open, Tab stays inside it, and
- * closing gives focus back to the chip, or to `returnFocus` when the chip is off the line. On a phone a process's details take the panel's place, named
+ * closing gives focus back to the chip, or to `returnFocus` when the chip is off the row. On a phone a process's details take the panel's place, named
  * by its header, with Back.
  */
 export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }: ChipLine) {
@@ -183,9 +186,8 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     if (how === "own") leaveEntry();
     onOpenChange(null);
     if (how === "outside") return;
-    // A tucked chip has no button, and one whose work just ended is folding out, inert.
-    const chip = buttons.current.get(shown.id);
-    (chip && !chip.closest("[inert]") ? chip : returnFocus?.current)?.focus({ preventScroll: true });
+    // A tucked chip has no button, and one whose work just ended has left the row.
+    (buttons.current.get(shown.id) ?? returnFocus?.current)?.focus({ preventScroll: true });
   };
 
   // The panel opens with focus inside it, where the keyboard stays until it closes.
@@ -216,7 +218,7 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     };
   }, [Boolean(shown)]);
 
-  const row = chips.filter((chip) => !chip.tucked);
+  const row = rowChips(chips);
   const close = () => closeRef.current("own");
   const trap = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab" || !panel.current) return;
@@ -242,21 +244,19 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
           <div className="composer-chip-panel-body">{detail ? detail.content : shown.content}</div>
         </section>
       )}
-      <Fold value={row.length > 0 && row}>{(shownRow) => <div className="composer-line">
-        <div role="group" aria-label="Status" className="composer-chip-row">
-          {shownRow.map((chip) => (
-            <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
-              type="button" className="composer-chip"
-              aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
-              aria-expanded={chip.id === open} aria-haspopup="dialog" aria-controls={chip.id === open ? "composer-chip-panel" : undefined}
-              onClick={() => (chip.id === open ? close() : onOpenChange(chip.id))}>
-              {chip.mark}
-              <span>{chip.label}</span>
-              {chip.count > 0 && <span className="composer-chip-count">{chip.count}</span>}
-            </button>
-          ))}
-        </div>
-      </div>}</Fold>
+      {row.length > 0 && <div role="group" aria-label="Status" className="composer-chip-row">
+        {row.map((chip) => (
+          <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
+            type="button" className="composer-chip" data-chip={chip.id}
+            aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
+            aria-expanded={chip.id === open} aria-haspopup="dialog" aria-controls={chip.id === open ? "composer-chip-panel" : undefined}
+            onClick={() => (chip.id === open ? close() : onOpenChange(chip.id))}>
+            {chip.mark}
+            <span className="composer-chip-label">{chip.label}</span>
+            {chip.count > 0 && <span className="composer-chip-count">{chip.count}</span>}
+          </button>
+        ))}
+      </div>}
     </div>
   );
 }
@@ -268,31 +268,34 @@ export function machineName(hostname = window.location.hostname): string {
 
 /**
  * Under the box: the branch the chat works on, when known, and the machine it runs on (Herdr's name
- * for it, with more than one). A desk has the room to say both whole. A phone gives the row to the
- * model and the context, and keeps the two behind one tap, so neither is ever cut mid-word.
+ * for it, with more than one). A wide box says both, truncating them side by side when the row is
+ * full. A narrow one (a phone, a docked thread: composer.css reads the box's own width) gives the row
+ * to the model and the chips, and keeps the two behind one tap, so neither is ever cut to nothing.
  */
 export function ComposerPlace({ branch, machine }: { branch?: string; machine?: string }) {
-  const compact = !useMediaQuery("(min-width: 768px)");
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const host = machine ?? machineName();
-  const branchItem = branch && <span className="composer-place-item" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>;
-  const hostItem = <span className="composer-place-item shrink-0"><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>;
-  if (!compact) return <span className="composer-place">{branchItem}{hostItem}</span>;
   const label = branch ? `${branch} on ${host}` : host;
   return (
-    <span className="composer-place justify-end">
-      <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
-        onClick={() => setOpen(!open)}>
-        {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}
-        <Laptop aria-hidden className="size-3.5 shrink-0" />
-      </button>
-      <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchor} label="Where this runs">
-        <dl className="composer-place-detail">
-          {branch && <><dt>Branch</dt><dd className="font-mono">{branch}</dd></>}
-          <dt>Machine</dt><dd>{host}</dd>
-        </dl>
-      </WorkbenchPopover>
+    <span className="composer-place">
+      <span className="composer-place-whole">
+        {branch && <span className="composer-place-item composer-place-branch" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>}
+        <span className="composer-place-item" title={host}><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>
+      </span>
+      <span className="composer-place-tap">
+        <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
+          onClick={() => setOpen(!open)}>
+          {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}
+          <Laptop aria-hidden className="size-3.5 shrink-0" />
+        </button>
+        <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchor} label="Where this runs">
+          <dl className="composer-place-detail">
+            {branch && <><dt>Branch</dt><dd className="font-mono">{branch}</dd></>}
+            <dt>Machine</dt><dd>{host}</dd>
+          </dl>
+        </WorkbenchPopover>
+      </span>
     </span>
   );
 }

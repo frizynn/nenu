@@ -9,9 +9,11 @@
 /* useFocusInPlace parks focus on the surface between a touch on the draft and its tap: no ring for that. */
 .composer-surface:focus { outline: none; }
 /* The composer: one rounded box (the +, the draft, Send), then a thin row of quiet controls. */
-.composer-box { display: flex; flex-wrap: wrap; align-items: flex-end; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color var(--motion-control) var(--motion-ease); }
+.composer-box { display: flex; flex-direction: column; min-width: 0; background: var(--card); border: 1px solid var(--input); border-radius: var(--radius-xl); transition: border-color var(--motion-control) var(--motion-ease); }
 .composer-box:focus-within { border-color: color-mix(in oklab, var(--foreground) 28%, transparent); }
 .composer-box-armed, .composer-box-armed:focus-within { border-color: var(--primary); }
+/* The +, the draft and Send, under the files when there are any. */
+.composer-row { display: flex; align-items: flex-end; min-width: 0; }
 /* Nothing can be written: a quiet well that holds only the reason. */
 .composer-box-locked, .composer-box-locked:focus-within { background: var(--disabled); border-color: transparent; }
 /* The draft and, under it, the pictures' chips (draft-chip-layer.tsx), laid out with the textarea's metrics. */
@@ -24,7 +26,7 @@
 .draft-chip-icon { position: absolute; left: 0.05em; top: 50%; width: 1.05em; height: 1.05em; translate: 0 -50%; color: var(--muted-foreground); }
 /* The draft's files, inside the box above the text: a row of their own, starting where the text does
    (past the + column and the draft's own left padding). */
-.composer-attachments { flex-basis: 100%; min-width: 0; padding-left: calc(38px + 0.5rem); padding-bottom: 4px; }
+.composer-attachments { min-width: 0; padding-left: calc(38px + 0.5rem); padding-bottom: 4px; }
 .composer-input::placeholder { color: var(--muted-foreground); }
 .composer-input-secret { -webkit-text-security: disc; }
 /* A notice on the draft it is about (a refused send, a password prompt), in flow above the box. */
@@ -36,10 +38,10 @@
 .composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
-/* A row above the box (the chips' line, a notice) folds open and shut, so the thread moves with it
+/* A row above the box (a notice, the busy choice) folds open and shut, so the thread moves with it
    instead of jumping (composer-fold.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
 .composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
-/* No min-width either: the chips' line scrolls inside the composer's width instead of widening it. */
+/* No min-width either: a row scrolls inside the composer's width instead of widening it. */
 .composer-fold > div { min-height: 0; min-width: 0; }
 .composer-fold:not([data-phase="open"]) > div { overflow: hidden; }
 .composer-fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: var(--motion-control); }
@@ -95,9 +97,10 @@
 @media (max-width: 1023px) and (pointer: coarse) {
   /* The keyboard covers the home indicator, whose inset iOS still reports; the composer sits on the keys. */
   .workbench-chat[data-keyboard-open] .workbench-composer { margin-bottom: 8px; }
-  /* While typing, the chips above the box and the model row under it give their height back to the thread. */
-  .workbench-chat[data-keyboard-open] .composer-meta { display: none; }
-  .workbench-chat[data-keyboard-open] .composer-chip-row { display: none; }
+  /* While typing, the row under the box (the model and the chips) gives its height back to the thread. */
+  .workbench-chat[data-keyboard-open] .composer-meta { min-height: 0; padding: 0; }
+  /* …all but an open chip's panel, which floats from the box and stays until it is closed. */
+  .workbench-chat[data-keyboard-open] .composer-meta > :not(.composer-chips), .workbench-chat[data-keyboard-open] .composer-chip-row { display: none; }
   /* …and a typed draft gets the +'s width, so it wraps no sooner than it did without one; the + is
      back as soon as the box is empty or the keyboard goes down. The draft's inset moves with the
      column, so the text slides over as one piece, and the + is hidden only once it has faded. */
@@ -106,27 +109,42 @@
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-input { padding-left: 14px; }
   .workbench-chat[data-keyboard-open] .composer-box-typing .composer-attachments { padding-left: 14px; }
 }
-/* The line above the box: one chip per kind of live work around the chat (composer-chips.tsx), and the
-   open chip's panel floating over the thread, anchored to the line: it takes no height, so neither the
-   box nor the conversation moves when it opens. Stop is in the box (ADR 0108). Marks are still; only the panel moves, once, as it opens. The
-   chips scroll sideways when a phone cannot fit them, so each keeps its 44px reach inside the row's own
-   padding. */
-.composer-chips { position: relative; }
-.composer-line { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
-.composer-chip-row { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 6px; padding: 4px 2px; overflow-x: auto; scrollbar-width: none; }
-.composer-chip-row::-webkit-scrollbar { display: none; }
-.composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9999px; background: var(--card); color: var(--foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale var(--motion-control) var(--motion-ease); }
-.composer-chip[aria-expanded="true"] { background: var(--popover); border-color: color-mix(in oklab, var(--foreground) 14%, transparent); box-shadow: var(--shadow-float); }
+/* The chips (composer-chips.tsx), one per kind of live work around the chat, sit in the row under the
+   box beside the model, quiet as its other controls: no line of their own above the box (ADR 0108). The
+   open chip's panel floats over the thread from the box's top edge (.composer-dock), so it takes no
+   height and neither the box nor the conversation moves when it opens. Marks are still; only the
+   panel moves, once, as it opens. A narrow box keeps the word only for Needs you: the rest are a mark
+   and a count, named in full to a screen reader. */
+.composer-dock { position: relative; container: composer / inline-size; }
+.composer-chips { display: flex; flex: 0 0 auto; }
+.composer-chip-row { display: flex; align-items: center; gap: 2px; }
+.composer-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; transition: scale var(--motion-control) var(--motion-ease); }
+.composer-chip[data-chip="needs"], .composer-chip[aria-expanded="true"] { color: var(--foreground); }
+.composer-chip[aria-expanded="true"] { background: var(--accent); }
 .composer-chip:active { scale: 0.97; }
-@media (hover: hover) { .composer-chip:hover { background: var(--popover); } }
-@media (pointer: coarse) {
-  .composer-chip { height: 36px; padding: 0 10px; }
-  .composer-chip::before { content: ""; position: absolute; inset: -4px 0; }
+@media (hover: hover) { .composer-chip:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
+/* What gives way is read off the box's own width, so a phone and a thread docked beside its coordinator
+   on a desk take the same row. Narrow, only Needs you keeps its word, and with chips in the row the
+   model's effort and the context's number step aside (the model picker and the ring's own panel still
+   say them); the model's name truncates after that: the chips and the place keep their width. */
+@container composer (max-width: 479px) {
+  .composer-chip { gap: 5px; padding: 0 7px; }
+  .composer-chip:not([data-chip="needs"]) .composer-chip-label { display: none; }
+  .composer-meta:has(.composer-chip) .workbench-effort, .composer-meta:has(.composer-chip) .workbench-context-number { display: none; }
 }
-.composer-chip-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 2px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity var(--motion-control) var(--motion-ease), translate var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease); }
+/* At a docked thread's narrowest the context's ring steps aside too (the thread's full view still
+   says it); the model's button stays, since the model panel opens on its own from it. */
+@container composer (max-width: 299px) { .composer-meta:has(.composer-chip) .workbench-context { display: none; } }
+/* 44px of reach each way: at least 44px wide, and grown down into the home indicator's inset, never up
+   into the box, as the row's other targets. */
+@media (pointer: coarse) {
+  .composer-chip { min-width: 44px; justify-content: center; }
+  .composer-chip::before { content: ""; position: absolute; left: 0; right: 0; top: -2px; height: 44px; }
+}
+.composer-chip-count { font-variant-numeric: tabular-nums; }
+.composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 6px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity var(--motion-control) var(--motion-ease), translate var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease); }
 @starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; scale: 0.98; } }
-/* A desk's composer is wide: the panel keeps a list's measure, from the chips' edge. */
+/* A desk's composer is wide: the panel keeps a list's measure, from the box's left edge. */
 @media (min-width: 768px) { .composer-chip-panel { right: auto; width: min(100%, 30rem); } }
 .composer-chip-panel-head { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 8px 0 14px; color: var(--muted-foreground); font-size: var(--text-footnote); }
 .composer-chip-panel-head h2 { font-weight: 400; }
@@ -138,9 +156,18 @@
 @media (pointer: coarse) { .composer-chip-item { min-height: 44px; } }
 @media (hover: hover) { button.composer-chip-item:hover { background: var(--workbench-row-hover); } }
 /* Under the box, after the model: the branch the chat works on and the machine it runs on. */
-.composer-place { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; padding: 0 6px; }
+.composer-place { display: flex; min-width: 0; flex: 1; align-items: center; padding: 0 6px; }
+.composer-place-whole { display: flex; min-width: 0; align-items: center; gap: 12px; overflow: hidden; }
 .composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }
 .composer-place-item .font-mono { font-size: var(--text-caption); }
+.composer-place-tap { display: none; }
+/* In a narrow box the place is one button at the row's end, kept whole with its reach. After the rules
+   above, which it overrides at the same specificity. */
+@container composer (max-width: 479px) {
+  .composer-place { justify-content: flex-end; min-width: fit-content; }
+  .composer-place-whole { display: none; }
+  .composer-place-tap { display: flex; }
+}
 .composer-place-detail { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: var(--text-footnote); }
 .composer-place-detail dt { color: var(--muted-foreground); }
 .composer-place-detail dd { min-width: 0; overflow-wrap: anywhere; }

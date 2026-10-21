@@ -48,13 +48,13 @@ export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, 
   const label = `Context window ${Math.round(percentage)}% used`;
   const usageColor = percentage > 90 ? "var(--destructive)" : "var(--primary)";
 
-  return <div className="relative">
+  return <div className="workbench-context relative">
     <button ref={anchorRef} type="button" className="composer-quiet hit-area gap-1.5" aria-label={label} title={label} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
       <svg viewBox="0 0 24 24" width={16} height={16} className="-rotate-90" aria-hidden="true">
         <circle cx="12" cy="12" r={radius} fill="none" stroke="color-mix(in oklab, var(--muted-foreground) 24%, transparent)" strokeWidth="3" />
         <circle cx="12" cy="12" r={radius} fill="none" stroke={usageColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} />
       </svg>
-      <span className="tabular-nums">{Math.round(percentage)}%</span>
+      <span className="workbench-context-number tabular-nums">{Math.round(percentage)}%</span>
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window">
       <div className="space-y-3 text-footnote">

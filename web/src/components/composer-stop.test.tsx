@@ -76,27 +76,22 @@ it("takes Stop out of the box when the turn ends, and nothing folds", () => {
   expect(document.querySelector(".composer-fold")).toBeNull();
 });
 
-// Opening a chat, its chips arrive a moment after it mounts; folding them open walked the conversation
-// up in ten steps every time. What arrives while the chat settles is simply there; later, it folds.
-it("draws a row that arrives while the chat settles at once, and folds open one that comes later", async () => {
-  const start = Date.now();
-  const now = vi.spyOn(Date, "now").mockReturnValue(start);
+// The chips never take a line between the thread and the box (ADR 0108): they sit in the row under
+// it, beside the model, whenever they arrive, so their coming and going moves nothing above the box.
+it("draws the chips in the row under the box, never on a line above it", async () => {
   const none = { chips: [], open: null, onOpenChange: vi.fn() };
   const live = { ...none, chips: [{ id: "working" as const, label: "Working", count: 1, content: "bun run build" }] };
-  try {
-    const { rerender } = setup({ working: false, chips: none });
-    rerender({ chips: live });
-    await waitFor(() => expect(screen.getByRole("group", { name: "Status" })).toBeInTheDocument());
-    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "open");
-    rerender({ chips: none });
-    await waitFor(() => expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument());
-    now.mockReturnValue(start + 5000);
-    rerender({ chips: live });
-    await waitFor(() => expect(screen.getByRole("group", { name: "Status" })).toBeInTheDocument());
-    expect(document.querySelector(".composer-fold")).toHaveAttribute("data-phase", "opening");
-  } finally {
-    now.mockRestore();
-  }
+  const { rerender } = setup({ working: false, chips: none });
+  rerender({ chips: live });
+  const chips = await screen.findByRole("group", { name: "Status" });
+  const box = document.querySelector(".composer-box")!;
+  expect(screen.getByRole("group", { name: "Message tools" })).toContainElement(chips);
+  // Under the box in the document, inside the dock the box opens, and nothing of it above the box.
+  expect(box.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(chips.closest(".composer-fold")).toBeNull();
+  rerender({ chips: none });
+  await waitFor(() => expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument());
+  expect(document.querySelector(".composer-box")).toBe(box);
 });
 
 it("stops once: the second tap meets 'Stopping…', and idle hands Send back", async () => {
@@ -178,17 +173,16 @@ it("a Stop the bridge answers after the pane went idle does not leave 'Stopping�
   expect(stopButton()).not.toBeInTheDocument();
 });
 
-// What asks nothing of you is off the line (ADR 0108): opened from the ⋯ menu, its panel floats over the
-// thread from the box's top edge, and no line opens under it.
-it("never draws a tucked chip on the line, and opens its panel without one", () => {
+// What asks nothing of you is not a chip (ADR 0108): opened from the ⋯ menu, its panel floats over the
+// thread from the box's top edge.
+it("never draws a tucked chip, and opens its panel without one", () => {
   const tucked = { id: "working" as const, label: "Done", title: "Finished work", count: 2, content: <p>bun run build</p>, tucked: true };
   const { rerender } = setup({ working: false, chips: { chips: [tucked], open: null, onOpenChange: vi.fn() } });
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
-  expect(document.querySelector(".composer-line")).toBeNull();
   rerender({ chips: { chips: [tucked], open: "working", onOpenChange: vi.fn() } });
   expect(screen.getByRole("dialog", { name: "Finished work" })).toHaveTextContent("bun run build");
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
-  expect(document.querySelector(".composer-line")).toBeNull();
+  expect(document.querySelector(".composer-dock")).toContainElement(screen.getByRole("dialog", { name: "Finished work" }));
 });
 
 it("when stopping sent Claude's own queue, the new turn gets a Stop of its own", async () => {

@@ -1,6 +1,7 @@
 # 0108. The line above the box holds only live work, and Stop sits in the box
 
-- **Status:** Accepted (2026-10-21). Requested by the operator. Reverses the chips' line of
+- **Status:** Accepted (2026-10-21), amended the same day: the live chips left the line for the row
+  under the box (see *Amendment*), so no line sits above the box at all. Requested by the operator. Reverses the chips' line of
   `17dfd095` (a quiet Done or Published chip once nothing ran, a Routines chip whenever a project had
   routines) and `b2b463e6` (Stop at the end of that line, on a line of its own when alone), which no
   ADR recorded.
@@ -52,3 +53,33 @@ swaps Stop for Send under the thumb, the reason Stop never took the Send slot.
 A turn with nothing else around it costs no height above the box. Finished work is one tap further
 (⋯, then the row) and no longer seen at a glance. The draft is 44 px narrower while a turn runs.
 Revisit if the operator reads finished work often enough to want it back in sight.
+
+## Amendment (2026-10-21): the chips sit under the box
+
+With finished work off the line, the line still took a full row for "Working 2" and "PRs 1" on a
+coordinator's chat (operator, on 1.38.1: "it still takes space"). Three places were sketched on the same
+chat (a worker with Needs you, Background and PRs; WebKit, 390×844 and 1440×900):
+
+| Chips | Height above the box (390 / 1440) | Draft width at 390 | Title at 390 | Taps to a kind |
+|---|---|---|---|---|
+| Their own line (1.38.1) | 48 / 40 px | 246 px | whole | 1 |
+| In the row under the box, beside the model | 0 / 0 | 246 px | whole | 1 |
+| In the header, beside the title | 0 / 0 | 246 px | gone (0 px) | 1 |
+| One counter in the box, beside + | 0 / 0 | 198 px | whole | 2 |
+
+**Decision, replacing 1 and 5:** the live chips (Needs you, Working or Background, PRs) sit in the row
+under the box, between the model and the place. That row is there on every chat, so they cost no height
+and no width of the draft. They are as quiet as the row's other controls; only Needs you
+keeps its word in a narrow box, the rest are a mark and a count (a dot, a pull-request icon), named in
+full to a screen reader. Each is at least 44 px wide on a touch screen, and its 44 px reach grows down, away from the
+box. What gives way is read off the box's own width (a container query), so a phone and a thread
+docked beside its coordinator take the same row: under 480 px only Needs you keeps its word and, while
+chips are there, the model's effort and the context's number step aside (the picker and the ring's
+panel still say them), then the model's name truncates, and the place is one button that opens the
+branch and the machine; under 300 px the context's ring steps aside too (the thread's full view says it),
+never the model's button, from which the model panel opens on its own. In a wide box the branch and
+the machine truncate side by side when the row is full. The panel a chip opens still floats over the
+thread from the box's top edge. With the phone's keyboard up the row gives its height back, chips
+included, as the line did; an open panel stays. Nothing folds: the row does not change height.
+`run.ts chip-line` (with a model reported, as in a real session) fails when anything sits between the
+thread and the box, when a chip is not under the box, or when any two controls of that row touch.

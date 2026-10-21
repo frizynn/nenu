@@ -9,7 +9,7 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { ComposerPlace, NEEDS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
+import { ComposerPlace, NEEDS_MARK, PRS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
 import { PrChecks } from "@/components/pr-bar";
 import { PrList, prLists } from "@/components/threads-panel";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
@@ -987,9 +987,9 @@ export function AgentChat({
   const processDetailContent = processDetail &&
     <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
   const published = activity.data?.available ? activity.data.artifacts : [];
-  // The row above the composer: what needs you and what works, this session's background work beside
-  // the project's threads around it, then the project's open PRs. Finished work and routines are rows
-  // of the ⋯ menu (ADR 0108).
+  // The chips under the box: what needs you and what works, this session's background work beside the
+  // project's threads around it, then the project's open PRs. Finished work and routines are rows of
+  // the ⋯ menu (ADR 0108).
   const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"], quiet = false) => (
     <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} quiet={quiet} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
@@ -1034,7 +1034,7 @@ export function AgentChat({
         processList({ running: processes.running, done: processes.done }, published,
           around && around.resolved.length > 0 ? { count: around.resolved.length, rows: threadRows(around.resolved) } : undefined, workingCount === 0)}
     </> }] : []),
-    ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, content: <div className="flex flex-col gap-2">
+    ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, mark: PRS_MARK, content: <div className="flex flex-col gap-2">
       <PrList project={projectChips.project} threads={projectChips.threads} session={projectChips.session} readOnly={projectChips.readOnly}
         onOpenPane={(id) => { setChip(null); projectChips.onOpenPane(id); }} onOpenNode={(id) => { setChip(null); projectChips.onOpenNode(id); }} onChanged={projectChips.onChanged} />
       {ownPr && <div className="border-t border-border pt-2">

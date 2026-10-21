@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchEngine, PHONE, userCacheDir, type Page } from "./browser.ts";
+import { brokenRows, DESKTOP, launchEngine, PHONE, reportModel, userCacheDir, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
 import { homeOrg, seedDemoHerd, seedDiffRepo, writeLongJournal } from "./scenario.ts";
 
@@ -139,6 +139,8 @@ try {
   const context = await browser.newContext({ ...DESKTOP, reducedMotion: "no-preference", colorScheme: "dark", timezoneId: "UTC", locale: "en-US" });
   const page = await context.newPage();
   await page.clock.install({ time: bridge.now() });
+  // A model reported, so the rows under the boxes are as full as a real session's.
+  await reportModel(page);
   const coordinator = `/pane/${encodeURIComponent(herd.idle)}`;
   await page.goto(bridge.url + coordinator);
   await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
@@ -178,8 +180,14 @@ try {
   await edge.focus();
   await page.keyboard.press("Home");
   await shoot(page, "8b-docked-narrowest-header", { x: 1440 - 340, y: 0, width: 340, height: 60 });
+  // …and the row under its box, its chips beside the model, inside the column (ADR 0108).
+  await shoot(page, "8b-docked-narrowest-row", { x: 1440 - 340, y: 900 - 140, width: 340, height: 140 });
+  result.rowsNarrowest = await page.evaluate(brokenRows, null);
+  // The docked thread's row holds chips, or the narrow box's rules were never put to the test.
+  result.dockedChips = await page.evaluate(() => document.querySelectorAll(".session-panel[data-docked] .composer-meta .composer-chip").length, null);
   await page.keyboard.press("End");
   await shoot(page, "8c-docked-widest");
+  result.rowsWidest = await page.evaluate(brokenRows, null);
 
   // The same fold beside a long conversation (200 turns), with motion and without: each frame's
   // length, the second the one reflow an instant fold costs. No fake clock here: it would drive
@@ -239,6 +247,16 @@ try {
 writeFileSync(join(outDir, "panels.json"), JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 console.log(shots.join("\n"));
+// No row under a box spills or crowds, the docked thread's at its narrowest and widest included (ADR 0108).
+const broken = [...(result.rowsNarrowest as string[] ?? []), ...(result.rowsWidest as string[] ?? [])];
+if (!result.dockedChips) {
+  console.error("✗ the docked thread's row held no chip");
+  process.exitCode = 1;
+}
+if (broken.length) {
+  console.error(`✗ a row under the box spills or crowds: ${broken.join(" | ")}`);
+  process.exitCode = 1;
+}
 // Docking a thread and closing it again must move no column (ADR 0105).
 const moved = (["dock", "undock"] as const).filter((step) => (result[step] as Columns[]).length > 1);
 if (moved.length) {

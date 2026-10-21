@@ -56,7 +56,7 @@ import { DiffCommentChips } from "@/components/diff-comment-chips";
 import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffComments, withDiffComments } from "@/lib/diff-comments";
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
-import { ComposerChips, type ChipLine } from "@/components/composer-chips";
+import { ComposerChips, rowChips, type ChipLine } from "@/components/composer-chips";
 import { Fold } from "@/components/composer-fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
@@ -142,7 +142,7 @@ interface ComposerProps {
   /** Something beside the composer (the desk's details panel) that the empty composer's Esc closes
    *  before it would stop the turn. */
   onEscape?: () => void;
-  /** The chat's chips, on the line above the box while one asks for you or runs. */
+  /** The chat's chips, in the row under the box while one asks for you or runs. */
   chips?: ChipLine;
   usageControls?: ReactNode;
   /** The conversation is on screen rather than the terminal mirror: sends can queue, and Display
@@ -1441,12 +1441,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             {failure.overridable && forcingSend && <p className="mt-1">To type it regardless, tap Type anyway.</p>}
           </ComposerNotice>
         )}</Fold>
-        {/* The line above the box holds only what asks for you or runs (ADR 0108): it folds open with a
-            live chip and shut when the last one goes. The open panel stays outside the fold, so a chip
-            leaving the line (opened from the ⋯ menu, or its work just ended) keeps it as it was. Stop
-            is in the box. */}
-        <ComposerChips {...chips} />
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
+        {/* The box and the row under it, which the chips' panel floats above. */}
+        <div className="composer-dock">
 
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes
             it (Stop while a turn runs, then Send or its confirm pill). Quiet controls live in the row
@@ -1460,6 +1457,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             label={skills.label} loading={skills.loading} error={skills.error} truncated={skills.truncated} onRetry={skills.retry} />)}
           <div className={cn("composer-box", direct.active && "composer-box-armed", lockedOut && "composer-box-locked", input !== "" && !direct.active && "composer-box-typing")}>
             <AttachmentChips items={attachments.items} onRemove={removeAttachment} onRetry={attachments.retry} disabled={locked} />
+            {/* The +, the draft and Send on a row of their own, under the files: never laid out beside
+                them, where a + folded to nothing let the draft in at no width (paste-image bench). */}
+            <div className="composer-row">
             {!lockedOut && <div ref={menuAnchorRef} className="composer-lead">
               <button ref={plusRef} type="button" className="composer-plus hit-area" aria-label="Message actions" aria-haspopup="dialog" aria-expanded={menuOpen}
                 onClick={toggleMenu}>
@@ -1592,14 +1592,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </Button>
             )}
             </div>
+            </div>
           </div>
         </div>
-        {(modelControl || place) && (
+        {/* The chips sit in the model's row, never on a line above the box: the thread keeps that
+            height (ADR 0108, `run.ts chip-line`). The panel a chip opens floats over the thread. */}
+        {(modelControl || place || rowChips(chips.chips).length > 0 || chips.open) && (
           <div role="group" aria-label="Message tools" className="composer-meta">
-            {modelControl && <div className="flex min-w-0 shrink-0 items-center">{modelControl}</div>}
+            {/* In a narrow box the model gives way first, the chips and the place keep their width; in a wide one the place truncates (composer.css). */}
+            {modelControl && <div className="flex min-w-0 items-center">{modelControl}</div>}
+            <ComposerChips {...chips} />
             {place}
           </div>
         )}
+        </div>
       </div>
 
       {/* The desk's Terminal tab, under the mirror agent-chat.tsx draws above: the switch that arms the

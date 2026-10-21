@@ -220,9 +220,10 @@ the unit name; the Herdr action runs from anywhere.
   and the drawer, and the drawer lists Projects after Needs you without History or counts;
   `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
-- **The line above a chat's box holds only live work** (`composer-chips.tsx`): Needs you, Working, PRs;
-  finished work and routines are rows of the ⋯ menu. Stop sits in the box beside Send, never in its
-  slot, so a draft never swaps it under the thumb
+- **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
+  Working, PRs) are in the row under the box beside the model, finished work and routines are rows of
+  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass. Stop sits in the box beside Send, never
+  in its slot, so a draft never swaps it under the thumb
   ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every

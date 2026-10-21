@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ComponentProps } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
+import { declarations } from "@/test/css-rules";
 import { fixtureAgents } from "@/test/handlers";
 import { server } from "@/test/setup";
 import type { ProjectThreadView, ProjectView } from "@/lib/types";
@@ -132,23 +135,30 @@ afterEach(() => { window.matchMedia = originalMatchMedia; });
 
 const LONG_BRANCH = "fix/meli-contracargos-reintentos-webhook";
 
-it("on a desk, says under the box which branch and which machine the chat runs on", async () => {
-  setMedia("(min-width: 768px)");
+it("in a wide box, says under it which branch and which machine the chat runs on", async () => {
   renderChat();
   const place = await screen.findByRole("group", { name: "Message tools" });
   expect(within(place).getByText("checkout-coupon")).toBeInTheDocument();
   expect(within(place).getByText(window.location.hostname)).toBeInTheDocument();
 });
 
-// At 390px the branch and the machine were cut mid-word ("fix/meli-contr…  r."): the row gives its
-// width to the model and the context, and keeps where it runs one tap away, whole.
-it("on a phone, keeps a long branch and the machine behind one tap, never cut in the row", async () => {
-  setMedia("(pointer: coarse)");
+// At 390px the branch and the machine were cut mid-word ("fix/meli-contr…  r."): a narrow box (a phone,
+// a docked thread) gives the row to the model and the chips, and keeps where it runs one tap away,
+// whole. Which form shows is the box's width's to say (composer.css); jsdom lays nothing out, so the
+// rule is read and the tap is pressed.
+it("in a narrow box, keeps a long branch and the machine behind one tap, never cut in the row", async () => {
+  const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
+  const narrow = ["@container composer (max-width: 479px)"];
+  expect(declarations(css, ".composer-place-tap").display).toBe("none");
+  expect(declarations(css, ".composer-place-whole", narrow).display).toBe("none");
+  expect(declarations(css, ".composer-place-tap", narrow).display).toBe("flex");
+  // After the base rules, which would override it at the same specificity.
+  expect(css.lastIndexOf("@container composer (max-width: 479px)")).toBeGreaterThan(css.indexOf(".composer-place-tap { display: none; }"));
   const thread = { ...own, branch: LONG_BRANCH };
   const { user } = renderChat({ thread, threads: threads.map((t) => (t.id === own.id ? thread : t)) });
   const place = await screen.findByRole("group", { name: "Message tools" });
-  expect(within(place).queryByText(LONG_BRANCH)).not.toBeInTheDocument();
   const where = within(place).getByRole("button", { name: `Where this runs: ${LONG_BRANCH} on ${window.location.hostname}` });
+  expect(where.closest(".composer-place-tap")).not.toBeNull();
   await user.click(where);
   const detail = screen.getByRole("dialog", { name: "Where this runs" });
   expect(within(detail).getByText(LONG_BRANCH)).toBeVisible();
@@ -161,20 +171,20 @@ it("floats the panel over the thread: the box and the conversation stay where th
   const box = document.querySelector(".composer-box")!;
   const scroller = screen.getByRole("region", { name: "Live conversation" }).querySelector<HTMLElement>(".overflow-y-auto")!;
   scroller.scrollTop = 120;
-  // The line folds in and out; the panel sits beside that fold, so a line folding never takes it along.
-  const line = chips.closest(".composer-fold")!;
-  const before = line.previousElementSibling;
+  // The chips sit under the box, in the row the model is in; nothing of theirs is above the box.
+  expect(screen.getByRole("group", { name: "Message tools" })).toContainElement(chips);
+  const dock = box.closest(".composer-dock")!;
+  const above = dock.previousElementSibling;
   await user.click(within(chips).getByRole("button", { name: "Working, 1" }));
   const panel = screen.getByRole("dialog", { name: "Working" });
-  // The panel is the line's own overlay, not a row of the composer: nothing is inserted above the line.
-  expect(panel.parentElement).toBe(line.parentElement);
-  expect(panel.parentElement).toHaveClass("composer-chips");
-  expect(line.previousElementSibling).toBe(panel);
+  // The panel is an overlay anchored to the box's dock, not a row of the composer.
+  expect(panel.closest(".composer-dock")).toBe(dock);
+  expect(dock.previousElementSibling).toBe(above);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "Working" })).not.toBeInTheDocument();
-  expect(line.previousElementSibling).toBe(before);
+  expect(dock.previousElementSibling).toBe(above);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
 });
