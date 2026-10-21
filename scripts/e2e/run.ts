@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
@@ -3101,11 +3101,7 @@ async function composerAround(): Promise<void> {
         await route.fulfill({ json });
       });
       // What the agent reports in a real session: its model, effort and context.
-      await page.route("**/api/pane/*/history*", async (route) => {
-        const json = await (await fetch(route.request().url())).json() as Record<string, unknown>;
-        if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 22_000, windowTokens: 200_000, usedPercent: 11 } };
-        await route.fulfill({ json });
-      });
+      await reportModel(page);
       // Layout shifts while the chat opens (Chromium reports them; WebKit has no such entry).
       await page.addInitScript(() => {
         const log: Array<{ value: number; sources: string[] }> = [];
@@ -3330,11 +3326,7 @@ async function chipLine(): Promise<void> {
           });
           await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
           // The model as a real session reports it, so the row under the box is as full as it gets.
-          await page.route("**/api/pane/*/history*", async (route) => {
-            const json = await (await fetch(route.request().url())).json() as Record<string, unknown>;
-            if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 22_000, windowTokens: 200_000, usedPercent: 11 } };
-            await route.fulfill({ json });
-          });
+          await reportModel(page);
           await page.goto(`${bridge.url}/pane/${encodeURIComponent(moment.paneId)}`);
           await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
           await page.waitForTimeout(2000);
@@ -3387,7 +3379,7 @@ async function chipLine(): Promise<void> {
     const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel") && !key.endsWith("-menu")).filter(([key, m]) => !m || m.pageScrollsSideways
       || (working.has(momentOf[key] ?? "") && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
-      || (m.aboveBox !== null && m.aboveBox > 0) || !m.chipsUnderBox || m.chipsOverlap).map(([key]) => key);
+      || (m.aboveBox !== null && m.aboveBox > 0) || !m.chipsUnderBox || m.rowBroken).map(([key]) => key);
     // Opened from the ⋯ menu, finished work's panel floats: the box stays where it was.
     for (const [key, value] of Object.entries(seen)) {
       if (key.endsWith("-finished-panel") && (value as { box?: number }).box !== (seen[key.replace(/-finished-panel$/, "")] as Seen)?.boxTop) failed.push(key);
@@ -3451,7 +3443,7 @@ function measureAboveBox() {
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
     // A branch named in the row keeps some of its name: never a bare icon.
-    chipsOverlap: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getBoundingClientRect().width < 24),
+    rowBroken: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getBoundingClientRect().width < 24),
     stop: rect(stop),
     stopInBox: inBox,
     stopReach: reach,

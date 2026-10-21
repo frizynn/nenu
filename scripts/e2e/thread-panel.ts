@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Page } from "./browser.ts";
+import { DESKTOP, launchWebkit, PHONE, reportModel, userCacheDir, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
 import { homeOrg, seedDiffRepo } from "./scenario.ts";
 
@@ -38,15 +38,6 @@ const browser = await launchWebkit().catch(async (error: unknown) => { await bri
 const herd = bridge.herd!;
 const shots: string[] = [];
 
-/** What a real session reports through its journal: its model and how full its context is. */
-async function withTelemetry(page: Page) {
-  await page.route("**/api/pane/*/history*", async (route) => {
-    const json = await (await fetch(route.request().url())).json() as Record<string, unknown>;
-    if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 44_000, windowTokens: 200_000, usedPercent: 22 } };
-    await route.fulfill({ json });
-  });
-}
-
 async function shoot(page: Page, name: string) {
   await page.waitForTimeout(900);
   const path = join(outDir, `${name}.png`);
@@ -59,7 +50,7 @@ try {
   for (const scheme of ["dark", "light"] as const) {
     const context = await browser.newContext({ ...DESKTOP, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
     const page = await context.newPage();
-    await withTelemetry(page);
+    await reportModel(page, 22);
     await page.clock.install({ time: bridge.now() });
     for (const [name, paneId] of scheme === "dark" ? panes : panes.slice(0, 1)) {
       await page.goto(bridge.url + `/pane/${encodeURIComponent(paneId)}`);

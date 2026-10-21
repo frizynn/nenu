@@ -147,3 +147,25 @@ export async function launchEngine(engine: "webkit" | "chromium"): Promise<Brows
   }
   return mod[engine].launch({ headless: true });
 }
+
+/** What a real session reports through its journal: its model, effort and how full its context is. */
+export async function reportModel(page: Page, usedPercent = 11): Promise<void> {
+  await page.route("**/api/pane/*/history*", async (route) => {
+    const json = JSON.parse(await (await route.fetch()).text()) as Record<string, unknown>;
+    if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: usedPercent * 2_000, windowTokens: 200_000, usedPercent } };
+    await route.fulfill({ json });
+  });
+}
+
+/** In the page: each row under a box that is wider inside than it is drawn, or whose controls touch. */
+export function brokenRows(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".composer-meta")).flatMap((meta) => {
+    const row = meta.getBoundingClientRect();
+    if (row.width === 0) return [];
+    const controls = Array.from(meta.querySelectorAll("button")).filter((el) => !el.closest("#composer-chip-panel"))
+      .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+    const touch = controls.some((r, i) => controls.some((o, j) => j !== i && r.left < o.right - 1 && r.right > o.left + 1));
+    const out = controls.some((r) => r.left < row.left - 1 || r.right > row.right + 1);
+    return meta.scrollWidth > meta.clientWidth + 1 || touch || out ? [meta.innerText.replace(/\s+/g, " ")] : [];
+  });
+}
