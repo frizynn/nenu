@@ -98,7 +98,7 @@ describe("what a pending bubble says", () => {
   it("follows its queue row: waiting per mode, then the CLI's own queue, then read", () => {
     const queued = send({ state: "queued", queueId: "q", agent: "claude", queueState: "queued", deliveryMode: "afterTurn", waitingFor: "working" });
     expect(pendingStatus(queued)).toMatchObject({ label: "Waiting for Claude to finish this turn.", actions: ["sendNow", "edit", "remove"] });
-    expect(pendingStatus({ ...queued, native: "enqueued", queueState: undefined })).toMatchObject({ label: expect.stringMatching(/^In Claude's queue/), actions: ["readNow", "edit", "remove"] });
+    expect(pendingStatus({ ...queued, native: "enqueued", queueState: undefined })).toMatchObject({ label: "Claude reads it after this step.", actions: ["readNow", "edit", "remove"] });
     expect(pendingStatus({ ...queued, state: "sent", native: "absorbed" })).toMatchObject({ tone: "done", label: "Read by Claude" });
   });
 });

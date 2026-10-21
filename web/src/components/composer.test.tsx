@@ -2897,7 +2897,7 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
     queue.delivered = [{ id: "row-1", text: "from the laptop", sentAt: 1, deliveryMode: "asap", native: "enqueued" }];
     renderComposerWithStatus({ nativeWorkbench: true, working: true });
     const strip = await screen.findByRole("region", { name: "Queued messages" });
-    expect(within(strip).getByText(/in claude's queue/i)).toBeInTheDocument();
+    expect(within(strip).getByText(/claude reads it after this step/i)).toBeInTheDocument();
     await user.click(within(strip).getByRole("button", { name: "Read it now" }));
     expect(queue.posts).toEqual([]);
     expect(screen.getByTestId("status")).toHaveTextContent(/moves a running command to the background/i);

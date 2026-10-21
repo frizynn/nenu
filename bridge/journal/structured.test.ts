@@ -57,6 +57,20 @@ describe("Claude structured rows", () => {
     expect(pendingQuestion).toBeUndefined();
   });
 
+  // Measured on 2.1.306: Claude writes the absorbed message after the step it waited on, stamped with
+  // the time it was queued. It reads as said when Claude read it, so a turn it splits splits there.
+  test("an absorbed message is dated when Claude read it, not when it was queued", () => {
+    const parser = parse([
+      { type: "assistant", uuid: "a", timestamp: "2026-10-21T19:49:35.665Z", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "sleep 6" } }] } },
+      { type: "queue-operation", operation: "enqueue", timestamp: "2026-10-21T19:49:37.678Z", content: "y decime cuántas" },
+      { type: "queue-operation", operation: "remove", reason: "absorbed_mid_turn", timestamp: "2026-10-21T19:49:42.436Z", content: "y decime cuántas" },
+      { type: "user", uuid: "r", timestamp: "2026-10-21T19:49:42.415Z", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } },
+      { type: "attachment", uuid: "q", timestamp: "2026-10-21T19:49:37.642Z", attachment: { type: "queued_command", prompt: "y decime cuántas", origin: { kind: "human" } } },
+    ]);
+    expect(parser.entries().find((e) => e.uuid === "q")).toMatchObject({ role: "user", ts: "2026-10-21T19:49:42.436Z" });
+    expect(parser.facts().queue.find((q) => q.kind === "queued_command")).toMatchObject({ ts: "2026-10-21T19:49:37.642Z" });
+  });
+
   // Captured 2026-10-14 in a disposable Herdr 0.9.3 with Claude Code 2.1.300: three 1 500-character
   // messages Nenu sent as one bracketed paste each (A typed, C queued for after the turn, D sent into
   // Claude's own queue and absorbed mid-turn). Claude logged every one between `<pasted_content>` tags.

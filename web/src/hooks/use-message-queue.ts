@@ -71,7 +71,7 @@ export function queueRowStatus(
   if (row.state === "sent") {
     if (row.native === "enqueued" && row.readNowAt !== undefined) return { tone: "busy", label: `Asked ${name} to read it now.`, actions: [] };
     // Claude hands its queue back on Up (ADR 0117), so a message waiting there can still be edited or removed.
-    if (row.native === "enqueued") return { tone: "waiting", label: `In ${name}'s queue, read after this step.`, actions: agent === "claude" ? ["readNow", "edit", "remove"] : [] };
+    if (row.native === "enqueued") return { tone: "waiting", label: `${name} reads it after this step.`, actions: agent === "claude" ? ["readNow", "edit", "remove"] : [] };
     if (row.native === "absorbed") return { tone: "done", label: `Read by ${name}`, actions: [] };
     if (row.native === "recalled") return { tone: "problem", label: "Taken back into the terminal's input box", actions: [] };
     if (agent === "codex" && row.deliveryMode === "steer") return { tone: "done", label: "Sent into Codex's current turn", actions: [] };
