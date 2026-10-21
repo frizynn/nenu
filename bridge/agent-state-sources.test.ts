@@ -215,5 +215,9 @@ describe("Claude usage limit", () => {
     scan.line(JSON.stringify({ ...refused, apiError: "overloaded", timestamp: "2026-10-21T21:36:00.000Z" }));
     expect(scan.limit?.resetsAt).toBe(RESETS);
     expect(scan.lastReply).toBe(-Infinity);
+    // Claude's own "No response requested." around a resume is no reply from the account (measured).
+    scan.line(JSON.stringify({ type: "assistant", timestamp: "2026-10-21T21:37:00.000Z", isApiErrorMessage: false, message: { model: "<synthetic>", content: [{ type: "text", text: "No response requested." }] } }));
+    expect(scan.limit?.resetsAt).toBe(RESETS);
+    expect(scan.lastReply).toBe(-Infinity);
   });
 });

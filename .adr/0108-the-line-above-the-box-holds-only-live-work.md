@@ -1,7 +1,7 @@
 # 0108. The line above the box holds only live work, and Stop sits in the box
 
 - **Status:** Accepted (2026-10-21), amended the same day: the live chips left the line for the row
-  under the box (see *Amendment*), so no line sits above the box at all. Requested by the operator. Reverses the chips' line of
+  under the box (see *Amendment*), so no line sits above the box at all. Amended by [ADR 0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md): while a usage limit holds the agent, its one line sits there, in place of the terminal's wait notice. Requested by the operator. Reverses the chips' line of
   `17dfd095` (a quiet Done or Published chip once nothing ran, a Routines chip whenever a project had
   routines) and `b2b463e6` (Stop at the end of that line, on a line of its own when alone), which no
   ADR recorded.

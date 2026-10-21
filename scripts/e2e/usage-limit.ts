@@ -25,6 +25,8 @@ async function limitRows(after: number, resetsAt: number): Promise<string> {
   const shift = after + 1_000 - Date.parse(rows[0]!.timestamp as string);
   return rows.map((row) => {
     const moved: Record<string, unknown> = { ...row, timestamp: new Date(Date.parse(row.timestamp as string) + shift).toISOString() };
+    // The words name the same reset the rows carry, so the thread and Nenu's line agree on screen.
+    Object.assign(moved, JSON.parse(JSON.stringify(moved).replaceAll("3:20am", clockWords(resetsAt)).replaceAll("(Europe/Amsterdam)", "(UTC)")));
     if (row.apiError === "usage_limit_reached") {
       const seconds = Math.floor(resetsAt / 1000);
       moved.quotaLimits = { ...(row.quotaLimits as object), resetsAt: seconds };
@@ -77,7 +79,7 @@ export async function usageLimitBench(bridge: TestBridge, browser: Browser, outD
   clock = Math.max(...rows.split("\n").filter(Boolean).map((line) => Date.parse((JSON.parse(line) as { timestamp: string }).timestamp)));
   await writeSession("idle");
   fake.processes.set(pane, [{ pid: PID, argv: ["claude"] }]);
-  fake.usageLimit.set(pane, "3:20am");
+  fake.usageLimit.set(pane, clockWords(resetsAt));
   fake.setStatus(pane, "done");
 
   const open = async (device: "desk" | "phone") => {
@@ -133,6 +135,11 @@ export async function usageLimitBench(bridge: TestBridge, browser: Browser, outD
   await phone.close();
   clearInterval(logger);
   return { checks, shots };
+}
+
+/** A reset as Claude words it, in the bench's UTC: "3:20am". */
+function clockWords(at: number): string {
+  return new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).replace(" ", "").toLowerCase();
 }
 
 /** The pane's `turn` from the snapshot, once it names a limit or after a few seconds. */

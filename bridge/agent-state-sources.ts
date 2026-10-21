@@ -79,7 +79,7 @@ export function claudeSessionDirs(projectRoots: readonly string[]): string[] {
 export class ClaudeTurnScan {
   lastMove = -Infinity;
   lastEnd = -Infinity;
-  /** When a real reply last came through: an assistant row that is not an API error. */
+  /** When a real reply last came through: an assistant row that is no API error and not Claude's own. */
   lastReply = -Infinity;
   /** The usage limit that refused the latest request, until a reply came through after it. */
   limit: { at: number; resetsAt: number } | undefined;
@@ -101,7 +101,8 @@ export class ClaudeTurnScan {
       if (row.apiError === "usage_limit_reached") {
         const resetsAt = limitResetsAt(row);
         if (resetsAt !== null && at >= (this.limit?.at ?? -Infinity)) this.limit = { at, resetsAt };
-      } else if (row.isApiErrorMessage !== true) {
+      } else if (row.isApiErrorMessage !== true && record(row.message).model !== "<synthetic>") {
+        // Claude's own rows ("No response requested.", around a resume) carry no reply from the account.
         this.lastReply = Math.max(this.lastReply, at);
         if (this.limit && at > this.limit.at) this.limit = undefined;
       }

@@ -121,7 +121,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0117](./0117-enter-follows-the-text-and-claudes-log-is-the-witness.md) | Enter follows the text, and Claude's log is the witness; waits end on the event (amends 0048, 0067, 0076, 0104) | Accepted |
 | [0118](./0118-work-in-progress-looks-alive.md) | Work in progress looks alive, where it happens, and one message is on screen once (amends 0111, 0113, 0116) | Accepted |
 | [0119](./0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md) | A chat panel's sections fold, and the operator arranges them; a coordinator's Threads lists its whole subtree (amends 0101, 0115) | Accepted |
-| [0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md) | A Claude at its usage limit reads so, and its messages wait in Nenu; Continue now resumes it (amends 0067, 0113, 0114) | Accepted |
+| [0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md) | A Claude at its usage limit reads so, and its messages wait in Nenu; Continue now resumes it (amends 0067, 0108, 0113, 0114) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

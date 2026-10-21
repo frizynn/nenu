@@ -383,8 +383,8 @@ export function AgentChat({
   // "Owns the keyboard" is asked of the dialog contract, not spelled as `kind !== "raw"`: the
   // slash-command `autocomplete` popup is a non-raw block painted while the input box is live.
   // A key hint on a screen no grammar claims. Only an unexplained one blocks the composer as a dialog;
-  // a pause the agent leaves by itself (Claude's usage limit) is a quiet line, and the send guard
-  // still refuses the box underneath it either way.
+  // a pause the agent leaves by itself is a quiet line. Claude's usage-limit notice no longer gets
+  // here (its box is ready, ADR 0120); the line stays for a wording of it nobody measured yet.
   const wait = grammarsOn && adapterFor(agent?.agent)?.composerReady?.(inputLines) === false && !liveBlocks.some(blockOwnsKeyboard)
     ? terminalWait(modelSource.text)
     : null;
@@ -1350,7 +1350,8 @@ export function AgentChat({
               <span role="status" className="min-w-0 flex-1 truncate">{limitLine(limit)}</span>
               {/* Typing past the limit is safe: Claude logs the message, and the limit only refuses it
                   again and re-arms its own continue (measured 2026-10-21, ADR 0120). */}
-              <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-footnote"
+              <Button type="button" variant="ghost" size="sm" className="shrink-0 px-2 text-footnote"
+                title="Claude goes on now if the account was switched; otherwise the limit refuses it again"
                 disabled={readOnly || gone || connecting} onClick={() => { void composerRef.current?.continueNow(); }}>
                 Continue now
               </Button>

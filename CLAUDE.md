@@ -232,7 +232,8 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
   Working, PRs) are in the row under the box beside the model, finished work and routines are rows of
-  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass. Stop sits in the box beside Send, never
+  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass; only a usage limit's line sits above
+  the box while it holds (ADR 0120). Stop sits in the box beside Send, never
   in its slot, so a draft never swaps it under the thumb
   ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **A turn's work reads the same on a phone and a desk** (`work-log-tools.tsx`, `fold.tsx`): "Worked for"

@@ -35,6 +35,8 @@ const TAIL_BYTES = 4 * 1024 * 1024;
  * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB.
  */
 const IDLE_TAIL_BYTES = 1024 * 1024;
+/** The longest wait before a Claude held by its usage limit is looked at again. */
+const LIMIT_RECHECK_MS = 3_600_000;
 /** A session file is a few hundred bytes; anything bigger is not one. */
 const SESSION_FILE_MAX = 64 * 1024;
 /** How often an unresolved pane is retried when Herdr reports no transition. */
@@ -292,7 +294,8 @@ export class AgentStates {
       // At rest the transcript is read once more, unwatched: the row that ended the turn may say the
       // usage limit refused it (ADR 0120), and it can land after the last watch event.
       if (file && !file.waitingFor) await this.peekTranscript(entry, file.sessionId);
-      this.closeTail(entry.transcript);
+      // Unless a busy spell began during that read and watches the transcript now.
+      if (entry.file?.status !== "busy") this.closeTail(entry.transcript);
     }
     this.update(entry);
   }
@@ -303,7 +306,8 @@ export class AgentStates {
       this.closeTail(entry.transcript);
       entry.transcript = undefined;
       const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
-      if (!path || entry.dropped || entry.file?.sessionId !== sessionId) return;
+      // A busy spell that began meanwhile followed the transcript itself, watched: that tail stays.
+      if (!path || entry.dropped || entry.file?.sessionId !== sessionId || entry.transcript) return;
       entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
       await this.readTail(entry.transcript, IDLE_TAIL_BYTES);
       return;
@@ -329,7 +333,9 @@ export class AgentStates {
         }
         return;
       }
-      entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
+      // A look at rest may have opened it during the lookup (`as Entry` reads it afresh past the await):
+      // one tail per transcript, never two scans.
+      if ((entry as Entry).transcript?.sessionId !== sessionId) entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
     }
     const transcript = entry.transcript;
     if (!transcript) return;
@@ -396,7 +402,8 @@ export class AgentStates {
       : entry.rollout ? codexTurn(entry.rollout.scan) ?? undefined : undefined;
     clearTimeout(entry.limitTimer);
     if (state?.limit) {
-      entry.limitTimer = setTimeout(() => this.update(entry), Math.max(0, state.limit.resetsAt - this.now()) + 1_000);
+      // At most an hour: a timer past 2^31 ms fires at once, and the next look re-arms it.
+      entry.limitTimer = setTimeout(() => this.update(entry), Math.min(Math.max(0, state.limit.resetsAt - this.now()) + 1_000, LIMIT_RECHECK_MS));
       entry.limitTimer.unref?.();
     }
     // A reply on one Claude is the account working again: every other Claude of its profile that the

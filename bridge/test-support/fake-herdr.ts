@@ -72,7 +72,8 @@ export class FakeHerdr {
   readonly version: string;
   readonly protocol: number;
   private readonly echoMs: number;
-  /** Typed text still echoing, per pane: a key sent behind it waits for it, as a PTY keeps input in order. */
+  /** Pastes still echoing, per pane: Enter behind one lands after it (ADR 0117 measured that). Typed
+   *  text keeps losing an Enter on its heels, as Claude's box does. */
   private readonly echoing = new Map<string, number>();
   private readonly tickMs: number;
   private readonly viewportRows: number;
@@ -430,9 +431,10 @@ export class FakeHerdr {
       }, this.echoMs * 4);
       return;
     }
-    this.echoing.set(paneId, (this.echoing.get(paneId) ?? 0) + 1);
+    const pasted = /^\x1b\[200~[\s\S]*\x1b\[201~$/.test(raw);
+    if (pasted) this.echoing.set(paneId, (this.echoing.get(paneId) ?? 0) + 1);
     setTimeout(() => {
-      this.echoing.set(paneId, this.echoing.get(paneId)! - 1);
+      if (pasted) this.echoing.set(paneId, this.echoing.get(paneId)! - 1);
       pane.draft += text;
       pane.revision++;
     }, this.echoMs);

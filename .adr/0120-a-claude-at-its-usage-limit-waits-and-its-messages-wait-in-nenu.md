@@ -3,7 +3,8 @@
 - **Status:** Accepted (2026-10-22). Reported by the operator on 1.41.2: a message sent from the phone to
   a coordinator held by the account's usage limit came back "Your message didn't show in the agent's
   input box, so nothing was sent", although it had. Amends [ADR 0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md)
-  (the transcript is read once at rest), [ADR 0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)
+  (the transcript is read once at rest), [ADR 0108](./0108-the-line-above-the-box-holds-only-live-work.md)
+  (the limit's line takes the place the terminal's wait notice had above the box), [ADR 0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)
   (one more mark) and [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md) (a send it would refuse waits).
 - **Trail:** `bridge/agent-state-sources.ts` (`ClaudeTurnScan.limit`, `claudeLimit`) ·
   `bridge/agent-state.ts` (`peekTranscript`, `profileReply`) · `bridge/queue-service.ts` (`wait: "limit"`) ·
@@ -37,7 +38,8 @@ Measured in Claude's log and its 2.1.307 code:
 
 1. **The limit is the CLI's state, read from its log.** The newest `usage_limit_reached` row holds a
    Claude at rest until its reset passes or a reply comes through after it, on that Claude or on any Claude
-   of the same profile (one sessions folder, one account). That reply is how a switched account shows.
+   of the same profile (one sessions folder, one account) in a pane Nenu follows; a Claude outside Herdr
+   lifts nothing. That reply is how a switched account shows.
    The transcript of a Claude at rest is read once more when its session file changes (1 MB on first
    sight), never watched. The screen's notice is not read for it.
 2. **That notice is Claude's own, not a dialog.** Its three wordings with "esc to cancel" leave the input
@@ -47,7 +49,10 @@ Measured in Claude's log and its 2.1.307 code:
    and goes by itself when the limit lifts. Send now on the row lifts only that wait.
 4. **Continue now** types Claude's own continue prompt without its claim that the limit reset. It is
    safe whatever the account: refused, Claude logs it and arms its automatic continue again.
-5. **A grey hourglass and "resets 6:40 PM"** mark the chat in the bar, Home and the chat's line. Grey: it
+5. **The line sits where the terminal's wait notice sat**, between the thread and the box, and only
+   while the limit holds: it is the one thing the operator can act on there, and the notice it replaces
+   is gone with it.
+6. **A grey hourglass and "resets 6:40 PM"** mark the chat in the bar, Home and the chat's line. Grey: it
    resumes by itself and asks nothing of the operator.
 
 ## Consequences

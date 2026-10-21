@@ -775,7 +775,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0114).
   const hostDraft = showPreview ? effectiveRaw : null;
   // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
-  const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
+  const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; how: SendHow } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   useEffect(() => {
     setDraftPick(null);
@@ -811,7 +811,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const pick = draftPick;
     setDraftPick(null);
     setSettledHere(false);
-    void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
+    void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { ...pick.how, draftSettled: true });
   }, [draftPick, boxSettled, sending, draftBusy]);
 
   /** Send or discard the agent's box's text, bound to the text shown (ADR 0114). */
@@ -904,7 +904,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // Text in the agent's box: the operator says what becomes of it, right above the box, and this
     // message goes the moment they do (ADR 0114). Never swept unseen, never waited on unsaid.
     if (!action && !force && !how.draftSettled && hostDraft !== null) {
-      setDraftPick({ text: t, isDraft, mode: how.mode });
+      setDraftPick({ text: t, isDraft, how });
       setSettledHere(false);
       return false;
     }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -205,6 +205,55 @@ describe("Claude panes at their usage limit", () => {
     service.poke("s", "w1:p1");
     await until(() => service.get("s", "w1:p1")?.limit === undefined);
     expect(service.get("s", "w1:p1")?.limit).toBeUndefined();
+    service.close();
+  });
+});
+
+describe("Claude panes at their usage limit, timers and races", () => {
+  const until = async (test: () => boolean) => { for (let i = 0; i < 100 && !test(); i++) await settle(); };
+  const limitRow = (at: number, resetsAt: number) =>
+    JSON.stringify({ type: "assistant", timestamp: iso(at), apiError: "usage_limit_reached", isApiErrorMessage: true, quotaLimits: { resetsAt: resetsAt / 1000 }, message: { model: "<synthetic>", content: [] } }) + "\n";
+
+  test("a reset weeks away arms a timer of an hour at most, never one past 2^31 ms", async () => {
+    const w = watches();
+    const timer = spyOn(globalThis, "setTimeout");
+    try {
+      const { service } = states(w, { now: () => T0 });
+      await writeFile(transcript, limitRow(T0 - 1_000, T0 + 40 * 86_400_000));
+      await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+      service.sync("s", herdr([PID]), [pane("claude")]);
+      await until(() => service.get("s", "w1:p1")?.limit !== undefined);
+      expect(service.get("s", "w1:p1")?.limit).toEqual({ resetsAt: T0 + 40 * 86_400_000 });
+      const delays = timer.mock.calls.map((call) => call[1] ?? 0);
+      expect(Math.max(...delays)).toBeLessThanOrEqual(3_600_000);
+      service.close();
+    } finally { timer.mockRestore(); }
+  });
+
+  test("a turn that starts while the look at rest is still finding the transcript keeps its watch", async () => {
+    const w = watches();
+    let release!: () => void;
+    const found = new Promise<void>((resolve) => { release = resolve; });
+    // The look at rest asks first and hears last: the busy spell's own lookup answers at once.
+    let calls = 0;
+    const { service } = states(w, { claudeTranscript: async (id) => { if (calls++ === 0) await found; return id === SESSION_ID ? transcript : null; } });
+    await writeFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0 + 20), message: { content: "go" } }) + "\n");
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    // The look at rest is waiting on the lookup; the session turns busy and follows the transcript too.
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0 + 10));
+    w.fire(sessions, `${PID}.json`);
+    await settle();
+    await until(() => service.get("s", "w1:p1")?.running === true && w.paths().includes(transcript));
+    release();
+    await settle();
+    expect(w.paths()).toContain(transcript);
+    // The watched tail is the one the state reads: the turn's end shows.
+    await appendFile(transcript, JSON.stringify({ type: "assistant", timestamp: iso(T0 + 900), message: { stop_reason: "end_turn", content: [] } }) + "\n");
+    w.fire(transcript);
+    await until(() => service.get("s", "w1:p1")?.running === false);
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, background: true, source: "claude-session" });
     service.close();
   });
 });

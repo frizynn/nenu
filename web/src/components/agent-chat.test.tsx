@@ -1452,10 +1452,8 @@ describe("AgentChat — why the composer is locked", () => {
   });
 });
 
-// Claude's usage-limit pause paints "esc to cancel" under a live input box. That hint makes the box
-// unsendable (ADR 0048 step 4), which is right, but it is not a question for the operator: Claude
-// resumes on its own. Only a screen that really waits on a key earns the interaction notice.
-// Claude at its usage limit, as it draws it under a live box.
+// Claude's usage-limit pause paints "esc to cancel" under a live input box. It is Claude's own key and
+// the box stays ready (ADR 0120); only a screen that really waits on a key earns the interaction notice.
 const USAGE_LIMIT_TEXT = [
   "● Listo, te aviso cuando termine.",
   "  ⎿  You've hit your session limit · resets 1:20am (Europe/Amsterdam)",
