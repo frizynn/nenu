@@ -109,16 +109,18 @@ export class QueueService {
     void this.tick(force).catch(() => {});
   }
   /**
-   * The rows of the pane's conversation the queue says wait in Claude's own queue, delivered within
-   * the two hours clients list them, oldest first. Read before a take-back presses Up (ADR 0118):
-   * Claude logs the recall at once, and the journal may mark them recalled before the take-back ends.
+   * The rows of the pane's conversation that may wait in Claude's own queue, delivered within the two
+   * hours clients list them, in the order they went; null when the pane's conversation is unknown.
+   * Read before a take-back presses Up (ADR 0118): Claude logs the recall at once, and the journal may
+   * mark them recalled before the take-back ends.
    */
-  async waitingOn(session: string, paneId: string): Promise<Array<{ id: string; text: string }>> {
+  async waitingOn(session: string, paneId: string): Promise<Array<{ id: string; text: string }> | null> {
     const current = await this.resolve(session, paneId).catch(() => null);
-    if (!current || !identity(current.pane)) return [];
+    if (!current || !identity(current.pane)) return null;
+    // A row just delivered may be there before the journal said so; the words decide whether it came back.
     return (await this.queue.recent(scopeFor(session, current.pane)))
-      .filter((row) => row.native === "enqueued")
-      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
+      .filter((row) => row.native === "enqueued" || (row.native === undefined && row.agent === "claude"))
+      .sort((a, b) => (a.claimedAt ?? a.sentAt ?? 0) - (b.claimedAt ?? b.sentAt ?? 0))
       .map(({ id, text }) => ({ id, text }));
   }
   /**
@@ -139,7 +141,7 @@ export class QueueService {
       matched.unshift(row);
       left = left.slice(0, -words.length);
     }
-    for (const row of matched) await this.queue.confirm(row.id, "recalled", "enqueued");
+    for (const row of matched) await this.queue.confirm(row.id, "recalled", [undefined, "enqueued"]);
     return { messages: matched, ours: matched.length > 0 && left === "" };
   }
   /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */

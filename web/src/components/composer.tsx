@@ -1111,12 +1111,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     try {
       const result = await api.takeBackQueue(paneId, session).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
       if (!result.ok) { setStatus(result.error, "info"); return; }
-      // A bridge older than the rows' recall answers the words alone: every bubble waiting there leaves.
+      // Words without rows (an older bridge, or a queue that could not say which they were): every
+      // bubble waiting there leaves, and the box gets the words as they came back.
       const rows = result.messages ?? listLocalSends(sendScope).flatMap((item) => !item.landed && item.native === "enqueued" && item.queueId ? [{ id: item.queueId, text: item.text }] : []);
       const ids = new Set(rows.map((message) => message.id));
       setRecalled((known) => new Set([...known, ...ids]));
       for (const item of listLocalSends(sendScope)) if (item.queueId && ids.has(item.queueId)) removeLocalSend(sendScope, item.id);
-      const back = takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId);
+      const back = result.messages ? takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId) : { text: result.text };
       if (back.text) restoreIntoComposer(back.text);
       if (back.note) setStatus(back.note, "info");
       focusInputEnd();
