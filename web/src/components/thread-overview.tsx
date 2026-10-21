@@ -10,6 +10,7 @@ import { threadAge, threadDetail } from "@/components/project-tasks";
 import type { SessionPr, SessionReading } from "@/components/session-inspector";
 import { fetchSessionDiff } from "@/lib/api";
 import { shortCwd } from "@/lib/format";
+import { needYou } from "@/lib/home-stats";
 import { modelDisplayName } from "@/lib/model-display";
 import { coordinatorState, nodeState, STATE_LABEL, workUnder, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
@@ -61,7 +62,7 @@ const COORDINATOR_ORDER = ["threads", "waiting", "changes", "this", "routines", 
  * answers to, its pull request, its agent and context), what it changed, and the threads of the
  * coordinator it belongs to; a coordinator's also what its page held. Each section answers one
  * question, folds under its head and keeps the place the operator gave it; the diff is read only
- * while it is shown.
+ * while the Overview is on screen.
  */
 export function ThreadOverview(props: ThreadOverviewProps) {
   // Read again when the thread or its agent moves: a turn that ends has usually changed files.
@@ -102,8 +103,8 @@ function thisSection({ thread, pane, pr, reading, parent, coordinating, now = Da
   return {
     id: "this",
     label: coordinating ? "This coordinator" : "This thread",
-    // Folded, it still says how it is.
-    badge: <span className="panel-section-meta"><NodeDot state={state} />{STATE_LABEL[state]}</span>,
+    // Folded, it still says how it is; open, its Status row does.
+    brief: <span className="panel-section-meta"><NodeDot state={state} />{STATE_LABEL[state]}</span>,
     body: <dl className="overview-body">
       <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
       {parent && <Row name="Coordinator">
@@ -197,16 +198,16 @@ function siblingsSection({ thread, threads, parent, paneId, onOpenThread, now = 
 }
 
 /** threadDetail's words that only restate a row's mark. */
-const PLAIN_DETAIL = new Set(["working", "idle", "not running", "done"]);
+const PLAIN_DETAIL = new Set(["working", "idle", "not running", "done", "unknown", "needs you"]);
 
 /** What is alive in a coordinator's work, in words, most urgent first: `1 needs you · 2 working`. */
 const LIVE_STATES = ["needs", "review", "working"] as const;
-const LIVE_WORD: Record<(typeof LIVE_STATES)[number], string> = { needs: "needs you", review: "to review", working: "working" };
+const LIVE_WORD: Record<(typeof LIVE_STATES)[number], (n: number) => string> = { needs: needYou, review: (n) => `${n} to review`, working: (n) => `${n} working` };
 
 /**
- * A coordinator's: the open work under it, its own threads first and then each coordinator under it
- * with its own, every row its state, what it is doing and a tap to open it. What finished is a link
- * to History.
+ * A coordinator's: the open work under it as the tree orders it, each coordinator under it with its
+ * own and then its own threads, every row its state, what it is doing and a tap to open it. What
+ * finished is a link to History.
  */
 function threadsSection({ threads, panes = [], paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps): PanelSection {
   const groups = workUnder(threads);
@@ -234,7 +235,7 @@ function threadsSection({ threads, panes = [], paneId, onOpenThread, onNewThread
     id: "threads",
     label: "Threads",
     badge: <span className="panel-section-meta">
-      {live.length ? live.map(([state, n]) => `${n} ${LIVE_WORD[state]}`).join(" · ") : open.length ? `${open.length} open` : ""}
+      {live.length ? live.map(([state, n]) => LIVE_WORD[state](n)).join(" · ") : open.length ? `${open.length} open` : ""}
     </span>,
     action: onNewThread && <button type="button" onClick={onNewThread} aria-haspopup="dialog" className="overview-link text-xs text-muted-foreground">
       <Plus aria-hidden className="size-3.5" />New thread

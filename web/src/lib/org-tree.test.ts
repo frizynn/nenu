@@ -187,7 +187,7 @@ it("reads a review whose pull request merged as closing: no work to review, abou
   expect(STATE_LABEL.closing).toBe("Merged, closes on its own");
 });
 
-it("groups the open work under a coordinator: its own threads first, then each coordinator under it, the most urgent first", () => {
+it("groups the open work under a coordinator as the tree orders it: each coordinator under it, the most urgent first, then its own threads", () => {
   // Everything under t-1, three levels deep, as threadTree hands it over.
   const groups = workUnder([
     node("t-2", "t-1"),
@@ -200,9 +200,9 @@ it("groups the open work under a coordinator: its own threads first, then each c
     node("t-9", "t-3", { status: "resolved" }),
   ]);
   expect(groups.map((group) => [group.coordinator?.thread.id ?? "own", group.rows.map(({ node: row, depth }) => `${row.thread.id}@${depth}`)])).toEqual([
-    ["own", ["t-8@0", "t-2@0"]],
     ["t-5", ["t-6@0", "t-7@1"]],
     ["t-3", ["t-4@0"]],
+    ["own", ["t-8@0", "t-2@0"]],
   ]);
   expect(workUnder([])).toEqual([]);
 });

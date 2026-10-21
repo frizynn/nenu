@@ -22,7 +22,7 @@ coordinators under it, one more level below one of them, 16 finished), 1440×900
 | | Before (1.41.1) | After |
 |---|---|---|
 | Open rows the panel lists | 5 of 12 (direct children only) | 12 of 12, grouped by coordinator |
-| First running thread, px below the panel's top | 702 (under two questions) | 162 |
+| First running thread, px below the panel's top | 702 (under two questions) | 208 |
 | "Nothing running" against its card's edge | yes | no |
 | Chips reading "missing" | 2 | 0 |
 
@@ -41,15 +41,16 @@ open, and at the top once Threads is folded, which the device remembers.
 
 1. **Every section of a chat's panel folds under its head** (`PanelSections`): a desk's Overview and a
    phone's Status tab alike. The head keeps a badge that still says what is inside when folded (what
-   is alive in the threads, the questions' count, the state). It folds on the shared `Fold` and
-   `desk-fold` motion (ADR 0111).
+   is alive in the threads, the questions' count, the state), and its chevron at its end, so its label
+   starts where its rows do. It folds on the shared `Fold` and `desk-fold` motion (ADR 0111).
 2. **Arrange moves and hides sections; the device keeps it, and Reset forgets it**
    (`lib/panel-layout.ts`, localStorage per kind of panel). A section the layout never heard of takes
    its default place after the one it follows; a hidden one is drawn nowhere until shown again.
 3. **No tabs inside Overview.** The panel already has its tabs; a second row repeats them.
-4. **A coordinator's Threads lists the open work of its whole subtree, first** (`workUnder`): its own
-   threads, then one group per coordinator under it, most urgent first, each row its state, what it
-   does when that says more than its mark, and a tap to open it. Finished work stays a link to History.
+4. **A coordinator's Threads lists the open work of its whole subtree, first** (`workUnder`), in the
+   tree's own order (ADR 0064, as a phone's Threads tab draws it): one group per coordinator under it,
+   most urgent first, then its own threads; each row its state, what it does when that says more than
+   its mark, and a tap to open it. The head counts what is alive. Finished work stays a link to History.
 5. **A task the tracker does not have draws no chip**; its context says "not in the tracker".
 
 ## Consequences

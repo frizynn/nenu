@@ -49,3 +49,10 @@ it("reads a damaged entry as the default, and keeps a layout for the page while 
   act(() => result.current.set(foldSection(result.current.layout, "changes", true)));
   expect(result.current.layout.folded).toEqual(["changes"]);
 });
+
+it("keeps a layout for the page when the store reads but will not write (a full quota)", () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+  const { result } = renderHook(() => usePanelLayout("full"));
+  act(() => result.current.set(foldSection(result.current.layout, "threads", true)));
+  expect(result.current.layout.folded).toEqual(["threads"]);
+});

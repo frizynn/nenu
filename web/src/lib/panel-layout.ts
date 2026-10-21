@@ -1,7 +1,7 @@
 // How the operator arranged a chat panel's sections on this device: their order, which are folded and
-// which are hidden. Kept in localStorage per kind of panel (a coordinator's, a thread's), so a phone
-// and a desk keep their own; a store that throws (private mode, a full quota) keeps it for the page's
-// life. A section the layout never heard of takes its place from the panel's own order.
+// which are hidden. Kept in localStorage per kind of panel (a coordinator's desk panel, its phone
+// Status tab, a thread's), so each device keeps its own; a store that throws (private mode, a full
+// quota) keeps it for the page's life. A section the layout never heard of takes its place from the panel's own order.
 import { useSyncExternalStore } from "react";
 
 export interface PanelLayout {
@@ -32,6 +32,9 @@ function parse(raw: string | null): PanelLayout {
 }
 
 function read(kind: string): PanelLayout {
+  // A layout the store refused to keep (a full quota) holds for the page, over what the store still has.
+  const kept = memory.get(kind);
+  if (kept) return kept;
   let raw: string | null;
   try {
     raw = localStorage.getItem(KEY + kind);
@@ -49,6 +52,7 @@ function write(kind: string, layout: PanelLayout): void {
   try {
     if (layout === DEFAULT_LAYOUT) localStorage.removeItem(KEY + kind);
     else localStorage.setItem(KEY + kind, JSON.stringify(layout));
+    memory.delete(kind);
   } catch {
     memory.set(kind, layout);
   }

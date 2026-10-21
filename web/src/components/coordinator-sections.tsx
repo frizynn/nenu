@@ -58,9 +58,10 @@ export function useCoordinatorSections({ project, thread, asks: given, panes, se
 
   const sections: PanelSection[] = [
     ...(count > 0 ? [{
-      id: "waiting", label: "Waiting on you",
+      id: "waiting", label: "Waiting on you", urgent: true,
       badge: <span className="desk-tab-count" data-waiting="">{count}</span>,
-      body: <div className="px-3.5 pb-1">
+      // Each question keeps its own 10 px inset: with this one, its words start where the head's label does.
+      body: <div className="px-1 pb-1">
         <AskSections sections={waiting} headings={false} session={session} whose={false} answers={asks.list?.answers === true} readOnly={readOnly} />
       </div>,
     }] : []),
@@ -96,10 +97,10 @@ export function useCoordinatorSections({ project, thread, asks: given, panes, se
   return { sections, footer };
 }
 
-/** A phone's Status tab: the coordinator's sections, arranged as its desk panel's are. */
+/** A phone's Status tab: the coordinator's sections, arranged apart from a desk's panel, which holds more. */
 export function CoordinatorSections(props: CoordinatorSectionsProps) {
   const { sections, footer } = useCoordinatorSections(props);
-  return <PanelSections kind="coordinator" sections={sections} footer={footer} />;
+  return <PanelSections kind="coordinator-status" sections={sections} footer={footer} />;
 }
 
 /**

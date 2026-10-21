@@ -154,7 +154,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     onShowChanges: () => inspector.setTab("changes"),
     onOpenThread: (candidate: ProjectThreadView) => {
       if (!candidate.paneId) openNode(candidate.id);
-      else if (scope.coordinating && live(candidate.paneId)) setDocked(candidate.paneId);
+      // A tap on a coordinator enters its chat (ADR 0115); a thread docks beside this one.
+      else if (scope.coordinating && candidate.role !== "coordinator" && live(candidate.paneId)) setDocked(candidate.paneId);
       else openPane(candidate.paneId);
     },
   };

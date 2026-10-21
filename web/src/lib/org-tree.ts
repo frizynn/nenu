@@ -217,8 +217,9 @@ export interface WorkGroup {
 }
 
 /**
- * The open work under a coordinator, `threads` being its whole subtree: the threads it runs itself
- * first, then one group per coordinator under it, most urgent first, each holding its own subtree.
+ * The open work under a coordinator, `threads` being its whole subtree, in the tree's own order (ADR
+ * 0064): one group per coordinator under it, most urgent first, each holding its own subtree, then
+ * the threads it runs itself.
  */
 export function workUnder(threads: readonly ProjectThreadView[]): WorkGroup[] {
   const top = orgTree(threads).open;
@@ -228,7 +229,7 @@ export function workUnder(threads: readonly ProjectThreadView[]): WorkGroup[] {
   const coordinators = top.filter((node) => node.thread.role === "coordinator")
     .map((node): WorkGroup => ({ coordinator: node, rows: placed(node.children, 0) }))
     .sort((a, b) => urgency(a) - urgency(b));
-  return [...(own.length ? [{ rows: placed(own, 0) }] : []), ...coordinators];
+  return [...coordinators, ...(own.length ? [{ rows: placed(own, 0) }] : [])];
 }
 
 /** Whether a project organizes coordinators: one open under it at least. A project with only its own coordinator is drawn as before. */

@@ -45,8 +45,7 @@ function setup(overrides: Partial<ThreadOverviewProps> = {}) {
 it("says what this thread is: its state, who it answers to, its PR, its agent and its context", async () => {
   const { user, parent } = setup({ pr: { number: 42, title: "Checkout flow", url: "https://github.com/acme/shop/pull/42" } });
   const card = screen.getByRole("region", { name: "This thread" });
-  // Its head says it too, so a folded section still does.
-  expect(within(card).getAllByText("Working")).toHaveLength(2);
+  expect(within(card).getByText("Working")).toBeInTheDocument();
   expect(within(card).getByText("· 17m")).toBeInTheDocument();
   expect(within(card).getByRole("link", { name: "#42" })).toHaveAttribute("href", "https://github.com/acme/shop/pull/42");
   expect(within(card).getByText("Claude Code · Opus 5.5")).toBeInTheDocument();
@@ -136,6 +135,8 @@ it("lists the open work of a coordinator's whole subtree, grouped by the coordin
   const card = screen.getByRole("region", { name: "Threads" });
   expect(within(card).getByRole("button", { name: /^Threads/ })).toHaveTextContent("1 to review · 2 working");
   expect(within(card).queryByText("Nothing running")).not.toBeInTheDocument();
+  // As the tree draws it: the coordinators under it first, then its own threads.
+  expect(within(card).getAllByRole("list").map((list) => list.getAttribute("aria-label"))).toEqual(["QA facturación threads", "Its own threads"]);
   const own = within(card).getByRole("list", { name: "Its own threads" });
   expect(within(own).getAllByRole("listitem").map((row) => row.textContent)).toEqual([expect.stringContaining("Own review"), expect.stringContaining("Own idle")]);
   const qa = within(card).getByRole("list", { name: "QA facturación threads" });
@@ -166,6 +167,8 @@ it("folds a section under its head and keeps it folded on this device", async ()
   expect(head).toHaveAttribute("aria-expanded", "true");
   await user.click(head);
   expect(head).toHaveAttribute("aria-expanded", "false");
+  // Folded, its head still says how it is.
+  expect(head).toHaveTextContent("Working");
   cleanupAndRender();
   expect(within(screen.getByRole("region", { name: "This thread" })).getByRole("button", { name: /^This thread/ })).toHaveAttribute("aria-expanded", "false");
 });
@@ -199,7 +202,7 @@ it("on the project coordinator's pane, names no coordinator above it", () => {
     pane: { paneId: "w1:p1", agent: "codex", status: "idle" } as ThreadOverviewProps["pane"], reading: { model: "gpt-5.5" } });
   const card = screen.getByRole("region", { name: "This coordinator" });
   expect(within(card).queryByText("Coordinator")).not.toBeInTheDocument();
-  expect(within(card).getAllByText("Idle")).toHaveLength(2);
+  expect(within(card).getByText("Idle")).toBeInTheDocument();
   expect(within(card).getByText("Codex · gpt-5.5")).toBeInTheDocument();
   expect(within(card).queryByText("Pull request")).not.toBeInTheDocument();
 });
