@@ -4,7 +4,9 @@
   [ADR 0109](./0109-a-coordinators-page-shows-live-work.md) point 2 (a tap on a coordinator's card
   opened its page), [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)
   point 3 (a phone entered a coordinator on its page) and [ADR 0092](./0092-a-project-organizes-its-coordinators.md)
-  point 1 (each coordinator a row into its page). 0109's other points hold, inside the chat.
+  point 1 (each coordinator a row into its page), and [ADR 0101](./0101-a-threads-panel-opens-on-its-overview.md)
+  on a coordinator's own pane (its Overview holds more than three cards, New thread and History included).
+  0109's other points hold, inside the chat.
 - **Trail:** `web/src/components/desk-pages.tsx` (`CoordinatorWorkCard`, `useOpenCoordinator`) ·
   `web/src/components/desk-project.tsx` (`ProjectWork`) · `web/src/routes/project.tsx` (`PhoneWork`) ·
   `web/src/routes/node.tsx` · `web/src/components/coordinator-sections.tsx` · `web/src/components/project-frame.tsx` ·
@@ -49,7 +51,8 @@ the project; its back reads "‹ Projects".
 3. **What the coordinator's page held lives in its chat.** On a desk, the panel's Overview: This
    coordinator, Waiting on you (answered in place), its Threads (with New thread and "N finished" to the
    project's History), Changes, Routines that reach it, Status (its card without the waiting asks, which
-   sit above, and STATUS.md), then Move and Close coordinator. On a phone, a fourth tab beside Chat,
+   sit above, and STATUS.md), then Move and Close coordinator, read only while the Overview is on
+   screen (ADR 0075). On a phone, a fourth tab beside Chat,
    Threads and PRs: Status, counting what waits on you in red, with the same parts; Threads keeps the
    tree, its New thread now starting under this coordinator.
 4. **The back control climbs the project's tree, on a desk too**: a coordinator to its parent

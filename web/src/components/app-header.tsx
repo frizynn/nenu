@@ -39,10 +39,6 @@ export interface HeaderBack {
   desk?: boolean;
 }
 
-/** Parents the desk's flat sidebar cannot climb to, a thread's coordinator or a node's parent, so the
- *  back stays on a desk with their name beside it. */
-const UNLISTED_PARENTS = ["/pane/:paneId", "/project/:projectSlug/node/:nodeId"];
-
 interface AppHeaderProps {
   // Brief network failures do not animate the header. A sustained outage mutes the mark.
   bridge: BridgeStatus | undefined;
@@ -102,8 +98,8 @@ export function AppHeader({
   const mark = !back && home;
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const parent = back?.to ?? homePath(session);
-  // Only from a chat or a node: a page under a chat (its history) has its own way back on a desk.
-  const unlisted = back?.desk || (!back?.onClick && [pathname, parent.split("?")[0]!].every((path) => UNLISTED_PARENTS.some((route) => matchPath(route, path) !== null)));
+  // Inside a project the way up is a level of its tree, which the desk's flat sidebar cannot climb.
+  const unlisted = Boolean(back?.desk);
   const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : unlisted ? "lg:pr-2" : "lg:hidden");
   // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
   // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
@@ -123,7 +119,7 @@ export function AppHeader({
             />
           ) : back?.onClick ? (
             <button type="button" onClick={() => { armMotion("pop"); back.onClick?.(); }} aria-label={`Back to ${back.label}`} className={backClass}>
-              {icon}{back.inPlace ? <span className="text-body">{back.label}</span> : unlisted && <span className="hidden max-w-48 truncate text-body lg:inline">{back.label}</span>}
+              {icon}{back.inPlace && <span className="text-body">{back.label}</span>}
             </button>
           ) : (
             // A tap goes back to where you came from (useGoBack).

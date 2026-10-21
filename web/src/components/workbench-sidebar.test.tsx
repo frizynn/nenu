@@ -517,6 +517,16 @@ describe("the sidebar", () => {
     expect(project.queryByRole("button", { name: /^History/ })).not.toBeInTheDocument();
   });
 
+  it("opens a coordinator whose pane closed on its page, never on a chat that is gone", async () => {
+    // Organizations keeps the pane id after the pane closed.
+    const closed = { ...acme, threads: acme.threads.map((node) => node.id === "t1" ? { ...node, paneId: "gone" } : node) };
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={{ ...herd, projects: [closed] }} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
+    render(<RouterProvider router={router} />);
+    const project = within(screen.getByRole("region", { name: "Acme" }));
+    await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
+    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/project/acme/node/t1");
+  });
+
   it("opens History on its five newest nodes and leaves the rest to the project page", async () => {
     const done = (n: number, day: number, extra: Partial<ProjectView["threads"][number]> = {}) =>
       thread(`h${n}`, `done ${n}`, "root", { status: "resolved", updated: `2026-10-0${day}T00:00:00Z`, ...extra });

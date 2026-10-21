@@ -118,7 +118,6 @@
 }
 
 /* The project page's tree (ADR 0092): a heading over its coordinators and over the threads at its top level, and what an open coordinator holds. */
-.task-section { padding: 10px 10px 4px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
 .task-fold-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; padding-bottom: 8px; }
 .task-fold-body > section[aria-label="Coordinator card"] { margin-bottom: 0; }
 

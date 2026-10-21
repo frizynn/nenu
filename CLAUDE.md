@@ -157,7 +157,7 @@ the unit name; the Herdr action runs from anywhere.
   each read only while on screen, folded with ⌘⌥B
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
-  cards; model and context come from the chat's own reading, and the project's own views are not in the panel
+  cards (a coordinator's own also what its page held, ADR 0113); model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
   `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)

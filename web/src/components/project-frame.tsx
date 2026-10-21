@@ -87,7 +87,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const readOnly = isReadOnly(data.device);
   const refresh = () => revalidator.revalidate();
   const asked = search.get(VIEW_PARAM);
-  const view: PhoneView = PHONE_VIEWS.find((candidate) => candidate === asked) ?? "chat";
+  // Status is a coordinator's tab only.
+  const view: PhoneView = PHONE_VIEWS.find((candidate) => candidate === asked && (candidate !== "status" || scope.coordinating)) ?? "chat";
   const setView = (next: PhoneView) => setSearch((current) => {
     const params = new URLSearchParams(current);
     if (next === "chat") params.delete(VIEW_PARAM);
@@ -129,13 +130,14 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const panelShown = desk && inspector.open && !docked;
 
   // A coordinator's chat holds what its page did (ADR 0113): a desk's panel and a phone's Status tab.
-  const asks = useAsks(scope.coordinating ? [project] : undefined);
+  // A phone reads the asks for its Status tab's count; a desk's Overview reads them while it is on screen.
+  const asks = useAsks(scope.coordinating && !desk ? [project] : undefined);
   const coordinatorId = thread?.id ?? "root";
   const waiting = scope.coordinating ? waitingAt(asks.list, project, coordinatorId).count : 0;
-  const sections = (children?: ReactNode) => <CoordinatorSections project={project} thread={thread} asks={asks} panes={data.agents} session={data.session}
+  const sections = (children?: ReactNode) => <CoordinatorSections project={project} thread={thread} asks={desk ? undefined : asks} panes={data.agents} session={data.session}
     readOnly={readOnly} onChanged={refresh}>{children}</CoordinatorSections>;
   const canStart = !readOnly && startableRoles(project).includes("worker");
-  const finished = scope.coordinating ? finishedCount(project, thread?.title) : 0;
+  const finished = scope.coordinating && desk ? finishedCount(project, thread?.title) : 0;
 
   const openCount = scope.threads.filter(isOpenThread).length;
   const prCount = prLists(scope.threads).open.length;

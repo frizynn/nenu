@@ -208,12 +208,6 @@ export function moveTargets(tree: OrgTree, node: OrgNode): { root: boolean; coor
   };
 }
 
-/** How much open work hangs under a node, and how much of it needs you. */
-export function openUnder(node: OrgNode): { open: number; needs: number } {
-  const under = flatten(node.children).filter((n) => n.state !== "resolved");
-  return { open: under.length, needs: under.filter((n) => n.state === "needs").length };
-}
-
 /** Whether a project organizes coordinators: one open under it at least. A project with only its own coordinator is drawn as before. */
 export function organizes(tree: OrgTree): boolean {
   return tree.open.some((node) => node.thread.role === "coordinator");

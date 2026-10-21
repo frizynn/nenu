@@ -10,10 +10,13 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [1.39.0] - 2026-10-21
 
+### Added
+
+- A coordinator's chat holds what its page did: the desk panel's Overview and a new Status tab on a phone, with Waiting on you, Routines, Status, Move and Close (120093ed, a50b25ae).
+
 ### Changed
 
 - A tap anywhere on a coordinator's row enters its chat, on a desk and a phone; its threads fold down under the row, and the page in between is gone (only a coordinator with no live pane keeps one). 3 taps from Home to its box become 2 (120093ed).
-- What that page held lives in the chat: the desk panel's Overview and a phone's new Status tab, with Waiting on you, Routines, Status, Move and Close (120093ed).
 - A ← back at the top left climbs coordinator → project → Projects, now on a desk too (120093ed).
 
 ## [1.38.4] - 2026-10-21

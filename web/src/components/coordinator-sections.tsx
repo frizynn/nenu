@@ -8,7 +8,7 @@ import { OwnReport } from "@/components/coordinator-summary";
 import { useOpenNode } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { canMove, CloseNodeDialog, MoveNodeDialog } from "@/components/project-tasks";
-import type { AsksRead } from "@/hooks/use-asks";
+import { useAsks, type AsksRead } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { askSections } from "@/lib/asks";
@@ -33,10 +33,10 @@ export function OverviewCard({ label, head, children }: { label: string; head?: 
  * it; its Status (its card, what was asked of it, STATUS.md, its own report); and Move and Close. A
  * desk draws it in the chat's panel, under This coordinator; a phone in the chat's Status tab.
  */
-export function CoordinatorSections({ project, thread, asks, panes, session, readOnly, onChanged, children }: {
+export function CoordinatorSections({ project, thread, asks: given, panes, session, readOnly, onChanged, children }: {
   project: ProjectView;
-  /** Every coordinator's asks, read once by the chat for this and its tab's count. */
-  asks: AsksRead;
+  /** Every coordinator's asks, where the chat already reads them for its tab's count; else read here, while this is on screen. */
+  asks?: AsksRead;
   /** The coordinator's node; absent for the project's own. */
   thread?: ProjectThreadView;
   panes: readonly AgentView[];
@@ -49,6 +49,8 @@ export function CoordinatorSections({ project, thread, asks, panes, session, rea
   const [closing, setClosing] = useState(false);
   const [moving, setMoving] = useState(false);
   const id = thread?.id ?? "root";
+  const own = useAsks(given ? undefined : [project]);
+  const asks = given ?? own;
   const routines = useRoutines(project.slug, session);
   const read = useThreadSummaries(project, thread ? [thread] : []);
   const openNode = useOpenNode(project, panes, session);

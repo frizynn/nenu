@@ -439,6 +439,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   // Open coordinators start open and resolved ones folded; the node on screen opens them.
   const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
+      live={node.thread.paneId !== undefined && data.agents.some((agent) => agent.paneId === node.thread.paneId)}
       fold={fold} />;
     if (phone) {
       const children = node.children.filter(shownOnPhone);
@@ -554,12 +555,14 @@ interface ThreadRowFold {
 }
 
 /** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
-function ThreadRow({ node, depth, slug, session, current, fold }: {
+function ThreadRow({ node, depth, slug, session, current, live, fold }: {
   node: OrgNode;
   depth: number;
   slug: string;
   session?: string;
   current: boolean;
+  /** Its pane is in the snapshot: Organizations keeps a pane id after the pane closed. */
+  live: boolean;
   /** Present on a coordinator with nodes under it. */
   fold?: ThreadRowFold;
 }) {
@@ -568,7 +571,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
   const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
   // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
   const note = thread.paneId || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
-  const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
+  const to = thread.paneId && live ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
     <div className="nav-thread">
       {fold && (

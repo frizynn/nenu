@@ -237,34 +237,6 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
 }
 
 /**
- * Which rows of a tree are open. The project page keeps them for the tab's session, so going into a
- * chat and back finds the tree as it was left; every other view starts fresh.
- */
-export function useFolds(project: string | undefined) {
-  const key = project && `nenu.folds.${project}`;
-  const [folds, setFolds] = useState<Record<string, boolean>>(() => {
-    if (!key) return {};
-    try {
-      const saved: unknown = JSON.parse(sessionStorage.getItem(key) ?? "{}");
-      return saved && typeof saved === "object" && !Array.isArray(saved)
-        ? Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))
-        : {};
-    } catch {
-      return {};
-    }
-  });
-  useEffect(() => {
-    if (!key) return;
-    try {
-      sessionStorage.setItem(key, JSON.stringify(folds));
-    } catch {
-      // Storage refused (a private window): the folds last as long as the page.
-    }
-  }, [key, folds]);
-  return [folds, setFolds] as const;
-}
-
-/**
  * Choose where an open node goes (Organizations' `node move`): the project's top level or an open
  * coordinator that is not the node or one of its own. On failure it stays open with the cause.
  */

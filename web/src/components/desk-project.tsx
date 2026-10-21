@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ChatCircle, ChevronDown, ChevronLeft, History, Plus, Search, Workflow } from "@/components/ui/icon";
 
@@ -10,7 +10,6 @@ import { startableRoles } from "@/components/node-start";
 import { prefetchContext, ProjectContext } from "@/components/project-context";
 import { ProjectGlyph } from "@/components/project-glyph";
 import { StartProjectCoordinator } from "@/components/project-coordinator";
-import { useFolds } from "@/components/project-tasks";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useAsks } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
@@ -204,4 +203,27 @@ function NewMenu({ project, roles, onStarted }: { project: ProjectView; roles: r
       ))}
     </WorkbenchPopover>
   </>;
+}
+
+/** Which of a project's rows are unfolded, kept for the tab's session: a chat and back finds them as they were left. */
+function useFolds(project: string) {
+  const key = `nenu.folds.${project}`;
+  const [folds, setFolds] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved: unknown = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+      return saved && typeof saved === "object" && !Array.isArray(saved)
+        ? Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"))
+        : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(folds));
+    } catch {
+      // Storage refused (a private window): the folds last as long as the page.
+    }
+  }, [key, folds]);
+  return [folds, setFolds] as const;
 }

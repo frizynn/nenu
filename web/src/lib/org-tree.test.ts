@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, openUnder, orgTree, STATE_LABEL, type OrgNode } from "./org-tree";
+import { awaits, closeRefusal, coordinatorState, flatten, historyCount, moveTargets, nodeState, openCoordinators, orgTree, STATE_LABEL, type OrgNode } from "./org-tree";
 import type { ProjectThreadView } from "./types";
 
 const node = (id: string, parentId: string, extra: Partial<ProjectThreadView> = {}): ProjectThreadView =>
@@ -177,11 +177,6 @@ describe("a project's coordinators", () => {
     expect(ids(find("hotfix"))).toEqual([false, ["lead", "checkout"]]);
     // Its own coordinator under it is no place for a coordinator.
     expect(ids(find("lead"))).toEqual([false, []]);
-  });
-
-  it("counts the open work under a node and how much of it needs you", () => {
-    expect(openUnder(find("lead"))).toEqual({ open: 3, needs: 1 });
-    expect(openUnder(find("hotfix"))).toEqual({ open: 0, needs: 0 });
   });
 });
 

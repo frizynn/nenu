@@ -114,7 +114,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted; point 2 amended by 0113 |
 | [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted; point 3 amended by 0113 |
 | [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted |
-| [0113](./0113-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0109, 0110) | Accepted |
+| [0113](./0113-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never
