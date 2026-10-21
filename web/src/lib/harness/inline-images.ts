@@ -47,7 +47,8 @@ export function imageTokens(draft: string | null): number {
   return draft?.match(TOKEN)?.length ?? 0;
 }
 
-const strip = (s: string) => s.replace(/\s+/g, "");
+/** A text without its whitespace: a box wraps, and its reading joins a word cut at the edge with a space. */
+export const strip = (s: string) => s.replace(/\s+/g, "");
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -105,4 +106,13 @@ export function draftIsPartOfSend(sent: string, draft: string | null): boolean {
     at += literal.length;
   }
   return at === box.length;
+}
+
+// What a CLI draws for something only it holds: a picture it attached (Claude and Codex), a paste it
+// collapsed (Claude's `[Pasted text #N +M lines]`, Codex's `[Pasted Content N chars]`).
+const CLI_TOKEN = /\[(?:Image #\d+|Pasted text #\d+[^\]]*|Pasted Content \d+ chars)\]/;
+
+/** Whether the box holds something only the CLI has, which a copy of its text would not carry. */
+export function holdsCliToken(draft: string): boolean {
+  return CLI_TOKEN.test(draft);
 }

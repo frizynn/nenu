@@ -1516,6 +1516,24 @@ describe("Composer — terminal-draft preview", () => {
     await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
   });
 
+  it("Take over leaves the terminal alone when its draft holds a picture only the CLI has", async () => {
+    const user = userEvent.setup();
+    const clears: unknown[] = [];
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async ({ request }) => {
+        clears.push(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderDraftHarness();
+    strandDraft("[Image #1] fix this");
+    await screen.findByText(/draft in terminal/i);
+    await user.click(screen.getByRole("button", { name: /take over/i }));
+    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("[Image #1] fix this");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(clears).toEqual([]);
+  });
+
   it("Take over copies the CURRENT draft into the composer, marks it handled, and hides the preview", async () => {
     const user = userEvent.setup();
     const keyCalls: string[] = [];

@@ -16,7 +16,7 @@ import { parseAnsi } from "../web/src/lib/ansi.ts";
 import { lineText, splitLines, trimTrailingBlank, type StyledLine } from "../web/src/lib/blocks.ts";
 import { draftCarriesSend } from "../web/src/lib/guarded-reply.ts";
 import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts";
-import { draftIsPartOfSend, hasPlacedPictures, imageTokens, pathShows, sendPieces } from "../web/src/lib/harness/inline-images.ts";
+import { draftIsPartOfSend, hasPlacedPictures, holdsCliToken, imageTokens, pathShows, sendPieces, strip } from "../web/src/lib/harness/inline-images.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
 import { deliveryVerdict } from "./delivery-check.ts";
@@ -221,6 +221,10 @@ class Send {
   ) {
     this.sleep = deps.sleep ?? defaultSleep;
     if (prior?.typeAttempted) this.trace.typeAttempted = true;
+  }
+
+  get priorDelivered(): boolean {
+    return this.prior?.textDelivered === true;
   }
 
   /** `textDelivered` is this attempt's; text an earlier attempt delivered may still be there too. */
@@ -430,6 +434,8 @@ async function pictureDrawn(send: Send, count: number, path: string): Promise<"t
  * never clears a draft, finds it there. Anything else in the box may be the operator's, and stays.
  */
 async function unsent(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: Stopped): Promise<GuardedSendResult> {
+  // An earlier try's text may already have gone: "send it again" would contradict the retry's answer.
+  if (send.priorDelivered) return send.fail(`${stopped.why} ${stopped.left}`, true);
   try {
     const seen = await send.read();
     if (seen.composer === true && draftIsPartOfSend(send.request.text, seen.draft) && (await sweep(send, deps, adapter, seen)) === null) {
@@ -502,15 +508,12 @@ async function sweep(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter,
   return send.fail("The terminal draft has not cleared yet. Your message wasn't typed; retry when the terminal is ready.", false);
 }
 
-// Whitespace is not compared: a long draft wraps, and the box's reading joins a word cut at the
-// edge with a space.
-const bare = (text: string) => text.replace(/\s+/g, "");
-
 /**
  * Clear the input box while it still holds `expected`, a draft the operator took over on the phone
  * (ADR 0112): a fresh read must show the input box holding exactly that draft, then the send's own
  * sweep clears it and a read confirms the box emptied. A changed draft, a dialog or no input box is
- * left alone. The caller holds the pane's write lock.
+ * left alone, and so is a draft holding a picture or a paste the CLI collapsed: the phone's copy is
+ * only its token, so clearing would lose it. The caller holds the pane's write lock.
  */
 export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep">, expected: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const kept = { ok: false as const, error: "The terminal's input changed, so it was left as it is." };
@@ -529,9 +532,10 @@ export async function clearTakenDraft(deps: Pick<GuardedSendDeps, "herdr" | "pan
   } catch (err) {
     return { ok: false, error: `herdr read failed: ${message(err)}` };
   }
-  if (seen.composer !== true || seen.draft === null || bare(seen.draft) !== bare(expected)) return kept;
+  if (seen.composer !== true || seen.draft === null || strip(seen.draft) !== strip(expected)) return kept;
+  if (holdsCliToken(seen.draft)) return { ok: false, error: "The terminal's input holds a picture or a paste only the agent has, so it was left as it is." };
   const failed = await sweep(send, full, adapter, seen);
-  return failed && !failed.outcome.ok ? { ok: false, error: failed.outcome.error } : { ok: true };
+  return failed ? { ok: false, error: "The terminal's input didn't clear; check Terminal." } : { ok: true };
 }
 
 /**

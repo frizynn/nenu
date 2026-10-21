@@ -37,6 +37,7 @@ import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
 import { isSelfEcho, normalizeDraft } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
+import { holdsCliToken } from "@/lib/harness/inline-images";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
@@ -795,11 +796,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
-    if (locked) return;
-    const kept = "The terminal still holds its copy: its input changed. Yours is here.";
+    // A picture or a paste only the CLI holds is a token in this copy: clearing it would lose it.
+    if (locked || holdsCliToken(draft)) return;
     api.clearTerminalDraft(paneId, draft, session).then(
-      (res) => { if (!res.ok) setStatus(kept, "info"); },
-      () => setStatus(kept, "info"),
+      (res) => { if (!res.ok) setStatus(res.error ?? "The terminal still holds its copy.", "info"); },
+      () => setStatus("The terminal still holds its copy: Nenu couldn't reach it.", "info"),
     );
   }
 

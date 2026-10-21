@@ -36,11 +36,14 @@ or mid-turn (`[Image #4]` in its own queue).
 3. **A queued row whose delivery cleared the box goes again**, at most three times, then pauses.
 4. **Take over moves the draft**: the composer gets the text, and the bridge clears the box only while
    a fresh read, under the pane's write lock, shows that exact text (`clear-draft`). A read-only
-   device only copies.
+   device only copies, and so does a draft holding `[Image #N]` or a collapsed paste: the copy is only
+   the token, and the picture or the pasted text lives in the CLI alone.
 
 ## Consequences
 
-- A picture the CLI never attaches costs the verify window (2.5 s) before its path goes as text.
+- A picture the CLI never attaches costs the verify window (2.5 s) before its path goes as text. One it
+  attaches later than that lands after the next piece; the final read then fails and the send stops
+  with "check Terminal", never a wrong Enter.
 - "Check Terminal before retrying" remains only where Nenu cannot tell its typing from the operator's.
 - Take over now writes to the terminal. It is the operator's tap, bound to the text the phone showed;
   a host that typed on keeps its line. Don't return it to a copy: the copy is what stranded the queue.

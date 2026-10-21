@@ -77,7 +77,7 @@ export async function deliverQueuedMessage(
       // it is the send clearing its own typing.
       if (!wrote) throw new Error("The terminal input changed. Check it before sending.");
       swept = true;
-      return herdr.sendPaneKeys(id, keys);
+      return checked(async () => (await herdr.sendPaneKeys(id, keys), { ok: true }));
     },
   };
   const { outcome } = await guardedSend(
