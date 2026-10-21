@@ -15,6 +15,7 @@ import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { RecoveryLeads } from "@/components/connect-conversation";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
+import { MOTION_PANEL_MS } from "@/lib/motion";
 
 interface LiveConversationProps {
   paneId: string;
@@ -409,11 +410,16 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     setFrozen((current) => current ?? history);
     restoring.current = true;
     if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
-    restoreFrame.current = requestAnimationFrame(() => {
+    // A fold opens and shuts over a panel's length (components/reveal.tsx): the tapped line is held
+    // where it was each frame until the motion has played.
+    const until = performance.now() + MOTION_PANEL_MS + 50;
+    const hold = () => {
       if (target.isConnected) el.scrollTop += target.getBoundingClientRect().top - before;
+      if (target.isConnected && performance.now() < until) { restoreFrame.current = requestAnimationFrame(hold); return; }
       restoring.current = false;
       restoreFrame.current = null;
-    });
+    };
+    restoreFrame.current = requestAnimationFrame(hold);
   }, [history]);
 
   function onScroll() {

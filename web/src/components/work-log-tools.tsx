@@ -1,23 +1,27 @@
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import { Sparkle, ChevronDown, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, ChatCircleDots, Search, SquareTerminal, Wrench, type IconComponent } from "@/components/ui/icon";
+import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, ListTodo, ChatCircleDots, Search, Sparkle, Terminal, Wrench, type IconComponent } from "@/components/ui/icon";
 import { displayPath } from "@/lib/display-path";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
+import { clockTime } from "@/lib/format";
 import { IMAGE_EXTENSION, imageLabel } from "@/lib/message-images";
+import { shellTokens, type ShellTokenKind } from "@/lib/shell-tokens";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { commandOutput, describeTool, firstLine, QUESTION_STEP, stepsDiff, stepsSummary, type LiveStep, type StepKind, type ToolStepDescription, type WorkStep } from "@/lib/work-timeline";
+import { commandOutput, describeTool, firstLine, foldsSteps, QUESTION_STEP, stepsDiff, stepsSummary, type LiveStep, type StepKind, type ToolStepDescription, type WorkStep } from "@/lib/work-timeline";
 import { DiffStat } from "./diff-stat";
 import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
+import { Reveal } from "./reveal";
 import { Elapsed, LiveGlyph } from "./work-activity-label";
 
-// A turn's work as a timeline: one line per step, its icon, a verb and what it acted on, in the quiet
-// greys, so the steps read as the agent working and its prose as what it says. A step with
-// a body (a call's output, a whole thought) opens it under its line; nothing groups steps behind a
-// second fold, so a failure is one tap from its output once the turn is open.
+// A turn's work as a timeline, the same on a phone and a desk: one line per step, its icon and what it
+// did in the quiet greys, so the steps read as the agent working and its prose as what it says. A
+// command reads as itself; a thought as its opening words. Several calls between two of the agent's
+// texts fold under one line ("Ran 3 commands"), and a step opens onto its command, coloured as a shell
+// reads it, and its output in grey (ADR 0113).
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
 
@@ -73,8 +77,8 @@ export function useToolImages() {
 }
 
 const STEP_ICONS: Record<StepKind | "thinking", IconComponent> = {
-  terminal: SquareTerminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Sparkle, plan: ListTodo, tool: Wrench,
-  question: ChatCircleDots, thinking: Sparkle,
+  terminal: Terminal, read: FileText, edit: FilePen, write: FilePlus, search: Search, web: Globe, agent: Sparkle, plan: ListTodo, tool: Wrench,
+  question: ChatCircleDots, thinking: Brain,
 };
 
 /**
@@ -97,8 +101,10 @@ function describeCall(part: ToolPart): ToolStepDescription & { text: string } {
   return { ...step, text: step.target === "title" ? planTitle(part.summary) : part.summary };
 }
 
-// 36px on a mouse, 44px under a finger, both from padding around one 20px line.
-const LINE = "flex w-full min-w-0 items-center gap-2 py-2 text-left text-subhead min-h-9 coarse:min-h-11";
+// 32px on a mouse, 44px under a finger, both from padding around one 20px line. The row lights on hover
+// as every row does (ADR 0111), its fill reaching past the icon so the icon column stays where it is.
+const ROW = "group -mx-1.5 flex w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-subhead min-h-8 coarse:min-h-11 pointer-fine:hover:bg-hover";
+const CHEVRON = "size-3.5 shrink-0 text-subtle-foreground transition-[rotate,color] duration-120 ease-out group-hover:text-foreground motion-reduce:transition-none";
 
 /** A step in progress: its line carries the live glyph for its icon, and how long it has run. */
 type Live = Pick<LiveStep, "since">;
@@ -119,26 +125,27 @@ function StepLine({ icon, live, label, expanded, controls, onToggle, children }:
   children: ReactNode;
 }) {
   const lead = live ? <LiveGlyph /> : icon;
-  const time = live?.since && <Elapsed since={live.since} className="shrink-0 text-footnote text-muted-foreground" />;
-  if (!onToggle) return <div className={LINE}>{lead}{children}{time}<span aria-hidden="true" className="size-3.5 shrink-0" /></div>;
+  const time = live?.since && <Elapsed since={live.since} className="shrink-0 text-footnote text-subtle-foreground" />;
+  const chevron = <ChevronRight aria-hidden="true" className={cn(CHEVRON, expanded && "rotate-90", !onToggle && "invisible")} />;
+  if (!onToggle) return <div className={ROW}>{lead}{children}{time}{chevron}</div>;
   return <button type="button" data-work-toggle={live ? undefined : true} aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
-    className={cn(LINE, "group")}>
-    {lead}{children}{time}
-    <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} />
+    className={ROW}>
+    {lead}{children}{time}{chevron}
   </button>;
 }
 
-function StepIcon({ kind }: { kind: StepKind | "thinking" }) {
+function StepIcon({ kind, failed = false }: { kind: StepKind | "thinking"; failed?: boolean }) {
   const Icon = STEP_ICONS[kind];
-  return <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />;
+  return <Icon aria-hidden="true" className={cn("size-4 shrink-0", failed ? "text-destructive" : "text-muted-foreground")} />;
 }
 
 /**
  * What a step acted on: a path shows its folders muted and its file name whole, code stays monospace.
  * The folders give up whole leading segments first, then lose characters from their start (the rtl
- * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay.
+ * box puts the ellipsis on the left), so the folders nearest the file are the ones that stay. A command
+ * reads as the line it is, in the row's own type: it is the row's name, not a block of code.
  */
-function StepTarget({ text, format, query, current }: { text: string; format: ToolStepDescription["target"] | "thought"; query: string; current: boolean }) {
+function StepTarget({ text, format, query, current }: { text: string; format: ToolStepDescription["target"] | "thought" | "command"; query: string; current: boolean }) {
   const cwd = useContext(PaneCwdContext);
   if (!text) return <span className="flex-1" />;
   if (format === "path") {
@@ -148,8 +155,8 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
       <span className="max-w-full shrink-0 truncate text-muted-foreground"><Highlight text={base} query={query} current={current} /></span>
     </span>;
   }
-  return <span className={cn("min-w-0 flex-1 truncate text-subtle-foreground", format === "code" && "font-mono text-code", format === "thought" && "italic")}>
-    <Highlight text={text} query={query} current={current} />
+  return <span className={cn("min-w-0 flex-1 truncate", format === "command" || format === "thought" ? "text-muted-foreground" : "text-subtle-foreground", format === "code" && "font-mono text-code")}>
+    <Highlight text={format === "command" ? firstLine(text) || text : text} query={query} current={current} />
   </span>;
 }
 
@@ -159,13 +166,6 @@ function spokenPath(path: string, cwd: string): string {
   return dir + base;
 }
 
-/** A finished step that failed says so on its line, so the failure shows before anything opens. */
-function FailedChip() {
-  return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-destructive/40 px-2 text-caption text-destructive">
-    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />Failed
-  </span>;
-}
-
 /** A call the operator has to answer for says so on its line: the blocked dot, and the words plain (direction.md). */
 function WaitingChip() {
   return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 text-caption text-foreground">
@@ -173,7 +173,35 @@ function WaitingChip() {
   </span>;
 }
 
+const SYNTAX: Record<ShellTokenKind, string | undefined> = {
+  command: "text-syntax-command", flag: "text-syntax-flag", argument: "text-syntax-argument", string: "text-syntax-argument",
+  variable: "text-syntax-variable", keyword: "text-syntax-keyword", operator: "text-muted-foreground", comment: "text-subtle-foreground", space: undefined,
+};
+
+/** A command as a shell reads it, in colour; every piece is a text node, and find's hits stay marked. */
+function ShellLine({ text, query, current }: { text: string; query: string; current: boolean }) {
+  return <>{shellTokens(text).map((token, index) => <span key={index} className={SYNTAX[token.kind]}><Highlight text={token.text} query={query} current={current} /></span>)}</>;
+}
+
 const OUTPUT = "min-w-0 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]";
+
+/**
+ * What a call ran and what it answered, verbatim: never Markdown (the XSS boundary). The command in
+ * colour, then its output in grey under it, a failure's exit code first as the CLI says it. A long
+ * output scrolls in place under a pointer; under a finger it runs whole, so the chat stays the one box
+ * that scrolls.
+ */
+function StepBody({ part, kind, query, focused, pending }: { part: ToolPart; kind: StepKind; query: string; focused: boolean; pending: string }) {
+  const { code, output } = commandOutput(part.result?.text ?? "");
+  return <div className="min-w-0 space-y-2 pt-1 pb-3">
+    {containsQuery(part.name, query) && <p className="font-mono text-caption text-subtle-foreground"><Highlight text={part.name} query={query} current={focused} /></p>}
+    {part.summary && <pre className={cn(OUTPUT, "text-foreground")}>{kind === "terminal" ? <ShellLine text={part.summary} query={query} current={focused} /> : <Highlight text={part.summary} query={query} current={focused} />}</pre>}
+    {part.result ? <pre className={cn(OUTPUT, "text-muted-foreground pointer-fine:max-h-80 pointer-fine:overflow-y-auto")}>
+      {code !== undefined && `Error: Exit code ${code}\n`}<Highlight text={output} query={query} current={focused} />
+      {part.result.truncated && <span className="text-subtle-foreground">{"\n… output truncated"}</span>}
+    </pre> : <p className="text-footnote text-muted-foreground">{pending}</p>}
+  </div>;
+}
 
 /**
  * A tool call as one step. Its output stays verbatim text, never Markdown (the XSS boundary). A call
@@ -193,30 +221,32 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const running = !part.result && active && !asking;
   const verb = asking ? step.ask : running ? step.doing : step.done;
   const status = failed ? "Failed" : asking ? "Waiting on you" : !part.result && !active ? "No output recorded" : null;
-  const truncated = !!part.result?.truncated;
+  const diff = part.diff && !failed ? { additions: part.diff.added, deletions: part.diff.removed } : null;
+  // A command reads as the line it is. Finished, it is the row's whole name: its verb would only say
+  // "Ran" on every line of a run of them; running or asked about, the verb says which.
+  const command = step.kind === "terminal";
+  const quiet = command && !asking && !running;
   return (
-    <div data-tool={id} data-step={step.kind} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} />} live={asking ? undefined : live} label={[verb, target, status, truncated ? "Truncated" : null].filter(Boolean).join(" ")}
+    // What the agent said the call is for (a Bash call's description) is the row's tooltip on a desk.
+    <div data-tool={id} data-step={step.kind} title={part.description} className="min-w-0">
+      <StepLine icon={<StepIcon kind={step.kind} failed={failed} />} live={asking ? undefined : live}
+        label={[verb, target, status, part.result?.truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
-        <span className={cn("text-muted-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>
-        <StepTarget text={step.text} format={step.target} query={query} current={focused} />
-        {failed ? <FailedChip /> : asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
-        {truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
+        {!quiet && <span className={cn("text-muted-foreground", step.kind === "tool" ? "min-w-0 max-w-[45%] truncate" : "shrink-0")}>{verb}</span>}
+        <StepTarget text={step.text} format={command ? "command" : step.target} query={query} current={focused} />
+        {diff && <DiffStat diff={diff} className="text-caption" />}
+        {asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-subtle-foreground">{status}</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
-      {/* Under a finger the output takes the row's full width: a phone fits few characters of code a line. */}
-      {open && <div id={contentId} className="mb-2 ml-6 min-w-0 space-y-2 rounded-lg bg-muted px-3 py-2 coarse:ml-0">
-        <p className="font-mono text-caption text-muted-foreground"><Highlight text={part.name} query={query} current={focused} /></p>
-        {part.summary && <pre className={OUTPUT}><Highlight text={part.summary} query={query} current={focused} /></pre>}
-        {part.result ? <pre className={OUTPUT}><Highlight text={part.result.text} query={query} current={focused} />{part.result.truncated && <span className="text-muted-foreground">{"\n… output truncated"}</span>}</pre>
-          : <p className="text-footnote text-muted-foreground">{asking ? "Waiting on you" : active ? "Running…" : "No output recorded"}</p>}
-      </div>}
+      <Reveal open={open} id={contentId}>
+        <StepBody part={part} kind={step.kind} query={query} focused={focused} pending={asking ? "Waiting on you" : active ? "Running…" : "No output recorded"} />
+      </Reveal>
     </div>
   );
 }
 
-/** A thought as one italic line of its opening words; the whole of it opens beneath. */
+/** A thought as one grey line of its opening words; the whole of it opens beneath. */
 export function ThinkingStep({ text, truncated = false, query, focused = false, live }: { text: string; truncated?: boolean; query: string; focused?: boolean; live?: Live }) {
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
@@ -228,13 +258,15 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
   return <div data-step="thinking" className="min-w-0">
     <StepLine icon={<StepIcon kind="thinking" />} live={live} label={`Thinking: ${preview}${truncated ? " · truncated" : ""}`} expanded={open} controls={contentId}
       onToggle={preview ? () => setExpanded((value) => !value) : undefined}>
-      {(live || !shown) && <span className="shrink-0 text-muted-foreground">Thinking</span>}
+      {(live || !shown) && <span className="shrink-0 text-muted-foreground">{live || !preview ? "Thinking" : "Thought"}</span>}
       <StepTarget text={shown} format="thought" query={query} current={focused} />
     </StepLine>
-    {open && preview && <div id={contentId} className="min-w-0 pb-2 pl-6 text-muted-foreground [overflow-wrap:anywhere]">
-      <MarkdownText text={text} query={query} current={focused} />
-      {truncated && <p className="text-footnote">… truncated</p>}
-    </div>}
+    {preview && <Reveal open={open} id={contentId}>
+      <div className="min-w-0 pb-2 pl-6 text-subhead text-muted-foreground [overflow-wrap:anywhere]">
+        <MarkdownText text={text} query={query} current={focused} />
+        {truncated && <p className="text-footnote">… truncated</p>}
+      </div>
+    </Reveal>}
   </div>;
 }
 
@@ -251,149 +283,68 @@ export function LiveStepRow({ step, query, focused, marker, waiting = false }: {
   </div>;
 }
 
-// On a desk, a turn reads as Claude Code's does: the agent's words at prose size, and between two of
-// them one quiet line for the steps it took. Open, the line is a table, one row per step: its verb in
-// grey, what it touched in small monospace (or the call's own description), and a row opens onto its
-// command and its output, in blocks of their own. Nothing of a step is ever drawn at prose size.
-
 /** Whether a step holds the searched words: its fold opens, so find's hit is on screen. */
 function stepMatches(step: WorkStep, query: string) {
   return step.part.kind === "tool" ? matches(step.part, query) : containsQuery(step.part.text, query);
 }
 
-/** A failed step's code, else that it failed, in the destructive tint. */
-function FailureChip({ code }: { code?: number }) {
-  return <span className="shrink-0 rounded-full bg-destructive/15 px-2 text-caption font-medium text-destructive">{code !== undefined ? `exit ${code}` : "Failed"}</span>;
+/** The icon a run's line draws: its calls' kind when they share one, else the generic tool. */
+function runIcon(steps: WorkStep[]): StepKind {
+  const kinds = new Set(steps.flatMap(({ part }) => part.kind === "tool" ? [part.questions?.length ? "question" : describeTool(part.name).kind] : []));
+  return kinds.size === 1 ? [...kinds][0] as StepKind : "tool";
 }
 
-const BLOCK = "min-w-0 overflow-hidden rounded-lg border bg-background";
-const BLOCK_TEXT = "max-h-96 overflow-y-auto px-3 py-2 font-mono text-caption leading-5 text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]";
-
-/** What a call ran and what it answered, verbatim: never Markdown (the XSS boundary), never at prose size. */
-function StepBody({ part, query, focused, waiting, active }: { part: ToolPart; query: string; focused: boolean; waiting: boolean; active: boolean }) {
-  const step = describeCall(part);
-  const { code, output } = commandOutput(part.result?.text ?? "");
-  const pending = waiting ? "Waiting on you" : active ? "Running…" : "No output recorded";
-  return <div className="min-w-0 space-y-2">
-    {part.summary && <pre className={cn(BLOCK, BLOCK_TEXT)}>{step.kind === "terminal" && <span aria-hidden="true" className="text-subtle-foreground">$ </span>}<Highlight text={part.summary} query={query} current={focused} /></pre>}
-    <div className={BLOCK}>
-      <div className="flex items-center justify-between border-b px-3 py-1 text-caption text-muted-foreground">
-        <span>Output</span>{code !== undefined && <span>exit {code}</span>}
-      </div>
-      {part.result ? <pre className={BLOCK_TEXT}><Highlight text={output} query={query} current={focused} />{part.result.truncated && <span className="text-subtle-foreground">{"\n… output truncated"}</span>}</pre>
-        : <p className="px-3 py-2 text-caption text-muted-foreground">{pending}</p>}
-    </div>
-  </div>;
-}
-
-/**
- * What a desk's step says it acted on, running or done: the call's description, unmarked since find
- * does not search it (only a desk draws one), else its target, a path relative to the pane's folder.
- */
-function deskTarget(part: ToolPart, cwd: string): { text: string; marked: boolean; mono: boolean } {
-  if (part.description) return { text: part.description, marked: false, mono: false };
-  const step = describeCall(part);
-  const text = step.target === "path" && step.text ? spokenPath(step.text, cwd) : step.text;
-  return { text, marked: true, mono: step.target !== "text" && step.target !== "title" };
-}
-
-/** A finished row's target fills the row in its own colour; the running step's takes the line's. */
-function DeskTarget({ part, query, focused, row = false }: { part: ToolPart; query: string; focused: boolean; row?: boolean }) {
-  const target = deskTarget(part, useContext(PaneCwdContext));
-  return <span className={cn("min-w-0 truncate", target.mono && "font-mono text-caption", row && "flex-1", row && (target.mono ? "text-muted-foreground" : "text-foreground"))}>
-    {target.marked ? <Highlight text={target.text} query={query} current={focused} /> : target.text}
-  </span>;
-}
-
-const ROW = "group flex w-full min-w-0 items-center gap-3 px-3.5 py-2.5 text-left text-footnote";
-const ROW_CHEVRON = "size-3.5 shrink-0 text-subtle-foreground transition-transform group-hover:text-foreground motion-reduce:transition-none";
-
-/** One step as a row of its run's table; it opens onto its command and output, a thought onto its words. */
-function StepRow({ step, query, focused, active, waiting }: { step: WorkStep; query: string; focused: boolean; active: boolean; waiting: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const contentId = useId();
-  const open = expanded || focused || stepMatches(step, query);
-  const { part } = step;
-  const tool = part.kind === "tool" ? part : null;
-  const thought = part.kind === "thinking" ? part : null;
-  const call = tool && describeCall(tool);
-  const asking = waiting && !tool?.result;
-  const verb = !call ? "Thought" : asking ? call.ask : !tool!.result && active ? call.doing : call.done;
-  const failed = !!tool?.result?.isError;
-  const diff = tool?.diff && !failed ? { additions: tool.diff.added, deletions: tool.diff.removed } : null;
-  return <div data-step-row data-tool={tool ? `${step.entry}:${step.index}` : undefined} className="min-w-0">
-    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)} className={ROW}>
-      <span className="min-w-14 shrink-0 whitespace-nowrap text-muted-foreground">{verb}</span>
-      {tool ? <DeskTarget part={tool} query={query} focused={focused} row />
-        : <span className="min-w-0 flex-1 truncate italic text-muted-foreground"><Highlight text={firstLine(thought!.text)} query={query} current={focused} /></span>}
-      {failed ? <FailureChip code={commandOutput(tool!.result!.text).code} /> : asking ? <WaitingChip /> : diff && <DiffStat diff={diff} className="text-caption" />}
-      {tool?.result?.truncated && <span className="shrink-0 text-caption text-muted-foreground">Truncated</span>}
-      {open ? <ChevronDown aria-hidden="true" className={ROW_CHEVRON} /> : <ChevronRight aria-hidden="true" className={ROW_CHEVRON} />}
-    </button>
-    {open && <div id={contentId} className="min-w-0 px-3.5 pb-3.5 pl-[5.125rem]">
-      {tool ? <StepBody part={tool} query={query} focused={focused} waiting={asking} active={active} />
-        : <div className="text-footnote text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={thought!.text} query={query} current={focused} />
-          {thought!.truncated && <p>… truncated</p>}</div>}
-    </div>}
-  </div>;
+/** Each step of a run as its own row; an entry's scroll marker sits on its first row, wherever its run is. */
+function StepRows({ steps, query, focusedUuid, active, asked }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string }) {
+  const marked = new Set<string>();
+  return <ol data-work-log className="min-w-0 select-text">
+    {steps.map((step) => {
+      const first = !marked.has(step.entry);
+      marked.add(step.entry);
+      const focused = step.entry === focusedUuid;
+      const id = `${step.entry}:${step.index}`;
+      return <li key={id} data-turn={first ? step.entry : undefined} className={focused ? "rounded ring-2 ring-inset ring-primary/60" : undefined}>
+        {step.part.kind === "tool"
+          ? <ToolStep id={id} part={step.part} owner={step.entry} query={query} active={active} focused={focused} waiting={asked === id} />
+          : <ThinkingStep text={step.part.text} truncated={step.part.truncated} query={query} focused={focused} />}
+      </li>;
+    })}
+  </ol>;
 }
 
 /**
- * The steps between two of the agent's texts, as one grey line ("Ran 4 commands, read 2 files" and
- * the lines its edits changed). It opens onto the table of its steps, and on its own when find's hit
- * or the focused entry is inside.
+ * The steps between two of the agent's texts. A single call, or thoughts alone, draw as their own rows;
+ * several calls fold under one line that says what they did ("Ran 3 commands", the lines its edits
+ * changed), with the time they started on a desk. It opens on its own when find's hit or the focused
+ * entry is inside.
+ *
+ * A run drawn as rows stays rows while it is on screen, however many calls join it as the turn runs:
+ * folding them then would pull a line in above the rows and hide one the reader may have opened. It
+ * folds the next time it is drawn whole.
  */
-export function WorkSteps({ steps, query, focusedUuid, active, asked }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string }) {
+export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; at?: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [folding] = useState(() => foldsSteps(steps));
   const contentId = useId();
-  const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query));
+  if (!folding || !foldsSteps(steps)) return <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />;
+  const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query) || asked === `${step.entry}:${step.index}`);
   const diff = stepsDiff(steps);
   const failures = steps.filter(({ part }) => part.kind === "tool" && part.result?.isError).length;
-  // An entry's scroll marker sits on its first row, wherever its run is.
-  const marked = new Set<string>();
-  return <div data-work-steps className="min-w-0 space-y-2">
-    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded(!open)}
-      className="group flex min-h-8 w-fit max-w-full min-w-0 items-center gap-1.5 text-left text-footnote text-muted-foreground hover:text-foreground">
-      <span className="min-w-0 truncate">{stepsSummary(steps)}</span>
-      {diff && <DiffStat diff={diff} className="rounded-md bg-muted px-1.5 text-caption" />}
-      {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
-      {open ? <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />}
+  const summary = stepsSummary(steps);
+  const time = at ? clockTime(Date.parse(at)) : "";
+  return <div data-work-steps className="min-w-0">
+    <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} aria-label={[summary, failures ? `${failures} failed` : ""].filter(Boolean).join(", ")}
+      onClick={() => setExpanded(!open)} className={ROW}>
+      <StepIcon kind={runIcon(steps)} failed={failures > 0} />
+      <span className="min-w-0 truncate text-muted-foreground">{summary}</span>
+      {diff && <DiffStat diff={diff} className="text-caption" />}
+      {failures > 0 && <span className="shrink-0 text-caption text-subtle-foreground">{failures} failed</span>}
+      <span className="flex-1" />
+      {time && <time dateTime={at} className="hidden shrink-0 text-footnote text-subtle-foreground pointer-fine:inline">{time}</time>}
+      <ChevronRight aria-hidden="true" className={cn(CHEVRON, open && "rotate-90")} />
     </button>
-    {open && <ol id={contentId} data-work-log className="min-w-0 divide-y overflow-hidden rounded-xl border bg-card/40 select-text">
-      {steps.map((step) => {
-        const first = !marked.has(step.entry);
-        marked.add(step.entry);
-        const focused = step.entry === focusedUuid;
-        return <li key={`${step.entry}:${step.index}`} data-turn={first ? step.entry : undefined} className={focused ? "ring-2 ring-inset ring-primary/60" : undefined}>
-          <StepRow step={step} query={query} focused={focused} active={active} waiting={asked === `${step.entry}:${step.index}`} />
-        </li>;
-      })}
-    </ol>}
-  </div>;
-}
-
-/**
- * A desk's running step, below every fold: the live glyph, its verb, what it does (the call's own
- * description when it has one) and how long it has run. It opens onto its command while it runs.
- */
-export function DeskLiveStep({ step, query, focused, marker, waiting = false }: { step: LiveStep; query: string; focused: boolean; marker?: string; waiting?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const contentId = useId();
-  const { part } = step;
-  const call = part.kind === "tool" ? describeCall(part) : null;
-  const open = expanded || focused;
-  return <div data-live-step data-turn={marker} className={cn("min-w-0", focused && marker && "rounded ring-2 ring-primary/60")}>
-    <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setExpanded((value) => !value)}
-      className="flex min-h-8 w-full min-w-0 items-center gap-2 text-left text-footnote text-muted-foreground hover:text-foreground">
-      {waiting ? <StepIcon kind={call?.kind ?? "thinking"} /> : <LiveGlyph />}
-      <span className="shrink-0 text-foreground">{!call ? "Thinking" : waiting ? call.ask : call.doing}</span>
-      {part.kind === "tool" ? <DeskTarget part={part} query={query} focused={focused} />
-        : <span className="min-w-0 truncate italic"><Highlight text={firstLine(part.text)} query={query} current={focused} /></span>}
-      {waiting ? <WaitingChip /> : step.since && <span className="shrink-0 text-subtle-foreground">· <Elapsed since={step.since} /></span>}
-    </button>
-    {open && <div id={contentId} className="min-w-0 pt-1 pl-6">
-      {part.kind === "tool" ? <StepBody part={part} query={query} focused={focused} waiting={waiting} active />
-        : <div className="text-footnote text-muted-foreground [overflow-wrap:anywhere]"><MarkdownText text={part.text} query={query} current={focused} /></div>}
-    </div>}
+    <Reveal open={open} id={contentId}>
+      <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />
+    </Reveal>
   </div>;
 }

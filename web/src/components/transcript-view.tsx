@@ -6,16 +6,16 @@ import { ArtifactCards } from "./artifact-card";
 import { ChatMedia } from "./chat-media";
 import { MediaViewerContext } from "./file-preview-provider";
 import { ImageStrip, JournalImages, journalStripImages, pathImages, PlacedMessage, type StripImage } from "./message-images";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "@/components/ui/icon";
+import { Reveal } from "./reveal";
 
 import { CopyButton, QUIET_ACTION } from "@/components/copy-button";
 import { MarkdownText } from "@/components/markdown-text";
 import { clockTime as formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { searchableText } from "@/lib/transcript-search";
-import { containsQuery, DeskLiveStep, Highlight, LiveStepRow, relabel, ThinkingStep, ToolStep, useToolImages, WorkSteps } from "@/components/work-log-tools";
-import { useMediaQuery } from "@/hooks/use-media-query";
+import { containsQuery, Highlight, LiveStepRow, ThinkingStep, ToolStep, relabel, useToolImages, WorkSteps } from "@/components/work-log-tools";
 import { Elapsed, WorkActivityLabel } from "@/components/work-activity-label";
 import { buildWorkTimeline, describeTool, formatWorkDuration, liveStep, workSegments, type LiveStep, type WorkTurn } from "@/lib/work-timeline";
 import type { AgentStatus, TranscriptEntry, TranscriptPart } from "@/lib/types";
@@ -180,15 +180,12 @@ function Turn({
   showHeader,
   query,
   focused = false,
-  stamp,
 }: {
   entry: TranscriptEntry;
   /** False for a turn continuing the same speaker's run: only the run's first bubble shows its time. */
   showHeader: boolean;
   query: string;
   focused?: boolean;
-  /** The time a turn's answer shows beside its Copy: when the turn finished, or "" for none. */
-  stamp?: string;
 }) {
   const time = clockTime(entry.ts);
   const inline = journalImages(entry).length > 0;
@@ -211,8 +208,8 @@ function Turn({
 
   // A chat, not a log: your messages are soft bubbles on the right, raised a step off the page as the
   // composer is, and the agent's are plain text on the left. The header already names the agent, so
-  // neither side repeats a speaker label; the time sits under your bubble, beside a finished turn's
-  // Copy, and on hover for the agent.
+  // neither side repeats a speaker label; the time sits under your bubble, at the end of a finished
+  // turn's line, and on hover for the agent.
   // What a command of theirs loaded (a skill's body) is not their words: a line beside the bubble.
   if (entry.role === "user") {
     const loaded = entry.parts.filter((part) => part.kind === "context");
@@ -234,10 +231,9 @@ function Turn({
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}
       <EntryImages entry={entry} />
-      {(words.trim() || stamp) && <div className="flex items-center gap-1 text-footnote text-subtle-foreground">
-        {words.trim() && <CopyButton what="message" iconOnly payload={() => ({ text: words })}
-          className={cn(QUIET_ACTION, "-ml-1.5 min-w-7 justify-center px-1.5 text-subtle-foreground")} />}
-        {stamp && <time dateTime={entry.ts}>{stamp}</time>}
+      {words.trim() && <div className="flex items-center gap-1 text-footnote text-subtle-foreground">
+        <CopyButton what="message" iconOnly payload={() => ({ text: words })}
+          className={cn(QUIET_ACTION, "-ml-1.5 min-w-7 justify-center px-1.5 text-subtle-foreground")} />
       </div>}
     </div>
   );
@@ -259,45 +255,15 @@ function askedCall(turn: WorkTurn): string | undefined {
   return (pending.find(({ part }) => part.questions?.length) ?? pending[0])?.id;
 }
 
-/** A turn's work, one step per row, in the order it happened. */
-function ActivityLog({ entries, query, focusedUuid, active, asked, live, className }: { entries: TranscriptEntry[]; query: string; focusedUuid?: string; active: boolean; asked?: string; live: LiveStep | null; className?: string }) {
-  return <ol data-work-log className={cn("min-w-0 select-text", className)}>
-    {entries.map((entry) => {
-      const steps = stepParts(entry, live);
-      if (!steps.length && !journalImages(entry).length) return null;
-      const focused = focusedUuid === entry.uuid;
-      return <li key={entry.uuid} data-turn={entry.uuid} className={focused ? "rounded ring-2 ring-primary/60" : undefined}>
-        {steps.map(({ part, index }) => {
-          const id = `${entry.uuid}:${index}`;
-          return <Part key={index} part={part} entryId={entry.uuid} id={id} query={query} focused={focused} active={active} waiting={id === asked} />;
-        })}
-        <EntryImages entry={entry} />
-      </li>;
-    })}
-  </ol>;
-}
-
 /**
- * A desk's turn: the agent's words between its runs of steps, each run one fold, and the step in
- * progress below them all. Nothing folds the turn as a whole, so what the agent said stays in reach.
+ * A turn: one line that says how long it worked ("Working for 9s", "Worked for 12s ⌄") and when it
+ * finished, then what it did in order, the agent's words between its runs of steps, and its answer.
+ * A running turn is open, its step in progress last; a finished one folds to its line and its answer,
+ * and opens again with a tap, the same on a phone and a desk (ADR 0113).
  */
-function DeskWork({ turn, query, focusedUuid, waiting, asked, live, liveMarker }: { turn: WorkTurn; query: string; focusedUuid?: string; waiting: boolean; asked?: string; live: LiveStep | null; liveMarker?: string }) {
-  const duration = turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
-  return <>
-    {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
-      ? <WorkSteps key={segment.id} steps={segment.steps} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
-      : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
-          className={cn("space-y-1.5 px-0.5 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
-          {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
-        </div>)}
-    {live && <DeskLiveStep step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
-    {turn.active && !live && <p className="min-h-8 text-footnote text-muted-foreground"><Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" /></p>}
-    {turn.interrupted && <p className="text-footnote text-muted-foreground">{duration ? `Stopped after ${duration}` : "Stopped"}</p>}
-  </>;
-}
-
-function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean; desk: boolean }) {
+function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { turn: WorkTurn; query: string; focusedUuid?: string; questionActive: boolean; waiting: boolean }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
+  const contentId = useId();
   const needle = query.trim().toLowerCase();
   const searching = turn.activity.some((entry) => entry.uuid === focusedUuid || (needle !== "" && searchableText(entry).toLowerCase().includes(needle)));
   const open = searching || (expanded ?? !turn.settled);
@@ -308,10 +274,9 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk 
   const asked = waiting ? askedCall(turn) : undefined;
   const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
   const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
-  const label = turn.interrupted ? (duration ? "Stopped after" : "Stopped") : turn.settled ? "Worked" : "Work log";
-  // One time per turn, when it finished, beside its answer's Copy (or on its line when it has no
-  // answer). The question's time is already under its bubble, so a turn that ends in the minute it
-  // started says it no second time.
+  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `Worked for ${duration}` : "Worked") : "Work log";
+  // One time per turn, when it finished, at the end of its line. The question's time is already under
+  // its bubble, so a turn that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
   const finished = clockTime(end);
   const endTime = finished !== clockTime(turn.startedAt ?? "") ? finished : "";
@@ -320,55 +285,47 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting, desk 
   const liveMarker = liveEntry && !stepParts(liveEntry, live).length && !journalImages(liveEntry).length ? liveEntry.uuid : undefined;
   const viewer = useContext(MediaViewerContext);
   const toolImages = useToolImages();
-  // Folded work still shows what the agent looked at, as one gallery for the turn; a desk's runs never
-  // draw their images, so its gallery stays.
-  const turnImages: StripImage[] = open && !desk ? [] : relabel(turn.activity.flatMap((entry) => [
-    ...entry.parts.flatMap((part) => part.kind === "tool" ? toolImages(part, entry.uuid) : []),
+  // What the agent looked at stays in reach as one gallery for the turn: the pictures its log holds,
+  // and while the turn is folded, those its calls returned too (open, each call shows its own).
+  const turnImages: StripImage[] = relabel(turn.activity.flatMap((entry) => [
+    ...(open ? [] : entry.parts.flatMap((part) => part.kind === "tool" ? toolImages(part, entry.uuid) : [])),
     ...journalImages(entry).map(({ index }) => ({ src: viewer?.journalUrl(entry.uuid, index), label: imageLabel(0), item: { kind: "journal" as const, entry: entry.uuid, index, label: imageLabel(0) } })),
   ]));
   const answerPaths = turn.answer ? turn.answer.parts.flatMap((part) => part.kind === "text" ? filePathsInText(part.text) : []) : [];
   const delivered = [...new Set(turn.activity.flatMap((entry) => entry.parts.flatMap(sentFiles)))]
     .filter((path) => !IMAGE_EXTENSION.test(path) && !answerPaths.some((mention) => path === mention || path.endsWith(`/${mention.replace(/^\.\//, "")}`)));
-  // The line reads as the board's "Worked 1m 52s": the duration a step quieter than the word, and the
-  // chevron after them, shown under a finger and, under a pointer, once the line is hovered or open.
-  // The line holds nothing but its toggle unless a turn with no answer keeps its time beside it.
-  const line = <button type="button" data-work-toggle aria-expanded={open} disabled={!hasDetails} onClick={() => setExpanded(!open)}
-    className="group flex min-h-8 w-fit max-w-full min-w-0 items-center gap-1.5 text-left text-footnote text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
-    {turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" />
-      : <>{label} {duration && <span className="text-subtle-foreground">{duration}</span>}</>}
-    {failures > 0 && <span className="whitespace-nowrap text-destructive">· {failures} failed</span>}
-    {hasDetails && <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
-      open ? "rotate-90" : "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
-  </button>;
   const questions = tools.flatMap((part, toolIndex) => (part.questions ?? []).map((question, index) =>
     <TranscriptQuestion key={`${toolIndex}:${index}`} {...question} active={questionActive && !part.result} />));
   const answer = turn.answer && <div data-turn={turn.activity.some((entry) => entry.uuid === turn.answer!.uuid) ? undefined : turn.answer.uuid}
     className={turn.answer.uuid === focusedUuid ? "rounded ring-2 ring-primary/60" : undefined}>
-    <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} stamp={endTime} />
-  </div>;
-  if (desk) return <div className="space-y-3" data-work-turn={turn.id}>
-    {questions}
-    <DeskWork turn={turn} query={query} focusedUuid={focusedUuid} waiting={waiting} asked={asked} live={live} liveMarker={liveMarker} />
-    {answer}
-    {endTime && !turn.answer && <p className="text-footnote text-muted-foreground"><time dateTime={end}>{endTime}</time></p>}
-    <ArtifactCards paths={delivered} />
-    <ImageStrip images={turnImages} max={3} label="Images from this turn" />
+    <Turn entry={turn.answer} showHeader query={query} focused={turn.answer.uuid === focusedUuid} />
   </div>;
   return <div className="space-y-2" data-work-turn={turn.id}>
-    {endTime && !turn.answer ? <div className="flex max-w-full flex-wrap items-center gap-x-1.5 text-footnote text-muted-foreground">
-      {line}<span className="whitespace-nowrap">· <time dateTime={end}>{endTime}</time></span>
-    </div> : line}
     {questions}
-    {/* While the turn runs, its steps are part of the conversation: they flow under its line, no rail
-        and no indent, its live row last. Finished, they fold away; opened again, the rail under the
-        line ties them to it. */}
-    {(open || live) && <div className={turn.settled ? "ml-[7px] min-w-0 border-l pl-3" : "min-w-0"}>
-      {/* Opened by a tap, the steps fade in under the line; opened on their own (a running turn, a
-          search hit), they are simply there. */}
-      {open && <ActivityLog entries={turn.activity} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} live={live}
-        className={expanded ? "animate-in fade-in slide-in-from-top-1 duration-180 ease-out motion-reduce:animate-none" : undefined} />}
-      {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
-    </div>}
+    {/* The line holds its toggle and the time; a hairline under it, while open, sets the turn's work
+        apart from the conversation above. */}
+    <div className={cn("flex min-h-8 min-w-0 items-center gap-2 transition-[border-color] duration-180 ease-out coarse:min-h-11", open ? "border-b border-border/60" : "border-b border-transparent")}>
+      <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} disabled={!hasDetails} onClick={() => setExpanded(!open)}
+        className="group flex min-h-8 min-w-0 items-center gap-1.5 text-left text-subhead text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
+        <span className="min-w-0 truncate">{turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" fine /> : label}</span>
+        {failures > 0 && <span className="shrink-0 whitespace-nowrap text-subtle-foreground">· {failures} failed</span>}
+        {hasDetails && <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
+          !open && "-rotate-90 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
+      </button>
+      <span className="flex-1" />
+      {endTime && <time dateTime={end} className="shrink-0 text-footnote text-subtle-foreground">{endTime}</time>}
+    </div>
+    <Reveal open={open} id={contentId}>
+      <div className="min-w-0 space-y-1 pb-1">
+        {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
+          ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
+          : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
+              className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
+              {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
+            </div>)}
+      </div>
+    </Reveal>
+    {live && <LiveStepRow step={live} query={query} focused={live.entry === focusedUuid} marker={liveMarker} waiting={asked === `${live.entry}:${live.index}`} />}
     {answer}
     <ArtifactCards paths={delivered} />
     <ImageStrip images={turnImages} max={3} label="Images from this turn" />
@@ -390,7 +347,6 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
   const questionOpen = entries[questionIndex]?.parts.some((part) => part.kind === "tool" && !!part.questions?.length && !part.result);
   const pendingQuestion = questionOpen && questionIndex > entries.findLastIndex((entry) => entry.role === "user") ? entries[questionIndex]?.uuid : undefined;
   const rows = useMemo(() => buildWorkTimeline(entries, activityStatus), [entries, activityStatus]);
-  const desk = useMediaQuery("(min-width: 1024px)");
   // While a dialog waits on the operator, the newest turn, if it has not ended, is the one it holds up.
   const dialogLive = useContext(QuestionLiveContext) !== null;
   const tail = rows.at(-1);
@@ -415,7 +371,7 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
         className={`${showHeader ? "space-y-3 pt-1" : "space-y-3"} ${row.kind === "message" && entry.uuid === focusedUuid ? "rounded-lg ring-2 ring-primary/60 ring-offset-2 ring-offset-background" : ""}`}>
         {newDay && <div className="pt-1 text-center text-footnote text-muted-foreground"><time dateTime={entry.ts}>{day}</time></div>}
         {row.kind === "message" ? <Turn entry={entry} showHeader={showHeader} query={query} focused={entry.uuid === focusedUuid} />
-          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} desk={desk} />}
+          : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
       </div>;
     })}
     {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}

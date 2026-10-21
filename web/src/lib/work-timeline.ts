@@ -184,12 +184,12 @@ export interface WorkStep {
 }
 
 /**
- * A desk's turn as it reads: the agent's words, and between two of them the run of steps it took, one
- * fold each. `id` names a run by its first step, so a fold keeps its state while the turn grows.
+ * A turn as it reads: the agent's words, and between two of them the run of steps it took. `id` names a
+ * run by its first step, so its fold keeps its state while the turn grows; `at` is when it started.
  */
 export type WorkSegment =
   | { kind: "prose"; entry: TranscriptEntry; parts: Array<{ part: TranscriptPart; index: number }> }
-  | { kind: "steps"; id: string; steps: WorkStep[] };
+  | { kind: "steps"; id: string; at: string; steps: WorkStep[] };
 
 /** `activity` cut at the agent's words; the live step is left out, since it draws below as the turn's last row. */
 export function workSegments(activity: TranscriptEntry[], live: LiveStep | null): WorkSegment[] {
@@ -201,12 +201,20 @@ export function workSegments(activity: TranscriptEntry[], live: LiveStep | null)
       if (part.kind === "tool" || part.kind === "thinking") {
         const step = { part, entry: entry.uuid, index };
         if (last?.kind === "steps") last.steps.push(step);
-        else segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, steps: [step] });
+        else segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [step] });
       } else if (last?.kind === "prose" && last.entry === entry) last.parts.push({ part, index });
       else segments.push({ kind: "prose", entry, parts: [{ part, index }] });
     });
   }
   return segments;
+}
+
+/**
+ * Whether a run folds under one line: only when it holds several calls. One call reads best as itself,
+ * and a thought is already one line, so neither hides behind a second tap.
+ */
+export function foldsSteps(steps: WorkStep[]): boolean {
+  return steps.filter(({ part }) => part.kind === "tool").length > 1;
 }
 
 // What a run of steps did, by the verb its steps share: "Ran 3 commands, read 2 files".

@@ -166,6 +166,14 @@
   --glyph-pink: light-dark(oklch(0.58 0.2 350), oklch(0.76 0.15 350));
   --glyph-slate: light-dark(oklch(0.5 0.03 255), oklch(0.74 0.03 255));
 
+  /* A command a step ran, drawn as a shell reads it (lib/shell-tokens.ts): the program, its flags, its
+     arguments and words, variables and keywords in the mark hues; operators stay the line's grey. */
+  --syntax-command: var(--glyph-violet);
+  --syntax-flag: var(--glyph-amber);
+  --syntax-argument: var(--glyph-green);
+  --syntax-variable: var(--glyph-teal);
+  --syntax-keyword: var(--glyph-pink);
+
   /* ── Terminal palette ─────────────────────────────────────────────────────────────────────────
      The 16 indexed ANSI slots, emitted by lib/ansi.ts as var(--ansi-N).
 
@@ -225,6 +233,11 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-subtle-foreground: var(--subtle-foreground);
+  --color-syntax-command: var(--syntax-command);
+  --color-syntax-flag: var(--syntax-flag);
+  --color-syntax-argument: var(--syntax-argument);
+  --color-syntax-variable: var(--syntax-variable);
+  --color-syntax-keyword: var(--syntax-keyword);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-switch-off: var(--switch-off);
