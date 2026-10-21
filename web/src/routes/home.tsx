@@ -75,7 +75,7 @@ export function HomeRoute() {
       <div className="flex flex-col gap-1">
         <p className="text-footnote text-muted-foreground max-sm:hidden">
           {new Date(now).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}
-          <span className="max-sm:hidden"> · {greeting(now).toLowerCase()}</span>
+          <span> · {greeting(now).toLowerCase()}</span>
         </p>
         <h1 className={cn("text-large-title text-balance lg:text-title", stale && "text-muted-foreground")}>{title}</h1>
         {detail && <p className="text-subhead text-muted-foreground tabular-nums">{detail}</p>}

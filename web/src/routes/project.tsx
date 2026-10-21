@@ -59,7 +59,7 @@ function PhoneProjectRoute() {
   if (coordinator) return <Navigate to={panePath(coordinator, data.session)} replace />;
 
   // The project coordinator's STATUS.md heads the page, except where the project organizes
-  // coordinators: there it sits under its coordinator's card while that runs, and otherwise heads the
+  // coordinators: there it is on its coordinator's page while that runs, and otherwise heads the
   // page only while it says something. An Organizations that predates the fields cannot tell, and shows it.
   const rootStatus = read.status ?? undefined;
   const says = (status: StatusFile) => !asksAvailable(data.projects) ||

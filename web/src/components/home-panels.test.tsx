@@ -18,7 +18,7 @@ function setup(first: RecentChat[]) {
   function Live() {
     const [recent, setRecent] = useState(first);
     show = setRecent;
-    return <HomeSessions recent={recent} workspaces={[]} reviews={[]} pullRequests={() => null} projects={[]} now={1_000} opening={null} />;
+    return <HomeSessions recent={recent} workspaces={[]} reviews={[]} projectRows={null} pullRequests={() => null} projects={[]} now={1_000} opening={null} />;
   }
   render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
   const rows = () => within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href"));

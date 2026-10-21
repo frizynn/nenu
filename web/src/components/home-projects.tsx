@@ -52,7 +52,7 @@ function PulseLine({ project, pulse, className }: { project: ProjectView; pulse:
 interface Entry { project: ProjectView; pulse: ProjectPulse }
 
 /** Whether anything runs or waits in a project: what Home's Projects tab shows before its Quiet fold. */
-export const projectLive = (pulse: ProjectPulse) => pulse.waiting + pulse.working + pulse.review > 0;
+const projectLive = (pulse: ProjectPulse) => pulse.waiting + pulse.working + pulse.review > 0;
 
 /**
  * Home's Projects tab: each project where something waits on you, works or is ready to review, with
@@ -70,7 +70,8 @@ export function HomeProjects({ projects, agents, session, now }: {
   const [quietShown, setQuietShown] = useState(false);
   const entries = held.order(projects.map((project) => ({ project, pulse: projectPulse(project, agents, projects) })));
   const live = entries.filter((entry) => projectLive(entry.pulse));
-  const quiet = [...entries.filter((entry) => !live.includes(entry) && entry.project.status !== "paused"), ...entries.filter((entry) => entry.project.status === "paused")];
+  const rest = entries.filter((entry) => !live.includes(entry));
+  const quiet = [...rest.filter((entry) => entry.project.status !== "paused"), ...rest.filter((entry) => entry.project.status === "paused")];
   const row = (entry: Entry) => <ProjectRow key={entry.project.slug} {...entry} session={session} now={now} />;
   return <>
     {live.length > 0

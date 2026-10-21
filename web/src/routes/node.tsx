@@ -9,6 +9,7 @@ import { CoordinatorStatus } from "@/components/coordinator-status";
 import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
 import { DeskCoordinator } from "@/components/desk-coordinator";
 import { NodeDot } from "@/components/node-row";
+import { NewNodeActions } from "@/components/node-start";
 import { ProjectMissing } from "@/components/project-missing";
 import { CloseNodeDialog, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -114,9 +115,8 @@ function NodePage() {
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
-      {/* Its threads are the list under the page, so the card names none of them again. */}
       {coordinator
-        ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage} listsAgents={false}
+        ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
           asks={asks} summaries={summaries} session={data.session} readOnly={readOnly} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
         : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-subhead">
@@ -133,12 +133,15 @@ function NodePage() {
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
           {closable && !coordinator && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
             className="border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive">
-            Close {coordinator ? "coordinator" : "thread"}</Button>}
+            Close thread</Button>}
         </div>}
       </section>
       {coordinator && <CoordinatorWork key={thread.id} coordinator={thread} summaries={summaries} failed={failed}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
+      {coordinator && !readOnly && state !== "resolved" && <div className="mt-3">
+        <NewNodeActions project={project} under={{ id: thread.id, title: thread.title }} session={data.session} onStarted={() => void refresh()} />
+      </div>}
       {coordinator && closable && <button type="button" className="task-history-toggle text-destructive" onClick={() => setClosing(true)}>Close coordinator…</button>}
       <CloseNodeDialog project={project} node={closing ? node : null} session={data.session} onCancel={() => setClosing(false)}
         onClosed={() => { setClosing(false); void refresh(); }} />

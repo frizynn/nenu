@@ -159,9 +159,9 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
 export type SessionList = "projects" | "recents" | "workspaces" | "prs";
 
 const LISTS: ReadonlyArray<[SessionList, string]> = [["projects", "Projects"], ["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
-// v2 since Projects became the first tab: a choice remembered before it existed opens on Projects once.
 /** The phone's segmented track for as many tabs: one column each, as wide as their words need. */
 const SEGMENTS: Record<number, string> = { 1: "grid-cols-1 sm:w-32", 2: "grid-cols-2 sm:w-60", 3: "grid-cols-3 sm:w-80", 4: "grid-cols-4 sm:w-[28rem]" };
+// v2 since Projects became the first tab: a choice remembered before it existed opens on Projects once.
 const LIST_KEY = "nenu:home-list:v2";
 
 function readList(): SessionList {
@@ -287,8 +287,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
   reviews: readonly ReviewEntry[];
-  /** The Projects tab's rows, while there is a project. */
-  projectRows?: ReactNode;
+  /** The Projects tab's rows, shown while there is a project. */
+  projectRows: ReactNode;
   pullRequests: (entries: readonly ReviewEntry[]) => ReactNode;
   projects: readonly ProjectView[];
   session?: string;

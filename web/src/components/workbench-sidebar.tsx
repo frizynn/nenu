@@ -188,12 +188,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           ? <SearchResults groups={results} query={query} listId={listId} selected={selected} herd={data} session={data.session} onPick={setPicked}
               onOpen={() => { picking.current = true; }} />
           : phone
-            ? <>
-              {variant === "drawer" && <DrawerSections data={data} part="needsYou" />}
-              <SidebarTree data={data} folded onNewChat={onNewChat} />
-              {variant === "drawer" && <DrawerSections data={data} part="recent" />}
-              <MachinesSlot data={data} place="nav" />
-            </>
+            ? <PhoneLists data={data} drawer={variant === "drawer"} onNewChat={onNewChat} />
             : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
             : <>
               {(data.projects?.length || data.agents.length)
@@ -279,22 +274,27 @@ function hitState(hit: SearchHit): string {
 }
 
 /**
- * The drawer's chats: what waits on you leads it, above the projects; the ones that moved last follow
- * the projects and workspaces, so a coordinator is a tap into its project from the top.
+ * A phone's drawer or Search sheet before anything is typed. The drawer leads with the chats waiting on
+ * you, above the projects, and ends with the ones that moved last, so a coordinator is a tap into its
+ * project from the top (ADR 0109).
  */
-function DrawerSections({ data, part }: { data: HomeData; part: "needsYou" | "recent" }) {
+function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boolean; onNewChat?: () => void }) {
   const { paneId } = useParams();
-  const chats = drawerSections(data, paneId)[part];
+  const chats = drawer ? drawerSections(data, paneId) : undefined;
   const now = Date.now();
-  if (!chats.length) return null;
-  const label = part === "needsYou" ? "Needs you" : "Recent";
-  return (
+  const section = (label: string, rows: readonly DrawerChat[], counted: boolean) => rows.length > 0 && (
     <section aria-label={label} className="nav-group">
-      <h3 className="nav-label">{label}{part === "needsYou" && <> <span className="nav-count">{chats.length}</span></>}</h3>
-      {chats.map((chat: DrawerChat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
+      <h3 className="nav-label">{label}{counted && <> <span className="nav-count">{rows.length}</span></>}</h3>
+      {rows.map((chat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
         session={data.session} />)}
     </section>
   );
+  return <>
+    {chats && section("Needs you", chats.needsYou, true)}
+    <SidebarTree data={data} folded onNewChat={onNewChat} />
+    {chats && section("Recent", chats.recent, false)}
+    <MachinesSlot data={data} place="nav" />
+  </>;
 }
 
 /**

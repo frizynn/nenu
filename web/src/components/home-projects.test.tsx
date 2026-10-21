@@ -41,6 +41,13 @@ describe("Home's projects", () => {
     expect(names()).toEqual(["BUSY", "IDLE", "EMPTY", "PAUSED"]);
   });
 
+  it("lists a paused project where something still moves once, with the live ones", async () => {
+    const { region, names } = show([working("busy", 5), project("paused", 9, { status: "paused", waitingAsks: 1 }), project("idle", 1)]);
+    expect(names()).toEqual(["BUSY", "PAUSED"]);
+    await userEvent.click(region.getByRole("button", { name: /^Quiet/ }));
+    expect(names()).toEqual(["BUSY", "PAUSED", "IDLE"]);
+  });
+
   it("says so when nothing moves in any project", () => {
     const { region } = show([project("a", 1)]);
     expect(region.getByText("Nothing is running in your projects.")).toBeInTheDocument();

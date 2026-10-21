@@ -146,8 +146,8 @@ interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
  */
 export function ProjectTasks({ threads, coordinator, title, subtitle, bare = false, status, organize, ...tree }: ProjectTasksProps) {
   const { project, panes, session, currentPaneId, readOnly, onOpenPane, onOpenNode, onChanged } = tree;
-  // The project as an organizer: its own coordinator is one of its coordinators, folded like the rest
-  // while it runs and a small Start beside New otherwise.
+  // The project as an organizer: its own coordinator is one of its coordinators, a row into its page
+  // like the rest while it runs and a small Start beside New otherwise.
   const organizer = organize && !coordinator && !threads && organizes(orgTree(project.threads)) ? organize : undefined;
   return (
     <div className="project-tasks">
