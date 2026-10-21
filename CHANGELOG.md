@@ -17,7 +17,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Changed
 
-- A coordinator's Threads comes first and lists the open work of its whole subtree, grouped by the coordinators under it as the tree draws them, each row its state, what it does and a tap to open it (eed1f71d, 8a4cfc5f).
+- A coordinator's Threads comes first and lists the open work of its whole subtree, grouped by the coordinators under it as the tree draws them, each row its state, what it does and a tap to open it (eed1f71d, 8a4cfc5f, 6f62902b).
 
 ### Fixed
 
