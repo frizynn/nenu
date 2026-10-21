@@ -82,6 +82,15 @@ export async function sendAlwaysBench(bridge: TestBridge, browser: Browser, outD
     await page.goto(`${bridge.url}/pane/${encodeURIComponent(pane)}`);
     const box = page.getByRole("textbox").first();
     await box.waitFor({ timeout: 15_000 });
+    // Each device starts on an empty queue: a row the other one left would hold this one's behind it.
+    await page.evaluate(async (paneId) => {
+      const headers = { "x-requested-with": "XMLHttpRequest", "content-type": "application/json" };
+      const base = `/api/pane/${encodeURIComponent(paneId)}/queue`;
+      const page = await (await fetch(base, { headers })).json() as { scope: string; messages: Array<{ id: string; revision: number }> };
+      for (const row of page.messages) await fetch(base, { method: "POST", headers, body: JSON.stringify({ scope: page.scope, action: "remove", id: row.id, revision: row.revision }) });
+    }, pane);
+    await page.reload();
+    await box.waitFor({ timeout: 15_000 });
 
     // 2. Send while Claude works: nothing to answer, and it goes into Claude's queue.
     const submitted = fake.submitted.length;
@@ -159,7 +168,8 @@ export async function sendAlwaysBench(bridge: TestBridge, browser: Browser, outD
     await page.waitForTimeout(300);
     for (let i = 0; i < 40 && fake.writes().slice(from).filter((call) => call.method === "pane.send_keys").length < 4; i++) await page.waitForTimeout(100);
     const keys = fake.writes().slice(from).filter((call) => call.method === "pane.send_keys").flatMap((call) => call.params.keys as string[]);
-    check(`${device}: in the Terminal view the box types into the pane`, JSON.stringify(keys) === JSON.stringify(["l", "s", "Backspace", "Enter"]), JSON.stringify(keys));
+    // The queue's own Enter for the row from step 1 may land in this window too; the typed keys lead.
+    check(`${device}: in the Terminal view the box types into the pane`, JSON.stringify(keys.slice(0, 4)) === JSON.stringify(["l", "s", "Backspace", "Enter"]), JSON.stringify(keys));
     await shoot("terminal-view");
     // Back to the chat: the box is the chat's again.
     if (device === "desk") await page.getByRole("button", { name: "Show conversation" }).click();
