@@ -6,7 +6,7 @@ import { deliverQueuedMessage, sendQueuedNow, type QueueWrite } from "./queue-de
 import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMode, sendNowKeys, submitKind } from "./queue-native.ts";
 import { computeEtag } from "./http-cache.ts";
 import { object } from "./subagent-files.ts";
-import type { ActionResponse, AgentView, DeliveryMode } from "./types.ts";
+import type { ActionResponse, AgentView, DeliveryMode, TurnState } from "./types.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
 import type { JournalFacts } from "./journal/types.ts";
 import type { AuditLog } from "./audit.ts";
@@ -29,6 +29,8 @@ export type QueueExtras = {
   audit?: Pick<AuditLog, "record"> | null;
   /** A fresh look at the log of the conversation a pane runs, as the phone send gets one. */
   log?: (session: string, paneId: string) => GuardedSendDeps["received"];
+  /** The CLI's own state of a pane (ADR 0067): whether a turn runs, and a dialog it reports. */
+  turn?: (session: string, paneId: string) => TurnState | undefined;
 };
 
 const identity = (pane: AgentView) =>
@@ -107,7 +109,7 @@ export class QueueService {
     void this.tick(force).catch(() => {});
   }
   /**
-   * What one take-back brought out of Claude's own queue on a pane (ADR 0117): the delivered rows it
+   * What one take-back brought out of Claude's own queue on a pane (ADR 0118): the delivered rows it
    * still held, in the order they went, now recalled, so no page draws them as waiting there. `ours`
    * says the words that came back are exactly those rows' words, spacing aside: the box held nothing else.
    */
@@ -181,10 +183,11 @@ export class QueueService {
   private async deliver(row: QueuedMessage, ready: Ready) {
     const { context } = ready;
     const write: QueueWrite = (text, submit, id, paste) => this.write(row, text, submit, id, paste);
+    const { turn } = this.extras;
     const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
-    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId) });
+    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId), ...(turn ? { turn: () => turn(row.session, row.paneId) } : {}) });
     // Only a delivery to a free agent starts a turn. A steer or a native-queue Tab into a working one
     // does not, and marking it would hold the next row for the whole TURN_START_CAP_MS.
     if (outcome.status === "sent" && !ready.busy) {

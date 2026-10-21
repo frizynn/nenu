@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 // Which rows ease in (`.row-enter` in index.css): only those that join a scope after it was first
 // drawn. A thread drawn from its history, or a fold opened onto its rows, shows them as they are; a
-// step, a thought or the agent's words arriving while it is read eases in where it lands (ADR 0117).
+// step, a thought or the agent's words arriving while it is read eases in where it lands (ADR 0118).
 
 const EnterContext = createContext<{ readonly current: boolean }>({ current: false });
 

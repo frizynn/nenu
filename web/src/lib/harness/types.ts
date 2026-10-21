@@ -50,6 +50,9 @@ export interface HarnessAdapter {
    * withheld either way; the pre-flight just avoids depositing the text in a menu first.
    */
   composerReady?(lines: StyledLine[]): boolean;
+  /** The CLI is still taking in a paste (Claude's "Pasting…" under its box): what the box shows of
+   *  it is not final yet. OPTIONAL: a harness that never says so omits it. */
+  pasting?(lines: StyledLine[]): boolean;
   /**
    * Literal on-screen text from the composer's prompt/draft tail — the region a DESTRUCTIVE write
    * aimed at that composer may be bound to. Null = no composer at the tail (the same screens
@@ -99,7 +102,7 @@ export interface HarnessAdapter {
    * the reported effort without offering a way to change it.
    */
   modelEffort?: "arrows" | "after-model";
-  /** OPTIONAL: absent, Nenu takes nothing back from the CLI's own queue (ADR 0117). */
+  /** OPTIONAL: absent, Nenu takes nothing back from the CLI's own queue (ADR 0118). */
   queueRecall?: QueueRecall;
 }
 

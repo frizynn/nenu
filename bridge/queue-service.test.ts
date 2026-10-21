@@ -250,7 +250,7 @@ async function agentPane(
     {
       facts: async () => ({ queue: pane.journal }),
       audit: audited ? { record: (entry) => { pane.audit.push(entry); } } : null,
-      ...(logs ? { log: () => async () => pane.logged } : {}),
+      ...(logs ? { log: () => async () => (pane.logged === null ? { kind: "none" as const } : { kind: "logged" as const, text: pane.logged }) } : {}),
     },
   );
   const call = async (body?: Record<string, unknown>) => {
@@ -515,7 +515,7 @@ describe("freshAgentView", () => {
   });
 });
 
-// ADR 0117: a take-back brought Claude's queue back into its box. The rows it held are recalled in the
+// ADR 0118: a take-back brought Claude's queue back into its box. The rows it held are recalled in the
 // same step, so no page draws them as waiting in Claude's queue while the journal catches up.
 it("recalls the rows Claude's queue held on a take-back, and says whether the words are exactly theirs", async () => {
   const t = await agentPane("claude", "working");

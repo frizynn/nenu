@@ -30,7 +30,7 @@ async function openTurn() {
 
 describe("a turn's runs of steps", () => {
   // Opened mid-turn, a run of finished calls whose thought is being written stays rows, so the thought
-  // that is the turn's live step is on screen (ADR 0117).
+  // that is the turn's live step is on screen (ADR 0118).
   it("keeps a run holding the thought in progress as rows when the chat opens on it", () => {
     const running = { status: "running" as const, startedAt: ts };
     render(<TranscriptView activityStatus="working" entries={[

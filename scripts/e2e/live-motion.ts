@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, userCacheDir, type Browser, type Page } from "./
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd } from "./scenario.ts";
 
-// What work in progress costs while it looks alive (ADR 0117): a desk with 40 agents working at once
+// What work in progress costs while it looks alive (ADR 0118): a desk with 40 agents working at once
 // (Home and the bar) and a chat whose turn runs, quiet for --seconds each, in Chrome. The browser's
 // CPU (every process this run launched, from ps) with motion allowed and with reduced motion, which
 // takes every live motion out of the page, on the same build, alternated --runs times; and how many

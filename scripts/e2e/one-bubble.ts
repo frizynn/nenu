@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
 
-// A message sent from Nenu is on screen once, in every frame (ADR 0117). On a phone and a desk: a send
+// A message sent from Nenu is on screen once, in every frame (ADR 0118). On a phone and a desk: a send
 // to an idle Claude whose log then shows it, and a send while Claude works, which goes into Claude's own
 // queue and is read mid-turn (an enqueue, then the queued_command Claude writes when it reads it). A
 // probe in the page counts, on every animation frame, the bubbles, journal turns and queue rows that

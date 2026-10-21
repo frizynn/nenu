@@ -46,7 +46,7 @@ export function Elapsed({ since, prefix = "", fallback = "", fine = false, class
 const GLOW_STEPS = 20;
 
 /**
- * A live line, glowing: a light passes across its words while the agent works (ADR 0117). While it
+ * A live line, glowing: a light passes across its words while the agent works (ADR 0118). While it
  * moves, the words are drawn a second time in the full ink behind a window that steps over them (the
  * copy hidden from assistive tech); `layout` lays out both copies alike (a row's flex classes).
  */

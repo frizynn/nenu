@@ -176,7 +176,7 @@ export function reconcileLocalSends(scope: string, entries: readonly TranscriptE
   if (changed) write(scope, next);
 }
 
-/** What a take-back from the CLI's own queue answered (ADR 0117): the words that came back, the rows they were. */
+/** What a take-back from the CLI's own queue answered (ADR 0118): the words that came back, the rows they were. */
 export interface TakenBack {
   text: string;
   messages: Array<{ id: string; text: string }>;

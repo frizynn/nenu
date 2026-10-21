@@ -1,4 +1,4 @@
-# 0117. Work in progress looks alive, where it happens, and one message is on screen once
+# 0118. Work in progress looks alive, where it happens, and one message is on screen once
 
 - **Status:** Accepted (2026-10-21). Requested by the operator on 1.40.0 and 1.41.0 ("ese Working
   debe tener animación, tipo glow", "no veo cuando pensás, es como que está muerto el agente", "no

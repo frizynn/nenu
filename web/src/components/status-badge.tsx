@@ -14,7 +14,7 @@ export const AGENT_STATE: Record<AgentStatus, NodeState> = { blocked: "needs", w
  * what is ready to look at a blue check, work in progress a grey dashed circle that turns slowly, a
  * merge left its grey branch, a resolved node a grey tick. Colour is only for what asks something of
  * you, and a resting node draws nothing, so a list shows at a glance only what is alive. Only work in
- * progress moves, and only while it is on screen (ADR 0117); every other mark is still.
+ * progress moves, and only while it is on screen (ADR 0118); every other mark is still.
  */
 const MARK: Record<Exclude<NodeState, "idle">, { glyph: IconComponent; tone: string }> = {
   needs: { glyph: CircleAlert, tone: "text-status-blocked" },
@@ -39,7 +39,7 @@ export function StateMark({ state, className }: { state: NodeState; className?: 
 const TURN_STEPS = 10;
 
 /**
- * Work in progress: the dashed circle turning slowly (ADR 0117). Still while off screen, on a hidden
+ * Work in progress: the dashed circle turning slowly (ADR 0118). Still while off screen, on a hidden
  * page, under the idle lock or reduced motion: there the shape alone says it works.
  */
 function WorkingMark({ className }: { className?: string }) {

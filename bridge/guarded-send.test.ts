@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   OutputTrigger,
@@ -6,6 +9,9 @@ import {
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
   TRIGGER_PREFIX_MAX,
+  PICTURES_BY_MS,
+  WAIT_BUDGET_MS,
+  WAIT_DELAYS_MS,
   WriteLedger,
   guardedSend,
   settleAfterType,
@@ -18,6 +24,10 @@ import {
   type PriorAttempt,
 } from "./guarded-send.ts";
 import type { OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
+import { claudeLogReader, type LogLook, type LogReader } from "./delivery-check.ts";
+import { parseAnsi } from "../web/src/lib/ansi.ts";
+import { splitLines } from "../web/src/lib/blocks.ts";
+import { adapterFor } from "../web/src/lib/harness/index.ts";
 import type { SendRequest } from "./types.ts";
 
 // A terminal with an input box, in memory: Claude's frame (rule / `❯ draft` / rule / statusline) or
@@ -37,6 +47,8 @@ class Term {
   lines = ["some output", ""];
   /** Typed text reaches the box only when something looks (a read or a wait), never at the call. */
   echo: "immediate" | "on-wait" | "never" = "immediate";
+  /** A loaded host: typed text reaches the box only from this read on. */
+  echoAfter = 0;
   pending = "";
   enterClears = true;
   failText: "before" | "after" | null = null;
@@ -50,8 +62,12 @@ class Term {
    *  cannot attach the file (measured 2.1.306, a path to no file), or leaves nothing (a lost paste). */
   unattached: "text" | "lost" = "lost";
   pictures = 0;
-  lateTokens: Array<{ token: string; reads: number }> = [];
-  /** Claude's own queue, and the history Up shows once it is empty (ADR 0117). */
+  /** While a picture's token is on its way, the footer says "Pasting…" (Claude 2.1.306). */
+  saysPasting = false;
+  /** The box shows a pasted picture's path while it is read, and the token then takes its place. */
+  pathFirst = false;
+  lateTokens: Array<{ token: string; reads: number; path?: string }> = [];
+  /** Claude's own queue, and the history Up shows once it is empty (ADR 0118). */
   queue: string[] = [];
   history: string | null = null;
   showingHistory = false;
@@ -67,13 +83,20 @@ class Term {
     }
     const top = this.showingHistory ? `─── History 1/1 ${RULE}` : RULE;
     const prompt = this.draft || (this.queue.length ? "Press up to edit queued messages" : "");
-    return [...this.lines, top, `❯ ${prompt}`, RULE, "  Opus 5.5 | Context 13% used", "  ← for agents"].join("\n");
+    const footer = this.saysPasting && this.lateTokens.length > 0 ? "  Pasting…" : "  Opus 5.5 | Context 13% used";
+    return [...this.lines, top, `❯ ${prompt}`, RULE, footer, "  ← for agents"].join("\n");
   }
 
+  /** Keys sent while typed text has not landed yet: they reach the box after it, never before. */
+  private queuedKeys: string[] = [];
+
   private land(): void {
-    if (this.echo === "never" || !this.pending) return;
+    if (this.echo === "never" || !this.pending || this.reads < this.echoAfter) return;
     this.draft += this.pending;
     this.pending = "";
+    const keys = this.queuedKeys;
+    this.queuedKeys = [];
+    this.press(keys);
   }
 
   getPane = async (paneId: string) => {
@@ -84,9 +107,10 @@ class Term {
 
   readPane = async (paneId: string, source: ReadSource, lines: number, format?: string): Promise<PaneRead> => {
     this.calls.push({ method: "pane.read", arg: [source, lines, format] });
-    this.onRead?.(this.reads++, this);
+    const n = this.reads++;
+    this.onRead?.(n, this);
     if (this.echo === "immediate") this.land();
-    for (const late of this.lateTokens) if (late.reads-- === 0) this.draft += late.token;
+    for (const late of this.lateTokens) if (late.reads-- === 0) this.draft = late.path && this.draft.endsWith(late.path) ? this.draft.slice(0, -late.path.length) + late.token : this.draft + late.token;
     this.lateTokens = this.lateTokens.filter((late) => late.reads >= 0);
     return { pane_id: paneId, text: this.screen(), truncated: false, revision: 0 };
   };
@@ -97,7 +121,11 @@ class Term {
     if (!this.dialog && this.drawsPictures && /^\x1b\[200~\/\S+\.png\x1b\[201~$/.test(text)) {
       // Like Claude: the token shows a beat (a read) after the paste, unless it never does.
       this.land();
-      if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
+      if (this.pictureReads >= 0 && this.pathFirst) {
+        const path = text.replace(/\x1b\[20[01]~/g, "");
+        this.draft += path;
+        this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads, path });
+      } else if (this.pictureReads >= 0) this.lateTokens.push({ token: `[Image #${++this.pictures}]`, reads: this.pictureReads });
       else if (this.unattached === "text") this.pending += text.replace(/\x1b\[20[01]~/g, "");
       return;
     }
@@ -108,6 +136,16 @@ class Term {
   sendPaneKeys = async (_paneId: string, keys: string[]) => {
     this.calls.push({ method: "pane.send_keys", arg: keys });
     if (this.failKeys) throw new Error("herdr pane.send_keys: internal: lost");
+    // A PTY is an ordered byte stream: keys never overtake the text typed before them.
+    this.land();
+    if (this.pending && this.echo !== "never") {
+      this.queuedKeys.push(...keys);
+      return;
+    }
+    this.press(keys);
+  };
+
+  private press(keys: string[]): void {
     for (const key of keys) {
       if (this.dialog) {
         this.dialog = null;
@@ -345,6 +383,149 @@ describe("guardedSend", () => {
     expect(term.count("pane.send_text")).toBe(2);
     expect(term.draft).toBe("");
     expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a picture that shows only after the send gave up and cleared the box is cleared too (ADR 0117)", async () => {
+    const term = new Term();
+    // Past the picture's bound and the sweep: a starved Claude draws the token late.
+    term.pictureReads = 80;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(term.pictures).toBe(1);
+    expect(term.lateTokens).toHaveLength(0);
+    expect(term.draft).toBe("");
+    expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a picture read for longer than the bound while Claude says Pasting… is still attached (ADR 0117)", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pictureReads = 150;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toContain("[Image #1]");
+  });
+
+  test("Claude's adapter tells the send it is pasting from the row under its box", () => {
+    const screen = (rows: string[]) => splitLines(parseAnsi(rows.join("\n")));
+    expect(adapterFor("claude")!.pasting?.(screen(["output", RULE, "❯ look", RULE, "  Pasting…"]))).toBe(true);
+  });
+
+  test("a Pasting… that never ends stops at the send's clock, and the send clears what it typed", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pictureReads = 100_000;
+    let clock = 0;
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: placed, requestId: "r1" },
+    );
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    // Waited past the 15 s bound while Claude said Pasting…, then stopped at the clock.
+    expect(clock).toBeGreaterThanOrEqual(PICTURES_BY_MS);
+    expect(clock).toBeLessThan(PICTURES_BY_MS + 3 * WAIT_BUDGET_MS + 250);
+  });
+
+  test("past the send's clock no picture is pasted: the send stops and clears what it typed", async () => {
+    const term = new Term();
+    term.pictureReads = 0;
+    let clock = 0;
+    let pastes = 0;
+    const paste = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      if (typed.startsWith("\x1b[200~/")) pastes++;
+      // The words after the first picture, which attached, land the send past PICTURES_BY_MS.
+      else if (pastes === 1) clock = PICTURES_BY_MS;
+      return paste(paneId, typed);
+    };
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: placed, requestId: "r1" },
+    );
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
+    expect(pastes).toBe(1);
+    expect(term.draft).toBe("");
+    expect(term.keys().flat()).not.toContain("Enter");
+  });
+
+  test("a message opening with a picture, past the send's clock before anything was typed, says nothing was typed", async () => {
+    const term = new Term();
+    let clock = 0;
+    term.onRead = () => void (clock = PICTURES_BY_MS);
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: `${red} what is this?`, requestId: "r1" },
+    );
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(term.count("pane.send_text")).toBe(0);
+  });
+
+  test("the send's pictures stop by its clock: a second picture pasting forever after a slow first fits the phone's wait", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    let pastes = 0;
+    const paste = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      // The first picture takes about 50 s of Pasting…; the second never ends.
+      if (typed.startsWith("\x1b[200~/")) term.pictureReads = ++pastes === 1 ? 200 : 100_000;
+      return paste(paneId, typed);
+    };
+    let clock = 0;
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: placed, requestId: "r1" },
+    );
+    expect(outcome.ok).toBe(false);
+    expect(term.pictures).toBe(2);
+    // Pictures stopped at PICTURES_BY_MS; what follows is at most three bounded waits.
+    expect(clock).toBeLessThan(PICTURES_BY_MS + 3 * WAIT_BUDGET_MS);
+    expect(clock).toBeLessThan(110_000);
+  });
+
+  test("a path the box shows while Claude says Pasting… is not taken for the path staying text", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    term.pathFirst = true;
+    term.pictureReads = 40;
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toBe("> first the red one [Image #1] then the blue one [Image #2] and that is all");
+  });
+
+  test("a dialog reported after the first clear keeps the late watch from sweeping again", async () => {
+    const term = new Term();
+    term.pictureReads = 80;
+    const turn = () => (term.count("pane.send_keys") > 0 ? { running: true, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn }, { text: placed, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(1);
+  });
+
+  test("a picture's wait that ends while Claude reports a dialog presses no key at all", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    const turn = () => (term.count("pane.send_text") > 1 ? { running: true, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn }, { text: placed, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("the late-picture watch stops at the clear: it never watches over what the operator types next", async () => {
+    const term = new Term();
+    term.pictureReads = 80;
+    let cleared = -1;
+    let last = -1;
+    term.onRead = (n, t) => {
+      last = n;
+      if (cleared < 0 && t.lateTokens.length === 0 && t.pictures === 1 && t.draft === "" && t.count("pane.send_keys") > 1) cleared = n;
+    };
+    const { outcome } = await run(term, { text: placed });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
+    // The read that saw the late sweep's box empty is the last one.
+    expect(cleared).toBeGreaterThan(0);
+    expect(last).toBe(cleared);
   });
 
   test("a send that stops after typing leaves alone a box holding more than it typed", async () => {
@@ -619,7 +800,8 @@ describe("guardedSend: what Claude logged", () => {
   const sent = Array.from({ length: 240 }, (_, i) => `word${i}`).join(" ");
   function logged(text: string | null, after = 0) {
     const asked: number[] = [];
-    return { asked, received: async (since: number) => (asked.push(since) > after ? text : null) };
+    const received: LogReader = async (since) => (asked.push(since) > after && text !== null ? { kind: "logged", text } : { kind: "none" });
+    return { asked, received };
   }
 
   test("a message Claude logged without its head is reported incomplete, not sent", async () => {
@@ -643,6 +825,273 @@ describe("guardedSend: what Claude logged", () => {
     const { outcome } = await run(new Term(), { text: sent }, { received: log.received });
     expect(outcome.ok).toBe(true);
     expect(log.asked.length).toBeGreaterThan(1);
+  });
+});
+
+describe("guardedSend: Enter behind the text at an idle Claude, the log as witness (ADR 0117)", () => {
+  const text = "deploy the staging build";
+  const idle = { running: false };
+  /** Claude's log of this send: nothing on the first `after` looks, then `then`. */
+  function log(after = 1, then: LogLook = { kind: "logged", text }) {
+    const asked: number[] = [];
+    const received: LogReader = async (since) => (asked.push(since) > after ? then : { kind: "none" });
+    return { asked, received };
+  }
+  const deps = (term: Term, extra: Partial<GuardedSendDeps>): GuardedSendDeps => ({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn: () => idle, ...extra });
+
+  test("Enter follows the text as one paste with no look in between, and the log confirms it", async () => {
+    const term = new Term();
+    const witness = log(2);
+    const { outcome, trace } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
+    expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
+    const methods = term.methods();
+    expect(methods[methods.indexOf("pane.send_text") + 1]).toBe("pane.send_keys");
+    expect(term.calls.find((call) => call.method === "pane.send_text")?.arg).toBe(`\x1b[200~${text}\x1b[201~`);
+    expect(term.lines.at(-1)).toBe(`> ${text}`);
+    // One look before the text, then the confirm reads until the log answers.
+    expect(witness.asked).toHaveLength(3);
+    expect(trace.typedAt).toBeNumber();
+  });
+
+  test("a Claude too loaded to paint the text is confirmed by its log, however late, with Enter behind the text", async () => {
+    const term = new Term();
+    term.echoAfter = 40;
+    const witness = log(45);
+    const { outcome } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+    expect(witness.asked).toHaveLength(46);
+    expect(term.lines.at(-1)).toBe(`> ${text}`);
+    expect(term.draft).toBe("");
+  });
+
+  test("a message Claude queued is a delivery", async () => {
+    const { outcome } = await guardedSend(deps(new Term(), { received: log(1, { kind: "queued" }).received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("mid-turn, Enter waits to see the text in the box: a permission prompt may open under it", async () => {
+    const term = new Term();
+    await guardedSend(deps(term, { received: log().received, turn: () => ({ running: true }) }), { text, requestId: "r1" });
+    const methods = term.methods();
+    expect(methods[methods.indexOf("pane.send_keys") - 1]).toBe("pane.read");
+  });
+
+  test("a log that cannot be read keeps the old order", async () => {
+    const term = new Term();
+    await guardedSend(deps(term, { received: async () => ({ kind: "unreadable" }) }), { text, requestId: "r1" });
+    const methods = term.methods();
+    expect(methods[methods.indexOf("pane.send_keys") - 1]).toBe("pane.read");
+  });
+
+  test("a slash command waits to be seen in the box before Enter, a message opening with a path does not", async () => {
+    const command = new Term();
+    await guardedSend(deps(command, { received: log().received }), { text: "/compact", requestId: "r1" });
+    expect(command.methods()[command.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    const path = new Term();
+    await guardedSend(deps(path, { received: log(1, { kind: "logged", text: "/home/u/notes.md says hi" }).received }), { text: "/home/u/notes.md says hi", requestId: "r1" });
+    expect(path.methods()[path.methods().indexOf("pane.send_keys") - 1]).toBe("pane.send_text");
+  });
+
+  test("a dialog the CLI reports refuses before anything is typed, whatever the screen shows", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, waiting: "permission prompt" }) }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "preflight", code: "not_ready", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("dialog");
+    expect(term.count("pane.send_text")).toBe(0);
+  });
+
+  test.each([
+    ["at an idle Claude", idle],
+    ["mid-turn", { running: true }],
+  ] as const)("a dialog the CLI reports between the text and Enter, %s: no key at all reaches it", async (_case, before) => {
+    const term = new Term();
+    const turn = () => (term.count("pane.send_text") > 0 ? { running: false, waiting: "permission prompt" } : before);
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: true });
+    // Neither Enter nor the sweep's keys: the dialog may be opening over the box.
+    expect(term.count("pane.send_keys")).toBe(0);
+    // What the terminal holds, painted or still on its way: the text, untouched.
+    expect(term.draft + term.pending).toBe(text);
+  });
+
+  test("mid-turn, a dialog drawn and reported right after the text stops the send at once, with no key", async () => {
+    const term = new Term();
+    const send = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      await send(paneId, typed);
+      term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    };
+    const turn = () => (term.dialog ? { running: false, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: true });
+    expect(outcome.ok ? "" : outcome.error).toContain("dialog");
+    expect(term.count("pane.send_keys")).toBe(0);
+    // Stopped on the CLI's word, not after the verify bound.
+    expect(term.count("pane.read")).toBeLessThan(4);
+  });
+
+  test("a retry whose earlier try the log has is sent, even with a dialog up now or the box unread", async () => {
+    const dialog = new Term();
+    const waiting = () => ({ running: false, waiting: "permission prompt" });
+    const prior = { typeAttempted: true, textDelivered: true, typedAt: 1 };
+    expect((await guardedSend(deps(dialog, { received: log(0).received, turn: waiting }), { text, requestId: "r1" }, prior)).outcome.ok).toBe(true);
+    const unread = new Term();
+    unread.readPane = async () => {
+      throw new Error("herdr request timed out");
+    };
+    expect((await guardedSend(deps(unread, { received: log(0).received }), { text, requestId: "r1" }, prior)).outcome.ok).toBe(true);
+    expect(unread.count("pane.send_text") + dialog.count("pane.send_text")).toBe(0);
+  });
+
+  test("a menu that takes the keys, with the log silent, is never called sent", async () => {
+    const term = new Term();
+    term.sendPaneKeys = async (_paneId, keys) => {
+      term.calls.push({ method: "pane.send_keys", arg: keys });
+      term.pending = "";
+      term.dialog = "Select model\n❯ 1. Opus\n  2. Haiku\n\nEnter to confirm · Esc to cancel";
+    };
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+  });
+
+  test("a box that never showed the text and a log that never had it are no evidence", async () => {
+    const term = new Term();
+    term.echo = "never";
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: true });
+  });
+
+  test("a box that showed the text and let go of it, with the log silent, is sent", async () => {
+    const term = new Term();
+    const clear = term.sendPaneKeys;
+    term.enterClears = false;
+    let reads = 0;
+    term.onRead = (_n, t) => {
+      if (t.count("pane.send_keys") > 0 && ++reads === 3) {
+        t.enterClears = true;
+        void clear("w1:p1", ["Enter"]);
+      }
+    };
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("Enter the box never takes: the send clears its own text and says so", async () => {
+    const term = new Term();
+    term.enterClears = false;
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
+    expect(term.draft).toBe("");
+  });
+
+  test("Claude queueing it after the clear is a delivery, never \"send it again\"", async () => {
+    const term = new Term();
+    term.enterClears = false;
+    const received: LogReader = async () => (term.count("pane.send_keys") > 1 ? { kind: "queued" } : { kind: "none" });
+    const { outcome } = await guardedSend(deps(term, { received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("a starved Claude that logs the message well after the clear is answered sent, never \"send it again\"", async () => {
+    const term = new Term();
+    term.enterClears = false;
+    let afterClear = 0;
+    // Logged on the 30th look after the sweep: past the short window, inside the bound.
+    const received: LogReader = async () => (term.count("pane.send_keys") > 1 && ++afterClear >= 30 ? { kind: "logged", text } : { kind: "none" });
+    const { outcome } = await guardedSend(deps(term, { received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("a retry whose earlier try the log has types nothing and presses nothing", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log(0).received }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 1 });
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_text")).toBe(0);
+    expect(term.count("pane.send_keys")).toBe(0);
+  });
+
+  test("at an idle Claude, a retry finds its earlier try in the real log and types nothing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nenu-retry-"));
+    const path = join(dir, "s.jsonl");
+    await writeFile(path, `${JSON.stringify({ type: "user", timestamp: new Date(5_000).toISOString(), message: { role: "user", content: text } })}\n`);
+    try {
+      const term = new Term();
+      const { outcome } = await guardedSend(deps(term, { received: claudeLogReader(async () => path) }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 4_000 });
+      expect(outcome.ok).toBe(true);
+      expect(term.count("pane.send_text")).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  test("background work alone is not idle: Enter waits to see the text", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, background: true }) }), { text, requestId: "r1" });
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_keys")).toBe(1);
+  });
+
+  test("a turn that starts before Enter sends this one the mid-turn way", async () => {
+    const term = new Term();
+    const turn = () => ({ running: term.count("pane.send_text") > 0 });
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(outcome.ok).toBe(true);
+    expect(term.count("pane.send_keys")).toBe(1);
+  });
+
+  test("a message of pictures alone waits to be seen in the box: the log has no words to find it by", async () => {
+    const term = new Term();
+    const path = "/state/uploads/shot-k3j9x2-0a1b2c3d.png";
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text: path, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+    expect(term.methods()[term.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    expect(term.lines.at(-1)).toBe("> [Image #1]");
+  });
+
+  test("one read with the box gone, mid-redraw, counts for neither held nor gone", async () => {
+    const term = new Term();
+    term.enterClears = false;
+    // The text sits in the box throughout; the confirm's last read catches a redraw.
+    let confirmReads = 0;
+    term.onRead = (_n, t) => {
+      const enter = t.count("pane.send_keys") > 0;
+      if (enter) confirmReads++;
+      t.dialog = enter && confirmReads === WAIT_DELAYS_MS.length ? "redrawing" : null;
+    };
+    const { outcome } = await guardedSend(deps(term, { received: log(10_000).received }), { text, requestId: "r1" });
+    // Held at the bound, so Claude never took the Enter: cleared, not "may still arrive".
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("cleared");
+  });
+
+  test("a retry the log says nothing about types nothing either: the earlier bytes may still arrive", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 1 });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(0);
+  });
+});
+
+describe("guardedSend: a loaded host (ADR 0117)", () => {
+  test("text painted late, well past the old 2.5 s window, is still verified and sent", async () => {
+    const term = new Term();
+    term.echoAfter = 30;
+    const sleeps: number[] = [];
+    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void sleeps.push(ms) }, { text: "deploy the staging build", requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+    expect(sleeps.reduce((a, b) => a + b, 0)).toBeGreaterThan(2_500);
+  });
+
+  test("a picture whose token comes late is attached, never taken for its path", async () => {
+    const term = new Term();
+    term.pictureReads = 30;
+    const path = "/state/uploads/shot-k3j9x2-0a1b2c3d.png";
+    const { outcome } = await run(term, { text: `look ${path} here` });
+    expect(outcome.ok).toBe(true);
+    expect(term.lines.at(-1)).toBe("> look [Image #1] here");
   });
 });
 

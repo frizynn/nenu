@@ -111,6 +111,10 @@ export function isDefiniteRefusal(error: unknown): boolean {
 const GET_TIMEOUT_MS = 10_000;
 //   - Mutations drive a real terminal on the host, which can legitimately take a beat — more slack.
 const MUTATION_TIMEOUT_MS = 20_000;
+//   - A send waits for a loaded agent's box and log: its pictures until 55 s into the send
+//     (bridge/guarded-send.ts PICTURES_BY_MS), then at most three 15 s waits on any path; under
+//     Bun's 120 s idle timeout.
+const SEND_TIMEOUT_MS = 110_000;
 const ORG_LIST_TIMEOUT_MS = 15_000;
 const ORG_MUTATION_TIMEOUT_MS = 35_000;
 //   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
@@ -599,6 +603,7 @@ export function sendMessage(paneId: string, request: SendRequest, session?: stri
     withSession(`/api/pane/${encodeURIComponent(paneId)}/send`, session),
     { method: "POST", body: JSON.stringify(request) },
     (_status, detail) => refusedSend(detail),
+    SEND_TIMEOUT_MS,
   );
 }
 
@@ -675,7 +680,7 @@ export function settleTerminalDraft(paneId: string, draft: string, session: stri
 }
 
 /**
- * Take back what waits in the agent's own queue (ADR 0117): the bridge pulls it into the agent's box,
+ * Take back what waits in the agent's own queue (ADR 0118): the bridge pulls it into the agent's box,
  * reads it, clears the box and recalls the rows it held, and answers with the words and those rows.
  */
 export function takeBackQueue(paneId: string, session: string | undefined): Promise<({ ok: true } & TakenBack) | { ok: false; error: string }> {

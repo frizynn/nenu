@@ -23,7 +23,7 @@ describe("PendingTurns", () => {
     const status = screen.getByRole("status");
     expect(within(status).getByText("Queued")).toBeInTheDocument();
     expect(status).toHaveTextContent("Queued Waiting for Claude to finish this turn.");
-    // Edit and Remove are on the line: one tap each (ADR 0117).
+    // Edit and Remove are on the line: one tap each (ADR 0118).
     await user.click(screen.getByRole("button", { name: "Remove" }));
     expect(handlers.remove).toHaveBeenCalledExactlyOnceWith(queued);
     await user.click(screen.getByRole("button", { name: "Edit" }));

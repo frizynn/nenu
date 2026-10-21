@@ -2930,7 +2930,7 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
     expect(pendingStatus(listLocalSends(scope)[0]!).actions).toEqual([]);
   });
 
-  // ADR 0117: a message in Claude's own queue is taken back; the bridge recalls the rows it held.
+  // ADR 0118: a message in Claude's own queue is taken back; the bridge recalls the rows it held.
   describe("taking a message back from Claude's queue", () => {
     const scope = localSendScope("w1:p1", undefined);
     const seed = () => ["primero", "segundo\ncon dos líneas"].map((text, i) => {

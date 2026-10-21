@@ -2,7 +2,7 @@ import { useEffect, useState, type RefObject } from "react";
 
 import { isLocked, useLocked } from "./idle";
 
-// The only motion that lasts (ADR 0117): what shows that an agent works now, the glow across a running
+// The only motion that lasts (ADR 0118): what shows that an agent works now, the glow across a running
 // turn's live line and the working mark's slow turn. Every one shares this observer and moves only
 // while it is on screen, the page is shown, the idle lock is down and motion is not reduced; otherwise
 // it is still and costs nothing.

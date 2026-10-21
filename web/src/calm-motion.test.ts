@@ -5,7 +5,7 @@ import { join, relative } from "node:path";
 // the set changes in one file; and nothing in Nenu animates forever: a state that lasts (working,
 // busy, sending, loading) is a still glyph, and motion only answers a tap and ends. A spinner left on
 // for a whole turn cost about 1 s of CPU every 30 s on the bench (2026-10-15 audit). What shows an
-// agent works now (ADR 0117) steps by hand from one timer, only while it is seen: any CSS animation
+// agent works now (ADR 0118) steps by hand from one timer, only while it is seen: any CSS animation
 // that runs, even in steps(), keeps the compositor drawing every frame.
 
 const src = import.meta.dirname;

@@ -1,7 +1,7 @@
 # 0116. A turn reads as T3 Code draws its work, the same on a phone and a desk
 
 - **Status:** Accepted (2026-10-21). Decision 4's step in progress (the turn's bottom row, with the
-  live mark) amended by [ADR 0117](./0117-work-in-progress-looks-alive.md): it sits in its run. Requested by the operator ("los comandos deben verse así", four
+  live mark) amended by [ADR 0118](./0118-work-in-progress-looks-alive.md): it sits in its run. Requested by the operator ("los comandos deben verse así", four
   captures of T3 Code). Reverses the desk's own work log of `c16199e7` (a turn never folds on a desk;
   each run of steps a bordered table of verb and target rows), which no ADR recorded.
 - **Trail:** `web/src/components/transcript-view.tsx` (`WorkTurnView`) ·

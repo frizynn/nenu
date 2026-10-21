@@ -29,7 +29,7 @@ export function pendingStatus(send: LocalSend): {
 }
 
 // What a waiting message can do is one tap away on its status line (Edit and Remove included, ADR
-// 0117); only Send now, which skips the wait the operator chose, stays behind the ⋯.
+// 0118); only Send now, which skips the wait the operator chose, stays behind the ⋯.
 const ACTION: Record<keyof LocalSendActions, { label: string; icon: IconComponent; remedy: boolean }> = {
   retry: { label: "Retry", icon: RotateCcw, remedy: true },
   openTerminal: { label: "Open Terminal", icon: SquareTerminal, remedy: true },

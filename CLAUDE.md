@@ -248,7 +248,7 @@ the unit name; the Herdr action runs from anywhere.
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
 - **A state is a glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
   `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
-  nothing at rest. Colour only for what asks for you, only the working circle moves (ADR 0117), and a
+  nothing at rest. Colour only for what asks for you, only the working circle moves (ADR 0118), and a
   resting chat in the desk's bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
   ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
 - **Work in progress looks alive, and nothing else moves for long** (`lib/live-motion.ts`): the glow on
@@ -258,7 +258,7 @@ the unit name; the Herdr action runs from anywhere.
   thread is read ease in (`lib/enter.tsx`). A sent message is on screen once (`pendingSends`), and one
   in Claude's own queue is taken back with Up under the write lock (`takeBackQueue`); a message Claude
   read is never rewound from Nenu. `bun scripts/e2e/live-motion.ts` measures the cost
-  ([ADR 0117](./.adr/0117-work-in-progress-looks-alive.md)).
+  ([ADR 0118](./.adr/0118-work-in-progress-looks-alive.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
@@ -331,6 +331,12 @@ the unit name; the Herdr action runs from anywhere.
   drop the first piece; after Enter, Claude's own log decides whether it arrived whole, and a log
   holding less is answered as incomplete, never "Sent"
   ([ADR 0076](./.adr/0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md)).
+- **At an idle Claude with a log, Enter follows the text and the log is the witness** — one paste and
+  Enter with no read between; mid-turn, Enter still waits to see the text. Claude's `waiting` refuses
+  or stops the send, the log confirms this message (logged or queued) and its silence is never "sent",
+  a retry types nothing the log cannot place, and every wait is bounded at 15 s and ends on the event;
+  `bun scripts/bench/send-stress.ts <your own test pane>` must show 0 stuck and 0
+  duplicated sends ([ADR 0117](./.adr/0117-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
 - **A password prompt is recognised so Nenu can SAY what it is, never so it can send** — no
   automatic Enter, no relaxed verification, no secret channel; the remedy offered is the operator's
   own tap on "Type" ([ADR 0017](./.adr/0017-recognising-a-password-prompt-changes-what-collie-says.md)).

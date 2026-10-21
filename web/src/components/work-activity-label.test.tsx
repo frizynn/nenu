@@ -93,7 +93,7 @@ describe("WorkActivityLabel", () => {
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
   });
 
-  // The words glow while the agent works (ADR 0117): a light passes across them, nothing else moves.
+  // The words glow while the agent works (ADR 0118): a light passes across them, nothing else moves.
   // jsdom has no IntersectionObserver, so the glow stays still and its words are on the page once.
   it("glows its words, with no spinner, no dot and no second copy while still", () => {
     const { container } = render(<WorkActivityLabel startedAt={startedAt} />);

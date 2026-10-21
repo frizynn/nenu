@@ -7,7 +7,7 @@ import { splitLines, type StyledLine } from "../../blocks";
 import { extractInputDraft, hasInputBox, inputBoxShowsHistory, readClaudeTurn } from "./chrome";
 
 // Claude Code 2.1.306 in a Herdr pane of its own, under a statusline long enough to fill its row:
-// two messages queued while a command ran, then Up in the empty box (ADR 0117).
+// two messages queued while a command ran, then Up in the empty box (ADR 0118).
 const fixture = (name: string): StyledLine[] =>
   splitLines(parseAnsi(readFileSync(join(import.meta.dirname, "fixtures", name), "utf8")));
 

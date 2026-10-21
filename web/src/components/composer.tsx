@@ -1098,7 +1098,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const queueRow = (echo: LocalSend): QueueMessage | undefined =>
     echo.queueId ? queue.page?.messages.find((message) => message.id === echo.queueId) : undefined;
   const bubbleActions = useRef<LocalSendActions | null>(null);
-  // A message already in Claude's own queue comes back from it (ADR 0117): every message waiting there
+  // A message already in Claude's own queue comes back from it (ADR 0118): every message waiting there
   // returns at once, and the bridge recalls their rows in the same step. Their bubbles leave, and what
   // is kept goes into the box as it was sent (takenBack). A second tap while one runs does nothing.
   const takingBack = useRef(false);

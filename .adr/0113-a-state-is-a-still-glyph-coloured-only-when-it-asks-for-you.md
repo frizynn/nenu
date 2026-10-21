@@ -1,7 +1,7 @@
 # 0113. A state is a still glyph, coloured only when it asks for you
 
 - **Status:** Accepted (2026-10-21). Decision 3 ("nothing spins") superseded by
-  [ADR 0117](./0117-work-in-progress-looks-alive.md): the working mark turns slowly. Supersedes decision 3 of
+  [ADR 0118](./0118-work-in-progress-looks-alive.md): the working mark turns slowly. Supersedes decision 3 of
   [ADR 0111](./0111-one-set-of-motion-hover-and-mark-tokens.md) ("one status mark, 6 px"). Requested by
   the operator on 1.38.4: "our sidebar is very rough and I don't like the dot of that colour; another,
   more minimal and nicer icon", with T3 Code and Ovis as references.

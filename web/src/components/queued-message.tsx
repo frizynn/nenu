@@ -38,7 +38,7 @@ const TONE_ICON: Record<Exclude<QueuedTone, "waiting">, ReactNode> = {
  * whether this device queued it or another one did, at the end of the chat: the bubble, a status
  * line under it and one trailing ⋯ of 44px. A message waiting in a queue wears a Queued badge. What
  * it can do now (Retry, Open Terminal, Read it now, Edit, Remove) is on the line, one tap away, next
- * to the words that call for it (ADR 0117); Send now, which skips the wait, lives behind the ⋯.
+ * to the words that call for it (ADR 0118); Send now, which skips the wait, lives behind the ⋯.
  */
 export function QueuedMessage({
   text,
