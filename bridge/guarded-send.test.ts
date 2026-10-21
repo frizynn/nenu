@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   OutputTrigger,
+  clearTakenDraft,
   SETTLE_CAP_MS,
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
@@ -835,5 +836,33 @@ describe("WriteLedger", () => {
     expect(await l.run("k", "other", async () => ({ ok: true, n: 1 }))).toMatchObject({ replayed: false });
     now = WriteLedger.TTL_MS;
     expect(await l.run("k", "f", async () => ({ ok: true, n: 2 }))).toEqual({ outcome: { ok: true, n: 2 }, replayed: false });
+  });
+});
+
+describe("clearTakenDraft", () => {
+  const deps = (term: Term) => ({ herdr: term, paneId: "w1:p1", readLines: 200, sleep: noSleep });
+
+  test("clears the box while it holds exactly the draft taken over, and confirms it emptied (ADR 0112)", async () => {
+    const term = new Term();
+    term.draft = "mira como se ve";
+    expect(await clearTakenDraft(deps(term), "mira  como se ve")).toEqual({ ok: true });
+    expect(term.draft).toBe("");
+    expect(term.keys()[0]![0]).toBe("ctrl+k");
+  });
+
+  test("leaves a box that changed since the phone read it", async () => {
+    const term = new Term();
+    term.draft = "mira como se ve y algo más";
+    expect((await clearTakenDraft(deps(term), "mira como se ve")).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+    expect(term.draft).toBe("mira como se ve y algo más");
+  });
+
+  test("presses nothing into a dialog", async () => {
+    const term = new Term();
+    term.draft = "mira";
+    term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    expect((await clearTakenDraft(deps(term), "mira")).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
   });
 });
