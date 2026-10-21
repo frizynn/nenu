@@ -6,12 +6,12 @@ import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorStatus } from "@/components/coordinator-status";
-import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
+import { OwnReport } from "@/components/coordinator-summary";
 import { DeskCoordinator } from "@/components/desk-coordinator";
 import { NodeDot } from "@/components/node-row";
 import { NewNodeActions } from "@/components/node-start";
 import { ProjectMissing } from "@/components/project-missing";
-import { CloseNodeDialog, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
+import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAsks } from "@/hooks/use-asks";
@@ -128,6 +128,7 @@ function NodePage() {
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
         {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
+        {failed && <p role="alert" className="mt-2 text-footnote text-muted-foreground">Could not read the reports: {failed}</p>}
         {(running || (closable && !coordinator)) && <div className="mt-3 flex flex-wrap gap-2">
           {running && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
@@ -136,7 +137,8 @@ function NodePage() {
             Close thread</Button>}
         </div>}
       </section>
-      {coordinator && <CoordinatorWork key={thread.id} coordinator={thread} summaries={summaries} failed={failed}
+      {/* Its live work; what finished is the tree's one folded History line (ADR 0109). */}
+      {coordinator && <OrgTreeList key={thread.id}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
       {coordinator && !readOnly && state !== "resolved" && <div className="mt-3">

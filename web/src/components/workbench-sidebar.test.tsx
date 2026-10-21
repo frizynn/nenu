@@ -336,6 +336,15 @@ describe("the sidebar", () => {
     expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
   });
 
+  it("marks a thread whose pull request merged as merged, in green, never as asking for you", async () => {
+    const merged = { ...acme, threads: [...acme.threads, thread("t9", "copy fix", "t1", { group: "ready-for-review", pr: { state: "merged", number: 9 } })] };
+    await openTree("/", { ...herd, projects: [merged] } as unknown as HomeData);
+    const row = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: "copy fix, merged, closes on its own" });
+    const word = row.querySelector(".nav-row-word");
+    expect(word).toHaveTextContent("merged");
+    expect(word).toHaveClass("text-status-done");
+  });
+
   it("marks the project's coordinator with the workflow glyph", async () => {
     await openTree();
     const coordinator = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: /^Coordinator/ });
@@ -406,6 +415,7 @@ describe("the sidebar", () => {
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
     expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs reply");
+    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
   });
 
   it("shows a coordinator thread's own state beside its threads' dots", async () => {
@@ -414,6 +424,7 @@ describe("the sidebar", () => {
     const head = screen.getByRole("link", { name: /^rediseño mobile/ });
     expect(head).toHaveAccessibleName("rediseño mobile, needs you");
     expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs you");
+    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
   });
 
   it("counts what needs you on Home, and keeps no Needs you list of its own", () => {

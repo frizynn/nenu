@@ -1,124 +1,28 @@
-import { lazy, Suspense, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useRouteLoaderData } from "react-router";
 import { ChevronRight, ExternalLink, FileText, GitPullRequest, Globe, ImageIcon, Sparkle } from "@/components/ui/icon";
 
 import { IMAGE_EDGE } from "@/components/message-images";
-import { NodeDot } from "@/components/node-row";
 import { BusyLabel } from "@/components/home-panels";
 import { FullReport } from "@/components/thread-report";
-import { OrgTreeList, prSummary, threadAge, threadDetail } from "@/components/project-tasks";
+import { prSummary } from "@/components/project-tasks";
 import { explainOrgThread, orgLibraryUrl } from "@/lib/api";
-import { summarySections, VERDICT_LABEL } from "@/lib/coordinator-summary";
+import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { nodeState, STATE_LABEL } from "@/lib/org-tree";
-import { isOpenThread } from "@/lib/projects";
 import { useSession } from "@/lib/session";
-import { isReadOnly, type AgentView, type ProjectThreadView, type ProjectView, type ThreadCapture, type ThreadDeliverable, type ThreadPullRequest, type ThreadSummary, type ThreadVerdict } from "@/lib/types";
+import { isReadOnly, type ProjectThreadView, type ProjectView, type ThreadCapture, type ThreadDeliverable, type ThreadPullRequest, type ThreadSummary, type ThreadVerdict } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CaptureViewer = lazy(() => import("./capture-viewer"));
 
-// A coordinator's Summary (ADR 0089): the work under it by outcome, each card with what its agent's
-// last report says in plain words, its PR, the pictures it took and the documents it left. Every
-// report field may be missing (an Organizations without them, a thread that has not reported), and
-// a card then shows only what Organizations knows. The summary is the agent's text, drawn as text.
-
-/** Done cards drawn at a time: a long-running coordinator resolves dozens. */
-const DONE_PAGE = 10;
+// A node's own report (ADR 0089, its Summary superseded by ADR 0109): what its agent's last report says
+// in plain words, its PR, the pictures it took and the documents it left. Every report field may be
+// missing (an Organizations without them, a thread that has not reported), and the page then shows only
+// what Organizations knows. The summary is the agent's text, drawn as text.
 export const VERDICT_TONE: Record<ThreadVerdict, string> = { done: "text-status-done", "needs-decision": "text-status-blocked", blocked: "text-status-blocked", failed: "text-status-blocked" };
 const CHIP = "inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md bg-muted px-2 text-caption font-medium text-foreground";
 
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-
-type TreeProps = ComponentProps<typeof OrgTreeList>;
-
-interface WorkProps extends TreeProps {
-  /** The coordinator, or the project's own as `{ id: "root" }`. */
-  coordinator: Pick<ProjectThreadView, "id" | "verdict">;
-  summaries: ReadonlyMap<string, ThreadSummary>;
-  /** Why the reports could not be read; what was read before stays. */
-  failed: string | null;
-}
-
-/**
- * The work under a coordinator, two ways: its Summary, and the tree every organization view draws.
- * It opens on the Summary once a thread has reported; before that, on the tree, as it always did.
- */
-export function CoordinatorWork({ coordinator, summaries, failed, ...tree }: WorkProps) {
-  const [view, setView] = useState<"summary" | "threads">(() => [coordinator, ...tree.threads].some((thread) => thread.verdict) ? "summary" : "threads");
-  const open = tree.threads.filter(isOpenThread).length;
-  return <>
-    <div role="tablist" aria-label="Work under this coordinator" className="mb-3 flex items-center gap-0.5">
-      <button type="button" role="tab" aria-selected={view === "summary"} className="panel-tab" onClick={() => setView("summary")}>Summary</button>
-      <button type="button" role="tab" aria-selected={view === "threads"} className="panel-tab" onClick={() => setView("threads")}>
-        Threads{open > 0 && <span className="tabular-nums text-muted-foreground">{open}</span>}
-      </button>
-    </div>
-    <div role="tabpanel" aria-label={view === "summary" ? "Summary" : "Threads"}>
-      {view === "summary"
-        ? <CoordinatorSummary {...tree} coordinatorId={coordinator.id} summaries={summaries} failed={failed} />
-        : <OrgTreeList {...tree} />}
-    </div>
-  </>;
-}
-
-function CoordinatorSummary({ project, threads, panes, coordinatorId, summaries, failed, onOpenPane, onOpenNode, now = Date.now() }: TreeProps & {
-  coordinatorId: string;
-  summaries: ReadonlyMap<string, ThreadSummary>;
-  failed: string | null;
-}) {
-  const [doneShown, setDoneShown] = useState(DONE_PAGE);
-  const sections = summarySections(threads);
-  const parentOf = (thread: ProjectThreadView) => thread.parentId === coordinatorId ? undefined : threads.find((candidate) => candidate.id === thread.parentId);
-  return <div className="flex flex-col gap-6">
-    {failed && <p role="alert" className="px-1 text-footnote text-muted-foreground">Could not read the reports: {failed}</p>}
-    {sections.map(({ outcome, label, threads: list }) => {
-      const shown = outcome === "done" ? list.slice(0, doneShown) : list;
-      const hidden = list.length - shown.length;
-      return <section key={outcome} aria-label={label}>
-        <h3 className="mb-2 flex items-baseline gap-2 px-1 text-subhead font-semibold">
-          {label}<span className="text-footnote font-normal tabular-nums text-muted-foreground">{list.length}</span>
-        </h3>
-        <ul className="flex flex-col gap-2.5">
-          {shown.map((thread) => <SummaryCard key={thread.id} project={project} thread={thread} summary={summaries.get(thread.id)} panes={panes}
-            parent={parentOf(thread)} now={now} onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} />)}
-        </ul>
-        {hidden > 0 && <button type="button" className="quiet-action mt-2" onClick={() => setDoneShown(doneShown + DONE_PAGE)}>
-          Show {Math.min(DONE_PAGE, hidden)} more
-        </button>}
-      </section>;
-    })}
-    {sections.length === 0 && <p className="px-1 text-footnote text-muted-foreground">No threads yet.</p>}
-  </div>;
-}
-
-function SummaryCard({ project, thread, summary, panes, parent, now, onOpen }: {
-  project: ProjectView;
-  thread: ProjectThreadView;
-  summary?: ThreadSummary;
-  panes: readonly AgentView[];
-  /** The coordinator it runs under, when that is not the one whose Summary this is. */
-  parent?: ProjectThreadView;
-  now: number;
-  onOpen: () => void;
-}) {
-  const state = nodeState(thread);
-  const said = thread.verdict ? VERDICT_LABEL[thread.verdict] : state === "resolved" || state === "review" ? STATE_LABEL[state] : threadDetail(thread, panes);
-  const meta = [said, parent && `in ${parent.title}`, threadAge(thread, now)].filter(Boolean).join(" · ");
-  return <li>
-    <article aria-label={thread.title} className="rounded-xl border border-border bg-card/40 px-3.5 py-3">
-      <button type="button" className="flex w-full items-start gap-2.5 text-left" onClick={onOpen}>
-        <NodeDot state={state} className="mt-[7px] size-2" />
-        <span className="min-w-0 flex-1">
-          <span className={cn("block break-words text-body font-medium", state === "resolved" && "text-muted-foreground")}>{thread.title}</span>
-          <span className="block text-footnote text-muted-foreground">{meta}</span>
-        </span>
-        <ChevronRight aria-hidden className="mt-1 size-4 shrink-0 text-muted-foreground" />
-      </button>
-      <ReportContent project={project} summary={summary} pr={thread.pr} />
-    </article>
-  </li>;
-}
 
 /** A node's own report at the top of its page: its verdict, then what it says and shows. Nothing without one. */
 export function OwnReport({ project, thread, summary }: { project: ProjectView; thread: ProjectThreadView; summary?: ThreadSummary }) {

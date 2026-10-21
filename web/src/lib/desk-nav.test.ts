@@ -82,4 +82,10 @@ describe("a project's pulse", () => {
     expect(projectPulse({ ...asking, waitingAsks: 4 }, [], [asking]).waiting).toBe(4);
     expect(projectPulse(acme, [], [acme])).toMatchObject({ working: 0, at: now - 5 * MIN });
   });
+
+  it("does not count a thread whose pull request merged as to review: it closes on its own", () => {
+    const merged = { ...acme, threads: [...acme.threads, { id: "t-5", title: "Copy", parentId: "root", role: "worker" as const, status: "open" as const,
+      group: "ready-for-review", updated: "", pr: { state: "merged" as const, number: 9 } }] };
+    expect(projectPulse(merged, [], [merged]).review).toBe(projectPulse(acme, [], [acme]).review);
+  });
 });

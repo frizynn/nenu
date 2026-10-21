@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.37.0] - 2026-10-21
+## [1.38.0] - 2026-10-21
 
 ### Added
 
@@ -24,6 +24,26 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - A working thread without a pane no longer reads "not running" in the navigation (a9878c0c).
+
+## [1.37.0] - 2026-10-21
+
+### Changed
+
+- A coordinator's page lists only its live work; what finished is one "N finished" line to its History, no Summary and no report cards (3069c4af, d142080d).
+- A tap anywhere on a coordinator card's head opens its page; the fold is its own chevron (bcd3105b).
+- Open chat and New thread, Project chat and New: one button, same size and fill (bcd3105b).
+- A coordinator's Waiting on you shows only what waits on you; its asks are on Status, done ones folded to one line everywhere (3069c4af, 5c06d6a1).
+- An Asked line outside the format (`[in-progress] …`) reads as a request in progress or done, never under "Other lines" (5c06d6a1).
+- A thread whose PR merged reads "merged, closes on its own" and no longer counts as to review, Home included (bcd3105b, 94b385df, d142080d, 28e2aad6, e1a24161).
+- History sits after the live work on the project and coordinator pages, never beside it (b2dec9d9).
+
+### Fixed
+
+- An opened STATUS.md is drawn whole and scrolls with the page; it was clipped at 288 px and a wheel moved nothing (a3029ec6).
+
+### Added
+
+- `bun scripts/e2e/coordinator-page.ts`: the project card, the coordinator page, its buttons, Waiting on you, Status and its scroll, desk and phone (f5b7630f).
 
 ## [1.36.1] - 2026-10-21
 

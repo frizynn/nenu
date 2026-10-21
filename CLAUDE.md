@@ -165,9 +165,11 @@ the unit name; the Herdr action runs from anywhere.
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
-  The one exception is a coordinator's **Summary** tab (`web/src/lib/coordinator-summary.ts`): its subtree
-  by outcome (needs your decision, in progress, done), each card with its report; the page opens on it
-  only once a report has a verdict ([ADR 0089](./.adr/0089-a-coordinators-summary-groups-its-work-by-outcome.md)).
+  A coordinator's page lists only its live work, what finished one line to History, and never its
+  threads' report cards (the Summary of ADR 0089 is gone); a tap anywhere on a coordinator card's head
+  opens it, its Waiting on you holds only what waits on you, an Asked line outside the format reads as
+  a request (`unmarked`), and an opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must
+  pass ([ADR 0109](./.adr/0109-a-coordinators-page-shows-live-work.md)).
   A conversation (`keep_open`) that ended its turn reads idle, never Needs you; only a dialog, a failed
   start or a lost pane make it ask ([ADR 0103](./.adr/0103-a-conversation-that-ended-its-turn-waits-on-nobody.md)).
   A report reads in plain words once Organizations' summary agent wrote them for it, the agent's words a

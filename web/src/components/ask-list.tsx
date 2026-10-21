@@ -27,7 +27,6 @@ export function AskMark({ group }: { group: AskGroup }) {
   const box = "flex size-4 shrink-0 items-center justify-center";
   if (group === "unclosed") return <span className={box}><TriangleAlert aria-hidden size={14} className="text-status-working" /></span>;
   if (group === "done") return <span className={box}><Check aria-hidden size={14} className="text-status-done" /></span>;
-  if (group === "other") return <span className={box}><span aria-hidden className="size-1 rounded-full bg-muted-foreground" /></span>;
   return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" className="size-2" /></span>;
 }
 
@@ -52,6 +51,8 @@ export function AskSections({ sections, session, whose, answers, readOnly, compa
 }) {
   // Answered here, until the next read of the asks moves the row where Organizations puts it.
   const [answered, setAnswered] = useState<Record<string, string>>({});
+  // What is done stays one line until opened: the list is for what is still open (ADR 0109).
+  const [doneShown, setDoneShown] = useState(false);
   if (sections.length === 0) return null;
   const answer = (entry: AskEntry, group: AskGroup): Answering => ({
     answer: answered[entry.key],
@@ -59,17 +60,22 @@ export function AskSections({ sections, session, whose, answers, readOnly, compa
     onAnswered: (text) => setAnswered((current) => ({ ...current, [entry.key]: text })),
   });
   return <div className={cn("flex flex-col", compact ? "gap-3" : "gap-6")}>
-    {sections.map((section) => (
-      <section key={section.group} aria-label={section.label}>
-        {headings && <h2 className={cn("flex items-center gap-2 pb-1 text-footnote font-medium text-muted-foreground", !compact && "px-2.5", compact && "font-semibold")}>
-          <span className={compact ? undefined : "text-foreground"}>{section.label}</span><span className="font-normal tabular-nums">{section.entries.length}</span>
-        </h2>}
-        <ul className="flex flex-col">
+    {sections.map((section) => {
+      const folds = headings && section.group === "done";
+      const label = <><span className={compact ? undefined : "text-foreground"}>{section.label}</span><span className="font-normal tabular-nums">{section.entries.length}</span></>;
+      const heading = cn("flex items-center gap-2 pb-1 text-footnote font-medium text-muted-foreground", !compact && "px-2.5", compact && "font-semibold");
+      return <section key={section.group} aria-label={section.label}>
+        {folds
+          ? <h2><button type="button" className={cn(heading, "-ml-0.5 rounded-md hover:text-foreground")} aria-expanded={doneShown} onClick={() => setDoneShown(!doneShown)}>
+            <ChevronRight aria-hidden className={cn("desk-fold size-3.5", doneShown && "rotate-90")} />{label}
+          </button></h2>
+          : headings && <h2 className={heading}>{label}</h2>}
+        {(!folds || doneShown) && <ul className={cn("flex flex-col", folds && "desk-reveal")}>
           {section.entries.map((entry) => <AskItem key={entry.key} entry={entry} session={session} whose={whose} compact={compact} readOnly={readOnly}
             answering={answer(entry, section.group)} parts={entry.parts.map((part) => answer(part, section.group))} />)}
-        </ul>
-      </section>
-    ))}
+        </ul>}
+      </section>;
+    })}
   </div>;
 }
 
@@ -104,9 +110,11 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
   // Once answered here, an ask's old answer from its coordinator no longer says anything.
   const said = kind === "ask" && answer !== undefined ? "" : body;
   const line = kind ? "" : [owner, answer === undefined && entry.detail].filter(Boolean).join(" · ");
+  // On a card, what does not wait on you reads at a glance: two lines of each, the rest on its links.
+  const clamped = compact && !kind;
   const words = whose
     ? <Link to={coordinator} className={cn("block break-words text-subhead hover:underline underline-offset-2", kind && "font-medium")}>{title}</Link>
-    : <p className={cn("break-words text-subhead", kind && "font-medium")}>{title}</p>;
+    : <p className={cn("break-words text-subhead", kind && "font-medium", clamped && "line-clamp-2")}>{title}</p>;
   return (
     <li className={cn("flex min-w-0 items-start gap-2.5", kind ? "ask-waiting" : "rounded-lg py-2", !compact && "px-2.5")}>
       {!kind && <span className="pt-0.5">{answer === undefined ? <AskMark group={entry.group} /> : <AskMark group="done" />}</span>}
@@ -116,7 +124,7 @@ function AskItem({ entry, session, whose, compact, readOnly, answering, parts }:
         </p>}
         {words}
         {said && <p className="mt-0.5 break-words text-subhead text-muted-foreground">{said}</p>}
-        {line && <p className="break-words text-footnote text-muted-foreground">{line}</p>}
+        {line && <p className={cn("break-words text-footnote text-muted-foreground", clamped && "line-clamp-2")}>{line}</p>}
         <Answered answer={answer} at={entry.answeredAt} />
         {why && <Why why={why} entry={entry} session={session} readOnly={readOnly} />}
         {entry.links.length > 0 && <Chips entry={entry} links={entry.links} session={session} />}

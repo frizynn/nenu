@@ -44,6 +44,7 @@ export function threadDetail(thread: ProjectThreadView, panes: readonly AgentVie
   const ask = awaits(thread);
   if (ask) return ASK[ask].label;
   if (state === "needs") return title ?? thread.note ?? "Needs you";
+  if (state === "closing") return [STATE_LABEL.closing, thread.pr?.number !== undefined && `PR #${thread.pr.number}`].filter(Boolean).join(" · ");
   if (state === "review" && thread.pr) return prSummary(thread.pr);
   // Organizations' own note (pane closed, session unreachable, a remote agent's state) says more than Nenu can.
   if (!thread.paneId) return thread.note || (thread.status !== "open" ? thread.status : state === "working" ? "working" : "not running");

@@ -82,9 +82,9 @@ function setup(path: string, { project = {}, asks = ASKS, summary = SUMMARY, wai
 
 it("lists every ask in the popup's groups, each with whose it is and where it stands, and opens its coordinator", async () => {
   const { router, user } = setup("/asks");
-  const waiting = await screen.findByRole("region", { name: "Wait on you" });
+  const waiting = await screen.findByRole("region", { name: "Waiting on you" });
   expect(screen.getByText("all coordinators · 2 wait on you · 2 do not close · 1 in progress · 1 done")).toBeInTheDocument();
-  expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Wait on you", "Does not close", "In progress", "Done"]);
+  expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Waiting on you", "Does not close", "In progress", "Done"]);
   expect(within(waiting).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
     // Its kind and whose it is, then what it asks, then what its coordinator says (a decision's recommendation after ` : `).
     "Your askShop · CoordinatorPilot with batch 2yes or no",
@@ -99,6 +99,9 @@ it("lists every ask in the popup's groups, each with whose it is and where it st
   await user.click(within(unclosed).getByRole("link", { name: /Land the copy fix/ }));
   expect(router.state.location.pathname).toBe("/project/shop/node/t-0010");
   await router.navigate("/asks");
+  // What is done is one line until opened.
+  expect(screen.queryByRole("link", { name: /Does it cut cost/ })).toBeNull();
+  await user.click(await screen.findByRole("button", { name: /^Done/ }));
   await user.click(await screen.findByRole("link", { name: /Does it cut cost/ }));
   expect(router.state.location.pathname).toBe("/project/shop/node/root");
 });
@@ -106,11 +109,11 @@ it("lists every ask in the popup's groups, each with whose it is and where it st
 it("opens a coordinator's page on its card: objective, what waits on you, its asks, agents, pull requests and tokens", async () => {
   setup("/project/shop/node/t-0010");
   const card = await screen.findByRole("region", { name: "Coordinator card" });
-  await waitFor(() => expect(card).toHaveTextContent("Wait on you1DecisionStocklist or cards"));
+  await waitFor(() => expect(card).toHaveTextContent("Waiting on you1DecisionStocklist or cards"));
   const main = within(screen.getByRole("main"));
   // The card heads the page, its asks drawn as Your asks draws them; the STATUS.md it reads from folds under it.
   const regions = main.getAllByRole("region").map((region) => region.getAttribute("aria-label"));
-  expect(regions.slice(0, regions.indexOf("Status") + 1)).toEqual(["Coordinator card", "Wait on you", "Does not close", "In progress", "Status"]);
+  expect(regions.slice(0, regions.indexOf("Status") + 1)).toEqual(["Coordinator card", "Waiting on you", "Does not close", "In progress", "Status"]);
   expect(main.getByRole("button", { name: "Show STATUS.md" })).toBeInTheDocument();
   expect(card).toHaveTextContent("Objectiveupdated 12m agothe checkout in six parts");
   expect(card).toHaveTextContent("Does not close1Land the copy fixMarked working, but a linked thread is resolved.");
@@ -127,15 +130,17 @@ it("opens a coordinator's page on its card: objective, what waits on you, its as
 });
 
 it("gives the project's own coordinator a page of its own: its agent, its card, its tokens over a cap", async () => {
-  setup("/project/shop/node/root");
+  const { user } = setup("/project/shop/node/root");
   const card = await screen.findByRole("region", { name: "Coordinator card" });
   const main = within(screen.getByRole("main"));
   expect(main.getByRole("heading", { name: "Coordinator" })).toBeInTheDocument();
   await waitFor(() => expect(main.getByText("claude · opus")).toBeInTheDocument());
   // What the ticker saw of it, without a live pane.
   expect(main.getByText("claude · opus").parentElement).toHaveTextContent("Idle·claude · opus");
-  await waitFor(() => expect(card).toHaveTextContent("Wait on you1Your askPilot with batch 2yes or no"));
+  await waitFor(() => expect(card).toHaveTextContent("Waiting on you1Your askPilot with batch 2yes or no"));
   expect(card).toHaveTextContent("Does not close1Ship the couponsapprovedMarked done, but a linked PR is still open.");
+  expect(card).toHaveTextContent("Done1Agents");
+  await user.click(within(card).getByRole("button", { name: /^Done/ }));
   expect(card).toHaveTextContent("Done1Does it cut cost?yes, measured twice");
   expect(card).toHaveTextContent("Agents1CheckoutIdle");
   expect(card.querySelector("[data-over-cap]")).toHaveTextContent("Over cap: context");
@@ -215,7 +220,7 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
 
   it("reads an ask's links as chips: a thread opens its node, a pull request its page, a task names its state", async () => {
     const { router, user } = setup("/asks", { asks: linked });
-    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const waiting = await screen.findByRole("region", { name: "Waiting on you" });
     const chips = within(within(waiting).getAllByRole("list", { name: "Links" })[0]!);
     expect(chips.getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["t-0012working", "AWA-569missing", "#1352open"]);
     expect(chips.getByRole("link", { name: /#1352/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1352");
@@ -231,7 +236,7 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
       return HttpResponse.json({ ok: true, answered: { project: "shop", coordinator: "t-0010", line: 5, answeredAt: "2026-10-17T10:00:00Z" } });
     }));
     const { user } = setup("/asks", { asks: linked });
-    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const waiting = await screen.findByRole("region", { name: "Waiting on you" });
     expect(within(waiting).getAllByRole("button", { name: /^Answer/ }).map((button) => button.getAttribute("aria-label")))
       .toEqual(["Answer Prospects or numbers first?", "Answer Pilot with batch 2"]);
     await user.click(within(waiting).getByRole("button", { name: "Answer Prospects or numbers first?" }));
@@ -254,7 +259,7 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
     const row = within(progress).getByText("Prospects or numbers first?").closest("li")!;
     expect(row).toHaveTextContent("Answered 5m ago");
     expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Wait on you" })).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Waiting on you" })).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
   });
 
   it("keeps the answer box open with the reason when Organizations refuses", async () => {
@@ -269,7 +274,7 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
 
   it("narrows to a project and then a coordinator, in the address", async () => {
     const { router, user } = setup("/asks", { asks: linked });
-    await screen.findByRole("region", { name: "Wait on you" });
+    await screen.findByRole("region", { name: "Waiting on you" });
     // Each pick is a navigation: the page draws what it narrowed to once the router commits it, and
     // the Coordinator selector opens only then.
     await user.selectOptions(screen.getByLabelText("Project"), "shop");
@@ -308,7 +313,7 @@ describe("decision rows, from an Organizations that prints them (ADR 0093)", () 
       return HttpResponse.json({ ok: true, answered: { project: "shop", coordinator: "t-0010", line: 9, answeredAt: "2026-10-17T10:00:00Z" } });
     }));
     const { user } = setup("/asks", { asks: rows });
-    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const waiting = await screen.findByRole("region", { name: "Waiting on you" });
     const row = within(waiting).getByText("Datos del comercio").closest("li")!;
     expect(row).toHaveTextContent("DecisionShop · CheckoutDatos del comercioFacturación o padrón");
     expect(within(within(row).getByRole("list", { name: "Links" })).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["AWA-711todo"]);
@@ -325,13 +330,13 @@ describe("decision rows, from an Organizations that prints them (ADR 0093)", () 
     const row = within(progress).getByText("Stock : list or cards").closest("li")!;
     expect(row).toHaveTextContent("Answered 3m ago");
     expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Wait on you" })).queryByText("Stock : list or cards")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Waiting on you" })).queryByText("Stock : list or cards")).not.toBeInTheDocument();
   });
 
   it("lists a coordinator's decisions on its card the same way", async () => {
     setup("/project/shop/node/t-0010", { asks: rows });
     const card = await screen.findByRole("region", { name: "Coordinator card" });
-    await waitFor(() => expect(card).toHaveTextContent("Wait on you1DecisionDatos del comercioFacturación o padrón"));
+    await waitFor(() => expect(card).toHaveTextContent("Waiting on you1DecisionDatos del comercioFacturación o padrón"));
     expect(within(card).getByRole("button", { name: "Answer Datos del comercio : Facturación o padrón" })).toBeInTheDocument();
     expect(card).toHaveTextContent("Stock : list or cardsdecisionAnswered 3m ago");
   });
@@ -339,7 +344,7 @@ describe("decision rows, from an Organizations that prints them (ADR 0093)", () 
   it("from a bridge that predates decision rows, a decision is text that waits on you, with no Answer", async () => {
     const old: AsksList = { ...ASKS, answers: true, decisions: [{ project: "shop", coordinator: CHECKOUT, text: "Stock : list or cards" }] };
     setup("/asks", { asks: old });
-    const waiting = await screen.findByRole("region", { name: "Wait on you" });
+    const waiting = await screen.findByRole("region", { name: "Waiting on you" });
     const row = within(waiting).getByText("Stock").closest("li")!;
     expect(row).toHaveTextContent("DecisionShop · CheckoutStocklist or cards");
     expect(within(row).queryByRole("button", { name: /^Answer/ })).not.toBeInTheDocument();

@@ -411,7 +411,11 @@ interface TreeFolds {
   onExpand: (key: string, open: boolean) => void;
 }
 
-const STATE_WORD: Partial<Record<NodeState, string>> = { needs: "needs you", review: "review" };
+/** A tree row's word and its tone: red asks for you, blue is to review, green has merged and closes on its own. */
+const NEEDS_TONE = "text-status-blocked";
+const STATE_WORD: Partial<Record<NodeState, { word: string; tone: string }>> = {
+  needs: { word: "needs you", tone: NEEDS_TONE }, review: { word: "review", tone: "text-primary" }, closing: { word: "merged", tone: "text-status-done" },
+};
 
 function ProjectSection({ project, data, open, expanded, onExpand, panes = [], phone = false }: TreeFolds & {
   project: ProjectView;
@@ -561,7 +565,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
-  const word = ask ? ASK[ask].word : STATE_WORD[state];
+  const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
   // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
   const note = thread.paneId || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId && !page ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
@@ -579,7 +583,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
-        {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
+        {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
         {page && <ChevronRight aria-hidden size={14} className="shrink-0 text-muted-foreground" />}
       </Link>
