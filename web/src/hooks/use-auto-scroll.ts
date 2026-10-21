@@ -16,7 +16,7 @@ export function atTail(el: HTMLElement, offset = 24): boolean {
 
 /** A field the operator types in: keys there edit text, they do not scroll a list. */
 export function isTextField(node: EventTarget | null): node is HTMLElement {
-  return node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement || (node instanceof HTMLElement && node.isContentEditable);
+  return node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement || (node instanceof HTMLElement && node.isContentEditable === true);
 }
 
 /** How long after an edit a move up can still be the layout settling rather than the reader. */
