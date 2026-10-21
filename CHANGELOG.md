@@ -8,6 +8,14 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.35.1] - 2026-10-21
+
+### Fixed
+
+- On an iPhone the app no longer stays squeezed into the top half after the keyboard closes: it takes the keyboard's height only while a field is focused, and re-reads the screen on focus, rotation and return to the app, past a lost viewport event, a zoom or iOS 26's leftover offset (00c928f3).
+- The chat stops reading the keyboard as up on those same paths, so the model row and the navigation band come back (00c928f3).
+- `bun scripts/e2e/keyboard-close.ts`: six ways to close the keyboard, in Safari and as the installed app (44062cbc, f230917d).
+
 ## [1.35.0] - 2026-10-21
 
 ### Added
