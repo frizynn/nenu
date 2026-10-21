@@ -49,6 +49,8 @@ export async function deliverQueuedMessage(
   const base = `queue:${row.id}:${row.revision}`;
   // Whether anything reached the terminal: until then a failed delivery is safe to retry.
   let wrote = false;
+  // A message with pictures is typed in pieces (ADR 0104): each write is its own request.
+  let pieces = 0;
   const checked = async (step: () => Promise<ActionResponse>) => {
     if (!(await sameConversation())) throw new Error("The connected conversation changed.");
     wrote = true;
@@ -59,7 +61,12 @@ export async function deliverQueuedMessage(
     getPane: (id) => herdr.getPane(id),
     readPane: (...args) => herdr.readPane(...args),
     waitForOutput: (...args) => herdr.waitForOutput(...args),
-    sendPaneText: (_id, wire) => checked(() => write(row.text, false, `${base}:type`, wire !== row.text)),
+    sendPaneText(_id, wire) {
+      // The reply route wraps a paste itself, so the piece goes without its markers.
+      const pasted = /^\x1b\[200~([\s\S]*)\x1b\[201~$/.exec(wire);
+      const id = `${base}:type${pieces++ ? `:${pieces}` : ""}`;
+      return checked(() => write(pasted ? pasted[1]! : wire, false, id, pasted !== null));
+    },
     async sendPaneKeys(id, keys) {
       if (keys === ENTER) return checked(() => write("", true, `${base}:submit`, false));
       if (keys === TAB) return checked(async () => (await herdr.sendPaneKeys(id, keys), { ok: true }));
