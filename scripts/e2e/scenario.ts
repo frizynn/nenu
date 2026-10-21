@@ -172,6 +172,86 @@ export async function writeChatJournal(file: string, at: number, repeat = 1, tai
   await writeFile(file, body);
 }
 
+/**
+ * The operator's command demo (T3 Code captures, 2026-10-21) as a Claude log: a thought, words, three
+ * commands in parallel, a thought, words, one that fails and one with a long output, then the answer;
+ * before it, a turn that reads, edits and runs one command. `stage` "running" stops after the failing
+ * command starts; "finished" writes the rest. Rows of one API message share its id, as the CLI's do.
+ */
+export async function writeCommandsJournal(file: string, at: number, stage: "running" | "finished"): Promise<void> {
+  let body = "";
+  let parent: string | null = null;
+  let clock = at - 5 * 60_000;
+  let n = 0;
+  const row = (fields: Record<string, unknown>) => {
+    const uuid = `${basename(file).slice(0, 8)}-0000-4000-9000-${String(++n).padStart(12, "0")}`;
+    body += JSON.stringify({ uuid, parentUuid: parent, timestamp: new Date(clock).toISOString(), isSidechain: false, ...fields }) + "\n";
+    parent = uuid;
+  };
+  const user = (content: unknown) => row({ type: "user", message: { role: "user", content } });
+  let message = 0;
+  const assistant = (stop: "tool_use" | "end_turn" | null, blocks: unknown[], id = `msg_${++message}`) => {
+    for (const block of blocks) row({ type: "assistant", message: { id, role: "assistant", stop_reason: stop, content: [block] } });
+  };
+  const bash = (id: string, command: string) => ({ type: "tool_use", id, name: "Bash", input: { command } });
+  const result = (id: string, content: string, isError = false) => user([{ type: "tool_result", tool_use_id: id, content, ...(isError ? { is_error: true } : {}) }]);
+  const done = (ms: number) => row({ type: "system", subtype: "turn_duration", durationMs: ms, isMeta: false });
+
+  // A turn that reads, edits and runs one command.
+  user("Arreglá el typo del README y corré los tests.");
+  let start = clock;
+  clock += 2000;
+  assistant("tool_use", [{ type: "tool_use", id: "toolu_r1", name: "Read", input: { file_path: "README.md" } }]);
+  result("toolu_r1", "# Nenu\n\nA phone web UI for your Herdr agnet herd.");
+  clock += 1500;
+  assistant("tool_use", [{ type: "tool_use", id: "toolu_e1", name: "Edit", input: { file_path: "README.md", old_string: "agnet", new_string: "agent" } }]);
+  result("toolu_e1", "The file README.md has been updated.");
+  clock += 1500;
+  assistant("tool_use", [bash("toolu_t1", "bun test bridge/journal")]);
+  clock += 3000;
+  result("toolu_t1", " 212 pass\n 0 fail\nRan 212 tests across 14 files. [1.84s]");
+  clock += 1000;
+  assistant("end_turn", [{ type: "text", text: "Listo: el README dice *agent* y los 212 tests pasan." }]);
+  done(clock - start);
+  clock += 60_000;
+
+  // The operator's demo.
+  user("hola usa comandos quiero ver como se ven en esta interfaz");
+  start = clock;
+  clock += 1500;
+  assistant("tool_use", [
+    { type: "thinking", thinking: "The user just wants to see how commands render here, so I'll run a few harmless ones in parallel to demonstrate the different shapes." },
+    { type: "text", text: "Dale, corro algunos comandos inofensivos para que veas cómo se muestran." },
+    bash("toolu_c1", "pwd && ls -la"),
+    bash("toolu_c2", "date && uname -a && sw_vers"),
+    bash("toolu_c3", "echo \"Hola desde la terminal 👋\" && for i in 1 2 3; do echo \"línea $i\"; done"),
+  ]);
+  clock += 1200;
+  result("toolu_c1", ["/Users/fran/Developer/nenu", "total 96", "drwxr-xr-x  18 fran  staff    576 Oct 21 17:05 .", "drwxr-xr-x  12 fran  staff    384 Oct 20 09:12 ..",
+    "-rw-r--r--   1 fran  staff   2193 Oct 21 16:58 README.md", "drwxr-xr-x  24 fran  staff    768 Oct 21 16:40 bridge", "drwxr-xr-x  11 fran  staff    352 Oct 21 16:40 web"].join("\n"));
+  result("toolu_c2", ["Wed Oct 21 17:05:45 CEST 2026", "Darwin Macbook-M5.local 25.6.0 Darwin Kernel Version 25.6.0: Sat Jul 11 15:26:12 PDT 2026; root:xnu-12377.161.13~4/RELEASE_ARM64_T8142 arm64",
+    "ProductName:\t\tmacOS", "ProductVersion:\t\t26.6", "BuildVersion:\t\t25G72"].join("\n"));
+  result("toolu_c3", "Hola desde la terminal 👋\nlínea 1\nlínea 2\nlínea 3");
+  clock += 1500;
+  assistant("tool_use", [
+    { type: "thinking", thinking: "I should also show a failing command with longer output to demonstrate how errors get rendered, keeping it harmless." },
+    { type: "text", text: "Sumo uno que falla, así ves también cómo se muestra un error." },
+    bash("toolu_c4", "ls /carpeta-que-no-existe"),
+  ]);
+  if (stage === "finished") {
+    clock += 800;
+    result("toolu_c4", "Exit code 1\nls: /carpeta-que-no-existe: No such file or directory", true);
+    clock += 1200;
+    assistant("tool_use", [bash("toolu_c5", "git log --oneline -40")]);
+    clock += 900;
+    result("toolu_c5", Array.from({ length: 40 }, (_, i) => `${(0x81c6c149 - i * 7919).toString(16).slice(0, 8)} ${["feat(chat): ", "fix(composer): ", "docs: ", "test(e2e): "][i % 4]}change number ${40 - i} in the transcript`).join("\n"));
+    clock += 2000;
+    assistant("end_turn", [{ type: "text", text: "Listo, corrí 5 comandos. Ninguno cambia nada en tu máquina. Tendrías que verlos arriba, cada uno en su bloque." }]);
+    done(clock - start);
+  }
+  await writeFile(file, body);
+}
+
 /** Keep the working pane's journal growing, like an agent streaming tool calls. Returns a stop function. */
 export function tickJournal(file: string, now: () => number, everyMs = 2000): () => void {
   let n = 0;
