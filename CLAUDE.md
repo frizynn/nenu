@@ -377,6 +377,13 @@ the unit name; the Herdr action runs from anywhere.
   alone is no turn, so Send goes directly. Don't add a screen regex for something these files say; the
   screen keeps only what no file records (dialog keys, the input box, Codex's own queue). Hooks only
   speed up a re-read ([ADR 0067](./.adr/0067-the-clis-own-state-decides-the-screen-is-the-fallback.md)).
+- **A Claude at its usage limit is held by its own log, and its messages wait in Nenu** — the newest
+  `usage_limit_reached` row holds it at rest until its reset or a reply on any Claude of the same profile
+  (a switched account), read once at rest, never from the screen; its "continuing automatically · esc to
+  cancel" notice is Claude's own and leaves the box ready. Send waits in the queue with `limit` and goes
+  when it lifts, Continue now types Claude's continue prompt, and the mark is a grey hourglass; Nenu never
+  reads the account to see a switch. `bun scripts/e2e/run.ts usage-limit` must pass
+  ([ADR 0120](./.adr/0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md)).
 - **A generically-detected menu emits only the keys the screen printed** — the footer's
   `<key> to <verb>` hints plus the arrows it advertised. Never synthesise a digit from a numbered row:
   in the `/model` picker a digit confirms *and* persists the user's default. The generic grammar
