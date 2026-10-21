@@ -100,11 +100,11 @@ function rows(path: string | null): Row[] {
 }
 
 /** Every time Claude took the message in: a typed user row, or an enqueue while it worked. */
-function deliveries(all: Row[], nonce: string): { text: string; images: number }[] {
-  const found: { text: string; images: number }[] = [];
+function deliveries(all: Row[], nonce: string): { text: string; images: number; queued?: true }[] {
+  const found: { text: string; images: number; queued?: true }[] = [];
   for (const row of all) {
     if (row.type === "queue-operation" && row.operation === "enqueue" && String(row.content ?? "").includes(nonce)) {
-      found.push({ text: String(row.content), images: (String(row.content).match(/\[Image #\d+\]/g) ?? []).length });
+      found.push({ text: String(row.content), images: (String(row.content).match(/\[Image #\d+\]/g) ?? []).length, queued: true });
       continue;
     }
     if (row.type !== "user") continue;
@@ -271,7 +271,10 @@ async function trial(variant: string, round: number): Promise<Trial> {
   const strip = (s: string) => s.replace(/\[Image #\d+\]/g, "").replace(/<\/?pasted_content[^>]*>/g, "").replace(/\s+/g, "");
   const want = strip(pictures ? text.replace(/\/\S+\.png/g, "") : text);
   let verdict: Verdict;
-  if (found.length > 1) verdict = "dup";
+  // Claude logs a message it queued mid-turn as an enqueue, and again as a typed row if it then
+  // sends it as a turn of its own: one delivery. Two of either kind is two.
+  const typedRows = found.filter((f) => !f.queued).length;
+  if (typedRows > 1 || found.length - typedRows > 1) verdict = "dup";
   else if (variant.startsWith("dialog")) verdict = found.length === 0 && !ok && refusedClean && !afterBox.composer && left === null ? "refused" : found.length ? "false" : left ? "stuck" : "failed";
   else if (left !== null && found.length === 0) verdict = "stuck";
   else if (found.length === 0) verdict = ok ? "lost" : "failed";
