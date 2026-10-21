@@ -165,19 +165,24 @@ the unit name; the Herdr action runs from anywhere.
 - **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
   Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
-  A coordinator's page lists only its live work, what finished one line to History, and never its
-  threads' report cards (the Summary of ADR 0089 is gone); a tap anywhere on a coordinator card's head
-  opens it, its Waiting on you holds only what waits on you, an Asked line outside the format reads as
-  a request (`unmarked`), and an opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must
-  pass ([ADR 0109](./.adr/0109-a-coordinators-page-shows-live-work.md)).
+  A tap anywhere on a coordinator's row enters its chat, and its address redirects there; only one with
+  no live pane keeps a page. Its threads fold down under its row, folded until asked, + on a desk's hover
+  only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status tab
+  (`coordinator-sections.tsx`), and the back climbs coordinator → project → Projects on a desk too;
+  `bun scripts/e2e/coordinator-chat.ts` must reach a running one in 2 taps from Home
+  ([ADR 0113](./.adr/0113-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
+  (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
+  holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
+  opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass
+  ([ADR 0109](./.adr/0109-a-coordinators-page-shows-live-work.md)).
   A conversation (`keep_open`) that ended its turn reads idle, never Needs you; only a dialog, a failed
   start or a lost pane make it ask ([ADR 0103](./.adr/0103-a-conversation-that-ended-its-turn-waits-on-nobody.md)).
   A report reads in plain words once Organizations' summary agent wrote them for it, the agent's words a
   tap away, and "In plain words" asks for them where `actions` lists `explain`; Nenu never calls a model
   itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
-  coordinators: only while it says something, ADR 0092; on a desk, its page's Status tab and never the
-  project page, ADR 0102), drawn as written through
+  coordinators: only while it says something, ADR 0092; on a desk, its chat's Status and never the
+  project page, ADR 0102, ADR 0113), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
   ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
   **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's
@@ -190,17 +195,18 @@ the unit name; the Herdr action runs from anywhere.
   A question folds the rows about the same thread or task, opens its thread's report in place
   (`/api/org/report`, by thread id, never a path) and says what keeps it from closing; only ids reach
   the coordinator ([ADR 0096](./.adr/0096-a-question-carries-its-context.md)).
-- **On a desk a project and a coordinator are pages with tabs** (ADR 0102, `desk-project.tsx`,
-  `desk-coordinator.tsx`, `lib/project-work.ts`): Work as a card per open coordinator with its threads,
-  Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch, Context;
+- **On a desk a project is a page with tabs** (ADR 0102, `desk-project.tsx`, `lib/project-work.ts`; a
+  coordinator only where it has no chat, `desk-coordinator.tsx`): Work as a row per open coordinator
+  with its threads, Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch, Context;
   never a redirect to a chat. On a desk `/asks` and `/routines` land there; a phone is unchanged. Finished
   work is History (`?work=finished`), by day with a search, without coordinators that ran no thread; a
   waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
   where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
-  page, each a row into its own page (ADR 0110), the project's own first while it runs and otherwise a
-  small Start beside New; it never redirects to that chat. "+" goes project → coordinator → chat, and Move
-  shows only where `node move --help` exits 0 and the node's `actions` list `move`
+  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0113), the
+  project's own last and otherwise a small Start beside New; it never redirects to that chat. "+" goes
+  project → coordinator → chat, and Move shows only where `node move --help` exits 0 and the node's
+  `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Projects (ADR 0102), projects as flat rows and chats by when they last moved; the tree is Search's.
@@ -216,9 +222,9 @@ the unit name; the Herdr action runs from anywhere.
   which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)). They
   are Home's first tab, before Recents, Workspaces and PRs, and absent with no project
   (`bun scripts/e2e/no-projects.ts` must pass): live projects first, the quiet ones folded at its end,
-  and a row always opens its project. On a phone a coordinator opens its page, from the project
-  and the drawer, and the drawer lists Projects after Needs you without History or counts;
-  `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
+  and a row always opens its project. On a phone a coordinator opens its chat (its page where it has
+  none, ADR 0113), from the project and the drawer, and the drawer lists Projects after Needs you without
+  History or counts; `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
   Working, PRs) are in the row under the box beside the model, finished work and routines are rows of
@@ -241,7 +247,7 @@ the unit name; the Herdr action runs from anywhere.
   replaces itself with its parent (`useGoBack`). A move up to a named node is `navigate(-1)` when that node
   is the entry before and a replace otherwise (`useGoUp`); a sibling replaces, a coordinator's thread
   pushes, and a phone's tab is `?view=`, replaced. `bun scripts/e2e/run.ts back` must end three backs at
-  the entry length + 3 (four and + 4 through a coordinator's page) and `bun scripts/e2e/origin.ts` must land 12 of 12
+  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0113) and `bun scripts/e2e/origin.ts` must land 12 of 12
   ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
   [ADR 0097](./.adr/0097-the-back-control-returns-to-the-screen-you-came-from.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
