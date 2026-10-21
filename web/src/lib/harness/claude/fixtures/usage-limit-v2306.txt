@@ -1,0 +1,15 @@
+
+❯ Se cortó por el límite de la cuenta y ya cambió. Continuá desde donde quedaste: revisá tu último paso, retomá lo que e
+
+● Usage limit reached again · continuing automatically at 3:20am · esc to cancel
+  ⎿  You've hit your session limit · resets 3:20am (Europe/Amsterdam)
+
+✻ Cogitated for 1s · done 11:40 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ Usage limit reached · limit resets 3:20am
+    Continuing automatically at 3:20am · esc to cancel
+  Opus 5.5 | Context 56% used (44% left) | 5h 100% used (0% left)
+  ⏵⏵ auto mode on (shift+tab to cycle)

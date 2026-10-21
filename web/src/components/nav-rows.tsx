@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
 import { Pending, Terminal } from "@/components/ui/icon";
 
-import { StatusDot } from "@/components/status-badge";
+import { StateMark, StatusDot } from "@/components/status-badge";
 import { displayName, displayPlace, type DisplayPlace } from "@/lib/display-name";
 import { timeAgoShort } from "@/lib/format";
 import { panePath } from "@/lib/nav";
@@ -27,8 +27,9 @@ export function RowBody({ mark, title, detail, end }: { mark: ReactNode; title: 
 }
 
 /** A pane's state dot, or the terminal glyph for a shell, which has no agent state. */
-export function PaneMark({ pane }: { pane: Pick<AgentView, "kind" | "status"> }) {
-  return pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} />;
+export function PaneMark({ pane }: { pane: Pick<AgentView, "kind" | "status" | "turn"> }) {
+  if (pane.kind === "shell") return <Terminal aria-hidden size={14} />;
+  return pane.turn?.limit ? <StateMark state="limit" /> : <StatusDot status={pane.status} />;
 }
 
 /** `text` with the part matching `query` in semibold. */

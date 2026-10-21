@@ -72,6 +72,9 @@ export class FakeHerdr {
   readonly version: string;
   readonly protocol: number;
   private readonly echoMs: number;
+  /** Pastes still echoing, per pane: Enter behind one lands after it (ADR 0117 measured that). Typed
+   *  text keeps losing an Enter on its heels, as Claude's box does. */
+  private readonly echoing = new Map<string, number>();
   private readonly tickMs: number;
   private readonly viewportRows: number;
   private readonly panes = new Map<string, FakePane>();
@@ -99,6 +102,8 @@ export class FakeHerdr {
   interruptMs = 0;
   /** Panes whose statusline is the operator's own: Claude then never prints "esc to interrupt". */
   readonly customStatusline = new Set<string>();
+  /** Panes at their usage limit, with the reset time Claude prints ("3:20am"): its notice under the box. */
+  readonly usageLimit = new Map<string, string>();
   /** `pane.process_info` foreground processes per pane; none by default. */
   readonly processes = new Map<string, Array<{ pid: number; argv: string[] }>>();
   /** `agent.start` calls Herdr accepted, with the argv the agent got. */
@@ -275,6 +280,9 @@ export class FakeHerdr {
     }
     // Claude 2.1.296 names the interrupt key in the statusline while a turn runs, and drops it while
     // the box holds a draft.
+    // Claude 2.1.306 at its usage limit, as the operator's coordinator drew it on 2026-10-21 (ADR 0120).
+    const resets = this.usageLimit.get(paneId);
+    if (resets) return [...body, RULE, `❯ ${pane.draft}`, RULE, `  ⚠ Usage limit reached · limit resets ${resets}`, `    Continuing automatically at ${resets} · esc to cancel`, "  Opus 5.5 | Context 56% used (44% left) | 5h 100% used (0% left)", "  ⏵⏵ auto mode on (shift+tab to cycle)"].join("\n");
     if (this.customStatusline.has(paneId)) return [...body, RULE, `❯ ${pane.draft}`, RULE, "  [custom-sl] opus", "  ⏵⏵ auto mode on · ← for agents"].join("\n");
     const hint = working && !pane.draft ? " · esc to interrupt" : "";
     return [...body, RULE, `❯ ${pane.draft}`, RULE, "  Opus 5.5 | Context 13% used", `  ⏵⏵ auto mode on${hint} · ← for agents`].join("\n");
@@ -423,7 +431,10 @@ export class FakeHerdr {
       }, this.echoMs * 4);
       return;
     }
+    const pasted = /^\x1b\[200~[\s\S]*\x1b\[201~$/.test(raw);
+    if (pasted) this.echoing.set(paneId, (this.echoing.get(paneId) ?? 0) + 1);
     setTimeout(() => {
+      if (pasted) this.echoing.set(paneId, this.echoing.get(paneId)! - 1);
       pane.draft += text;
       pane.revision++;
     }, this.echoMs);
@@ -440,6 +451,10 @@ export class FakeHerdr {
       return;
     }
     if (key === "Enter") {
+      if (this.echoing.get(paneId)) {
+        setTimeout(() => this.pressKey(paneId, key), this.echoMs);
+        return;
+      }
       if (!pane.draft) return;
       this.submitted.push({ paneId, text: pane.draft, at: now });
       pane.lines.push(pane.agent === null ? `${SHELL_PROMPT}${pane.draft}` : `❯ ${pane.draft}`);

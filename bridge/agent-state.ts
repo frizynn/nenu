@@ -4,6 +4,7 @@ import { open, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ClaudeTurnScan,
+  claudeLimit,
   claudeSessionDirs,
   claudeTurn,
   CodexTurnScan,
@@ -29,6 +30,13 @@ import type { AgentView, LivePublisher, TurnState } from "./types.ts";
 
 /** A Claude transcript or Codex rollout read on first sight: enough tail to hold the current turn. */
 const TAIL_BYTES = 4 * 1024 * 1024;
+/**
+ * A Claude at rest, first seen: enough tail to hold the row that ended its last turn, which is all the
+ * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB.
+ */
+const IDLE_TAIL_BYTES = 1024 * 1024;
+/** The longest wait before a Claude held by its usage limit is looked at again. */
+const LIMIT_RECHECK_MS = 3_600_000;
 /** A session file is a few hundred bytes; anything bigger is not one. */
 const SESSION_FILE_MAX = 64 * 1024;
 /** How often an unresolved pane is retried when Herdr reports no transition. */
@@ -89,6 +97,10 @@ interface Entry {
   transcript?: Tail<ClaudeTurnScan> & { sessionId: string };
   transcriptRetry?: ReturnType<typeof setTimeout>;
   rollout?: Tail<CodexTurnScan>;
+  /** Wakes the entry when its usage limit resets, so the state drops it on time. */
+  limitTimer?: ReturnType<typeof setTimeout>;
+  /** The transcript's latest reply this entry has told its profile about. */
+  replySeen?: number;
   state?: TurnState;
   published: string;
   dropped?: boolean;
@@ -278,8 +290,29 @@ export class AgentStates {
     } else entry.busySince = undefined;
     entry.file = file;
     if (file?.status === "busy" && !file.waitingFor) await this.followTranscript(entry, file.sessionId, 0);
-    else this.closeTail(entry.transcript);
+    else {
+      // At rest the transcript is read once more, unwatched: the row that ended the turn may say the
+      // usage limit refused it (ADR 0120), and it can land after the last watch event.
+      if (file && !file.waitingFor) await this.peekTranscript(entry, file.sessionId);
+      // Unless a busy spell began during that read and watches the transcript now.
+      if (entry.file?.status !== "busy") this.closeTail(entry.transcript);
+    }
     this.update(entry);
+  }
+
+  /** Read what the transcript of a Claude at rest appended, without watching it. */
+  private async peekTranscript(entry: Entry, sessionId: string): Promise<void> {
+    if (entry.transcript?.sessionId !== sessionId) {
+      this.closeTail(entry.transcript);
+      entry.transcript = undefined;
+      const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
+      // A busy spell that began meanwhile followed the transcript itself, watched: that tail stays.
+      if (!path || entry.dropped || entry.file?.sessionId !== sessionId || entry.transcript) return;
+      entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
+      await this.readTail(entry.transcript, IDLE_TAIL_BYTES);
+      return;
+    }
+    await this.readTail(entry.transcript);
   }
 
   /** While busy, the transcript tells a running main turn from background work and holds the queue. */
@@ -300,12 +333,16 @@ export class AgentStates {
         }
         return;
       }
-      entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
+      // A look at rest may have opened it during the lookup (`as Entry` reads it afresh past the await):
+      // one tail per transcript, never two scans.
+      if ((entry as Entry).transcript?.sessionId !== sessionId) entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
     }
     const transcript = entry.transcript;
     if (!transcript) return;
     await this.readTail(transcript);
-    if (!transcript.watcher && !entry.dropped) {
+    // Only a turn still running watches: one that ended during the read left a Claude at rest.
+    const busy = entry.file?.status === "busy" && !entry.file.waitingFor;
+    if (!transcript.watcher && !entry.dropped && busy && entry.transcript === transcript) {
       transcript.watcher = this.watchFile(transcript.path, () => {
         void this.readTail(transcript).then(() => this.update(entry));
       });
@@ -343,10 +380,10 @@ export class AgentStates {
 
   /** Read what was appended since the last read. Two reads of one file never overlap: the same lines
    *  scanned twice would replay Claude's queue twice and leave a phantom queued message. */
-  private readTail(tail: Tail<{ line(text: string): void }>): Promise<void> {
+  private readTail(tail: Tail<{ line(text: string): void }>, firstBytes = TAIL_BYTES): Promise<void> {
     const read = (tail.reading ?? Promise.resolve()).then(async () => {
       try {
-        const next = await readAppended(tail.path, TAIL_BYTES, tail.tail);
+        const next = await readAppended(tail.path, tail.tail ? TAIL_BYTES : firstBytes, tail.tail);
         tail.tail = next.tail;
         for (const line of next.lines) tail.scan.line(line);
       } catch {
@@ -360,15 +397,38 @@ export class AgentStates {
 
   private update(entry: Entry): void {
     if (entry.dropped) return;
+    const scan = entry.transcript?.scan ?? null;
+    const limit = entry.agent === "claude" ? claudeLimit(scan, this.profileReply(entry), this.now()) : undefined;
     const state = entry.agent === "claude"
-      ? entry.file ? claudeTurn(entry.file, entry.transcript?.scan ?? null, entry.busySince) : undefined
+      ? entry.file ? claudeTurn(entry.file, scan, entry.busySince, limit) : undefined
       : entry.rollout ? codexTurn(entry.rollout.scan) ?? undefined : undefined;
+    clearTimeout(entry.limitTimer);
+    if (state?.limit) {
+      // At most an hour: a timer past 2^31 ms fires at once, and the next look re-arms it.
+      entry.limitTimer = setTimeout(() => this.update(entry), Math.min(Math.max(0, state.limit.resetsAt - this.now()) + 1_000, LIMIT_RECHECK_MS));
+      entry.limitTimer.unref?.();
+    }
+    // A reply on one Claude is the account working again: every other Claude of its profile that the
+    // limit holds is looked at again (ADR 0120).
+    if (scan && scan.lastReply !== (entry.replySeen ?? -Infinity)) {
+      entry.replySeen = scan.lastReply;
+      for (const other of this.entries.values()) if (other !== entry && other.state?.limit && other.sessionDir === entry.sessionDir) this.update(other);
+    }
     const published = JSON.stringify(state ?? null);
     if (published === entry.published) return;
     entry.state = state;
     entry.published = published;
     this.opts.live.publish({ session: entry.session, topic: "snapshot" });
     this.opts.live.publish({ session: entry.session, topic: "pane", paneId: entry.paneId });
+  }
+
+  /** The latest reply any Claude of this entry's profile (its sessions folder, one account) has had. */
+  private profileReply(entry: Entry): number {
+    let latest = -Infinity;
+    for (const other of this.entries.values()) {
+      if (other.agent === "claude" && other.sessionDir === entry.sessionDir && other.transcript) latest = Math.max(latest, other.transcript.scan.lastReply);
+    }
+    return latest;
   }
 
   private watchDir(dir: string): void {
@@ -411,6 +471,7 @@ export class AgentStates {
   private drop(entry: Entry): void {
     entry.dropped = true;
     clearTimeout(entry.transcriptRetry);
+    clearTimeout(entry.limitTimer);
     this.closeTail(entry.transcript);
     this.closeTail(entry.rollout);
     for (const pid of entry.pids) if (this.pids.get(pid) === entry.key) this.pids.delete(pid);

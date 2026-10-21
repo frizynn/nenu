@@ -1,6 +1,6 @@
 # 0114. A send from Nenu never gets stuck, and the Terminal view is the terminal
 
-- **Status:** Accepted (2026-10-21). Reported by the operator on a desk with 1.38.1 and again on
+- **Status:** Accepted (2026-10-21). Amended by [ADR 0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md): a send to a Claude at its usage limit waits in Nenu's queue. Reported by the operator on a desk with 1.38.1 and again on
   1.38.4. Amends [ADR 0056](./0056-queued-messages-follow-each-clis-native-queue.md) decision 3 (the
   send-time question), [ADR 0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md)
   decision 4 ("a Send from the phone still replaces any stranded draft"),

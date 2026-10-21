@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { useCallback, useState } from "react";
+import { createRef, useCallback, useState } from "react";
 import type { ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,7 +16,8 @@ import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import { declarations } from "@/test/css-rules";
 import type { SendOutcome, SendRequest, SendStage } from "@/lib/types";
-import { Composer, type ComposerControl } from "./composer";
+import { Composer, type ComposerControl, type ComposerHandle } from "./composer";
+import { CONTINUE_PROMPT } from "@/lib/usage-limit";
 import { pendingStatus } from "./pending-turns";
 import { ActionGroups } from "./conversation-actions";
 import { imageChip } from "@/lib/message-images";
@@ -1620,6 +1621,35 @@ describe("Composer — terminal-draft preview", () => {
     await user.click(screen.getByRole("button", { name: button }));
     await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["mensaje desde Nenu"]));
     expect(settled).toEqual([{ draft: "borrador escrito a mano", action }]);
+  });
+
+  // ADR 0120: Continue now over text in Claude's box waits for the same choice, then still goes past
+  // the usage limit; before, the replay lost that and queued the continue prompt behind the limit.
+  it("Continue now over text in the agent's box goes past the limit once the box is settled", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    const posts: unknown[] = [];
+    server.use(
+      http.get(/\/api\/pane\/[^/]+\/queue$/, () => HttpResponse.json({ available: true, scope: "scope", messages: [], delivered: [] })),
+      http.post(/\/api\/pane\/[^/]+\/queue$/, async ({ request }) => {
+        posts.push(await request.json());
+        return HttpResponse.json({ available: true, scope: "scope", messages: [], delivered: [] });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async () => {
+        setRawDraft("");
+        setStableDraft("");
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const handle = createRef<ComposerHandle>();
+    renderDraftHarness({ ref: handle, nativeWorkbench: true, limit: { resetsAt: Date.now() + 3_600_000 } });
+    strandDraft("lo que quedó en la caja");
+    await screen.findByText(/text in claude's box/i);
+    await act(async () => { void handle.current?.continueNow(); });
+    expect(sends).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Send it first" }));
+    await waitFor(() => expect(sends.map((body) => body.text)).toEqual([CONTINUE_PROMPT]));
+    expect(posts).toEqual([]);
   });
 
   it("a Send over text in the agent's box goes once the terminal itself empties the box", async () => {

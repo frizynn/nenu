@@ -1,23 +1,22 @@
 import { render } from "@testing-library/react";
 
-import type { NodeState } from "@/lib/org-tree";
+import { resting, StateMark, StatusDot, type MarkState } from "./status-badge";
 
-import { resting, StateMark, StatusDot } from "./status-badge";
-
-const mark = (state: NodeState) => render(<StateMark state={state} />).container.firstElementChild!;
+const mark = (state: MarkState) => render(<StateMark state={state} />).container.firstElementChild!;
 
 describe("StateMark", () => {
   // Each state by its shape, so a list reads in grey too: the 1.38 dots told needs, working and
   // review apart only by colour (marcas-alternativas-gris.png).
   it("draws a different glyph for every state that is alive", () => {
-    const glyphs = (["needs", "review", "working", "merging", "resolved"] as const).map((state) => mark(state).getAttribute("class")!.match(/icon-[a-z-]+/)?.[0]);
-    expect(glyphs).toEqual(["icon-circle-alert", "icon-circle-check", "icon-circle-dashed", "icon-git-merge", "icon-check"]);
+    const glyphs = (["needs", "review", "working", "merging", "resolved", "limit"] as const).map((state) => mark(state).getAttribute("class")!.match(/icon-[a-z-]+/)?.[0]);
+    expect(glyphs).toEqual(["icon-circle-alert", "icon-circle-check", "icon-circle-dashed", "icon-git-merge", "icon-check", "icon-hourglass"]);
   });
 
   it("colours only what asks something of you", () => {
     expect(mark("needs")).toHaveClass("text-status-blocked");
     expect(mark("review")).toHaveClass("text-primary");
-    for (const state of ["working", "merging", "closing", "resolved"] as const) expect(mark(state)).toHaveClass("text-muted-foreground");
+    // A usage limit resumes by itself at its reset: it asks nothing of you (ADR 0120).
+    for (const state of ["working", "merging", "closing", "resolved", "limit"] as const) expect(mark(state)).toHaveClass("text-muted-foreground");
   });
 
   it("draws nothing for a resting node, keeping its box so names stay in line", () => {

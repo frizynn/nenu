@@ -74,11 +74,14 @@ import {
   type LocalSendActions,
 } from "@/lib/local-sends";
 import type { QueueMessage } from "@/lib/api";
+import { CONTINUE_PROMPT, type UsageLimit } from "@/lib/usage-limit";
 
 export interface ComposerHandle {
   /** Focus the input and put the caret at the end — used by the mirror-tap-to-focus in AgentChat. */
   focusInput: () => void;
   prepareAnswer: (text: string) => void;
+  /** "Continue now" for an agent held by its usage limit: types the continue prompt, past the limit. */
+  continueNow: () => Promise<boolean>;
   /** Opens the harness's own model picker through the same verified send as a reply. */
   openModelPicker: () => Promise<boolean>;
   compactContext: () => Promise<boolean>;
@@ -155,6 +158,8 @@ interface ComposerProps {
   /** A dialog (prompt/wizard/preview/multi-select) is on screen, so the TUI's keyboard belongs to it.
    * Free-text sending is refused while true — see send(). Answer it with its own buttons instead. */
   dialogPresent: boolean;
+  /** The account's usage limit holds the agent: a message waits in Nenu's queue until it lifts (ADR 0120). */
+  limit?: UsageLimit;
   /** Latest pane text — clears the pending-send preview once the mirror echoes the send back. */
   text: string;
   /** A user draft stranded on the terminal's "❯" input line (extractInputDraft), STABILISED across
@@ -252,6 +257,8 @@ interface SendFailure {
 interface SendHow {
   mode?: DeliveryMode;
   draftSettled?: boolean;
+  /** Typed now, past the usage limit: the operator's "Continue now" (ADR 0120). */
+  pastLimit?: boolean;
 }
 
 const counted = (n: number, noun: string) => (n ? `${n} ${noun}${n === 1 ? "" : "s"}` : "");
@@ -274,7 +281,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
+  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, limit, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -453,7 +460,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       if (echo.state !== "queued") continue;
       const row = page.messages.find((message) => message.id === echo.queueId);
       if (row) {
-        const patch = { queueState: row.state, error: row.error, deliveryMode: row.deliveryMode, waitingFor: row.waitingFor, stranded: row.stranded };
+        const patch = { queueState: row.state, error: row.error, deliveryMode: row.deliveryMode, waitingFor: row.waitingFor, until: row.until, stranded: row.stranded };
         if ((Object.keys(patch) as Array<keyof typeof patch>).some((key) => JSON.stringify(patch[key]) !== JSON.stringify(echo[key])))
           updateLocalSend(sendScope, echo.id, patch);
         continue;
@@ -700,6 +707,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useImperativeHandle(ref, () => ({
     focusInput: focusInputImmediately,
     prepareAnswer: (text) => { updateInput((draft) => draft.trim() ? `${draft}\n${text}` : text); focusInputImmediately(); },
+    continueNow: () => send(CONTINUE_PROMPT, false, false, undefined, { pastLimit: true }),
     openModelPicker: () => runWorkbenchCommand("/model"),
     compactContext: () => runWorkbenchCommand("/compact"),
     openDock: (dock) => requestDrawer(dock),
@@ -771,7 +779,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0114).
   const hostDraft = showPreview ? effectiveRaw : null;
   // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
-  const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
+  const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; how: SendHow } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   useEffect(() => {
     setDraftPick(null);
@@ -807,7 +815,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const pick = draftPick;
     setDraftPick(null);
     setSettledHere(false);
-    void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
+    void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { ...pick.how, draftSettled: true });
   }, [draftPick, boxSettled, sending, draftBusy]);
 
   /** Send or discard the agent's box's text, bound to the text shown (ADR 0114). */
@@ -894,10 +902,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // again reuses its row id, so the message is delivered once instead of also through /send.
     const unsaved = queueable ? queue.pendingAdd() : null;
     if (unsaved) return enqueueDraft(t, isDraft, unsaved.text === t ? unsaved.deliveryMode : "afterTurn");
+    // The usage limit would refuse it the moment Claude took it: Nenu's queue holds it, says until when,
+    // and sends it once the limit lifts (ADR 0120). Never a failure, never text left in the box.
+    if (queueable && limit && !how.pastLimit) return enqueueDraft(t, isDraft, "asap");
     // Text in the agent's box: the operator says what becomes of it, right above the box, and this
     // message goes the moment they do (ADR 0114). Never swept unseen, never waited on unsaid.
     if (!action && !force && !how.draftSettled && hostDraft !== null) {
-      setDraftPick({ text: t, isDraft, mode: how.mode });
+      setDraftPick({ text: t, isDraft, how });
       setSettledHere(false);
       return false;
     }

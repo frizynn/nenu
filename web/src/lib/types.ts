@@ -87,6 +87,8 @@ export interface TurnState {
   /** Work goes on with no turn to interrupt: background agents, a workflow or a shell. */
   background?: boolean;
   queued?: "sends" | null;
+  /** Claude, at rest: its usage limit refused the last request; epoch ms it resets (ADR 0120). */
+  limit?: { resetsAt: number };
   source: "claude-session" | "codex-rollout";
 }
 
@@ -978,7 +980,7 @@ export type SendOutcome =
     };
 
 /** Why a queued row is still waiting (mirrors bridge/types.ts). */
-export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped";
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped" | "limit";
 
 /** What the CLI's own queue did with a delivered row. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";
