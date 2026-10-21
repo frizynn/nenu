@@ -9,7 +9,7 @@ import { formatContextTokens } from "@/components/workbench-context-meter";
 import { askSections, coordinatorAsks } from "@/lib/asks";
 import { VERDICT_LABEL } from "@/lib/coordinator-summary";
 import { timeAgo } from "@/lib/format";
-import { flatten, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
+import { flatten, mergedToClose, orgTree, STATE_LABEL, type OrgNode } from "@/lib/org-tree";
 import type { AsksList, ProjectView, StatusFile, ThreadSummary, TokenUsage } from "@/lib/types";
 
 // A coordinator's card (ADR 0091), as Herdr Organizations' popup draws one: its objective, what waits
@@ -90,7 +90,8 @@ function CoordinatorCard({ status, usage, asks, agents, prs, summaries, onOpenNo
       {agents.slice(0, MOST).map((node) => {
         const { thread } = node;
         const overCap = (summaries.get(thread.id)?.usage?.overCap.length ?? 0) > 0;
-        const detail = [STATE_LABEL[node.state], thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");
+        const state = mergedToClose(thread, node.state) ? "PR merged, closes on its own" : STATE_LABEL[node.state];
+        const detail = [state, thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");
         return <li key={thread.id}>
           <button type="button" className="flex w-full min-w-0 items-start gap-2.5 rounded-lg py-1 text-left hover:bg-muted/50" onClick={() => onOpenNode(node)}>
             <span className="flex size-4 shrink-0 items-center justify-center pt-1"><NodeDot state={node.state} /></span>
