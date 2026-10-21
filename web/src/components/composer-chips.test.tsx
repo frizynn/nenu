@@ -266,6 +266,20 @@ it("raises no chip for threads that ended alone", async () => {
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
 });
 
+// Beside a project's resolved threads, the pages the session published still open unfolded: the menu
+// row says Published, and that is what the panel opens on (ADR 0108).
+it("opens Published from the ⋯ menu on its pages, beside the project's resolved threads", async () => {
+  server.use(http.get(/\/api\/pane\/[^/]+\/activity$/, () => HttpResponse.json({ available: true, sessionKey: "k", workflows: [], tasks: [],
+    artifacts: [{ id: "art_1", url: "https://claude.ai/code/artifact/00000000-test", title: "Cart redesign", icon: "canvas", version: "1-a", at: Date.now() }] })));
+  const quietThreads = threads.filter((thread) => thread.id === own.id || thread.status === "resolved").map((thread) => ({ ...thread, pr: undefined }));
+  const { user } = renderChat({ threads: quietThreads, thread: { ...own, pr: undefined }, project: { ...project, threads: quietThreads } });
+  await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+  await user.click(await screen.findByRole("button", { name: "Published · 1" }));
+  const panel = screen.getByRole("dialog", { name: "Published" });
+  expect(within(panel).getByRole("button", { name: "Published (1)" })).toHaveAttribute("aria-expanded", "true");
+  expect(within(panel).getByRole("link", { name: /Cart redesign/ })).toBeVisible();
+});
+
 it("keeps every chip still: nothing in the row animates on its own", async () => {
   renderChat();
   const chips = await row();

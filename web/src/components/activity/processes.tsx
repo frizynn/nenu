@@ -136,7 +136,8 @@ function Fold({ title, count, extra, defaultOpen = false, children }: { title: s
 /**
  * Waiting first, then running, then a folded "Done (n)" with the newest few and the claude.ai pages
  * the session published. `quiet` (finished work, opened from the ⋯ menu: nothing live in the panel)
- * opens the first of them unfolded, with nothing said about what runs: it is what was asked for.
+ * opens the finished rows unfolded, and the pages too when the session finished nothing itself, with
+ * nothing said about what runs: it is what the menu row named.
  * Rows expand in place. `finished` is other work that ended (a project's
  * resolved threads), folded in with the session's own.
  */
