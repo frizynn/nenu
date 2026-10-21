@@ -102,6 +102,35 @@ test("types once through the audited route and confirms the box let go after Ent
   ]);
 });
 
+test("a picture goes piece by piece through the audited route, its path pasted alone (ADR 0104)", async () => {
+  // The 2026-10-21 report: a queued message with a picture was pasted whole, so Claude drew no
+  // `[Image #1]` and the path stayed in its box as text.
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const writes: { text: string; submit: boolean; id: string; paste: boolean }[] = [];
+  const result = await deliverQueuedMessage(
+    { ...row, text: `${path} look at this` },
+    terminal("claude", () => screen(draft)),
+    async (text, submit, id, paste) => {
+      writes.push({ text, submit, id, paste });
+      // Like Claude: a path pasted alone becomes its token, anything else lands as typed.
+      draft = submit ? "" : draft + (paste && text === path ? "[Image #1]" : text);
+      return { ok: true };
+    },
+    async () => true,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result.status).toBe("sent");
+  expect(writes.map(({ text, submit, paste }) => ({ text, submit, paste }))).toEqual([
+    { text: path, submit: false, paste: true },
+    { text: " look at this", submit: false, paste: false },
+    { text: "", submit: true, paste: false },
+  ]);
+  // Each write is its own request: one id for two payloads is a conflict at the reply route.
+  expect(new Set(writes.map((w) => w.id)).size).toBe(3);
+});
+
 test("Enter acknowledgement with a stranded draft is uncertain and never types twice", async () => {
   let draft = "";
   let types = 0;
