@@ -246,11 +246,19 @@ the unit name; the Herdr action runs from anywhere.
   (`hover:bg-hover`); one status mark (ADR 0113); a desk's page tabs underlined. `calm-motion.test` and
   `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
-- **A state is a still glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
+- **A state is a glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
   `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
-  nothing at rest. Colour only for what asks for you, nothing spins, and a resting chat in the desk's
-  bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
+  nothing at rest. Colour only for what asks for you, only the working circle moves (ADR 0117), and a
+  resting chat in the desk's bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
   ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
+- **Work in progress looks alive, and nothing else moves for long** (`lib/live-motion.ts`): the glow on
+  a running turn's "Working for", its step in progress and "Thinking…", and the working circle's slow
+  turn, by transform in 30 steps per 2.2 s, only on screen on a shown page with no idle lock or reduced
+  motion. The step in progress sits in its run and turns done in place; rows that arrive while the
+  thread is read ease in (`lib/enter.tsx`). A sent message is on screen once (`pendingSends`), and one
+  in Claude's own queue is taken back with Up under the write lock (`takeBackQueue`); a message Claude
+  read is never rewound from Nenu. `bun scripts/e2e/live-motion.ts` measures the cost
+  ([ADR 0117](./.adr/0117-work-in-progress-looks-alive.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
