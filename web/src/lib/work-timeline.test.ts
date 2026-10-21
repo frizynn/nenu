@@ -16,6 +16,37 @@ function work(entries: TranscriptEntry[], status: Parameters<typeof buildWorkTim
 }
 
 describe("buildWorkTimeline", () => {
+  // Claude reads a queued message mid-turn and writes it with that turn's id (measured, 2.1.306).
+  describe("a message the CLI read mid-turn", () => {
+    const running = { status: "running" as const, startedAt: "2026-09-08T12:00:01Z" };
+    const steps = entry("a", { turnId: "t", parts: [{ kind: "tool", name: "Bash", summary: "sleep 4 && ls", result: { text: "ok" } }], turn: running });
+    const steer = user("steer", { turnId: "t", ts: "2026-09-08T12:00:20Z", parts: [text("y al final decime cuántos archivos hay")], turn: running });
+    const after = entry("b", { turnId: "t", ts: "2026-09-08T12:00:25Z", parts: [{ kind: "tool", name: "Bash", summary: "ls" }], turn: running });
+
+    it("sits between the work it split, the work above still alive and the work below continuing", () => {
+      const rows = buildWorkTimeline([user(), steps, steer, after], "working");
+      expect(rows.map((row) => row.kind === "message" ? row.entry.uuid : `work:${row.id}`)).toEqual(["user", "work:t", "steer", "work:t:after:steer"]);
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ active: false, alive: true, continued: false, settled: false, startedAt: running.startedAt });
+      expect(below).toMatchObject({ active: true, alive: true, continued: true, startedAt: "2026-09-08T12:00:20Z" });
+    });
+
+    it("keeps the whole turn's time on the line above and the rest on Continued once it ends", () => {
+      const done = { status: "completed" as const, startedAt: "2026-09-08T12:00:01Z", completedAt: "2026-09-08T12:00:30Z", durationMs: 29_000 };
+      const final = entry("c", { turnId: "t", ts: "2026-09-08T12:00:30Z", phase: "final_answer", parts: [text("Hay 2.")], turn: done });
+      const rows = buildWorkTimeline([user(), { ...steps, turn: done }, { ...steer, turn: done }, { ...after, turn: done }, final], "idle");
+      const [above, below] = rows.filter((row) => row.kind === "work");
+      expect(above).toMatchObject({ alive: false, settled: true, durationMs: 29_000 });
+      expect(below).toMatchObject({ continued: true, settled: true, durationMs: 10_000 });
+    });
+
+    it("does not continue a turn from a message that opened a new one", () => {
+      const next = user("next", { turnId: "t2", ts: "2026-09-08T12:01:00Z" });
+      const rows = buildWorkTimeline([user(), steps, next, entry("d", { turnId: "t2", parts: [tool] })], "done");
+      expect(rows.filter((row) => row.kind === "work").map((row) => row.continued)).toEqual([false, false]);
+    });
+  });
+
   it("uses native completion and phase to keep the final answer outside folded work", () => {
     const progress = entry("progress", { turnId: "native-turn", phase: "commentary", parts: [text("Checking the code"), tool] });
     const final = entry("final", { turnId: "native-turn", phase: "final_answer", parts: [text("The fix is ready.")],

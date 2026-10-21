@@ -282,7 +282,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   // The pictures its log holds are in the turn's gallery, folded or not, so they open nothing.
   const hasDetails = turn.activity.some((entry) => entry.parts.some((part) => part.kind !== "image"));
   const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
-  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `Worked for ${duration}` : "Worked") : "Work log";
+  const worked = turn.continued ? "Continued" : "Worked";
+  const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `${worked} for ${duration}` : worked) : "Work log";
   // One time per turn, when it finished, at the end of its line. The question's time is already under
   // its bubble, so a turn that ends in the minute it started says it no second time.
   const end = turn.settled ? turn.entries.at(-1)?.ts ?? "" : "";
@@ -312,9 +313,11 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     <div className={cn("flex min-h-8 min-w-0 items-center gap-2 transition-[border-color] duration-180 ease-out coarse:min-h-11", open ? "border-b border-border/60" : "border-b border-transparent")}>
       <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} disabled={!hasDetails} onClick={() => setExpanded(!open)}
         className="group flex min-h-8 min-w-0 items-center gap-1.5 text-left text-subhead text-muted-foreground hover:text-foreground disabled:opacity-100 coarse:min-h-11">
-        {turn.active
+        {/* The turn's own line glows while its turn runs; the part after a message read mid-turn
+            counts on quietly under it, its live step glowing at its end. */}
+        {turn.alive && !turn.continued
           ? <Glow layout="truncate"><Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" fine /></Glow>
-          : <span className="min-w-0 truncate">{label}</span>}
+          : <span className="min-w-0 truncate">{turn.active ? <Elapsed since={turn.startedAt} prefix="Continued for " fallback="Continued" fine /> : label}</span>}
         {failures > 0 && <span className="shrink-0 whitespace-nowrap text-subtle-foreground">· {failures} failed</span>}
         {hasDetails && <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
           !open && "-rotate-90")} />}
@@ -377,6 +380,9 @@ export function TranscriptView({ entries, query = "", focusedUuid, activityStatu
           : <WorkTurnView turn={row} query={query} focusedUuid={focusedUuid} questionActive={row.entries.some((entry) => entry.uuid === pendingQuestion)} waiting={row.id === waitingTurn} />}
       </div>;
     })}
-    {pending && <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>}
+    {/* Under a message the agent read mid-turn, the turn above still runs: it is thinking. */}
+    {pending && (rows.some((row) => row.kind === "work" && row.alive)
+      ? <ThinkingNow />
+      : <div className="px-0.5 py-1" role="status"><WorkActivityLabel startedAt={last?.role === "user" ? last.ts : undefined} /></div>)}
   </div></EnterScope>;
 }

@@ -61,6 +61,6 @@ export function Glow({ children, className, layout }: { children: ReactNode; cla
 /** "Working for 3m", glowing, where no turn line says it yet. */
 export function WorkActivityLabel({ startedAt }: { startedAt?: string }) {
   return <Glow className="inline-flex text-footnote text-muted-foreground">
-    <Elapsed since={startedAt} prefix="Working for " fallback="Working…" />
+    <Elapsed since={startedAt} prefix="Working for " fallback="Working…" fine />
   </Glow>;
 }

@@ -19,13 +19,13 @@ function visibility(value: boolean) {
 }
 
 describe("WorkActivityLabel", () => {
-  it("updates only the elapsed text, once a minute, without causing React commits for the surrounding transcript", () => {
+  it("updates only the elapsed text, each second of the first minute and then once a minute, without causing React commits for the surrounding transcript", () => {
     const committed = vi.fn();
     render(<Profiler id="transcript" onRender={committed}><WorkActivityLabel startedAt={startedAt} /></Profiler>);
-    expect(screen.getByText("Working for <1m")).toBeVisible();
+    expect(screen.getByText("Working for 5s")).toBeVisible();
     const initialCommits = committed.mock.calls.length;
     act(() => { vi.advanceTimersByTime(54_000); });
-    expect(screen.getByText("Working for <1m")).toBeVisible();
+    expect(screen.getByText("Working for 59s")).toBeVisible();
     act(() => { vi.advanceTimersByTime(1000); });
     expect(screen.getByText("Working for 1m")).toBeVisible();
     act(() => { vi.advanceTimersByTime(60_000); });
@@ -39,7 +39,7 @@ describe("WorkActivityLabel", () => {
     visibility(true);
     expect(vi.getTimerCount()).toBe(0);
     act(() => { vi.advanceTimersByTime(120_000); });
-    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
+    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
     visibility(false);
     expect(screen.getByText("Working for 2m")).toBeInTheDocument();
     visibility(false);
@@ -61,7 +61,7 @@ describe("WorkActivityLabel", () => {
     act(() => setLocked(true));
     expect(vi.getTimerCount()).toBe(0);
     act(() => { vi.advanceTimersByTime(60_000); });
-    expect(screen.getByText("Working for <1m")).toBeInTheDocument();
+    expect(screen.getByText("Working for 5s")).toBeInTheDocument();
     act(() => setLocked(false));
     expect(screen.getByText("Working for 1m")).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(1);

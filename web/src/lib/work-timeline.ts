@@ -8,6 +8,10 @@ export interface WorkTurn {
   activity: TranscriptEntry[];
   answer: TranscriptEntry | null;
   active: boolean;
+  /** The CLI's turn this work belongs to still runs, though a message it read cut this part off. */
+  alive: boolean;
+  /** This work follows a message the CLI read mid-turn: it continues the turn above it. */
+  continued: boolean;
   settled: boolean;
   interrupted: boolean;
   startedAt?: string;
@@ -29,19 +33,25 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
   const rows: WorkTimelineRow[] = [];
   let group: TranscriptEntry[] = [];
   let userBoundary: TranscriptEntry | undefined;
+  // The user row that opened the current group was read by the CLI mid-turn (it carries that turn's id).
+  let continuing = false;
   let systemBoundary = "";
   const usedTurnIds = new Set<string>();
   const lastAssistant = entries.findLast((entry) => entry.role === "assistant");
 
-  function flush(bounded: boolean) {
+  function flush(bounded: boolean, cutMidTurn = false) {
     if (!group.length) return;
     const original = group;
+    const continued = continuing;
     group = [];
+    continuing = false;
     const first = original[0]!;
     const last = original.at(-1)!;
     const native = original.findLast((entry) => entry.turn)?.turn;
     const isLatest = last.uuid === lastAssistant?.uuid && !bounded;
     const active = isLatest && status === "working" && native?.status !== "completed" && native?.status !== "aborted";
+    // Work a message cut off while the turn still runs keeps saying so; its live steps are below it.
+    const alive = active || (cutMidTurn && status === "working" && native?.status === "running" && last.turnId === lastAssistant?.turnId);
     const explicitFinal = original.findLast((entry) => entry.phase === "final_answer" && entry.parts.some((part) => part.kind === "text"));
     const settled = !!explicitFinal || native?.status === "completed" || native?.status === "aborted" || (bounded && native?.status !== "running") ||
       (isLatest && native?.status !== "running" && status !== undefined && status !== "working" && status !== "blocked" && status !== "unknown");
@@ -57,24 +67,29 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
       const parts = entry.parts.filter((part) => part.kind !== "text");
       return parts.length ? [{ ...entry, parts }] : [];
     });
-    const startedAt = validTime(native?.startedAt) ?? validTime(userBoundary?.ts);
+    // The part after a message read mid-turn counts from that message; the turn's line counts it all.
+    const startedAt = continued ? validTime(userBoundary?.ts) : validTime(native?.startedAt) ?? validTime(userBoundary?.ts);
     const end = validTime(native?.completedAt) ?? (settled ? validTime(last.ts) : undefined);
-    const measured = typeof native?.durationMs === "number" && Number.isFinite(native.durationMs) && native.durationMs >= 0 ? native.durationMs : undefined;
+    const measured = !continued && typeof native?.durationMs === "number" && Number.isFinite(native.durationMs) && native.durationMs >= 0 ? native.durationMs : undefined;
     const elapsed = startedAt && end ? Date.parse(end) - Date.parse(startedAt) : undefined;
     const durationMs = measured ?? (elapsed !== undefined && elapsed >= 0 ? elapsed : undefined);
     const baseId = first.turnId ?? userBoundary?.uuid ?? `orphan:${first.uuid}`;
     const id = usedTurnIds.has(baseId) ? `${baseId}:after:${systemBoundary || first.uuid}` : baseId;
     usedTurnIds.add(baseId);
     rows.push({ kind: "work", id,
-      entries: original, activity, answer, active, settled, interrupted: native?.status === "aborted",
+      entries: original, activity, answer, active, alive, continued, settled, interrupted: native?.status === "aborted",
       ...(startedAt ? { startedAt } : {}), ...(durationMs !== undefined ? { durationMs } : {}) });
   }
 
   for (const entry of entries) {
     if (entry.role !== "assistant") {
-      flush(true);
+      // A message Claude read from its queue mid-turn carries that turn's id: it sits between the work
+      // it split, and the work after it continues the same turn (as T3 Code draws a steer).
+      const midTurn = entry.role === "user" && !!entry.turnId && group.at(-1)?.turnId === entry.turnId;
+      flush(true, midTurn);
       rows.push({ kind: "message", entry });
       userBoundary = entry.role === "user" ? entry : undefined;
+      continuing = midTurn;
       systemBoundary = entry.uuid;
       continue;
     }
@@ -83,6 +98,8 @@ export function buildWorkTimeline(entries: TranscriptEntry[], status?: AgentStat
       flush(true);
       userBoundary = undefined;
     }
+    // Only work that follows the message at once continues its turn.
+    if (!group.length && continuing && userBoundary?.turnId !== entry.turnId) continuing = false;
     group.push(entry);
   }
   flush(false);
