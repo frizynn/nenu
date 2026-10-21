@@ -188,7 +188,7 @@ async function tour(bridge: TestBridge, browser: Browser, device: "desk" | "phon
   await run("chat-more", async () => { await page.getByRole("button", { name: "Conversation actions" }).first().click({ timeout: 8000 }); });
   await escape();
   if (device === "phone") {
-    await run("chat-plus", async () => { await visit("/settings", "main"); await visit(chat, "main"); await page.locator("textarea >> visible=true").first().waitFor({ timeout: 30_000 }); await page.getByRole("button", { name: "Message actions" }).first().click({ timeout: 8000 }); });
+    await run("chat-plus", async () => { await page.goto(bridge.url + chat); await page.getByRole("button", { name: "Message actions" }).first().click({ timeout: 30_000 }); });
     await escape();
   }
   await run("settings", () => visit("/settings", "main"));
