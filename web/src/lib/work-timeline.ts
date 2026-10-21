@@ -199,8 +199,8 @@ export type WorkSegment =
 
 /**
  * `activity` cut at the agent's words. The live step is left out of its run, since it draws below as the
- * turn's last row, but it still opens the run it belongs to: the run is named by it from the start, and
- * may hold no step yet.
+ * turn's last row, but it still opens the run it belongs to, so the run is named by it from the start; a
+ * run holding nothing but the live step is left out.
  */
 export function workSegments(activity: TranscriptEntry[], live: LiveStep | null): WorkSegment[] {
   const segments: WorkSegment[] = [];
@@ -210,15 +210,14 @@ export function workSegments(activity: TranscriptEntry[], live: LiveStep | null)
       const last = segments.at(-1);
       if (part.kind === "tool" || part.kind === "thinking") {
         const step = { part, entry: entry.uuid, index };
-        const isLive = live?.entry === entry.uuid && live.index === index;
-        if (last?.kind === "steps") { if (!isLive) last.steps.push(step); }
-        else if (isLive) segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [] });
-        else segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [step] });
+        let run = last?.kind === "steps" ? last : null;
+        if (!run) segments.push(run = { kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [] });
+        if (live?.entry !== entry.uuid || live.index !== index) run.steps.push(step);
       } else if (last?.kind === "prose" && last.entry === entry) last.parts.push({ part, index });
       else segments.push({ kind: "prose", entry, parts: [{ part, index }] });
     });
   }
-  return segments;
+  return segments.filter((segment) => segment.kind === "prose" || segment.steps.length > 0);
 }
 
 /**

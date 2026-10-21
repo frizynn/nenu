@@ -264,10 +264,9 @@ describe("workSegments", () => {
     const second = entry("b", { parts: [tool, text("Found it"), text("And more"), tool] });
     const segments = workSegments([first, second], { part: tool as WorkStep["part"], entry: "b", index: 3 });
     expect(segments.map((s) => s.kind === "prose" ? s.parts.map((p) => p.index) : s.steps.map((p) => `${p.entry}:${p.index}`))).toEqual([
-      [0], ["a:1", "a:2", "b:0"], [1, 2], [],
+      [0], ["a:1", "a:2", "b:0"], [1, 2],
     ]);
     expect(segments[1]).toMatchObject({ kind: "steps", id: "a:1" });
-    expect(segments[3]).toMatchObject({ kind: "steps", id: "b:3" });
   });
 
   it("keeps a run's id when its live call finishes after a later one", () => {

@@ -40,7 +40,8 @@ the colouring could not come that way.
    never pulls a line in above rows the reader may have opened; the run folds the next time it is
    drawn whole. Calls still running never fold under a line in the past tense, and a run is named by
    its first step, the live one included, so parallel calls finishing out of order and an older page
-   going in above it keep its state.
+   going in above it keep its state, unless that page ends inside the run (pages are cut by entries,
+   not by turns): the run then starts at an earlier step, takes its name and mounts afresh.
 4. **A command is its row's name**, in the row's type; the verb stays in the row's accessible name.
    Open, it shows the command coloured by `lib/shell-tokens.ts` (program, flags, arguments, strings,
    variables, keywords; text nodes only) and its output in grey, "Error: Exit code N" first. A row's

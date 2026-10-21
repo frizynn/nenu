@@ -318,7 +318,7 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
     </div>
     <Fold value={open} animate={expanded === true}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
         {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
-          ? segment.steps.length > 0 && <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
+          ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
           : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
               className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
               {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}
