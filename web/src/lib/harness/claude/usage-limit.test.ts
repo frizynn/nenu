@@ -8,7 +8,7 @@ import { extractInputDraft, hasInputBox } from "./chrome";
 import { claudeAdapter } from "./index";
 
 // Claude 2.1.306 at its usage limit, as the operator's phone send saw it on 2026-10-21 (the audit
-// line's screen, ADR 0118). The pause prints "esc to cancel" under a live box: Escape cancels the
+// line's screen, ADR 0120). The pause prints "esc to cancel" under a live box: Escape cancels the
 // automatic continue, the box still takes typing, and Enter submits (Claude logged the message 13 s
 // after Nenu typed it). Reading that hint as a dialog refused the send, then hid the typed text.
 const FIXTURES = join(import.meta.dirname, "fixtures");

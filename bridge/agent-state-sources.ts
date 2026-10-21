@@ -187,7 +187,7 @@ export function claudeTurn(
 }
 
 /**
- * Whether Claude's usage limit still holds it (ADR 0118): its transcript's latest request was refused
+ * Whether Claude's usage limit still holds it (ADR 0120): its transcript's latest request was refused
  * by the limit, the reset has not passed, and no Claude of the same profile (one account) has had a
  * reply since, which is how a switched account shows. `replied` is that profile's latest reply.
  */

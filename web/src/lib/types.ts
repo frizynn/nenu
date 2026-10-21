@@ -87,7 +87,7 @@ export interface TurnState {
   /** Work goes on with no turn to interrupt: background agents, a workflow or a shell. */
   background?: boolean;
   queued?: "sends" | null;
-  /** Claude, at rest: its usage limit refused the last request; epoch ms it resets (ADR 0118). */
+  /** Claude, at rest: its usage limit refused the last request; epoch ms it resets (ADR 0120). */
   limit?: { resetsAt: number };
   source: "claude-session" | "codex-rollout";
 }

@@ -11,7 +11,7 @@ import { clearStatus, useStatus } from "@/lib/status";
 import { setOutageNoticeShown } from "@/lib/connection-health";
 import { isReloadHeld, __resetReloadGuard } from "@/lib/reload-guard";
 import { loadDraft, saveDraft } from "@/lib/drafts";
-import { listLocalSends, localSendScope, setQueueSlot } from "@/lib/local-sends";
+import { addLocalSend, listLocalSends, localSendActions, localSendScope, setQueueSlot, updateLocalSend } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import { declarations } from "@/test/css-rules";
@@ -2897,7 +2897,7 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
     queue.delivered = [{ id: "row-1", text: "from the laptop", sentAt: 1, deliveryMode: "asap", native: "enqueued" }];
     renderComposerWithStatus({ nativeWorkbench: true, working: true });
     const strip = await screen.findByRole("region", { name: "Queued messages" });
-    expect(within(strip).getByText(/in claude's queue/i)).toBeInTheDocument();
+    expect(within(strip).getByText(/claude reads it after this step/i)).toBeInTheDocument();
     await user.click(within(strip).getByRole("button", { name: "Read it now" }));
     expect(queue.posts).toEqual([]);
     expect(screen.getByTestId("status")).toHaveTextContent(/moves a running command to the background/i);
@@ -2928,6 +2928,83 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
     await queueOne("later", true);
     await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ queueId: id, native: "enqueued", readNowAt: 2 }));
     expect(pendingStatus(listLocalSends(scope)[0]!).actions).toEqual([]);
+  });
+
+  // ADR 0118: a message in Claude's own queue is taken back; the bridge recalls the rows it held.
+  describe("taking a message back from Claude's queue", () => {
+    const scope = localSendScope("w1:p1", undefined);
+    const seed = () => ["primero", "segundo\ncon dos líneas"].map((text, i) => {
+      const id = addLocalSend(scope, text, "queued");
+      updateLocalSend(scope, id, { queueId: `r${i}`, native: "enqueued", agent: "claude" });
+      return listLocalSends(scope).find((echo) => echo.id === id)!;
+    });
+    const answer = (body: Record<string, unknown>) => server.use(http.post(/\/api\/pane\/[^/]+\/take-back$/, () => HttpResponse.json(body)));
+    const back = { ok: true, text: "primero segundo con dos líneas", ours: true, messages: [{ id: "r0", text: "primero" }, { id: "r1", text: "segundo\ncon dos líneas" }] };
+
+    it("Edit puts every message it held back in the box as sent, and their bubbles leave", async () => {
+      serveQueueRoute();
+      renderComposer({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer(back);
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await act(async () => { await localSendActions(scope)!.edit(first!); });
+      expect(screen.getByRole("textbox")).toHaveValue("primero\n\nsegundo\ncon dos líneas");
+      expect(listLocalSends(scope)).toEqual([]);
+    });
+
+    // The queue's last page still lists them in Claude's queue until its next read: they never come
+    // back as rows of their own (the bubbles were already gone).
+    it("does not draw the rows it took back as queued again before the queue reads them recalled", async () => {
+      const queue = serveQueueRoute();
+      queue.delivered = [
+        { id: "r0", text: "primero", sentAt: 1, deliveryMode: "asap", native: "enqueued" },
+        { id: "r1", text: "segundo\ncon dos líneas", sentAt: 2, deliveryMode: "asap", native: "enqueued" },
+      ];
+      renderComposer({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer(back);
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await waitFor(() => expect(listLocalSends(scope)[0]).toMatchObject({ native: "enqueued", state: "queued" }));
+      await act(async () => { await localSendActions(scope)!.edit(first!); });
+      expect(listLocalSends(scope)).toEqual([]);
+      expect(document.querySelectorAll("[data-queue-row]")).toHaveLength(0);
+      expect(screen.getByRole("textbox")).toHaveValue("primero\n\nsegundo\ncon dos líneas");
+    });
+
+    it("Remove keeps the others in the box and says so", async () => {
+      serveQueueRoute();
+      renderComposerWithStatus({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer(back);
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await act(async () => { await localSendActions(scope)!.remove(first!); });
+      expect(screen.getByRole("textbox")).toHaveValue("segundo\ncon dos líneas");
+      expect(screen.getByTestId("status")).toHaveTextContent(/^Removed/);
+    });
+
+    it("puts the words back as they came and says so when the queue could not say whose they were", async () => {
+      serveQueueRoute();
+      renderComposerWithStatus({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer({ ok: true, text: "primero segundo con dos líneas" });
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await act(async () => { await localSendActions(scope)!.remove(first!); });
+      expect(listLocalSends(scope)).toEqual([]);
+      expect(screen.getByRole("textbox")).toHaveValue("primero segundo con dos líneas");
+      expect(screen.getByTestId("status")).toHaveTextContent(/didn't say which words were this message/);
+    });
+
+    it("keeps the bubbles and says why when nothing came back", async () => {
+      serveQueueRoute();
+      renderComposerWithStatus({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer({ ok: false, error: "The agent has already read its queue, so nothing was taken back." });
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await act(async () => { await localSendActions(scope)!.edit(first!); });
+      expect(listLocalSends(scope)).toHaveLength(2);
+      expect(screen.getByRole("textbox")).toHaveValue("");
+      expect(screen.getByTestId("status")).toHaveTextContent(/already read its queue/);
+    });
   });
 });
 

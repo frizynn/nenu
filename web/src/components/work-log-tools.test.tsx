@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
-import { LiveStepRow, ThinkingStep, ToolStep } from "./work-log-tools";
+import { ThinkingNow, ThinkingStep, ToolStep } from "./work-log-tools";
 import { FileMediaContext } from "@/lib/file-preview-context";
 import type { TranscriptPart } from "@/lib/types";
 
@@ -144,17 +144,26 @@ describe("ThinkingStep", () => {
   });
 });
 
-describe("LiveStepRow", () => {
-  it("says what runs now with the live mark, and leaves how long to the turn's line", () => {
-    const { container } = render(<LiveStepRow step={{ part: { kind: "tool", name: "Bash", summary: "bun run test tab-strip" }, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} />);
-    const row = container.querySelector("[data-live-step]")!;
+describe("the step in progress", () => {
+  it("says what runs now with its own icon and its words marked live; how long is the turn's line's", () => {
+    const { container } = render(<ToolStep id="e:0" part={{ kind: "tool", name: "Bash", summary: "bun run test tab-strip" }} query="" active focused={false} live={{}} />);
+    const row = screen.getByRole("button", { name: "Running bun run test tab-strip" });
     expect(row).toHaveTextContent(/^Running\s*bun run test tab-strip$/);
-    expect(row.querySelector("[data-live-glyph]")).not.toBeNull();
+    expect(row.querySelector("[data-glow]")).not.toBeNull();
+    expect(row.querySelector("svg")).not.toBeNull();
+    expect(container.querySelector("[data-live-glyph]")).toBeNull();
   });
 
   it("shows the thought's first line while the agent thinks", () => {
-    const { container } = render(<LiveStepRow step={{ part: { kind: "thinking", text: "Ahora ajusto el chip.\nDespués el test." }, entry: "e", index: 0 }} query="" focused={false} />);
-    expect(container.querySelector("[data-live-step]")).toHaveTextContent("ThinkingAhora ajusto el chip.");
+    render(<ThinkingStep text={"Ahora ajusto el chip.\nDespués el test."} query="" live={{}} />);
+    expect(screen.getByRole("button", { name: /^Thinking/ })).toHaveTextContent("ThinkingAhora ajusto el chip.");
+  });
+
+  it("says Thinking… between steps, live, with nothing to open", () => {
+    const { container } = render(<ThinkingNow />);
+    expect(container.querySelector('[data-live-step="thinking"]')).toHaveTextContent(/^Thinking…$/);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-glow]")).not.toBeNull();
   });
 });
 
@@ -178,9 +187,9 @@ describe("a call waiting on the operator", () => {
   it("waits without a spinner or a clock even while the turn runs", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
-    const { container } = render(<LiveStepRow step={{ part: bash, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} waiting />);
+    const { container } = render(<ToolStep id="e:0" part={bash} query="" active focused={false} live={{ since: "2026-09-08T12:00:30Z" }} waiting />);
     expect(screen.getByRole("button", { name: "Run echo hi > hello.txt Waiting on you" })).toBeInTheDocument();
-    expect(container.querySelector("[data-live-glyph]")).toBeNull();
+    expect(container.querySelector("[data-glow]")).toBeNull();
     expect(screen.queryByText("<1m")).not.toBeInTheDocument();
   });
 

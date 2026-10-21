@@ -56,7 +56,7 @@ function LinksSaid({ links }: { links: readonly AskLink[] }) {
       return <li key={index} className="min-w-0 break-words">
         {chip.href ? <a href={chip.href} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">{link.kind === "page" ? link.text : what}</a>
           : <span className="font-medium">{what}</span>}
-        {chip.state && <span className="text-muted-foreground"> · {chip.state}</span>}
+        {chip.state && <span className="text-muted-foreground"> · {link.kind === "task" && link.state === "missing" ? "not in the tracker" : chip.state}</span>}
         {link.title && <span className="block text-footnote text-muted-foreground">{link.title}</span>}
       </li>;
     })}

@@ -320,11 +320,16 @@ export class MessageQueue {
     }
     return rows.length;
   }
-  /** Record what the CLI's own queue did with a row; a paused row the journal confirms becomes sent. */
-  async confirm(id: string, native: NativeQueueState) {
+  /**
+   * Record what the CLI's own queue did with a row; a paused row the journal confirms becomes sent.
+   * With `from`, only a row in one of those states changes (a take-back recalls what may still wait,
+   * never a row the journal already said was read).
+   */
+  async confirm(id: string, native: NativeQueueState, from?: ReadonlyArray<NativeQueueState | undefined>) {
     const row = await this.mutate(() => {
       const row = this.rows.find((item) => item.id === id);
       if (!row || row.native === native || (row.state !== "sent" && row.state !== "paused")) return null;
+      if (from !== undefined && !from.includes(row.native)) return null;
       if (row.state === "paused") {
         row.state = "sent";
         row.sentAt = this.now();

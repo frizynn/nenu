@@ -8,6 +8,45 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-10-22
+
+### Added
+
+- A running turn looks alive: "Working" glows with its time beside it in a quiet ink (9s), the step in progress and "Thinking…" glow, and the working mark turns slowly in the bar, Home, a project and the chips; only on screen, never under reduced motion (e6fc4d17, 5ebe2770, ab86cb45, f0bf4605, 721a6df7, cf053b5a).
+- Between steps a "Thinking…" row stands where the next step lands; the step in progress sits in its run and turns done in place, with no row jumping up (e6fc4d17).
+- Steps, thoughts and the agent's words that arrive while you read ease in (e6fc4d17).
+- A waiting message has Edit and Remove on its line, one tap each; one already in Claude's own queue is taken back from it, its words kept whole (a7f47870, 14060638, 62814399, cf053b5a, a1b53d11, b732a95a).
+- `bun scripts/e2e/one-bubble.ts` fails when a sent message is on screen twice in any frame; `bun scripts/e2e/live-motion.ts` measures what the live motion costs (e89703c0, ab86cb45).
+
+### Changed
+
+- A message Claude reads mid-turn sits between the work it split: "Worked for 4s" above it and "Continued for 11s" under it add up to the turn (b028cbff, e0e3a118).
+- A turn's line stands where it will be before Claude's log shows the turn; a queued message reads "Claude reads it after this step." (e0e3a118, ab79be90).
+- A message Claude reads mid-turn is dated when Claude read it, not when it was queued (ab79be90).
+- "Working for" counts seconds through its first minute everywhere (b028cbff).
+
+### Fixed
+
+- A message sent from Nenu no longer shows twice for a moment, as its bubble beside its queue row or beside the journal's turn (08c97564).
+- Your message's bubble no longer shows its time as a faint tooltip over itself on a desk, nor does any row of the thread (721a6df7, f2006acc).
+- Nenu again sees Claude's box when a draft of two lines puts "ctrl+g to edit in Vim" right after a long statusline; until now it refused to send and hid the text left there (b9d83a54).
+
+## [1.42.0] - 2026-10-21
+
+### Added
+
+- Every section of a chat's panel, and of a phone's Status tab, folds under its head with what it holds still said beside it; Arrange moves and hides sections, kept on this device, with a Reset; what waits on you can fold but never hide (eed1f71d, 8a4cfc5f).
+- `bun scripts/e2e/overview-sections.ts` measures a coordinator's panel at 1440×900 and 390×844, then folds, hides, reorders and reloads (44aeb729).
+
+### Changed
+
+- A coordinator's Threads comes first and lists the open work of its whole subtree, grouped by the coordinators under it as the tree draws them, each row its state, what it does and a tap to open it (eed1f71d, 8a4cfc5f, 6f62902b).
+
+### Fixed
+
+- "Nothing running" sits inside its card's margin (eed1f71d).
+- A task the tracker does not have draws no "missing" chip; its context says it is not in the tracker (1d46153c).
+
 ## [1.41.2] - 2026-10-21
 
 ### Fixed

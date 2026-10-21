@@ -15,7 +15,7 @@ describe("StateMark", () => {
   it("colours only what asks something of you", () => {
     expect(mark("needs")).toHaveClass("text-status-blocked");
     expect(mark("review")).toHaveClass("text-primary");
-    // A usage limit resumes by itself at its reset: it asks nothing of you (ADR 0118).
+    // A usage limit resumes by itself at its reset: it asks nothing of you (ADR 0120).
     for (const state of ["working", "merging", "closing", "resolved", "limit"] as const) expect(mark(state)).toHaveClass("text-muted-foreground");
   });
 

@@ -20,6 +20,7 @@ import { isReadOnly, type ProjectThreadView } from "@/lib/types";
 
 // The Overview tab is a desk's alone: a phone never loads it.
 const ThreadOverview = lazy(() => loadThreadOverview().then((module) => ({ default: module.ThreadOverview })));
+const CoordinatorOverview = lazy(() => loadThreadOverview().then((module) => ({ default: module.CoordinatorOverview })));
 
 /** What a project gives the chat it wraps. */
 export interface ProjectChatSlots {
@@ -134,8 +135,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const asks = useAsks(scope.coordinating && !desk ? [project] : undefined);
   const coordinatorId = thread?.id ?? "root";
   const waiting = scope.coordinating ? waitingAt(asks.list, project, coordinatorId).count : 0;
-  const sections = (children?: ReactNode) => <CoordinatorSections project={project} thread={thread} asks={desk ? undefined : asks} panes={data.agents} session={data.session}
-    readOnly={readOnly} onChanged={refresh}>{children}</CoordinatorSections>;
+  const coordinatorSections = { project, thread, asks: desk ? undefined : asks, panes: data.agents, session: data.session, readOnly, onChanged: refresh };
   const canStart = !readOnly && startableRoles(project).includes("worker");
   const finished = scope.coordinating && desk ? finishedCount(project, thread?.title) : 0;
 
@@ -148,6 +148,17 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const up = (title: string, nodeId: string, paneId?: string) => ({ title, open: () => goUp(live(paneId) ? panePath(paneId, data.session) : nodePath(project.slug, nodeId, data.session)) });
   const parentNode = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
   const parent = !thread ? undefined : parentNode ? up(parentNode.title, parentNode.id, parentNode.paneId) : up(project.name, "root", project.coordinator?.paneId);
+  // What a thread's and a coordinator's Overview share.
+  const overview = {
+    thread, pane: data.agents.find((pane) => pane.paneId === paneId), panes: data.agents, paneId, session: data.session, pr, reading: inspector.reading, parent,
+    onShowChanges: () => inspector.setTab("changes"),
+    onOpenThread: (candidate: ProjectThreadView) => {
+      if (!candidate.paneId) openNode(candidate.id);
+      // A tap on a coordinator enters its chat (ADR 0115); a thread docks beside this one.
+      else if (scope.coordinating && candidate.role !== "coordinator" && live(candidate.paneId)) setDocked(candidate.paneId);
+      else openPane(candidate.paneId);
+    },
+  };
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
   const phoneTabs = !desk ? (
@@ -174,7 +185,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
       {view === "threads" ? tasks
-        : view === "status" && scope.coordinating ? <div className="flex flex-col gap-3">{sections()}</div>
+        : view === "status" && scope.coordinating ? <CoordinatorSections {...coordinatorSections} />
         : <PrList project={project} threads={scope.threads} session={data.session} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />}
     </div></div>
   ) : undefined;
@@ -199,17 +210,11 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
       )}
       {panelShown && (
         <SessionInspector inspector={inspector} paneId={paneId} session={data.session} artifacts={data.agents.some((pane) => pane.paneId === paneId)} pr={pr}
-          overview={<Suspense fallback={null}><ThreadOverview key={paneId} thread={thread} pane={data.agents.find((pane) => pane.paneId === paneId)} paneId={paneId}
-            session={data.session} pr={pr} reading={inspector.reading} parent={parent} threads={scope.siblings} coordinating={scope.coordinating}
-            onShowChanges={() => inspector.setTab("changes")}
-            around={scope.coordinating ? sections : undefined}
-            onNewThread={scope.coordinating && canStart ? () => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent: coordinatorId, onStarted: refresh }) : undefined}
-            finished={scope.coordinating ? { count: finished, open: () => navigate(projectHistoryPath(project.slug, data.session, thread?.title)) } : undefined}
-            onOpenThread={(candidate) => {
-              if (!candidate.paneId) openNode(candidate.id);
-              else if (scope.coordinating && live(candidate.paneId)) setDocked(candidate.paneId);
-              else openPane(candidate.paneId);
-            }} /></Suspense>} />
+          overview={<Suspense fallback={null}>{scope.coordinating
+            ? <CoordinatorOverview key={paneId} {...overview} coordinator={coordinatorSections} threads={scope.threads}
+              onNewThread={canStart ? () => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent: coordinatorId, onStarted: refresh }) : undefined}
+              finished={{ count: finished, open: () => navigate(projectHistoryPath(project.slug, data.session, thread?.title)) }} />
+            : <ThreadOverview key={paneId} {...overview} threads={scope.siblings} coordinating={false} />}</Suspense>} />
       )}
     </div>
   );

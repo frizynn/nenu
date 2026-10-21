@@ -32,7 +32,7 @@ import type { AgentView, LivePublisher, TurnState } from "./types.ts";
 const TAIL_BYTES = 4 * 1024 * 1024;
 /**
  * A Claude at rest, first seen: enough tail to hold the row that ended its last turn, which is all the
- * usage limit needs (ADR 0118). Its request blobs average 18 KB, the largest measured 2.9 MB.
+ * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB.
  */
 const IDLE_TAIL_BYTES = 1024 * 1024;
 /** A session file is a few hundred bytes; anything bigger is not one. */
@@ -290,7 +290,7 @@ export class AgentStates {
     if (file?.status === "busy" && !file.waitingFor) await this.followTranscript(entry, file.sessionId, 0);
     else {
       // At rest the transcript is read once more, unwatched: the row that ended the turn may say the
-      // usage limit refused it (ADR 0118), and it can land after the last watch event.
+      // usage limit refused it (ADR 0120), and it can land after the last watch event.
       if (file && !file.waitingFor) await this.peekTranscript(entry, file.sessionId);
       this.closeTail(entry.transcript);
     }
@@ -400,7 +400,7 @@ export class AgentStates {
       entry.limitTimer.unref?.();
     }
     // A reply on one Claude is the account working again: every other Claude of its profile that the
-    // limit holds is looked at again (ADR 0118).
+    // limit holds is looked at again (ADR 0120).
     if (scan && scan.lastReply !== (entry.replySeen ?? -Infinity)) {
       entry.replySeen = scan.lastReply;
       for (const other of this.entries.values()) if (other !== entry && other.state?.limit && other.sessionDir === entry.sessionDir) this.update(other);

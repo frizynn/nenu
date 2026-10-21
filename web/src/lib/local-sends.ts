@@ -8,9 +8,12 @@ import type { DeliveryMode, NativeQueueState, QueueWaitReason, TranscriptEntry }
 //
 // The transcript is read from the agent's own session log, which only gains the operator's message
 // after the harness writes it and the next history poll lands — seconds after the tap. Until then the
-// conversation shows the message as a pending bubble from here. Each bubble is removed when the
-// journal gains a matching user turn that was not already there when the bubble first rendered, so an
-// identical earlier "continue" can never swallow a new one.
+// conversation shows the message as a pending bubble from here. A bubble lands when the journal gains a
+// matching user turn that was not already there when the bubble first rendered, so an identical
+// earlier "continue" can never swallow a new one. The conversation stops drawing it in the same render
+// that draws the journal's turn (`pendingSends`), so the message is never on screen twice; the landed
+// bubble stays in the store a while longer, holding its queue row, so that row is not drawn as a
+// message of its own while the queue catches up.
 //
 // Module state, keyed by pane, so a bubble survives the composer remounting on a pane switch. It is
 // a page-session cache only: nothing here is persisted.
@@ -44,6 +47,8 @@ export interface LocalSend {
   error?: string;
   /** Journal user turns that already matched when this bubble was first reconciled. */
   baseline?: string[];
+  /** The journal turn that now shows this message: the bubble is no longer drawn. */
+  landed?: string;
 }
 
 export interface LocalSendActions {
@@ -83,7 +88,7 @@ function write(scope: string, next: LocalSend[]) {
 // conversation view clears the composer as it sends, so this is the only place that text lives.
 function holdWhileUnsent() {
   const unsent = [...sends.values()].some((list) =>
-    list.some((send) => send.state === "sending" || (send.state === "failed" && !send.textDelivered)));
+    list.some((send) => !send.landed && (send.state === "sending" || (send.state === "failed" && !send.textDelivered))));
   if (unsent) holdReload("local-sends");
   else releaseReload("local-sends");
 }
@@ -95,7 +100,7 @@ export function listLocalSends(scope: string): LocalSend[] {
 /** Start (or restart, for a retry of the same text) a pending bubble. Returns its id. */
 export function addLocalSend(scope: string, text: string, state: LocalSendState = "sending"): string {
   const list = listLocalSends(scope);
-  const existing = list.find((send) => send.text === text && (send.state === "failed" || send.state === "sending"));
+  const existing = list.find((send) => !send.landed && send.text === text && (send.state === "failed" || send.state === "sending"));
   if (existing) {
     updateLocalSend(scope, existing.id, { state, error: undefined, textDelivered: undefined });
     return existing.id;
@@ -107,8 +112,11 @@ export function addLocalSend(scope: string, text: string, state: LocalSendState 
 
 export function updateLocalSend(scope: string, id: string, patch: Partial<Omit<LocalSend, "id" | "text">>) {
   const list = listLocalSends(scope);
-  if (!list.some((send) => send.id === id)) return;
-  write(scope, list.map((send) => (send.id === id ? { ...send, ...patch } : send)));
+  const send = list.find((item) => item.id === id);
+  if (!send) return;
+  write(scope, list.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  // A landed bubble keeps the timer that forgets it.
+  if (send.landed) return;
   clearTimeout(expiry.get(id));
   expiry.delete(id);
   if (patch.state === "sent") expiry.set(id, setTimeout(() => removeLocalSend(scope, id), SENT_TTL_MS));
@@ -121,31 +129,73 @@ export function removeLocalSend(scope: string, id: string) {
   if (list.some((send) => send.id === id)) write(scope, list.filter((send) => send.id !== id));
 }
 
-/** Drop every bubble the journal now shows. `entries` is the live (not frozen) history window. */
-export function reconcileLocalSends(scope: string, entries: readonly TranscriptEntry[]) {
-  const list = listLocalSends(scope);
-  if (!list.length) return;
-  const users = entries
+/** The journal's user turns as the bubbles match them: by their words and their pictures. */
+function userKeys(entries: readonly TranscriptEntry[]) {
+  return entries
     .filter((entry) => entry.role === "user")
     .map((entry) => ({
       uuid: entry.uuid,
       key: messageMatchKey(entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n")),
     }));
+}
+
+/** The journal turn showing `send` that was not there when it was first reconciled. */
+function landing(send: LocalSend, users: ReturnType<typeof userKeys>): string | undefined {
+  if (!send.baseline) return undefined;
+  const key = messageMatchKey(send.text);
+  return users.find((user) => user.key === key && !send.baseline!.includes(user.uuid))?.uuid;
+}
+
+/**
+ * The bubbles to draw beside `entries`: none the journal already shows. Read in the same render as
+ * the entries, so the frame that draws the journal's turn never draws the bubble too.
+ */
+export function pendingSends(list: readonly LocalSend[], entries: readonly TranscriptEntry[] | null): LocalSend[] {
+  const users = entries ? userKeys(entries) : [];
+  return list.filter((send) => !send.landed && landing(send, users) === undefined);
+}
+
+/** Mark every bubble the journal now shows as landed. `entries` is the live (not frozen) history window. */
+export function reconcileLocalSends(scope: string, entries: readonly TranscriptEntry[]) {
+  const list = listLocalSends(scope);
+  if (!list.length) return;
+  const users = userKeys(entries);
   let changed = false;
-  const next: LocalSend[] = [];
-  for (const send of list) {
-    const key = messageMatchKey(send.text);
-    const matches = users.filter((user) => user.key === key).map((user) => user.uuid);
+  const next = list.map((send) => {
+    if (send.landed) return send;
     if (!send.baseline) {
-      next.push({ ...send, baseline: matches });
       changed = true;
-    } else if (matches.some((uuid) => !send.baseline!.includes(uuid))) {
-      clearTimeout(expiry.get(send.id));
-      expiry.delete(send.id);
-      changed = true;
-    } else next.push(send);
-  }
+      const key = messageMatchKey(send.text);
+      return { ...send, baseline: users.filter((user) => user.key === key).map((user) => user.uuid) };
+    }
+    const landed = landing(send, users);
+    if (!landed) return send;
+    changed = true;
+    clearTimeout(expiry.get(send.id));
+    expiry.set(send.id, setTimeout(() => removeLocalSend(scope, send.id), SENT_TTL_MS));
+    return { ...send, landed };
+  });
   if (changed) write(scope, next);
+}
+
+/** What a take-back from the CLI's own queue answered (ADR 0118): the words that came back, the rows they were. */
+export interface TakenBack {
+  text: string;
+  messages: Array<{ id: string; text: string }>;
+  /** The words are exactly those rows', spacing aside: the box held nothing else. */
+  ours: boolean;
+}
+
+/**
+ * What a take-back puts in the composer, and what it says. The rows' own words when the box held only
+ * them, so line breaks and long words survive; without `removed`'s row for a Remove. Otherwise the box
+ * as the screen showed it, said as such: nothing that came back is dropped.
+ */
+export function takenBack(back: TakenBack, removed?: string): { text: string; note?: string } {
+  if (!back.ours) return { text: back.text, note: "Claude's queue held more than Nenu sent: all of it is back in your box." };
+  const kept = back.messages.filter((message) => message.id !== removed);
+  const text = kept.map((message) => message.text).join("\n\n");
+  return removed !== undefined && kept.length ? { text, note: "Removed. The other queued messages are back in your box." } : { text };
 }
 
 /** The composer that owns a pane registers what the bubbles' buttons do. */

@@ -1,0 +1,80 @@
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mM2kuhy y al final decime cuántos archivos hay.[0m[48;2;55;55;55m                                                                       [0m
+
+[0m[38;2;78;186;101m● [0m[1mBash[0m(sleep 3 && python3 -c "print(2+2)")
+[0m[38;2;153;153;153m  ⎿  [0m4
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+
+[0m[38;2;255;255;255m● [0mCorrí los tres comandos en orden: [0m[38;2;177;185;249mls [0mlistó [0m[38;2;177;185;249mcalc.py [0my [0m[38;2;177;185;249mREADME.md[0m, [0m[38;2;177;185;249mcalc.py [0mdefine [0m[38;2;177;185;249madd(a,b) [0my [0m[38;2;177;185;249m2+2 [0mdio 4.
+  Hay 2 archivos (medido con el [0m[38;2;177;185;249mls [0mdel primer comando, sin contar ocultos).
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mCogitated for 23s · done 8:42 PM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mCorré con Bash [0m[38;2;177;185;249m[48;2;55;55;55msleep 25 && echo listo[0m[38;2;255;255;255m[48;2;55;55;55m y después decime listo.[0m[48;2;55;55;55m                                                        [0m
+
+[0m[38;2;255;107;128m●[0m [0m[1mBash[0m(sleep 25 && echo listo)
+[0m[38;2;153;153;153m  ⎿  [0m[38;2;255;107;128mError: Blocked: sleep 25 followed by: echo listo. To wait for a condition, use Monitor with an until-loop (e.g. [0m
+     [0m[38;2;255;107;128m`until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain [0m
+     [0m[38;2;255;107;128mshorter sleeps to work around this block.[0m
+
+[0m[38;2;78;186;101m●[0m [0m[1mBash[0m(sleep 25 && echo listo)
+[0m[38;2;153;153;153m  ⎿  Running in the background (↓ to manage)[0m
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mcola uno[0m[48;2;55;55;55m                                                                                                             [0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mcola dos[0m[48;2;55;55;55m                                                                                                             [0m
+
+[0m[38;2;255;255;255m● [0mRecibí "cola uno" y "cola dos". No piden ninguna acción, así que no hice nada con ellos.
+
+  El [0m[38;2;177;185;249msleep 25 && echo listo[0m sigue corriendo en segundo plano. Cuando termine te digo "listo".
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mBrewed for 13s · done 8:44 PM[0m
+  
+[0m[38;2;78;186;101m●[0m Background command "Wait 25 seconds and print listo" completed (exit code 0)
+
+[0m[38;2;255;255;255m●[0m Listo. El comando terminó con código 0 (según la notificación de la tarea en segundo plano).
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mBaked for 1s · done 8:44 PM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mM1q8b2 Ejecutá con Bash, de a uno y en este orden: [0m[38;2;177;185;249m[48;2;55;55;55msleep 4 && ls[0m[38;2;255;255;255m[48;2;55;55;55m, después [0m[38;2;177;185;249m[48;2;55;55;55msleep 3 && cat calc.py[0m[38;2;255;255;255m[48;2;55;55;55m, después [0m[38;2;177;185;249m[48;2;55;55;55msleep 3 &&[0m[48;2;55;55;55m [0m
+[0m[48;2;55;55;55m  [0m[38;2;177;185;249m[48;2;55;55;55mpython3 -c "print(2+2)"[0m[38;2;255;255;255m[48;2;55;55;55m. Después pensá un momento y contestá en dos líneas.[0m[48;2;55;55;55m                                          [0m
+  
+[0m[38;2;78;186;101m●[0m [0m[1mBash[0m(sleep 4 && ls)
+[0m[38;2;153;153;153m  ⎿  [0mcalc.py
+     README.md
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+
+[0m[38;2;78;186;101m●[0m [0m[1mBash[0m(sleep 3 && cat calc.py)
+[0m[38;2;153;153;153m  ⎿  [0mdef add(a,b):
+         return a+b
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+  
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mM2q8b2 y al final decime cuántos archivos hay.[0m[48;2;55;55;55m                                                                       [0m
+
+[0m[38;2;78;186;101m● [0m[1mBash[0m(sleep 3 && python3 -c "print(2+2)")
+[0m[38;2;153;153;153m  ⎿  [0m4
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode classifier[0m
+
+[0m[38;2;255;255;255m● [0mCorrí los tres comandos en orden: [0m[38;2;177;185;249mls [0mlistó [0m[38;2;177;185;249mcalc.py [0my [0m[38;2;177;185;249mREADME.md[0m, [0m[38;2;177;185;249mcalc.py [0mdefine [0m[38;2;177;185;249madd(a,b) [0my [0m[38;2;177;185;249m2+2 [0mdio 4.
+  Hay 2 archivos (medido con el [0m[38;2;177;185;249mls [0mdel primer comando, sin contar ocultos).
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mCooked for 24s · done 8:46 PM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mCorré con Bash en primer plano: python3 -c "import time; time.sleep(20)" y después decime hecho.[0m[48;2;55;55;55m                     [0m
+
+[0m[38;2;153;153;153m [0m [0m[1mBash[0m(python3 -c "import time; time.sleep(20)")
+[0m[38;2;153;153;153m  ⎿  Running… (7s)[0m
+     [0m[38;2;153;153;153m(ctrl+b to run in background)[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ cola A[0m[48;2;55;55;55m                                                                                                               [0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ cola B con más palabras[0m[48;2;55;55;55m                                                                                              [0m
+  [0m[38;2;153;153;153mctrl+enter to send now[0m
+
+[0m[38;2;215;119;87m* [0m[38;2;235;159;127mRoosting…[0m[38;2;215;119;87m [0m[38;2;153;153;153m(10s · ↓[0m [0m[38;2;153;153;153m96 tokens)[0m
+
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;153;153;153m❯ [0m[2mPress up to edit queued messages[0m
+[0m[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[2m[38;5;6mSonnet 5.5[0m[38;2;153;153;153m [0m[2m[38;2;153;153;153m|[0m[38;2;153;153;153m [0m[2m[38;5;3mContext 6% used (94% left)[0m[38;2;153;153;153m [0m[2m[38;2;153;153;153m|[0m[38;2;153;153;153m [0m[2m[38;5;2m5h 65% used (35% left)[0m[38;2;153;153;153m [0m[2m[38;2;153;153;153m|[0m[38;2;153;153;153m [0m[2m[38;5;5mWeekly 65% used (35% left)                   [0m[38;2;78;186;101m/rc[0m
+  [0m[38;2;255;193;7m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle)[0m

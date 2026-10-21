@@ -158,7 +158,11 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
   cards (a coordinator's own also what its page held, ADR 0115); model and context come from the chat's own reading, and the project's own views are not in the panel
-  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
+  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). Every section of the panel and of a phone's
+  Status tab folds under its head (`panel-sections.tsx`), Arrange moves and hides them per device with a Reset, no
+  tabs inside Overview, and a coordinator's Threads lists its whole subtree first, by coordinator;
+  `bun scripts/e2e/overview-sections.ts` must pass ([ADR 0119](./.adr/0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md)).
+  A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
   `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
   ([ADR 0105](./.adr/0105-a-docked-thread-takes-the-panels-place-at-its-width.md)).
@@ -246,11 +250,19 @@ the unit name; the Herdr action runs from anywhere.
   (`hover:bg-hover`); one status mark (ADR 0113); a desk's page tabs underlined. `calm-motion.test` and
   `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
-- **A state is a still glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
+- **A state is a glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
   `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
-  nothing at rest. Colour only for what asks for you, nothing spins, and a resting chat in the desk's
-  bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
+  nothing at rest. Colour only for what asks for you, only the working circle moves (ADR 0118), and a
+  resting chat in the desk's bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
   ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
+- **Work in progress looks alive, and nothing else moves for long** (`lib/live-motion.ts`): the glow on
+  a running turn's "Working for", its step in progress and "Thinking…", and the working circle's slow
+  turn, stepped by hand from one timer (never a CSS animation, which draws every frame), only on
+  screen on a shown page with no idle lock or reduced motion. The step in progress sits in its run and turns done in place; rows that arrive while the
+  thread is read ease in (`lib/enter.tsx`). A sent message is on screen once (`pendingSends`), and one
+  in Claude's own queue is taken back with Up under the write lock (`takeBackQueue`); a message Claude
+  read is never rewound from Nenu. `bun scripts/e2e/live-motion.ts` measures the cost
+  ([ADR 0118](./.adr/0118-work-in-progress-looks-alive.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened

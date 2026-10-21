@@ -1349,7 +1349,7 @@ export function AgentChat({
               <StateMark state="limit" />
               <span role="status" className="min-w-0 flex-1 truncate">{limitLine(limit)}</span>
               {/* Typing past the limit is safe: Claude logs the message, and the limit only refuses it
-                  again and re-arms its own continue (measured 2026-10-21, ADR 0118). */}
+                  again and re-arms its own continue (measured 2026-10-21, ADR 0120). */}
               <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-footnote"
                 disabled={readOnly || gone || connecting} onClick={() => { void composerRef.current?.continueNow(); }}>
                 Continue now

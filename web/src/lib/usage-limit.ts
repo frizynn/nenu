@@ -1,7 +1,7 @@
 import { clockTime } from "@/lib/format";
 import type { TurnState } from "@/lib/types";
 
-// A Claude held by its account's usage limit (ADR 0118): the bridge reads it from Claude's own log
+// A Claude held by its account's usage limit (ADR 0120): the bridge reads it from Claude's own log
 // and drops it once the reset passed or a reply came through on the account.
 
 export type UsageLimit = NonNullable<TurnState["limit"]>;

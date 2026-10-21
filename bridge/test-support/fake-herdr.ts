@@ -279,7 +279,7 @@ export class FakeHerdr {
     }
     // Claude 2.1.296 names the interrupt key in the statusline while a turn runs, and drops it while
     // the box holds a draft.
-    // Claude 2.1.306 at its usage limit, as the operator's coordinator drew it on 2026-10-21 (ADR 0118).
+    // Claude 2.1.306 at its usage limit, as the operator's coordinator drew it on 2026-10-21 (ADR 0120).
     const resets = this.usageLimit.get(paneId);
     if (resets) return [...body, RULE, `❯ ${pane.draft}`, RULE, `  ⚠ Usage limit reached · limit resets ${resets}`, `    Continuing automatically at ${resets} · esc to cancel`, "  Opus 5.5 | Context 56% used (44% left) | 5h 100% used (0% left)", "  ⏵⏵ auto mode on (shift+tab to cycle)"].join("\n");
     if (this.customStatusline.has(paneId)) return [...body, RULE, `❯ ${pane.draft}`, RULE, "  [custom-sl] opus", "  ⏵⏵ auto mode on · ← for agents"].join("\n");

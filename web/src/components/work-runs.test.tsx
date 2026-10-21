@@ -29,6 +29,18 @@ async function openTurn() {
 }
 
 describe("a turn's runs of steps", () => {
+  // Opened mid-turn, a run of finished calls whose thought is being written stays rows, so the thought
+  // that is the turn's live step is on screen (ADR 0118).
+  it("keeps a run holding the thought in progress as rows when the chat opens on it", () => {
+    const running = { status: "running" as const, startedAt: ts };
+    render(<TranscriptView activityStatus="working" entries={[
+      { uuid: "u", ts, role: "user", parts: [{ kind: "text", text: "Fix the roles" }] },
+      { ...says("a", [call("Bash", "pwd"), call("Bash", "date"), { kind: "thinking", text: "Now the role table." }]), turn: running },
+    ]} />);
+    expect(document.querySelector('[data-live-step="thinking"]')).toHaveTextContent("Now the role table.");
+    expect(screen.queryByRole("button", { name: /^Ran 2 commands/ })).not.toBeInTheDocument();
+  });
+
   it("folds the finished turn to its line and its answer", () => {
     render(<TranscriptView entries={entries} activityStatus="done" />);
     expect(screen.getByRole("button", { name: /^Worked/, expanded: false })).toBeInTheDocument();

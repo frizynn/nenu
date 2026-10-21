@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { EnterScope } from "@/lib/enter";
 import { MOTION_CONTROL_MS, MOTION_PANEL_MS } from "@/lib/motion";
 
 // How long a fold takes to open and to shut: index.css's .fold.
@@ -32,7 +33,8 @@ export function Fold<T>({ value, animate = true, children }: { value: T | null |
   const shutting = phase === "shutting";
   return (
     <div className="fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
-      <div>{children(last.current)}</div>
+      {/* What the fold opens onto is simply there; only a row that joins it later eases in. */}
+      <div><EnterScope>{children(last.current)}</EnterScope></div>
     </div>
   );
 }

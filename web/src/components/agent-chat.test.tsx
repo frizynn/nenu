@@ -1477,7 +1477,7 @@ const USAGE_LIMIT_TEXT = [
 describe("AgentChat — terminal waiting notice", () => {
   const UNKNOWN_WAIT_TEXT = ["● Working on it", "", "  Something new needs your attention", "", "  Enter to continue"].join("\n");
 
-  // The limit itself comes from Claude's log (ADR 0118); its notice on screen is Claude's own and no
+  // The limit itself comes from Claude's log (ADR 0120); its notice on screen is Claude's own and no
   // longer a wait, so without that state nothing is said about it here.
   it("says nothing about a usage-limit notice the CLI's own state does not report", async () => {
     const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
@@ -1787,7 +1787,7 @@ describe("AgentChat — Send while only background work runs", () => {
   });
 });
 
-// ADR 0118: a Claude at its account's usage limit. The line says until when; Send waits in Nenu's
+// ADR 0120: a Claude at its account's usage limit. The line says until when; Send waits in Nenu's
 // queue and says so in the thread; Continue now types the continue prompt past the limit.
 describe("AgentChat — an agent at its usage limit", () => {
   const RESETS = Date.now() + 2 * 3_600_000;
