@@ -9,7 +9,7 @@ import { startTestBridge } from "./bridge.ts";
 // to an idle Claude whose log then shows it, and a send while Claude works, which goes into Claude's own
 // queue and is read mid-turn (an enqueue, then the queued_command Claude writes when it reads it). A
 // probe in the page counts, on every animation frame, the bubbles, journal turns and queue rows that
-// carry the message; a frame with two fails. Before 1.42.0 both sends showed twice for a moment.
+// carry the message; a frame with two fails. Before 1.43.0 both sends showed twice for a moment.
 // Exits 1 on any failure.
 //
 //   bun scripts/e2e/one-bubble.ts [--port 8878] [--out DIR]
