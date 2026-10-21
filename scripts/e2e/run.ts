@@ -40,7 +40,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
 //   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips under the box and Stop in it: seven moments, phone and desk, nothing above the box
-//   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; what opening a panel moves
+//   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; fails if a panel moves anything or the row under the box spills
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
@@ -2984,7 +2984,8 @@ async function chips(before: boolean): Promise<void> {
           if (chip === "PRs" && name.startsWith("worker-phone")) {
             // The PR bar's diff, from the PRs panel now: its size opens the PR's changes.
             if (await tap(page.getByRole("button", { name: /^View changes/ }).first(), "prs:diff")) {
-              const viewer = page.getByRole("dialog").first();
+              // The diff's sheet is the last dialog: the chip's panel it opened from is still open under it.
+              const viewer = page.getByRole("dialog").last();
               found[`${name}:prs:diff-open`] = await viewer.waitFor({ timeout: 5000 }).then(() => true, () => false);
               await page.waitForTimeout(800);
               await shoot("prs-diff");
@@ -3241,19 +3242,25 @@ async function composerAround(): Promise<void> {
     benchRepo(dir);
     writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
   });
-  await writeFile(join(outDir, "composer.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify({ moved: result.moved, seen: result.seen }, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
+  // The row under the box holds the model, the chips and the place within its width: nothing spills past it.
+  const spilled = Object.entries(result.seen).filter(([, m]) => {
+    const meta = (m as { meta?: { width: number; clientWidth: number } | null })?.meta;
+    return meta && meta.width > meta.clientWidth + 1;
+  }).map(([key]) => key);
+  await writeFile(join(outDir, "composer.json"), JSON.stringify({ ...result, spilled }, null, 2));
+  console.log(JSON.stringify({ moved: result.moved, spilled, seen: result.seen }, null, 2));
+  if (result.unexpectedWrites.length || result.moved.length || spilled.length) process.exit(1);
 }
 
 /**
- * The chips above the box and Stop in it (ADR 0108), on a phone and a desk, dark and light: a working
- * chat with one background command (Background 1 and Stop), the same with none (Stop alone), a chat at
- * rest with a command still running (chips alone), finished work only while working and at rest (no
- * line: it is a row of the ⋯ menu, opened from there), homeOrg's worker with everything around it
- * (more chips than a phone fits, and Stop) and the terminal view. Each capture measures what sits
- * between the last message and the box's top edge; the phone's first moment is also read with the
- * keyboard up.
+ * The chips under the box and Stop in it (ADR 0108), on a phone and a desk, dark and light, beside a
+ * model as a session reports it: a working chat with one background command (Background 1 and Stop),
+ * the same with none (Stop alone), a chat at rest with a command still running (chips alone), finished
+ * work only while working and at rest (no chip: it is a row of the ⋯ menu, opened from there),
+ * homeOrg's worker with everything around it (Needs you, Background, PRs and Stop: the fullest row)
+ * and the terminal view. Each capture measures what sits between the thread and the box's top edge,
+ * and whether any control in the row under the box touches another; the phone's first moment is also
+ * read with the keyboard up.
  */
 async function chipLine(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -3322,6 +3329,12 @@ async function chipLine(): Promise<void> {
             return route.fulfill({ json: activityOf(url) });
           });
           await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
+          // The model as a real session reports it, so the row under the box is as full as it gets.
+          await page.route("**/api/pane/*/history*", async (route) => {
+            const json = await (await fetch(route.request().url())).json() as Record<string, unknown>;
+            if (json.available) json.telemetry = { source: "journal", model: "claude-opus-5-5", effort: "medium", context: { usedTokens: 22_000, windowTokens: 200_000, usedPercent: 11 } };
+            await route.fulfill({ json });
+          });
           await page.goto(`${bridge.url}/pane/${encodeURIComponent(moment.paneId)}`);
           await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
           await page.waitForTimeout(2000);
@@ -3422,11 +3435,13 @@ function measureAboveBox() {
   const reach = sr && sr.height > 0 ? [-21, 21].map((dy) => document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2 + dy)?.closest("button") === stop) : null;
   const chipsRect = rect(chipRow);
   const inBox = stop?.closest(".composer-box") !== null && stop !== null && sr !== undefined && sr.height > 0;
-  // The chips sit in the row under the box, and touch neither the model nor the place beside them.
+  // The chips sit in the row under the box, and no control in that row touches another or leaves it.
   const meta = document.querySelector(".composer-meta");
-  const neighbours = Array.from(meta?.children ?? []).filter((el) => !el.classList.contains("composer-chips")).map((el) => el.getBoundingClientRect())
-    .filter((r) => r.width > 0);
-  const overlaps = chipsRect !== null && neighbours.some((r) => r.left < chipsRect.right - 1 && r.right > chipsRect.left + 1);
+  const metaRect = meta?.getBoundingClientRect();
+  const controls = Array.from(meta?.querySelectorAll("button") ?? []).filter((el) => !el.closest("#composer-chip-panel"))
+    .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+  const overlaps = metaRect !== undefined && controls.some((r, i) => r.left < metaRect.left - 1 || r.right > metaRect.right + 1
+    || controls.some((o, j) => j !== i && r.left < o.right - 1 && r.right > o.left + 1));
   return {
     gap: last === null ? null : Math.round(box.top - last),
     aboveBox: thread ? Math.round(box.top - thread.bottom) : null,
@@ -3435,7 +3450,8 @@ function measureAboveBox() {
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
     chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
-    chipsOverlap: overlaps,
+    // A branch named in the row keeps some of its name: never a bare icon.
+    chipsOverlap: overlaps || Array.from(document.querySelectorAll(".composer-place-branch .truncate")).some((el) => el.getBoundingClientRect().width < 24),
     stop: rect(stop),
     stopInBox: inBox,
     stopReach: reach,
