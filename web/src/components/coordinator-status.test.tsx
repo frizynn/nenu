@@ -88,6 +88,17 @@ it("folds a long STATUS.md under Show all, and a short one not at all", async ()
   expect(block.getByRole("button", { name: "Show less" })).toBeInTheDocument();
 });
 
+it("opens a STATUS.md the card already summed up whole, never into a clipped box the wheel cannot move", async () => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(320);
+  const { user } = setup("/project/hub/node/t-0010", { threads: [{ id: "t-0010", captures: [], deliverables: [], status: { text: STATUS, updated: hoursAgo(2), objective: "ship the new checkout" } }] });
+  const block = within(await screen.findByRole("region", { name: "Status" }));
+  await user.click(await block.findByRole("button", { name: "Show STATUS.md" }));
+  expect(await block.findByText("Asked")).toBeInTheDocument();
+  expect(block.queryByRole("button", { name: "Show all" })).toBeNull();
+  expect(screen.getByRole("region", { name: "Status" }).querySelector(".max-h-72")).toBeNull();
+});
+
 it("draws no block without the field, on either page, and the pages stay as they were", async () => {
   setup("/project/hub/node/t-0010", { threads: [] });
   expect(await screen.findByRole("region", { name: "Node" })).toBeInTheDocument();
