@@ -155,7 +155,7 @@ async function run(): Promise<void> {
     let stop = churn(fake);
     try {
       // A thread in a project: its ‹ goes up, and its views switch beside it (sibling chips before 1.23.0,
-      // Chat · Threads · PRs under the header since, the ⋯'s rows since 1.42.0, its toast-prone corner).
+      // Chat · Threads · PRs under the header since, the ⋯'s rows since 1.43.0, its toast-prone corner).
       const taps: Array<Record<string, unknown>> = [];
       const views = 'header button[aria-label^="Conversation actions"]';
       for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", views]] as const) {

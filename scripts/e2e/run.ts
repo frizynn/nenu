@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchEngine, launchWebkit, openPhoneView, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { commandsBench } from "./commands.ts";
 import { filesBench } from "./files.ts";
@@ -897,7 +897,7 @@ async function layout(): Promise<void> {
     ]);
   }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
   await withBench(async (bridge, browser) => {
-    await capture(bridge, browser, [["coordinator", `/pane/${encodeURIComponent(bridge.herd!.codex)}`, 'aside[aria-label="Project"]:has-text("Panel depósito"), [role=tab]:has-text("Threads")']]);
+    await capture(bridge, browser, [["coordinator", `/pane/${encodeURIComponent(bridge.herd!.codex)}`, 'aside[aria-label="Project"]:has-text("Panel depósito"), header button[aria-label^="Conversation actions"]']]);
   }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
   await writeFile(join(outDir, "layout.json"), JSON.stringify(measures, null, 2));
   console.log(`[e2e] ${Object.keys(measures).length} captures in ${outDir}`);
@@ -1428,7 +1428,7 @@ async function needsYou(): Promise<void> {
     const text = (locator: Locator) => locator.innerText().then((t) => t.replace(/\s+/g, " ").trim());
     {
       const { page, close } = await open(PHONE);
-      await page.getByRole("tab", { name: /^Threads/ }).click();
+      await openPhoneView(page, "Threads");
       await page.locator(".project-overlay").waitFor({ timeout: 5000 });
       await page.waitForTimeout(300);
       for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneRow ${title}`] = await text(page.locator(".project-overlay .task-main", { hasText: title }).first());
@@ -2356,10 +2356,10 @@ async function back(): Promise<void> {
         shots.push(path);
       };
       const visibleBack = () => page.locator('header [aria-label^="Back to"] >> visible=true').first();
-      // A row by its title where a person would tap it: the phone's Threads tab, else the page or the desk's bar.
+      // A row by its title where a person would tap it: a phone chat's Threads view, else the page or the desk's bar.
       const open = async (title: string) => {
-        if (device === PHONE && await page.getByRole("tab", { name: /^Threads/ }).first().isVisible()) {
-          await page.getByRole("tab", { name: /^Threads/ }).first().click({ timeout: 5000 });
+        if (device === PHONE && await page.locator('header button[aria-label^="Conversation actions"]').first().isVisible()) {
+          await openPhoneView(page, "Threads");
           await log("threads-tab");
           await page.locator(".project-overlay").getByText(title).first().click({ timeout: 5000 });
         } else {
@@ -2384,7 +2384,7 @@ async function back(): Promise<void> {
         await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
         await log("coordinator");
         if (device === PHONE) {
-          await page.getByRole("tab", { name: /^Threads/ }).click({ timeout: 5000 });
+          await openPhoneView(page, "Threads");
           await page.reload();
           await page.locator('[role="tablist"][aria-label="Project"]').waitFor({ timeout: 10_000 });
           await log("threads-reload");

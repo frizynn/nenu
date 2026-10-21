@@ -165,7 +165,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   };
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
-  // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0118).
+  // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0120).
   const phoneViews = !desk ? ([["chat", "Chat", ChatCircleText, null], ["threads", "Threads", FolderTree, openCount], ["prs", "PRs", GitPullRequest, prCount],
     ...(scope.coordinating ? [["status", "Status", Inbox, waiting]] as const : [])] as const) : undefined;
   const menu = phoneViews ? { label: "Show", waiting, actions: phoneViews.map(([key, label, icon, count]) => ({

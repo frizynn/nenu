@@ -87,7 +87,7 @@ it("opens a project on its coordinator's chat, and switches Chat, Threads and PR
   // The tabs list the threads, so the conversation carries no cards of them as well.
   expect(screen.queryByRole("region", { name: "Threads" })).not.toBeInTheDocument();
 
-  // Nothing stands between the title and the chat: the views are rows of the ⋯ menu (ADR 0118).
+  // Nothing stands between the title and the chat: the views are rows of the ⋯ menu (ADR 0120).
   expect(screen.queryByRole("tablist", { name: "Project" })).not.toBeInTheDocument();
   expect(menuRow("Chat")).toHaveAttribute("aria-pressed", "true");
   await user.click(menuRow("Threads · 2"));

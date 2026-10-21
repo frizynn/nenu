@@ -193,7 +193,7 @@ describe("AgentChat — header title block", () => {
     expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
   });
 
-  // A phone's project views (ADR 0118): its rows head the menu, and what waits on you shows on the ⋯ while shut.
+  // A phone's project views (ADR 0120): its rows head the menu, and what waits on you shows on the ⋯ while shut.
   it("heads the ⋯ menu with a project's rows and counts what waits on you on the ⋯ itself", async () => {
     const show = vi.fn();
     renderChat({ agent: named, agents: [named], menu: { label: "Show", waiting: 2, actions: [

@@ -123,7 +123,7 @@ async function main(): Promise<void> {
       await open(coordinatorPath);
       check(new URL(page.url()).pathname.startsWith("/pane/"), `${size}: the coordinator's address lands on its chat`);
       if (size === "390") {
-        // Its Status is a row of the ⋯ (ADR 0118).
+        // Its Status is a row of the ⋯ (ADR 0120).
         await page.getByRole("button", { name: /^Conversation actions/ }).first().click().catch(() => {});
         const row = page.getByRole("dialog", { name: "Conversation actions" }).getByRole("button", { name: /^Status/ });
         check(await row.count() === 1, "390: the chat's ⋯ has a Status row");

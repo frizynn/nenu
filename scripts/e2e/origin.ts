@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { launchWebkit, PHONE, userCacheDir, type Page } from "./browser.ts";
+import { launchWebkit, openPhoneView, PHONE, userCacheDir, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
 import { demoOrg, type DemoHerd } from "./scenario.ts";
 
@@ -153,7 +153,7 @@ try {
   await settle(page);
   await click('main >> text="Rediseño mobile"')(page);
   await settle(page);
-  await page.getByRole("tab", { name: /^Threads/ }).click({ timeout: 5000 });
+  await openPhoneView(page, "Threads");
   await settle(page);
   await tapBack(page);
   const first = await here(page);
