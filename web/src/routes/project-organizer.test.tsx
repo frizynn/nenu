@@ -105,7 +105,7 @@ describe("a project that organizes coordinators", () => {
 
   it("leads with what waits on you there, and leaves the goal to the desk", async () => {
     const { user, router } = setup(home([{ ...project, waitingAsks: 2 }]));
-    const waiting = await screen.findByRole("link", { name: /2 wait on you/ });
+    const waiting = await screen.findByRole("link", { name: /2 asks wait on you/ });
     expect(screen.queryByText("Ship it")).not.toBeInTheDocument();
     await user.click(waiting);
     expect(router.state.location.pathname).toBe("/asks");

@@ -74,7 +74,7 @@ function PhoneProjectRoute() {
       <TasksHeader title={project.name} paused={project.status === "paused"} mark={<ProjectGlyph slug={project.slug} pick={project} size={20} className="mt-1" />} />
       {waiting > 0 && <Link to={asksPath(data.session, project.slug)}
         className="mb-4 flex min-h-11 items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-subhead">
-        <NodeDot state="needs" /><span className="flex-1 font-medium">{waiting} {waiting === 1 ? "waits" : "wait"} on you</span>
+        <NodeDot state="needs" /><span className="flex-1 font-medium">{waiting === 1 ? "1 ask waits" : `${waiting} asks wait`} on you</span>
         <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
       </Link>}
       {/* Keyed by project: its folds are its own, and node ids repeat across projects. */}

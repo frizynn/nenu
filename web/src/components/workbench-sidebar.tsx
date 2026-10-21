@@ -562,7 +562,8 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
   const { thread, state } = node;
   const ask = awaits(thread);
   const word = ask ? ASK[ask].word : STATE_WORD[state];
-  const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
+  // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
+  const note = thread.paneId || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId && !page ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
     <div className="nav-thread">
@@ -580,6 +581,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
+        {page && <ChevronRight aria-hidden size={14} className="shrink-0 text-muted-foreground" />}
       </Link>
     </div>
   );
