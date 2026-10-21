@@ -73,6 +73,7 @@ async function styles(page: Page) {
       iconSize: {} as Record<string, number>, iconStroke: {} as Record<string, number>,
       transition: {} as Record<string, number>, radius: {} as Record<string, number>,
       controls: [] as string[],
+      offScale: [] as string[],
     };
     for (const el of Array.from(document.querySelectorAll("button, a[href], [role=tab], [role=button], select, input:not([type=hidden]), textarea"))) {
       if (!visible(el)) continue;
@@ -98,6 +99,10 @@ async function styles(page: Page) {
         count(out.textSize, s.fontSize);
         count(out.textWeight, s.fontWeight);
         count(out.lineHeight, `${s.fontSize}/${s.lineHeight}`);
+        // The type scale's steps (index.css): anything else is a size no token gave it.
+        if (!["11px", "12px", "13px", "15px", "16px", "17px", "22px", "28px"].includes(s.fontSize)) {
+          out.offScale.push(`${s.fontSize} ${el.tagName.toLowerCase()}.${el.className.toString().split(" ").slice(0, 3).join(".")} "${(el.textContent ?? "").trim().slice(0, 24)}"`);
+        }
       }
       const r = el.getBoundingClientRect();
       if (!own && r.width <= 10 && r.width >= 4 && Math.abs(r.width - r.height) < 1 && s.borderTopLeftRadius !== "0px" && s.backgroundColor !== "rgba(0, 0, 0, 0)") {
