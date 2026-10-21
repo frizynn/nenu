@@ -64,10 +64,13 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
     const last = known.get(project.slug);
     return last && { slug: project.slug, detail: last.detail };
   });
+  // Which files are open, by name. A link in one file to another listed here opens it in place.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     let live = true;
     const last = known.get(project.slug);
     setRead(last && { slug: project.slug, detail: last.detail });
+    setOpened(new Set());
     if (last && Date.now() - last.at < FRESH_MS && !reading.has(project.slug)) return;
     // A failed read keeps what the tab last showed.
     readContext(project.slug)
@@ -77,8 +80,6 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
   }, [project.slug]);
   const current = read?.slug === project.slug ? read : undefined;
   const detail = current?.detail;
-  // Which files are open, by name. A link in one file to another listed here opens it in place.
-  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const files = detail ? [
     { name: "PROJECT.md", note: "standing instructions", text: detail.instructions },
     ...(detail.memory.trim() ? [{ name: "MEMORY.md", text: detail.memory }] : []),
@@ -93,7 +94,7 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
   const openListed = (path: string) => {
     const name = listedName(path);
     setOpened((now) => new Set(now).add(name));
-    requestAnimationFrame(() => document.getElementById(fileAnchor(name))?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    requestAnimationFrame(() => document.getElementById(fileAnchor(name))?.scrollIntoView({ block: "nearest", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
   };
   const branches = threads.filter((thread) => thread.branch && thread.status !== "resolved");
   const card = (label: string, children: ReactNode) => <section aria-label={label} className="mb-5">
