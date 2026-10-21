@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { keyboardStep, useFocusInPlace, useKeyboardOpen, type KeyboardState } from "./use-keyboard";
 
@@ -56,7 +56,13 @@ describe("keyboardStep", () => {
 });
 
 describe("useKeyboardOpen", () => {
-  afterEach(() => { vi.unstubAllGlobals(); document.querySelector("textarea")?.remove(); });
+  let pending: FrameRequestCallback | undefined;
+  const flush = () => act(() => { const callback = pending; pending = undefined; callback?.(0); });
+  beforeEach(() => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { pending = callback; return 1; });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => { pending = undefined; });
+  });
+  afterEach(() => { pending = undefined; vi.unstubAllGlobals(); vi.restoreAllMocks(); document.querySelector("textarea")?.remove(); });
 
   /** A focused field over a risen keyboard, as the viewport reported it. */
   const typing = () => {
@@ -69,6 +75,7 @@ describe("useKeyboardOpen", () => {
       viewport.height = 508;
       viewport.dispatchEvent(new Event("resize"));
     });
+    flush();
     expect(hook.result.current).toBe(true);
     return { viewport, field, hook };
   };
@@ -76,6 +83,7 @@ describe("useKeyboardOpen", () => {
   it("reads closed once the field blurs, though the viewport never says the keyboard went down", () => {
     const { field, hook } = typing();
     act(() => field.blur());
+    flush();
     expect(hook.result.current).toBe(false);
   });
 
@@ -83,6 +91,7 @@ describe("useKeyboardOpen", () => {
     const { viewport, hook } = typing();
     viewport.height = 844;
     act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    flush();
     expect(hook.result.current).toBe(false);
   });
 });

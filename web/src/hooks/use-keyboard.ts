@@ -1,6 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
-import { watchViewport } from "@/hooks/use-app-viewport";
-import { isTextField } from "@/hooks/use-auto-scroll";
+import { mayHoldKeyboard, watchViewport } from "@/hooks/use-app-viewport";
 
 // Detect whether the on-screen keyboard is open by watching the visual viewport height.
 //
@@ -50,7 +49,7 @@ export function useKeyboardOpen(): boolean {
     // and only a focused field holds the keyboard up, whatever the last sample said.
     const update = () => {
       state = keyboardStep(state, { height: vv.height, width: vv.width });
-      setOpen(state.open && isTextField(document.activeElement));
+      setOpen(state.open && mayHoldKeyboard(document.activeElement));
     };
     update();
     return watchViewport(vv, update);

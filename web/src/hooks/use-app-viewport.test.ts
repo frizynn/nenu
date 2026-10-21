@@ -89,7 +89,7 @@ describe("useAppViewport", () => {
     expect(top()).toBe("110px");
   });
 
-  it("drops a height read while zoomed once no field holds the keyboard", () => {
+  it("drops a height read while zoomed once no field holds the keyboard, and keeps the offset it had", () => {
     renderHook(useAppViewport);
     openKeyboard();
     act(() => field.blur());
@@ -100,7 +100,20 @@ describe("useAppViewport", () => {
     });
     flush();
     expect(height()).toBe("");
-    expect(top()).toBe("");
+    expect(top()).toBe("40px");
+  });
+
+  it("follows the keyboard while a frame holds focus, since its own field may hold the keyboard up", () => {
+    const frame = document.body.appendChild(document.createElement("iframe"));
+    renderHook(useAppViewport);
+    act(() => frame.focus());
+    act(() => {
+      viewport.height = 480;
+      viewport.dispatchEvent(new Event("resize"));
+    });
+    flush();
+    expect(height()).toBe("480px");
+    frame.remove();
   });
 
   it.each([
