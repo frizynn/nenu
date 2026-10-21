@@ -19,7 +19,7 @@ All notable changes to Nenu are recorded here. The format follows
 - On a phone a coordinator opens its page (its work and Open chat) from the project page and the drawer; Home reaches a project's coordinators in 2 taps, one more for each coordinator they sit under (020e76e4, df3ba4b5).
 - A project's row on Home always opens the project; its page on a phone heads with what waits on you and leaves the goal out (63be049c, 020e76e4).
 - Less on a phone's first screen: no idle count in Home's headline, no date, no History or task counts in the drawer, no workspace or agent counts in its footer, and Close coordinator moved to the end of its page (63be049c, 020e76e4).
-- A coordinator's page on a phone offers New thread and New coordinator under it (020e76e4).
+- A coordinator's page on a phone offers New thread and New coordinator under it (0060e6f9).
 
 ## [1.36.0] - 2026-10-21
 
