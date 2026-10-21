@@ -166,6 +166,11 @@ async function startTurn(pid: number, seconds: number) {
 }
 
 async function openDialog(pid: number, nonce: string) {
+  // A fresh conversation: one that saw its earlier dialogs refused stops asking for the tool.
+  const before = sessionFile(pid)?.sessionId;
+  await typeRaw("/clear", true);
+  await until(() => sessionFile(pid)?.sessionId !== before, 15_000, 100);
+  await sleep(1000);
   // Not the nonce itself: the dialog's prompt must not count as a delivery of the message.
   await typeRaw(`Use the Bash tool to run exactly: touch dialog-${nonce.split("").reverse().join("")}.txt`, true);
   await until(() => sessionFile(pid)?.status === "waiting", 30_000, 100);
