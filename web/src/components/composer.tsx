@@ -1117,7 +1117,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const ids = new Set(rows.map((message) => message.id));
       setRecalled((known) => new Set([...known, ...ids]));
       for (const item of listLocalSends(sendScope)) if (item.queueId && ids.has(item.queueId)) removeLocalSend(sendScope, item.id);
-      const back = result.messages ? takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId) : { text: result.text };
+      const back = result.messages ? takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId)
+        : { text: result.text, note: keep ? undefined : "Claude's queue didn't say which words were this message: everything that came back is in your box." };
       if (back.text) restoreIntoComposer(back.text);
       if (back.note) setStatus(back.note, "info");
       focusInputEnd();

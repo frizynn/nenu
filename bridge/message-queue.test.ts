@@ -432,6 +432,17 @@ test("the journal confirms a paused delivery and records what the CLI's queue di
   });
 });
 
+// A take-back recalls what may still wait in Claude's queue (ADR 0118), never a row the journal said was read.
+test("confirm with a list of prior states changes only a row in one of them", async () => {
+  await withQueue(async (queue) => {
+    await queue.add(row);
+    await queue.tick(readyNow, async () => ({ status: "uncertain" as const, error: "Check Terminal." }));
+    await queue.confirm("one", "absorbed");
+    await queue.confirm("one", "recalled", [undefined, "enqueued"]);
+    expect((await queue.recent("scope"))[0]).toMatchObject({ id: "one", native: "absorbed" });
+  });
+});
+
 test("until answers on the row's first move, or at the deadline", async () => {
   await withQueue(async (queue) => {
     await queue.add(row);

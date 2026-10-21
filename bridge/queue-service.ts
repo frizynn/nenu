@@ -1,7 +1,7 @@
 import { queueReadiness } from "./queue-readiness.ts";
 import { PaneWrites } from "./pane-writes.ts";
 import { join } from "node:path";
-import { MessageQueue, type Exclusive, type QueuedMessage, type Verdict } from "./message-queue.ts";
+import { MessageQueue, RECENT_MS, type Exclusive, type QueuedMessage, type Verdict } from "./message-queue.ts";
 import { deliverQueuedMessage, sendQueuedNow, type QueueWrite } from "./queue-delivery.ts";
 import { DELIVERY_MODES, effectiveMode, nativeSettled, nativeState, normalizeMode, sendNowKeys, submitKind } from "./queue-native.ts";
 import { computeEtag } from "./http-cache.ts";
@@ -117,9 +117,11 @@ export class QueueService {
   async waitingOn(session: string, paneId: string): Promise<Array<{ id: string; text: string }> | null> {
     const current = await this.resolve(session, paneId).catch(() => null);
     if (!current || !identity(current.pane)) return null;
-    // A row just delivered may be there before the journal said so; the words decide whether it came back.
+    // A row just delivered may be there before the journal said so; the words decide whether it came
+    // back. Only a recent one: a row sent to an idle Claude never gets a queue state at all.
+    const recently = Date.now() - RECENT_MS;
     return (await this.queue.recent(scopeFor(session, current.pane)))
-      .filter((row) => row.native === "enqueued" || (row.native === undefined && row.agent === "claude"))
+      .filter((row) => row.native === "enqueued" || (row.native === undefined && row.agent === "claude" && (row.sentAt ?? 0) > recently))
       .sort((a, b) => (a.claimedAt ?? a.sentAt ?? 0) - (b.claimedAt ?? b.sentAt ?? 0))
       .map(({ id, text }) => ({ id, text }));
   }

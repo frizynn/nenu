@@ -81,11 +81,12 @@ did, because a running CSS animation keeps the compositor drawing at the display
    comes back together, as Claude hands them over: all of them into the composer (Edit), or all but
    the removed one (Remove), as Nenu sent them. If Up reached the history, its text is cleared and
    nothing is taken; if what came back holds a picture or a paste only Claude has, it stays in
-   Claude's box. Which rows came back is decided from the rows of the pane's conversation that waited
-   in Claude's queue before Up (Claude logs the recall at once), matched from the end of the words,
-   newest first, since that queue is first in, first out, so a row Claude read but the journal never confirmed,
-   being older, is not taken for them unless its words repeat theirs. Those rows are recalled
-   in the same request, so no page draws them as waiting there.
+   Claude's box. Which rows came back is decided from the rows of the pane's conversation that may
+   wait in Claude's queue, read before Up because Claude logs the recall at once: those the journal
+   saw enqueued, and those delivered in the last ten minutes it has not placed yet. They are matched
+   from the end of the words, newest first, since that queue is first in, first out; an older row
+   Claude already read is taken only if its words repeat theirs. Those rows are recalled in the same
+   request, so no page draws them as waiting there.
 6. **A message Claude has read is not edited from Nenu.** Rewind is a menu read by truncated text and
    position that forks the conversation; it waits for a protocol that can name the message.
 
