@@ -268,6 +268,10 @@ describe("a coordinator under the project", () => {
       { project: "hub", coordinator: { id: "L", title: "Lead" }, line: 5, text: "Old plan", answer: "shipped", links: [], group: "done", state: "done" },
     ] })),
     http.get("/api/org/summary", () => HttpResponse.json({ ok: true, coordinator: null, usage: null, status: null, threads: [] })),
+    http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: true, editable: false, broken: 0, routines: [
+      { name: "lead-daily", trigger: "schedule", to: "node:Lead", parent: "", prompt: "Report.", schedule: "daily 09:00", events: [], enabled: true, lastRun: "", nextRun: "" },
+      { name: "elsewhere", trigger: "schedule", to: "root", parent: "", prompt: "Other.", schedule: "daily 10:00", events: [], enabled: true, lastRun: "", nextRun: "" },
+    ] })),
   );
 
   it("holds on a phone what its page held, in a Status tab that counts what waits on you", async () => {
@@ -282,6 +286,10 @@ describe("a coordinator under the project", () => {
     // The waiting ask is not said twice: the status card lists the others.
     expect(screen.getAllByText("Which plan?")).toHaveLength(1);
     expect(screen.getByRole("region", { name: "Coordinator status" })).toBeInTheDocument();
+    // Only the routines that reach it.
+    const routines = within(await screen.findByRole("region", { name: "Routines" }));
+    expect(routines.getByRole("button", { name: /lead-daily/ })).toBeInTheDocument();
+    expect(routines.queryByRole("button", { name: /elsewhere/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close coordinator…" })).toBeInTheDocument();
     // Its Threads start new work under it.
     await user.click(screen.getAllByRole("tab", { name: /^Threads/ })[0]!);

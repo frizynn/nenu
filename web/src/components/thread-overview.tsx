@@ -92,8 +92,8 @@ function ThisThread({ thread, pane, pr, reading, parent, coordinating, now = Dat
             <span className="truncate">{parent.title}</span><ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
         </Row>}
-        {/* The project coordinator opens no pull request of its own. */}
-        {thread && <Row name="Pull request">
+        {/* The project coordinator opens no pull request of its own, and a coordinator rarely does. */}
+        {thread && (!coordinating || pr) && <Row name="Pull request">
           {!pr ? <span className="text-muted-foreground">Not opened yet</span>
             : pr.url ? <a href={pr.url} target="_blank" rel="noreferrer" className="overview-link">{prName(pr)}</a>
             : <span>{prName(pr)}</span>}

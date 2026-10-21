@@ -74,16 +74,15 @@ export function CoordinatorSections({ project, thread, asks, panes, session, rea
         <RoutinesPanel routines={routines} shown={reaching} threads={project.threads} readOnly={readOnly} empty="No routine reaches this coordinator." narrow />
       </div>
     </OverviewCard>}
-    {/* Named apart from the STATUS.md region inside it. */}
-    <OverviewCard label="Coordinator status" head="Status">
-      <div className="px-3.5 pb-3">
-        <CoordinatorHead project={project} coordinatorId={id} status={status} usage={usage} listsAgents={false} waitingApart
-          asks={asks} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
-          onOpenStatusNode={(node) => navigate(nodePath(project.slug, node, session))} />
-        {thread && <OwnReport project={project} thread={thread} summary={read.summaries.get(thread.id)} />}
-        {!status && !thread?.verdict && <p className="text-footnote text-muted-foreground">This coordinator has no STATUS.md yet.</p>}
-      </div>
-    </OverviewCard>
+    {/* Its card and STATUS.md are cards of their own: no frame around them. Named apart from the
+        STATUS.md region inside. */}
+    <section aria-label="Coordinator status">
+      <CoordinatorHead project={project} coordinatorId={id} status={status} usage={usage} listsAgents={false} waitingApart
+        asks={asks} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
+        onOpenStatusNode={(node) => navigate(nodePath(project.slug, node, session))} />
+      {thread && <OwnReport project={project} thread={thread} summary={read.summaries.get(thread.id)} />}
+      {!status && !thread?.verdict && <p className="px-1 text-footnote text-muted-foreground">This coordinator has no STATUS.md yet.</p>}
+    </section>
     {node && !readOnly && <div className="flex flex-wrap gap-1 px-1">
       {movable && <button type="button" className="quiet-action" aria-haspopup="dialog" onClick={() => setMoving(true)}><ArrowRight aria-hidden className="size-4" />Move…</button>}
       <button type="button" className="quiet-action text-destructive" aria-haspopup="dialog" onClick={() => setClosing(true)}>Close coordinator…</button>
