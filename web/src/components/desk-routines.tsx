@@ -22,13 +22,15 @@ import { cn } from "@/lib/utils";
  * reaches and its prompt. A routine is created and its command approved at a terminal, where approving
  * a command is the person's own step.
  */
-export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
+export function RoutinesPanel({ routines, shown, threads, readOnly, empty, narrow = false }: {
   routines: Routines;
   /** The routines this page lists, out of the project's. */
   shown: (list: readonly RoutineView[]) => RoutineView[];
   threads: readonly ProjectThreadView[];
   readOnly: boolean;
   empty: string;
+  /** A column, not a page (a chat's panel or tab): the detail opens under the list, and the list is not explained. */
+  narrow?: boolean;
 }) {
   const [params, setParams] = useSearchParams();
   const [failed, setFailed] = useState<string>();
@@ -38,7 +40,8 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
   const listed = list ? shown(list.routines) : [];
   // The first routine opens beside the list until another is picked; closing it leaves `routine=` empty.
   const asked = params.get("routine");
-  const open = asked === null ? listed[0] : listed.find((routine) => routine.name === asked);
+  // A column opens none until one is picked.
+  const open = asked === null ? (narrow ? undefined : listed[0]) : listed.find((routine) => routine.name === asked);
   const select = (name?: string) => setParams((current) => {
     const kept = new URLSearchParams(current);
     kept.set("routine", name ?? "");
@@ -58,9 +61,9 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
   const line = (text: string) => <p className="px-1 text-subhead text-muted-foreground">{text}</p>;
   const editable = !readOnly && list?.editable === true;
 
-  return <div className={cn("grid items-start gap-5", open && "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]")}>
+  return <div className={cn("grid items-start", narrow ? "gap-3" : "gap-5", open && !narrow && "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]")}>
     <div className="min-w-0">
-      <p className="mb-3 px-1 text-footnote text-muted-foreground">What runs on its own: on a schedule, or when a pull request changes. Each one sends its prompt to whom it names.</p>
+      {!narrow && <p className="mb-3 px-1 text-footnote text-muted-foreground">What runs on its own: on a schedule, or when a pull request changes. Each one sends its prompt to whom it names.</p>}
       {failed && <p role="alert" className="mb-3 px-1 text-footnote text-destructive">{failed}</p>}
       {!list && !error ? line("Reading…")
         : error ? line(error)

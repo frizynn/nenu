@@ -4,13 +4,14 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
-import { orgTreeSeed, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { herdSeed } from "./scenario.ts";
 
 // How a phone reaches a coordinator, over projects shaped like the operator's on 2026-10-21: one
 // whose running project coordinator organizes open coordinators (one nested), one whose running
 // coordinator only has workers, and a quiet one. Walks Home, the drawer, the project and each
-// coordinator at 390x844, counting taps from Home (2, and one more per coordinator it is nested in)
-// and from the drawer (3), and captures every screen, plus Home at 1440. Exits 1 on any failure.
+// coordinator at 390x844, counting taps from Home (2, a nested one too: it is its own row) and from
+// the drawer (3), landing on its chat where it runs and on its page where it does not (ADR 0115), and
+// captures every screen, plus Home at 1440. Exits 1 on any failure.
 //
 //   bun scripts/e2e/phone-nav.ts [--port 8871] [--out DIR] [--tag before|after]
 
@@ -20,38 +21,6 @@ const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(
 const tag = values.tag;
 const EPOCH = Date.parse("2026-10-21T03:30:00Z");
 
-function seed(herd: DemoHerd, now: number): OrgSeed {
-  const org = orgTreeSeed(herd, now, { coordinator: true });
-  // The working demo pane is Nenu's coordinator here, so Acme's thread on it runs nowhere.
-  const acme = org.projects[0]!;
-  acme.threads = acme.threads.map((thread) => thread.id === "t-0103" ? { ...thread, workspace_id: "", tab_id: "", pane_id: "" } : thread);
-  const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
-  const node = (id: number, title: string, group: string, minutes: number) => ({
-    id: `t-${String(id).padStart(4, "0")}`, title, parent_id: "root", role: "worker", status: group === "resolved" ? "resolved" : "open", group,
-    group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes),
-    report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null,
-  });
-  return {
-    ...org,
-    answers: true,
-    asks: [{ project: "acme", coordinator: { id: "root", title: "" }, line: 4, state: "needs-decision", text: "Cuotas sin interés : recomiendo 3",
-      answer: "", links: [], actions: ["answer"], confirmed: "", mismatch: "" }],
-    projects: [
-      ...org.projects,
-      {
-        slug: "nenu", name: "Nenu", goal: "La app para ver y manejar los proyectos desde el celular", status: "active",
-        coordinator: { pane_id: herd.working, workspace_id: herd.working.split(":")[0]!, tab_id: "w1:t1" },
-        threads: [
-          ...Array.from({ length: 9 }, (_, n) => node(n + 1, `Tarea cerrada ${n + 1}`, "resolved", 600 + n * 90)),
-          node(11, "Simplificar el coordinador", "working", 3), node(12, "Chip Done", "ready-for-review", 25),
-          node(13, "Chat al final", "working", 8), node(14, "Home con Projects", "working", 1),
-        ],
-      },
-      { slug: "herdr-org", name: "Herdr Org", goal: "Organizations", status: "active", threads: Array.from({ length: 6 }, (_, n) => node(n + 1, `Hecha ${n + 1}`, "resolved", 3000 + n * 60)) },
-    ],
-  };
-}
-
 interface Step { at: string; path: string; taps: number }
 
 async function main(): Promise<void> {
@@ -59,7 +28,7 @@ async function main(): Promise<void> {
   const shots: string[] = [];
   const failures: string[] = [];
   const seen: Record<string, unknown> = {};
-  const bridge = await startTestBridge({ port, fake: true, epoch: EPOCH, org: (herd, now) => seed(herd, now) });
+  const bridge = await startTestBridge({ port, fake: true, epoch: EPOCH, org: herdSeed });
   let browser: Browser | null = null;
   try {
     browser = await launchChrome();
@@ -98,17 +67,16 @@ async function main(): Promise<void> {
     }
 
     // Each coordinator, reached from Home and from the drawer: where each tap lands, and how many it took.
-    // A coordinator is reached on its page (/project/<slug>/node/<id>), or, for a project whose only
-    // coordinator is its own, on that coordinator's chat, which the project opens on (ADR 0092).
+    // One that runs is reached on its chat; one that does not, on its page (/project/<slug>/node/<id>).
     const walks: Record<string, Step[]> = {};
-    const reached = (path: string, slug: string) => path.startsWith(`/project/${slug}/node/`) || (slug === "nenu" && path.startsWith("/pane/"));
-    // Each coordinator with the rows a person taps from the project page to it: a nested one goes
-    // through its parent's page, one tap more.
-    // The last field is the page a coordinator lands on; empty where the project opens on its chat.
+    // The project, its coordinator's row (empty where the project opens on its own coordinator's chat),
+    // the rows a person taps on the way (none: a nested coordinator is its own row on the project), and
+    // where it lands.
     const targets: ReadonlyArray<readonly [string, string, string, readonly string[], string]> = [
-      ["acme", "Acme Shop", "Project coordinator", [], "/node/root"], ["acme", "Acme Shop", "Migración de stock", [], "/node/t-0101"],
-      ["acme", "Acme Shop", "Rediseño mobile", [], "/node/t-0102"], ["acme", "Acme Shop", "Checkout", ["Rediseño mobile"], "/node/t-0105"], ["nenu", "Nenu", "", [], ""],
+      ["acme", "Acme Shop", "Project coordinator", [], "/pane/w2%3Acodex"], ["acme", "Acme Shop", "Migración de stock", [], "/project/acme/node/t-0101"],
+      ["acme", "Acme Shop", "Rediseño mobile", [], "/pane/w1%3Aidle"], ["acme", "Acme Shop", "Checkout", [], "/project/acme/node/t-0105"], ["nenu", "Nenu", "", [], "/pane/w1%3Aworking"],
     ];
+    const reached = (path: string, landing: string) => path.split("?")[0] === landing;
     for (const [slug, project, coordinator, through, node] of targets) {
       const name = coordinator || `${project} coordinator`;
       const steps: Step[] = [];
@@ -122,11 +90,11 @@ async function main(): Promise<void> {
         if (await row.count()) { await row.click(); taps++; await page.waitForTimeout(2500); }
         steps.push({ at: "home → project", path: here(page), taps });
         for (const title of coordinator ? [...through, coordinator] : []) {
-          const entry = page.locator(".task-main", { hasText: title }).first();
+          const entry = page.locator(".desk-card-open", { hasText: title }).first();
           if (await entry.count()) { await entry.click(); taps++; await page.waitForTimeout(2500); }
           steps.push({ at: `home → ${title}`, path: here(page), taps });
         }
-        if (!reached(here(page), slug) || !here(page).includes(node) || taps > 2 + through.length) failures.push(`home: ${name} took ${taps} taps and landed on ${here(page)}`);
+        if (!reached(here(page), node) || taps > 2 + through.length) failures.push(`home: ${name} took ${taps} taps and landed on ${here(page)}`);
         await shoot(page, `reach-${slug}-${(coordinator || "own").split(" ")[0]!.toLowerCase()}-home-390`);
         await context.close();
       }
@@ -146,14 +114,14 @@ async function main(): Promise<void> {
         const link = drawer.locator(`section[aria-label="${project}"] a`).filter({ hasText: new RegExp(`^${label}`) }).first();
         if (await link.count()) { await link.click(); taps++; await page.waitForTimeout(2500); }
         steps.push({ at: `drawer → ${name}`, path: here(page), taps });
-        if (!reached(here(page), slug) || taps > 3) failures.push(`drawer: ${name} took ${taps} taps and landed on ${here(page)}`);
+        if (!reached(here(page), node) || taps > 3) failures.push(`drawer: ${name} took ${taps} taps and landed on ${here(page)}`);
         await context.close();
       }
       walks[name] = steps;
     }
-    // The project and coordinator pages as a phone draws them.
+    // The project, a coordinator's chat and the page of one that does not run, as a phone draws them.
     for (const [name, path] of [["project-acme", "/project/acme"], ["coordinator-root", "/project/acme/node/root"], ["coordinator-migracion", "/project/acme/node/t-0101"],
-      ["coordinator-rediseno", "/project/acme/node/t-0102"]] as const) {
+      ["coordinator-rediseno", "/pane/w1%3Aidle?view=status"]] as const) {
       const { page, context } = await open(PHONE, path);
       await shoot(page, `${name}-390`);
       seen[`${name}Text`] = await text(page);

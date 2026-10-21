@@ -27,8 +27,10 @@ const CAP_WORD: Record<string, string> = { context_warn: "context", compaction_w
  * print. The file starts closed only when the card already says what it says (the objective, the
  * asks, the decisions), and waits for the asks, so which read lands first never changes either.
  */
-export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, readOnly, listsAgents = true, session }: {
+export function CoordinatorHead({ project, coordinatorId, status, usage, asks, summaries, onOpenNode, onOpenStatusNode, readOnly, listsAgents = true, waitingApart = false, session }: {
   project: ProjectView;
+  /** Waiting on you is drawn apart, above the card (a coordinator's chat): the card lists its other asks. */
+  waitingApart?: boolean;
   /** `root` for the project's own coordinator. */
   coordinatorId: string;
   /** False where the tree beside the card already lists its agents: the project page. */
@@ -47,7 +49,7 @@ export function CoordinatorHead({ project, coordinatorId, status, usage, asks, s
   onOpenStatusNode: (id: string) => void;
 }) {
   const mine = coordinatorAsks(asks.list, project.slug, coordinatorId);
-  const sections = asks.list ? askSections(asks.list, [project], { project: project.slug, coordinator: coordinatorId }) : [];
+  const sections = asks.list ? askSections(asks.list, [project], { project: project.slug, coordinator: coordinatorId }).filter((section) => !waitingApart || section.group !== "waiting") : [];
   const tree = orgTree(project.threads);
   const agents = coordinatorId === "root" ? tree.open : flatten(tree.open).find((node) => node.thread.id === coordinatorId)?.children ?? [];
   const says = Boolean(status?.objective || mine?.waiting.length || mine?.asks.length);

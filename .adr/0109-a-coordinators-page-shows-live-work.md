@@ -4,7 +4,8 @@
   [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md)'s Summary view (a node's own
   report at the head of its page stays). Amends [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md)
   (the coordinator card on a project page) and [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)
-  (what a card lists of its asks).
+  (what a card lists of its asks). Point 2 amended by [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md):
+  a tap on a coordinator enters its chat, which now holds this page's parts.
 - **Trail:** `web/src/components/desk-coordinator.tsx` · `web/src/components/desk-pages.tsx` ·
   `web/src/lib/asks.ts` (`unmarked`) · `web/src/components/ask-list.tsx` · `web/src/components/coordinator-status.tsx` ·
   `web/src/lib/org-tree.ts` (`nodeState`: `closing`) · `scripts/e2e/coordinator-page.ts`
