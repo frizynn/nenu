@@ -31,7 +31,7 @@ function NavMachine({ machine }: { machine: MachineView }) {
   return (
     <section aria-label={machine.label} className="nav-group" data-machine>
       <h3 className="nav-label">
-        <StatusDot status={DOT[machine.state]} surface="bg-transparent" />
+        <StatusDot status={DOT[machine.state]} />
         {machine.label}
         {machine.state === "connected" && chats.length > 0 && <span className="nav-count">{chats.length}</span>}
       </h3>

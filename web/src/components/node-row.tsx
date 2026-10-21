@@ -1,23 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight, Info, ChatCircle, Ellipsis, type IconComponent } from "@/components/ui/icon";
+import { ChevronRight, Info, ChatCircle, Ellipsis, type IconComponent } from "@/components/ui/icon";
 
 import { ActionRow } from "@/components/action-sheet-rows";
-import { StatusDot } from "@/components/status-badge";
+import { StateMark as NodeDot } from "@/components/status-badge";
 import { BottomSheet } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { NodeState } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 
-const DOT_STATUS = { needs: "blocked", working: "working", idle: "idle" } as const;
-
-/** A node's mark: red when it needs you, blue for review, a green ring while only its merge is left or
- *  once it merged and is about to close, the agent's dot otherwise, a grey check once resolved. */
-export function NodeDot({ state, className = "size-1.5" }: { state: NodeState; className?: string }) {
-  if (state === "resolved") return <Check aria-hidden data-node-state="resolved" className={cn("shrink-0 text-muted-foreground", className, "size-3")} />;
-  if (state === "review") return <span aria-hidden className={cn("inline-flex shrink-0 rounded-full bg-primary", className)} />;
-  if (state === "merging" || state === "closing") return <span aria-hidden data-node-state={state} className={cn("inline-flex shrink-0 rounded-full border border-status-done", className)} />;
-  return <StatusDot status={DOT_STATUS[state]} surface="bg-transparent" className={className} />;
-}
+/** A node's mark (status-badge.tsx): one glyph per state, the same in every list. */
+export { NodeDot };
 
 export interface Fold {
   open: boolean;

@@ -174,7 +174,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
           aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
-          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{attention}</span>}
+          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{attention}</span>}
         </Link>}
         {!phone && !!data.projects?.length && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
           <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
@@ -309,7 +309,7 @@ function AsksRow({ data, current }: { data: HomeData; current: boolean }) {
       aria-label={waiting > 0 ? `Your asks, ${waiting} ${waiting === 1 ? "waits" : "wait"} on you` : undefined}>
       <span className="nav-lead"><ListChecks aria-hidden size={16} /></span>
       <span className="nav-row-text">Your asks</span>
-      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{waiting}</span>}
+      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{waiting}</span>}
     </Link>
   );
 }
@@ -470,7 +470,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
-          {status && <StatusDot status={status} surface="bg-transparent" />}
+          {status && <StatusDot status={status} />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
           {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
           {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}

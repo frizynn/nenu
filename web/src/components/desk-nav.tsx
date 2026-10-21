@@ -82,7 +82,7 @@ function DeskProjects({ data, now, onNewProject }: { data: HomeData; now: number
             <span className="nav-lead"><OpeningMark to={to}><ProjectGlyph slug={project.slug} pick={project} /></OpeningMark></span>
             <span className="nav-row-text">{project.name}</span>
             <span className="nav-row-meta" aria-hidden>
-              {status && <StatusDot status={status} surface="bg-transparent" />}
+              {status && <StatusDot status={status} />}
               {at > 0 && timeAgoShort(at, now)}
             </span>
             <span className="sr-only">{[status && STATUS_LABEL[status], at > 0 && timeAgo(at, now)].filter(Boolean).map((part) => `, ${part}`).join("")}</span>
@@ -146,7 +146,7 @@ function prMark(pr: ThreadPr): { glyph: typeof GitPullRequest; tone?: "failing" 
 }
 
 /**
- * A chat: its state as a small dot, its one name, a quiet +1 when it finished or asked for you since
+ * A chat: its state as a small still glyph, its one name, a quiet +1 when it finished or asked for you since
  * you last opened it (the desk's answer to an agent finishing elsewhere, instead of a toast), and a
  * pull request's glyph when it has one open: a draft's own glyph, red while checks fail or changes
  * are asked, green once approved, grey otherwise.
@@ -159,8 +159,10 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
   const word = ask ? ASK[ask].word : state ? STATE_LABEL[state].toLowerCase() : pane && STATUS_LABEL[pane.status];
   const pr = thread?.pr && (thread.pr.state === "open" || thread.pr.state === "draft") ? thread.pr : undefined;
   const mark = pr && prMark(pr);
+  // Only what is alive reads in full ink: a chat that waits, works, finished unseen or has something to review.
+  const live = ask !== undefined || (state ? state !== "idle" && state !== "resolved" : pane !== undefined && pane.status !== "idle" && pane.status !== "unknown") || chat.unread;
   return (
-    <Link className="nav-row" to={to} aria-current={current ? "page" : undefined}>
+    <Link className="nav-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
       <span className="nav-lead">
         <OpeningMark to={to}>{state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />}</OpeningMark>
       </span>
