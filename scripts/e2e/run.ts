@@ -4168,7 +4168,7 @@ async function liveJournal(source: string | undefined): Promise<void> {
   const result = await withBench((bridge, browser) => liveJournalBench(bridge, browser, outDir, source), CAPTURE_EPOCH);
   await writeFile(join(outDir, "live-journal.json"), JSON.stringify(result, null, 2));
   for (const row of result.rows) console.log(`${row.sizeMb} MB ${row.view}: ${row.latenciesMs.join(" / ")} ms · bridge cpu ${row.bridgeCpuMs} ms, rss ${row.bridgeRssMb} MB`);
-  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.detail ? `  (${c.detail})` : ""}`);
   console.log(result.shots.join("\n"));
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
