@@ -68,8 +68,8 @@
   --motion-panel: 180ms;
   --motion-page: 280ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
-  /* The one motion that lasts: the glow across a running turn's live line (Glow, ADR 0117), one pass
-     every 2.2 s in 30 steps, so it costs a few composited frames a second and nothing off screen. */
+  /* The one motion that lasts (ADR 0117): the glow across a running turn's live line and the working
+     mark's turn, one pass every 2.2 s in 30 steps, a few composited frames a second, none off screen. */
   --motion-glow: 2200ms;
   /* Grounds in three steps of grey, as the Cursor-style board's tokens sheet draws them: the sidebar
      (--workbench-sidebar) below the page, raised surfaces (cards, the composer, bubbles) above it and
@@ -474,6 +474,15 @@
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .glow-window { animation: none; opacity: 0; }
   .glow-copy { animation: none; }
+}
+
+/* Work in progress (WorkingMark in status-badge.tsx): the dashed circle's six dashes turn a sixth of a
+   turn per pass, in the glow's length and steps, so each pass ends where the next begins. Transform
+   alone; on the page only while the mark is on screen on a shown page. */
+@keyframes mark-turn { from { transform: rotate(0deg); } to { transform: rotate(60deg); } }
+.mark-turn { animation: mark-turn var(--motion-glow) steps(30) infinite; }
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .mark-turn { animation: none; }
 }
 
 /* A sub-16px editable field makes iOS zoom the entire app on focus. Keep browser zoom available

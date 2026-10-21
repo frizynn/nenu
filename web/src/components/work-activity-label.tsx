@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { formatElapsed } from "@/lib/activity";
 import { isLocked, useLocked } from "@/lib/idle";
+import { useLiveMotion } from "@/lib/live-motion";
 import { cn } from "@/lib/utils";
 
 const SECOND = 1000;
@@ -41,58 +42,14 @@ export function Elapsed({ since, prefix = "", fallback = "", fine = false, class
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 
-// Every glow on the page shares one observer: a glow moves only while it is on screen, the page is
-// shown, the idle lock is down and motion is not reduced (ADR 0117). Otherwise its moving copy is not
-// even in the page, so a still glow costs nothing and its words are on the page once.
-const glows = new Map<Element, { visible: boolean; set: (running: boolean) => void }>();
-let observer: IntersectionObserver | null = null;
-let reduced: MediaQueryList | null = null;
-
-function syncGlows() {
-  const still = document.hidden || isLocked() || !!reduced?.matches;
-  for (const glow of glows.values()) glow.set(glow.visible && !still);
-}
-
-function watchGlow(element: Element, set: (running: boolean) => void): () => void {
-  if (typeof IntersectionObserver === "undefined") return () => {};
-  if (!observer) {
-    observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const glow = glows.get(entry.target);
-        if (glow) glow.visible = entry.isIntersecting;
-      }
-      syncGlows();
-    });
-    reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
-    reduced?.addEventListener("change", syncGlows);
-    document.addEventListener("visibilitychange", syncGlows);
-  }
-  glows.set(element, { visible: false, set });
-  observer.observe(element);
-  return () => {
-    glows.delete(element);
-    observer?.unobserve(element);
-    if (glows.size === 0 && observer) {
-      observer.disconnect();
-      observer = null;
-      reduced?.removeEventListener("change", syncGlows);
-      reduced = null;
-      document.removeEventListener("visibilitychange", syncGlows);
-    }
-  };
-}
-
 /**
  * A live line, glowing: a light passes across its words while the agent works (ADR 0117). While it
  * runs, the words are drawn a second time in the full ink behind a window that slides over them (the
  * copy hidden from assistive tech); `layout` lays out both copies alike (a row's flex classes).
  */
 export function Glow({ children, className, layout }: { children: ReactNode; className?: string; layout?: string }) {
-  const locked = useLocked();
-  const [running, setRunning] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => (ref.current ? watchGlow(ref.current, setRunning) : undefined), []);
-  useEffect(syncGlows, [locked]);
+  const running = useLiveMotion(ref);
   return <span ref={ref} data-glow={running ? "running" : "still"} className={cn("relative min-w-0 overflow-hidden", layout, className)}>
     {children}
     {running && <span aria-hidden="true" className="glow-window">
