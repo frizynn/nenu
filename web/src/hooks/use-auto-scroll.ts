@@ -24,6 +24,11 @@ export function clamped(el: HTMLElement, lastTop: number): boolean {
   return el.scrollHeight - el.clientHeight < lastTop;
 }
 
+/** Where the list stands, short of an iOS bounce past the bottom, which no clamp can follow. */
+export function standing(el: HTMLElement): number {
+  return Math.min(el.scrollTop, el.scrollHeight - el.clientHeight);
+}
+
 /** A field the operator types in: keys there edit text, they do not scroll a list. */
 export function isTextField(node: EventTarget | null): node is HTMLElement {
   return node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement || (node instanceof HTMLElement && node.isContentEditable === true);
@@ -113,7 +118,7 @@ export function useAutoScroll<T extends HTMLElement = HTMLDivElement>(
     if (!el) return;
     const top = lastTop.current;
     const up = el.scrollTop < top;
-    lastTop.current = el.scrollTop;
+    lastTop.current = standing(el);
     const bottom = atTail(el, offset);
     if (!bottom && (!up || (autoScroll.current && (editShift() || clamped(el, top))))) {
       if (autoScroll.current) pin(el);

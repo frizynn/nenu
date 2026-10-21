@@ -8,7 +8,7 @@ import { fetchHistory } from "@/lib/api";
 import type { AgentStatus, PaneHistoryResponse, TranscriptEntry } from "@/lib/types";
 import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
-import { atTail, clamped, isTextField, useEditShift } from "@/hooks/use-auto-scroll";
+import { atTail, clamped, isTextField, standing, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
 import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
@@ -421,9 +421,9 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     if (!el) return;
     const top = lastTop.current;
     const up = el.scrollTop < top;
-    // Our own pins leave scrollTop where they put it; any other move is the reader's.
+    // Our own pins leave scrollTop where they put it; any other move is the reader's or a clamp's.
     if (Math.abs(el.scrollTop - top) >= 1) onCap.current = false;
-    lastTop.current = el.scrollTop;
+    lastTop.current = standing(el);
     // Paging and a tapped step move the list to keep the reader's place; the line is measured again.
     if (restoring.current) {
       reading.current = following.current ? null : lineAt(el, contentRef.current);
