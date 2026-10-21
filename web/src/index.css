@@ -166,6 +166,14 @@
   --glyph-pink: light-dark(oklch(0.58 0.2 350), oklch(0.76 0.15 350));
   --glyph-slate: light-dark(oklch(0.5 0.03 255), oklch(0.74 0.03 255));
 
+  /* A command a step ran, drawn as a shell reads it (lib/shell-tokens.ts): the program, its flags, its
+     arguments and words, variables and keywords in the mark hues; operators stay the line's grey. */
+  --syntax-command: var(--glyph-violet);
+  --syntax-flag: var(--glyph-amber);
+  --syntax-argument: var(--glyph-green);
+  --syntax-variable: var(--glyph-teal);
+  --syntax-keyword: var(--glyph-pink);
+
   /* ── Terminal palette ─────────────────────────────────────────────────────────────────────────
      The 16 indexed ANSI slots, emitted by lib/ansi.ts as var(--ansi-N).
 
@@ -225,6 +233,11 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-subtle-foreground: var(--subtle-foreground);
+  --color-syntax-command: var(--syntax-command);
+  --color-syntax-flag: var(--syntax-flag);
+  --color-syntax-argument: var(--syntax-argument);
+  --color-syntax-variable: var(--syntax-variable);
+  --color-syntax-keyword: var(--syntax-keyword);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-switch-off: var(--switch-off);
@@ -404,6 +417,19 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sheet-bottom-panel, .side-sheet-panel { transition: none; }
+}
+
+/* What folds open and shut in place (fold.tsx): a row above the box, a turn's work, a command's output.
+   Its height grows from nothing as a panel arrives and shrinks as a control exits, so what sits below
+   moves with it instead of jumping. Clipped only while it moves, so a settled row keeps its 44px hits;
+   no min-width either, so a wide row scrolls inside its column instead of widening it. */
+.fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
+.fold > div { min-height: 0; min-width: 0; }
+.fold:not([data-phase="open"]) > div { overflow: hidden; }
+.fold[data-phase="shutting"] { grid-template-rows: 0fr; opacity: 0; transition-duration: var(--motion-control); }
+@starting-style { .fold[data-phase="opening"] { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .fold { transition: opacity var(--motion-control) var(--motion-ease); }
 }
 
 /* A sub-16px editable field makes iOS zoom the entire app on focus. Keep browser zoom available

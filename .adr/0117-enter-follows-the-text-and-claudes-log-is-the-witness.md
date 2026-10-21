@@ -1,4 +1,4 @@
-# 0116. Enter follows the text, and Claude's log is the witness
+# 0117. Enter follows the text, and Claude's log is the witness
 
 - **Status:** Accepted (2026-10-21). Amends [ADR 0104](./0104-a-picture-travels-where-it-sits-in-the-message.md)
   (a picture's token is waited for, not timed), [ADR 0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md)

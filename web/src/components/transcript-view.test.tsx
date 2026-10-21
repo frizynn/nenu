@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { QuestionLiveContext, QuestionReplyContext } from "./transcript-question";
 import { FileMediaContext } from "@/lib/file-preview-context";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
@@ -70,8 +70,8 @@ describe("TranscriptView", () => {
     );
 
     await openWork();
-    expect(screen.getByText("Ran")).toBeInTheDocument();
-    expect(screen.getByText("git log --oneline")).toBeInTheDocument();
+    // A command's row is the command: its verb stays in the row's name, not on every line.
+    expect(screen.getByRole("button", { name: "Ran git log --oneline" })).toHaveTextContent(/^git log --oneline$/);
     // Collapsed by default — a real thread is mostly tool traffic, and expanding it all buries the prose.
     expect(screen.queryByText(/abc1234 the commit body/)).not.toBeInTheDocument();
 
@@ -110,7 +110,9 @@ describe("TranscriptView", () => {
       </PaneCwdContext>,
     );
     await openWork();
-    expect(screen.getByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
+    // Two calls fold under the line that says what they did.
+    await userEvent.click(screen.getByRole("button", { name: "Read 1 file, edited 1 file" }));
+    expect(screen.getByRole("button", { name: /^Read web/ })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
     expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent(/^Edited\s*~\/\.config\/nenu\/keys\.toml$/);
     // The row is named by what it shows, so a spoken "tap Read web src workbench.css" finds it.
     expect(screen.getByRole("button", { name: "Read web/src/workbench.css" })).toBeInTheDocument();
@@ -379,23 +381,22 @@ describe("TranscriptView — work folding", () => {
 
   it("collapses completed work while leaving the answer and measured duration visible", async () => {
     render(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    const fold = screen.getByRole("button", { name: "Worked 21s", expanded: false });
+    const fold = screen.getByRole("button", { name: "Worked for 21s", expanded: false });
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
     expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument();
     await userEvent.click(fold);
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
     await userEvent.click(fold);
-    expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument();
+    // It folds as a panel does, then leaves the page.
+    await waitFor(() => expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument());
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
 
-  it("says how long the turn worked as Worked 1m 52s, the duration a quieter tone than the word", () => {
+  it("says how long the turn worked as Worked for 1m 52s", () => {
     const long = { ...final, turn: { status: "completed" as const, durationMs: 112_000 } };
     render(<TranscriptView entries={[activity, long]} activityStatus="done" />);
-    const fold = screen.getByRole("button", { name: "Worked 1m 52s", expanded: false });
-    expect(within(fold).getByText("1m 52s")).toHaveClass("text-subtle-foreground");
-    expect(fold).not.toHaveTextContent("for");
+    expect(screen.getByRole("button", { name: "Worked for 1m 52s", expanded: false })).toHaveTextContent(/^Worked for 1m 52s$/);
   });
 
   it("says a stopped turn stopped, and after how long when the journal measured it", () => {
@@ -406,14 +407,13 @@ describe("TranscriptView — work folding", () => {
     expect(screen.getByRole("button", { name: "Stopped" })).toBeInTheDocument();
   });
 
-  it("lets running work flow in the conversation, and hangs it from the rail only once finished and reopened", async () => {
+  it("lets the work flow in the conversation under its line, with no rail or indent, running or reopened", async () => {
     const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
-    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("border-l");
-    expect(container.querySelector("[data-work-log]")!.parentElement).not.toHaveClass("pl-3");
+    expect(container.querySelector("[data-step]")!.closest(".border-l, .pl-3")).toBeNull();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(container.querySelector("[data-work-log]")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
-    expect(container.querySelector("[data-work-log]")!.parentElement).toHaveClass("border-l");
+    await waitFor(() => expect(container.querySelector("[data-step]")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "Worked for 21s" }));
+    expect(container.querySelector("[data-step]")!.closest(".border-l, .pl-3")).toBeNull();
   });
 
   it("leaves no empty box under a message that names no media", () => {
@@ -426,46 +426,50 @@ describe("TranscriptView — work folding", () => {
   it("animates the work it opens only when you open it, never on its own", async () => {
     const { container, rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
     // Open by itself while it runs: it draws in place.
-    expect(container.querySelector("[data-work-log]")).not.toHaveClass("animate-in");
+    const turnBody = () => container.querySelector("[data-work-turn] > .fold");
+    expect(turnBody()).toHaveAttribute("data-phase", "open");
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
-    expect(container.querySelector("[data-work-log]")).toHaveClass("animate-in", "motion-reduce:animate-none");
+    await waitFor(() => expect(turnBody()).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "Worked for 21s" }));
+    // Tapped, it folds open as a panel does (index.css's .fold), then settles.
+    expect(turnBody()).toHaveAttribute("data-phase", "opening");
+    await waitFor(() => expect(turnBody()).toHaveAttribute("data-phase", "open"));
   });
 
-  it("opens active work, then collapses it automatically on completion", () => {
+  it("opens active work, then collapses it automatically on completion", async () => {
     const { rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
-    expect(screen.getByRole("button", { name: /^Thinking|^Working/, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Working/, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked 21s", expanded: false })).toBeInTheDocument();
-    expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Checking the import graph.")).not.toBeInTheDocument());
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
 
   it("preserves an explicit open choice so completion does not remove work being read", async () => {
     const { rerender } = render(<TranscriptView entries={[activity]} activityStatus="working" />);
-    const fold = screen.getByRole("button", { name: /^Thinking|^Working/, expanded: true });
+    const fold = screen.getByRole("button", { name: /^Working/, expanded: true });
     await userEvent.click(fold);
     await userEvent.click(fold);
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
     expect(screen.getByText("The dependency cycle is fixed.")).toBeVisible();
   });
 
   it("a query opens completed work and its matching thinking detail, then restores the fold", () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" query="dependency direction" />);
-    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Thinking: /, expanded: true })).toBeInTheDocument();
     expect(screen.getByText("dependency direction")).toBeVisible();
     rerender(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked 21s", expanded: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: false })).toBeInTheDocument();
   });
 
   it("a focused tool entry opens all nested disclosures and has one scroll marker", () => {
     const action = turn({ uuid: "tool-entry", role: "assistant", turnId: "native-turn", parts: [{ kind: "tool", name: "Read", summary: "src/app.ts", result: { text: "source contents" } }] });
     const { container } = render(<TranscriptView entries={[action, final]} activityStatus="done" focusedUuid="tool-entry" />);
-    expect(screen.getByRole("button", { name: /^Worked 21s/, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Worked for 21s/, expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read src/app.ts", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("source contents")).toBeVisible();
     expect(container.querySelectorAll('[data-turn="tool-entry"]')).toHaveLength(1);
@@ -473,10 +477,10 @@ describe("TranscriptView — work folding", () => {
 
   it("preserves an expanded fold when older unrelated turns are prepended", async () => {
     const { rerender } = render(<TranscriptView entries={[activity, final]} activityStatus="done" />);
-    await userEvent.click(screen.getByRole("button", { name: "Worked 21s" }));
+    await userEvent.click(screen.getByRole("button", { name: "Worked for 21s" }));
     const old = turn({ uuid: "old-work", role: "assistant", turnId: "old-turn", parts: [{ kind: "tool", name: "Read", summary: "old.ts" }], turn: { status: "completed" } });
     rerender(<TranscriptView entries={[old, activity, final]} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: "Worked 21s", expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Worked for 21s", expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Checking the import graph.")).toBeVisible();
   });
 });
@@ -554,6 +558,14 @@ describe("journal media", () => {
       turn({ uuid: "call", role: "assistant", parts: [{ kind: "tool", name: "Read", summary: "/tmp/shot.png", result: { text: "", attachments: [{ kind: "image", index: 0, mediaType: "image/png" }] } }] }),
     ]} />));
     expect(await screen.findByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=call&n=0");
+  });
+
+  it("keeps what a folded run of calls returned in sight under its line, the turn open", () => {
+    const read = (uuid: string, summary: string) => turn({ uuid, role: "assistant", turnId: "t", turn: { status: "running" },
+      parts: [{ kind: "tool", name: "Read", summary, result: { text: "", attachments: [{ kind: "image" as const, index: 0 }] } }] });
+    render(withViewer(<TranscriptView activityStatus="working" entries={[turn({ uuid: "ask", parts: [{ kind: "text", text: "shots" }] }), read("a", "a.png"), read("b", "b.png")]} />));
+    expect(screen.getByRole("button", { name: "Read 2 files", expanded: false })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Images these steps returned" }).querySelectorAll("img")).toHaveLength(2);
   });
 
   it("keeps the images of folded work visible as one gallery for the turn", () => {
@@ -696,12 +708,16 @@ describe("TranscriptView — the work timeline", () => {
   ];
   const clock = (hm: string) => new Date(at(hm)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
-  it("opens a finished turn onto one row per step, with no fold of tool calls inside it", async () => {
+  it("opens a finished turn onto the one line of its calls, the thought among them, each a tap from its output", async () => {
     render(<TranscriptView entries={settled} activityStatus="done" />);
-    const fold = screen.getByRole("button", { name: /^Worked 4m 12s/, expanded: false });
+    const fold = screen.getByRole("button", { name: /^Worked for 4m 12s/, expanded: false });
     // The failure shows on the folded line, before anything is opened.
     expect(fold).toHaveTextContent("1 failed");
     await userEvent.click(fold);
+    // The line counts the calls; the thought that led into them folds with them.
+    const run = screen.getByRole("button", { name: "Searched 1 pattern, edited 1 file, ran 1 command, 1 failed", expanded: false });
+    expect(screen.queryByRole("button", { name: /^Searched safe-area-inset-bottom/ })).not.toBeInTheDocument();
+    await userEvent.click(run);
     expect(screen.getByRole("button", { name: "Thinking: The inset is counted twice." })).toHaveTextContent("The inset is counted twice.");
     expect(screen.getByRole("button", { name: /^Searched safe-area-inset-bottom/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Edited / })).toHaveTextContent("index.css");
@@ -723,15 +739,13 @@ describe("TranscriptView — the work timeline", () => {
     expect(container.textContent).not.toMatch(/\b0\d:\d\d/);
   });
 
-  it("keeps the finished turn's time beside its answer's Copy, not on its Worked line", () => {
+  it("puts the finished turn's time at the end of its Worked line, not beside its answer's Copy", () => {
     const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
-    expect(screen.getByRole("button", { name: /^Worked 4m 12s/ })).not.toHaveTextContent(clock("09:09"));
+    const line = screen.getByRole("button", { name: /^Worked for 4m 12s/ }).parentElement!;
+    expect(line).toHaveTextContent(clock("09:09"));
     const answer = container.querySelector('[data-work-turn] [data-speaker="assistant"]') as HTMLElement;
-    const copy = within(answer).getByRole("button", { name: "Copy message" });
-    expect(copy.parentElement).toHaveTextContent(clock("09:09"));
-    const times = container.querySelectorAll("[data-work-turn] time");
-    expect(times).toHaveLength(1);
-    expect(answer).toContainElement(times[0] as HTMLElement);
+    expect(answer).not.toHaveTextContent(clock("09:09"));
+    expect(container.querySelectorAll("[data-work-turn] time")).toHaveLength(1);
   });
 
   it("gives a turn that ends in the minute it started no second time, since its question already shows it", () => {
@@ -740,7 +754,7 @@ describe("TranscriptView — the work timeline", () => {
       step("look", "09:05", [{ kind: "tool", name: "Grep", summary: "x", result: { text: "y" } }]),
       step("final", "09:05", [{ kind: "text", text: "Done." }], { phase: "final_answer", turn: { status: "completed", durationMs: 17_000 } }),
     ]} />);
-    expect(screen.getByRole("button", { name: /^Worked 17s/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Worked for 17s/ })).toBeInTheDocument();
     expect(screen.getAllByText(clock("09:05"))).toHaveLength(1);
     expect(container.querySelector("[data-work-turn] time")).toBeNull();
   });
@@ -762,7 +776,7 @@ describe("TranscriptView — the work timeline", () => {
     expect(screen.getByRole("button", { name: /^Read / })).toBeInTheDocument();
     // Folding the turn keeps the live row: it is what the operator glances at.
     await userEvent.click(header);
-    expect(screen.queryByRole("button", { name: /^Read / })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Read / })).not.toBeInTheDocument());
     expect(container.querySelector("[data-live-step]")).toHaveTextContent("Running");
   });
 
@@ -851,6 +865,7 @@ describe("TranscriptView — the work timeline", () => {
   it("draws no text tone from alpha: times, the day, the work line and every step are solid", async () => {
     const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
     await userEvent.click(screen.getByRole("button", { name: /^Worked / }));
+    await userEvent.click(screen.getByRole("button", { name: /^Searched 1 pattern/ }));
     await userEvent.click(screen.getByRole("button", { name: /^Ran bun run test/ }));
     const faded = [...container.querySelectorAll("[class]")].flatMap((el) => [...el.classList].filter((name) => /^text-(muted-foreground|foreground|destructive)\/\d+$/.test(name)));
     expect(faded).toEqual([]);

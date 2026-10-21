@@ -132,7 +132,7 @@ export const LOCAL_DELAYS_MS: readonly number[] = [0, 20, 20, 30, 30, 50, 50, 10
 export const VERIFY_BUDGET_MS = LOCAL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
 /**
  * The bound on a wait for something the terminal or the CLI will do: paint the text, draw a picture's
- * token, empty the box, log the message (ADR 0116). It is no guess at how long that takes, which a
+ * token, empty the box, log the message (ADR 0117). It is no guess at how long that takes, which a
  * loaded host stretches past any guess: every wait ends on the first look that sees it, and the bound
  * is counted in the pauses between looks, so where looks themselves are slow a wait only lasts longer.
  */
@@ -338,7 +338,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const paste = adapter?.bracketedPaste;
   const now = deps.now ?? Date.now;
   const turn = deps.turn?.();
-  // Enter right behind the text (ADR 0116) where the log can witness the send and Claude is idle, no
+  // Enter right behind the text (ADR 0117) where the log can witness the send and Claude is idle, no
   // turn and no background work: then nothing but the operator opens a dialog, and the pre-flight read
   // is the last look. Mid-turn a tool's permission prompt may open under the text, so Enter waits.
   let logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request) && idle(turn);
@@ -348,7 +348,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const retry = prior?.typeAttempted === true && prior.typedAt !== undefined;
   const first = deps.received && (logFirst || retry) ? await look(deps.received, prior?.typedAt ?? now(), request.text) : null;
   if (first?.kind === "unreadable") logFirst = false;
-  // Logged or queued, an earlier try reached the agent (ADR 0116): it is sent, and nothing is typed or
+  // Logged or queued, an earlier try reached the agent (ADR 0117): it is sent, and nothing is typed or
   // refused, whatever the screen or the CLI shows now. Its silence proves nothing: the bytes may still
   // be on their way.
   if (retry && first) {
@@ -356,7 +356,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
     if (earlier) return earlier;
   }
   // With Enter right behind it, typed text goes as a paste whatever its length: 760 characters typed
-  // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0116).
+  // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0117).
   const pasted = (text: string) => logFirst || request.paste === true || paste === true || (typeof paste === "function" && paste(text));
   // Pictures in their places go piece by piece, each path pasted alone (ADR 0104); else one write.
   const pieces = adapter?.pastesImagePaths && hasPlacedPictures(request.text) ? sendPieces(request.text) : null;
@@ -493,7 +493,7 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
 /**
  * A picture that never showed may still be on its way: a starved Claude reads it for longer than the
  * bound and then draws its token or path into the box the send just cleared (measured at 5% of a core,
- * ADR 0116). Watch the box for one more bound and clear what of this send arrives late, through
+ * ADR 0117). Watch the box for one more bound and clear what of this send arrives late, through
  * `unsent` as any stop does; anything else there is the operator's and stays.
  */
 async function afterLatePicture(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: GuardedSendResult): Promise<GuardedSendResult> {
@@ -525,7 +525,7 @@ function onlyItsPictures(sent: string, draft: string): boolean {
  * it attaches it and may show its path meanwhile; a path that sits at the end of the box for
  * {@link PATH_SETTLED_MS} once the CLI no longer says it is pasting is "path". While it says so the
  * bound does not run, up to {@link PASTING_CAP_MS}: a starved Claude reads a picture for longer than
- * 15 s (ADR 0116). Neither: null.
+ * 15 s (ADR 0117). Neither: null.
  */
 async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string): Promise<"token" | "path" | null> {
   let shownFor: number | null = null;
@@ -647,7 +647,7 @@ function idle(turn: ReturnType<NonNullable<GuardedSendDeps["turn"]>>): boolean {
 }
 
 /**
- * Enter right behind the text, at an idle Claude whose log witnesses the send (ADR 0116). The
+ * Enter right behind the text, at an idle Claude whose log witnesses the send (ADR 0117). The
  * pre-flight read, or the sweep's, was the last look before the text, as a read used to be the last
  * look before Enter; the terminal hands Claude the text and the Enter in order however late it reads
  * them, so there is no window to wait out first. Sent once the log has this message or Claude queued

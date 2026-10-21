@@ -4,7 +4,7 @@
   its claim that `pane.send_text` cannot carry a bracketed paste, and its idea that a paste
   placeholder consistent with the message proves the message arrived. Keeps 0010's placeholder
   grammar as the evidence for Enter and its refusal to chunk sends.
-- **Amended by:** [ADR 0116](./0116-enter-follows-the-text-and-claudes-log-is-the-witness.md): on a pane with a log, Enter follows the text and the log is read before the box.
+- **Amended by:** [ADR 0117](./0117-enter-follows-the-text-and-claudes-log-is-the-witness.md): on a pane with a log, Enter follows the text and the log is read before the box.
 - **Trail:** `web/src/lib/harness/claude/paste.ts` (`sendsAsOnePaste`) · `bridge/guarded-send.ts`
   (`logged`) · `bridge/delivery-check.ts` · `bridge/routes/reply.ts` (`claudeLog`) ·
   `bridge/agent-state.ts` (`claudeSessionId`)

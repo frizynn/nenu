@@ -103,7 +103,7 @@ export type LogLook =
 export type LogReader = (since: number, sent: string) => Promise<LogLook>;
 
 /**
- * Looks at a Claude session's log for one message (ADR 0076, ADR 0116). Each call reads only what was
+ * Looks at a Claude session's log for one message (ADR 0076, ADR 0117). Each call reads only what was
  * appended since the last one and answers that message logged, or queued, at or after `since`; other
  * messages are skipped. "none" only from a log that is read back to `since`.
  */

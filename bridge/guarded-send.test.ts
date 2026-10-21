@@ -371,7 +371,7 @@ describe("guardedSend", () => {
     expect(term.keys().flat()).not.toContain("Enter");
   });
 
-  test("a picture that shows only after the send gave up and cleared the box is cleared too (ADR 0116)", async () => {
+  test("a picture that shows only after the send gave up and cleared the box is cleared too (ADR 0117)", async () => {
     const term = new Term();
     // Past the picture's bound and the sweep: a starved Claude draws the token late.
     term.pictureReads = 80;
@@ -383,7 +383,7 @@ describe("guardedSend", () => {
     expect(term.keys().flat()).not.toContain("Enter");
   });
 
-  test("a picture read for longer than the bound while Claude says Pasting… is still attached (ADR 0116)", async () => {
+  test("a picture read for longer than the bound while Claude says Pasting… is still attached (ADR 0117)", async () => {
     const term = new Term();
     term.saysPasting = true;
     term.pictureReads = 150;
@@ -777,7 +777,7 @@ describe("guardedSend: what Claude logged", () => {
   });
 });
 
-describe("guardedSend: Enter behind the text at an idle Claude, the log as witness (ADR 0116)", () => {
+describe("guardedSend: Enter behind the text at an idle Claude, the log as witness (ADR 0117)", () => {
   const text = "deploy the staging build";
   const idle = { running: false };
   /** Claude's log of this send: nothing on the first `after` looks, then `then`. */
@@ -1024,7 +1024,7 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
   });
 });
 
-describe("guardedSend: a loaded host (ADR 0116)", () => {
+describe("guardedSend: a loaded host (ADR 0117)", () => {
   test("text painted late, well past the old 2.5 s window, is still verified and sent", async () => {
     const term = new Term();
     term.echoAfter = 30;

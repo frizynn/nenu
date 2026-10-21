@@ -903,7 +903,7 @@ describe("real corpus — pinned so any change to the walk shows up as a diff", 
   });
 });
 
-describe("claudePasting — Claude still taking in a paste (ADR 0116)", () => {
+describe("claudePasting — Claude still taking in a paste (ADR 0117)", () => {
   it("reads Pasting… under the box, on a narrow pane too", () => {
     expect(claudePasting(boxBuffer("❯ look", "  Pasting…"))).toBe(true);
     const narrow = "─".repeat(12);

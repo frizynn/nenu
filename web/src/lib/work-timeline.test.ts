@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkTimeline, commandOutput, describeTool, firstLine, formatWorkDuration, liveStep, stepsDiff, stepsSummary, workSegments, type WorkStep, type WorkTurn } from "./work-timeline";
+import { buildWorkTimeline, commandOutput, describeTool, firstLine, foldsSteps, formatWorkDuration, liveStep, stepsDiff, stepsSummary, workSegments, type WorkStep, type WorkTurn } from "./work-timeline";
 import type { TranscriptEntry, TranscriptPart } from "./types";
 
 const text = (value: string): TranscriptPart => ({ kind: "text", text: value });
@@ -268,6 +268,13 @@ describe("workSegments", () => {
     ]);
     expect(segments[1]).toMatchObject({ kind: "steps", id: "a:1" });
   });
+
+  it("keeps a run's id when its live call finishes after a later one", () => {
+    const parallel = entry("p", { parts: [text("Two at once"), tool, { ...tool, result: { text: "done" } }] });
+    const live = { part: tool as WorkStep["part"], entry: "p", index: 1 };
+    expect(workSegments([parallel], live)[1]).toMatchObject({ id: "p:1", steps: [{ index: 2 }] });
+    expect(workSegments([parallel], null)[1]).toMatchObject({ id: "p:1" });
+  });
 });
 
 describe("stepsSummary", () => {
@@ -293,5 +300,19 @@ describe("commandOutput", () => {
   it("splits the exit code Claude opens a failed command with", () => {
     expect(commandOutput("Exit code 2\nnope")).toEqual({ code: 2, output: "nope" });
     expect(commandOutput("fine")).toEqual({ output: "fine" });
+  });
+});
+
+describe("foldsSteps", () => {
+  const tool = (name: string): WorkStep => ({ part: { kind: "tool", name, summary: name }, entry: "e", index: 0 });
+  const thought: WorkStep = { part: { kind: "thinking", text: "Plan it." }, entry: "e", index: 1 };
+  it("folds several calls under one line, the thoughts among them with them", () => {
+    expect(foldsSteps([tool("Bash"), tool("Bash")])).toBe(true);
+    expect(foldsSteps([thought, tool("Bash"), tool("Read")])).toBe(true);
+  });
+  it("leaves one call, or thoughts alone, as their own rows", () => {
+    expect(foldsSteps([tool("Bash")])).toBe(false);
+    expect(foldsSteps([thought, tool("Bash")])).toBe(false);
+    expect(foldsSteps([thought, thought])).toBe(false);
   });
 });

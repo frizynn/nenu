@@ -171,7 +171,7 @@ export function stripChrome(lines: StyledLine[]): StyledLine[] {
 /**
  * Claude says "Pasting…" on a row under its input box while it takes in a paste, a picture's file read
  * included; meanwhile the box may show the path as text before it turns into `[Image #N]` (measured on
- * 2.1.306 at 5% of a core, ADR 0116). Read only under the box locateInputBox finds, never the thread.
+ * 2.1.306 at 5% of a core, ADR 0117). Read only under the box locateInputBox finds, never the thread.
  */
 export function claudePasting(lines: StyledLine[]): boolean {
   const texts = lines.map(lineText);

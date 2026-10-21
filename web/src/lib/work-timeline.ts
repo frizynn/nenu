@@ -148,6 +148,11 @@ export function firstLine(text: string): string {
   return text.split("\n").map((line) => plain(parseInline(line.trim().replace(BLOCK_MARK, ""))).trim()).find(Boolean) ?? "";
 }
 
+/** A command's first line with words, exactly as it ran: a shell line is never read as Markdown. */
+export function commandLine(text: string): string {
+  return text.split("\n").find((line) => line.trim()) ?? "";
+}
+
 /**
  * What a running turn is doing now: a call still waiting for its result, or the thought being
  * written. `entry` and `index` name that part, so the timeline draws it once, as the turn's live row.
@@ -184,29 +189,43 @@ export interface WorkStep {
 }
 
 /**
- * A desk's turn as it reads: the agent's words, and between two of them the run of steps it took, one
- * fold each. `id` names a run by its first step, so a fold keeps its state while the turn grows.
+ * A turn as it reads: the agent's words, and between two of them the run of steps it took. `id` names a
+ * run by its first step, the live one included, so a run keeps its id (and its fold its state) however
+ * its calls finish and whatever older page goes in above it; `at` is when it started.
  */
 export type WorkSegment =
   | { kind: "prose"; entry: TranscriptEntry; parts: Array<{ part: TranscriptPart; index: number }> }
-  | { kind: "steps"; id: string; steps: WorkStep[] };
+  | { kind: "steps"; id: string; at: string; steps: WorkStep[] };
 
-/** `activity` cut at the agent's words; the live step is left out, since it draws below as the turn's last row. */
+/**
+ * `activity` cut at the agent's words. The live step is left out of its run, since it draws below as the
+ * turn's last row, but it still opens the run it belongs to, so the run is named by it from the start; a
+ * run holding nothing but the live step is left out.
+ */
 export function workSegments(activity: TranscriptEntry[], live: LiveStep | null): WorkSegment[] {
   const segments: WorkSegment[] = [];
   for (const entry of activity) {
     entry.parts.forEach((part, index) => {
-      if (part.kind === "image" || (live?.entry === entry.uuid && live.index === index)) return;
+      if (part.kind === "image") return;
       const last = segments.at(-1);
       if (part.kind === "tool" || part.kind === "thinking") {
         const step = { part, entry: entry.uuid, index };
-        if (last?.kind === "steps") last.steps.push(step);
-        else segments.push({ kind: "steps", id: `${entry.uuid}:${index}`, steps: [step] });
+        let run = last?.kind === "steps" ? last : null;
+        if (!run) segments.push(run = { kind: "steps", id: `${entry.uuid}:${index}`, at: entry.ts, steps: [] });
+        if (live?.entry !== entry.uuid || live.index !== index) run.steps.push(step);
       } else if (last?.kind === "prose" && last.entry === entry) last.parts.push({ part, index });
       else segments.push({ kind: "prose", entry, parts: [{ part, index }] });
     });
   }
-  return segments;
+  return segments.filter((segment) => segment.kind === "prose" || segment.steps.length > 0);
+}
+
+/**
+ * Whether a run folds under one line: only when it holds several calls. One call reads best as itself,
+ * and a thought is already one line, so neither hides behind a second tap.
+ */
+export function foldsSteps(steps: WorkStep[]): boolean {
+  return steps.filter(({ part }) => part.kind === "tool").length > 1;
 }
 
 // What a run of steps did, by the verb its steps share: "Ran 3 commands, read 2 files".

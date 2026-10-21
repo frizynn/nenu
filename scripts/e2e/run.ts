@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
+import { commandsBench } from "./commands.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
 import { pasteImageBench } from "./paste-image.ts";
@@ -53,6 +54,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
 //   bun scripts/e2e/run.ts send-always [--port 8797] [--out DIR]  A working Claude: queued rows in the thread with their pictures, Send asks nothing, text in its box never holds a send, the Terminal view types
 //   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
+//   bun scripts/e2e/run.ts commands [--before] [--port 8797] [--out DIR]  The command demo, desk and phone: each fold opened, a running turn, the rest landing
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
 // Output goes outside the repo: --out, else $NENU_E2E_OUT, else <user cache>/nenu-e2e/<stamp>.
@@ -3120,7 +3122,7 @@ async function composerAround(): Promise<void> {
       seen[`${deviceName}:open-shifts`] = await page.evaluate(() => {
         const log = (window as unknown as { __shifts?: Array<{ value: number; sources: string[] }> }).__shifts ?? [];
         const from = (name: string) => log.filter((s) => s.sources.some((src) => src.includes(name))).length;
-        return { count: log.length, fold: from("composer-fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
+        return { count: log.length, fold: from("div.fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
       }, null);
       // A quiet chat is read only for how it opens.
       if (process.env.NENU_E2E_LATE_CHIPS) {
@@ -4157,6 +4159,16 @@ async function takeOver(): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
+/** The command demo, desk and phone: the turn, its group, a command, a failure, a long output, a running turn. */
+async function commands(before: boolean): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = await withBench((bridge, browser) => commandsBench(bridge, browser, outDir, before), CAPTURE_EPOCH);
+  await writeFile(join(outDir, "commands.json"), JSON.stringify(result, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  console.log(result.shots.join("\n"));
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 /** ADR 0114 on a phone and a desk: nothing Nenu sends gets stuck or drawn over the thread. */
 async function sendAlways(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -4203,9 +4215,10 @@ else if (command === "inline-images") await inlineImages(values.before === true)
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
+else if (command === "commands") await commands(values.before === true);
 else if (command === "send-always") await sendAlways();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|send-always [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|commands|send-always [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

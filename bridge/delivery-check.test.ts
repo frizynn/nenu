@@ -58,7 +58,7 @@ describe("deliveryVerdict", () => {
   });
 });
 
-describe("claudeLogReader (ADR 0116)", () => {
+describe("claudeLogReader (ADR 0117)", () => {
   const at = (ms: number) => new Date(ms).toISOString();
   const typed = (text: string, ms: number) => JSON.stringify({ type: "user", timestamp: at(ms), message: { role: "user", content: text } });
   const enqueue = (text: string, ms: number) => JSON.stringify({ type: "queue-operation", operation: "enqueue", timestamp: at(ms), content: text });

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import { LiveStepRow, ThinkingStep, ToolStep } from "./work-log-tools";
@@ -16,11 +16,10 @@ function Steps({ calls, query = "", active = false, focused }: { calls: Call[]; 
 
 afterEach(() => { vi.useRealTimers(); });
 
-it("draws a call as one line, what it did and on what, with its output behind one tap", async () => {
+it("draws a command as one line, the command itself, with its output behind one tap", async () => {
   render(<Steps calls={[status]} />);
   const row = screen.getByRole("button", { name: "Ran git status", expanded: false });
-  expect(row).toHaveTextContent("Ran");
-  expect(row).toHaveTextContent("git status");
+  expect(row).toHaveTextContent(/^git status$/);
   expect(screen.queryByText("clean")).not.toBeInTheDocument();
   await userEvent.click(row);
   expect(row).toHaveAttribute("aria-expanded", "true");
@@ -29,8 +28,8 @@ it("draws a call as one line, what it did and on what, with its output behind on
 
 it("draws a step's line in the quiet greys, so it reads as the agent's work and not its words", () => {
   render(<Steps calls={[status, { kind: "tool", name: "Read", summary: "/repo/app/cart.ts", result: { text: "x" } }]} />);
-  expect(screen.getByText("Ran")).toHaveClass("text-muted-foreground");
-  expect(screen.getByText("git status").parentElement).toHaveClass("text-subtle-foreground");
+  expect(screen.getByText("Read")).toHaveClass("text-muted-foreground");
+  expect(screen.getByText("git status").parentElement).toHaveClass("text-muted-foreground");
   expect(screen.getByText("cart.ts").parentElement).toHaveClass("text-muted-foreground");
 });
 
@@ -146,16 +145,10 @@ describe("ThinkingStep", () => {
 });
 
 describe("LiveStepRow", () => {
-  it("says what runs now and for how long, in whole minutes", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
+  it("says what runs now with the live mark, and leaves how long to the turn's line", () => {
     const { container } = render(<LiveStepRow step={{ part: { kind: "tool", name: "Bash", summary: "bun run test tab-strip" }, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} />);
     const row = container.querySelector("[data-live-step]")!;
-    expect(row).toHaveTextContent("Running");
-    expect(row).toHaveTextContent("bun run test tab-strip");
-    expect(screen.getByText("<1m")).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(48_000); });
-    expect(screen.getByText("1m")).toBeInTheDocument();
+    expect(row).toHaveTextContent(/^Running\s*bun run test tab-strip$/);
     expect(row.querySelector("[data-live-glyph]")).not.toBeNull();
   });
 
@@ -252,4 +245,24 @@ it("draws the current find match's hits apart from the others", () => {
   const [other, current] = [screen.getByRole("button", { name: /^Ran git status/ }), screen.getByRole("button", { name: /^Ran git diff/ })];
   expect(other.querySelector("mark")).not.toHaveAttribute("aria-current");
   expect(current.querySelector("mark")).toHaveAttribute("aria-current", "true");
+});
+
+it("opens a command onto itself in a shell's colours and its output in grey, a failure's exit code first", async () => {
+  const failed: Call = { kind: "tool", name: "Bash", summary: "ls -la /nope", result: { text: "Exit code 1\nls: /nope: No such file or directory", isError: true } };
+  const { container } = render(<Steps calls={[failed]} />);
+  await userEvent.click(screen.getByRole("button", { name: /^Ran ls -la \/nope Failed/ }));
+  const [command, output] = container.querySelectorAll("pre");
+  expect(within(command as HTMLElement).getByText("ls").parentElement).toHaveClass("text-syntax-command");
+  expect(within(command as HTMLElement).getByText("-la").parentElement).toHaveClass("text-syntax-flag");
+  expect(output).toHaveClass("text-muted-foreground");
+  expect(output).toHaveTextContent(/^Error: Exit code 1\s*ls: \/nope: No such file or directory$/);
+  // Sober: the row says it failed in grey, and only its icon takes the destructive hue.
+  expect(container.querySelector(".text-destructive")).toHaveClass("icon");
+});
+
+it("names a command's row by the line it ran, as written, never through Markdown", () => {
+  render(<Steps calls={["echo `date`", "find . -name '*_test_*'", "# just a comment\nls"].map((summary) => ({ kind: "tool", name: "Bash", summary, result: { text: "" } }))} />);
+  expect(screen.getByRole("button", { name: "Ran echo `date`" })).toHaveTextContent(/^echo `date`$/);
+  expect(screen.getByRole("button", { name: "Ran find . -name '*_test_*'" })).toHaveTextContent(/^find \. -name '\*_test_\*'$/);
+  expect(screen.getByRole("button", { name: /^Ran # just a comment/ })).toHaveTextContent(/^# just a comment$/);
 });

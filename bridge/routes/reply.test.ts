@@ -91,7 +91,7 @@ describe("POST send", () => {
     expect(lines[0]?.detail).toMatchObject({ submitted: true, textDelivered: true });
   });
 
-  test("a dialog Claude's own state reports refuses the send before anything is typed (ADR 0116)", async () => {
+  test("a dialog Claude's own state reports refuses the send before anything is typed (ADR 0117)", async () => {
     const box = new Box();
     const { audit } = recorder();
     const turn = () => ({ running: false, waiting: "permission prompt" });
