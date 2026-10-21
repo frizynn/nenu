@@ -106,7 +106,7 @@ it("shows a message Claude's own queue still holds, with Read it now armed by th
   const { rerender } = render(
     <MessageQueueStrip agent="claude" messages={[]} delivered={delivered} busy={false} error="" change={vi.fn()} readNow={readNow} />,
   );
-  expect(screen.getByText("In Claude's queue. Claude reads it after the step it's on.")).toBeInTheDocument();
+  expect(screen.getByText("Claude reads it after this step.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Read it now" }));
   expect(readNow).toHaveBeenCalledWith("d1");
   rerender(

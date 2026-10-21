@@ -4,7 +4,9 @@ import { join, relative } from "node:path";
 // Two contracts the screen can't show in a test run. Every icon draws through components/ui/icon, so
 // the set changes in one file; and nothing in Nenu animates forever: a state that lasts (working,
 // busy, sending, loading) is a still glyph, and motion only answers a tap and ends. A spinner left on
-// for a whole turn cost about 1 s of CPU every 30 s on the bench (2026-10-15 audit).
+// for a whole turn cost about 1 s of CPU every 30 s on the bench (2026-10-15 audit). What shows an
+// agent works now (ADR 0118) steps by hand from one timer, only while it is seen: any CSS animation
+// that runs, even in steps(), keeps the compositor drawing every frame.
 
 const src = import.meta.dirname;
 const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -22,9 +24,11 @@ it("draws every icon through the facade, with no icon package behind it", () => 
   expect(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }).filter((name) => /icon|lucide/.test(name))).toEqual([]);
 });
 
-it("runs no animation forever", () => {
+it("runs no animation forever: what shows an agent works now steps by hand, only while it is seen", () => {
   expect(offenders(/\binfinite\b/)).toEqual([]);
   expect(offenders(/\banimate-(spin|pulse|ping|bounce)\b/)).toEqual([]);
+  // The glow and the working mark move from lib/live-motion.ts's one timer, and nothing else does.
+  expect(offenders(/useLiveMotion\(/).filter((path) => path !== "lib/live-motion.ts").sort()).toEqual(["components/status-badge.tsx", "components/work-activity-label.tsx"]);
 });
 
 // One set of lengths and one curve (index.css --motion-*): a control 120 ms, a panel 180 ms, a page

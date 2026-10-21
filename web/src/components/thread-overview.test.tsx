@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -69,7 +69,7 @@ it("sums up the branch with its first files, and sends every tap to the Changes 
   expect(within(card).getAllByRole("listitem")).toHaveLength(5);
   expect(within(card).getByRole("button", { name: /^Changes/ })).toHaveTextContent("+28 −7");
   expect(reads).toEqual(["branch"]);
-  await user.click(within(card).getByRole("button", { name: /^Changes/ }));
+  await user.click(within(card).getByRole("button", { name: "Open the Changes tab" }));
   await user.click(within(card).getByRole("button", { name: /app\/file-0\.ts/ }));
   await user.click(within(card).getByText("2 more files"));
   expect(onShowChanges).toHaveBeenCalledTimes(3);
@@ -117,6 +117,85 @@ it("on a coordinator's own pane, lists its threads with no way to open itself", 
   expect(within(card).queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
   expect(within(card).getAllByRole("listitem")).toHaveLength(3);
 });
+
+// Mi Cúcula's shape: its own threads, a coordinator under it with its own, and one more level below that.
+const tree = [
+  thread("t-20", "Own review", { parentId: "t-10", group: "ready-for-review" }),
+  thread("t-21", "Own idle", { parentId: "t-10" }),
+  thread("t-30", "QA facturación", { parentId: "t-10", role: "coordinator" }),
+  thread("t-31", "Lote de facturación", { parentId: "t-30", group: "working" }),
+  thread("t-32", "PDF de la factura", { parentId: "t-30" }),
+  thread("t-40", "Fotos", { parentId: "t-30", role: "coordinator" }),
+  thread("t-41", "Recorte de fotos", { parentId: "t-40", group: "working" }),
+  thread("t-50", "Old", { parentId: "t-10", status: "resolved" }),
+];
+
+it("lists the open work of a coordinator's whole subtree, grouped by the coordinators under it, the live first", async () => {
+  const { user, onOpenThread } = setup({ thread: { ...flow, id: "t-10", role: "coordinator" }, coordinating: true, threads: tree });
+  const card = screen.getByRole("region", { name: "Threads" });
+  expect(within(card).getByRole("button", { name: /^Threads/ })).toHaveTextContent("1 to review · 2 working");
+  expect(within(card).queryByText("Nothing running")).not.toBeInTheDocument();
+  // As the tree draws it: the coordinators under it first, then its own threads.
+  expect(within(card).getAllByRole("list").map((list) => list.getAttribute("aria-label"))).toEqual(["QA facturación threads", "Its own threads"]);
+  const own = within(card).getByRole("list", { name: "Its own threads" });
+  expect(within(own).getAllByRole("listitem").map((row) => row.textContent)).toEqual([expect.stringContaining("Own review"), expect.stringContaining("Own idle")]);
+  const qa = within(card).getByRole("list", { name: "QA facturación threads" });
+  const rows = within(qa).getAllByRole("button");
+  expect(rows.map((row) => row.textContent)).toEqual([
+    expect.stringContaining("QA facturación"), expect.stringContaining("Fotos"), expect.stringContaining("Recorte de fotos"),
+    expect.stringContaining("Lote de facturación"), expect.stringContaining("PDF de la factura"),
+  ]);
+  // Each level is set in under the coordinator it belongs to.
+  expect(rows[2]).toHaveStyle({ paddingInlineStart: "46px" });
+  expect(within(qa).getByText("Coordinator · 3 open")).toBeInTheDocument();
+  await user.click(rows[2]!);
+  expect(onOpenThread).toHaveBeenCalledWith(tree[6]);
+});
+
+it("says Nothing running inside the card when a coordinator has no open work, and links what finished", async () => {
+  const open = vi.fn();
+  const { user } = setup({ thread: { ...flow, id: "t-10", role: "coordinator" }, coordinating: true, threads: [tree[7]!], finished: { count: 16, open } });
+  const card = screen.getByRole("region", { name: "Threads" });
+  expect(within(card).getByText("Nothing running").closest(".overview-body")).not.toBeNull();
+  await user.click(within(card).getByRole("button", { name: /16 finished/ }));
+  expect(open).toHaveBeenCalledOnce();
+});
+
+it("folds a section under its head and keeps it folded on this device", async () => {
+  const { user } = setup();
+  const head = within(screen.getByRole("region", { name: "This thread" })).getByRole("button", { name: /^This thread/ });
+  expect(head).toHaveAttribute("aria-expanded", "true");
+  await user.click(head);
+  expect(head).toHaveAttribute("aria-expanded", "false");
+  // Folded, its head still says how it is.
+  expect(head).toHaveTextContent("Working");
+  cleanupAndRender();
+  expect(within(screen.getByRole("region", { name: "This thread" })).getByRole("button", { name: /^This thread/ })).toHaveAttribute("aria-expanded", "false");
+});
+
+it("arranges the sections: one moved up, one hidden, both kept, and Reset puts them back", async () => {
+  const { user } = setup();
+  const order = () => screen.getAllByRole("region").map((region) => region.getAttribute("aria-label"));
+  expect(order()).toEqual(["This thread", "Changes", "Coordinator Checkout redesign"]);
+  await user.click(screen.getByRole("button", { name: /^Arrange/ }));
+  await user.click(screen.getByRole("button", { name: "Move Changes up" }));
+  await user.click(screen.getByRole("button", { name: "Hide This thread" }));
+  await user.click(screen.getByRole("button", { name: "Done" }));
+  expect(order()).toEqual(["Changes", "Coordinator Checkout redesign"]);
+  cleanupAndRender();
+  expect(order()).toEqual(["Changes", "Coordinator Checkout redesign"]);
+  expect(screen.getByRole("button", { name: /^Arrange/ })).toHaveTextContent("1 hidden");
+  await user.click(screen.getByRole("button", { name: /^Arrange/ }));
+  await user.click(screen.getByRole("button", { name: "Reset" }));
+  await user.click(screen.getByRole("button", { name: "Done" }));
+  expect(order()).toEqual(["This thread", "Changes", "Coordinator Checkout redesign"]);
+});
+
+/** A new mount, as a reload would give: what the device kept is all that carries over. */
+function cleanupAndRender() {
+  cleanup();
+  setup();
+}
 
 it("on the project coordinator's pane, names no coordinator above it", () => {
   setup({ thread: undefined, parent: undefined, coordinating: true,

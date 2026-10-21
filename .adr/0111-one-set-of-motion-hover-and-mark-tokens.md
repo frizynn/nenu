@@ -1,7 +1,8 @@
 # 0111. One set of motion, hover and mark tokens
 
 - **Status:** Accepted (2026-10-21). Decision 3 superseded by
-  [ADR 0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md). Requested by the operator ("more professional, native, subtle
+  [ADR 0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md); decision 1's
+  "nothing animates forever" amended by [ADR 0118](./0118-work-in-progress-looks-alive.md). Requested by the operator ("more professional, native, subtle
   and smooth", Ovis as the reference) after six threads built pages in parallel.
 - **Trail:** `web/src/index.css` (`--motion-*`, `--color-hover`) · `web/src/lib/motion.ts` ·
   `web/src/components/status-badge.tsx` · `web/src/components/node-row.tsx` ·

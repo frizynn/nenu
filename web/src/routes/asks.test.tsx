@@ -213,16 +213,16 @@ describe("narrowing, chips and Answer (ADR 0093)", () => {
   // Organizations takes an answer on every row of a coordinator that runs.
   const linked: AsksList = { ...ASKS, answers: true, asks: [
     ask(CHECKOUT, "waiting", "needs-decision", "Prospects or numbers first?", { line: 5, answer: "both are ready", answerable: true,
-      links: [link("thread", "t-0012", { thread: "t-0012", state: "working" }), link("task", "task:AWA-569", { state: "missing" }),
+      links: [link("thread", "t-0012", { thread: "t-0012", state: "working" }), link("task", "task:AWA-569", { state: "todo" }), link("task", "task:AWA-570", { state: "missing" }),
         link("pr", "https://github.com/acme/shop/pull/1352", { target: "https://github.com/acme/shop/pull/1352", state: "open" })] }),
     ...ASKS.asks!.map((row) => ({ ...row, answerable: true as const })),
   ] };
 
-  it("reads an ask's links as chips: a thread opens its node, a pull request its page, a task names its state", async () => {
+  it("reads an ask's links as chips: a thread opens its node, a pull request its page, a task names its state, one the tracker lacks none", async () => {
     const { router, user } = setup("/asks", { asks: linked });
     const waiting = await screen.findByRole("region", { name: "Waiting on you" });
     const chips = within(within(waiting).getAllByRole("list", { name: "Links" })[0]!);
-    expect(chips.getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["t-0012working", "AWA-569missing", "#1352open"]);
+    expect(chips.getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["t-0012working", "AWA-569todo", "#1352open"]);
     expect(chips.getByRole("link", { name: /#1352/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1352");
     expect(waiting).not.toHaveTextContent("task:AWA-569");
     await user.click(chips.getByRole("link", { name: /t-0012/ }));

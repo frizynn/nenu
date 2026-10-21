@@ -67,6 +67,7 @@ import {
   removeLocalSend,
   setLocalSendActions,
   updateLocalSend,
+  takenBack,
   useLocalSends,
   useQueueSlot,
   type LocalSend,
@@ -413,7 +414,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const queueSlot = useQueueSlot(sendScope);
   // A refusal that says nothing was sent goes with its bubble: the journal showed the message.
   useEffect(() => {
-    if (failure?.bubble && !localSends.some((send) => send.id === failure.bubble)) setFailure(null);
+    if (failure?.bubble && !localSends.some((send) => send.id === failure.bubble && !send.landed)) setFailure(null);
   }, [failure, localSends]);
   useEffect(() => {
     const accepted = queue.accepted;
@@ -443,7 +444,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const page = queue.page;
     if (!page?.available) return;
     for (const echo of listLocalSends(sendScope)) {
-      if (!echo.queueId) continue;
+      if (!echo.queueId || echo.landed) continue;
       // A delivered bubble still learns what the CLI's own queue did with it (Claude's journal).
       if (echo.state === "sent") {
         const done = queue.delivered.find((item) => item.id === echo.queueId);
@@ -505,7 +506,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (!t || sending || queue.busy) return false;
     if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
     const started = beginSend(t, isDraft, !isSlashCommand(t));
-    const rowId = await queue.add(t, mode);
+    const rowId = await queue.add(t, mode, (id) => { if (started.id) updateLocalSend(sendScope, started.id, { queueId: id }); });
     if (rowId) {
       if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued", queueId: rowId, deliveryMode: mode });
       if (outgoing() === t) clearComposer();
@@ -1104,9 +1105,38 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const queueRow = (echo: LocalSend): QueueMessage | undefined =>
     echo.queueId ? queue.page?.messages.find((message) => message.id === echo.queueId) : undefined;
   const bubbleActions = useRef<LocalSendActions | null>(null);
+  // A message already in Claude's own queue comes back from it (ADR 0118): every message waiting there
+  // returns at once, and the bridge recalls their rows in the same step. Their bubbles leave, and what
+  // is kept goes into the box as it was sent (takenBack). A second tap while one runs does nothing.
+  const takingBack = useRef(false);
+  // Rows a take-back recalled: until the queue's next read says so, its last page still lists them in
+  // Claude's queue, and they must not come back as rows of their own.
+  const [recalled, setRecalled] = useState<ReadonlySet<string>>(() => new Set());
+  async function takeBack(echo: LocalSend, keep: boolean) {
+    if (takingBack.current) return;
+    takingBack.current = true;
+    try {
+      const result = await api.takeBackQueue(paneId, session).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : String(err) }));
+      if (!result.ok) { setStatus(result.error, "info"); return; }
+      // Words without rows (an older bridge, or a queue that could not say which they were): every
+      // bubble waiting there leaves, and the box gets the words as they came back.
+      const rows = result.messages ?? listLocalSends(sendScope).flatMap((item) => !item.landed && item.native === "enqueued" && item.queueId ? [{ id: item.queueId, text: item.text }] : []);
+      const ids = new Set(rows.map((message) => message.id));
+      setRecalled((known) => new Set([...known, ...ids]));
+      for (const item of listLocalSends(sendScope)) if (item.queueId && ids.has(item.queueId)) removeLocalSend(sendScope, item.id);
+      const back = result.messages ? takenBack({ text: result.text, messages: rows, ours: result.ours ?? false }, keep ? undefined : echo.queueId)
+        : { text: result.text, note: keep ? undefined : "Claude's queue didn't say which words were this message: everything that came back is in your box." };
+      if (back.text) restoreIntoComposer(back.text);
+      if (back.note) setStatus(back.note, "info");
+      focusInputEnd();
+    } finally {
+      takingBack.current = false;
+    }
+  }
   bubbleActions.current = {
     retry: (echo) => { if (!sending) void send(echo.text, false); },
     edit: async (echo) => {
+      if (echo.native === "enqueued") return takeBack(echo, true);
       const row = echo.state === "queued" ? queueRow(echo) : undefined;
       if (row && !(await queue.mutate("remove", undefined, row))) return;
       removeLocalSend(sendScope, echo.id);
@@ -1114,6 +1144,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       focusInputEnd();
     },
     remove: async (echo) => {
+      if (echo.native === "enqueued") return takeBack(echo, false);
       const row = queueRow(echo);
       if (row && !(await queue.mutate("remove", undefined, row))) return;
       removeLocalSend(sendScope, echo.id);
@@ -1140,7 +1171,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // The queue strip lists only what has no bubble in the conversation, so nothing shows twice.
   const echoed = new Set(localSends.map((echo) => echo.queueId).filter(Boolean));
   const strayQueue = (queue.page?.messages ?? []).filter((message) => !echoed.has(message.id));
-  const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id));
+  const strayDelivered = queue.delivered.filter((row) => row.native === "enqueued" && !echoed.has(row.id) && !recalled.has(row.id));
 
   const confirmingSend = sendConfirm.pending === "send";
   const forcingSend = forceConfirm.pending === "force";

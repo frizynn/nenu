@@ -800,6 +800,61 @@ export async function settleDraft(
 }
 
 /**
+ * Take back what waits in the CLI's own queue (ADR 0118): while its empty box still says the queue
+ * holds something, press the adapter's recall keys, read what came back into the box, and clear the
+ * box, so the words are the phone's again (to edit, or to drop). Every message waiting there comes
+ * back together, as the CLI hands them over. When the keys reach the history instead (the CLI read
+ * the queue first), the history's text is cleared and nothing is taken. The caller holds the pane's
+ * write lock.
+ */
+export async function takeBackQueue(
+  deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep">,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  let adapter: HarnessAdapter | undefined;
+  try {
+    adapter = adapterFor((await deps.herdr.getPane(deps.paneId)).agent ?? undefined);
+  } catch (err) {
+    return { ok: false, error: `herdr pane.get failed: ${message(err)}` };
+  }
+  const recall = adapter?.queueRecall;
+  if (!adapter?.composerReady || !adapter.interrupt || !recall) return { ok: false, error: "Nenu can't take messages back from this agent's queue." };
+  const full = { ...deps, submitKeys: [] };
+  const send = new Send(full, { text: "", requestId: "queue-take-back" }, adapter);
+  const read = "The agent has already read its queue, so nothing was taken back.";
+  let seen: Seen;
+  try {
+    seen = await send.read();
+  } catch (err) {
+    return { ok: false, error: `herdr read failed: ${message(err)}` };
+  }
+  if (seen.composer !== true || seen.draft !== null) return { ok: false, error: "The agent's box isn't free, so its queue was left as it is." };
+  if (adapter.interrupt.read(seen.text).queued !== "sends") return { ok: false, error: read };
+  try {
+    await deps.herdr.sendPaneKeys(deps.paneId, recall.keys);
+  } catch (err) {
+    return { ok: false, error: `Couldn't reach the terminal: ${message(err)}` };
+  }
+  for (const delay of LOCAL_DELAYS_MS) {
+    if (delay > 0) await send.sleep(delay);
+    let now: Seen;
+    try {
+      now = await send.read();
+    } catch {
+      continue;
+    }
+    if (now.draft === null) continue;
+    const history = recall.history(now.lines);
+    // A picture or a paste only the CLI holds would be lost with the box: it stays there, where the
+    // text-in-the-box row offers Send it first and Discard (ADR 0114).
+    if (!history && holdsCliToken(now.draft)) return { ok: false, error: "What came back holds a picture or a paste only the agent has, so it stays in its box." };
+    const failed = await sweep(send, full, adapter, now);
+    if (failed) return { ok: false, error: "The agent's box didn't empty. Check Terminal." };
+    return history ? { ok: false, error: read } : { ok: true, text: now.draft };
+  }
+  return { ok: false, error: "Nothing came back from the agent's queue. Check Terminal." };
+}
+
+/**
  * Wait until the adapter sees the message in the input box. `pane.wait_for_output` wakes the loop
  * when the trigger regex matches, and every wake (match or miss) ends in a fresh read the adapter
  * judges. A match the adapter rejects (the text elsewhere on screen) hands the rest of the window to

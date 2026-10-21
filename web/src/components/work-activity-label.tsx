@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { formatElapsed } from "@/lib/activity";
 import { isLocked, useLocked } from "@/lib/idle";
+import { useLiveMotion } from "@/lib/live-motion";
 import { cn } from "@/lib/utils";
 
 const SECOND = 1000;
@@ -41,17 +42,34 @@ export function Elapsed({ since, prefix = "", fallback = "", fine = false, class
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 
-/** The live mark: a still dot in the working colour. The words say the state; nothing here moves. */
-export function LiveGlyph({ className }: { className?: string }) {
-  return <span data-live-glyph aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center text-status-working", className)}>
-    <span className="size-1.5 rounded-full bg-current" />
+// A pass of the glow in 20 steps (~9 frames a second); the working mark's steps fall on every other one.
+const GLOW_STEPS = 20;
+
+/**
+ * A live line, glowing: a light passes across its words while the agent works (ADR 0118). While it
+ * moves, the words are drawn a second time in the full ink behind a window that steps over them (the
+ * copy hidden from assistive tech); `layout` lays out both copies alike (a row's flex classes).
+ */
+export function Glow({ children, className, layout }: { children: ReactNode; className?: string; layout?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const lens = useRef<HTMLSpanElement>(null);
+  const copy = useRef<HTMLSpanElement>(null);
+  const running = useLiveMotion(ref, GLOW_STEPS, (n) => {
+    const at = (n / GLOW_STEPS) * 100;
+    lens.current?.style.setProperty("transform", `translateX(${at}%)`);
+    copy.current?.style.setProperty("transform", `translateX(${-at}%)`);
+  });
+  return <span ref={ref} data-glow={running ? "running" : "still"} className={cn("relative min-w-0 overflow-hidden", layout, className)}>
+    {children}
+    {running && <span ref={lens} aria-hidden="true" className="glow-window">
+      <span ref={copy} className="glow-copy"><span className={cn("block text-foreground", layout)}>{children}</span></span>
+    </span>}
   </span>;
 }
 
-/** "Working for 3m" with its live mark, where no turn line says it yet. */
+/** "Working for 3m", glowing, where no turn line says it yet. */
 export function WorkActivityLabel({ startedAt }: { startedAt?: string }) {
-  return <span className="inline-flex items-center gap-1.5 text-footnote text-muted-foreground">
-    <LiveGlyph className="size-3.5" />
-    <Elapsed since={startedAt} prefix="Working for " fallback="Working…" />
-  </span>;
+  return <Glow className="inline-flex text-footnote text-muted-foreground">
+    <Elapsed since={startedAt} prefix="Working for " fallback="Working…" fine />
+  </Glow>;
 }

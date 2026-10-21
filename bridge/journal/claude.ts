@@ -376,6 +376,9 @@ export class ClaudeParser implements JournalParser {
     return false;
   }
 
+  /** The latest row time seen, ISO strings compare in time order. */
+  private latest = "";
+
   line(line: string, offset: number, bytes: number): void {
     if (line.trim() === "") return;
     let row: RawRow;
@@ -390,8 +393,12 @@ export class ClaudeParser implements JournalParser {
     if (row.isSidechain === true && !this.opts.includeSidechains) return;
     const uuid = typeof row.uuid === "string" ? row.uuid : "";
     const ts = typeof row.timestamp === "string" ? row.timestamp : "";
+    // A message absorbed mid-turn carries the time it was queued, though Claude writes it only once it
+    // read it, after the step it waited on (measured 2.1.306): the latest time before it is that read.
+    const read = ts && this.latest > ts ? this.latest : ts;
+    if (ts > this.latest) this.latest = ts;
     if (this.fact(row, ts)) { this.turns.observe(row); return; }
-    if (type === "attachment") { this.absorbed(row, uuid, ts); return; }
+    if (type === "attachment") { this.absorbed(row, uuid, ts, read); return; }
     if (type !== "user" && type !== "assistant") { this.turns.observe(row); return; }
 
     const message = row.message;
@@ -528,7 +535,7 @@ export class ClaudeParser implements JournalParser {
    * it ONLY as this attachment (never as a user row), so without it the history would lose something
    * the operator said. It stays in the running turn, as it did on screen.
    */
-  private absorbed(row: RawRow, uuid: string, ts: string): void {
+  private absorbed(row: RawRow, uuid: string, ts: string, read: string): void {
     this.turns.observe(row);
     const attachment = row.attachment;
     if (attachment === null || typeof attachment !== "object") return;
@@ -544,7 +551,7 @@ export class ClaudeParser implements JournalParser {
     if (origin !== "human" || !prompt || uuid === "") return;
     const classified = classifyUserText(prompt, { origin: a.origin });
     if (classified?.role !== "user") return;
-    this.push({ uuid, ts, role: "user", parts: [{ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) }] });
+    this.push({ uuid, ts: read, role: "user", parts: [{ kind: "text", ...clamp(classified.text, MAX_TEXT_CHARS) }] });
   }
 
   private push(entry: TranscriptEntry): void {
