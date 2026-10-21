@@ -472,6 +472,8 @@ async function typePieces(send: Send, deps: GuardedSendDeps, adapter: HarnessAda
   let attached = 0;
   let wrote = false;
   for (const piece of pieces) {
+    // Past the send's clock no picture is pasted that would not be waited for (ADR 0117).
+    if (piece.kind === "image" && send.elapsed() >= PICTURES_BY_MS) return await unsent(send, deps, adapter, PICTURE_UNSEEN);
     const text = piece.kind === "image" ? `\x1b[200~${piece.path}\x1b[201~` : pasted(piece.text) ? `\x1b[200~${piece.text}\x1b[201~` : piece.text;
     try {
       await deps.herdr.sendPaneText(deps.paneId, text);
@@ -523,14 +525,13 @@ function onlyItsPictures(sent: string, draft: string): boolean {
  * it attaches it and may show its path meanwhile; a path that sits at the end of the box for
  * {@link PATH_SETTLED_MS} once the CLI no longer says it is pasting is "path". While it says so the
  * bound does not run: a starved Claude reads a picture for longer than 15 s (ADR 0117). The send's
- * clock ends every picture's wait {@link PICTURES_BY_MS} in, after one look at least. Neither: null.
+ * clock ends every picture's wait {@link PICTURES_BY_MS} in, and pastes none past it. Neither: null.
  */
 async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string): Promise<"token" | "path" | null> {
   let shownFor: number | null = null;
   let waited = 0;
-  // The bound while Claude is not pasting, and the send's own clock for all its pictures together,
-  // checked after a look so a picture pasted late still gets one.
-  for (let i = 0; waited < WAIT_BUDGET_MS && (i === 0 || send.elapsed() < PICTURES_BY_MS); i++) {
+  // The bound while Claude is not pasting, and the send's own clock for all its pictures together.
+  for (let i = 0; waited < WAIT_BUDGET_MS && send.elapsed() < PICTURES_BY_MS; i++) {
     const delay = WAIT_DELAYS_MS[Math.min(i, WAIT_DELAYS_MS.length - 1)]!;
     if (delay > 0) await send.sleep(delay);
     let pasting = false;

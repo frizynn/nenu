@@ -411,18 +411,25 @@ describe("guardedSend", () => {
     expect(clock).toBeLessThan(PICTURES_BY_MS + 3 * WAIT_BUDGET_MS + 250);
   });
 
-  test("a picture pasted after the send's clock ran out still gets one look", async () => {
+  test("past the send's clock no picture is pasted: the send stops and clears what it typed", async () => {
     const term = new Term();
     term.pictureReads = 0;
-    // The send starts at 0 by its clock, and its first pause lands it 60 s in: past PICTURES_BY_MS
-    // before its first picture's first look.
-    let clock = 60_000;
-    const start = clock;
+    let clock = 0;
+    let pastes = 0;
+    const paste = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      if (typed.startsWith("\x1b[200~/")) pastes++;
+      // The words after the first picture, which attached, land the send past PICTURES_BY_MS.
+      else if (pastes === 1) clock = PICTURES_BY_MS;
+      return paste(paneId, typed);
+    };
     const { outcome } = await guardedSend(
-      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => (clock === start ? 0 : clock) },
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
       { text: placed, requestId: "r1" },
     );
-    expect(outcome.ok).toBe(true);
+    expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
+    expect(pastes).toBe(1);
+    expect(term.draft).toBe("");
   });
 
   test("the send's pictures stop by its clock: a second picture pasting forever after a slow first fits the phone's wait", async () => {
