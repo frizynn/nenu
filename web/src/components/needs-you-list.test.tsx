@@ -31,13 +31,14 @@ it("reads a blocked row as its thread, where it lives and why it waits", () => {
   expect(row).toHaveAttribute("href", "/pane/w5%3Aa2?s=work");
 });
 
-// "Needs you" is said by a small dot and plain words: a red fill or a red border made the row shout.
-it("says the row needs you with a small red dot alone, on a quiet surface with no red fill or border", () => {
+// "Needs you" is said by its small mark and plain words: a red fill or a red border made the row shout.
+it("says the row needs you with its small red mark alone, on a quiet surface with no red fill or border", () => {
   const card = renderRow().closest(".relative")!;
   expect(card.className).not.toMatch(/status-blocked/);
   const red = [...card.querySelectorAll("[class*='status-blocked']")];
   expect(red).toHaveLength(1);
-  expect(red[0]).toHaveClass("size-1.5", "rounded-full");
+  expect(red[0]).toHaveAttribute("data-node-state", "needs");
+  expect(red[0]).toHaveClass("size-3.5");
 });
 
 // jsdom lays nothing out, so this pins the class the fix stands on: the column that holds the name

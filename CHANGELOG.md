@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.38.5] - 2026-10-21
+
+### Changed
+
+- A state is a still glyph instead of a coloured dot, in the bar, Home, a project and the chat: a red alert waits on you, a blue check is to review, a grey dashed circle works, nothing at rest (13a17b47, e344eee0).
+- The desk's bar reads resting chats in the muted ink, on 32px rows; what is alive keeps the full ink (65e2b047).
+
+### Fixed
+
+- A long chat name no longer widens the desk's bar: it ends in "…", and a sideways swipe can no longer cut the projects to "M" or float "N updates" past the rows (762beb09).
+
 ## [1.38.4] - 2026-10-21
 
 ### Changed

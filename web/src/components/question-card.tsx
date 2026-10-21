@@ -23,6 +23,7 @@ import type {
   InteractionSubject,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { StateMark } from "@/components/status-badge";
 
 // One card for every dialog the bridge detected (ADR 0057): the newest line of a thread, and compact
 // on Home. A tap is one POST naming the option by index; the bridge re-reads the screen, refuses a
@@ -505,7 +506,7 @@ function Frame({ ref, compact, answered, label, busy = false, children }: { ref?
  *  chevron turns into the spinner every opening row on Home shows. Section already says Needs you. */
 function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?: () => void; opening: boolean }) {
   const who = <>
-    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />
+    <StateMark state="needs" />
     <span className="min-w-0 flex-1 truncate text-subhead font-medium text-foreground">{title ?? "Waiting on you"}</span>
   </>;
   if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;

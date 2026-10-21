@@ -21,8 +21,8 @@
 /* Hover only where a pointer hovers: on a phone a tap would leave the row under it lit. */
 @media (hover: hover) {
   /* The fill follows the pointer on Ovis's curve, short enough that a sweep down the list never trails. */
-  :is(.nav-row, .nav-pane) { transition: background-color var(--motion-control) var(--motion-ease); }
-  :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); }
+  :is(.nav-row, .nav-pane) { transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
+  :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); color: var(--foreground); }
   .nav-row:disabled:hover, button.nav-pane:disabled:hover { background: none; }
 }
 /* A finger gets the same tint the moment it lands, and it fades as the finger lifts. A row already
@@ -142,6 +142,11 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 /* What a desk row says at its end: a project's dot and age, Home's count, a chat's pull request. */
 .nav-row-meta { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-left: auto; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 .nav-row-end { display: inline-flex; flex-shrink: 0; color: var(--subtle-foreground); }
+/* A resting chat reads in the muted ink, as T3 Code's list does, so the eye lands on what is alive: a
+   chat that waits, works, finished unseen or has something to review, the one on screen and the one
+   under the pointer keep the full ink. */
+.nav-chats .nav-row:not([data-live], [aria-current="page"]) { color: var(--muted-foreground); }
+@media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
 .nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
 @media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -150,10 +155,11 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-more-chevron { transition: transform var(--motion-panel) var(--motion-ease); }
 .nav-more[aria-expanded="true"] .nav-more-chevron { transform: rotate(180deg); }
 /* Rows More folds: the height closes to nothing and the row fades with it, both ways, on one curve. The
-   inner box clips (never hides) so a period's sticky heading still sticks to the bar's scroller. */
+   inner box clips (never hides) so a period's sticky heading still sticks to the bar's scroller. A clip is no
+   scroller, so the box would keep a grid item's minimum, its longest name, and widen the whole list. */
 .nav-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
 .nav-reveal[data-folded] { grid-template-rows: 0fr; opacity: 0; }
-.nav-reveal-inner { min-height: 0; overflow: clip; }
+.nav-reveal-inner { min-width: 0; min-height: 0; overflow: clip; }
 /* A period's name stays on top of its chats while they scroll under it, so a row deep in the list still says when it moved. */
 .nav-chats .nav-group > .nav-label { position: sticky; top: 0; z-index: 1; background: var(--workbench-sidebar); }
 /* A pull request that asks for something takes its colour; one that only waits stays grey. */
@@ -173,11 +179,11 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .workbench-navigation[data-variant="drawer"] .nav-host { padding-left: 16px; }
 }
 
-/* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, 30px rows, faint
-   icons and a soft grey for the row on screen. A touch screen keeps the 44px rows below. */
+/* The desk's bar, drawn as Cursor's where a mouse drives it: small type, airy groups, faint
+   icons and a soft grey for the row on screen, 32px rows as T3 Code's. A touch screen keeps the 44px rows below. */
 @media (min-width: 1024px) and (pointer: fine) {
   .workbench-navigation[data-variant="sidebar"] > .nav-top { gap: 1px; padding: 2px 8px 0; }
-  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row { min-height: 30px; padding-block: 0; }
+  .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row, .nav-desk .nav-row { min-height: 32px; padding-block: 0; }
   .workbench-navigation[data-variant="sidebar"] > .nav-top > .nav-row > svg { color: var(--subtle-foreground); }
   .nav-desk.nav-group { padding-top: 18px; }
   .nav-desk .nav-group { padding-top: 10px; }
