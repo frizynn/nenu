@@ -2982,6 +2982,18 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
       expect(screen.getByTestId("status")).toHaveTextContent(/^Removed/);
     });
 
+    it("puts the words back as they came and says so when the queue could not say whose they were", async () => {
+      serveQueueRoute();
+      renderComposerWithStatus({ nativeWorkbench: true, working: true });
+      const [first] = seed();
+      answer({ ok: true, text: "primero segundo con dos líneas" });
+      await waitFor(() => expect(localSendActions(scope)).toBeDefined());
+      await act(async () => { await localSendActions(scope)!.remove(first!); });
+      expect(listLocalSends(scope)).toEqual([]);
+      expect(screen.getByRole("textbox")).toHaveValue("primero segundo con dos líneas");
+      expect(screen.getByTestId("status")).toHaveTextContent(/didn't say which words were this message/);
+    });
+
     it("keeps the bubbles and says why when nothing came back", async () => {
       serveQueueRoute();
       renderComposerWithStatus({ nativeWorkbench: true, working: true });
