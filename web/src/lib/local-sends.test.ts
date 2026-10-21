@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import {
-  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, pendingSends, reconcileLocalSends,
+  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, pendingSends, reconcileLocalSends, takenBack,
   rememberLocalImage, removeLocalSend, resetLocalSends, updateLocalSend, useLocalSends,
 } from "./local-sends";
 import { isWorkHeld } from "./reload-guard";
@@ -131,5 +131,23 @@ describe("a message without its answer is unsent work", () => {
     const typed = addLocalSend(scope, "typed");
     updateLocalSend(scope, typed, { state: "failed", textDelivered: true });
     expect(isWorkHeld()).toBe(false);
+  });
+});
+
+describe("what a take-back puts in the composer", () => {
+  const messages = [{ id: "a", text: "primero" }, { id: "b", text: "segundo\ncon dos líneas" }];
+
+  it("puts back the rows' own words, line breaks kept, when the box held only them", () => {
+    expect(takenBack({ text: "primero segundo con dos líneas", messages, ours: true })).toEqual({ text: "primero\n\nsegundo\ncon dos líneas" });
+  });
+
+  it("leaves out the removed one and says the others are back", () => {
+    expect(takenBack({ text: "", messages, ours: true }, "a")).toEqual({ text: "segundo\ncon dos líneas", note: expect.stringMatching(/^Removed/) });
+    expect(takenBack({ text: "", messages: [messages[0]!], ours: true }, "a")).toEqual({ text: "" });
+  });
+
+  it("puts back the box as the screen showed it, and says so, when it held more than Nenu sent", () => {
+    expect(takenBack({ text: "primero y algo tecleado", messages: [messages[0]!], ours: false }, "a"))
+      .toEqual({ text: "primero y algo tecleado", note: expect.stringMatching(/held more than Nenu sent/) });
   });
 });

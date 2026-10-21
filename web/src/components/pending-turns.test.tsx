@@ -40,7 +40,7 @@ describe("PendingTurns", () => {
     const handlers = actions();
     const inClaude: LocalSend = { ...queued, native: "enqueued", queueState: undefined };
     render(<PendingTurns sends={[inClaude]} actions={handlers} />);
-    expect(screen.getByRole("status")).toHaveTextContent("In Claude's queue.");
+    expect(screen.getByRole("status")).toHaveTextContent("In Claude's queue, read after this step.");
     expect(screen.getByRole("button", { name: "Read it now" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(handlers.edit).toHaveBeenCalledExactlyOnceWith(inClaude);

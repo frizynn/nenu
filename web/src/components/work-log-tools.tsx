@@ -346,7 +346,8 @@ export function WorkSteps({ steps, query, focusedUuid, active, asked, at, live =
   const [expanded, setExpanded] = useState(false);
   // A run whose calls still run is drawn as rows, and stays rows from the moment one joins it: its line
   // would say "Ran" of what has not finished.
-  const running = active && steps.some(({ part }) => part.kind === "tool" && !part.result);
+  // So is one that holds the step in progress, a thought being written included: folded, it would hide it.
+  const running = active && steps.some(({ part, entry, index }) => (part.kind === "tool" && !part.result) || (live?.entry === entry && live.index === index));
   const [folding, setFolding] = useState(() => foldsSteps(steps) && !running);
   if (folding && running) setFolding(false);
   const contentId = useId();

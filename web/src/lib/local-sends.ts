@@ -176,6 +176,26 @@ export function reconcileLocalSends(scope: string, entries: readonly TranscriptE
   if (changed) write(scope, next);
 }
 
+/** What a take-back from the CLI's own queue answered (ADR 0117): the words that came back, the rows they were. */
+export interface TakenBack {
+  text: string;
+  messages: Array<{ id: string; text: string }>;
+  /** The words are exactly those rows', spacing aside: the box held nothing else. */
+  ours: boolean;
+}
+
+/**
+ * What a take-back puts in the composer, and what it says. The rows' own words when the box held only
+ * them, so line breaks and long words survive; without `removed`'s row for a Remove. Otherwise the box
+ * as the screen showed it, said as such: nothing that came back is dropped.
+ */
+export function takenBack(back: TakenBack, removed?: string): { text: string; note?: string } {
+  if (!back.ours) return { text: back.text, note: "Claude's queue held more than Nenu sent: all of it is back in your box." };
+  const kept = back.messages.filter((message) => message.id !== removed);
+  const text = kept.map((message) => message.text).join("\n\n");
+  return removed !== undefined && kept.length ? { text, note: "Removed. The other queued messages are back in your box." } : { text };
+}
+
 /** The composer that owns a pane registers what the bubbles' buttons do. */
 export function setLocalSendActions(scope: string, value: LocalSendActions | null) {
   if (value) actions.set(scope, value);

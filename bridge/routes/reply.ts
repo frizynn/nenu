@@ -77,11 +77,13 @@ export const replyPaneActions: Record<string, PaneAction> = {
   "take-back": {
     level: "write",
     marksSeen: true,
-    handle: exclusive(async ({ cfg, audit }, { req, rt, paneId, device }) => {
+    handle: exclusive(async ({ cfg, audit, queue }, { req, rt, paneId, device }) => {
       const outcome = await takeBackQueue({ herdr: rt.herdr, paneId, readLines: cfg.readLines });
+      // The rows it held are recalled in the same step, so no page draws them as waiting there.
+      const answer = outcome.ok ? { ...outcome, ...(await queue.recallOn(rt.name, paneId, outcome.text)) } : outcome;
       // The words' length, not the words.
       audit.record({ action: "queue.take-back", paneId, session: rt.name, device, detail: { done: outcome.ok, chars: outcome.ok ? outcome.text.length : 0 } });
-      return json(outcome, req.headers.get("accept-encoding"));
+      return json(answer, req.headers.get("accept-encoding"));
     }),
   },
   // Not wrapped in `exclusive`: a Stop tapped right after Send waits for the turn to start, and must

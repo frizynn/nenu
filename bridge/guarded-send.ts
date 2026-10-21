@@ -611,6 +611,9 @@ export async function takeBackQueue(
     }
     if (now.draft === null) continue;
     const history = recall.history(now.lines);
+    // A picture or a paste only the CLI holds would be lost with the box: it stays there, where the
+    // text-in-the-box row offers Send it first and Discard (ADR 0114).
+    if (!history && holdsCliToken(now.draft)) return { ok: false, error: "What came back holds a picture or a paste only the agent has, so it stays in its box." };
     const failed = await sweep(send, full, adapter, now);
     if (failed) return { ok: false, error: "The agent's box didn't empty. Check Terminal." };
     return history ? { ok: false, error: read } : { ok: true, text: now.draft };

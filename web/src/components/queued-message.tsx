@@ -123,6 +123,7 @@ export function QueuedMessage({
                 key={id}
                 type="button"
                 aria-label={name}
+                aria-describedby={bubbleId}
                 disabled={disabled}
                 onClick={run}
                 className={cn(

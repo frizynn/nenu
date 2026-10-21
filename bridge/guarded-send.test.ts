@@ -966,6 +966,13 @@ describe("takeBackQueue", () => {
     expect(term.draft).toBe("");
   });
 
+  test("leaves what came back in the box when it holds a paste or a picture only Claude has", async () => {
+    const term = new Term();
+    term.queue = ["[Pasted text #3 +40 lines]"];
+    expect(await takeBackQueue(deps(term))).toEqual({ ok: false, error: expect.stringMatching(/stays in its box/) });
+    expect(term.draft).toBe("[Pasted text #3 +40 lines]");
+  });
+
   test("leaves a box that holds a draft, and a CLI with no recall", async () => {
     const term = new Term();
     term.queue = ["cola A"];

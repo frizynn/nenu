@@ -514,3 +514,23 @@ describe("freshAgentView", () => {
     await expect(freshAgentView(herdrWith(new Error("herdr pane.get: timed out after 5000ms")), original)).rejects.toThrow("timed out");
   });
 });
+
+// ADR 0117: a take-back brought Claude's queue back into its box. The rows it held are recalled in the
+// same step, so no page draws them as waiting in Claude's queue while the journal catches up.
+it("recalls the rows Claude's queue held on a take-back, and says whether the words are exactly theirs", async () => {
+  const t = await agentPane("claude", "working");
+  try {
+    await t.add("one", "primero", "asap");
+    await t.settle(() => t.pane.submitted.length === 1);
+    await t.add("two", "segundo\ncon dos líneas", "asap");
+    await t.settle(() => t.pane.submitted.length === 2);
+    t.service.kick();
+    await Bun.sleep(30);
+    expect((await t.call()).body.delivered.map((row: { native?: string }) => row.native)).toEqual(["enqueued", "enqueued"]);
+    // Claude hands them back on one line each; the box reads them joined by spaces.
+    const back = await t.service.recallOn("session", "pane", "primero segundo con dos líneas");
+    expect(back).toEqual({ ours: true, messages: [{ id: "one", text: "primero" }, { id: "two", text: "segundo\ncon dos líneas" }] });
+    expect((await t.call()).body.delivered.filter((row: { native?: string }) => row.native === "enqueued")).toEqual([]);
+    expect(await t.service.recallOn("session", "pane", "primero")).toEqual({ ours: false, messages: [] });
+  } finally { await t.close(); }
+});

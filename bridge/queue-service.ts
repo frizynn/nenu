@@ -106,6 +106,19 @@ export class QueueService {
   kick(force = true): void {
     void this.tick(force).catch(() => {});
   }
+  /**
+   * What one take-back brought out of Claude's own queue on a pane (ADR 0117): the delivered rows it
+   * still held, in the order they went, now recalled, so no page draws them as waiting there. `ours`
+   * says the words that came back are exactly those rows' words, spacing aside: the box held nothing else.
+   */
+  async recallOn(session: string, paneId: string, text: string): Promise<{ messages: Array<{ id: string; text: string }>; ours: boolean }> {
+    const rows = (await this.queue.unconfirmed())
+      .filter((row) => row.session === session && row.paneId === paneId && row.state === "sent" && row.native === "enqueued")
+      .sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0));
+    for (const row of rows) await this.queue.confirm(row.id, "recalled");
+    const squash = (value: string) => value.replace(/\s+/g, "");
+    return { messages: rows.map(({ id, text: words }) => ({ id, text: words })), ours: rows.length > 0 && squash(rows.map((row) => row.text).join("")) === squash(text) };
+  }
   /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */
   textsOn(session: string, paneId: string): Promise<string[]> {
     return this.queue.textsOn(session, paneId);

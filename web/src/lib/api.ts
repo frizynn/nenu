@@ -1,5 +1,6 @@
 import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
 import type { PrAsk } from "./types";
+import type { TakenBack } from "./local-sends";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
 
@@ -675,9 +676,9 @@ export function settleTerminalDraft(paneId: string, draft: string, session: stri
 
 /**
  * Take back what waits in the agent's own queue (ADR 0117): the bridge pulls it into the agent's box,
- * reads it and clears the box, and answers with the words, every queued message together.
+ * reads it, clears the box and recalls the rows it held, and answers with the words and those rows.
  */
-export function takeBackQueue(paneId: string, session: string | undefined): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+export function takeBackQueue(paneId: string, session: string | undefined): Promise<({ ok: true } & TakenBack) | { ok: false; error: string }> {
   return req(withSession(`/api/pane/${encodeURIComponent(paneId)}/take-back`, session), { method: "POST", body: "{}" });
 }
 
