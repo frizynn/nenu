@@ -16,7 +16,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- A red count on the ⋯ and on its Status row says what waits on you with the menu shut (be33368f, ca9f2c73).
+- A red count on the ⋯ and on its Status row says what waits on you with the menu shut (be33368f, ca9f2c73, 87823561).
 
 ## [1.43.0] - 2026-10-22
 
