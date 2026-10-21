@@ -230,3 +230,4 @@ try {
 }
 await writeFile(join(outDir, "styles.json"), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ out: outDir, captures: Object.keys(report).length, failures }, null, 2));
+if (failures.length) process.exitCode = 1;
