@@ -114,6 +114,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted |
 | [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted |
 | [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0114 |
+| [0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md) | A state is a still glyph, coloured only when it asks for you | Accepted |
 | [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's

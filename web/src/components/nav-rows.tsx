@@ -28,7 +28,7 @@ export function RowBody({ mark, title, detail, end }: { mark: ReactNode; title: 
 
 /** A pane's state dot, or the terminal glyph for a shell, which has no agent state. */
 export function PaneMark({ pane }: { pane: Pick<AgentView, "kind" | "status"> }) {
-  return pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} surface="bg-transparent" />;
+  return pane.kind === "shell" ? <Terminal aria-hidden size={14} /> : <StatusDot status={pane.status} />;
 }
 
 /** `text` with the part matching `query` in semibold. */

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
-import { StatusDot } from "@/components/status-badge";
+import { StateMark } from "@/components/status-badge";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -66,11 +66,10 @@ export function threadsAround(source: ProjectChipsSource, paneId: string) {
   };
 }
 
-export const NEEDS_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
-export const WORKING_MARK = <StatusDot status="working" />;
+export const NEEDS_MARK = <StateMark state="needs" />;
+export const WORKING_MARK = <StateMark state="working" />;
 /** PRs' mark: beside the word on a desk, in its place on a phone. */
 export const PRS_MARK = <GitPullRequest aria-hidden className="size-3.5 shrink-0" />;
-const ENDED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
 
 /** One row per thread: its mark, its name, what it is doing and since when. A tap opens it. */
 export function ThreadRows({ threads, panes, now, onOpen }: {
@@ -86,7 +85,7 @@ export function ThreadRows({ threads, panes, now, onOpen }: {
         const ended = ENDED.has(state);
         return <li key={thread.id}>
           <button type="button" className={cn("composer-chip-item", ended && "text-muted-foreground")} onClick={() => onOpen(thread)}>
-            <span className="flex w-3.5 shrink-0 justify-center">{state === "needs" ? NEEDS_MARK : ended ? ENDED_MARK : WORKING_MARK}</span>
+            <span className="flex w-3.5 shrink-0 justify-center"><StateMark state={state} /></span>
             <span className="min-w-0 flex-1 truncate">{thread.title} <span className="text-muted-foreground">{threadDetail(thread, panes)}</span></span>
             <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{threadAge(thread, now)}</span>
           </button>

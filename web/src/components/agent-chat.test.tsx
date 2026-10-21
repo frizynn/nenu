@@ -728,7 +728,7 @@ describe("AgentChat — shared header: stale-status dimming", () => {
 
     const title = screen.getByRole("button", { name: /overview$/ });
     expect(title).toHaveTextContent("needs you");
-    const dot = () => title.querySelector("span.rounded-full");
+    const dot = () => title.querySelector("[data-node-state]");
     expect(dot()).toHaveClass("opacity-40"); // not live → frozen status dimmed
     act(() => setError(false)); // snapshot recovers → live
     expect(dot()).not.toHaveClass("opacity-40"); // undimmed instantly
@@ -1517,7 +1517,7 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(within(notice).queryByText(/Composer paused/)).not.toBeInTheDocument();
     const chip = within(notice).getByRole("button", { name: "Terminal waiting on a key" });
     expect(chip).toHaveAttribute("aria-expanded", "false");
-    expect(chip.querySelector("[aria-hidden].bg-status-blocked")).not.toBeNull();
+    expect(chip.querySelector("[aria-hidden][data-node-state=needs].text-status-blocked")).not.toBeNull();
     await user.click(chip);
     expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
