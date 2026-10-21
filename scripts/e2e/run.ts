@@ -2976,7 +2976,7 @@ async function chips(before: boolean): Promise<void> {
         if (await tap(page.getByRole("button", { name: /^Processes/ }).first(), "background")) { await shoot("background"); await page.keyboard.press("Escape"); }
       } else {
         const row = page.getByRole("group", { name: "Status" });
-        for (const chip of ["Needs you", "Working", "Background", "PRs", "Routines"]) {
+        for (const chip of ["Needs you", "Working", "Background", "PRs"]) {
           if (!await tap(row.getByRole("button", { name: new RegExp(`^${chip}`) }).first(), chip)) continue;
           await shoot(chip.toLowerCase().replace(" ", "-"));
           if (chip === "PRs" && name.startsWith("worker-phone")) {
@@ -2991,6 +2991,11 @@ async function chips(before: boolean): Promise<void> {
             }
           }
           await tap(page.getByRole("button", { name: "Close", exact: true }).first(), `${chip}:close`);
+        }
+        // Routines ask nothing of you: a row of the ⋯ menu opens their panel (ADR 0108).
+        if (await tap(page.getByRole("button", { name: "Conversation actions" }), "menu") && await tap(page.getByRole("button", { name: /^Routines/ }), "Routines")) {
+          await shoot("routines");
+          await tap(page.getByRole("button", { name: "Close", exact: true }).first(), "Routines:close");
         }
       }
       await context.close();
@@ -3167,6 +3172,21 @@ async function composerAround(): Promise<void> {
           if (m.boxTop !== rest.boxTop || m.scrollTop !== rest.scrollTop || m.threadBottom !== rest.threadBottom) moved.push(`${deviceName}:${when}-${slug}`);
         }
       }
+      // Routines ask nothing of you: the ⋯ menu opens their panel, and it moves nothing either.
+      await page.getByRole("button", { name: "Conversation actions" }).click();
+      await page.waitForTimeout(400);
+      await page.getByRole("button", { name: /^Routines/ }).click();
+      await page.waitForTimeout(500);
+      await shoot("open-routines");
+      const routinesOpen = await read();
+      seen[`${deviceName}:open-routines`] = routinesOpen;
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+      const routinesAfter = await read();
+      seen[`${deviceName}:after-routines`] = routinesAfter;
+      for (const [when, m] of [["open", routinesOpen], ["after", routinesAfter]] as const) {
+        if (m.boxTop !== rest.boxTop || m.scrollTop !== rest.scrollTop || m.threadBottom !== rest.threadBottom) moved.push(`${deviceName}:${when}-routines`);
+      }
       // What ended stays one tap away, folded and quiet under what still works.
       await row.getByRole("button", { name: /^Working/ }).click();
       await page.waitForTimeout(400);
@@ -3281,6 +3301,7 @@ async function chipLine(): Promise<void> {
     const activityOf = (url: string) => moments.find((m) => url.includes(encodeURIComponent(m.paneId)))?.activity ?? none;
     const shots: string[] = [];
     const seen: Record<string, unknown> = {};
+    const momentOf: Record<string, string> = {};
     for (const moment of moments) {
       for (const [deviceName, device] of [["phone", PHONE], ["desk", DESKTOP]] as const) {
         for (const scheme of ["dark", "light"] as const) {
@@ -3303,6 +3324,7 @@ async function chipLine(): Promise<void> {
           await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
           await page.waitForTimeout(2000);
           const key = `${moment.name}-${deviceName}-${scheme}`;
+          momentOf[key] = momentOf[`${key}-keyboard`] = moment.name;
           const path = join(outDir, `${key}.png`);
           await page.screenshot({ path, animations: "disabled" });
           shots.push(path);
@@ -3347,7 +3369,7 @@ async function chipLine(): Promise<void> {
     type Seen = ReturnType<typeof measureAboveBox>;
     const working = new Set<string>(moments.filter((m) => m.status === "working").map((m) => m.name));
     const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel") && !key.endsWith("-menu")).filter(([key, m]) => !m || m.pageScrollsSideways
-      || (working.has(key.replace(/-keyboard$/, "").split("-").slice(0, -2).join("-")) && !m.stopInBox)
+      || (working.has(momentOf[key] ?? "") && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
       || (m.chipLabels.length === 0 && m.aboveBox !== null && m.aboveBox > 0)).map(([key]) => key);
     // Opened from the ⋯ menu, finished work's panel floats: the box stays where it was.

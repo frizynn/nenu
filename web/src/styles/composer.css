@@ -56,8 +56,8 @@
 .composer-action { width: 32px; height: 32px; min-height: 32px; flex-shrink: 0; border-radius: 9999px; box-shadow: none; }
 .composer-send:disabled { background: var(--muted); color: var(--muted-foreground); }
 .composer-send[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
-/* Stop at the end of the line above the box, right edge on Send's, for the whole turn. It never
-   shrinks: beside more chips than fit, the chips scroll instead. */
+/* Stop beside Send for the whole turn (ADR 0108): a ring, so Send stays the box's one filled action.
+   "Really stop?" and "Stopping…" are pills of the same height. */
 .composer-stop-icon { background: transparent; color: var(--foreground); }
 .composer-stop { height: 32px; padding: 0 12px; border-radius: 9999px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
 .composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }

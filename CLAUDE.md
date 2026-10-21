@@ -211,6 +211,10 @@ the unit name; the Herdr action runs from anywhere.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
   which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)).
+- **The line above a chat's box holds only live work** (`composer-chips.tsx`): Needs you, Working, PRs;
+  finished work and routines are rows of the ⋯ menu. Stop sits in the box beside Send, never in its
+  slot, so a draft never swaps it under the thumb
+  ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped

@@ -56,6 +56,7 @@ import { diffCommentsCarried, diffCommentsFor, forgetDiffComments, useDiffCommen
 import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, type ChipLine } from "@/components/composer-chips";
+import { Fold } from "@/components/composer-fold";
 import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
@@ -246,44 +247,6 @@ function BusyChoicePanel({ choice, onPick, onCancel }: { choice: BusyChoice; onP
 }
 
 const NO_CHIPS: ChipLine = { chips: [], open: null, onOpenChange: () => {} };
-
-// How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
-const FOLD_OPEN_MS = 220;
-const FOLD_SHUT_MS = 150;
-// How long a chat takes to settle: its chips come from reads that answer after it mounts.
-const FOLD_SETTLE_MS = 2000;
-
-/**
- * A row above the box (Stop's, a notice) folds open and shut instead of appearing at once, so the
- * thread above moves with it rather than jumping. One already there on mount, or arriving while the
- * chat is still settling (the chips its first reads bring), is simply there: opening a chat must not
- * play a fold that walks the conversation up in steps. Folding shut, it keeps showing what it last
- * showed, out of reach: inert and hidden from assistive tech, so a Stop on its way out can never be
- * pressed.
- */
-function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
-  const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
-  const [mountedAt] = useState(() => Date.now());
-  const last = useRef<T | null>(null);
-  if (value) last.current = value;
-  const shown = Boolean(value);
-  useEffect(() => setPhase((current) => (shown
-    ? current === "open" ? current : Date.now() - mountedAt < FOLD_SETTLE_MS ? "open" : "opening"
-    : current === "shut" ? current : "shutting")), [shown, mountedAt]);
-  useEffect(() => {
-    if (phase !== "opening" && phase !== "shutting") return;
-    const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);
-    return () => clearTimeout(timer);
-  }, [phase]);
-  if (phase === "shut" || last.current === null) return null;
-  const shutting = phase === "shutting";
-  return (
-    <div className="composer-fold" data-phase={phase} inert={shutting} aria-hidden={shutting || undefined}>
-      <div>{children(last.current)}</div>
-    </div>
-  );
-}
-
 
 /** A send that did not go through, said above the box until the next edit or send. */
 interface SendFailure {
@@ -1475,7 +1438,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             live chip and shut when the last one goes. The open panel stays outside the fold, so a chip
             leaving the line (opened from the ⋯ menu, or its work just ended) keeps it as it was. Stop
             is in the box. */}
-        <ComposerChips {...chips} fold={(line) => <Fold value={line}>{(shown) => shown}</Fold>} />
+        <ComposerChips {...chips} />
         <DiffCommentChips comments={diffComments} onRemove={(comment) => forgetDiffComments(paneId, session, [comment])} />
 
         {/* One rounded box: the + leads, the draft grows upward to its cap, and Send's slot closes

@@ -113,6 +113,20 @@ it("keeps finished work one tap away once nothing waits or runs", async () => {
   expect(within(within(sheet).getByRole("list", { name: "Done" })).getByRole("button", { name: "Expand explorer" })).toBeVisible();
 });
 
+// No chip on the line takes focus back: the ⋯ trigger the panel was opened from does.
+it("opens finished work from the ⋯ menu with focus in its panel, and Escape gives it back to ⋯", async () => {
+  activityList = { ...list, workflows: list.workflows.filter((w) => w.status !== "running"), tasks: [] };
+  subagentList = subagents([{ ...explorer, status: "completed" }]);
+  const { user } = renderChat();
+  await waitFor(() => expect(subagentCalls).toBeGreaterThan(0));
+  await fromMenu(user, /^Finished work · \d+$/);
+  const sheet = screen.getByRole("dialog", { name: "Finished work" });
+  await waitFor(() => expect(sheet.contains(document.activeElement)).toBe(true));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Finished work" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Conversation actions" })).toHaveFocus();
+});
+
 it("says Published when all the session left is pages it published", async () => {
   activityList = { ...list, workflows: [], tasks: [] };
   subagentList = subagents([]);

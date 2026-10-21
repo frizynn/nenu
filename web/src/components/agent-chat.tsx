@@ -393,6 +393,8 @@ export function AgentChat({
   const catalog = useModelCatalog({ paneId, session, agent: agent?.agent, live: liveModelBlock,
     enabled: hasConversation && !isShell && !gone && !connecting });
   const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  // The ⋯ trigger: a panel opened from its rows gives focus back there, having no chip on the line.
+  const actionsRef = useRef<HTMLButtonElement>(null);
   const writableRef = useRef(false);
   writableRef.current = !readOnly && !gone && !connecting;
   const localModel = useLocalModelApply({ paneId, session, agent: agent?.agent, requestedLines,
@@ -1023,10 +1025,9 @@ export function AgentChat({
     // their own: a project's history would keep it there for good.
     ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
       // The chat's own turn is never in this count: the session's work alone reads as Background.
-      label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Done" : "Published",
+      label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Finished work" : "Published",
       count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined,
-      title: workingCount > 0 ? undefined : finished > 0 ? "Finished work" : "Published",
-      tucked: workingCount === 0, content: <>
+      tucked: workingCount === 0, icon: ListChecks, content: <>
       {around && threadRows(around.working)}
       {(sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) || (around?.resolved.length ?? 0) > 0) &&
         processList({ running: processes.running, done: processes.done }, published,
@@ -1040,11 +1041,12 @@ export function AgentChat({
       </div>}
     </div> }] : []),
     // Routines run on their own clock and ask nothing of you here: the ⋯ menu opens them.
-    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length, tucked: true,
+    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length, tucked: true, icon: Clock,
       content: <RoutineRows routines={routines} now={Date.now()} /> }] : []),
   ];
-  const tuckedActions: ConversationAction[] = chips.filter((c) => c.tucked).map((c) => ({ id: `chip-${c.id}`,
-    label: c.count > 0 ? `${c.title ?? c.label} · ${c.count}` : c.title ?? c.label, icon: c.id === "routines" ? Clock : ListChecks, run: () => setChip(c.id) }));
+  const openChip = (next: ChipId | null) => { setChip(next); if (!desktop) setProcessDetail(null); };
+  const tuckedActions: ConversationAction[] = chips.flatMap((c) => c.tucked && c.icon ? [{ id: `chip-${c.id}`,
+    label: c.count > 0 ? `${c.title ?? c.label} · ${c.count}` : c.title ?? c.label, icon: c.icon, run: () => openChip(c.id) }] : []);
   const chipDetail = !desktop && processDetail && processDetailContent
     ? { title: detailTitle(processDetail, activity), content: <RunNamedAbove value>{processDetailContent}</RunNamedAbove>, onBack: () => setProcessDetail(null) }
     : null;
@@ -1059,7 +1061,7 @@ export function AgentChat({
   const sessionTools = agent && conversationCapable
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
-  const actionsMenu = agent && !subagent ? <ConversationActions
+  const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
     groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
@@ -1413,7 +1415,7 @@ export function AgentChat({
             place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
-              onOpenChange: (next) => { setChip(next); if (!desktop) setProcessDetail(null); } }}
+              returnFocus: actionsRef, onOpenChange: openChip }}
             usageControls={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="metrics" />}
             nativeWorkbench={showConversation}
             prepareSend={showConversation ? panels.prepareSend : undefined}

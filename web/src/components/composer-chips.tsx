@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X } from "@/components/ui/icon";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
+import { Fold } from "@/components/composer-fold";
 import { StatusDot } from "@/components/status-badge";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
@@ -45,6 +46,8 @@ export interface ChipView {
   mark?: ReactNode;
   /** Asks nothing of you (finished work, routines): off the line, its panel opened from the ⋯ menu. */
   tucked?: boolean;
+  /** The ⋯ menu row's icon, for a chip that can be tucked. */
+  icon?: IconComponent;
   content: ReactNode;
 }
 
@@ -144,6 +147,8 @@ export interface ChipLine {
   open: ChipId | null;
   onOpenChange: (id: ChipId | null) => void;
   detail?: { title: string; content: ReactNode; onBack: () => void } | null;
+  /** Where focus goes when a panel closes with no chip on the line to take it (the ⋯ trigger). */
+  returnFocus?: RefObject<HTMLElement | null>;
 }
 
 /** A press that belongs to something the panel opened, such as a confirmation or a diff over the page. */
@@ -153,14 +158,14 @@ const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled), select:
 
 /**
  * The line above the box: its live chips, and the open chip's panel floating over the thread, anchored
- * to the line (a tucked chip's panel, opened from the ⋯ menu, floats from the same place). `fold` draws
- * the line, folding it open and shut, while the panel stays outside it. The panel takes no height, so
+ * to the line (a tucked chip's panel, opened from the ⋯ menu, floats from the same place). The line
+ * folds open and shut; the panel stays outside the fold, so a chip leaving the line keeps it as it was. The panel takes no height, so
  * opening it moves neither the box nor the conversation. One panel at a time; the chip toggles it, and
  * ✕, Escape, a press outside it or, on a phone, Back close it. While open, Tab stays inside it, and
- * closing gives focus back to the chip. On a phone a process's details take the panel's place, named
+ * closing gives focus back to the chip, or to `returnFocus` when the chip is off the line. On a phone a process's details take the panel's place, named
  * by its header, with Back.
  */
-export function ComposerChips({ chips, open, onOpenChange, detail, fold }: ChipLine & { fold: (line: ReactNode | null) => ReactNode }) {
+export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }: ChipLine) {
   const buttons = useRef(new Map<ChipId, HTMLButtonElement>());
   const line = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -177,7 +182,10 @@ export function ComposerChips({ chips, open, onOpenChange, detail, fold }: ChipL
     if (!shown) return;
     if (how === "own") leaveEntry();
     onOpenChange(null);
-    if (how !== "outside") buttons.current.get(shown.id)?.focus({ preventScroll: true });
+    if (how === "outside") return;
+    // A tucked chip has no button, and one whose work just ended is folding out, inert.
+    const chip = buttons.current.get(shown.id);
+    (chip && !chip.closest("[inert]") ? chip : returnFocus?.current)?.focus({ preventScroll: true });
   };
 
   // The panel opens with focus inside it, where the keyboard stays until it closes.
@@ -234,9 +242,9 @@ export function ComposerChips({ chips, open, onOpenChange, detail, fold }: ChipL
           <div className="composer-chip-panel-body">{detail ? detail.content : shown.content}</div>
         </section>
       )}
-      {fold(row.length > 0 ? <div className="composer-line">
+      <Fold value={row.length > 0 && row}>{(shownRow) => <div className="composer-line">
         <div role="group" aria-label="Status" className="composer-chip-row">
-          {row.map((chip) => (
+          {shownRow.map((chip) => (
             <button key={chip.id} ref={(node) => { if (node) buttons.current.set(chip.id, node); else buttons.current.delete(chip.id); }}
               type="button" className="composer-chip"
               aria-label={chip.count > 0 ? `${chip.label}, ${chip.count}` : chip.label}
@@ -248,7 +256,7 @@ export function ComposerChips({ chips, open, onOpenChange, detail, fold }: ChipL
             </button>
           ))}
         </div>
-      </div> : null)}
+      </div>}</Fold>
     </div>
   );
 }
