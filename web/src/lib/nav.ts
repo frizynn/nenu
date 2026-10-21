@@ -40,6 +40,12 @@ export function projectPath(slug: string, session?: string): string {
   return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
 }
 
+/** A project's finished work, its History (ADR 0106). */
+export function projectHistoryPath(slug: string, session?: string): string {
+  const path = projectPath(slug, session);
+  return `${path}${path.includes("?") ? "&" : "?"}work=finished`;
+}
+
 /** One node of a project's organization: its detail, for a node that runs in no live pane. */
 export function nodePath(slug: string, nodeId: string, session?: string): string {
   return `/project/${encodeURIComponent(slug)}/node/${encodeURIComponent(nodeId)}${sessionSearch(session)}`;

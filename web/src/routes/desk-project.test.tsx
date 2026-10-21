@@ -26,6 +26,7 @@ const threads: ProjectThreadView[] = [
   node("t-4", "Docs", "t-3", { group: "working", pr: { state: "open", number: 58 } }),
   node("t-7", "Hotfix", "root", { group: "idle" }),
   node("t-8", "Shipped", "t-3", { status: "resolved" }),
+  node("t-9", "Copy fix", "t-3", { group: "ready-for-review", pr: { state: "merged", number: 60 } }),
 ];
 const project: ProjectView = { slug: "hub", name: "Hub", goal: "Ship it", status: "active", source: "json", nodeActions: true, waitingAsks: 1, threads };
 const data: HomeData = {
@@ -45,6 +46,8 @@ beforeEach(() => {
     http.get("/api/org/summary", () => HttpResponse.json({ ok: true, coordinator: null, usage: null, status: null, threads: [] })),
     http.get("/api/org/asks", () => HttpResponse.json({ ok: true, answers: true, decisions: [], asks: [
       { project: "hub", coordinator: { id: "t-3", title: "Lead" }, line: 4, text: "Which plan?", answer: "", links: [], group: "waiting", state: "needs-decision", answerable: true },
+      { project: "hub", coordinator: { id: "t-3", title: "Lead" }, line: 5, text: "Old plan", answer: "shipped", links: [], group: "done", state: "done" },
+      { project: "hub", coordinator: { id: "t-3", title: "Lead" }, line: 6, text: "[in-progress] Faster docs : thread at work (t-4)", answer: "", links: [], group: "other", state: "unknown" },
     ] })),
     http.get("/api/org/routines", () => HttpResponse.json({ ok: true, available: true, editable: true, broken: 0, routines: [prRoutine, leadRoutine] })),
     http.post("/api/org/routine/set", async ({ request }) => {
@@ -87,6 +90,19 @@ describe("a desk's project page", () => {
     expect(lead.getByRole("button", { name: /Docs/ })).toHaveTextContent("#58");
     expect(within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: /Hotfix/ })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/project/hub");
+  });
+
+  it("opens a coordinator on a tap anywhere on its card's head; the fold is its own button", async () => {
+    const { user, router } = setup("/project/hub");
+    const lead = within(await screen.findByRole("region", { name: "Lead" }));
+    // A merged pull request closes on its own: not counted, nor read, as work to review.
+    expect(lead.getByRole("button", { name: /Copy fix/ })).toHaveTextContent("merged, closes on its own");
+    expect(lead.queryByText(/to review/)).toBeNull();
+    await user.click(lead.getByRole("button", { name: "Hide Lead threads" }));
+    expect(lead.queryByRole("button", { name: /Docs/ })).toBeNull();
+    expect(router.state.location.pathname).toBe("/project/hub");
+    await user.click(lead.getByText("1 waiting on you"));
+    expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
   });
 
   it("keeps finished work in History, one step away, by day and searched by who ran it", async () => {
@@ -159,12 +175,45 @@ describe("a desk's coordinator page", () => {
     const { user } = setup("/project/hub/node/t-3");
     expect(within(await screen.findByRole("main")).getByRole("heading", { level: 1, name: "Lead" })).toBeInTheDocument();
     const tabs = () => within(screen.getByRole("tablist", { name: "Lead" })).getAllByRole("tab").map((tab) => tab.textContent);
-    await waitFor(() => expect(tabs()).toEqual(["Threads1", "Waiting on you1", "Routines1", "Status"]));
+    await waitFor(() => expect(tabs()).toEqual(["Threads2", "Waiting on you1", "Routines1", "Status"]));
     expect(screen.getByRole("button", { name: /1 decision waits on you/ })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /Routines/ }));
     await waitFor(() => expect(screen.getByRole("tab", { name: /Routines/ })).toHaveAttribute("aria-selected", "true"));
     expect(await screen.findByRole("button", { name: /lead-daily/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /pr-followup/ })).toBeNull();
+  });
+
+  it("lists only its live work, with what finished one line to the project's History, and no Summary", async () => {
+    const { user, router } = setup("/project/hub/node/t-3");
+    const panel = within(await screen.findByRole("tabpanel"));
+    expect(panel.getByRole("button", { name: /Docs/ })).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: /Copy fix/ })).toHaveTextContent("merged, closes on its own");
+    expect(panel.queryByText("Shipped")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Summary" })).toBeNull();
+    // Open chat and New thread are one kind of button.
+    const main = within(screen.getByRole("main"));
+    const [chat, start] = [main.getByRole("button", { name: /Open chat/ }), main.getByRole("button", { name: /New thread/ })];
+    expect(chat.className).toBe(start.className);
+    await user.click(panel.getByRole("button", { name: /1 finished/ }));
+    expect(`${router.state.location.pathname}${router.state.location.search}`).toBe("/project/hub?work=finished");
+  });
+
+  it("waits on you only for what does; Status reads every ask as a request with its state, done ones folded", async () => {
+    const { user } = setup("/project/hub/node/t-3?tab=waiting");
+    const waiting = within(await screen.findByRole("tabpanel"));
+    expect(await waiting.findByText("Which plan?")).toBeInTheDocument();
+    expect(waiting.queryByText("Old plan")).toBeNull();
+    expect(waiting.queryByText(/Faster docs/)).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Status" }));
+    const card = within(await screen.findByRole("region", { name: "Coordinator card" }));
+    // A line outside the format reads as the request it is, its brackets gone: never "Other lines".
+    const progress = within(card.getByRole("region", { name: "In progress" }));
+    expect(progress.getByText("Faster docs")).toBeInTheDocument();
+    expect(progress.getByText(/thread at work/)).toBeInTheDocument();
+    expect(card.queryByText(/Other lines|Not marked|\[in-progress\]/)).toBeNull();
+    expect(card.queryByText("Old plan")).toBeNull();
+    await user.click(card.getByRole("button", { name: /^Done/ }));
+    expect(card.getByText("Old plan")).toBeInTheDocument();
   });
 });
 

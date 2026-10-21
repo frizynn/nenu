@@ -6,11 +6,11 @@ import type { HeaderBack } from "@/components/app-header";
 import { ColumnPage } from "@/components/column-page";
 import { CoordinatorHead } from "@/components/coordinator-card";
 import { CoordinatorStatus } from "@/components/coordinator-status";
-import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
+import { OwnReport } from "@/components/coordinator-summary";
 import { DeskCoordinator } from "@/components/desk-coordinator";
 import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
-import { CloseNodeDialog, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
+import { CloseNodeDialog, OrgTreeList, TasksHeader, prSummary, threadAge, threadTree } from "@/components/project-tasks";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAsks } from "@/hooks/use-asks";
@@ -59,7 +59,7 @@ function NodePage() {
   const coordinating = isRoot || node?.thread.role === "coordinator";
   const subtree = project && coordinating ? threadTree(project, isRoot ? undefined : node?.thread.id) : [];
   const read = useThreadSummaries(project, node ? [node.thread, ...subtree] : subtree);
-  const { summaries, failed } = read;
+  const { summaries } = read;
   // Only a coordinator has a card to fill.
   const asks = useAsks(coordinating ? data.projects : undefined);
   const live = (paneId: string | undefined) => paneId !== undefined && data.agents.some((pane) => pane.paneId === paneId);
@@ -133,7 +133,8 @@ function NodePage() {
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
       </section>
-      {coordinator && <CoordinatorWork key={thread.id} coordinator={thread} summaries={summaries} failed={failed}
+      {/* Its live work; what finished is the tree's one folded History line (ADR 0108). */}
+      {coordinator && <OrgTreeList key={thread.id}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
       <CloseNodeDialog project={project} node={closing ? node : null} session={data.session} onCancel={() => setClosing(false)}

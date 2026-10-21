@@ -6,15 +6,15 @@ import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import type { DemoHerd, OrgSeed } from "./scenario.ts";
 
-// A coordinator's Summary on the e2e bench: a coordinator whose threads reported in every outcome
+// Reports on the e2e bench: a coordinator whose threads reported in every outcome
 // (a decision with three captures and its documents, a blocked one, one working, one done with an
 // approved PR, one merged, an old one with no report, and a nested coordinator), with the fields
 // Organizations adds (`verdict`, `summary`, `captures`, `deliverables`). The captures are mock
 // screens the bench renders itself, so no real screen or client data is involved. It checks the
-// library route from outside the page (what it serves and what it refuses), then captures the
-// Summary on a phone (dark and light) and a desk, a capture opened large, the Threads tab, and
-// records the phone flow. `--quiet` seeds the same threads without the new fields: an Organizations
-// that predates them, where the page must open on its tree as before.
+// library route from outside the page (what it serves and what it refuses), then that the
+// coordinator's page lists only its tree (its Summary is gone, ADR 0108) and that a thread's own page
+// carries its report, a capture opened large. `--quiet` seeds the same threads without the new
+// fields: an Organizations that predates them.
 //
 //   bun scripts/e2e/coordinator-summary.ts [--quiet] [--port 8797] [--out DIR]
 
@@ -30,6 +30,7 @@ const quiet = values.quiet === true;
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `coordinator-summary-${Date.now()}`);
 const CAPTURE_EPOCH = Date.parse("2026-10-10T14:00:00Z");
 const NODE = "/project/acme/node/t-0010";
+const THREAD = "/project/acme/node/t-0011";
 
 /** A mock screen: what an agent's screenshot of its own work looks like, drawn from markup. */
 interface Mock { thread: string; file: string; caption: string; width: number; height: number; html: string }
@@ -198,12 +199,15 @@ async function main(): Promise<void> {
     if (!quiet && library.served.some((entry) => entry.status !== 200)) failures.push("the library refused a file inside it");
     if (library.refused.some((entry) => entry.status !== 404)) failures.push("the library served a file it must refuse");
 
-    const open = async (device: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+    const open = async (path: string, device: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
       const context = await browser!.newContext({ ...device, timezoneId: "UTC", locale: "en-US", ...extra }) as Awaited<ReturnType<Browser["newContext"]>>;
       const page = await context.newPage();
       await page.clock.install({ time: bridge.now() });
-      await page.goto(bridge.url + NODE);
-      await page.getByRole("tab", { name: "Summary" }).waitFor({ timeout: 15_000 });
+      await page.goto(bridge.url + path);
+      await page.locator("main").getByText(path === NODE ? "Rediseño del checkout" : "Panel de stock a 390 px").first().waitFor({ timeout: 15_000 }).catch(async (error: unknown) => {
+        await page.screenshot({ path: join(outDir, "stuck.png") });
+        throw error;
+      });
       await page.waitForTimeout(1200);
       return { page, context };
     };
@@ -212,47 +216,25 @@ async function main(): Promise<void> {
       await page.screenshot({ path, animations: "disabled" });
       shots.push(path);
     };
-    const TALL_PHONE = { ...PHONE, viewport: { width: 390, height: 3800 } };
-    const TALL_DESKTOP = { ...DESKTOP, viewport: { width: 1440, height: 2000 } };
 
-    for (const [name, device] of [["phone", PHONE], ["phone-full", TALL_PHONE], ["phone-light", { ...TALL_PHONE, colorScheme: "light" }], ["desktop", DESKTOP], ["desktop-full", TALL_DESKTOP]] as const) {
-      const { page, context } = await open(device);
-      const selected = await page.getByRole("tab", { name: "Summary" }).getAttribute("aria-selected");
-      if (selected !== (quiet ? "false" : "true")) failures.push(`${name}: the page opened on the ${selected === "true" ? "Summary" : "tree"}`);
-      if (quiet) await page.getByRole("tab", { name: "Summary" }).click();
-      await page.waitForTimeout(400);
-      await shoot(page, `summary-${name}`);
+    // The coordinator's page lists its live work as the tree, never its threads' reports (ADR 0108).
+    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      const { page, context } = await open(NODE, device);
+      if (await page.getByRole("tab", { name: "Summary" }).count()) failures.push(`${name}: the coordinator page still offers a Summary`);
+      if (await page.locator("main article").count()) failures.push(`${name}: the coordinator page draws report cards`);
+      await shoot(page, `coordinator-${name}`);
+      await context.close();
+    }
+    // A thread's own page carries its report: its words, its captures (opened large) and its documents.
+    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
+      const { page, context } = await open(THREAD, device);
+      await shoot(page, `report-${name}`);
       if (name === "phone" && !quiet) {
         await page.getByRole("button", { name: /^Open Opción A/ }).click();
         await page.getByRole("dialog", { name: /^Opción A/ }).waitFor({ timeout: 5000 });
         await page.waitForTimeout(600);
         await shoot(page, "capture-open-phone");
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(400);
-        await page.getByRole("tab", { name: /^Threads/ }).click();
-        await page.waitForTimeout(400);
-        await shoot(page, "threads-tab-phone");
       }
-      await context.close();
-    }
-
-    if (!quiet) {
-      // The phone flow, recorded: read the decisions, swipe the captures, open one, close it, then the tree.
-      const { page, context } = await open(PHONE, { recordVideo: { dir: outDir, size: { width: 390, height: 844 } } });
-      await page.waitForTimeout(800);
-      await page.evaluate(() => { document.querySelector('[aria-label="Captures"]')?.scrollBy({ left: 260, behavior: "smooth" }); }, null);
-      await page.waitForTimeout(900);
-      await page.getByRole("button", { name: /^Open Opción B/ }).click();
-      await page.waitForTimeout(1200);
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(600);
-      await page.evaluate(() => { document.querySelector("main")?.scrollBy({ top: 900, behavior: "smooth" }); }, null);
-      await page.waitForTimeout(1200);
-      await page.evaluate(() => { document.querySelector("main")?.scrollBy({ top: 1400, behavior: "smooth" }); }, null);
-      await page.waitForTimeout(1200);
-      await page.evaluate(() => { document.querySelector("main")?.scrollTo({ top: 0 }); }, null);
-      await page.getByRole("tab", { name: /^Threads/ }).click();
-      await page.waitForTimeout(1200);
       await context.close();
     }
     const result = { quiet, outDir, shots, library, failures };

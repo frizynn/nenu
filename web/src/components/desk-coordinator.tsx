@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ChatCircle, ChevronRight, GitPullRequest, Plus } from "@/components/ui/icon";
+import { ChatCircle, ChevronRight, GitPullRequest, History, Plus } from "@/components/ui/icon";
 
 import { AskSections } from "@/components/ask-list";
 import { CoordinatorHead } from "@/components/coordinator-card";
-import { CoordinatorWork, OwnReport } from "@/components/coordinator-summary";
-import { DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenNode, type DeskTab } from "@/components/desk-pages";
+import { OwnReport } from "@/components/coordinator-summary";
+import { DeskAction, DeskHead, DeskTabs, useDeskTab, useOpenNode, WorkRow, type DeskTab } from "@/components/desk-pages";
 import { RoutinesPanel } from "@/components/desk-routines";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -17,9 +17,9 @@ import { useAsks } from "@/hooks/use-asks";
 import { useRoutines } from "@/hooks/use-routines";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { askSections } from "@/lib/asks";
-import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState } from "@/lib/org-tree";
+import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { routinesFor, waitingGroups } from "@/lib/project-work";
-import { nodePath, panePath, projectPath } from "@/lib/nav";
+import { nodePath, panePath, projectHistoryPath, projectPath } from "@/lib/nav";
 import { isOpenThread } from "@/lib/projects";
 import { isReadOnly, type AgentView, type DeviceAuth, type ProjectThreadView, type ProjectView, type RoutineView } from "@/lib/types";
 
@@ -27,8 +27,9 @@ type Tab = "threads" | "waiting" | "routines" | "status";
 
 /**
  * A coordinator on a desk (ADR 0102): its name, state, threads working and pull request, Open chat and
- * New thread, then Threads (its work, as Summary and tree), what waits on you there, the routines that
- * reach it, and Status (its card and STATUS.md). `thread` is undefined for the project's own coordinator.
+ * New thread, then Threads (only its live work, finished work one line away in the project's History,
+ * ADR 0108), what waits on you there, the routines that reach it, and Status (its card, with what was
+ * asked of it, and STATUS.md). `thread` is undefined for the project's own coordinator.
  */
 export function DeskCoordinator({ project, thread, panes, device, session, onChanged }: {
   project: ProjectView;
@@ -47,7 +48,8 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   const read = useThreadSummaries(project, thread ? [thread, ...work] : work);
   const asks = useAsks([project]);
   const routines = useRoutines(project.slug, session);
-  const mine = asks.list ? askSections(asks.list, [project], { project: project.slug, coordinator: id }) : [];
+  // Only what waits on you: what it is doing and what it did are its Status (ADR 0108).
+  const mine = asks.list ? askSections(asks.list, [project], { project: project.slug, coordinator: id }).filter((section) => section.group === "waiting") : [];
   const waiting = asks.list ? waitingGroups(asks.list, project).find((group) => group.coordinator.id === id)?.count ?? 0 : 0;
   const reaching = (list: readonly RoutineView[]) => routinesFor(list, id, project.threads);
   const tabs: Array<DeskTab<Tab>> = [
@@ -88,7 +90,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
       </span>}
       actions={<>
         {chat && <DeskAction onClick={() => navigate(panePath(chat, session))}><ChatCircle aria-hidden className="size-4" />Open chat</DeskAction>}
-        {canStart && <DeskAction primary aria-haspopup="dialog"
+        {canStart && <DeskAction aria-haspopup="dialog"
           onClick={() => openNewDialog({ kind: "thread", project: project.slug, role: "worker", parent: id, onStarted: onChanged })}>
           <Plus aria-hidden className="size-4" />New thread</DeskAction>}
       </>} />
@@ -100,20 +102,18 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
           <NodeDot state="needs" className="size-1.5" /><span className="flex-1">{waiting} {waiting === 1 ? "decision waits" : "decisions wait"} on you</span>
           <span className="inline-flex items-center gap-1 text-footnote text-muted-foreground">Review<ChevronRight aria-hidden className="size-3.5" /></span>
         </button>}
-        <CoordinatorWork key={id} coordinator={thread ?? { id }} summaries={read.summaries} failed={read.failed}
-          project={project} threads={work} panes={panes} session={session} readOnly={readOnly}
-          onOpenPane={(paneId) => navigate(panePath(paneId, session))} onOpenNode={(node) => navigate(nodePath(project.slug, node, session))} onChanged={onChanged} />
+        <LiveWork threads={work} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session))} />
       </>}
       {tab === "waiting" && (asks.list
         ? mine.length > 0
           ? <AskSections sections={mine} session={session} whose={false} answers={asks.list.answers === true} readOnly={readOnly} />
-          : <p className="px-1 text-subhead text-muted-foreground">Nothing asked here.</p>
+          : <p className="px-1 text-subhead text-muted-foreground">Nothing waits on you here.</p>
         : <p className="px-1 text-subhead text-muted-foreground">{!asks.loaded ? "Reading…" : asks.failed ?? "This Herdr Organizations can’t list asks yet; update it to see them here."}</p>)}
       {tab === "routines" && <RoutinesPanel routines={routines} shown={reaching} threads={project.threads} readOnly={readOnly}
         empty="No routine reaches this coordinator." />}
       {tab === "status" && <>
         <CoordinatorHead project={project} coordinatorId={id} status={status} usage={usage} listsAgents={false}
-          asks={{ list: null, loaded: true }} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
+          asks={asks} summaries={read.summaries} session={session} readOnly={readOnly} onOpenNode={openNode}
           onOpenStatusNode={(node) => navigate(nodePath(project.slug, node, session))} />
         {thread && <OwnReport project={project} thread={thread} summary={read.summaries.get(thread.id)} />}
         {!status && !thread?.verdict && <p className="px-1 text-subhead text-muted-foreground">This coordinator has no STATUS.md yet.</p>}
@@ -123,5 +123,25 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
     </div>
     {closable && <CloseNodeDialog project={project} node={closing ? closable : null}
       session={session} onCancel={() => setClosing(false)} onClosed={() => { setClosing(false); onChanged(); }} />}
+  </>;
+}
+
+/**
+ * A coordinator's live work: its open threads, the most urgent first, each a row that opens it; what
+ * finished is one line that opens the project's History, never cards on this page (ADR 0108).
+ */
+function LiveWork({ threads, onOpenNode, onHistory }: { threads: readonly ProjectThreadView[]; onOpenNode: (node: OrgNode) => void; onHistory: () => void }) {
+  const walk = (nodes: readonly OrgNode[], depth: number): Array<{ node: OrgNode; depth: number }> =>
+    nodes.flatMap((node) => [{ node, depth }, ...walk(node.children, depth + 1)]);
+  const rows = walk(orgTree(threads).open, 0);
+  const finished = threads.filter((thread) => thread.status === "resolved").length;
+  return <>
+    <div className="desk-toolbar">
+      <span className="min-w-0 flex-1 truncate">{rows.length === 0 ? "Nothing running" : `${rows.length} open`}</span>
+      {finished > 0 && <button type="button" className="quiet-action" onClick={onHistory}>
+        <History aria-hidden className="size-3.5" />{finished} finished<ChevronRight aria-hidden className="size-3.5" />
+      </button>}
+    </div>
+    {rows.length > 0 && <div className="desk-card">{rows.map(({ node, depth }) => <WorkRow key={node.thread.id} node={node} depth={depth} onOpen={onOpenNode} />)}</div>}
   </>;
 }
