@@ -16,6 +16,7 @@ import {
   guardedSend,
   settleAfterType,
   settleDraft,
+  takeBackQueue,
   triggerFor,
   triggerHead,
   triggerPattern,
@@ -66,6 +67,10 @@ class Term {
   /** The box shows a pasted picture's path while it is read, and the token then takes its place. */
   pathFirst = false;
   lateTokens: Array<{ token: string; reads: number; path?: string }> = [];
+  /** Claude's own queue, and the history Up shows once it is empty (ADR 0118). */
+  queue: string[] = [];
+  history: string | null = null;
+  showingHistory = false;
   /** Runs before each read with its index, to change the screen between the send's reads. */
   onRead: ((n: number, term: Term) => void) | null = null;
   readonly calls: Call[] = [];
@@ -76,8 +81,10 @@ class Term {
     if (this.agent === "codex") {
       return [...this.lines, this.draft ? `\x1b[0m\x1b[1m› \x1b[0m${this.draft}` : PLACEHOLDER, "", "  GPT-6.1-Sol low · /tmp/p · Context 0% used", "  ? for shortcuts"].join("\n");
     }
+    const top = this.showingHistory ? `─── History 1/1 ${RULE}` : RULE;
+    const prompt = this.draft || (this.queue.length ? "Press up to edit queued messages" : "");
     const footer = this.saysPasting && this.lateTokens.length > 0 ? "  Pasting…" : "  Opus 5.5 | Context 13% used";
-    return [...this.lines, RULE, `❯ ${this.draft}`, RULE, footer, "  ← for agents"].join("\n");
+    return [...this.lines, top, `❯ ${prompt}`, RULE, footer, "  ← for agents"].join("\n");
   }
 
   /** Keys sent while typed text has not landed yet: they reach the box after it, never before. */
@@ -148,6 +155,14 @@ class Term {
         this.lines.push(`> ${this.draft}`);
         this.draft = "";
       } else if (key === "Backspace") this.draft = [...this.draft].slice(0, -1).join("");
+      else if (key === "ctrl+k") this.showingHistory = false;
+      else if (key === "Up" && !this.draft && this.queue.length) {
+        this.draft = this.queue.join(" ");
+        this.queue = [];
+      } else if (key === "Up" && !this.draft && this.history) {
+        this.draft = this.history;
+        this.showingHistory = true;
+      }
     }
   };
 
@@ -1366,5 +1381,56 @@ describe("settleDraft", () => {
     expect((await settleDraft(deps(term), "borrador", "send")).ok).toBe(false);
     expect((await settleDraft(deps(term), "borrador", "discard")).ok).toBe(false);
     expect(term.keys()).toEqual([]);
+  });
+});
+
+describe("takeBackQueue", () => {
+  const deps = (term: Term) => ({ herdr: term, paneId: "w1:p1", readLines: 200, sleep: noSleep });
+
+  test("brings Claude's whole queue back and leaves its box empty", async () => {
+    const term = new Term();
+    term.queue = ["cola A", "cola B con más palabras"];
+    expect(await takeBackQueue(deps(term))).toEqual({ ok: true, text: "cola A cola B con más palabras" });
+    expect(term.keys()[0]).toEqual(["Up"]);
+    expect(term.draft).toBe("");
+    expect(term.queue).toEqual([]);
+  });
+
+  test("presses nothing once Claude has read its queue", async () => {
+    const term = new Term();
+    term.history = "an old message";
+    expect(await takeBackQueue(deps(term))).toEqual({ ok: false, error: expect.stringMatching(/already read its queue/) });
+    expect(term.keys()).toEqual([]);
+  });
+
+  test("clears a past message Up reached when the queue was read under it, and takes nothing", async () => {
+    const term = new Term();
+    term.queue = ["cola A"];
+    term.history = "an old message";
+    // Claude reads its queue between the check and the key.
+    term.onRead = (n, t) => { if (n === 1) t.queue = []; };
+    const original = term.sendPaneKeys;
+    term.sendPaneKeys = async (paneId, keys) => { if (keys[0] === "Up") term.queue = []; return original(paneId, keys); };
+    expect(await takeBackQueue(deps(term))).toEqual({ ok: false, error: expect.stringMatching(/already read its queue/) });
+    expect(term.draft).toBe("");
+  });
+
+  test("leaves what came back in the box when it holds a paste or a picture only Claude has", async () => {
+    const term = new Term();
+    term.queue = ["[Pasted text #3 +40 lines]"];
+    expect(await takeBackQueue(deps(term))).toEqual({ ok: false, error: expect.stringMatching(/stays in its box/) });
+    expect(term.draft).toBe("[Pasted text #3 +40 lines]");
+  });
+
+  test("leaves a box that holds a draft, and a CLI with no recall", async () => {
+    const term = new Term();
+    term.queue = ["cola A"];
+    term.draft = "typed by hand";
+    expect((await takeBackQueue(deps(term))).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+    expect(term.draft).toBe("typed by hand");
+    const codex = new Term();
+    codex.agent = "codex";
+    expect(await takeBackQueue(deps(codex))).toEqual({ ok: false, error: expect.stringMatching(/can't take messages back/) });
   });
 });

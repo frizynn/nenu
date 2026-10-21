@@ -320,7 +320,7 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "dialog" }, "Waiting. Answer the dialog first."],
     ["codex", { state: "queued", deliveryMode: "steer" }, "Goes as soon as Codex's input box is free."],
     ["claude", { state: "queued", deliveryMode: "asap", waitingFor: "turn-start" }, "Waiting for Claude to start on the previous message."],
-    ["claude", { state: "sent", native: "enqueued" }, "In Claude's queue. Claude reads it after the step it's on."],
+    ["claude", { state: "sent", native: "enqueued" }, "Claude reads it after this step."],
     ["claude", { state: "sent", native: "absorbed" }, "Read by Claude"],
     ["claude", { state: "sent", native: "recalled" }, "Taken back into the terminal's input box"],
     ["codex", { state: "sent", deliveryMode: "steer" }, "Sent into Codex's current turn"],
@@ -329,8 +329,8 @@ describe("queueRowStatus says what each CLI does with the row", () => {
     expect(queueRowStatus(agent, row).label).toBe(label);
   });
 
-  it("offers Read it now only for a row Claude's own queue holds", () => {
-    expect(queueRowStatus("claude", { state: "sent", native: "enqueued" }).actions).toEqual(["readNow"]);
+  it("offers Read it now only for a row Claude's own queue holds, and taking it back to edit or remove", () => {
+    expect(queueRowStatus("claude", { state: "sent", native: "enqueued" }).actions).toEqual(["readNow", "edit", "remove"]);
     // Pressed once already: the chord backgrounds the running command, so nothing invites a repeat.
     expect(queueRowStatus("claude", { state: "sent", native: "enqueued", readNowAt: 1 })).toEqual({ tone: "busy", label: "Asked Claude to read it now.", actions: [] });
     expect(queueRowStatus("codex", { state: "sent", native: "enqueued" }).actions).toEqual([]);
