@@ -9,18 +9,20 @@ const FOLD_SHUT_MS = MOTION_CONTROL_MS;
 /**
  * What folds open and shut instead of appearing at once (a row above the box, a turn's work, a step's
  * output), so what sits around it moves with it rather than jumping. One already there on mount is
- * simply there.
+ * simply there, and so is one opened with `animate` off (a search hit, a focused entry): only what the
+ * operator opened moves (ADR 0113).
+ * The phase follows `value` in the render itself, so what opens is in the page in the same commit as
+ * the change that opened it: a search that scrolls to its hit finds it there.
  * Folding shut, it keeps showing what it last showed, out of reach: inert and hidden from assistive
  * tech, so a control on its way out can never be pressed.
  */
-export function Fold<T>({ value, children }: { value: T | null | false; children: (value: T) => ReactNode }) {
+export function Fold<T>({ value, animate = true, children }: { value: T | null | false; animate?: boolean; children: (value: T) => ReactNode }) {
   const [phase, setPhase] = useState<"open" | "opening" | "shutting" | "shut">(value ? "open" : "shut");
   const last = useRef<T | null>(null);
   if (value) last.current = value;
   const shown = Boolean(value);
-  useEffect(() => setPhase((current) => (shown
-    ? current === "open" ? current : "opening"
-    : current === "shut" ? current : "shutting")), [shown]);
+  if (shown && (phase === "shut" || phase === "shutting")) setPhase(animate ? "opening" : "open");
+  if (!shown && (phase === "open" || phase === "opening")) setPhase("shutting");
   useEffect(() => {
     if (phase !== "opening" && phase !== "shutting") return;
     const timer = setTimeout(() => setPhase(phase === "opening" ? "open" : "shut"), phase === "opening" ? FOLD_OPEN_MS : FOLD_SHUT_MS);

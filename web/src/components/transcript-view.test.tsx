@@ -560,6 +560,14 @@ describe("journal media", () => {
     expect(await screen.findByRole("img", { name: "Image 1" })).toHaveAttribute("src", "/api/pane/w1%3Ap1/journal-image?entry=call&n=0");
   });
 
+  it("keeps what a folded run of calls returned in sight under its line, the turn open", () => {
+    const read = (uuid: string, summary: string) => turn({ uuid, role: "assistant", turnId: "t", turn: { status: "running" },
+      parts: [{ kind: "tool", name: "Read", summary, result: { text: "", attachments: [{ kind: "image" as const, index: 0 }] } }] });
+    render(withViewer(<TranscriptView activityStatus="working" entries={[turn({ uuid: "ask", parts: [{ kind: "text", text: "shots" }] }), read("a", "a.png"), read("b", "b.png")]} />));
+    expect(screen.getByRole("button", { name: "Read 2 files", expanded: false })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Images these steps returned" }).querySelectorAll("img")).toHaveLength(2);
+  });
+
   it("keeps the images of folded work visible as one gallery for the turn", () => {
     render(withViewer(<TranscriptView activityStatus="done" entries={[
       turn({ uuid: "ask", parts: [{ kind: "text", text: "shots" }] }),
@@ -913,15 +921,13 @@ describe("TranscriptView — a turn waiting on the operator", () => {
 
   // Claude runs subagents side by side; when one of them asks for a permission, the dialog is the
   // subagent's. Their own calls keep running, and none of them is the request.
-  it("keeps parallel subagents running while a dialog inside one waits", async () => {
+  it("keeps parallel subagents running while a dialog inside one waits", () => {
     const agents = [...blocked.slice(0, -1), turn({ uuid: "a1", ts: at("09:01"), role: "assistant", turnId: "t1", parts: [
       { kind: "tool", name: "Task", summary: "Review the parser" },
       { kind: "tool", name: "Task", summary: "Review the UI" },
       { kind: "tool", name: "Task", summary: "Review the tests" },
     ] })];
     render(view("card", agents));
-    // None of them is the request, so their line stays folded until it is opened.
-    await userEvent.click(screen.getByRole("button", { name: "Ran 3 agents" }));
     for (const name of ["Review the parser", "Review the UI", "Review the tests"]) {
       expect(screen.getByRole("button", { name: `Running agent ${name}` })).toBeInTheDocument();
     }

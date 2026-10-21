@@ -181,7 +181,9 @@ export async function writeChatJournal(file: string, at: number, repeat = 1, tai
 export async function writeCommandsJournal(file: string, at: number, stage: "running" | "finished"): Promise<void> {
   let body = "";
   let parent: string | null = null;
-  let clock = at - 5 * 60_000;
+  // The demo turn starts 20 s before `at`, so a capture taken then reads "Working for" about as long as
+  // the finished turn's measured duration says.
+  let clock = at - 90_000;
   let n = 0;
   const row = (fields: Record<string, unknown>) => {
     const uuid = `${basename(file).slice(0, 8)}-0000-4000-9000-${String(++n).padStart(12, "0")}`;
@@ -213,7 +215,7 @@ export async function writeCommandsJournal(file: string, at: number, stage: "run
   clock += 1000;
   assistant("end_turn", [{ type: "text", text: "Listo: el README dice *agent* y los 212 tests pasan." }]);
   done(clock - start);
-  clock += 60_000;
+  clock = at - 20_000;
 
   // The operator's demo.
   user("hola usa comandos quiero ver como se ven en esta interfaz");

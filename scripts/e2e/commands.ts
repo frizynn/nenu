@@ -46,6 +46,8 @@ export async function commandsBench(bridge: TestBridge, browser: Browser, outDir
           .find((node) => node.innerText.includes(text));
         el?.scrollIntoView({ block: "center" });
       }, at);
+      // The pointer rests off the thread, so no row is caught lit by its hover.
+      await page.mouse.move(0, 0);
       await page.waitForTimeout(300);
       const path = join(outDir, `${prefix}-${name}-${deviceName}.png`);
       await page.screenshot({ path, animations: "disabled" });

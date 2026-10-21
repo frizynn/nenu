@@ -33,18 +33,24 @@ the colouring could not come that way.
    while open. A finished turn folds to its line and its answer; a running one is open.
 2. **Inside, the agent's words between runs of steps.** A run with one call, or only thoughts, draws
    as its own rows. A run with several calls folds under one line that counts them ("Ran 3 commands",
-   "Read 1 file, edited 1 file") with the icon they share; the thoughts among them fold with them.
+   "Read 1 file, edited 1 file") with the icon they share and no chevron; the thoughts among them fold
+   with them, and what their calls returned stays in sight under the line while it is folded. Open on
+   a desk, the line says when the run began.
 3. **A run drawn as rows stays rows while it is on screen.** A call that joins it as the turn runs
    never pulls a line in above rows the reader may have opened; the run folds the next time it is
-   drawn whole.
+   drawn whole. Calls still running never fold under a line in the past tense, and a run is keyed by
+   its place in the turn, so parallel calls finishing out of order keep it mounted.
 4. **A command is its row's name**, in the row's type; the verb stays in the row's accessible name.
    Open, it shows the command coloured by `lib/shell-tokens.ts` (program, flags, arguments, strings,
-   variables, keywords; text nodes only) and its output in grey, "Error: Exit code N" first. A failed
-   step marks only its icon in the destructive hue and says Failed in grey.
+   variables, keywords; text nodes only) and its output in grey, "Error: Exit code N" first. A row's
+   command is its first line as written, never passed through the Markdown a thought goes through. A
+   failed step half-tints its icon and its row says Failed in grey; its run's line tints only its icon.
+   The step in progress carries the live mark and no clock: the turn's line says how long.
 5. **Folds move as the box's rows already did** (ADR 0111): the composer's `Fold`, now `fold.tsx`
    with its `.fold` rules in `index.css`, grows a fold's height from nothing in 180 ms and shrinks it
    in 120 ms on the shared curve, inert while it leaves; chevrons turn in 120 ms; under reduced motion
-   only the fade remains. T3 Code animates only its chevron (measured, 200 ms); the operator asked for
+   only the fade remains. Only a fold the operator opened moves: one opened by search or focus is in
+   the page in the same commit (its phase follows its value in the render), so find can scroll to it. T3 Code animates only its chevron (measured, 200 ms); the operator asked for
    more ("faltan animaciones, como desplegar los comandos"). The chat holds the tapped line in place for
    the whole motion.
 
@@ -54,8 +60,6 @@ the colouring could not come that way.
   pointer (`max-h-80`) and runs whole under a finger, so the chat stays the one box that scrolls.
 - A call's own description (Claude's Bash `description`) is no longer drawn; it is the row's tooltip.
 - A turn opened by search or focus is simply there; only a tap animates.
-- A run of calls has no chevron, as in T3 Code: its line is the toggle, its time where a row's
-  chevron sits on a desk.
 - A running turn may hold an unfolded run that a reload would fold. That is the price of rule 3;
   revisit only with a measured jump that folding live runs would not cause.
 - A syntax highlighter that emits HTML (Shiki, Prism, highlight.js) stays out of the transcript; a new

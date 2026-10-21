@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -86,5 +87,35 @@ describe("a turn's runs of steps", () => {
     const step = document.querySelector("[data-live-step]") as HTMLElement;
     expect(step).toHaveTextContent("src/auth.ts");
     expect(step).not.toHaveTextContent("/repo/src/auth.ts");
+  });
+
+  it("keeps a run drawn as rows as rows when a call joins it while the turn runs", async () => {
+    const running = (calls: TranscriptPart[]): TranscriptEntry[] => [entries[0]!, { ...says("r", calls), turn: { status: "running" } }];
+    const { rerender } = render(<TranscriptView entries={running([call("Bash", "pwd")])} activityStatus="working" />);
+    await userEvent.click(screen.getByRole("button", { name: "Ran pwd" }));
+    rerender(<TranscriptView entries={running([call("Bash", "pwd"), call("Bash", "date")])} activityStatus="working" />);
+    expect(screen.queryByRole("button", { name: "Ran 2 commands" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ran pwd", expanded: true })).toBeInTheDocument();
+  });
+
+  it("draws calls that still run as rows, never under a line that says they ran", () => {
+    const pending = (summary: string) => call("Bash", summary, { result: undefined });
+    render(<TranscriptView entries={[entries[0]!, { ...says("r", [pending("a"), pending("b"), pending("c")]), turn: { status: "running" } }]} activityStatus="working" />);
+    expect(screen.queryByRole("button", { name: /^Ran \d+ commands/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Running a" })).toBeInTheDocument();
+  });
+
+  it("puts a search hit inside a folded turn in the page in the same commit, for find to scroll to", () => {
+    const seen: boolean[] = [];
+    function Probe({ query }: { query: string }) {
+      // Find's own effect looks for the hit as this one does: in the commit that set the query.
+      useEffect(() => { if (query) seen.push(document.querySelector("mark") !== null); }, [query]);
+      return null;
+    }
+    const view = (query: string) => <><TranscriptView entries={entries} activityStatus="done" query={query} /><Probe query={query} /></>;
+    const { rerender } = render(view(""));
+    rerender(view("requireRole"));
+    expect(seen).toEqual([true]);
+    expect(document.querySelector("[data-work-turn] > .fold")).toHaveAttribute("data-phase", "open");
   });
 });

@@ -15,7 +15,7 @@ import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Fold } from "./fold";
-import { Elapsed, LiveGlyph } from "./work-activity-label";
+import { LiveGlyph } from "./work-activity-label";
 
 // A turn's work as a timeline, the same on a phone and a desk: one line per step, its icon and what it
 // did in the quiet greys, so the steps read as the agent working and its prose as what it says. A
@@ -106,7 +106,7 @@ function describeCall(part: ToolPart): ToolStepDescription & { text: string } {
 const ROW = "group -mx-1.5 flex w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-subhead min-h-6 coarse:min-h-11 pointer-fine:hover:bg-hover";
 const CHEVRON = "size-3 shrink-0 text-subtle-foreground transition-[rotate,color] duration-120 ease-out group-hover:text-foreground motion-reduce:transition-none";
 
-/** A step in progress: its line carries the live glyph for its icon, and how long it has run. */
+/** A step in progress: its line carries the live glyph for its icon; the turn's line says how long. */
 type Live = Pick<LiveStep, "since">;
 
 /**
@@ -115,22 +115,22 @@ type Live = Pick<LiveStep, "since">;
  * itself (`data-work-toggle`) so the thread holds still and stops following. The live step is the
  * tail the thread follows, so it opens without reporting and the thread keeps following it.
  */
-function StepLine({ icon, live, label, expanded, controls, onToggle, children }: {
+function StepLine({ icon, live, label, title, expanded, controls, onToggle, children }: {
   icon: ReactNode;
   live?: Live;
   label?: string;
+  title?: string;
   expanded?: boolean;
   controls?: string;
   onToggle?: () => void;
   children: ReactNode;
 }) {
   const lead = live ? <LiveGlyph /> : icon;
-  const time = live?.since && <Elapsed since={live.since} className="shrink-0 text-footnote text-subtle-foreground" />;
   const chevron = <ChevronRight aria-hidden="true" className={cn(CHEVRON, expanded && "rotate-90", !onToggle && "invisible")} />;
-  if (!onToggle) return <div className={ROW}>{lead}{children}{time}{chevron}</div>;
+  if (!onToggle) return <div className={ROW} title={title}>{lead}{children}{chevron}</div>;
   return <button type="button" data-work-toggle={live ? undefined : true} aria-label={label} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}
-    className={ROW}>
-    {lead}{children}{time}{chevron}
+    title={title} className={ROW}>
+    {lead}{children}{chevron}
   </button>;
 }
 
@@ -156,7 +156,8 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
     </span>;
   }
   return <span className={cn("min-w-0 flex-1 truncate", format === "command" || format === "thought" ? "text-muted-foreground" : "text-subtle-foreground", format === "code" && "font-mono text-code")}>
-    <Highlight text={format === "command" ? firstLine(text) || text : text} query={query} current={current} />
+    {/* A command reads as it ran: its first line as written, never through the Markdown a thought goes through. */}
+    <Highlight text={format === "command" ? text.split("\n").find((line) => line.trim()) ?? text : text} query={query} current={current} />
   </span>;
 }
 
@@ -227,9 +228,9 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
   const command = step.kind === "terminal";
   const quiet = command && !asking && !running;
   return (
-    // What the agent said the call is for (a Bash call's description) is the row's tooltip on a desk.
-    <div data-tool={id} data-step={step.kind} title={part.description} className="min-w-0">
-      <StepLine icon={<StepIcon kind={step.kind} failed={failed} />} live={asking ? undefined : live}
+    <div data-tool={id} data-step={step.kind} className="min-w-0">
+      {/* What the agent said the call is for (a Bash call's description) is its line's tooltip on a desk. */}
+      <StepLine icon={<StepIcon kind={step.kind} failed={failed} />} live={asking ? undefined : live} title={part.description}
         label={[verb, target, status, part.result?.truncated ? "Truncated" : null].filter(Boolean).join(" ")}
         expanded={open} controls={contentId} onToggle={() => setExpanded((value) => !value)}>
         {/* A tool's own name can run long; it gives way before the target's first half and the chip. */}
@@ -239,7 +240,7 @@ export function ToolStep({ id, part, owner, query, active, focused, live, waitin
         {asking ? <WaitingChip /> : status && <span className="shrink-0 text-caption text-subtle-foreground">{status}</span>}
       </StepLine>
       <ImageStrip images={images(part, owner)} label="Images the tool returned" className="pb-1 pl-6" />
-      <Fold value={open}>{() => <div id={contentId}>
+      <Fold value={open} animate={expanded}>{() => <div id={contentId}>
         <StepBody part={part} kind={step.kind} query={query} focused={focused} pending={asking ? "Waiting on you" : active ? "Running…" : "No output recorded"} />
       </div>}</Fold>
     </div>
@@ -261,7 +262,7 @@ export function ThinkingStep({ text, truncated = false, query, focused = false, 
       {(live || !shown) && <span className="shrink-0 text-muted-foreground">{live || !preview ? "Thinking" : "Thought"}</span>}
       <StepTarget text={shown} format="thought" query={query} current={focused} />
     </StepLine>
-    {preview && <Fold value={open}>{() => <div id={contentId}>
+    {preview && <Fold value={open} animate={expanded}>{() => <div id={contentId}>
       <div className="min-w-0 pb-2 pl-6 text-subhead text-muted-foreground [overflow-wrap:anywhere]">
         <MarkdownText text={text} query={query} current={focused} />
         {truncated && <p className="text-footnote">… truncated</p>}
@@ -324,26 +325,31 @@ function StepRows({ steps, query, focusedUuid, active, asked }: { steps: WorkSte
  */
 export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; at?: string }) {
   const [expanded, setExpanded] = useState(false);
-  const [folding] = useState(() => foldsSteps(steps));
+  // A run whose calls still run is drawn as rows: its line would say "Ran" of what has not finished.
+  const [folding] = useState(() => foldsSteps(steps) && !(active && steps.some(({ part }) => part.kind === "tool" && !part.result)));
   const contentId = useId();
+  const toolImages = useToolImages();
   if (!folding || !foldsSteps(steps)) return <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />;
   const open = expanded || steps.some((step) => step.entry === focusedUuid || stepMatches(step, query) || asked === `${step.entry}:${step.index}`);
   const diff = stepsDiff(steps);
   const failures = steps.filter(({ part }) => part.kind === "tool" && part.result?.isError).length;
   const summary = stepsSummary(steps);
   const time = at ? clockTime(Date.parse(at)) : "";
+  // Folded, what its calls showed the agent stays in sight under its line; open, each call shows its own.
+  const images = open ? [] : relabel(steps.flatMap(({ part, entry }) => part.kind === "tool" ? toolImages(part, entry) : []));
   return <div data-work-steps className="min-w-0">
     <button type="button" data-work-toggle aria-expanded={open} aria-controls={contentId} aria-label={[summary, failures ? `${failures} failed` : ""].filter(Boolean).join(", ")}
       onClick={() => setExpanded(!open)} className={ROW}>
+      {/* A failure inside shows as its tinted icon; the row that failed says so once it is open. */}
       <StepIcon kind={runIcon(steps)} failed={failures > 0} />
       <span className="min-w-0 truncate text-muted-foreground">{summary}</span>
       {diff && <DiffStat diff={diff} className="text-caption" />}
-      {failures > 0 && <span className="shrink-0 text-caption text-subtle-foreground">{failures} failed</span>}
       <span className="flex-1" />
-      {/* The line is the toggle, as T3 Code draws it: no chevron, the time where a row's chevron sits. */}
-      {time && <time dateTime={at} className="hidden shrink-0 text-footnote text-subtle-foreground pointer-fine:inline">{time}</time>}
+      {/* The line is the toggle, as T3 Code draws it: no chevron. Open on a desk, it says when the run began. */}
+      {open && time && <time dateTime={at} className="hidden shrink-0 text-footnote text-subtle-foreground pointer-fine:inline">{time}</time>}
     </button>
-    <Fold value={open}>{() => <div id={contentId}>
+    <ImageStrip images={images} label="Images these steps returned" className="pb-1 pl-6" />
+    <Fold value={open} animate={expanded}>{() => <div id={contentId}>
       <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />
     </div>}</Fold>
   </div>;

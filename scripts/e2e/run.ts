@@ -3124,7 +3124,7 @@ async function composerAround(): Promise<void> {
       seen[`${deviceName}:open-shifts`] = await page.evaluate(() => {
         const log = (window as unknown as { __shifts?: Array<{ value: number; sources: string[] }> }).__shifts ?? [];
         const from = (name: string) => log.filter((s) => s.sources.some((src) => src.includes(name))).length;
-        return { count: log.length, fold: from("composer-fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
+        return { count: log.length, fold: from("div.fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
       }, null);
       // A quiet chat is read only for how it opens.
       if (process.env.NENU_E2E_LATE_CHIPS) {

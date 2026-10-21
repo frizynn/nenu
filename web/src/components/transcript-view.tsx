@@ -272,7 +272,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
   const live = liveStep(turn);
   // A turn held up by a dialog has not ended: the call the dialog asks about waits, the others run on.
   const asked = waiting ? askedCall(turn) : undefined;
-  const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0 || journalImages(entry).length > 0);
+  // The pictures its log holds are in the turn's gallery, folded or not, so they open nothing.
+  const hasDetails = turn.activity.some((entry) => stepParts(entry, live).length > 0);
   const duration = turn.settled && turn.durationMs !== undefined ? formatWorkDuration(turn.durationMs) : "";
   const label = turn.interrupted ? (duration ? `Stopped after ${duration}` : "Stopped") : turn.settled ? (duration ? `Worked for ${duration}` : "Worked") : "Work log";
   // One time per turn, when it finished, at the end of its line. The question's time is already under
@@ -310,14 +311,16 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
         <span className="min-w-0 truncate">{turn.active ? <Elapsed since={turn.startedAt} prefix="Working for " fallback="Working…" fine /> : label}</span>
         {failures > 0 && <span className="shrink-0 whitespace-nowrap text-subtle-foreground">· {failures} failed</span>}
         {hasDetails && <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-[rotate,opacity] duration-120 ease-out motion-reduce:transition-none",
-          !open && "-rotate-90 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-visible:opacity-100")} />}
+          !open && "-rotate-90")} />}
       </button>
       <span className="flex-1" />
       {endTime && <time dateTime={end} className="shrink-0 text-footnote text-subtle-foreground">{endTime}</time>}
     </div>
-    <Fold value={open}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
-        {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
-          ? <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
+    <Fold value={open} animate={expanded === true}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
+        {/* A run is keyed by its place among the turn's segments, not by its first step: parallel calls
+            finish in any order, and a run that gains an earlier call must keep its rows (ADR 0113). */}
+        {workSegments(turn.activity, live).map((segment, place) => segment.kind === "steps"
+          ? <WorkSteps key={`steps:${place}`} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
           : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
               className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
               {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}

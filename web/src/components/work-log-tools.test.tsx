@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import { LiveStepRow, ThinkingStep, ToolStep } from "./work-log-tools";
@@ -145,16 +145,10 @@ describe("ThinkingStep", () => {
 });
 
 describe("LiveStepRow", () => {
-  it("says what runs now and for how long, in whole minutes", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-08T12:00:42Z"));
+  it("says what runs now with the live mark, and leaves how long to the turn's line", () => {
     const { container } = render(<LiveStepRow step={{ part: { kind: "tool", name: "Bash", summary: "bun run test tab-strip" }, entry: "e", index: 0, since: "2026-09-08T12:00:30Z" }} query="" focused={false} />);
     const row = container.querySelector("[data-live-step]")!;
-    expect(row).toHaveTextContent("Running");
-    expect(row).toHaveTextContent("bun run test tab-strip");
-    expect(screen.getByText("<1m")).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(48_000); });
-    expect(screen.getByText("1m")).toBeInTheDocument();
+    expect(row).toHaveTextContent(/^Running\s*bun run test tab-strip$/);
     expect(row.querySelector("[data-live-glyph]")).not.toBeNull();
   });
 
@@ -264,4 +258,11 @@ it("opens a command onto itself in a shell's colours and its output in grey, a f
   expect(output).toHaveTextContent(/^Error: Exit code 1\s*ls: \/nope: No such file or directory$/);
   // Sober: the row says it failed in grey, and only its icon takes the destructive hue.
   expect(container.querySelector(".text-destructive")).toHaveClass("icon");
+});
+
+it("names a command's row by the line it ran, as written, never through Markdown", () => {
+  render(<Steps calls={["echo `date`", "find . -name '*_test_*'", "# just a comment\nls"].map((summary) => ({ kind: "tool", name: "Bash", summary, result: { text: "" } }))} />);
+  expect(screen.getByRole("button", { name: "Ran echo `date`" })).toHaveTextContent(/^echo `date`$/);
+  expect(screen.getByRole("button", { name: "Ran find . -name '*_test_*'" })).toHaveTextContent(/^find \. -name '\*_test_\*'$/);
+  expect(screen.getByRole("button", { name: /^Ran # just a comment/ })).toHaveTextContent(/^# just a comment$/);
 });

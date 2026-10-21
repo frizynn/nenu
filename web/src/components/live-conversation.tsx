@@ -410,12 +410,17 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     setFrozen((current) => current ?? history);
     restoring.current = true;
     if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
-    // A fold opens and shuts over a panel's length (components/reveal.tsx): the tapped line is held
-    // where it was each frame until the motion has played.
-    const until = performance.now() + MOTION_PANEL_MS + 50;
+    // A fold opens and shuts over a panel's length (components/fold.tsx): the tapped line is held
+    // where it was each frame until the motion has played, unless the reader scrolls first.
+    let until = performance.now() + MOTION_PANEL_MS + 50;
+    const release = () => { until = 0; };
+    el.addEventListener("wheel", release, { once: true, passive: true });
+    el.addEventListener("touchmove", release, { once: true, passive: true });
     const hold = () => {
-      if (target.isConnected) el.scrollTop += target.getBoundingClientRect().top - before;
+      if (target.isConnected && until) el.scrollTop += target.getBoundingClientRect().top - before;
       if (target.isConnected && performance.now() < until) { restoreFrame.current = requestAnimationFrame(hold); return; }
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("touchmove", release);
       restoring.current = false;
       restoreFrame.current = null;
     };
