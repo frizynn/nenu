@@ -118,4 +118,27 @@ describe("a turn's runs of steps", () => {
     expect(seen).toEqual([true]);
     expect(document.querySelector("[data-work-turn] > .fold")).toHaveAttribute("data-phase", "open");
   });
+
+  it("unfolds a folded run into rows when a call that still runs joins it", () => {
+    const running = (calls: TranscriptPart[]): TranscriptEntry[] => [entries[0]!, { ...says("r", calls), turn: { status: "running" } }];
+    const done = [call("Bash", "a"), call("Bash", "b")];
+    const { rerender } = render(<TranscriptView entries={running(done)} activityStatus="working" />);
+    expect(screen.getByRole("button", { name: "Ran 2 commands" })).toBeInTheDocument();
+    // c still runs inside the run; d, the latest, is the live row.
+    rerender(<TranscriptView entries={running([...done, call("Bash", "c", { result: undefined }), call("Bash", "d", { result: undefined })])} activityStatus="working" />);
+    expect(screen.queryByRole("button", { name: /^Ran \d+ commands/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Running c" })).toBeInTheDocument();
+  });
+
+  it("keeps the run the reader opened open when an older page goes in above it", async () => {
+    const page = (older: TranscriptEntry[]) => [...older, says("r1", [call("Read", "a.ts"), call("Read", "b.ts")]),
+      says("r2", [{ kind: "text", text: "Then the commands." }, call("Bash", "pwd"), call("Bash", "date")]), says("end", [{ kind: "text", text: "Done." }], "final_answer")];
+    const { rerender } = render(<TranscriptView entries={page([])} activityStatus="done" />);
+    await openTurn();
+    await userEvent.click(screen.getByRole("button", { name: "Read 2 files" }));
+    rerender(<TranscriptView entries={page([says("o", [call("Write", "x.ts"), call("Write", "y.ts"), { kind: "text", text: "Now the reads." }])])} activityStatus="done" />);
+    expect(screen.getByRole("button", { name: "Read 2 files" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Ran 2 commands" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Wrote 2 files" })).toHaveAttribute("aria-expanded", "false");
+  });
 });

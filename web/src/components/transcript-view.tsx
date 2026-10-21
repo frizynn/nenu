@@ -317,10 +317,8 @@ function WorkTurnView({ turn, query, focusedUuid, questionActive, waiting }: { t
       {endTime && <time dateTime={end} className="shrink-0 text-footnote text-subtle-foreground">{endTime}</time>}
     </div>
     <Fold value={open} animate={expanded === true}>{() => <div id={contentId} className="min-w-0 space-y-1 pb-1">
-        {/* A run is keyed by its place among the turn's segments, not by its first step: parallel calls
-            finish in any order, and a run that gains an earlier call must keep its rows (ADR 0113). */}
-        {workSegments(turn.activity, live).map((segment, place) => segment.kind === "steps"
-          ? <WorkSteps key={`steps:${place}`} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
+        {workSegments(turn.activity, live).map((segment) => segment.kind === "steps"
+          ? segment.steps.length > 0 && <WorkSteps key={segment.id} steps={segment.steps} at={segment.at} query={query} focusedUuid={focusedUuid} active={turn.active || waiting} asked={asked} />
           : <div key={`${segment.entry.uuid}:${segment.parts[0]!.index}`} data-turn={segment.entry.uuid} data-speaker="assistant"
               className={cn("space-y-1.5 px-0.5 py-1 select-text", segment.entry.uuid === focusedUuid && "rounded ring-2 ring-primary/60")}>
               {segment.parts.map(({ part, index }) => <Part key={index} part={part} entryId={segment.entry.uuid} query={query} focused={segment.entry.uuid === focusedUuid} />)}

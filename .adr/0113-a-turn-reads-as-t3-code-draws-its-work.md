@@ -38,8 +38,9 @@ the colouring could not come that way.
    a desk, the line says when the run began.
 3. **A run drawn as rows stays rows while it is on screen.** A call that joins it as the turn runs
    never pulls a line in above rows the reader may have opened; the run folds the next time it is
-   drawn whole. Calls still running never fold under a line in the past tense, and a run is keyed by
-   its place in the turn, so parallel calls finishing out of order keep it mounted.
+   drawn whole. Calls still running never fold under a line in the past tense, and a run is named by
+   its first step, the live one included, so parallel calls finishing out of order and an older page
+   going in above it keep its state.
 4. **A command is its row's name**, in the row's type; the verb stays in the row's accessible name.
    Open, it shows the command coloured by `lib/shell-tokens.ts` (program, flags, arguments, strings,
    variables, keywords; text nodes only) and its output in grey, "Error: Exit code N" first. A row's
@@ -50,9 +51,10 @@ the colouring could not come that way.
    with its `.fold` rules in `index.css`, grows a fold's height from nothing in 180 ms and shrinks it
    in 120 ms on the shared curve, inert while it leaves; chevrons turn in 120 ms; under reduced motion
    only the fade remains. Only a fold the operator opened moves: one opened by search or focus is in
-   the page in the same commit (its phase follows its value in the render), so find can scroll to it. T3 Code animates only its chevron (measured, 200 ms); the operator asked for
-   more ("faltan animaciones, como desplegar los comandos"). The chat holds the tapped line in place for
-   the whole motion.
+   the page in the same commit (its phase follows its value in the render), so find can scroll to
+   it. T3 Code animates only its chevron (measured, 200 ms); the operator asked for more ("faltan
+   animaciones, como desplegar los comandos"). The chat holds the tapped line in place for the whole
+   motion, and lets go as soon as the reader scrolls.
 
 ## Consequences
 

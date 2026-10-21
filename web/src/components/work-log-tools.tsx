@@ -9,7 +9,7 @@ import { shellTokens, type ShellTokenKind } from "@/lib/shell-tokens";
 import { splitHighlight } from "@/lib/transcript-search";
 import type { TranscriptPart } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { commandOutput, describeTool, firstLine, foldsSteps, QUESTION_STEP, stepsDiff, stepsSummary, type LiveStep, type StepKind, type ToolStepDescription, type WorkStep } from "@/lib/work-timeline";
+import { commandLine, commandOutput, describeTool, firstLine, foldsSteps, QUESTION_STEP, stepsDiff, stepsSummary, type LiveStep, type StepKind, type ToolStepDescription, type WorkStep } from "@/lib/work-timeline";
 import { DiffStat } from "./diff-stat";
 import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
@@ -156,8 +156,7 @@ function StepTarget({ text, format, query, current }: { text: string; format: To
     </span>;
   }
   return <span className={cn("min-w-0 flex-1 truncate", format === "command" || format === "thought" ? "text-muted-foreground" : "text-subtle-foreground", format === "code" && "font-mono text-code")}>
-    {/* A command reads as it ran: its first line as written, never through the Markdown a thought goes through. */}
-    <Highlight text={format === "command" ? text.split("\n").find((line) => line.trim()) ?? text : text} query={query} current={current} />
+    <Highlight text={format === "command" ? commandLine(text) : text} query={query} current={current} />
   </span>;
 }
 
@@ -325,8 +324,11 @@ function StepRows({ steps, query, focusedUuid, active, asked }: { steps: WorkSte
  */
 export function WorkSteps({ steps, query, focusedUuid, active, asked, at }: { steps: WorkStep[]; query: string; focusedUuid?: string; active: boolean; asked?: string; at?: string }) {
   const [expanded, setExpanded] = useState(false);
-  // A run whose calls still run is drawn as rows: its line would say "Ran" of what has not finished.
-  const [folding] = useState(() => foldsSteps(steps) && !(active && steps.some(({ part }) => part.kind === "tool" && !part.result)));
+  // A run whose calls still run is drawn as rows, and stays rows from the moment one joins it: its line
+  // would say "Ran" of what has not finished.
+  const running = active && steps.some(({ part }) => part.kind === "tool" && !part.result);
+  const [folding, setFolding] = useState(() => foldsSteps(steps) && !running);
+  if (folding && running) setFolding(false);
   const contentId = useId();
   const toolImages = useToolImages();
   if (!folding || !foldsSteps(steps)) return <StepRows steps={steps} query={query} focusedUuid={focusedUuid} active={active} asked={asked} />;

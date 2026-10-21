@@ -100,7 +100,11 @@ export async function commandsBench(bridge: TestBridge, browser: Browser, outDir
     const run = running[i]!;
     const live = await browser.newContext({ ...device, colorScheme: "dark", timezoneId: "UTC", locale: "en-US" });
     const watch = await live.newPage();
-    await watch.clock.install({ time: bridge.now() });
+    // Written now, so the turn has run as long as its finished duration says when the capture is taken,
+    // and finished from the same instant, so its times do not move under the operator.
+    const at = bridge.now();
+    await writeCommandsJournal(join(folder, `${run.session}.jsonl`), at, "running");
+    await watch.clock.install({ time: at });
     await watch.goto(`${bridge.url}/pane/${encodeURIComponent(run.paneId)}`);
     await watch.getByText("Sumo uno que falla").waitFor({ timeout: 15_000 });
     await watch.waitForTimeout(1200);
@@ -109,7 +113,7 @@ export async function commandsBench(bridge: TestBridge, browser: Browser, outDir
     await watch.screenshot({ path, animations: "disabled" });
     shots.push(path);
     if (!before) check(`${deviceName}: a running turn reads "Working for"`, (seen[`${deviceName}-working`] as string[])[0]?.startsWith("Working for") ?? false, JSON.stringify(seen[`${deviceName}-working`]));
-    await writeCommandsJournal(join(folder, `${run.session}.jsonl`), bridge.now(), "finished");
+    await writeCommandsJournal(join(folder, `${run.session}.jsonl`), at, "finished");
     fake.setStatus(run.paneId, "done");
     await watch.getByText("Listo, corrí 5 comandos").waitFor({ timeout: 15_000 });
     await watch.waitForTimeout(1200);
