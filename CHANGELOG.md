@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Fixed
 
-- iPhone: closing the keyboard no longer drops the chat off its latest line behind the ↓ button; the terminal mirror follows the same rule (c12a566f).
+- iPhone: closing the keyboard no longer drops the chat off its latest line behind the ↓ button; the terminal mirror follows the same rule (c12a566f, 38b922e0).
 
 ### Changed
 
