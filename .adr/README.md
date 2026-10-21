@@ -83,11 +83,11 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0026](./0026-open-clients-survive-frontend-updates.md) | Open clients stay usable across frontend updates | Accepted |
 | [0027](./0027-quiet-recovery-on-intermittent-networks.md) | Intermittent connectivity and updates stay out of the conversation | Accepted |
 | [0028](./0028-automatic-codex-history-recovery.md) | Automatic Codex history recovery from the live terminal title | Accepted |
-| [0048](./0048-the-input-box-is-found-by-its-own-frame.md) | The input box is found by its own frame; the statusline bound only bounds what is stripped (amends 0004) | Accepted; the last look before Enter amended by 0114 |
+| [0048](./0048-the-input-box-is-found-by-its-own-frame.md) | The input box is found by its own frame; the statusline bound only bounds what is stripped (amends 0004) | Accepted; the last look before Enter amended by 0115 |
 | [0053](./0053-an-unread-dialog-still-has-a-way-out.md) | An unread dialog still has a way out: a footer phrase never silences a grammar (only that half is in Nenu) | Proposed |
 | [0054](./0054-the-browser-hears-what-changed-not-the-state.md) | The browser hears what changed, never the state | Accepted; amended by 0058 |
 | [0055](./0055-the-folder-picker-lists-names-under-home-only.md) | The folder picker lists folder names under home, and nothing else | Accepted |
-| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted |
+| [0056](./0056-queued-messages-follow-each-clis-native-queue.md) | Queued messages follow each CLI's native queue, with a send-time choice while the agent is busy (supersedes the queue half of 0025) | Accepted; send-time choice amended by 0114 |
 | [0057](./0057-the-bridge-reads-and-answers-dialogs-through-the-screen.md) | The bridge reads and answers dialogs; the screen is the actuator and hooks only observe | Accepted |
 | [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted |
 | [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted; amended by 0063 |
@@ -97,24 +97,26 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted; amended by 0080, 0089, 0092, 0102, 0103 |
 | [0065](./0065-a-workspace-opens-on-its-pane.md) | A workspace opens on its pane, not on a page | Accepted |
 | [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
-| [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted; extended to sends by 0114 |
-| [0076](./0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md) | A long Claude send is one bracketed paste, and Claude's log has the last word (amends 0010) | Accepted; amended by 0114 |
-| [0077](./0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md) | On a desk, Keys and Type into terminal live in the Terminal tab | Accepted; Keys amended by 0079 |
+| [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted; extended to sends by 0115 |
+| [0076](./0076-a-long-claude-send-is-one-paste-and-its-log-has-the-last-word.md) | A long Claude send is one bracketed paste, and Claude's log has the last word (amends 0010) | Accepted; amended by 0115 |
+| [0077](./0077-on-a-desk-type-into-terminal-lives-in-the-terminal-tab.md) | On a desk, Keys and Type into terminal live in the Terminal tab | Accepted; Keys amended by 0079, arming by 0114 |
 | [0078](./0078-page-motion-runs-only-on-navigations-the-app-starts.md) | Page motion runs only on navigations the app starts (React Router's `viewTransition` flag was rejected) | Accepted |
-| [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted |
+| [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted; amended by 0114 |
 | [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md) | On a desk, the project is the session panel's first tab (supersedes 0075 point 2) | Superseded by 0101 |
 | [0082](./0082-a-codex-with-no-turn-has-nothing-to-link.md) | A Codex with no turn has nothing to link; one holding its rollout is that conversation (narrows 0022, adds to 0028) | Accepted |
 | [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted |
 | [0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) | On a desk, projects and coordinators are pages with tabs; asks and routines live on them (amends 0064, 0080, 0090, 0091, 0092 on a desk) | Accepted; amended by 0106 |
 | [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Accepted |
-| [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted; amended by 0112 and 0114 |
+| [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted; amended by 0112 and 0115 |
 | [0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md) | On a desk, finished work is a History by day, and a routine is edited where it is read (amends 0102) | Accepted |
 | [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Accepted |
 | [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted |
 | [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted |
 | [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted |
-| [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted |
-| [0114](./0114-enter-follows-the-text-and-claudes-log-is-the-witness.md) | Enter follows the text, and Claude's log is the witness; waits end on the event (amends 0104, 0067, 0076, 0048) | Accepted |
+| [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0114 |
+| [0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md) | A state is a still glyph, coloured only when it asks for you | Accepted |
+| [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
+| [0115](./0115-enter-follows-the-text-and-claudes-log-is-the-witness.md) | Enter follows the text, and Claude's log is the witness; waits end on the event (amends 0048, 0067, 0076, 0104) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

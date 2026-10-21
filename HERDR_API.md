@@ -125,7 +125,7 @@ the socket assumptions behind the design in [`ARCHITECTURE.md`](./ARCHITECTURE.m
   successful RPC pair is not evidence a reply was delivered — a focused TUI dialog can swallow the
   text and consume the Enter with both calls reporting success. Anything that needs delivery
   *confirmed* must read the pane back and look (`bridge/guarded-send.ts`), or, on a Claude pane, read
-  Claude's log ([ADR 0114](.adr/0114-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
+  Claude's log ([ADR 0115](.adr/0115-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
 - **What the PTY hands the program, rechecked 2026-10-21 on herdr 0.9.3 (Linux).** A raw-mode reader
   in a pane (it enables DECSET 2004, as Claude Code 2.1.306 does) got one 1 500-byte `send_text` as
   one read, a 1 512-byte bracketed paste as one read, and a 5 012-byte bracketed paste as two reads of

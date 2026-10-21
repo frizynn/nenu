@@ -728,7 +728,7 @@ describe("AgentChat — shared header: stale-status dimming", () => {
 
     const title = screen.getByRole("button", { name: /overview$/ });
     expect(title).toHaveTextContent("needs you");
-    const dot = () => title.querySelector("span.rounded-full");
+    const dot = () => title.querySelector("[data-node-state]");
     expect(dot()).toHaveClass("opacity-40"); // not live → frozen status dimmed
     act(() => setError(false)); // snapshot recovers → live
     expect(dot()).not.toHaveClass("opacity-40"); // undimmed instantly
@@ -1117,8 +1117,8 @@ describe("AgentChat — a pane opened on its last text", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderChat({ text: withDraft, pending });
     act(() => vi.advanceTimersByTime(1600));
-    if (offered) expect(await screen.findByText(/draft in terminal/i)).toBeInTheDocument();
-    else expect(screen.queryByText(/draft in terminal/i)).toBeNull();
+    if (offered) expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
+    else expect(screen.queryByText(/text in .*'s box/i)).toBeNull();
   });
 });
 
@@ -1517,7 +1517,7 @@ describe("AgentChat — terminal waiting notice", () => {
     expect(within(notice).queryByText(/Composer paused/)).not.toBeInTheDocument();
     const chip = within(notice).getByRole("button", { name: "Terminal waiting on a key" });
     expect(chip).toHaveAttribute("aria-expanded", "false");
-    expect(chip.querySelector("[aria-hidden].bg-status-blocked")).not.toBeNull();
+    expect(chip.querySelector("[aria-hidden][data-node-state=needs].text-status-blocked")).not.toBeNull();
     await user.click(chip);
     expect(within(notice).getByText("Claude is showing a screen Nenu can't answer")).toBeVisible();
   });
@@ -1765,18 +1765,19 @@ describe("AgentChat — Send while only background work runs", () => {
     await user.type(screen.getByRole("textbox"), "status?");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(wire.sends).toEqual(["status?"]));
-    expect(screen.queryByRole("group", { name: /is working/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
     expect(wire.posts).toEqual([]);
   });
 
-  it("still asks while the main turn runs", async () => {
+  it("goes into Claude's own queue while the main turn runs, as its Enter does, without asking", async () => {
     const wire = serveQueue();
     const agent = claude({ running: true });
     renderChat({ paneId: agent.paneId, agent, agents: [agent], text: "" });
     const user = userEvent.setup();
     await user.type(screen.getByRole("textbox"), "status?");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("group", { name: /is working/i })).toBeInTheDocument();
+    await waitFor(() => expect(wire.posts).toEqual([expect.objectContaining({ action: "add", text: "status?", deliveryMode: "asap" })]));
+    expect(screen.queryByText(/when should it read this/i)).not.toBeInTheDocument();
     expect(wire.sends).toEqual([]);
   });
 });

@@ -60,15 +60,18 @@ function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altK
 interface DirectTypingOptions {
   paneKey: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
-  /** The durable reply draft, read at the moment of arming rather than captured at render. A getter,
-   *  because the password-prompt handoff (components/no-echo-notice.tsx) clears the draft and arms in
-   *  the SAME tick: a value captured at render would still be the secret the operator just typed, and
-   *  the refusal below would block the very remedy being offered. */
-  replyDraft: () => string;
   canActivate: () => boolean;
+  /** What `canActivate` answers, as a value: a terminal view retries arming when it turns true. */
+  canArm: boolean;
   /** True while the view the mode belongs to has stopped being live: a gone pane, a read-only
    *  device, or the idle pause. Arming survives none of them — see the disarm effect below. */
   suspended: boolean;
+  /** A terminal view is on screen (the chat's Terminal view, or a desk's Terminal tab): the box is the
+   *  terminal while it is, unless the operator turned that off in this view (ADR 0114). */
+  auto: boolean;
+  /** Whether arming by `auto` takes focus: on a desk, so the keys go in at once; never on a phone,
+   *  where a keyboard nobody asked for would cover the mirror. */
+  autoFocus: boolean;
   sendKeys: (keys: string[]) => Promise<boolean>;
   onActivate: () => void;
   focusInput: () => void;
@@ -80,25 +83,28 @@ interface DirectTypingOptions {
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
 // Herdr writes.
 //
-// It does NOT own the entry point. Arming is an explicit NAMED choice: the "Type into terminal" row
-// beside Keys in the composer's + menu on a phone, or the switch of that name in a desk's Terminal
-// tab, which also disarms when the tab leaves the screen (composer.tsx, ADR 0077, ADR 0079).
+// Arming is a choice the operator can read on screen, never a gesture: the "Type into terminal" row
+// in the composer's + menu on a phone, the switch of that name in a desk's Terminal tab, or a
+// terminal view itself (`auto`): while the chat's Terminal view or a desk's Terminal tab is on screen,
+// the box is that terminal, and leaving the view gives the chat its box back (ADR 0114, amending
+// ADR 0077 and ADR 0079). The chat's draft is never touched: it waits in the store and comes back
+// with the chat. Turned off by the operator inside a view, the mode stays off until the view is
+// left and entered again.
 //
-// WHY A NAMED CHOICE AND NOT A GESTURE. The submitted version of this feature armed the mode on a
-// bare long press of the Send button. That reads as a saving of one tap, but the tap is priced per
-// SESSION, not per keystroke: you arm once and then type many keys. What it actually buys is an
-// accidental hold — a pocket, a fumbled scroll, a hesitation over Send with a destructive command in
-// the box — silently pointing the phone keyboard at a live terminal with nothing on screen having
-// asked. This surface's safety story is "you see what is about to go on the wire" (ADR 0005), and a
-// mode you can enter without reading anything sits outside it. A labelled toggle you press on purpose
-// is the cheapest thing that stays inside it. Don't reintroduce a hold as a shortcut.
+// WHY NOT A GESTURE. The submitted version of this feature armed the mode on a bare long press of the
+// Send button. That reads as a saving of one tap, but the tap is priced per SESSION, not per
+// keystroke: you arm once and then type many keys. What it actually buys is an accidental hold — a
+// pocket, a fumbled scroll, a hesitation over Send with a destructive command in the box — silently
+// pointing the phone keyboard at a live terminal with nothing on screen having asked. This surface's
+// safety story is "you see what is about to go on the wire" (ADR 0005). A terminal view keeps it: the
+// pane is what the screen shows, and the box says it types there. Don't reintroduce a hold.
 //
 // WHY THE MODE DIES WITH THE VIEW. What stands in for a review step here is that you are LOOKING at
 // the pane while you type into it — this is the one write path with no reviewable payload, by design
 // (reviewing each keystroke would defeat it). That condition can quietly stop being true: the mirror
 // is polled, and the poll stops on an idle pause (ADR 0007), on a backgrounded tab, on a pane going
-// away. Hence the disarms below. Never persisted, never restored: there is no path by which this is
-// already armed when you arrive at a screen.
+// away. Hence the disarms below. Never persisted: a terminal view arms it again only while it is on
+// screen and live.
 //
 // Two apparent omissions that are deliberate. A lost connection is NOT a separate trigger — it
 // surfaces as a failed batch, which already disarms, observed directly rather than inferred from a
@@ -108,9 +114,11 @@ interface DirectTypingOptions {
 export function useDirectTyping({
   paneKey,
   inputRef,
-  replyDraft,
   canActivate,
+  canArm,
   suspended,
+  auto,
+  autoFocus,
   sendKeys,
   onActivate,
   focusInput,
@@ -121,25 +129,30 @@ export function useDirectTyping({
   // the transitions themselves, not during render: the listener fires between renders, and a ref
   // that only catches up on the next one would let it misread which state it is reporting on.
   const activeRef = useRef(false);
+  const autoRef = useRef(auto);
+  autoRef.current = auto;
   const backgrounded = useRef(false);
   const composing = useRef(false);
   const committedComposition = useRef<string | null>(null);
   const pendingBlur = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The operator turned the mode off inside a terminal view; entering a view again clears it.
+  const optedOut = useRef(false);
+  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
   const sender = useOrderedKeySender(sendKeys, () => {
     resetMode();
+    // A failed batch is the connection's word, not the view's: a terminal view on screen stays off
+    // until it is entered again. Armed from the + with no view, there is nothing to keep off.
+    if (autoRef.current) optedOut.current = true;
     // Stop the phone keyboard too: otherwise continued typing after a transport failure silently
     // becomes a buffered Reply, which is a different action with an eventual Enter attached.
     dropKeyboard();
   });
 
-  function activate() {
+  function activate(focus = true) {
     if (!canActivate()) return;
-    // A buffered reply and live keystrokes cannot safely share one field. Keep the durable draft
-    // exactly where it is and make the user send or clear it before arming direct terminal input.
-    if (replyDraft().length > 0) {
-      setStatus("Send or clear the draft before typing into the terminal.", "info");
-      return;
-    }
+    // The reply draft stays where it is, in the composer's state and store; the field shows the
+    // terminal's keystrokes instead until the mode ends.
+    optedOut.current = false;
     onActivate();
     // A new armed session owns the field from here: any blur still pending belongs to an older one,
     // and this cancellation is what keeps it from landing on the session that replaced it.
@@ -149,6 +162,7 @@ export function useDirectTyping({
     committedComposition.current = null;
     activeRef.current = true;
     setActive(true);
+    if (!focus) return;
     // No toast: the armed strip above the composer says it, and stays while the mode does.
     // Focus synchronously while the tap on "Type into terminal" (the + row, or the desk's switch)
     // still carries browser user activation; a deferred focus selects the field but mobile browsers may refuse to
@@ -205,6 +219,7 @@ export function useDirectTyping({
 
   /** Disarm on the operator's own tap. Silent: the strip going away and the placeholder say it. */
   function deactivate() {
+    if (auto) optedOut.current = true;
     clearMode();
   }
 
@@ -216,7 +231,7 @@ export function useDirectTyping({
   useEffect(() => {
     if (!active || !suspended) return;
     clearMode();
-    setStatus("Stopped typing into the terminal — the pane view was interrupted.", "info");
+    if (!autoRef.current) setStatus("Stopped typing into the terminal — the pane view was interrupted.", "info");
   }, [active, suspended]);
 
   // The backgrounded-tab disarm has to announce itself on the way BACK, not on the way out. A
@@ -232,6 +247,7 @@ export function useDirectTyping({
   // trip has nobody left to report it. The armed state is read through a ref for the same reason.
   useEffect(() => {
     const onVisibility = () => {
+      setVisible(document.visibilityState !== "hidden");
       if (document.visibilityState === "hidden") {
         if (!activeRef.current) return;
         backgrounded.current = true;
@@ -244,6 +260,8 @@ export function useDirectTyping({
       }
       if (!backgrounded.current) return;
       backgrounded.current = false;
+      // A terminal view arms it again on the way back (above); nothing stopped from the operator's side.
+      if (autoRef.current) return;
       setStatus("Stopped typing into the terminal — the app was backgrounded.", "info");
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -260,10 +278,27 @@ export function useDirectTyping({
     // was backgrounded" over a pane the mode was never armed on.
     cancelPendingBlur();
     backgrounded.current = false;
+    optedOut.current = false;
     sender.reset();
   }, [paneKey, sender.reset]);
 
   useEffect(() => cancelPendingBlur, []);
+
+  // A terminal view arms the box while it is on screen and live, and gives it back when it goes,
+  // without taking focus. Declared after the pane-boundary reset, so a new pane's view arms again. A
+  // re-arm after a pause or a hidden page is the view coming back, so it says nothing.
+  const autoWas = useRef(false);
+  useEffect(() => {
+    const was = autoWas.current;
+    autoWas.current = auto;
+    if (!auto) {
+      optedOut.current = false;
+      if (was && activeRef.current) resetMode();
+      return;
+    }
+    if (activeRef.current || optedOut.current || suspended || !visible || !canArm) return;
+    activate(autoFocus);
+  }, [auto, suspended, visible, paneKey, canArm]);
 
   // Android virtual Backspace/Enter can arrive as beforeinput without a useful keydown. A native
   // listener is intentional: React's synthetic beforeinput omits these events on some engines.

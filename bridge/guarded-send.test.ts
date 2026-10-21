@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   OutputTrigger,
-  clearTakenDraft,
   SETTLE_CAP_MS,
   SETTLE_TICK_MS,
   TRIGGER_PATTERN_MAX,
@@ -10,6 +9,7 @@ import {
   WriteLedger,
   guardedSend,
   settleAfterType,
+  settleDraft,
   triggerFor,
   triggerHead,
   triggerPattern,
@@ -383,7 +383,7 @@ describe("guardedSend", () => {
     };
     const { outcome } = await run(term, { text: `${red} what is this?` }, { prior: { typeAttempted: true, textDelivered: true } });
     expect(outcome).toMatchObject({ ok: false, textDelivered: true });
-    if (!outcome.ok) expect(outcome.error).toContain("check Terminal");
+    if (!outcome.ok) expect(outcome.error).toContain("with Send it first and Discard");
     expect(term.keys()).toEqual([]);
   });
 
@@ -636,7 +636,7 @@ describe("guardedSend: what Claude logged", () => {
   });
 });
 
-describe("guardedSend: Enter behind the text, the log as witness (ADR 0114)", () => {
+describe("guardedSend: Enter behind the text, the log as witness (ADR 0115)", () => {
   const text = "deploy the staging build";
   /** Claude's log of the send: nothing until `after` looks, then the text (or what `logs` says). */
   function log(after = 1, logs: string | undefined = text) {
@@ -726,7 +726,7 @@ describe("guardedSend: Enter behind the text, the log as witness (ADR 0114)", ()
   });
 });
 
-describe("guardedSend: a loaded host (ADR 0114)", () => {
+describe("guardedSend: a loaded host (ADR 0115)", () => {
   test("text painted late, well past the old 2.5 s window, is still verified and sent", async () => {
     const term = new Term();
     term.echoAfter = 30;
@@ -968,14 +968,14 @@ describe("WriteLedger", () => {
   });
 });
 
-describe("clearTakenDraft", () => {
+describe("settleDraft", () => {
   const deps = (term: Term) => ({ herdr: term, paneId: "w1:p1", readLines: 200, sleep: noSleep });
 
   test("clears the box while it holds exactly the draft taken over, and confirms it emptied (ADR 0112)", async () => {
     const term = new Term();
     term.draft = "mira como se ve";
     // As the phone read it: a word cut where the box wrapped comes back with a space in it.
-    expect(await clearTakenDraft(deps(term), "mira co mo se ve")).toEqual({ ok: true });
+    expect(await settleDraft(deps(term), "mira co mo se ve")).toEqual({ ok: true });
     expect(term.draft).toBe("");
     expect(term.keys()[0]![0]).toBe("ctrl+k");
   });
@@ -983,7 +983,7 @@ describe("clearTakenDraft", () => {
   test("leaves a box that changed since the phone read it", async () => {
     const term = new Term();
     term.draft = "mira como se ve y algo más";
-    expect((await clearTakenDraft(deps(term), "mira como se ve")).ok).toBe(false);
+    expect((await settleDraft(deps(term), "mira como se ve")).ok).toBe(false);
     expect(term.keys()).toEqual([]);
     expect(term.draft).toBe("mira como se ve y algo más");
   });
@@ -995,7 +995,7 @@ describe("clearTakenDraft", () => {
   ])("leaves a draft holding %s: only the CLI has it, and the phone's copy is its token", async (_case, held) => {
     const term = new Term();
     term.draft = held;
-    expect((await clearTakenDraft(deps(term), held)).ok).toBe(false);
+    expect((await settleDraft(deps(term), held)).ok).toBe(false);
     expect(term.keys()).toEqual([]);
     expect(term.draft).toBe(held);
   });
@@ -1004,7 +1004,33 @@ describe("clearTakenDraft", () => {
     const term = new Term();
     term.draft = "mira";
     term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
-    expect((await clearTakenDraft(deps(term), "mira")).ok).toBe(false);
+    for (const action of ["take", "discard", "send"] as const) expect((await settleDraft(deps(term), "mira", action)).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+  });
+
+  test.each([
+    ["words", "borrador escrito a mano"],
+    ["a paste the CLI collapsed", "[Pasted text #37 +27 lines]"],
+  ])("discards a draft holding %s the operator saw and chose to drop (ADR 0114)", async (_case, held) => {
+    const term = new Term();
+    term.draft = held;
+    expect(await settleDraft(deps(term), held, "discard")).toEqual({ ok: true });
+    expect(term.draft).toBe("");
+  });
+
+  test("sends the draft with the submit key and waits for the box to let go of it (ADR 0114)", async () => {
+    const term = new Term();
+    term.draft = "[Pasted text #37 +27 lines]";
+    expect(await settleDraft(deps(term), "[Pasted text #37 +27 lines]", "send")).toEqual({ ok: true });
+    expect(term.keys()).toEqual([["Enter"]]);
+    expect(term.draft).toBe("");
+  });
+
+  test("sends nothing when the box holds other text than the phone showed", async () => {
+    const term = new Term();
+    term.draft = "borrador y algo más";
+    expect((await settleDraft(deps(term), "borrador", "send")).ok).toBe(false);
+    expect((await settleDraft(deps(term), "borrador", "discard")).ok).toBe(false);
     expect(term.keys()).toEqual([]);
   });
 });
