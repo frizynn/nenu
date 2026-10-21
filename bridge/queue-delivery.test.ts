@@ -131,6 +131,32 @@ test("a picture goes piece by piece through the audited route, its path pasted a
   expect(new Set(writes.map((w) => w.id)).size).toBe(3);
 });
 
+test("a picture that never shows is cleared from the box, so the row may go again", async () => {
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const keys: string[][] = [];
+  const herdr = terminal("claude", () => screen(draft), keys);
+  herdr.sendPaneKeys = async (_id, sent) => {
+    keys.push(sent);
+    for (const key of sent) if (key === "Backspace") draft = draft.slice(0, -1);
+  };
+  const result = await deliverQueuedMessage(
+    { ...row, text: `look at this ${path} please` },
+    herdr,
+    async (text, submit) => {
+      // A paste that never lands: the words before it are all the box holds.
+      if (!submit && !text.startsWith("/")) draft += text;
+      return { ok: true };
+    },
+    async () => true,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result).toMatchObject({ status: "blocked", cleared: true });
+  expect(draft).toBe("");
+  expect(keys.flat()).not.toContain("Enter");
+});
+
 test("Enter acknowledgement with a stranded draft is uncertain and never types twice", async () => {
   let draft = "";
   let types = 0;
