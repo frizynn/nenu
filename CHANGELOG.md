@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-21
+
+### Changed
+
+- Needs you, Working and PRs sit in the row under the box, beside the model; no line above the box takes the thread's height. On a phone only Needs you keeps its word (1d576f22).
+
+### Fixed
+
+- A picture pasted or attached with the phone's keyboard up no longer pushes the draft off the box's right edge (ebd2ccd6, 9c4b75bb).
+
 ## [1.38.1] - 2026-10-21
 
 ### Changed
