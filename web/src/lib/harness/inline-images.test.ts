@@ -1,6 +1,6 @@
 import { claudeAdapter } from "./claude";
 import { codexAdapter } from "./codex";
-import { hasPlacedPictures, imageTokens, placedPicturesCarrySend, sendPieces } from "./inline-images";
+import { draftIsPartOfSend, hasPlacedPictures, holdsCliToken, imageTokens, pathShows, placedPicturesCarrySend, sendPieces } from "./inline-images";
 
 const UP = "/home/you/.local/state/nenu/uploads";
 const red = `${UP}/w1_p1-mv8g-0a1b2c3d.png`;
@@ -49,5 +49,53 @@ describe("pictures in their places on the wire (ADR 0104)", () => {
   it("is something Claude and Codex do, so only they get the message piece by piece", () => {
     expect(claudeAdapter.pastesImagePaths).toBe(true);
     expect(codexAdapter.pastesImagePaths).toBe(true);
+  });
+});
+
+// These decide whether the bridge presses ctrl+k and Backspaces into a live terminal (ADR 0112).
+describe("what Nenu may clear from the box", () => {
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mv8g-0a1b2c3d.png";
+  const sent = `look at ${path} please`;
+
+  it.each([
+    ["the start of a word", "look at"],
+    ["inside a word", "lo"],
+    ["inside a path", `look at ${path.slice(0, 20)}`],
+    ["the path kept as text", `look at ${path}`],
+    ["right after a token", "look at [Image #3]"],
+    ["the whole message", "look at [Image #3] please"],
+    ["a word cut where the box wrapped", "look a t [Image #3] plea se"],
+  ])("is Nenu's own typing: %s", (_case, draft) => {
+    expect(draftIsPartOfSend(sent, draft)).toBe(true);
+  });
+
+  it.each([
+    ["an empty box", ""],
+    ["no box", null],
+    ["a token alone where words go", "[Image #3]"],
+    ["a token where the words are", "look [Image #3] at please"],
+    ["more than the message", "look at [Image #3] please and mine"],
+    ["a paste token", "look at [Pasted text #1 +3 lines]"],
+    ["other words", "look here"],
+  ])("may be the operator's: %s", (_case, draft) => {
+    expect(draftIsPartOfSend(sent, draft)).toBe(false);
+  });
+
+  it("reads a picture as text only when its path ends the box", () => {
+    expect(pathShows(`look at ${path}`, path)).toBe(true);
+    expect(pathShows(`look at ${path.slice(0, 30)} ${path.slice(30)}`, path)).toBe(true);
+    expect(pathShows(`look at ${path} and`, path)).toBe(false);
+    expect(pathShows("look at [Image #1]", path)).toBe(false);
+    expect(pathShows(null, path)).toBe(false);
+  });
+
+  it.each([
+    ["[Image #1] fix this", true],
+    ["why does this fail [Pasted text #1 +80 lines]", true],
+    ["[Pasted text #2]", true],
+    ["summarise [Pasted Content 1204 chars] #2", true],
+    ["plain words [Image] and #1", false],
+  ])("knows a box holding what only the CLI has: %s", (draft, held) => {
+    expect(holdsCliToken(draft)).toBe(held);
   });
 });

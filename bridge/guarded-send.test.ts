@@ -859,6 +859,17 @@ describe("clearTakenDraft", () => {
     expect(term.draft).toBe("mira como se ve y algo más");
   });
 
+  test.each([
+    ["a picture the CLI attached", "[Image #1] fix this"],
+    ["a paste the CLI collapsed", "why does this fail [Pasted text #1 +80 lines]"],
+  ])("leaves a draft holding %s: only the CLI has it, and the phone's copy is its token", async (_case, held) => {
+    const term = new Term();
+    term.draft = held;
+    expect((await clearTakenDraft(deps(term), held)).ok).toBe(false);
+    expect(term.keys()).toEqual([]);
+    expect(term.draft).toBe(held);
+  });
+
   test("presses nothing into a dialog", async () => {
     const term = new Term();
     term.draft = "mira";
