@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { CircleAlert, TriangleAlert, CircleCheck, Info, X } from "@/components/ui/icon";
 
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { clearStatus, pauseStatus, resumeStatus, useStatus, type StatusMessage, type StatusTone } from "@/lib/status";
 
@@ -15,15 +16,14 @@ const TONE: Record<StatusTone, string> = {
 const ICONS = { info: Info, success: CircleCheck, warn: TriangleAlert, error: CircleAlert } as const;
 
 /** A dismissed toast stays drawn this long while it fades and drifts 8px back up. */
-export const TOAST_EXIT_MS = 150;
-/** Under reduced motion the exit is an opacity fade only, and shorter. */
-export const TOAST_EXIT_REDUCED_MS = 120;
+export const TOAST_EXIT_MS = MOTION_CONTROL_MS;
+/** Under reduced motion the exit is an opacity fade only, as long (index.css --motion-control). */
+export const TOAST_EXIT_REDUCED_MS = TOAST_EXIT_MS;
 /** An upward drag past this dismisses; anything shorter springs back. */
 const SWIPE_DISMISS_PX = 24;
 /** Below this a press is still a tap, so the toast's own link keeps working. */
 const DRAG_SLOP_PX = 6;
 
-const reducedMotion = () => typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * One app-wide, nonmodal notification surface. On a phone it drops in over the header, under the
@@ -40,7 +40,7 @@ export function StatusArea() {
   const leaving = !status && shown !== null;
   useEffect(() => {
     if (!leaving) return;
-    const timer = setTimeout(() => setShown(null), reducedMotion() ? TOAST_EXIT_REDUCED_MS : TOAST_EXIT_MS);
+    const timer = setTimeout(() => setShown(null), TOAST_EXIT_MS);
     return () => clearTimeout(timer);
   }, [leaving]);
 

@@ -3,7 +3,8 @@ import { ChevronRight, FolderGit2, GitBranch } from "@/components/ui/icon";
 
 import { MarkdownText } from "@/components/markdown-text";
 import { fetchOrgContext } from "@/lib/api";
-import { FileKnownContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { FileHrefContext, FileKnownContext, FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { reducedMotion } from "@/lib/motion";
 import type { OrgProjectDetail, ProjectThreadView, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,13 @@ export function __forgetContexts(): void {
 }
 
 /** One file every thread receives: a header with its name and size, its Markdown drawn under it when opened. */
-function SharedFile({ name, note, text, open, onToggle }: { name: string; note?: string; text: string; open: boolean; onToggle: () => void }) {
+function SharedFile({ name, note, text, open, onToggle, resolve, onFollow }: {
+  name: string; note?: string; text: string; open: boolean; onToggle: () => void;
+  /** A link's target as a listed file's name, read from this file's folder; null for anything else. */
+  resolve: (from: string, path: string) => string | null;
+  onFollow: (name: string) => void;
+}) {
+  const target = (path: string) => resolve(name, path);
   return (
     <li className="desk-context-file" id={fileAnchor(name)}>
       <button type="button" aria-expanded={open} onClick={onToggle} className="desk-context-row">
@@ -49,14 +56,21 @@ function SharedFile({ name, note, text, open, onToggle }: { name: string; note?:
         <span className="min-w-0 flex-1 truncate text-left"><span className="font-medium">{name}</span>{note && <span className="text-muted-foreground"> · {note}</span>}</span>
         <span className="tabular-nums text-muted-foreground">{size(text)}</span>
       </button>
-      {open && <div className="desk-context-body"><MarkdownText text={text.trim()} /></div>}
+      {/* Only the files listed here open: no pane's file page or media route reaches this tab. */}
+      {open && <div className="desk-context-body">
+        <FileHrefContext.Provider value={null}><FileMediaContext.Provider value={null}>
+          <FileKnownContext.Provider value={(path) => target(path) !== null}>
+            <FilePreviewContext.Provider value={(path) => { const listed = target(path); if (listed) onFollow(listed); }}>
+              <MarkdownText text={text.trim()} />
+            </FilePreviewContext.Provider>
+          </FileKnownContext.Provider>
+        </FileMediaContext.Provider></FileHrefContext.Provider>
+      </div>}
     </li>
   );
 }
 
-const fileAnchor = (name: string) => `context-${name.replace(/[^\w.-]/g, "-")}`;
-/** A link's target as one of the listed files' names: `./memory/a.md` and `memory/a.md` are the same file. */
-const listedName = (path: string) => path.replace(/^\.\//, "");
+const fileAnchor = (name: string) => `context-${encodeURIComponent(name)}`;
 
 /** The goal, what every thread receives, where they work and the agents; the routines have their own tab. */
 export function ProjectContext({ project, threads }: { project: ProjectView; threads: readonly ProjectThreadView[] }) {
@@ -91,10 +105,15 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
     if (!next.delete(name)) next.add(name);
     return next;
   });
-  const openListed = (path: string) => {
-    const name = listedName(path);
+  // From memory/a.md, `b.md` is memory/b.md; `./b.md` too; a name with no listed file reads as words.
+  const resolve = (from: string, path: string) => {
+    const clean = path.replace(/^\.\//, "");
+    const folder = from.slice(0, from.lastIndexOf("/") + 1);
+    return [folder + clean, clean].find((name) => listed.has(name)) ?? null;
+  };
+  const follow = (name: string) => {
     setOpened((now) => new Set(now).add(name));
-    requestAnimationFrame(() => document.getElementById(fileAnchor(name))?.scrollIntoView({ block: "nearest", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+    requestAnimationFrame(() => document.getElementById(fileAnchor(name))?.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" }));
   };
   const branches = threads.filter((thread) => thread.branch && thread.status !== "resolved");
   const card = (label: string, children: ReactNode) => <section aria-label={label} className="mb-5">
@@ -111,13 +130,9 @@ export function ProjectContext({ project, threads }: { project: ProjectView; thr
         </span></li>)}
       </ul>
     </>)}
-    {detail && card("Every thread receives", <FileKnownContext.Provider value={(path) => listed.has(listedName(path))}>
-      <FilePreviewContext.Provider value={openListed}>
-        <ul className="desk-context-files">
-          {files.map((file) => <SharedFile key={file.name} {...file} open={opened.has(file.name)} onToggle={() => toggle(file.name)} />)}
-        </ul>
-      </FilePreviewContext.Provider>
-    </FileKnownContext.Provider>)}
+    {detail && card("Every thread receives", <ul className="desk-context-files">
+      {files.map((file) => <SharedFile key={file.name} {...file} open={opened.has(file.name)} onToggle={() => toggle(file.name)} resolve={resolve} onFollow={follow} />)}
+    </ul>)}
     {detail && detail.repos.length > 0 && card("Repositories", <ul className="desk-context-files">
       {detail.repos.map((repo) => <li key={`${repo.machine}\0${repo.path}`} className="desk-context-file"><div className="desk-context-row">
         <FolderGit2 aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />

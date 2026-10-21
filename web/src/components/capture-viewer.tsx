@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { ImageViewer, reducedMotion, type ViewerImage } from "./image-viewer";
+import { ImageViewer, type ViewerImage } from "./image-viewer";
 import "./file-preview.css";
 
 /**
@@ -29,7 +30,7 @@ export default function CaptureViewer({ images, start, onClose }: { images: read
   const close = () => {
     if (exit.current) return;
     setLeaving(true);
-    exit.current = window.setTimeout(onClose, reducedMotion() ? 120 : 150);
+    exit.current = window.setTimeout(onClose, MOTION_CONTROL_MS);
   };
   const mark = (src: string, broken: boolean) => setFailed((set) => {
     if (set.has(src) === broken) return set;

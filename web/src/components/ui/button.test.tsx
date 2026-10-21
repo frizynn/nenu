@@ -32,6 +32,13 @@ describe("Button", () => {
     expect(declarations(indexCss, ".ui-button-default", [COMPONENTS]).height).toBe("2.25rem");
   });
 
+  it("takes its label from one class, so a caller's own size replaces it on every pointer", () => {
+    render(<Button size="sm" className="text-footnote">Take over</Button>);
+    const button = screen.getByRole("button", { name: "Take over" });
+    expect(button).toHaveClass("text-footnote");
+    expect(button.className).not.toMatch(/\btext-control\b|coarse:text-/);
+  });
+
   it("has one large primary for a card or a sheet: full width, 40 fine and 44 coarse, its label centred at body 500, radius lg", () => {
     // The same family as the option rows above it (lg, body/500), so a card's commit and its
     // choices read as one system instead of a pill, a slab and a row (QA 1).

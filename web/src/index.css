@@ -285,11 +285,15 @@
   --text-large-title--letter-spacing: -0.02em;
   --text-code: 0.8125rem; /* 13 fine, 14 coarse: code blocks, commands */
   --text-code--line-height: 1.25rem;
+  --text-control: 0.8125rem; /* 13 fine, 15 coarse: a button's label */
+  --text-control--line-height: 1.125rem;
 }
 @media (pointer: coarse) {
   :root {
     --text-body: 1rem;
     --text-code: 0.875rem;
+    --text-control: 0.9375rem;
+    --text-control--line-height: 1.25rem;
   }
 }
 

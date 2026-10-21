@@ -16,6 +16,9 @@ export const MOTION_CONTROL_MS = 120;
 export const MOTION_PANEL_MS = 180;
 export const MOTION_EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
+/** The person asked for less motion: a script's motion turns into a cut or a fade. */
+export const reducedMotion = (): boolean => typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 /** How long the old page may stay frozen on screen while the next one loads. Past it the change goes
  *  through as it always did, unanimated; under NAV_BUSY_THRESHOLD_MS, so a slow link still shows the bar. */
 export const MOTION_BUDGET_MS = 300;

@@ -49,3 +49,12 @@ it("keeps the script's motion constants equal to the stylesheet's tokens", async
   expect(root).toContain(`--motion-panel: ${motion.MOTION_PANEL_MS}ms;`);
   expect(root).toContain(`--motion-ease: ${motion.MOTION_EASE};`);
 });
+
+it("times a script's exit or arrival by the shared lengths", () => {
+  // A timer that unmounts a layer once its CSS motion ends must last exactly as long as that motion;
+  // a literal drifts the day the token moves (FOLD_OPEN_MS stayed 220 against a 180 fold). A
+  // gesture's own physics (image-viewer's double tap and hand-off) is not a token's to set.
+  const tsx = files.filter((f) => /\.tsx?$/.test(f.path));
+  expect(tsx.flatMap((f) => [...code(f.text).matchAll(/\bconst \w*_(OPEN|SHUT|EXIT|ENTER|FADE|SLIDE)_MS = \d+/g)].map((m) => `${f.path}: ${m[0]}`))).toEqual([]);
+  expect(tsx.flatMap((f) => [...code(f.text).matchAll(/reducedMotion\(\) \? \d+ : \d+/g)].map((m) => `${f.path}: ${m[0]}`))).toEqual([]);
+});

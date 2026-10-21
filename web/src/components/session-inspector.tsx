@@ -6,7 +6,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { loadSessionPanel } from "@/lib/desk-chunks";
 import { isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
-import { MOTION_CONTROL_MS, MOTION_EASE, MOTION_PANEL_MS } from "@/lib/motion";
+import { MOTION_CONTROL_MS, MOTION_EASE, MOTION_PANEL_MS, reducedMotion } from "@/lib/motion";
 import type { ProjectThreadView, ThreadPullRequest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -207,7 +207,7 @@ export function panelLink(inspector: SessionInspectorState): SessionPanelLink {
  * reduced motion or without Web Animations.
  */
 export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animation | null {
-  if (typeof panel.animate !== "function" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return null;
+  if (typeof panel.animate !== "function" || reducedMotion()) return null;
   const width = panel.getBoundingClientRect().width;
   const hidden = { width: "0px", opacity: 0 };
   const shown = { width: `${width}px`, opacity: 1 };

@@ -13,7 +13,10 @@ const project: ProjectView = { slug: "hub", name: "Hub", goal: "Ship it", status
 const detail: OrgProjectDetail = {
   instructions: "# Instructions\n\n- Read **AGENTS.md** first\n- See [the deploy notes](DEPLOYMENT.md)",
   memory: "# Memory\n\n- [Merges](memory/merges.md): how main merges",
-  memoryFiles: [{ name: "merges.md", text: "# Merges\n\nA merge commit, never a squash." }],
+  memoryFiles: [
+    { name: "merges.md", text: "# Merges\n\nA merge commit, never a squash. See [tags](tags.md)." },
+    { name: "tags.md", text: "# Tags\n\nOne annotated tag per release." },
+  ],
   repos: [], coordinatorProfile: "", threadProfile: "", maxParallelThreads: 0,
 };
 
@@ -31,7 +34,7 @@ test("each file is its own card, its Markdown drawn under its header when opened
   render(<ProjectContext project={project} threads={[]} />);
   const memory = await screen.findByRole("button", { name: /MEMORY\.md/ });
   const files = screen.getByRole("region", { name: "Every thread receives" });
-  expect(within(files).getAllByRole("listitem")).toHaveLength(3);
+  expect(within(files).getAllByRole("listitem")).toHaveLength(4);
   expect(within(files).queryByText("Memory")).toBeNull();
   await userEvent.click(memory);
   expect(memory).toHaveAttribute("aria-expanded", "true");
@@ -49,7 +52,10 @@ test("a link to a file listed here opens it in place; one to a file it does not 
   expect(merges).toHaveAttribute("aria-expanded", "false");
   await userEvent.click(screen.getByRole("button", { name: "Merges" }));
   expect(merges).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByText("A merge commit, never a squash.")).toBeInTheDocument();
+  expect(screen.getByText(/A merge commit, never a squash/)).toBeInTheDocument();
+  // Read from memory/, a bare name is the memory file beside it.
+  await userEvent.click(screen.getByRole("button", { name: "tags" }));
+  expect(screen.getByRole("button", { name: /memory\/tags\.md/ })).toHaveAttribute("aria-expanded", "true");
   await userEvent.click(screen.getByRole("button", { name: /PROJECT\.md/ }));
   expect(screen.getByText(/the deploy notes/).closest("button, a")).toBeNull();
 });

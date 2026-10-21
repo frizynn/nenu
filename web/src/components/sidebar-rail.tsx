@@ -9,6 +9,7 @@ import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { liveliest, projectAgents } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { homePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
 import { projectForPane } from "@/lib/projects";
 import { workspaceName } from "@/lib/spaces";
@@ -65,7 +66,7 @@ export function railHue(name: string): number {
 const TIP_DELAY_MS = 300;
 const TIP_WARM_MS = 400;
 /** How long a name takes to fade out; it stays mounted until then. Matches the .rail-tip exit in shell.css. */
-const TIP_EXIT_MS = 120;
+const TIP_EXIT_MS = MOTION_CONTROL_MS;
 
 /**
  * The name of the rail item under the pointer or keyboard focus, drawn to the rail's right. The rail
