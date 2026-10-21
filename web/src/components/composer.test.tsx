@@ -585,7 +585,7 @@ describe("Composer — a refused send is said beside the draft", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sendNotice()).toHaveTextContent(VERIFY));
     strandDraft("rm -rf build");
-    await user.click(await screen.findByRole("button", { name: /add to mine/i }));
+    await user.click(await screen.findByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("hello\nrm -rf build");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(sends).toHaveLength(1);
@@ -1532,7 +1532,7 @@ describe("Composer — terminal-draft preview", () => {
   // 2026-10-21, 1.38.4: a draft in Claude's box held the queue for good, and a direct send swept a
   // hand-typed one unseen. A Send now waits on the operator's call, made beside the box, and goes.
   it.each([
-    ["send", "Send it"],
+    ["send", "Send it first"],
     ["discard", "Discard"],
   ] as const)("a Send over text in the agent's box waits for %s, then goes on its own (ADR 0113)", async (action, button) => {
     const user = userEvent.setup();
@@ -1553,7 +1553,7 @@ describe("Composer — terminal-draft preview", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     // Nothing goes yet, and nothing sweeps the box: the choice sits right above it.
     expect(sends).toEqual([]);
-    expect(screen.getByText(/yours goes as soon as you choose/i)).toBeVisible();
+    expect(screen.getByText(/your message goes as soon as you choose/i)).toBeVisible();
     await user.click(screen.getByRole("button", { name: button }));
     await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["mensaje desde Nenu"]));
     expect(settled).toEqual([{ draft: "borrador escrito a mano", action }]);
@@ -1573,7 +1573,55 @@ describe("Composer — terminal-draft preview", () => {
     await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["lo mío"]));
   });
 
-  it("Add to mine joins the box's text to the waiting message, which then goes as one", async () => {
+  it("Don't send mine takes the waiting message back, on a phone too, and keeps it in the box", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("algo");
+    await screen.findByText(/text in claude's box/i);
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "mejor no");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Don't send mine" }));
+    // The box empties at the terminal later: nothing goes on its own.
+    setRawDraft("");
+    setStableDraft("");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sends).toEqual([]);
+    expect(box).toHaveValue("mejor no");
+  });
+
+  it("a preview that only hides for a poll, with the text still in the box, sends nothing", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("sigue acá");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "espero");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    setStableDraft(""); // the stabilised value drops for a read; the raw line still holds the text
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sends).toEqual([]);
+  });
+
+  it("a message waiting on the box's text is dropped when the page is hidden", async () => {
+    const user = userEvent.setup();
+    const sends = serveSend();
+    renderDraftHarness();
+    strandDraft("algo");
+    await screen.findByText(/text in claude's box/i);
+    await user.type(screen.getByPlaceholderText(/type a reply/i), "luego");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    setRawDraft("");
+    setStableDraft("");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sends).toEqual([]);
+  });
+
+  it("Add to my message joins the box's text to the waiting message, which then goes as one", async () => {
     const user = userEvent.setup();
     const sends = serveSend();
     server.use(http.post(/\/api\/pane\/[^/]+\/clear-draft$/, () => HttpResponse.json({ ok: true })));
@@ -1582,7 +1630,7 @@ describe("Composer — terminal-draft preview", () => {
     await screen.findByText(/text in claude's box/i);
     await user.type(screen.getByPlaceholderText(/type a reply/i), "segunda");
     await user.click(screen.getByRole("button", { name: "Send" }));
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     await waitFor(() => expect(sends.map((body) => body.text)).toEqual(["segunda\nprimera parte"]));
   });
 
@@ -1596,7 +1644,7 @@ describe("Composer — terminal-draft preview", () => {
     await user.type(box, "espera");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await user.type(box, "{Escape}");
-    expect(screen.queryByText(/yours goes as soon as you choose/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/your message goes as soon as you choose/i)).not.toBeInTheDocument();
     expect(box).toHaveValue("espera");
     expect(sends).toEqual([]);
   });
@@ -1616,9 +1664,9 @@ describe("Composer — terminal-draft preview", () => {
     strandDraft("take me over");
     await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("take me over");
-    await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
+    await waitFor(() => expect(clears).toEqual([{ draft: "take me over", action: "take" }]));
   });
 
   it.each(["[Image #1] fix this", "fix this [Ima ge #1]", "why does this fail [Pasted text #1 +80 lines]"])(
@@ -1628,7 +1676,7 @@ describe("Composer — terminal-draft preview", () => {
       renderDraftHarness();
       strandDraft(held);
       await screen.findByText(/text in .*'s box/i);
-      expect(screen.queryByRole("button", { name: /add to mine/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /add to my message/i })).not.toBeInTheDocument();
       expect(screen.getByText(held)).toBeInTheDocument(); // the preview still says what the box holds
     },
   );
@@ -1648,7 +1696,7 @@ describe("Composer — terminal-draft preview", () => {
     const box = screen.getByPlaceholderText(/type a reply/i);
     expect(box).toHaveValue(""); // never auto-written before the deliberate takeover
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("take me over"); // the text lands, one-shot
     expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument(); // preview hidden
     expect(keyCalls).toEqual([]); // no keys from the phone: the bridge clears it, bound to the text
@@ -1660,7 +1708,7 @@ describe("Composer — terminal-draft preview", () => {
     strandDraft("original");
     await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     // The host keeps typing → a DIFFERENT draft → the preview returns with the new text.
@@ -1677,7 +1725,7 @@ describe("Composer — terminal-draft preview", () => {
     strandDraft("continue");
     await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(screen.queryByText(/text in .*'s box/i)).not.toBeInTheDocument();
 
     strandDraft(""); // the host line empties (submitted/wiped on the host)
@@ -1695,7 +1743,7 @@ describe("Composer — terminal-draft preview", () => {
     strandDraft("adopted line");
     await screen.findByText(/text in .*'s box/i);
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     const box = screen.getByPlaceholderText(/type a reply/i);
     expect(box).toHaveValue("adopted line");
 
@@ -1721,7 +1769,7 @@ describe("Composer — terminal-draft preview", () => {
     const box = screen.getByPlaceholderText(/read-only/i);
     expect(box).toHaveValue(""); // never auto-written
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("read only draft"); // local copy landed
     expect(box).toBeDisabled(); // still locked — can't edit or send
     expect(keyCalls).toEqual([]); // no terminal writes at all
@@ -1807,7 +1855,7 @@ describe("Composer — in-flight echo suppression (match-last-sent)", () => {
     expect(await screen.findByText(/text in .*'s box/i)).toBeInTheDocument();
     expect(box).toHaveValue("");
 
-    await user.click(screen.getByRole("button", { name: /add to mine/i }));
+    await user.click(screen.getByRole("button", { name: /add to my message/i }));
     expect(box).toHaveValue("someone else's leftover");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sends.map((send) => send.text)).toEqual(["hello", "someone else's leftover"]));

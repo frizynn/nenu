@@ -12,7 +12,7 @@ import type { Check } from "./inline-images.ts";
 //      own for it (queued before a reload): drawn in the thread at its end, never in a section over
 //      it, and its picture loads.
 //   2. Send while Claude works: no question in the middle of the screen; it goes into Claude's queue.
-//   3. Text in Claude's box: Send waits beside the box for Send it, Add to mine or Discard, and goes on
+//   3. Text in Claude's box: Send waits beside the box for Send it first, Add to my message or Discard, and goes on
 //      the tap. Before, a queued message waited behind it for good.
 //   4. The chat's Terminal view: what is typed in the box reaches the pane, key by key.
 
@@ -137,7 +137,7 @@ export async function sendAlwaysBench(bridge: TestBridge, browser: Browser, outD
     const before = fake.submitted.length;
     await box.fill(`mine goes after (${device})`);
     await page.getByRole("button", { name: "Send", exact: true }).click();
-    const waiting = await page.getByText(/yours goes as soon as you choose/i).waitFor({ timeout: 3000 }).then(() => true, () => false);
+    const waiting = await page.getByText(/your message goes as soon as you choose/i).waitFor({ timeout: 3000 }).then(() => true, () => false);
     check(`${device}: Send over text in Claude's box waits beside the box`, waiting && fake.submitted.length === before);
     await shoot("draft-choice");
     await page.getByRole("button", { name: "Discard" }).click({ timeout: 3000 }).catch(() => {});

@@ -61,6 +61,8 @@ interface DirectTypingOptions {
   paneKey: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   canActivate: () => boolean;
+  /** What `canActivate` answers, as a value: a terminal view retries arming when it turns true. */
+  canArm: boolean;
   /** True while the view the mode belongs to has stopped being live: a gone pane, a read-only
    *  device, or the idle pause. Arming survives none of them — see the disarm effect below. */
   suspended: boolean;
@@ -113,6 +115,7 @@ export function useDirectTyping({
   paneKey,
   inputRef,
   canActivate,
+  canArm,
   suspended,
   auto,
   autoFocus,
@@ -290,9 +293,9 @@ export function useDirectTyping({
       if (was && activeRef.current) resetMode();
       return;
     }
-    if (activeRef.current || optedOut.current || suspended || !visible) return;
+    if (activeRef.current || optedOut.current || suspended || !visible || !canArm) return;
     activate(autoFocus);
-  }, [auto, suspended, visible, paneKey]);
+  }, [auto, suspended, visible, paneKey, canArm]);
 
   // Android virtual Backspace/Enter can arrive as beforeinput without a useful keydown. A native
   // listener is intentional: React's synthetic beforeinput omits these events on some engines.

@@ -442,10 +442,10 @@ terminal's copy while it still holds that text; `bun scripts/e2e/run.ts take-ove
 ([ADR 0112](./.adr/0112-a-send-that-stops-leaves-the-box-as-it-found-it.md)).
 **A send from Nenu never gets stuck** ([ADR 0113](./.adr/0113-a-send-from-nenu-never-gets-stuck.md)):
 Send while the agent works goes now, as its terminal's Enter (Send after this turn is a + row); text in
-the agent's box is settled beside the composer with Send it, Add to mine or Discard, bound to the text
-shown, and a Send over it waits for that tap, never sweeping it or queueing behind it; a pending
-message is drawn in the thread at its end with its pictures, never over it; `bun scripts/e2e/run.ts
-send-always` must pass.
+the agent's box is settled beside the composer with Send it first, Add to my message or Discard, bound
+to the text shown, and a Send over it waits for that tap, never sweeping it or queueing behind it; a
+pending message is drawn in the thread at its end with its pictures, never over it;
+`bun scripts/e2e/run.ts send-always` must pass.
 The composer attaches any file up to 25 MB through `bridge/uploads.ts` `saveUpload`: the name is
 generated (an image by its bytes, anything else with a flat copy of its own name), only an image
 previews, and nothing in Nenu's own folders (`nenuDirs`: the state directory and the uploads

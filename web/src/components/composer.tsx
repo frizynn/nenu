@@ -618,6 +618,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     auto: terminalView || sessionPanel?.terminal != null,
     autoFocus: !coarse,
     canActivate: () => !(locked || sending || attachments.uploading),
+    canArm: !(locked || sending || attachments.uploading),
     // `locked` covers a gone pane, a read-only device, and the idle pause. A LOST CONNECTION is
     // deliberately not added here: the mode already disarms on a failed batch, which is the same
     // event observed directly rather than inferred from a timer, and it fires whether or not any
@@ -764,30 +765,39 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     !gone && previewLatched && effectiveRaw !== null && normalizeDraft(effectiveRaw) !== handledKey;
   // The text the agent's box holds that a Send must not sweep or wait on unsaid (ADR 0113).
   const hostDraft = showPreview ? effectiveRaw : null;
-  // A message waiting for the operator's call on that text: Send it, Add to mine or Discard.
+  // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
   const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   useEffect(() => setDraftPick(null), [paneId, session, locked]);
-  // The text left the box, by a tap here or at the terminal: the waiting message goes now, the
-  // draft as it then reads (Add to mine put the box's text into it).
+  // A pick dies with the page: a message must not go on its own while nobody is looking.
   useEffect(() => {
-    if (!draftPick || hostDraft !== null || sending) return;
+    const onHidden = () => { if (document.visibilityState === "hidden") setDraftPick(null); };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, []);
+  // The box's text was settled here, or the box itself is empty again (the terminal sent or cleared
+  // it): the waiting message goes now, the draft as it then reads (Add to my message joined it). A
+  // preview that only hid for a poll is neither, so it holds.
+  const boxSettled = rawTerminalDraft === null || (effectiveRaw !== null && normalizeDraft(effectiveRaw) === handledKey);
+  useEffect(() => {
+    if (!draftPick || !boxSettled || sending) return;
     const pick = draftPick;
     setDraftPick(null);
     void send(pick.isDraft ? outgoing() : pick.text, pick.isDraft, false, undefined, { mode: pick.mode, draftSettled: true });
-  }, [draftPick, hostDraft, sending]);
+  }, [draftPick, boxSettled, sending]);
 
   /** Send or discard the agent's box's text, bound to the text shown (ADR 0113). */
   async function settleHostDraft(action: "send" | "discard") {
     if (hostDraft === null || locked || draftBusy) return;
     const draft = hostDraft;
     setDraftBusy(true);
-    const res = await api.clearTerminalDraft(paneId, draft, session, action).catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+    const res = await api.settleTerminalDraft(paneId, draft, session, action).catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
     setDraftBusy(false);
     if (!res.ok) {
       setStatus(res.error ?? "The agent's box was left as it is.", "error");
       return;
     }
+    if (action === "send") stop.turnSent();
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
   }
@@ -799,16 +809,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // the composer held the copy (ADR 0112). The bridge clears it only while the box still holds this
   // exact text: if the host typed on, the line stays. A read-only device only copies. If the host
   // keeps typing and produces a DIFFERENT draft afterwards, the preview honestly reappears with it.
-  function takeOverDraft() {
+  async function takeOverDraft() {
     if (effectiveRaw === null) return;
     const draft = effectiveRaw;
+    // A message waiting on this text goes once it leaves the box, so the box empties first: the queue
+    // never sweeps a draft, and the copy must not go out while the original still sits there.
+    if (draftPick && !locked) {
+      if (draftBusy) return;
+      setDraftBusy(true);
+      const res = await api.settleTerminalDraft(paneId, draft, session, "take").catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+      setDraftBusy(false);
+      if (!res.ok) {
+        setStatus(res.error ?? "The agent's box was left as it is.", "error");
+        return;
+      }
+    }
     direct.deactivate();
     updateInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${draft}` : draft));
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
-    if (locked) return;
-    api.clearTerminalDraft(paneId, draft, session).then(
+    if (locked || draftPick) return;
+    api.settleTerminalDraft(paneId, draft, session, "take").then(
       (res) => { if (!res.ok) setStatus(res.error ?? "The terminal still holds its copy.", "info"); },
       () => setStatus("The terminal still holds its copy: Nenu couldn't reach it.", "info"),
     );
@@ -1348,7 +1370,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </ComposerDock>
         )}
         {/* The text in the agent's own box, shown once it holds still, with what to do about it in one
-            tap: Send it, Add to mine, Discard (terminal-draft-preview.tsx, ADR 0113). A Send while it
+            tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0113). A Send while it
             is there waits on that tap instead of sweeping it or queueing behind it. */}
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
@@ -1356,12 +1378,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             // No Take over when the line holds something only the CLI has (`holdsCliToken`): a copy
             // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
             // preview keeps showing it, and Type into terminal edits it in place.
-            onTakeOver={holdsCliToken(effectiveRaw) ? null : takeOverDraft}
+            onTakeOver={holdsCliToken(effectiveRaw) ? null : () => void takeOverDraft()}
             name={busyChoiceFor(agent)?.name ?? "the agent"}
             onSend={locked ? null : () => void settleHostDraft("send")}
             onDiscard={locked ? null : () => void settleHostDraft("discard")}
             busy={draftBusy}
             waiting={draftPick !== null}
+            onCancel={() => setDraftPick(null)}
           />
         )}
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two
@@ -1595,7 +1618,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               >
                 {direct.active ? (
                   <Keyboard className="size-4" />
-                ) : sending ? (
+                ) : sending || draftPick ? (
                   <Pending className="size-4" />
                 ) : justSent ? (
                   <Check className="size-4" />

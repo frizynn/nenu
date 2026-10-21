@@ -81,15 +81,15 @@ const NO_ECHO =
   "That's a password prompt — it shows nothing as you type, so Send can never confirm the text arrived. Nothing was typed.";
 const NO_ECHO_TYPED =
   "That's a password prompt — it shows nothing as you type, so the text can't be confirmed and nothing was submitted. What you typed is already in the pane.";
-// Whatever a stopped send leaves in the agent's box is drawn above the composer with Send it, Add to
-// mine and Discard (ADR 0113), so the way forward is a tap there, never a trip to the terminal.
-const LEFT_IN_BOX = "If any of it is in the agent's box, it shows above yours: tap Send it or Discard.";
+// Whatever a stopped send leaves in the agent's box is drawn above the composer with Send it first,
+// Add to my message and Discard (ADR 0113), so the way forward is a tap there, never a trip to the terminal.
+const LEFT_IN_BOX = "If any of it is in the agent's box, it shows above yours with Send it first and Discard.";
 const UNREAD = `Nenu couldn't read the terminal to confirm your message, so it didn't press Enter. ${LEFT_IN_BOX}`;
 // A stop after typing names why, then either what is left in the box or that Nenu cleared it.
 type Stopped = { why: string; left: string };
 const UNSEEN: Stopped = { why: "Your message didn't show in the agent's input box, so nothing was sent.", left: LEFT_IN_BOX };
 const MOVED: Stopped = { why: "The agent's input box changed right before Enter, so nothing was sent.", left: LEFT_IN_BOX };
-const UNCONFIRMED = "Enter went out, but the message still shows in the agent's input box. If it stays, tap Send it above yours.";
+const UNCONFIRMED = "Enter went out, but the message still shows in the agent's input box. If it stays, it shows above yours with Send it first.";
 const UNCHECKED =
   "Nenu couldn't read the terminal to check the earlier try of this message, so it typed nothing. Try again in a moment.";
 const NO_READBACK =

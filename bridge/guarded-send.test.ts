@@ -378,7 +378,7 @@ describe("guardedSend", () => {
     };
     const { outcome } = await run(term, { text: `${red} what is this?` }, { prior: { typeAttempted: true, textDelivered: true } });
     expect(outcome).toMatchObject({ ok: false, textDelivered: true });
-    if (!outcome.ok) expect(outcome.error).toContain("tap Send it or Discard");
+    if (!outcome.ok) expect(outcome.error).toContain("with Send it first and Discard");
     expect(term.keys()).toEqual([]);
   });
 

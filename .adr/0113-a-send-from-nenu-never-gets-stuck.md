@@ -49,14 +49,17 @@ in Claude's queue, read after the step it is on; Codex's Enter steers. T3 Code d
    Nothing asks. "Send after this turn" is a row of the + menu while the agent works and the box has
    something to send (`afterTurn`, as before). The question is gone.
 2. **Text in the agent's box is settled in one tap, beside the box.** The row above the box ("Text in
-   Claude's box") offers **Send it** (Enter in the terminal), **Add to mine** (Take over: it joins the
-   draft and leaves the terminal) and **Discard**. Send it and Discard are bound to the text the phone
-   shows, as Take over is: a fresh read under the pane's write lock must show exactly that text, or
-   nothing is pressed (`settleDraft`). They act on a paste or picture only the CLI holds as well,
-   because the operator saw it and chose; Add to mine still is not offered for one (ADR 0112).
+   Claude's box") offers **Send it first** (Enter in the terminal), **Add to my message** (Take over:
+   it joins the draft and leaves the terminal) and **Discard**. Send it first and Discard are bound to
+   the text the phone shows, as Take over is: a fresh read under the pane's write lock must show
+   exactly that text, or nothing is pressed (`settleDraft`). They act on a paste or picture only the
+   CLI holds as well, because the operator saw it and chose; Add to my message still is not offered
+   for one (ADR 0112).
 3. **A Send over that text waits for the tap, never sweeps it and never queues behind it.** The row
-   says "Yours goes as soon as you choose", the tap settles the box, and the message goes on its own;
-   it also goes if the box empties at the terminal. Esc takes it back. A row of the queue that waits on
+   says "Your message goes as soon as you choose", Send shows it waiting, the tap settles the box, and
+   the message goes on its own; it also goes if the box empties at the terminal, never on a preview
+   that only hid for a read. Don't send mine (or Esc on a desk) takes it back, and so does a hidden
+   page: a message never goes on its own while nobody looks. A row of the queue that waits on
    such text says so and points at the same three buttons, and goes by itself once the box is free
    (unchanged: the queue's tick already sends a row the moment its box empties).
 4. **A message sent from Nenu is drawn in the thread, at its end, until the journal has it.** The
@@ -72,7 +75,7 @@ in Claude's queue, read after the step it is on; Codex's Enter steers. T3 Code d
    hidden page, failed batch); the view arms it again when it is live again, without a notice. The +
    row still arms it in the chat for one pane, as before.
 6. **An error says what happened and what to tap.** A stopped send says nothing was sent, and that
-   whatever is left in the box shows above the composer with Send it and Discard; "check Terminal"
+   whatever is left in the box shows above the composer with Send it first and Discard; "check Terminal"
    stays only where Nenu cannot tell what happened.
 
 ## Consequences
@@ -86,5 +89,9 @@ in Claude's queue, read after the step it is on; Codex's Enter steers. T3 Code d
 - `bun scripts/e2e/run.ts send-always` must pass: a queued message with a picture is drawn in the
   thread and its picture loads, Send while working asks nothing, text in the box never holds a send,
   and the Terminal view types into the pane, on a phone and a desk.
+- The guard against sweeping lives in the client: `/send` still sweeps a stranded draft before it
+  types, as ADR 0112 left it. A send that reaches the bridge with the box's text unsettled (a client
+  of an older build, a read that missed the text) still replaces it. Moving that refusal into the
+  bridge is the transport's change to make.
 - Shell panes keep their composer: their only view is the mirror, and a command still goes through
   the guarded send unless Type into terminal is armed from the +.

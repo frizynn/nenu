@@ -666,10 +666,10 @@ export function sendKeys(
  * Act on the agent's input box while it still holds `draft`: take it over into the composer (ADR
  * 0112), discard it, or send it with Enter (ADR 0113).
  */
-export function clearTerminalDraft(paneId: string, draft: string, session?: string, action: "take" | "discard" | "send" = "take"): Promise<ActionResponse> {
+export function settleTerminalDraft(paneId: string, draft: string, session: string | undefined, action: "take" | "discard" | "send"): Promise<ActionResponse> {
   return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/clear-draft`, session), {
     method: "POST",
-    body: JSON.stringify(action === "take" ? { draft } : { draft, action }),
+    body: JSON.stringify({ draft, action }),
   });
 }
 
