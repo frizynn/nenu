@@ -3,24 +3,29 @@ import { formatElapsed } from "@/lib/activity";
 import { isLocked, useLocked } from "@/lib/idle";
 import { cn } from "@/lib/utils";
 
+const SECOND = 1000;
 const MINUTE = 60_000;
 
 /**
  * The time since `since` in whole minutes ("3m", after `prefix`), or `fallback` without a usable
- * start. Only this text node changes, once a minute on the minute since `since`, so the transcript
- * around it never re-renders for it; it stops while the page is hidden or the idle lock is up and
- * catches up when either ends. The exact duration shows once the turn ends.
+ * start; `fine` counts the first minute in seconds ("9s"), as a turn's own line does. Only this text
+ * node changes, once a minute on the minute since `since` (each second of a fine first minute), so the
+ * transcript around it never re-renders for it; it stops while the page is hidden or the idle lock is
+ * up and catches up when either ends. The exact duration shows once the turn ends.
  */
-export function Elapsed({ since, prefix = "", fallback = "", className }: { since?: string; prefix?: string; fallback?: string; className?: string }) {
+export function Elapsed({ since, prefix = "", fallback = "", fine = false, className }: { since?: string; prefix?: string; fallback?: string; fine?: boolean; className?: string }) {
   const text = useRef<HTMLSpanElement>(null);
   const locked = useLocked();
   const start = since ? Date.parse(since) : NaN;
-  const label = () => Number.isFinite(start) && start <= Date.now() ? `${prefix}${formatElapsed(Date.now() - start)}` : fallback;
+  const seconds = () => fine && Date.now() - start < MINUTE;
+  const label = () => !Number.isFinite(start) || start > Date.now() ? fallback
+    : `${prefix}${seconds() ? `${Math.floor((Date.now() - start) / SECOND)}s` : formatElapsed(Date.now() - start)}`;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
       if (text.current) text.current.textContent = label();
-      timer = setTimeout(tick, MINUTE - (((Date.now() - start) % MINUTE) + MINUTE) % MINUTE);
+      const step = seconds() ? SECOND : MINUTE;
+      timer = setTimeout(tick, step - (((Date.now() - start) % step) + step) % step);
     };
     const sync = () => {
       if (timer) clearTimeout(timer);
@@ -32,7 +37,7 @@ export function Elapsed({ since, prefix = "", fallback = "", className }: { sinc
     sync();
     document.addEventListener("visibilitychange", sync);
     return () => { if (timer) clearTimeout(timer); document.removeEventListener("visibilitychange", sync); };
-  }, [since, prefix, fallback, locked]);
+  }, [since, prefix, fallback, fine, locked]);
   return <span ref={text} className={cn("tabular-nums", className)}>{label()}</span>;
 }
 

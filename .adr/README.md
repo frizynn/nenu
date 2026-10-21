@@ -117,6 +117,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md) | A state is a still glyph, coloured only when it asks for you | Accepted |
 | [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
 | [0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Accepted |
+| [0116](./0116-a-turn-reads-as-t3-code-draws-its-work.md) | A turn reads as T3 Code draws its work, the same on a phone and a desk (reverses the desk's step table) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

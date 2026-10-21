@@ -15,6 +15,7 @@ import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { RecoveryLeads } from "@/components/connect-conversation";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
+import { MOTION_PANEL_MS } from "@/lib/motion";
 
 interface LiveConversationProps {
   paneId: string;
@@ -181,6 +182,8 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const onCap = useRef(false);
   const restoring = useRef(false);
   const restoreFrame = useRef<number | null>(null);
+  // What lets a held line go when the reader scrolls during a fold's motion (onWorkToggle).
+  const holdRelease = useRef<AbortController | null>(null);
   // The list's height just before an older page goes in above the reader. Restoring adds only the
   // growth to wherever the list stands by then: a reader still scrolling keeps moving from there.
   const anchorHeight = useRef<number | null>(null);
@@ -410,11 +413,23 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
     setFrozen((current) => current ?? history);
     restoring.current = true;
     if (restoreFrame.current !== null) cancelAnimationFrame(restoreFrame.current);
-    restoreFrame.current = requestAnimationFrame(() => {
-      if (target.isConnected) el.scrollTop += target.getBoundingClientRect().top - before;
+    holdRelease.current?.abort();
+    // A fold opens and shuts over a panel's length (components/fold.tsx): the tapped line is held
+    // where it was each frame until the motion has played, unless the reader scrolls first.
+    let until = performance.now() + MOTION_PANEL_MS + 50;
+    const release = new AbortController();
+    holdRelease.current = release;
+    const letGo = () => { until = 0; };
+    el.addEventListener("wheel", letGo, { passive: true, signal: release.signal });
+    el.addEventListener("touchmove", letGo, { passive: true, signal: release.signal });
+    const hold = () => {
+      if (target.isConnected && until) el.scrollTop += target.getBoundingClientRect().top - before;
+      if (target.isConnected && performance.now() < until) { restoreFrame.current = requestAnimationFrame(hold); return; }
+      release.abort();
       restoring.current = false;
       restoreFrame.current = null;
-    });
+    };
+    restoreFrame.current = requestAnimationFrame(hold);
   }, [history]);
 
   function onScroll() {

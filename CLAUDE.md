@@ -231,6 +231,11 @@ the unit name; the Herdr action runs from anywhere.
   the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass. Stop sits in the box beside Send, never
   in its slot, so a draft never swaps it under the thumb
   ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
+- **A turn's work reads the same on a phone and a desk** (`work-log-tools.tsx`, `fold.tsx`): "Worked for"
+  folds the turn, several calls fold under one line ("Ran 3 commands"), a command is its row and opens
+  coloured by `lib/shell-tokens.ts` (text nodes, never a highlighter's HTML) over its output in grey; a
+  run drawn as rows stays rows while on screen, and `bun scripts/e2e/run.ts commands` must pass
+  ([ADR 0116](./.adr/0116-a-turn-reads-as-t3-code-draws-its-work.md)).
 - **Page motion runs only on navigations the app starts** (`web/src/lib/motion.ts` wraps
   `router.navigate`): never React Router's `viewTransition` flag, which replays a transition on every
   poll after a Back; the page moves as one picture, Back and the iOS swipe never animate, and a tapped
