@@ -13,7 +13,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - A send to an idle Claude goes as one paste with Enter right behind it, confirmed by Claude's own log of that message, so a loaded host no longer strands it in the box or answers "check Terminal" for a message Claude took (5e4e9a8b, 20f584a0, 0209b5f6).
-- Every wait of a send ends on its event within 15 s instead of a fixed 2.5 s window; a picture's wait runs on while Claude says Pasting…, and stops 55 s into the send (448928ae, 7f52df3a, 75deda75).
+- Every wait of a send ends on its event within 15 s instead of a fixed 2.5 s window; a picture's wait runs on while Claude says Pasting…, and stops 55 s into the send (448928ae, 7f52df3a, 75deda75, dd44b6c0).
 - A dialog Claude's session file reports refuses a send before typing and stops it before Enter, with no key pressed into it (5ade17f4, 31782d35, 9b23547f).
 - A retry Claude's log places is answered sent without typing again; a picture that arrives after a send gave up is cleared too (0209b5f6, 9af7ccfa).
 - The phone waits 110 s for a send, past the bridge's bound for a loaded agent (e7b8de48).
