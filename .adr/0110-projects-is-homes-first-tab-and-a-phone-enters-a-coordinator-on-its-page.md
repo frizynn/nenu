@@ -7,7 +7,8 @@
 - **Trail:** `web/src/components/home-projects.tsx` · `web/src/components/home-panels.tsx` (`HomeSessions`) ·
   `web/src/routes/project.tsx` · `web/src/components/project-tasks.tsx` (`organize`) ·
   `web/src/components/workbench-sidebar.tsx` (`ProjectSection`, `DrawerSections`) · `web/src/routes/node.tsx` ·
-  `scripts/e2e/phone-nav.ts`
+  `web/src/components/desk-nav.tsx` (`DeskProjects`) · `web/src/components/sidebar-rail.tsx` ·
+  `scripts/e2e/phone-nav.ts` · `scripts/e2e/no-projects.ts`
 
 ## Context
 
@@ -33,7 +34,8 @@ and the project with only its own coordinator still opens on that chat (ADR 0092
 
 1. **Home's lists are one tab control: Projects, Recents, Workspaces, PRs.** Projects comes first and
    is what Home opens on; the choice is remembered on the device under a new key, so a choice made
-   before the tab existed opens on Projects once. Projects and PRs show only while there is one.
+   before the tab existed opens on Projects once. Projects and PRs show only while there is one, and a
+   remembered tab that is not there opens the first one left, kept for when it comes back.
 2. **The Projects tab leads with live projects**: something waits on you, works, or is ready to
    review there. The rest (nothing running, paused last) fold under one "Quiet" row at its end. Each
    row is ADR 0107's, and always opens its project; the project page says what waits on you there.
@@ -46,9 +48,20 @@ and the project with only its own coordinator still opens on that chat (ADR 0092
    a project opens on its coordinators and the threads that wait on you, work or wait for a review,
    with no History and no open-task count. Home's headline
    leaves idle agents out, a phone's Home leaves the date out, and no footer counts workspaces or agents.
+5. **Without a project no list or bar says Projects** (amended 2026-10-21): not Home's tab, nor on a desk
+   the bar's Projects row, its Projects heading with its +, or the folded rail's Projects button. Someone
+   without Organizations, or with no project in it, sees Recents first; New project stays in New, under
+   its own Projects group, and `/projects` still answers a link.
+
+`bun scripts/e2e/no-projects.ts` loads Home at 390x844 and 1440x900 over four herds: one project,
+Organizations with none, no Organizations, and one that never answers. The tabs come with the first
+snapshot, whose projects the bridge reads from the files before Organizations answers, so each load drew
+one set of tabs and kept it: no tab shows and then goes. Before the amendment, the three herds without a
+project drew Recents first on both sizes and still said Projects three times on a desk; after, none.
 
 ## Consequences
 
 Recents is a tap further away than it was. A coordinator's chat is two taps from a project on a phone,
 one more than before, in exchange for its page being reachable at all. Revisit if the operator asks for
-the chat again from the project page; the page's Open chat is the place to measure from.
+the chat again from the project page; the page's Open chat is the place to measure from. A desk with no
+project has no shortcut to the Projects page; its first project starts from New.

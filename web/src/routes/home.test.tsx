@@ -663,6 +663,15 @@ it("has no PRs tab when there is no pull request, and falls back to Recents from
   expect(main.getByRole("tabpanel", { name: "Recents" })).toBeInTheDocument();
 });
 
+it("has no Projects tab without a project, and opens on Recents from a remembered Projects", async () => {
+  localStorage.setItem("nenu:home-list:v2", "projects");
+  const { main } = await setup({ ...data, projects: [] });
+  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces"]);
+  expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
+  expect(main.queryByRole("combobox", { name: "Project" })).toBeNull();
+  expect(localStorage.getItem("nenu:home-list:v2")).toBe("projects");
+});
+
 it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one place to jump from", async () => {
   const { user, router } = await setup();
   await user.keyboard("{Meta>}k{/Meta}");

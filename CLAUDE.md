@@ -203,7 +203,8 @@ the unit name; the Herdr action runs from anywhere.
   shows only where `node move --help` exits 0 and the node's `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
-  Home, Projects (ADR 0102), projects as flat rows and chats by when they last moved; the tree is Search's. An
+  Home, Projects (ADR 0102), projects as flat rows and chats by when they last moved; the tree is Search's.
+  Without a project, the bar, its heading and the rail say Projects nowhere (ADR 0110). An
   agent finishing elsewhere is a +1 on its row there, never a toast on a desk
   ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
   is New on its Home row, and only an agent that asks raises a toast
@@ -213,8 +214,9 @@ the unit name; the Herdr action runs from anywhere.
 - **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
   works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
   which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)). They
-  are Home's first tab, before Recents, Workspaces and PRs: live projects first, the quiet ones folded at
-  its end, and a row always opens its project. On a phone a coordinator opens its page, from the project
+  are Home's first tab, before Recents, Workspaces and PRs, and absent with no project
+  (`bun scripts/e2e/no-projects.ts` must pass): live projects first, the quiet ones folded at its end,
+  and a row always opens its project. On a phone a coordinator opens its page, from the project
   and the drawer, and the drawer lists Projects after Needs you without History or counts;
   `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
