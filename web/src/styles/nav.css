@@ -78,7 +78,7 @@
 .nav-ws-body .nav-pane { --nav-depth: 1; min-height: 28px; padding-block: 3px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth) - 1) * var(--nav-indent, 16px)); }
 .nav-ws-body .nav-pane-nested { --nav-depth: 2; }
 .nav-tab { position: relative; }
-.nav-tab-fold { position: absolute; top: calc(50% - 6.5px); left: calc(var(--nav-pad, 10px) + (var(--nav-fold, 20px) - 13px) / 2); color: var(--muted-foreground); transition: transform var(--motion-control) var(--motion-ease); }
+.nav-tab-fold { position: absolute; top: calc(50% - 7px); left: calc(var(--nav-pad, 10px) + (var(--nav-fold, 20px) - 14px) / 2); color: var(--muted-foreground); transition: transform var(--motion-control) var(--motion-ease); }
 .nav-tab[aria-expanded="true"] > .nav-tab-fold { transform: rotate(90deg); }
 
 /* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */

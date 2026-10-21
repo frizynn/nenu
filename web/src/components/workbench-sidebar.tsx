@@ -574,7 +574,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
       {fold && (
         <button type="button" className="nav-disclosure" style={depthStyle(depth)} aria-label={`${thread.title} threads`} aria-expanded={fold.open}
           onClick={fold.onToggle}>
-          <ChevronRight aria-hidden size={13} />
+          <ChevronRight aria-hidden size={14} />
         </button>
       )}
       <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head", state === "resolved" && "nav-tree-resolved")} style={depthStyle(depth)}

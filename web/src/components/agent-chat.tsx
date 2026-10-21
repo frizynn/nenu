@@ -1124,7 +1124,7 @@ export function AgentChat({
                     aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                     aria-pressed={prefs.rawTerminal}
                     title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
                   >
                     {prefs.rawTerminal ? <ChatCircleText aria-hidden="true" className="size-4" /> : <SquareTerminal aria-hidden="true" className="size-4" />}
                   </button>

@@ -249,7 +249,7 @@ export function ChatFilesBrowser({
         aria-label="Artifacts and files"
         title="Artifacts and files"
         onClick={() => { begin(); setOpen(true); }}
-        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"
+        className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"
       >
         <Paperclip aria-hidden="true" className="size-4" />
       </button>}

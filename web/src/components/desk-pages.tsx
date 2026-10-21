@@ -130,7 +130,7 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   // A card with no threads has nothing to unfold: its head says so and draws no chevron.
   const foldable = card.rows.length > 0;
   const head = <>
-    <span className="desk-card-mark"><Mark aria-hidden size={15} /></span>
+    <span className="desk-card-mark"><Mark aria-hidden size={16} /></span>
     <span className="min-w-0 flex-1">
       <span className="block truncate text-subhead font-medium">{name}</span>
       <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
@@ -150,9 +150,9 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
         : <span aria-hidden className="w-3.5 shrink-0" />}
       {/* Named for what it does; what its threads are doing is said as its description. */}
       <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>{head}</button>
-      {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={15} /></button>}
+      {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={16} /></button>}
       {/* The head already opens the page; the chevron only says so, and is not a second stop for the keyboard. */}
-      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={15} /></button>
+      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={16} /></button>
     </div>
     {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal">
       {card.rows.slice(0, limit).map((node) => <WorkRow key={node.thread.id} node={node} onOpen={onOpenNode} />)}

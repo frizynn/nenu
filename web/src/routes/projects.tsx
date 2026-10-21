@@ -36,7 +36,7 @@ export function ProjectsRoute() {
         ? <EmptyState className="py-12" icon={LayoutGrid} title="No projects yet">A project is a Herdr Organizations project: a goal, its coordinators and their threads.</EmptyState>
         : <>
           <label className="mb-4 flex h-10 items-center gap-2.5 rounded-lg border border-border bg-card px-3 text-subhead">
-            <Search aria-hidden size={15} className="text-muted-foreground" />
+            <Search aria-hidden size={16} className="text-muted-foreground" />
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" aria-label="Search projects"
               className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-subtle-foreground" />
           </label>

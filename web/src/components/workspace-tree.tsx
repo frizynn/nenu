@@ -121,7 +121,7 @@ function TabRows({ tab, folds, projects, session, currentPaneId, open, onToggle 
   return <>
     <button type="button" className="nav-pane nav-tab" aria-expanded={open} aria-controls={open ? bodyId : undefined}
       aria-label={[tab.label, status && STATUS_LABEL[status], count].filter(Boolean).join(", ")} onClick={() => onToggle(!open)}>
-      <ChevronRight aria-hidden size={13} className="nav-tab-fold" />
+      <ChevronRight aria-hidden size={14} className="nav-tab-fold" />
       <RowBody mark={<LayoutTemplate aria-hidden size={14} />} title={tab.label} end={<>
         {status && <StatusDot status={status} surface="bg-transparent" />}
         <span className="nav-count">{count}</span>
