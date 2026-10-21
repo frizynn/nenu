@@ -91,7 +91,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
     {listed && connectButton}
     <button type="button" aria-expanded={manual} aria-controls={regionId} onClick={toggleManual} className={cn(quiet, "w-full")}>
       Enter a session ID
-      <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform duration-200 motion-reduce:transition-none", manual && "rotate-180")} />
+      <ChevronDown aria-hidden="true" className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", manual && "rotate-180")} />
     </button>
     <div id={regionId} hidden={!manual} className="flex flex-col gap-3">
       <label className="block space-y-1.5 text-footnote text-muted-foreground">

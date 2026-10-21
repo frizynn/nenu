@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { StatusArea, TOAST_EXIT_MS, TOAST_EXIT_REDUCED_MS } from "./status-area";
+import { StatusArea, TOAST_EXIT_MS } from "./status-area";
 import { clearStatus, setStatus } from "@/lib/status";
 
 /** Past the exit: a dismissed notice stays mounted for its fade, then leaves. */
@@ -76,7 +76,7 @@ describe("workbench notifications", () => {
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
   });
 
-  it("shortens the exit to an opacity fade under reduced motion", () => {
+  it("still leaves after TOAST_EXIT_MS under reduced motion, as a fade alone", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query.includes("prefers-reduced-motion"), media: query, onchange: null,
       addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
@@ -84,7 +84,7 @@ describe("workbench notifications", () => {
     render(<StatusArea />);
     act(() => setStatus("Tab closed", "info"));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
-    act(() => vi.advanceTimersByTime(TOAST_EXIT_REDUCED_MS));
+    act(() => vi.advanceTimersByTime(TOAST_EXIT_MS));
     expect(screen.queryByText("Tab closed")).not.toBeInTheDocument();
     vi.unstubAllGlobals();
   });

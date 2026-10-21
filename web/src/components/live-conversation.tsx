@@ -520,7 +520,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
       {error && (
         <div role="status" className="flex items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
           <span>{entries.length ? "Conversation refresh failed. Showing the last update." : "Couldn't load the conversation."}</span>
-          {onRetry && <button type="button" onClick={onRetry} className="min-h-11 shrink-0 rounded-md px-3 font-medium hover:bg-muted">Retry</button>}
+          {onRetry && <button type="button" onClick={onRetry} className="min-h-11 shrink-0 rounded-md px-3 font-medium hover:bg-hover">Retry</button>}
         </div>
       )}
       <div className="relative min-h-0 flex-1">
@@ -528,7 +528,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
           <div ref={contentRef} className={cn("mx-auto w-full max-w-(--chat-column)", skeleton && "flex min-h-full flex-col justify-end", linkable && cn("flex min-h-full flex-col", waiting ? "justify-end" : "justify-center"))}>
             {entries.length > 0 ? <>
               {(canLoadOlder || historyBoundary || olderError) && <div className="mb-6 text-center text-xs text-muted-foreground">
-                {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-muted hover:text-foreground disabled:opacity-50">
+                {canLoadOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 hover:bg-hover hover:text-foreground disabled:opacity-50">
                   {loadingOlder ? <Pending aria-hidden="true" className="size-3" /> : <ArrowUp aria-hidden="true" className="size-3" />}
                   {loadingOlder ? "Loading older messages…" : olderError ? "Retry older messages" : "Load older messages"}
                 </button>}
@@ -559,7 +559,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
                 </div>
               }>Send a message to start, or link the one already running.</EmptyState>}
               {footer}
-            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground">
+            </> : <><div className="flex flex-col items-center gap-3 px-4 py-16 text-center text-footnote text-muted-foreground">
               <ChatCircle className="size-5" />
               <p>{emptyCopy}</p>
               {shown && !shown.available && shown.reason !== "disabled" && offer && <div className="w-full max-w-sm">{offer}</div>}

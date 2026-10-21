@@ -18,7 +18,7 @@ export function DiffCommentChips({ comments, onRemove }: { comments: readonly Di
             <span className="max-w-40 truncate font-mono">{comment.path.slice(comment.path.lastIndexOf("/") + 1)}:{comment.line}</span>
             <button
               type="button"
-              className="hit-area grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="hit-area grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground"
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => onRemove(comment)}
               aria-label={`Remove comment on ${comment.side === "-" ? "removed " : ""}${at}`}

@@ -232,7 +232,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
     </span>
     <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
       {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
-      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />}
+      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
     </span>
   </>;
   return (
@@ -304,7 +304,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
-  // A desk draws the switcher as the session panel's text tabs and the filter as a quiet action; a phone keeps the segmented track.
+  // A desk draws the switcher as a page's underlined tabs (DeskTabs) and the filter as a quiet action; a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
@@ -326,12 +326,12 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
     <section aria-label="Your work" className="flex flex-col gap-2">
-      <div className="relative flex items-center gap-2.5">
+      <div className={cn("relative flex items-center gap-2.5", desk && "border-b border-border")}>
         <div role="tablist" aria-label="Your work"
-          className={desk ? "-ml-2 flex items-center gap-1" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
+          className={desk ? "flex items-center gap-5" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-              onClick={() => { setList(key); rememberList(key); }} className={desk ? "panel-tab" : "project-segment"}>{label}</button>
+              onClick={() => { setList(key); rememberList(key); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
         {/* Always laid out beside the tabs, so its arrival moves neither them nor the rows; a phone gives the
@@ -392,7 +392,7 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
   const to = panePath(paneId, session);
   const busy = isOpening(opening, to);
   return (
-    <Link to={to} aria-busy={busy || undefined} className={cn("flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-accent", busy && "bg-accent")}>
+    <Link to={to} aria-busy={busy || undefined} className={cn("flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-hover", busy && "bg-accent")}>
       <span className="flex min-w-0 items-center gap-2.5">
         <Workflow aria-hidden className="size-4 shrink-0 text-status-working" />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -422,7 +422,7 @@ export function RunningWorkCard({ paneId, workflow, agent, session, now, opening
 function StarterRow({ icon: Icon, title, hint, disabled, onClick }: { icon: IconComponent; title: string; hint: string; disabled: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled}
-      className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
+      className="flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover active:bg-muted disabled:pointer-events-none disabled:text-disabled-foreground">
       <Icon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-body font-medium">{title}</span>

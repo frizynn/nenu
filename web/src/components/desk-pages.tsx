@@ -94,7 +94,7 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
   const settled = pr && pr.state !== "open" && pr.state !== "draft" && node.state !== "closing" ? pr.state : undefined;
   // A thread under a nested coordinator sits one step in, as the tree draws it.
   return <button type="button" className="desk-row" style={depth ? { paddingLeft: 22 + depth * 20 } : undefined} onClick={() => onOpen(node)}>
-    <NodeDot state={node.state} className="size-1.5" />
+    <NodeDot state={node.state} />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
     <span className="desk-row-end">{rowEnd(node, now)}</span>
@@ -130,13 +130,13 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   // A card with no threads has nothing to unfold: its head says so and draws no chevron.
   const foldable = card.rows.length > 0;
   const head = <>
-    <span className="desk-card-mark"><Mark aria-hidden size={15} /></span>
+    <span className="desk-card-mark"><Mark aria-hidden size={16} /></span>
     <span className="min-w-0 flex-1">
       <span className="block truncate text-subhead font-medium">{name}</span>
       <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
         {!card.coordinator && <span>{foldable ? "Threads started straight from the project" : "No threads started from the project"}</span>}
         {card.coordinator && parts.length === 0 && <span>{foldable ? `${card.rows.length} ${card.rows.length === 1 ? "thread" : "threads"}` : "No open threads"}</span>}
-        {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} className="size-1.5" />{part.text}</span>)}
+        {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} />{part.text}</span>)}
         {ownState && <span>{ownState}</span>}
       </span>
     </span>
@@ -150,9 +150,9 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
         : <span aria-hidden className="w-3.5 shrink-0" />}
       {/* Named for what it does; what its threads are doing is said as its description. */}
       <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>{head}</button>
-      {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={15} /></button>}
+      {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={16} /></button>}
       {/* The head already opens the page; the chevron only says so, and is not a second stop for the keyboard. */}
-      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={15} /></button>
+      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={16} /></button>
     </div>
     {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal">
       {card.rows.slice(0, limit).map((node) => <WorkRow key={node.thread.id} node={node} onOpen={onOpenNode} />)}

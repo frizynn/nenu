@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as Reac
 import { ChevronLeft, ChevronRight, Download, Pending, X } from "@/components/ui/icon";
 
 import { shortName, useFitted } from "@/lib/fit-text";
+import { reducedMotion } from "@/lib/motion";
 import {
   clampView, dragIntent, DOUBLE_TAP_ZOOM, IDENTITY, MAX_ZOOM, pageStep, project, resist, rubberband, shouldDismiss, velocity, zoomAt,
   type Point, type Sample, type Size, type View,
@@ -23,8 +24,6 @@ const DOUBLE_TAP_MS = 280;
 /** Leaves at twice its average speed, so a duration of 2 · distance / speed hands the finger's speed on. */
 const HANDOFF = "cubic-bezier(0.25, 0.5, 0.5, 1)";
 const SETTLE = "cubic-bezier(0.2, 0.9, 0.3, 1)";
-
-export const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
 /** A release's animation length: the finger's own speed when it had one, kept between 180 and 300ms. */
 function handoffMs(distance: number, speed: number): number {

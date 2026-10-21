@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-// How long a row above the box takes to fold open and to fold shut (the direction's enter and exit).
-const FOLD_OPEN_MS = 220;
-const FOLD_SHUT_MS = 150;
+import { MOTION_CONTROL_MS, MOTION_PANEL_MS } from "@/lib/motion";
+
+// How long a row above the box takes to fold open and to fold shut: composer.css's .composer-fold.
+const FOLD_OPEN_MS = MOTION_PANEL_MS;
+const FOLD_SHUT_MS = MOTION_CONTROL_MS;
 // How long a chat takes to settle: its chips come from reads that answer after it mounts.
 const FOLD_SETTLE_MS = 2000;
 

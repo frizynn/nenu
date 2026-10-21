@@ -79,7 +79,7 @@ export function PrChecks({ project, thread, session, readOnly, onChanged }: {
         <span className="min-w-0 flex-1 truncate font-mono text-code text-muted-foreground">{thread.branch}</span>
         {pr.diff && <DiffStat diff={pr.diff} paneId={pr.state === "open" || pr.state === "draft" ? thread.paneId : undefined} pr={pr.number} session={session} url={pr.url} className="text-caption" />}
         {pr.url && <a href={pr.url} target="_blank" rel="noreferrer" aria-label="Open on GitHub" title="Open on GitHub"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground">
           <ExternalLink aria-hidden className="size-3.5" />
         </a>}
       </div>

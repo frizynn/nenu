@@ -130,7 +130,7 @@ export function QueuedMessage({
                 disabled={disabled}
                 onClick={run}
                 className={cn(
-                  "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-accent disabled:text-disabled-foreground coarse:min-h-11",
+                  "flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-footnote font-medium text-foreground hover:bg-hover disabled:text-disabled-foreground coarse:min-h-11",
                   armed && "bg-destructive/10 text-destructive hover:bg-destructive/15",
                 )}
               >
@@ -147,7 +147,7 @@ export function QueuedMessage({
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 onClick={() => setOpen(!open)}
-                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted"
               >
                 <Ellipsis aria-hidden="true" className="size-5" />
               </button>

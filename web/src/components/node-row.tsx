@@ -12,7 +12,7 @@ const DOT_STATUS = { needs: "blocked", working: "working", idle: "idle" } as con
 
 /** A node's mark: red when it needs you, blue for review, a green ring while only its merge is left or
  *  once it merged and is about to close, the agent's dot otherwise, a grey check once resolved. */
-export function NodeDot({ state, className = "size-2" }: { state: NodeState; className?: string }) {
+export function NodeDot({ state, className = "size-1.5" }: { state: NodeState; className?: string }) {
   if (state === "resolved") return <Check aria-hidden data-node-state="resolved" className={cn("shrink-0 text-muted-foreground", className, "size-3")} />;
   if (state === "review") return <span aria-hidden className={cn("inline-flex shrink-0 rounded-full bg-primary", className)} />;
   if (state === "merging" || state === "closing") return <span aria-hidden data-node-state={state} className={cn("inline-flex shrink-0 rounded-full border border-status-done", className)} />;
@@ -59,7 +59,7 @@ export function TaskRow({ state, title, detail, age, current, onOpen, opens = "d
       <div className="task-row">
         <button type="button" className="task-main" onClick={onOpen}>
           {/* The mark centres on the title's first line, whichever mark it is (a dot or the check). */}
-          <span className="flex h-6 shrink-0 items-center"><NodeDot state={state} className="size-2" /></span>
+          <span className="flex h-6 shrink-0 items-center"><NodeDot state={state} /></span>
           <span className="min-w-0 flex-1">
             <span className={cn("block break-words text-body font-medium", state === "resolved" && "text-muted-foreground")}>{title}</span>
             <span className="block truncate text-footnote text-muted-foreground">{detail}</span>

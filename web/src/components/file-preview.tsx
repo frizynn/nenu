@@ -9,13 +9,14 @@ import { paneOwningPath, type PaneRoot } from "@/lib/file-links";
 import { FileHrefContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { shortName, useFitted } from "@/lib/fit-text";
 import { IMAGE_EXTENSION } from "@/lib/message-images";
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { useHoldReload } from "@/lib/reload-guard";
 import { cn } from "@/lib/utils";
 import { ActionGroups } from "./conversation-actions";
 import { MarkdownText } from "./markdown-text";
 import { HtmlViewer } from "./html-viewer";
 import { FileUnavailable, type FileFailure } from "./file-unavailable";
-import { ImageViewer, reducedMotion, type ViewerImage } from "./image-viewer";
+import { ImageViewer, type ViewerImage } from "./image-viewer";
 import { WorkbenchPopover } from "./ui/workbench-popover";
 import type { PreviewItem } from "./file-preview-provider";
 import "./file-preview.css";
@@ -28,9 +29,6 @@ const isHtml = (item: PreviewItem | undefined) => item?.kind === "file" && /\.ht
 const isImage = (item: PreviewItem | undefined) => item?.kind === "journal" || (item?.kind === "file" && IMAGE_EXTENSION.test(item.path));
 const keyOf = (item: PreviewItem | undefined) => item?.kind === "journal" ? `journal:${item.entry}:${item.index}` : `file:${item?.path ?? ""}`;
 const fileName = (path: string) => path.split("/").pop() || "Document";
-
-/** How long the layer stays mounted for its exit: a fade and a fall, or the fade alone. */
-const exitMs = () => reducedMotion() ? 120 : 150;
 
 /** The folder that holds a file, from the folder of the pane it is read through; "" at its top. */
 function folderOf(path: string, cwd: string | undefined): string {
@@ -161,10 +159,8 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
   /** Leave with the layer still mounted for its exit, then unmount. */
   const close = () => {
     if (exit.current) return;
-    const ms = exitMs();
-    if (!ms) return onClose();
     setLeaving(true);
-    exit.current = window.setTimeout(onClose, ms);
+    exit.current = window.setTimeout(onClose, MOTION_CONTROL_MS);
   };
 
   /**
@@ -283,11 +279,11 @@ function DocumentContent({ data, name, openRelated, hrefRelated, onError }: { da
       // A picture under a name without an image extension: the bridge's type says what it is.
       return <img src={data.url} alt={name} decoding="async" className="mx-auto h-auto max-w-full" onError={() => onError("Could not load this image.")} />;
     case "text":
-      if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-sm whitespace-pre">{data.text}</pre>;
+      if (!data.markdown) return <pre className="overflow-x-auto p-5 font-mono text-code whitespace-pre">{data.text}</pre>;
       return <FilePreviewContext.Provider value={openRelated}><FileHrefContext.Provider value={hrefRelated}>
         <MarkdownText text={data.text} className="mx-auto max-w-3xl p-5 sm:p-8" />
       </FileHrefContext.Provider></FilePreviewContext.Provider>;
   }
 }
 
-function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground"><Pending className="size-4" />Loading document…</div>; }
+function Loading() { return <div role="status" className="flex items-center justify-center gap-2 p-10 text-footnote text-muted-foreground"><Pending className="size-4" />Loading document…</div>; }

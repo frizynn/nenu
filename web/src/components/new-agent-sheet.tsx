@@ -210,7 +210,7 @@ export function FolderButton({ shown, parent, onClick, label = "Directory" }: { 
       type="button"
       aria-label={`${label}: ${shown}`}
       onClick={onClick}
-      className="flex h-12 w-full items-center gap-3 rounded-lg border border-border bg-background px-3 text-left hover:bg-accent/60 active:bg-accent coarse:h-14"
+      className="flex h-12 w-full items-center gap-3 rounded-lg border border-border bg-background px-3 text-left hover:bg-hover active:bg-accent coarse:h-14"
     >
       <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 flex-1">

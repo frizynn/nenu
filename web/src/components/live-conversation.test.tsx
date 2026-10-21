@@ -365,7 +365,7 @@ describe("LiveConversation", () => {
     expect(empty).toHaveTextContent("Send a message to start, or link the one already running.");
     // Find is the large action every empty state offers; the typed ID and its full-width Connect wait
     // behind their disclosure, inside the same empty state.
-    expect(within(empty!).getByRole("button", { name: "Find Codex conversations" })).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+    expect(within(empty!).getByRole("button", { name: "Find Codex conversations" })).toHaveClass("ui-button-lg", "bg-foreground", "text-body");
     fireEvent.click(within(empty!).getByRole("button", { name: "Enter a session ID" }));
     expect(within(empty!).getByRole("textbox", { name: "Session ID" })).toBeVisible();
     expect(within(empty!).getByRole("button", { name: "Connect history" })).toHaveClass("w-full", "rounded-lg", "text-body");

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { ImageViewer, reducedMotion, type ViewerImage } from "./image-viewer";
+import { ImageViewer, type ViewerImage } from "./image-viewer";
 import "./file-preview.css";
 
 /**
@@ -29,7 +30,7 @@ export default function CaptureViewer({ images, start, onClose }: { images: read
   const close = () => {
     if (exit.current) return;
     setLeaving(true);
-    exit.current = window.setTimeout(onClose, reducedMotion() ? 120 : 150);
+    exit.current = window.setTimeout(onClose, MOTION_CONTROL_MS);
   };
   const mark = (src: string, broken: boolean) => setFailed((set) => {
     if (set.has(src) === broken) return set;
@@ -52,7 +53,7 @@ export default function CaptureViewer({ images, start, onClose }: { images: read
       onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
       <div ref={panel} role="dialog" aria-modal="true" aria-label={current.label} tabIndex={-1} onKeyDown={onKeyDown} className="file-preview-panel file-preview-panel--image">
         <ImageViewer images={images} index={index} name={current.label} downloadUrl={current.src}
-          error={failed.has(current.src) ? <p className="p-4 text-sm">Could not load this picture.</p> : undefined}
+          error={failed.has(current.src) ? <p className="p-4 text-footnote">Could not load this picture.</p> : undefined}
           onStep={step} onClose={close} onDismissed={onClose} onImageError={(src) => mark(src, true)} onImageLoad={(src) => mark(src, false)} />
       </div>
     </div>,

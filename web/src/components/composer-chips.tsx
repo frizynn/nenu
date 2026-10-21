@@ -66,7 +66,7 @@ export function threadsAround(source: ProjectChipsSource, paneId: string) {
 }
 
 export const NEEDS_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
-export const WORKING_MARK = <StatusDot status="working" className="size-1.5" />;
+export const WORKING_MARK = <StatusDot status="working" />;
 const ENDED_MARK = <span aria-hidden className="size-1.5 shrink-0 rounded-full border border-muted-foreground/60" />;
 
 /** One row per thread: its mark, its name, what it is doing and since when. A tap opens it. */

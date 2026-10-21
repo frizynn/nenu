@@ -43,11 +43,12 @@ export function StatusDot({
 }) {
   const hollow = RESTING.has(status);
   // One static node per status. Colour alone carries activity, avoiding a permanent compositor
-  // animation and the extra ping node for every working pane. `className` can still resize it.
+  // animation and the extra ping node for every working pane. 6px beside every row, chip and title;
+  // only an avatar's corner badge (sidebar-rail) passes a size of its own.
   return (
     <span
       className={cn(
-        "inline-flex size-2.5 shrink-0 rounded-full",
+        "inline-flex size-1.5 shrink-0 rounded-full",
         hollow ? cn("border-[1.5px]", surface, RING[status]) : DOT[status],
         className,
       )}

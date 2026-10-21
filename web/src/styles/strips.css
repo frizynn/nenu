@@ -22,7 +22,7 @@
 
 /* One chip for a tab and a pane. The open one takes the neutral selection fill: the accent is for
    focus and on-states, not for where you are. A name past the cap truncates. */
-.strip-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 6px; height: 28px; min-width: 44px; max-width: min(60vw, 240px); padding-inline: 12px; border: 1px solid transparent; border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; white-space: nowrap; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: background-color 150ms ease-out, color 150ms ease-out, scale 120ms ease-out; }
+.strip-chip { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 6px; height: 28px; min-width: 44px; max-width: min(60vw, 240px); padding-inline: 12px; border: 1px solid transparent; border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; white-space: nowrap; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease); }
 .strip-chip[aria-current="true"] { background: var(--workbench-row-selected); color: var(--foreground); }
 /* The tab focused in the desktop TUI. */
 .strip-chip[data-focused]:not([aria-current="true"]) { border-style: dashed; border-color: var(--border); }
@@ -33,7 +33,7 @@
 /* Says the open chip opens its actions. */
 .strip-chip-more { flex-shrink: 0; width: 14px; height: 14px; margin-inline-end: -4px; color: var(--muted-foreground); }
 
-.strip-add { position: relative; display: inline-grid; flex-shrink: 0; place-items: center; width: 32px; height: 28px; border-radius: 9999px; color: var(--muted-foreground); transition: background-color 150ms ease-out, color 150ms ease-out; }
+.strip-add { position: relative; display: inline-grid; flex-shrink: 0; place-items: center; width: 32px; height: 28px; border-radius: 9999px; color: var(--muted-foreground); transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 
 /* The touch target: the chip's outer edge (the pseudo-element sits inside its 1px border) plus the reach. */
 .strip-chip::after, .strip-add::after { content: ""; position: absolute; inset: -1px; bottom: calc(-1px - var(--reach)); }
@@ -50,7 +50,7 @@
    slide aside into the slot it leaves while it follows the pointer. */
 .strip-chip[data-lifted] { z-index: 1; background: var(--workbench-row-selected); color: var(--foreground); box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); scale: 1.06; cursor: grabbing; }
 @media (prefers-reduced-motion: no-preference) {
-  .strip-scroller[data-reordering] .strip-chip:not([data-lifted]) { transition: background-color 150ms ease-out, color 150ms ease-out, scale 120ms ease-out, translate 150ms ease-out; }
+  .strip-scroller[data-reordering] .strip-chip:not([data-lifted]) { transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease), translate var(--motion-control) var(--motion-ease); }
 }
 
 /* A phone: both rows at 32px, so the thread starts 9px higher than it did under the two old rows,

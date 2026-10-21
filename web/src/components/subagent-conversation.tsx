@@ -184,7 +184,7 @@ export function SubagentConversation({
         {failed && (
           <div
             role="status"
-            className="flex items-center gap-2 text-sm text-muted-foreground"
+            className="flex items-center gap-2 text-footnote text-muted-foreground"
           >
             Couldn’t refresh this conversation.
             <button
@@ -204,7 +204,7 @@ export function SubagentConversation({
           <TranscriptView entries={page.entries} />
         ) : (
           !failed && (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-footnote text-muted-foreground">
               Loading conversation…
             </p>
           )
@@ -218,7 +218,7 @@ export function SubagentConversation({
             type="button"
             onClick={() => onWrite(forwardDraft(harness, child))}
             aria-label={`Write to ${child.name} through Main`}
-            className="flex min-h-11 items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
+            className="flex min-h-11 items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-left text-footnote text-muted-foreground transition-colors hover:text-foreground active:bg-muted"
           >
             <ChatCircleDots aria-hidden className="size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate">Write to it through Main…</span>

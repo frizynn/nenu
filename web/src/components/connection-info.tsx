@@ -42,7 +42,7 @@ export function ConnectionInfo({
         <ChevronRight
           aria-hidden="true"
           className={cn(
-            "size-4 shrink-0 text-subtle-foreground transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "size-4 shrink-0 text-subtle-foreground transition-transform duration-120 ease-out motion-reduce:transition-none",
             open && "rotate-90",
           )}
         />
@@ -52,7 +52,7 @@ export function ConnectionInfo({
         id={regionId}
         inert={!open}
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          "grid transition-[grid-template-rows] duration-180 ease-out motion-reduce:transition-none",
           open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >

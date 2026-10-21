@@ -1,6 +1,6 @@
 import { useContext, type CSSProperties, type ReactNode } from "react";
 
-import { FileHrefContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { FileHrefContext, FileKnownContext, FilePreviewContext } from "@/lib/file-preview-context";
 
 /**
  * What opens a file. A tap opens Nenu's viewer in place. Where the pane can address the file, it is a
@@ -20,7 +20,8 @@ export function FileLink({ path, onOpen, label, title, className, style, childre
 }) {
   const href = useContext(FileHrefContext);
   const openFile = useContext(FilePreviewContext);
-  const open = onOpen ?? (openFile ? () => openFile(path) : null);
+  const known = useContext(FileKnownContext);
+  const open = onOpen ?? (openFile && (!known || known(path)) ? () => openFile(path) : null);
   if (!open) return <>{children}</>;
   const props = { "aria-label": label, title, className, style };
   if (!href) return <button type="button" {...props} onClick={open}>{children}</button>;

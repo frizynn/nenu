@@ -103,7 +103,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
         <button type="button" className="task-main" onClick={() => opensPr ? onOpenPr(thread) : openThread(thread)}>
           <span data-pr-status={status} className="mt-0.5 flex shrink-0"><Icon aria-hidden className={cn("size-3.5", tone)} /></span>
           <span className="min-w-0 flex-1">
-            <span data-task-title className={cn("block break-words text-sm font-medium", past && "text-muted-foreground")}>{thread.title}</span>
+            <span data-task-title className={cn("block break-words text-subhead font-medium", past && "text-muted-foreground")}>{thread.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{!pr ? "No PR" : pr.number !== undefined ? `PR #${pr.number}` : "PR"} · {label}{!past && thread.autoMerge && " · Auto-merge"}</span>
           </span>
           {pr?.diff ? !diffPane && <DiffStat diff={pr.diff} className="text-xs" /> : age && <span className="shrink-0 text-xs text-muted-foreground">{age}</span>}
@@ -123,7 +123,7 @@ export function PrList({ project, threads, session, readOnly, onOpenPane, onOpen
     <ul className="task-list">{list.map((thread) => row(thread, false))}</ul>
   </section>;
   return <>
-    {open.length === 0 ? <p className="mb-2 px-2 py-1 text-sm text-muted-foreground">No thread has an open pull request.</p>
+    {open.length === 0 ? <p className="mb-2 px-2 py-1 text-footnote text-muted-foreground">No thread has an open pull request.</p>
       : grouped ? <>{section("Ready to merge", ready)}{section("In flight", open.filter((thread) => !ready.includes(thread)))}</>
       : <ul className="task-list mb-2" aria-label="Open pull requests">{open.map((thread) => row(thread, false))}</ul>}
     {history.length > 0 && <>

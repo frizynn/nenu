@@ -105,11 +105,11 @@ export function DiffBody({ read, footer, empty, comments: target, onLeave }: {
   const comments = useDiffComments(target?.paneId, target?.session);
   const onScreen = useParams().paneId;
   return <>
-    {read.state === "loading" && <p role="status" className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+    {read.state === "loading" && <p role="status" className="flex items-center gap-2 px-4 py-6 text-footnote text-muted-foreground">
       <Pending aria-hidden className="size-4" />Reading the diff…
     </p>}
-    {read.state === "failed" && <div className="px-4"><p role="alert" className="text-sm">{read.message}</p>{footer}</div>}
-    {diff && !diff.ok && <div className="px-4"><p className="text-sm">{diff.message}</p>
+    {read.state === "failed" && <div className="px-4"><p role="alert" className="text-footnote">{read.message}</p>{footer}</div>}
+    {diff && !diff.ok && <div className="px-4"><p className="text-footnote">{diff.message}</p>
       {diff.repo && <p className="mt-1 text-xs text-muted-foreground">In the project's repository, <code className="font-mono">{tildeHome(diff.repo)}</code>, since this pane's folder is not a git repository.</p>}
       {footer}</div>}
     {diff?.ok && <>
@@ -125,7 +125,7 @@ export function DiffBody({ read, footer, empty, comments: target, onLeave }: {
       </div>
       {target && comments.length > 0 && target.paneId !== onScreen && <CommentsElsewhere target={target} count={comments.length} onLeave={onLeave} />}
       {diff.files.length === 0
-        ? empty ?? <p className="px-4 text-sm text-muted-foreground">No changes against the base branch.</p>
+        ? empty ?? <p className="px-4 text-footnote text-muted-foreground">No changes against the base branch.</p>
         : <ul className="border-t border-border/60">{diff.files.map((file) => <FileRow key={`${file.from ?? ""}\0${file.path}`} file={file}
           commenting={target && { target, comments: comments.filter((comment) => comment.path === file.path) }} />)}</ul>}
     </>}
@@ -227,7 +227,7 @@ function CommentableLine({ at, commenting, row }: { at: DiffLine; commenting: Co
           <button type="button" aria-label={`Edit comment on ${name}`} onClick={(event) => { event.stopPropagation(); setEditing(true); }}
             className="min-w-0 flex-1 whitespace-normal break-words text-left">{saved.text}</button>
           <button type="button" aria-label={`Remove comment on ${name}`} onClick={(event) => { event.stopPropagation(); save(""); }}
-            className="hit-area grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">
+            className="hit-area grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
             <X aria-hidden className="size-3" />
           </button>
         </div>}
@@ -242,7 +242,7 @@ function CommentBox({ name, initial, onSave, onCancel }: { name: string; initial
       className="sticky left-0 flex w-[100cqw] items-center gap-1.5 border-y border-border/60 bg-background py-1.5 pl-4 pr-2 font-sans">
       {/* Focused on open: the line was tapped to write here. */}
       <input autoFocus value={text} onChange={(event) => setText(event.target.value)} aria-label={`Comment on ${name}`} placeholder="Comment for the agent"
-        enterKeyHint="done" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:text-sm"
+        enterKeyHint="done" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:text-footnote"
         onKeyDown={(event) => {
           // The IME owns Enter while committing a word; Safari can say so only with 229.
           if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;

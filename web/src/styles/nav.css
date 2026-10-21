@@ -21,14 +21,14 @@
 /* Hover only where a pointer hovers: on a phone a tap would leave the row under it lit. */
 @media (hover: hover) {
   /* The fill follows the pointer on Ovis's curve, short enough that a sweep down the list never trails. */
-  :is(.nav-row, .nav-pane) { transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1); }
+  :is(.nav-row, .nav-pane) { transition: background-color var(--motion-control) var(--motion-ease); }
   :is(.nav-row, .nav-pane):hover { background: var(--workbench-row-hover); }
   .nav-row:disabled:hover, button.nav-pane:disabled:hover { background: none; }
 }
 /* A finger gets the same tint the moment it lands, and it fades as the finger lifts. A row already
    filled as current or picked keeps its fill. */
 @media (hover: none) {
-  :is(.nav-row, .nav-pane) { transition: background-color 120ms ease-out; }
+  :is(.nav-row, .nav-pane) { transition: background-color var(--motion-control) var(--motion-ease); }
   :is(.nav-row, .nav-pane):active:not(:disabled, [aria-current="page"], [aria-selected="true"]) { background: var(--workbench-row-hover); transition-duration: 0ms; }
 }
 .nav-row[aria-current="page"] { background: var(--workbench-row-selected); }
@@ -50,7 +50,7 @@
 .nav-lead { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; color: var(--muted-foreground); }
 .nav-disclosure { position: absolute; z-index: 1; inset-block: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted-foreground); cursor: pointer; }
 .nav-disclosure-end { right: 4px; width: 26px; }
-.nav-disclosure > svg, .nav-history > svg { transition: transform 150ms ease-out; }
+.nav-disclosure > svg, .nav-history > svg { transition: transform var(--motion-control) var(--motion-ease); }
 .nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
 .nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-caption); }
 .nav-count { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
@@ -78,7 +78,7 @@
 .nav-ws-body .nav-pane { --nav-depth: 1; min-height: 28px; padding-block: 3px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth) - 1) * var(--nav-indent, 16px)); }
 .nav-ws-body .nav-pane-nested { --nav-depth: 2; }
 .nav-tab { position: relative; }
-.nav-tab-fold { position: absolute; top: calc(50% - 6.5px); left: calc(var(--nav-pad, 10px) + (var(--nav-fold, 20px) - 13px) / 2); color: var(--muted-foreground); transition: transform 150ms ease-out; }
+.nav-tab-fold { position: absolute; top: calc(50% - 7px); left: calc(var(--nav-pad, 10px) + (var(--nav-fold, 20px) - 14px) / 2); color: var(--muted-foreground); transition: transform var(--motion-control) var(--motion-ease); }
 .nav-tab[aria-expanded="true"] > .nav-tab-fold { transform: rotate(90deg); }
 
 /* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
@@ -89,7 +89,7 @@
 /* A row's shortcut is the hand on the mouse's reminder: out of sight until the pointer rests on the row
    or a key lands on it, as Cursor keeps its own. */
 @media (hover: hover) {
-  .nav-kbd { opacity: 0; transition: opacity 150ms ease-out; }
+  .nav-kbd { opacity: 0; transition: opacity var(--motion-control) var(--motion-ease); }
   .nav-row:is(:hover, :focus-visible) > .nav-kbd { opacity: 1; }
 }
 .nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
@@ -127,7 +127,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-group > .nav-label > .nav-count, .nav-fold > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
 /* A section heading that folds its rows (the pane switcher's Recent and Shells). */
 .nav-fold { display: inline-flex; align-items: center; gap: 6px; color: inherit; cursor: pointer; }
-.nav-fold > svg { flex-shrink: 0; transition: transform 150ms ease-out; }
+.nav-fold > svg { flex-shrink: 0; transition: transform var(--motion-control) var(--motion-ease); }
 .nav-fold[aria-expanded="true"] > svg { transform: rotate(90deg); }
 /* Search: one flat list of what matched, the pick filled like the current row, the match in semibold. */
 .nav-result[aria-selected="true"] { background: var(--workbench-row-selected); }
@@ -147,11 +147,11 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 @media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 .nav-more { color: var(--subtle-foreground); }
 @media (hover: hover) { .nav-more:hover { color: var(--muted-foreground); } }
-.nav-more-chevron { transition: transform 200ms cubic-bezier(0.2, 0, 0, 1); }
+.nav-more-chevron { transition: transform var(--motion-panel) var(--motion-ease); }
 .nav-more[aria-expanded="true"] .nav-more-chevron { transform: rotate(180deg); }
 /* Rows More folds: the height closes to nothing and the row fades with it, both ways, on one curve. The
    inner box clips (never hides) so a period's sticky heading still sticks to the bar's scroller. */
-.nav-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 220ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms ease-out; }
+.nav-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
 .nav-reveal[data-folded] { grid-template-rows: 0fr; opacity: 0; }
 .nav-reveal-inner { min-height: 0; overflow: clip; }
 /* A period's name stays on top of its chats while they scroll under it, so a row deep in the list still says when it moved. */
@@ -189,7 +189,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 /* The tree Search opens fades down into place. More's rows open and close (above) on a press, and also when a
    poll lets go of a row it held in view past the fold, such as a chat that stopped asking. */
 @keyframes nav-enter { from { opacity: 0; transform: translateY(-3px); } }
-.nav-enter { animation: nav-enter 160ms cubic-bezier(0.2, 0, 0, 1); }
+.nav-enter { animation: nav-enter var(--motion-control) var(--motion-ease); }
 
 @media (prefers-reduced-motion: reduce) {
   .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg, .nav-tab-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }

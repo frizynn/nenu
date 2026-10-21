@@ -35,7 +35,7 @@ export function ActionRow({
       onClick={onClick}
       className={cn(
         "flex min-h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-subhead font-medium transition-colors coarse:min-h-11",
-        destructive ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15" : "hover:bg-accent active:bg-muted",
+        destructive ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15" : "hover:bg-hover active:bg-muted",
       )}
     >
       {icon}

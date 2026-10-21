@@ -41,7 +41,7 @@ function PulseLine({ project, pulse, className }: { project: ProjectView; pulse:
           {project.status === "paused" && <span className="shrink-0">Paused</span>}
           {parts.map((part) => (
             <span key={part.state} className="inline-flex min-w-0 items-center gap-1.5 tabular-nums">
-              <NodeDot state={part.state} className="size-1.5" /><span className="truncate">{part.text}</span>
+              <NodeDot state={part.state} /><span className="truncate">{part.text}</span>
             </span>
           ))}
         </>}
@@ -80,7 +80,7 @@ export function HomeProjects({ projects, agents, session, now }: {
     {quiet.length > 0 && <>
       <button type="button" aria-expanded={quietShown} aria-controls="home-quiet-projects" onClick={() => setQuietShown(!quietShown)}
         className="mt-1 inline-flex min-h-9 items-center gap-1.5 self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
-        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform duration-150 motion-reduce:transition-none", quietShown && "rotate-90")} />
+        <ChevronRight aria-hidden className={cn("size-3.5 transition-transform duration-120 motion-reduce:transition-none", quietShown && "rotate-90")} />
         Quiet <span className="tabular-nums font-normal">{quiet.length}</span>
       </button>
       {quietShown && <ul id="home-quiet-projects" aria-label="Quiet projects" className="flex flex-col max-sm:divide-y max-sm:divide-border">{quiet.map(row)}</ul>}

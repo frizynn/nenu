@@ -20,7 +20,7 @@ export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-xl border border
 export function WaitingOnYou() {
   return (
     <span className="flex shrink-0 items-center gap-2 font-medium text-foreground">
-      <span aria-hidden className="size-2 rounded-full bg-status-blocked" />
+      <span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />
       Waiting on you
     </span>
   );
@@ -75,7 +75,7 @@ export type OptionTone = "default" | "selected" | "busy";
 export function optionRow(tone: OptionTone = "default"): string {
   return cn(
     "flex min-h-9 w-full min-w-0 items-center gap-3 px-3.5 py-1.5 text-left select-none coarse:min-h-11 coarse:py-2",
-    "transition-colors duration-150 ease-out motion-reduce:transition-none focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed",
+    "transition-colors duration-120 ease-out motion-reduce:transition-none focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed",
     tone === "default" ? "enabled:hover:bg-[var(--workbench-row-hover)] enabled:active:bg-[var(--workbench-row-selected)]" : ROW_SELECTED,
   );
 }
@@ -152,7 +152,7 @@ export const PRIMARY_ACTION = cn(buttonVariants({ size: "block" }));
 export const NEUTRAL_ACTION = cn(buttonVariants({ variant: "secondary", size: "block" }));
 /** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
 export const SECONDARY_ACTION =
-  "inline-flex min-h-11 select-none items-center gap-1.5 rounded-lg px-2 text-subhead font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-disabled-foreground";
+  "inline-flex min-h-11 select-none items-center gap-1.5 rounded-lg px-2 text-subhead font-medium text-muted-foreground transition-colors hover:bg-hover hover:text-foreground active:bg-muted disabled:text-disabled-foreground";
 /** The row of SECONDARY_ACTIONs, bled into the card's padding so their text lines up with the content. */
 export const SECONDARY_ROW = "-mx-2 -mb-2 flex flex-wrap items-center";
 

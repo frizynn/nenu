@@ -267,7 +267,7 @@ export function HistoryRoute() {
             icon={ScrollText}
             title={empty.title}
             className="h-full justify-center"
-            // cn() is what drops buttonVariants' base text-sm for lg's text-base on a link.
+            // cn() is what drops buttonVariants' base text-footnote for lg's text-body on a link.
             action={
               <StepLink to={back.to} go={goUp} className={cn(buttonVariants({ size: "lg" }), "max-w-[min(20rem,80vw)]")}>
                 <span className="truncate">{back.action}</span>

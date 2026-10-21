@@ -33,7 +33,7 @@ export function ProjectFilesBrowser(props: Props) {
         <button
           type="button"
           aria-label="Refresh files"
-          className="flex size-11 items-center justify-center rounded-md hover:bg-muted"
+          className="flex size-11 items-center justify-center rounded-md hover:bg-hover"
           onClick={() => setRefresh((n) => n + 1)}
         >
           <RefreshCw className="size-4" />
@@ -109,7 +109,7 @@ function Directory({
               onOpen={() => onOpen(file.path)}
               title={file.path}
               style={{ paddingLeft: `${Math.min(depth, 10) * 12 + 24}px` }}
-              className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-sm hover:bg-muted/40"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-footnote hover:bg-hover"
             >
               <FileIcon
                 name={file.name}
@@ -152,7 +152,7 @@ function FolderBranch({
           setOpen(!open);
         }}
         style={{ paddingLeft: `${Math.min(props.depth, 10) * 12}px` }}
-        className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-sm hover:bg-muted/40"
+        className="flex min-h-11 w-full items-center gap-2 rounded-md pr-2 text-left text-footnote hover:bg-hover"
       >
         <ChevronRight
           aria-hidden="true"

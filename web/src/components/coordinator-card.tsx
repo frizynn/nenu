@@ -81,7 +81,7 @@ function CoordinatorCard({ status, usage, asks, asksTitled, agents, prs, summari
 }) {
   const updated = Date.parse(status?.updated ?? "");
 
-  return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-sm">
+  return <section aria-label="Coordinator card" className="mb-5 flex flex-col gap-4 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-footnote">
     {status?.objective && <div>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-footnote font-semibold text-muted-foreground">Objective</h3>
@@ -98,7 +98,7 @@ function CoordinatorCard({ status, usage, asks, asksTitled, agents, prs, summari
         const overCap = (summaries.get(thread.id)?.usage?.overCap.length ?? 0) > 0;
         const detail = [STATE_LABEL[node.state], thread.verdict && VERDICT_LABEL[thread.verdict], overCap && "over cap"].filter(Boolean).join(" · ");
         return <li key={thread.id}>
-          <button type="button" className="flex w-full min-w-0 items-start gap-2.5 rounded-lg py-1 text-left hover:bg-muted/50" onClick={() => onOpenNode(node)}>
+          <button type="button" className="flex w-full min-w-0 items-start gap-2.5 rounded-lg py-1 text-left hover:bg-hover" onClick={() => onOpenNode(node)}>
             <span className="flex size-4 shrink-0 items-center justify-center pt-1"><NodeDot state={node.state} /></span>
             <RowText title={thread.title} detail={detail} />
           </button>
@@ -107,7 +107,7 @@ function CoordinatorCard({ status, usage, asks, asksTitled, agents, prs, summari
     </CardList>}
     {prs.length > 0 && <CardList label="Pull requests" count={prs.length}>
       {prs.slice(0, MOST).map(({ thread }) => <li key={thread.id}>
-        <a className="flex min-w-0 items-start gap-2.5 rounded-lg py-1 hover:bg-muted/50" href={thread.pr!.url} target="_blank" rel="noreferrer">
+        <a className="flex min-w-0 items-start gap-2.5 rounded-lg py-1 hover:bg-hover" href={thread.pr!.url} target="_blank" rel="noreferrer">
           <span className="flex size-4 shrink-0 items-center justify-center pt-0.5"><GitPullRequest aria-hidden size={14} className="text-muted-foreground" /></span>
           <RowText title={thread.title} detail={prSummary(thread.pr!)} />
         </a>
@@ -137,7 +137,7 @@ function CardList({ label, count, children }: { label: string; count: number; ch
 
 function RowText({ title, detail }: { title: string; detail?: string }) {
   return <span className="min-w-0 flex-1">
-    <span className="block break-words">{title}</span>
+    <span className="block break-words text-subhead">{title}</span>
     {detail && <span className="block break-words text-footnote text-muted-foreground">{detail}</span>}
   </span>;
 }

@@ -1084,7 +1084,7 @@ export function AgentChat({
     <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
       {isShell
         ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
-        : <StatusDot status={agent.status} className={cn("size-2", connecting && "opacity-40")} />}
+        : <StatusDot status={agent.status} className={cn(connecting && "opacity-40")} />}
       <span className="min-w-0 truncate">{place?.place}</span>
       {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
     </span>
@@ -1124,7 +1124,7 @@ export function AgentChat({
                     aria-label={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
                     aria-pressed={prefs.rawTerminal}
                     title={prefs.rawTerminal ? "Show conversation" : "Show raw terminal"}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted"
                   >
                     {prefs.rawTerminal ? <ChatCircleText aria-hidden="true" className="size-4" /> : <SquareTerminal aria-hidden="true" className="size-4" />}
                   </button>
@@ -1476,7 +1476,7 @@ function InlineDialogSlot() {
 function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?: string; onShow: () => void; onKeys: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   // It needs the operator, so its dot is the blocked one the pane carries in the header.
-  const dot = <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />;
+  const dot = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
   return (
     <section aria-label="Terminal waiting" className="mb-2">
       {collapsed ? (

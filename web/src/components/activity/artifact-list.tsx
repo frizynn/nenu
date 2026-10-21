@@ -13,7 +13,7 @@ export function ArtifactRow({ artifact, className }: { artifact: ActivityArtifac
       href={artifact.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-1.5 hover:bg-muted/40", className)}
+      className={cn("flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-1.5 hover:bg-hover", className)}
     >
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
         <ExternalLink aria-hidden="true" className="size-3.5" />

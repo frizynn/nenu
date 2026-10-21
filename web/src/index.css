@@ -59,6 +59,15 @@
   /* The lg radius; attachment-chips derives its inner corner from it. */
   --radius: 0.75rem;
   --font-sans: "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* Motion: three lengths and one curve for everything that moves. A control answers a tap or a hover
+     (colour, a press, a chevron, a tooltip, a fade out); a panel arrives or folds (a sheet, a popover,
+     a row revealed, a docked column); a page slides in whole (lib/motion.ts). The curve starts fast and
+     settles, so a short motion reads as an answer, not a wait. Stylesheets name these, never a number;
+     Tailwind's bare `transition`, `ease-out` and the duration-120/180/280 classes resolve to them. */
+  --motion-control: 120ms;
+  --motion-panel: 180ms;
+  --motion-page: 280ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   /* Grounds in three steps of grey, as the Cursor-style board's tokens sheet draws them: the sidebar
      (--workbench-sidebar) below the page, raised surfaces (cards, the composer, bubbles) above it and
      floating layers on top. Light is measured from Cursor (#f1f1f1, #f7f7f7, #fdfdfd); dark is
@@ -221,6 +230,8 @@
   --color-switch-off: var(--switch-off);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  /* The one hover fill, rows and controls alike; a press steps up to accent. */
+  --color-hover: var(--workbench-row-hover);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -232,6 +243,10 @@
   --color-status-done: var(--status-done);
   --color-status-idle: var(--status-idle);
   --color-status-unknown: var(--status-unknown);
+
+  --ease-out: var(--motion-ease);
+  --default-transition-duration: var(--motion-control);
+  --default-transition-timing-function: var(--motion-ease);
 
   --font-mono: "Nerd Font Symbols", "JetBrains Mono", "Cascadia Mono", "Cascadia Code",
     "Roboto Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
@@ -270,11 +285,15 @@
   --text-large-title--letter-spacing: -0.02em;
   --text-code: 0.8125rem; /* 13 fine, 14 coarse: code blocks, commands */
   --text-code--line-height: 1.25rem;
+  --text-control: 0.8125rem; /* 13 fine, 15 coarse: a button's label */
+  --text-control--line-height: 1.125rem;
 }
 @media (pointer: coarse) {
   :root {
     --text-body: 1rem;
     --text-code: 0.875rem;
+    --text-control: 0.9375rem;
+    --text-control--line-height: 1.25rem;
   }
 }
 
@@ -377,11 +396,11 @@
 .sheet-bottom-panel {
   max-height: min(82dvh, calc(var(--app-viewport-height, 100dvh) - env(safe-area-inset-top) - 16px));
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
-  transition: transform 200ms ease-out;
+  transition: transform var(--motion-panel) var(--motion-ease);
 }
 .side-sheet-panel {
   padding-left: env(safe-area-inset-left);
-  transition: transform 200ms ease-out;
+  transition: transform var(--motion-panel) var(--motion-ease);
 }
 @media (prefers-reduced-motion: reduce) {
   .sheet-bottom-panel, .side-sheet-panel { transition: none; }
@@ -396,13 +415,13 @@
 }
 
 .workbench-icon-button {
-  transition: background-color 120ms ease-out, color 120ms ease-out, scale 120ms ease-out;
+  transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease);
 }
 .workbench-icon-button:active { scale: 0.96; }
 [data-workbench-popover] {
   opacity: 1;
   translate: 0 0;
-  transition: opacity 150ms ease-out, translate 150ms ease-out;
+  transition: opacity var(--motion-control) var(--motion-ease), translate var(--motion-control) var(--motion-ease);
 }
 @starting-style {
   [data-workbench-popover] { opacity: 0; translate: 0 6px; }
@@ -445,15 +464,15 @@ html[data-motion] { view-transition-name: root; }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 200ms;
-  animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  animation-duration: var(--motion-panel);
+  animation-timing-function: var(--motion-ease);
 }
 /* A push and a pop lay one opaque page over the other, so they blend normally, not the fade's plus-lighter. */
 html:is([data-motion="push"], [data-motion="pop"])::view-transition-old(root),
 html:is([data-motion="push"], [data-motion="pop"])::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation-duration: 280ms;
-  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-duration: var(--motion-page);
+  animation-timing-function: var(--motion-ease);
   animation-fill-mode: both;
 }
 html[data-motion="push"]::view-transition-old(root) { animation-name: motion-under-out; }
@@ -478,7 +497,7 @@ html[data-motion="pop"]::view-transition-new(root) { animation-name: motion-unde
   z-index: 60;
   height: 2px;
   background: color-mix(in oklab, var(--primary) 55%, transparent);
-  animation: busy-bar-appear 140ms ease-out 120ms both;
+  animation: busy-bar-appear var(--motion-control) var(--motion-ease) var(--motion-control) both;
 }
 @keyframes busy-bar-appear {
   from {

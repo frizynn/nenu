@@ -82,7 +82,7 @@ export function LocalModelPicker({ rows, currentModel, currentLabel, disabled, o
                 else return;
                 event.preventDefault();
               }}
-              className="group relative flex min-h-11 w-full min-w-0 touch-manipulation items-center gap-3 rounded-lg px-3 py-1.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:bg-accent disabled:text-disabled-foreground"
+              className="group relative flex min-h-11 w-full min-w-0 touch-manipulation items-center gap-3 rounded-lg px-3 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring active:bg-accent disabled:text-disabled-foreground"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body font-medium">{row.name}</span>

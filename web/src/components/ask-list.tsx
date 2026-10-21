@@ -27,7 +27,7 @@ export function AskMark({ group }: { group: AskGroup }) {
   const box = "flex size-4 shrink-0 items-center justify-center";
   if (group === "unclosed") return <span className={box}><TriangleAlert aria-hidden size={14} className="text-status-working" /></span>;
   if (group === "done") return <span className={box}><Check aria-hidden size={14} className="text-status-done" /></span>;
-  return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" className="size-2" /></span>;
+  return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" /></span>;
 }
 
 
@@ -227,7 +227,7 @@ function AskCoordinator({ open, paneId, session, why, name, onCancel, onAsked }:
   return (
     <Dialog open={open} onClose={cancel} title="Ask the coordinator?"
       description={<>Nenu asks {name} to close what is still open, or to update the line and say why. {why.said}</>}>
-      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-footnote text-destructive">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="ghost" size="lg" onClick={cancel} disabled={busy}>Cancel</Button>
         <Button type="button" size="lg" onClick={() => void ask()} disabled={busy} aria-busy={busy || undefined}>{busy ? "Sending…" : "Ask the coordinator"}</Button>
@@ -245,8 +245,8 @@ function Chip({ chip, project, session }: { chip: ReturnType<typeof linkChip>; p
     {chip.href && <ExternalLink aria-hidden className="size-3 shrink-0" />}
   </>;
   const shape = "inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted px-2 text-caption text-muted-foreground";
-  if (chip.thread) return <Link to={nodePath(project, chip.thread, session)} className={cn(shape, "hover:bg-accent")}>{body}</Link>;
-  if (chip.href) return <a href={chip.href} target="_blank" rel="noreferrer" className={cn(shape, "hover:bg-accent")}>{body}</a>;
+  if (chip.thread) return <Link to={nodePath(project, chip.thread, session)} className={cn(shape, "hover:bg-hover")}>{body}</Link>;
+  if (chip.href) return <a href={chip.href} target="_blank" rel="noreferrer" className={cn(shape, "hover:bg-hover")}>{body}</a>;
   return <span className={shape}>{body}</span>;
 }
 

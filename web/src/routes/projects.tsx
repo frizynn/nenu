@@ -36,7 +36,7 @@ export function ProjectsRoute() {
         ? <EmptyState className="py-12" icon={LayoutGrid} title="No projects yet">A project is a Herdr Organizations project: a goal, its coordinators and their threads.</EmptyState>
         : <>
           <label className="mb-4 flex h-10 items-center gap-2.5 rounded-lg border border-border bg-card px-3 text-subhead">
-            <Search aria-hidden size={15} className="text-muted-foreground" />
+            <Search aria-hidden size={16} className="text-muted-foreground" />
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" aria-label="Search projects"
               className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-subtle-foreground" />
           </label>
@@ -54,13 +54,13 @@ function ProjectCard({ project, agents, projects, now, session }: { project: Pro
   const { waiting, working, coordinators, threads, at } = projectPulse(project, agents, projects);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
-    <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-accent/40">
+    <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-hover">
       <span className="desk-card-mark mb-3 size-9"><ProjectGlyph slug={project.slug} pick={project} size={18} /></span>
       <span className="text-headline">{project.name}</span>
       {project.goal && <span className="mt-1 line-clamp-2 text-footnote text-muted-foreground">{project.goal}</span>}
       <span className="mt-3 flex flex-wrap gap-x-3 text-footnote text-muted-foreground">
-        {waiting > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="needs" className="size-1.5" />{waiting} waiting on you</span>}
-        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" className="size-1.5" />{working} working</span>}
+        {waiting > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="needs" />{waiting} waiting on you</span>}
+        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" />{working} working</span>}
         {project.status === "paused" && <span>Paused</span>}
       </span>
       <span aria-hidden className="flex-1" />

@@ -141,12 +141,12 @@ function Changes({ paneId, session, pr }: { paneId: string; session?: string; pr
         </div>
         <span className="flex-1" />
         <button type="button" aria-label="Read the diff again" title="Read the diff again" onClick={() => setAttempt((n) => n + 1)}
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground">
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground">
           <RefreshCw aria-hidden className="size-3.5" />
         </button>
       </div>
       <DiffBody read={read} comments={{ paneId, session }} empty={<div className="mx-4 rounded-xl border border-dashed px-5 py-8 text-center">
-        <p className="text-sm font-medium">{scope === "branch" ? "Nothing changed on this branch" : "Nothing left to commit"}</p>
+        <p className="text-footnote font-medium">{scope === "branch" ? "Nothing changed on this branch" : "Nothing left to commit"}</p>
         <p className="mt-1 text-xs text-muted-foreground">{scope === "branch" ? "The working tree matches where the branch started." : "Every edit in this folder is committed."}</p>
       </div>} />
     </div>

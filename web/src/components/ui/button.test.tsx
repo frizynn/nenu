@@ -32,6 +32,13 @@ describe("Button", () => {
     expect(declarations(indexCss, ".ui-button-default", [COMPONENTS]).height).toBe("2.25rem");
   });
 
+  it("takes its label from one class, so a caller's own size replaces it on every pointer", () => {
+    render(<Button size="sm" className="text-footnote">Take over</Button>);
+    const button = screen.getByRole("button", { name: "Take over" });
+    expect(button).toHaveClass("text-footnote");
+    expect(button.className).not.toMatch(/\btext-control\b|coarse:text-/);
+  });
+
   it("has one large primary for a card or a sheet: full width, 40 fine and 44 coarse, its label centred at body 500, radius lg", () => {
     // The same family as the option rows above it (lg, body/500), so a card's commit and its
     // choices read as one system instead of a pill, a slab and a row (QA 1).
@@ -40,7 +47,7 @@ describe("Button", () => {
     expect(button).toHaveClass("bg-foreground", "w-full", "min-h-10", "coarse:min-h-11", "rounded-lg", "text-body", "font-medium", "justify-center", "text-center");
     // A long label wraps inside the button instead of running past the card's edge.
     expect(button).toHaveClass("whitespace-normal");
-    for (const replaced of ["rounded-md", "text-sm", "whitespace-nowrap"]) expect(button).not.toHaveClass(replaced);
+    for (const replaced of ["rounded-md", "text-footnote", "whitespace-nowrap"]) expect(button).not.toHaveClass(replaced);
     // A press on a bar this wide stays a nudge (direction.md: 0.97 to 0.98), not the base's 0.96.
     expect(button).toHaveClass("active:scale-[0.98]");
     expect(button).not.toHaveClass("active:scale-[0.96]");

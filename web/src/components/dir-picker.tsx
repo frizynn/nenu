@@ -19,7 +19,7 @@ interface DirPickerProps {
 
 type Listing = { state: "loading" } | { state: "ready"; dirs: HomeDirs } | { state: "error" };
 
-const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-body active:bg-accent hover:bg-accent/60";
+const row = "flex min-h-11 w-full items-center gap-3 rounded-lg px-2 text-left text-body active:bg-accent hover:bg-hover";
 
 /**
  * Browse folders under home: tap to go in, type to filter or to give any path, "Use" to choose. The
@@ -112,7 +112,7 @@ export function DirPicker({ home, shortcuts, onHome, onPick, session }: DirPicke
                   aria-label={tildePath(path, home)}
                   title={tildePath(path, home)}
                   onClick={() => onPick(path)}
-                  className="flex h-9 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-subhead hover:bg-accent/60 active:bg-accent coarse:h-11"
+                  className="flex h-9 max-w-56 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-subhead hover:bg-hover active:bg-accent coarse:h-11"
                 >
                   <History className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="truncate">{labels[i]}</span>

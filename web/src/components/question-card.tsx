@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOutageNoticeShown } from "@/lib/connection-health";
 import { isToggle, type AnswerExtra, type Receipt } from "@/hooks/use-interactions";
+import { reducedMotion } from "@/lib/motion";
 import { FEEDBACK_MAX_LENGTH } from "@/lib/prompt-action";
 import type {
   AnswerOutcome,
@@ -504,13 +505,13 @@ function Frame({ ref, compact, answered, label, busy = false, children }: { ref?
  *  chevron turns into the spinner every opening row on Home shows. Section already says Needs you. */
 function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?: () => void; opening: boolean }) {
   const who = <>
-    <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />
+    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />
     <span className="min-w-0 flex-1 truncate text-subhead font-medium text-foreground">{title ?? "Waiting on you"}</span>
   </>;
   if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;
   return (
     <button type="button" onClick={onOpen} aria-busy={opening || undefined}
-      className="-mx-2 flex min-h-11 min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted active:bg-muted">
+      className="-mx-2 flex min-h-11 min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-hover active:bg-muted">
       {who}
       <span className="sr-only">, open thread</span>
       {opening
@@ -524,7 +525,7 @@ function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?:
 function StepButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" aria-label={label} disabled={disabled} onClick={onClick}
-      className="hit-area flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted active:bg-muted disabled:text-muted-foreground">
+      className="hit-area flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-hover active:bg-muted disabled:text-muted-foreground">
       {children}
     </button>
   );
@@ -772,7 +773,7 @@ function ChoiceRow({ option, toggle, armed, busy, failed, disabled, onPress, cla
 function ConfirmPill() {
   const ring = useRef<SVGCircleElement>(null);
   useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (reducedMotion()) return;
     const animation = ring.current?.animate?.([{ strokeDashoffset: 0 }, { strokeDashoffset: 38 }], { duration: CONFIRM_MS, easing: "linear", fill: "forwards" });
     return () => animation?.cancel();
   }, []);

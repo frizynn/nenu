@@ -103,7 +103,7 @@ export function CommandPalette({
               onClick={() => pick(c)}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors active:scale-[0.99]",
-                isPending ? "bg-destructive/10" : "hover:bg-accent",
+                isPending ? "bg-destructive/10" : "hover:bg-hover",
               )}
             >
               <div className="min-w-0 flex-1">

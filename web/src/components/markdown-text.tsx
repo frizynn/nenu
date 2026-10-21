@@ -2,7 +2,7 @@ import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useS
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdList, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
-import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { FileKnownContext, FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
@@ -79,6 +79,7 @@ export const TextTokensContext = createContext<((text: string) => ReactNode) | n
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
   const openFile = useContext(FilePreviewContext);
+  const known = useContext(FileKnownContext);
   const inLink = useContext(InLinkContext);
   const tokens = useContext(TextTokensContext);
   switch (span.kind) {
@@ -101,7 +102,8 @@ function Span({ span }: { span: MdSpan }) {
         </em>
       );
     case "code": {
-      const path = openFile ? localFilePath(span.text) : null;
+      const found = openFile ? localFilePath(span.text) : null;
+      const path = found && (!known || known(found)) ? found : null;
       const code = <code className={cn(INLINE_CODE, path && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
       // A file's link is an inline box whatever its length.
       if (path) return <FileLink path={path} className={cn(WHOLE, "text-left")}>{code}</FileLink>;

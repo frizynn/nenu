@@ -100,7 +100,7 @@ function ExplainButton({ project, id, onAnswer }: { project: string; id: string;
 function PrChip({ pr }: { pr: ThreadPullRequest }) {
   const body = <><GitPullRequest aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{prSummary(pr)}</span></>;
   if (!pr.url) return <span className={CHIP}>{body}</span>;
-  return <a className={cn(CHIP, "hover:bg-accent")} href={pr.url} target="_blank" rel="noreferrer">
+  return <a className={cn(CHIP, "hover:bg-hover")} href={pr.url} target="_blank" rel="noreferrer">
     {body}<ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
   </a>;
 }
@@ -141,7 +141,7 @@ export function Deliverables({ project, deliverables }: { project: ProjectView; 
     {deliverables.map((deliverable) => {
       const Icon = deliverable.kind === "html" ? Globe : FileText;
       return <li key={deliverable.path} className="min-w-0 max-w-full">
-        <a className={cn(CHIP, "hover:bg-accent")} href={orgLibraryUrl(project.slug, deliverable.path)} target="_blank" rel="noreferrer">
+        <a className={cn(CHIP, "hover:bg-hover")} href={orgLibraryUrl(project.slug, deliverable.path)} target="_blank" rel="noreferrer">
           <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{fileName(deliverable.path)}</span>
           <ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
         </a>

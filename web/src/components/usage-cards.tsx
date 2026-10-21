@@ -96,7 +96,7 @@ export function LimitsCard({ blocks, more, onMore }: {
         </div>
       ))}
       {more.map((m) => (
-        <button key={m.agent} type="button" onClick={onMore} className={cn(hairline, "flex min-h-10 items-center gap-2 px-4 text-left coarse:min-h-11 hover:bg-accent last:rounded-b-xl")}>
+        <button key={m.agent} type="button" onClick={onMore} className={cn(hairline, "flex min-h-10 items-center gap-2 px-4 text-left coarse:min-h-11 hover:bg-hover last:rounded-b-xl")}>
           {/* Its own words stay whole; a long account name in the hint gives way. */}
           <span className="flex-1 text-body whitespace-nowrap">{m.count}{blocks.length ? " more" : ""} {m.agent === "claude" ? "Claude" : "Codex"} {m.count === 1 ? "account" : "accounts"}</span>
           {m.best && <span className="min-w-0 truncate text-footnote text-subtle-foreground tabular-nums">{m.best}</span>}
@@ -204,7 +204,7 @@ export function AccountList({ accounts, selected, onSelect, check }: {
       role="option"
       aria-selected={selected === id}
       onClick={() => onSelect(id)}
-      className={cn("usage-account relative flex min-h-12 w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-accent first:rounded-t-xl last:rounded-b-xl", selected === id && "usage-selected")}
+      className={cn("usage-account relative flex min-h-12 w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-hover first:rounded-t-xl last:rounded-b-xl", selected === id && "usage-selected")}
     >
       {lead}
       <span className="flex min-w-0 flex-1 flex-col">

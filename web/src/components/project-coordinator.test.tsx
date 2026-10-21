@@ -182,7 +182,7 @@ it("offers Start as the page's large primary, and says it is busy while the coor
 
   const start = within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: "Start coordinator" });
   // The shared Button at the page tier (44 high, 16 px, auto width), the 404's Go to Home's size.
-  expect(start).toHaveClass("ui-button-lg", "bg-foreground", "text-base");
+  expect(start).toHaveClass("ui-button-lg", "bg-foreground", "text-body");
   const window = await openWindow(user);
   await window.findByRole("radio", { name: "Claude Code" });
   await user.click(window.getByRole("button", { name: "Start" }));

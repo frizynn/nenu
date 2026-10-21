@@ -70,7 +70,7 @@ export function RoutinesPanel({ routines, shown, threads, readOnly, empty }: {
           const Icon = routine.trigger === "pr" ? GitPullRequest : Clock;
           const chosen = routine.name === open?.name;
           return <li key={routine.name} className="desk-card routine-row" data-chosen={chosen ? "" : undefined}>
-            <span className="desk-card-mark"><Icon aria-hidden size={15} /></span>
+            <span className="desk-card-mark"><Icon aria-hidden size={16} /></span>
             <button type="button" className="min-w-0 flex-1 text-left" aria-expanded={chosen} onClick={() => select(chosen ? undefined : routine.name)}>
               <span className="flex items-center gap-2 text-subhead font-medium">
                 <span className="truncate">{routine.name}</span>
@@ -102,7 +102,7 @@ function RoutineDetail({ routine, threads, editable, onSave, onClose }: {
   const last = Date.parse(routine.lastRun);
   const next = Date.parse(routine.nextRun);
   const rows: Array<[string, string]> = [
-    ["Runs when", routine.trigger === "pr" ? routineWhen(routine) : `${routine.schedule}${Number.isNaN(next) ? "" : `, next in ${timeUntilShort(next)}`}`],
+    ["Runs when", routine.trigger === "pr" ? routineWhen(routine) : `${routine.schedule}${Number.isNaN(next) ? "" : `, next ${timeUntilShort(next)}`}`],
     ["Goes to", routineRecipient(routine, threads)],
     ["Last run", routine.trigger === "pr" ? "Not recorded for pull-request routines" : Number.isNaN(last) ? "Not yet" : timeAgo(last, now)],
   ];
@@ -111,7 +111,7 @@ function RoutineDetail({ routine, threads, editable, onSave, onClose }: {
       <h2 className="min-w-0 flex-1 truncate text-headline">{routine.name}</h2>
       <span className={cn("routine-state", routine.enabled && "routine-state-on")}>{routine.enabled ? "On" : "Off"}</span>
       {editable && !editing && <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)}><Pencil aria-hidden className="size-3.5" />Edit</Button>}
-      <button type="button" className="desk-icon-button" aria-label="Close routine" onClick={onClose}><X aria-hidden size={15} /></button>
+      <button type="button" className="desk-icon-button" aria-label="Close routine" onClick={onClose}><X aria-hidden size={16} /></button>
     </div>
     {editing
       ? <RoutineForm routine={routine} threads={threads} onSave={onSave} onDone={() => setEditing(false)} />

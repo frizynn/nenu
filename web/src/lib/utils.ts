@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
 /** The type scale's steps, as index.css names them (`--text-body` gives `text-body`). */
-export const TYPE_SCALE = ["micro", "caption", "footnote", "subhead", "body", "headline", "title", "large-title", "code"] as const;
+export const TYPE_SCALE = ["micro", "caption", "footnote", "subhead", "body", "headline", "title", "large-title", "code", "control"] as const;
 
 // Told about the scale, so text-body counts as a size: it then replaces text-sm and sits beside a
 // text colour, where an unknown text-* would be taken for a colour and dropped.

@@ -85,8 +85,8 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
         {parent && <><ChevronRight aria-hidden className="size-3" /><Link to={nodePath(project.slug, parent.id, session)} className="hover:text-foreground">{parent.title}</Link></>}
       </>}
       subtitle={<span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-footnote">
-        {state && <span className="inline-flex items-center gap-1.5"><NodeDot state={state} className="size-1.5" />{STATE_LABEL[state]}{age && ` · ${age}`}</span>}
-        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" className="size-1.5" />{working} {working === 1 ? "thread" : "threads"} working</span>}
+        {state && <span className="inline-flex items-center gap-1.5"><NodeDot state={state} />{STATE_LABEL[state]}{age && ` · ${age}`}</span>}
+        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" />{working} {working === 1 ? "thread" : "threads"} working</span>}
         {pr?.number !== undefined && (pr.url
           ? <a href={pr.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground"><GitPullRequest aria-hidden size={12} />#{pr.number}</a>
           : <span className="inline-flex items-center gap-1"><GitPullRequest aria-hidden size={12} />#{pr.number}</span>)}
@@ -102,7 +102,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
       {tab === "threads" && <>
         {waiting > 0 && <button type="button" onClick={() => setTab("waiting")}
           className="desk-card mb-4 flex w-full items-center gap-3 border-status-blocked/40 bg-status-blocked/10 px-4 py-3 text-left text-subhead">
-          <NodeDot state="needs" className="size-1.5" /><span className="flex-1">{waiting} {waiting === 1 ? "decision waits" : "decisions wait"} on you</span>
+          <NodeDot state="needs" /><span className="flex-1">{waiting} {waiting === 1 ? "decision waits" : "decisions wait"} on you</span>
           <span className="inline-flex items-center gap-1 text-footnote text-muted-foreground">Review<ChevronRight aria-hidden className="size-3.5" /></span>
         </button>}
         <LiveWork threads={work} finished={finished} onOpenNode={openNode} onHistory={() => navigate(projectHistoryPath(project.slug, session, thread?.title))} />
@@ -144,9 +144,8 @@ function LiveWork({ threads, finished, onOpenNode, onHistory }: {
     nodes.flatMap((node) => [{ node, depth }, ...walk(node.children, depth + 1)]);
   const rows = walk(orgTree(threads).open, 0);
   return <>
-    <div className="desk-toolbar">
-      <span className="min-w-0 flex-1 truncate">{rows.length === 0 ? "Nothing running" : `${rows.length} open`}</span>
-    </div>
+    {/* The tab already counts the open threads; only their absence needs a line. */}
+    {rows.length === 0 && <div className="desk-toolbar"><span className="min-w-0 flex-1 truncate">Nothing running</span></div>}
     {rows.length > 0 && <div className="desk-card">{rows.map(({ node, depth }) => <WorkRow key={node.thread.id} node={node} depth={depth} onOpen={onOpenNode} />)}</div>}
     {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={onHistory}>
       <History aria-hidden className="size-3.5" />{finished} finished<ChevronRight aria-hidden className="size-3.5" />

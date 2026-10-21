@@ -22,7 +22,7 @@ export function EffortStepper({ effort, disabled, onStep }: {
   disabled?: boolean;
   onStep: (key: "Left" | "Right") => void | Promise<void>;
 }) {
-  const arrow = "flex min-h-9 min-w-9 items-center justify-center rounded hover:bg-accent disabled:opacity-50 coarse:min-h-11 coarse:min-w-11";
+  const arrow = "flex min-h-9 min-w-9 items-center justify-center rounded hover:bg-hover disabled:opacity-50 coarse:min-h-11 coarse:min-w-11";
   return (
     <div className="inline-flex items-center rounded-md border border-border bg-muted/50 p-0.5">
       <button type="button" disabled={disabled} aria-label={`Left — ${effort.verb} (${effort.label})`} onClick={() => void onStep("Left")} className={arrow}><ChevronLeft aria-hidden="true" className="size-4" /></button>
@@ -63,7 +63,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <AgentIcon agent={agent} className="size-5" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
+          <h3 className="text-footnote font-medium">{parsed.kind === "reasoning" ? "Reasoning effort" : "Model"}</h3>
           <p className="mt-0.5 text-footnote text-muted-foreground">{parsed.kind === "reasoning" ? menu.title.replace(/^Select Reasoning Level for /i, "") : "Choose a model, then apply your selection."}</p>
         </div>
       </div>
@@ -84,7 +84,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
               event.preventDefault();
               choose((index + (event.key === "ArrowDown" ? 1 : parsed.rows.length - 1)) % parsed.rows.length);
             }}
-            className={`group relative flex min-h-11 w-full min-w-0 items-center gap-3 rounded-md px-2.5 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${row.selected ? "bg-foreground/[0.08] text-foreground" : ""}`}
+            className={`group relative flex min-h-11 w-full min-w-0 items-center gap-3 rounded-md px-2.5 py-2.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${row.selected ? "bg-foreground/[0.08] text-foreground" : ""}`}
           >
             <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border" aria-hidden="true">
               {row.selected && <span className="size-2 rounded-full bg-foreground" />}
@@ -108,7 +108,7 @@ export function NativeModelMenu({ agent, menu, parsed, onAction, disabled }: Pro
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-3">
         {[...menu.actions.filter((action) => action.cancel), ...menu.actions.filter((action) => !action.cancel)].map((action, index) => (
-          <button key={index} type="button" disabled={locked} onClick={() => void press(`action-${index}`, { keys: action.keys, nav: false })} className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium disabled:opacity-50 ${action.cancel ? "mr-auto text-muted-foreground hover:bg-accent" : "border border-border bg-secondary text-foreground hover:bg-accent"}`}>
+          <button key={index} type="button" disabled={locked} onClick={() => void press(`action-${index}`, { keys: action.keys, nav: false })} className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium disabled:opacity-50 ${action.cancel ? "mr-auto text-muted-foreground hover:bg-hover" : "border border-border bg-secondary text-foreground hover:bg-hover"}`}>
             {sending === `action-${index}` && <Pending aria-hidden="true" className="size-3" />}{action.label}
           </button>
         ))}

@@ -44,6 +44,8 @@ const ON_SCALE = [
   "components/workbench-telemetry.tsx",
   "components/agent-chat.tsx",
   "components/home-panels.tsx",
+  "components/ui/button.tsx",
+  "components/project-context.tsx",
 ];
 const COMPONENTS = [...ON_SCALE, "components/chat-files-browser.tsx", "routes/not-found.tsx", "routes/history.tsx"];
 

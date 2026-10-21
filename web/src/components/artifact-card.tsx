@@ -27,12 +27,12 @@ export function ArtifactCard({ path, name = path, designboard, open }: { path: s
   const body = <>
     <span className="grid h-12 w-[4.5rem] shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground"><Icon className="size-5" aria-hidden="true" /></span>
     <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
-      <span className="truncate text-sm font-medium">{title}</span>
+      <span className="truncate text-subhead font-medium">{title}</span>
       <span className="truncate text-xs text-muted-foreground">{sub}</span>
     </span>
     {open && <span className="shrink-0 px-1 text-xs text-muted-foreground">Open</span>}
   </>;
-  const className = "flex w-full max-w-lg min-w-0 items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-accent/30 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none";
+  const className = "flex w-full max-w-lg min-w-0 items-center gap-3 rounded-xl border bg-card p-2.5 text-left transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none";
   return open
     ? <FileLink path={path} onOpen={open} label={`Open ${title}`} title={path} className={className}>{body}</FileLink>
     : <div title={path} className={cn(className, "opacity-70")}>{body}</div>;

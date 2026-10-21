@@ -45,7 +45,7 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
     >
       <span
         aria-hidden="true"
-        className="absolute inset-y-0.5 left-0.5 rounded-sm bg-card shadow-[0_1px_2px_rgb(0_0_0/0.12)] transition-transform duration-200 ease-out motion-reduce:transition-none dark:bg-input"
+        className="absolute inset-y-0.5 left-0.5 rounded-sm bg-card shadow-[0_1px_2px_rgb(0_0_0/0.12)] transition-transform duration-120 ease-out motion-reduce:transition-none dark:bg-input"
         style={{ width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${index * 100}%)` }}
       />
       {options.map((option, i) => {
@@ -62,7 +62,7 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
             className={cn(
-              "hit-area relative flex select-none items-center justify-center gap-1.5 rounded-sm text-subhead transition-colors duration-150 ease-out motion-reduce:transition-none",
+              "hit-area relative flex select-none items-center justify-center gap-1.5 rounded-sm text-subhead transition-colors duration-120 ease-out motion-reduce:transition-none",
               selected ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >

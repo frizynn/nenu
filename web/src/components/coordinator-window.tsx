@@ -100,7 +100,7 @@ export function CoordinatorWindow({ project, session, mode, running, busy = fals
               {shortcuts(choices).map((profile) => (
                 <button key={profile.name} type="button" aria-pressed={shortcut?.name === profile.name}
                   onClick={() => setForm({ profile: profile.name, harness: profile.harness, model: profile.model, effort: profile.reasoningEffort })}
-                  className="rounded-lg border border-border px-2.5 py-1.5 text-left text-footnote transition-colors hover:bg-accent aria-pressed:border-foreground/40 aria-pressed:bg-accent coarse:min-h-11">
+                  className="rounded-lg border border-border px-2.5 py-1.5 text-left text-footnote transition-colors hover:bg-hover aria-pressed:border-foreground/40 aria-pressed:bg-accent coarse:min-h-11">
                   <span className="font-medium">{profile.name}</span>
                   <span className="text-muted-foreground"> · {[harnessName(profile.harness), profile.model, profile.reasoningEffort].filter(Boolean).join(" · ")}</span>
                 </button>

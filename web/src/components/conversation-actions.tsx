@@ -34,7 +34,7 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
   const run = (action: () => void) => { setOpen(false); action(); };
   return <>
     <button ref={trigger} type="button" aria-label="Conversation actions" aria-haspopup="dialog" aria-expanded={open}
-      onClick={() => setOpen(!open)} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted lg:size-8">
+      onClick={() => setOpen(!open)} className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted lg:size-8">
       <Ellipsis aria-hidden="true" className="size-5 lg:size-4" />
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
@@ -58,7 +58,7 @@ export function ActionGroups({ groups, onRun }: { groups: ConversationActionGrou
       {group.actions.map(({ id, label, icon: Icon, run, disabled, on }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
           onClick={() => onRun(run)}
-          className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-accent active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
+          className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {on && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}

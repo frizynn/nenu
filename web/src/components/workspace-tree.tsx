@@ -65,7 +65,7 @@ function WorkspaceSection({ branch, href, session, currentPaneId, projects, open
         <Link className="nav-row" to={href} aria-current={branch.current ? "true" : undefined}>
           <span className="nav-lead"><OpeningMark to={href}><LayoutGrid aria-hidden size={14} /></OpeningMark></span>
           <span className="nav-row-text">{name}</span>
-          {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
+          {status && <StatusDot status={status} surface="bg-transparent" />}
           {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}
           <span className="nav-count">{branch.tabs.length} {branch.tabs.length === 1 ? "tab" : "tabs"}</span>
         </Link>
@@ -121,9 +121,9 @@ function TabRows({ tab, folds, projects, session, currentPaneId, open, onToggle 
   return <>
     <button type="button" className="nav-pane nav-tab" aria-expanded={open} aria-controls={open ? bodyId : undefined}
       aria-label={[tab.label, status && STATUS_LABEL[status], count].filter(Boolean).join(", ")} onClick={() => onToggle(!open)}>
-      <ChevronRight aria-hidden size={13} className="nav-tab-fold" />
+      <ChevronRight aria-hidden size={14} className="nav-tab-fold" />
       <RowBody mark={<LayoutTemplate aria-hidden size={14} />} title={tab.label} end={<>
-        {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
+        {status && <StatusDot status={status} surface="bg-transparent" />}
         <span className="nav-count">{count}</span>
       </>} />
     </button>
