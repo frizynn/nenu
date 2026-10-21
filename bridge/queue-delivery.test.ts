@@ -267,3 +267,11 @@ test("read it now: Ctrl+Enter only into an empty input box", async () => {
   expect((await sendQueuedNow("p", "claude", ["ctrl+enter"], terminal("claude", () => screen("draft"), keys))).ok).toBe(false);
   expect(keys).toHaveLength(1);
 });
+
+test("a dialog Claude's own state reports keeps the row out of the terminal (ADR 0116)", async () => {
+  let writes = 0;
+  const turn = () => ({ running: false, waiting: "permission prompt" });
+  const result = await deliverQueuedMessage(row, terminal("claude", screen), async () => (writes++, { ok: true }), async () => true, "enter", { sleep: noSleep, turn });
+  expect(result.status).toBe("blocked");
+  expect(writes).toBe(0);
+});

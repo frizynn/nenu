@@ -29,8 +29,8 @@ export type QueueExtras = {
   audit?: Pick<AuditLog, "record"> | null;
   /** A fresh look at the log of the conversation a pane runs, as the phone send gets one. */
   log?: (session: string, paneId: string) => GuardedSendDeps["received"];
-  /** Whether the CLI's own state says a dialog owns the pane's keyboard (Claude's `waiting`). */
-  waiting?: (session: string, paneId: string) => boolean;
+  /** The CLI's own state of a pane (ADR 0067): whether a turn runs, and a dialog it reports. */
+  turn?: (session: string, paneId: string) => ReturnType<NonNullable<GuardedSendDeps["turn"]>>;
 };
 
 const identity = (pane: AgentView) =>
@@ -170,11 +170,11 @@ export class QueueService {
   private async deliver(row: QueuedMessage, ready: Ready) {
     const { context } = ready;
     const write: QueueWrite = (text, submit, id, paste) => this.write(row, text, submit, id, paste);
-    const { waiting } = this.extras;
+    const { turn } = this.extras;
     const outcome = await deliverQueuedMessage(row, this.audited(row, context.herdr, "queue.submit"), write, async () => {
       const next = await this.resolve(row.session, row.paneId, true);
       return !!next?.connected && identity(next.pane) === row.conversation;
-    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId), ...(waiting ? { waiting: () => waiting(row.session, row.paneId) } : {}) });
+    }, ready.submit, { received: this.extras.log?.(row.session, row.paneId), ...(turn ? { turn: () => turn(row.session, row.paneId) } : {}) });
     // Only a delivery to a free agent starts a turn. A steer or a native-queue Tab into a working one
     // does not, and marking it would hold the next row for the whole TURN_START_CAP_MS.
     if (outcome.status === "sent" && !ready.busy) {

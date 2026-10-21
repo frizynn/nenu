@@ -250,7 +250,7 @@ async function agentPane(
     {
       facts: async () => ({ queue: pane.journal }),
       audit: audited ? { record: (entry) => { pane.audit.push(entry); } } : null,
-      ...(logs ? { log: () => async () => pane.logged } : {}),
+      ...(logs ? { log: () => async () => (pane.logged === null ? { kind: "none" as const } : { kind: "logged" as const, text: pane.logged }) } : {}),
     },
   );
   const call = async (body?: Record<string, unknown>) => {

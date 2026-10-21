@@ -17,6 +17,7 @@ import {
   type PriorAttempt,
 } from "./guarded-send.ts";
 import type { OutputMatch, PaneRead, ReadSource } from "./herdr-client.ts";
+import type { LogLook, LogReader } from "./delivery-check.ts";
 import type { SendRequest } from "./types.ts";
 
 // A terminal with an input box, in memory: Claude's frame (rule / `❯ draft` / rule / statusline) or
@@ -65,10 +66,16 @@ class Term {
     return [...this.lines, RULE, `❯ ${this.draft}`, RULE, "  Opus 5.5 | Context 13% used", "  ← for agents"].join("\n");
   }
 
+  /** Keys sent while typed text has not landed yet: they reach the box after it, never before. */
+  private queuedKeys: string[] = [];
+
   private land(): void {
     if (this.echo === "never" || !this.pending || this.reads < this.echoAfter) return;
     this.draft += this.pending;
     this.pending = "";
+    const keys = this.queuedKeys;
+    this.queuedKeys = [];
+    this.press(keys);
   }
 
   getPane = async (paneId: string) => {
@@ -106,6 +113,14 @@ class Term {
     if (this.failKeys) throw new Error("herdr pane.send_keys: internal: lost");
     // A PTY is an ordered byte stream: keys never overtake the text typed before them.
     this.land();
+    if (this.pending && this.echo !== "never") {
+      this.queuedKeys.push(...keys);
+      return;
+    }
+    this.press(keys);
+  };
+
+  private press(keys: string[]): void {
     for (const key of keys) {
       if (this.dialog) {
         this.dialog = null;
@@ -609,7 +624,8 @@ describe("guardedSend: what Claude logged", () => {
   const sent = Array.from({ length: 240 }, (_, i) => `word${i}`).join(" ");
   function logged(text: string | null, after = 0) {
     const asked: number[] = [];
-    return { asked, received: async (since: number) => (asked.push(since) > after ? text : null) };
+    const received: LogReader = async (since) => (asked.push(since) > after && text !== null ? { kind: "logged", text } : { kind: "none" });
+    return { asked, received };
   }
 
   test("a message Claude logged without its head is reported incomplete, not sent", async () => {
@@ -636,93 +652,150 @@ describe("guardedSend: what Claude logged", () => {
   });
 });
 
-describe("guardedSend: Enter behind the text, the log as witness (ADR 0116)", () => {
+describe("guardedSend: Enter behind the text at an idle Claude, the log as witness (ADR 0116)", () => {
   const text = "deploy the staging build";
-  /** Claude's log of the send: nothing until `after` looks, then the text (or what `logs` says). */
-  function log(after = 1, logs: string | undefined = text) {
+  const idle = { running: false };
+  /** Claude's log of this send: nothing on the first `after` looks, then `then`. */
+  function log(after = 1, then: LogLook = { kind: "logged", text }) {
     const asked: number[] = [];
-    return { asked, received: async (since: number) => (asked.push(since) > after ? logs : null) };
+    const received: LogReader = async (since) => (asked.push(since) > after ? then : { kind: "none" });
+    return { asked, received };
   }
+  const deps = (term: Term, extra: Partial<GuardedSendDeps>): GuardedSendDeps => ({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, turn: () => idle, ...extra });
 
-  test("with a log, Enter follows the text with no look in between, and the log confirms it", async () => {
+  test("Enter follows the text as one paste with no look in between, and the log confirms it", async () => {
     const term = new Term();
-    const witness = log();
-    const { outcome, trace } = await run(term, {}, { received: witness.received });
+    const witness = log(2);
+    const { outcome, trace } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
     expect(outcome).toEqual({ ok: true, requestId: "r1", ack: "submitted" });
     const methods = term.methods();
     expect(methods[methods.indexOf("pane.send_text") + 1]).toBe("pane.send_keys");
+    expect(term.calls.find((call) => call.method === "pane.send_text")?.arg).toBe(`\x1b[200~${text}\x1b[201~`);
     expect(term.lines.at(-1)).toBe(`> ${text}`);
+    // One look before the text, then the confirm reads until the log answers.
+    expect(witness.asked).toHaveLength(3);
     expect(trace.typedAt).toBeNumber();
   });
 
-  test("typed text goes as one paste when Enter follows it, short or not", async () => {
-    const term = new Term();
-    await run(term, {}, { received: log().received });
-    expect(term.calls.find((call) => call.method === "pane.send_text")?.arg).toBe(`\x1b[200~${text}\x1b[201~`);
-  });
-
-  test("a terminal too loaded to paint the text in time still gets it, and Enter, in order", async () => {
+  test("a Claude too loaded to paint the text is confirmed by its log, however late, with Enter behind the text", async () => {
     const term = new Term();
     term.echoAfter = 40;
-    const { outcome } = await run(term, {}, { received: log(30).received });
+    const witness = log(45);
+    const { outcome } = await guardedSend(deps(term, { received: witness.received }), { text, requestId: "r1" });
     expect(outcome.ok).toBe(true);
-    expect(term.keys()).toEqual([["Enter"]]);
+    expect(witness.asked).toHaveLength(46);
+    expect(term.lines.at(-1)).toBe(`> ${text}`);
+    expect(term.draft).toBe("");
   });
 
-  test("Claude queueing the message mid-turn is a delivery", async () => {
-    const { outcome } = await run(new Term(), {}, { received: log(0, undefined).received });
+  test("a message Claude queued is a delivery", async () => {
+    const { outcome } = await guardedSend(deps(new Term(), { received: log(1, { kind: "queued" }).received }), { text, requestId: "r1" });
     expect(outcome.ok).toBe(true);
   });
 
-  test("a dialog the CLI reports before Enter: no Enter, and the box is left as it was found", async () => {
+  test("mid-turn, Enter waits to see the text in the box: a permission prompt may open under it", async () => {
     const term = new Term();
-    const deps: GuardedSendDeps = { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, received: log().received, waiting: () => term.count("pane.send_text") > 0 };
-    const { outcome } = await guardedSend(deps, { text, requestId: "r1" });
+    await guardedSend(deps(term, { received: log().received, turn: () => ({ running: true }) }), { text, requestId: "r1" });
+    const methods = term.methods();
+    expect(methods[methods.indexOf("pane.send_keys") - 1]).toBe("pane.read");
+  });
+
+  test("a log that cannot be read keeps the old order", async () => {
+    const term = new Term();
+    await guardedSend(deps(term, { received: async () => ({ kind: "unreadable" }) }), { text, requestId: "r1" });
+    const methods = term.methods();
+    expect(methods[methods.indexOf("pane.send_keys") - 1]).toBe("pane.read");
+  });
+
+  test("a slash command waits to be seen in the box before Enter, a message opening with a path does not", async () => {
+    const command = new Term();
+    await guardedSend(deps(command, { received: log().received }), { text: "/compact", requestId: "r1" });
+    expect(command.methods()[command.methods().indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    const path = new Term();
+    await guardedSend(deps(path, { received: log(1, { kind: "logged", text: "/home/u/notes.md says hi" }).received }), { text: "/home/u/notes.md says hi", requestId: "r1" });
+    expect(path.methods()[path.methods().indexOf("pane.send_keys") - 1]).toBe("pane.send_text");
+  });
+
+  test("a dialog the CLI reports refuses before anything is typed, whatever the screen shows", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn: () => ({ running: false, waiting: "permission prompt" }) }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "preflight", code: "not_ready", textDelivered: false });
+    expect(outcome.ok ? "" : outcome.error).toContain("dialog");
+    expect(term.count("pane.send_text")).toBe(0);
+  });
+
+  test("a dialog the CLI reports between the text and Enter: no Enter, and the box is left as it was found", async () => {
+    const term = new Term();
+    const turn = () => (term.count("pane.send_text") > 0 ? { running: false, waiting: "permission prompt" } : idle);
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
     expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: false });
     expect(term.keys().some((keys) => keys.includes("Enter"))).toBe(false);
     expect(term.draft).toBe("");
   });
 
-  test("a dialog the CLI reports refuses before anything is typed, whatever the screen shows", async () => {
+  test("a menu that takes the keys, with the log silent, is never called sent", async () => {
     const term = new Term();
-    const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: noSleep, waiting: () => true }, { text, requestId: "r1" });
-    expect(outcome).toMatchObject({ ok: false, stage: "preflight", code: "not_ready", textDelivered: false });
-    expect(term.count("pane.send_text")).toBe(0);
+    term.sendPaneKeys = async (_paneId, keys) => {
+      term.calls.push({ method: "pane.send_keys", arg: keys });
+      term.pending = "";
+      term.dialog = "Select model\n❯ 1. Opus\n  2. Haiku\n\nEnter to confirm · Esc to cancel";
+    };
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+  });
+
+  test("a box that never showed the text and a log that never had it are no evidence", async () => {
+    const term = new Term();
+    term.echo = "never";
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: true });
+  });
+
+  test("a box that showed the text and let go of it, with the log silent, is sent", async () => {
+    const term = new Term();
+    const clear = term.sendPaneKeys;
+    term.enterClears = false;
+    let reads = 0;
+    term.onRead = (_n, t) => {
+      if (t.count("pane.send_keys") > 0 && ++reads === 3) {
+        t.enterClears = true;
+        void clear("w1:p1", ["Enter"]);
+      }
+    };
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
   });
 
   test("Enter the box never takes: the send clears its own text and says so", async () => {
     const term = new Term();
     term.enterClears = false;
-    const { outcome } = await run(term, {}, { received: log(1_000).received });
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" });
     expect(outcome).toMatchObject({ ok: false, stage: "confirm", textDelivered: false });
     expect(outcome.ok ? "" : outcome.error).toContain("cleared");
     expect(term.draft).toBe("");
   });
 
-  test("a retry whose earlier try the log already has types nothing and presses nothing", async () => {
+  test("Claude queueing it after the clear is a delivery, never \"send it again\"", async () => {
     const term = new Term();
-    const { outcome } = await run(term, {}, { received: log(0).received, prior: { typeAttempted: true, textDelivered: true, typedAt: 1 } });
+    term.enterClears = false;
+    const received: LogReader = async () => (term.count("pane.send_keys") > 1 ? { kind: "queued" } : { kind: "none" });
+    const { outcome } = await guardedSend(deps(term, { received }), { text, requestId: "r1" });
+    expect(outcome.ok).toBe(true);
+  });
+
+  test("a retry whose earlier try the log has types nothing and presses nothing", async () => {
+    const term = new Term();
+    const { outcome } = await guardedSend(deps(term, { received: log(0).received }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 1 });
     expect(outcome.ok).toBe(true);
     expect(term.count("pane.send_text")).toBe(0);
     expect(term.count("pane.send_keys")).toBe(0);
   });
 
-  test("a retry the log proves never arrived types it again, once", async () => {
+  test("a retry the log says nothing about types nothing either: the earlier bytes may still arrive", async () => {
     const term = new Term();
-    const asked: number[] = [];
-    // Nothing logged since the earlier try; this attempt's message is logged after its Enter.
-    const received = async (since: number) => (since === 1 ? null : asked.push(since) > 1 ? text : null);
-    const { outcome } = await run(term, {}, { received, prior: { typeAttempted: true, textDelivered: true, typedAt: 1 } });
-    expect(outcome.ok).toBe(true);
-    expect(term.count("pane.send_text")).toBe(1);
-    expect(term.lines.filter((line) => line === `> ${text}`)).toHaveLength(1);
-  });
-
-  test("a slash command waits to be seen in the box before Enter: the log does not witness it", async () => {
-    const term = new Term();
-    await run(term, { text: "/compact" }, { received: log(1_000).received });
-    const methods = term.methods();
-    expect(methods[methods.indexOf("pane.send_keys") - 1]).toBe("pane.read");
+    const { outcome } = await guardedSend(deps(term, { received: log(1_000).received }), { text, requestId: "r1" }, { typeAttempted: true, textDelivered: true, typedAt: 1 });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    expect(term.count("pane.send_text")).toBe(0);
   });
 });
 
