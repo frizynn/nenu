@@ -73,8 +73,10 @@ export function PanelSections({ kind, sections, footer }: { kind: string; sectio
                   data-focus={`up:${id}`} onClick={() => move(id, -1)}><ArrowUp aria-hidden className="size-3.5" /></button>
                 <button type="button" className="panel-section-tool" aria-label={`Move ${section.label} down`} disabled={index === order.length - 1}
                   data-focus={`down:${id}`} onClick={() => move(id, 1)}><ArrowDown aria-hidden className="size-3.5" /></button>
-                {!section.urgent && <button type="button" className="panel-section-tool panel-section-show" aria-label={`${off ? "Show" : "Hide"} ${section.label}`}
-                  onClick={() => set(hideSection(layout, id, !off))}>{off ? "Show" : "Hide"}</button>}
+                {/* What asks for you keeps Hide's place empty, so every row's arrows line up. */}
+                {section.urgent ? <span aria-hidden className="panel-section-tool panel-section-show invisible">Hide</span>
+                  : <button type="button" className="panel-section-tool panel-section-show" aria-label={`${off ? "Show" : "Hide"} ${section.label}`}
+                    onClick={() => set(hideSection(layout, id, !off))}>{off ? "Show" : "Hide"}</button>}
               </span> : open && section.action}
             </header>
             <Fold value={open}>{() => <div className="panel-section-body">{section.body}</div>}</Fold>
@@ -85,7 +87,7 @@ export function PanelSections({ kind, sections, footer }: { kind: string; sectio
         {arranging ? <>
           <Button type="button" size="sm" variant="secondary" className="desk-head-action-quiet" data-focus="done"
             onClick={() => { setArranging(false); setFocus({ key: "arrange" }); }}>Done</Button>
-          {arranged(layout) && <button type="button" className="quiet-action" onClick={reset}>Reset</button>}
+          {arranged(layout) && <button type="button" className="quiet-action" onClick={() => { reset(); setFocus({ key: "done" }); }}>Reset</button>}
           <span className="px-1 text-footnote text-muted-foreground">Move or hide sections on this device.</span>
         </> : <button type="button" className="quiet-action" data-focus="arrange" onClick={() => { setArranging(true); setFocus({ key: "done" }); }}>
           <ListFilter aria-hidden className="size-3.5" />Arrange{hiddenIds.size > 0 && <span className="text-muted-foreground">· {hiddenIds.size} hidden</span>}

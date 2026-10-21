@@ -218,17 +218,14 @@ export interface WorkGroup {
 
 /**
  * The open work under a coordinator, `threads` being its whole subtree, in the tree's own order (ADR
- * 0064): one group per coordinator under it, most urgent first, each holding its own subtree, then
- * the threads it runs itself.
+ * 0064): one group per coordinator under it, each holding its own subtree, then the threads it runs
+ * itself.
  */
 export function workUnder(threads: readonly ProjectThreadView[]): WorkGroup[] {
   const top = orgTree(threads).open;
   const placed = (nodes: readonly OrgNode[], depth: number): Placed[] => nodes.flatMap((node) => [{ node, depth }, ...placed(node.children, depth + 1)]);
-  const urgency = (group: WorkGroup) => Math.min(...[group.coordinator, ...group.rows.map(({ node }) => node)].map((node) => URGENCY[node!.state]));
   const own = top.filter((node) => node.thread.role !== "coordinator");
-  const coordinators = top.filter((node) => node.thread.role === "coordinator")
-    .map((node): WorkGroup => ({ coordinator: node, rows: placed(node.children, 0) }))
-    .sort((a, b) => urgency(a) - urgency(b));
+  const coordinators = top.filter((node) => node.thread.role === "coordinator").map((node): WorkGroup => ({ coordinator: node, rows: placed(node.children, 0) }));
   return [...coordinators, ...(own.length ? [{ rows: placed(own, 0) }] : [])];
 }
 

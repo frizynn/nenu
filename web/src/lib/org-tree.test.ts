@@ -187,22 +187,30 @@ it("reads a review whose pull request merged as closing: no work to review, abou
   expect(STATE_LABEL.closing).toBe("Merged, closes on its own");
 });
 
-it("groups the open work under a coordinator as the tree orders it: each coordinator under it, the most urgent first, then its own threads", () => {
+it("groups the open work under a coordinator as the tree orders it: each coordinator under it by its own state, then its own threads", () => {
   // Everything under t-1, three levels deep, as threadTree hands it over.
   const groups = workUnder([
     node("t-2", "t-1"),
     node("t-3", "t-1", { role: "coordinator" }),
     node("t-4", "t-3"),
-    node("t-5", "t-1", { role: "coordinator" }),
+    node("t-5", "t-1", { role: "coordinator", group: "working" }),
     node("t-6", "t-5", { role: "coordinator" }),
     node("t-7", "t-6", { group: "working" }),
     node("t-8", "t-1", { group: "ready-for-review" }),
     node("t-9", "t-3", { status: "resolved" }),
+    node("t-10", "t-1", { role: "coordinator" }),
+    node("t-11", "t-10", { group: "working" }),
   ]);
+  // t-5 works, so it leads; t-3 and t-10 rest, and keep their order however busy what is under them.
   expect(groups.map((group) => [group.coordinator?.thread.id ?? "own", group.rows.map(({ node: row, depth }) => `${row.thread.id}@${depth}`)])).toEqual([
     ["t-5", ["t-6@0", "t-7@1"]],
     ["t-3", ["t-4@0"]],
+    ["t-10", ["t-11@0"]],
     ["own", ["t-8@0", "t-2@0"]],
   ]);
+  // The same order a phone's tree draws.
+  expect(orgTree([node("t-1", "root", { role: "coordinator" }), ...[
+    node("t-3", "t-1", { role: "coordinator" }), node("t-5", "t-1", { role: "coordinator", group: "working" }), node("t-10", "t-1", { role: "coordinator" }),
+  ]]).open[0]!.children.map((child) => child.thread.id)).toEqual(["t-5", "t-3", "t-10"]);
   expect(workUnder([])).toEqual([]);
 });

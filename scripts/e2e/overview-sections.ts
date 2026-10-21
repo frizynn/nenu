@@ -70,6 +70,13 @@ function seed(herd: DemoHerd, now: number, projects: string): OrgSeed {
   };
 }
 
+/** The sub-coordinators, in the order a screen draws them: every view draws the tree's order (ADR 0064). */
+const SUBS = ["QA facturación y ventas", "Rediseño productos"];
+const subOrder = (page: Page, scope: string) => page.evaluate(({ scope, subs }) => {
+  const text = document.querySelector(scope)?.textContent ?? "";
+  return subs.filter((sub) => text.includes(sub)).sort((a, b) => text.indexOf(a) - text.indexOf(b));
+}, { scope, subs: SUBS });
+
 interface Measure { device: string; rows: number; firstWorkingTop: number | null; viewport: number; nothingRunning: boolean; missingChips: number; tight: string[] }
 
 async function main(): Promise<void> {
@@ -78,6 +85,7 @@ async function main(): Promise<void> {
   const failures: string[] = [];
   const measures: Measure[] = [];
   const check = (ok: boolean, what: string) => { if (!ok) failures.push(what); };
+  let deskOrder: string[] = [];
   const bridge = await startTestBridge({ port: Number(values.port), fake: true, epoch: EPOCH, org: seed });
   const browser = await launchChrome().catch(async (error: unknown) => { await bridge.stop(); throw error; });
   const herd = bridge.herd!;
@@ -146,6 +154,7 @@ async function main(): Promise<void> {
       check(!m.nothingRunning, "desk says Nothing running");
       check(m.missingChips === 0, `desk draws ${m.missingChips} missing chips`);
       check(m.tight.length === 0, `desk text against its card's edge: ${m.tight.join(" | ")}`);
+      deskOrder = await subOrder(page, panel);
 
       const threads = page.locator(`${panel} section[aria-label=Threads] .panel-section-toggle`);
       if (await threads.count()) {
@@ -198,6 +207,9 @@ async function main(): Promise<void> {
     await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.idle)}?view=threads`);
     await page.waitForTimeout(2000);
     await shoot(page, "phone-threads");
+    const phoneOrder = await subOrder(page, ".project-overlay");
+    check(phoneOrder.length === SUBS.length && JSON.stringify(phoneOrder) === JSON.stringify(deskOrder),
+      `the desk lists the coordinators under it as ${deskOrder.join(", ")}, a phone as ${phoneOrder.join(", ")}`);
     await context.close();
   } finally {
     await browser.close();
