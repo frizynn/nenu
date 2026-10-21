@@ -19,6 +19,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 - Opening a project's chat no longer folds an empty line shut two seconds in (2cb05671).
 
+## [1.35.1] - 2026-10-21
+
+### Fixed
+
+- iPhone: closing the keyboard no longer leaves the app squeezed into the top half; it takes the keyboard's height only while a field is focused (00c928f3, d67cb9e1).
+- iPhone: the app and the chat re-read the screen on focus, rotation and return, past a lost event, a zoom or iOS 26's leftover offset (00c928f3, d67cb9e1).
+
+### Added
+
+- `bun scripts/e2e/keyboard-close.ts`: seven ways to close the keyboard, in Safari and as the installed app (44062cbc, c51a2b03).
+
 ## [1.35.0] - 2026-10-21
 
 ### Added
