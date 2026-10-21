@@ -8,6 +8,25 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-10-21
+
+### Changed
+
+- A coordinator's page lists only its live work; what finished is one "N finished" line to History, no Summary and no report cards (3069c4af).
+- A tap anywhere on a coordinator card's head opens its page; the fold is its own chevron (bcd3105b).
+- Open chat and New thread, Project chat and New: one button, same size and fill (bcd3105b).
+- A coordinator's Waiting on you shows only what waits on you; its asks are on Status, done ones folded to one line everywhere (3069c4af, 5c06d6a1).
+- An Asked line outside the format (`[in-progress] …`) reads as a request in progress or done, never under "Other lines" (5c06d6a1).
+- A thread whose PR merged reads "merged, closes on its own", not "to review" (bcd3105b).
+
+### Fixed
+
+- An opened STATUS.md is drawn whole and scrolls with the page; it was clipped at 288 px and a wheel moved nothing (a3029ec6).
+
+### Added
+
+- `bun scripts/e2e/coordinator-page.ts`: the project card, the coordinator page, its buttons, Waiting on you, Status and its scroll, desk and phone (f5b7630f).
+
 ## [1.35.0] - 2026-10-21
 
 ### Added
