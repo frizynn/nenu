@@ -40,6 +40,11 @@ swaps Stop for Send under the thumb, the reason Stop never took the Send slot.
    "Really stop?" and "Stopping…" take its place there. Esc in the empty box still stops.
 4. **The terminal view says nothing of its own about the turn**: the mirror shows the CLI's own
    "Working… (Ns)".
+5. **A chat holds no line while it settles.** The hold kept the line's height for chips that answer
+   after a project's chat mounts, mostly Done; with finished work off the line it almost always ended
+   empty and folded shut two seconds in (composer bench, Chromium, late chips: 1 and 3 fold shifts on
+   a phone and a desk with it, 0 and 0 without). A live chip that answers while the chat settles is
+   drawn at once, like any row then; one that comes later folds in.
 
 ## Consequences
 
