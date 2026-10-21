@@ -8,6 +8,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-10-21
+
+### Added
+
+- Projects is Home's first tab, beside Recents, Workspaces and PRs: projects where something moves first, the quiet ones folded at the end (63be049c).
+
+### Changed
+
+- On a phone a coordinator opens its page (its work and Open chat) from the project page and the drawer; Home reaches any coordinator in 2 taps (020e76e4, df3ba4b5).
+- A project's row on Home always opens the project; its page on a phone heads with what waits on you and leaves the goal out (63be049c, 020e76e4).
+- Less on a phone's first screen: no idle count in Home's headline, no date, no History or task counts in the drawer, no workspace or agent counts in its footer, and Close coordinator moved to the end of its page (63be049c, 020e76e4).
+
 ## [1.36.0] - 2026-10-21
 
 ### Changed
