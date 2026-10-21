@@ -35,6 +35,13 @@ describe("chat upload previews", () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
   });
 
+  test("serves a picture a message still waiting in Nenu's queue on this pane names, before the journal has it (ADR 0114)", async () => {
+    expect((await chatUploadPreviewResponse(uploads, path, [], null)).status).toBe(404);
+    expect((await chatUploadPreviewResponse(uploads, path, [], null, [`mira esto ${path} se ve mal`])).status).toBe(200);
+    // Only a whole token names it: a longer name that starts with it does not.
+    expect((await chatUploadPreviewResponse(uploads, path, [], null, [`${path}x`])).status).toBe(404);
+  });
+
   test("previews uploads from Nenu's uploads folder and from the old one beside the state", async () => {
     const home = join(temp, "home");
     const dirs = uploadDirs(defaultStateDir(home), home);

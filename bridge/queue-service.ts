@@ -106,6 +106,10 @@ export class QueueService {
   kick(force = true): void {
     void this.tick(force).catch(() => {});
   }
+  /** The text of every row on a pane, for the pictures its pending bubbles show (chat-upload-preview.ts). */
+  textsOn(session: string, paneId: string): Promise<string[]> {
+    return this.queue.textsOn(session, paneId);
+  }
   dispose(): void {
     clearInterval(this.timer);
   }

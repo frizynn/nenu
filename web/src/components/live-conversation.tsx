@@ -10,7 +10,7 @@ import { matchingEntries } from "@/lib/transcript-search";
 import { PendingTurns } from "@/components/pending-turns";
 import { atTail, clamped, isTextField, standing, useEditShift } from "@/hooks/use-auto-scroll";
 import { TURN_PENDING_MS } from "@/hooks/use-stop-turn";
-import { localSendScope, reconcileLocalSends, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
+import { localSendScope, reconcileLocalSends, setQueueSlot, useLocalSendActions, useLocalSends } from "@/lib/local-sends";
 import { ScrollToLatest } from "@/components/ui/chat/scroll-to-latest";
 import { RecoveryLeads } from "@/components/connect-conversation";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -220,6 +220,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
   const sendScope = localSendScope(paneId, session);
   const localSends = useLocalSends(sendScope);
   const localSendActions = useLocalSendActions(sendScope);
+  const queueSlot = useCallback((element: HTMLDivElement | null) => setQueueSlot(sendScope, element), [sendScope]);
   const liveEntries = history?.available ? history.entries : null;
   useEffect(() => {
     if (liveEntries) reconcileLocalSends(sendScope, liveEntries);
@@ -553,10 +554,11 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               <TranscriptView entries={entries} query={query}
                 focusedUuid={searching ? entries[matches[currentMatch] ?? -1]?.uuid : undefined}
                 activityStatus={activity} activityLabel={!labelUnderSend} onWorkToggle={onWorkToggle} />
+              <div ref={queueSlot} data-queue-slot />
               <PendingTurns sends={localSends} actions={localSendActions} />
               {startingLabel}
               {footer}
-            </> : localSends.length > 0 ? <><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : skeleton ? <>
+            </> : localSends.length > 0 ? <><div ref={queueSlot} data-queue-slot /><PendingTurns sends={localSends} actions={localSendActions} />{startingLabel}{footer}</> : skeleton ? <>
               <TranscriptSkeleton />
               {activityStatus === "working" && <div className="mt-3 px-0.5 py-1"><WorkActivityLabel /></div>}
               {footer}
@@ -580,6 +582,7 @@ function ScopedConversation({ paneId, session, activityStatus, history, loading,
               {shown && !shown.available && shown.reason !== "disabled" && offer && <div className="w-full max-w-sm">{offer}</div>}
               {!error && activityStatus === "working" && <WorkActivityLabel />}
             </div>{footer}</>}
+            {entries.length === 0 && localSends.length === 0 && <div ref={queueSlot} data-queue-slot />}
           </div>
         </div>
         {/* The list's top edge fades into the page instead of cutting text under the strip above it.

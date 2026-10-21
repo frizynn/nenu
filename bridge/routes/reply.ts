@@ -9,7 +9,7 @@ import {
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
 import { claudeLogReader } from "../delivery-check.ts";
-import { clearTakenDraft, guardedSend, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { guardedSend, settleDraft, settleAfterType, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
@@ -66,7 +66,8 @@ export const replyPaneActions: Record<string, PaneAction> = {
     marksSeen: true,
     handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => keysPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
   },
-  // Take over on the phone (ADR 0112): the box's draft is cleared only while it still holds that text.
+  // A draft in the agent's box, settled from the phone (ADR 0112, ADR 0114): taken over, discarded or
+  // sent, only while the box still holds the text the phone showed.
   "clear-draft": {
     level: "write",
     marksSeen: true,
@@ -436,7 +437,7 @@ function auditSend(audit: AuditLog, run: SendRun, txt: string, paneId: string, s
   if (detail) audit.record({ action: "reply.unsent", paneId, session, device, detail });
 }
 
-/** POST `{ draft }`: clear the input box while it holds exactly `draft` (guarded-send.ts clearTakenDraft). */
+/** POST `{ draft, action? }`: take over, discard or send the box's draft while it holds exactly `draft` (guarded-send.ts settleDraft). */
 export async function clearDraftPane(
   herdr: HerdrClient,
   cfg: Config,
@@ -446,16 +447,18 @@ export async function clearDraftPane(
   device: string | null,
   session: string,
 ): Promise<Response> {
-  let body: { draft?: unknown };
+  let body: { draft?: unknown; action?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return text("bad body", 400);
   }
   if (typeof body.draft !== "string" || !body.draft.trim() || body.draft.length > MAX_CLEAR_DRAFT_CHARS) return text("bad draft", 400);
-  const outcome = await clearTakenDraft({ herdr, paneId, readLines: cfg.readLines }, body.draft);
+  const action = body.action ?? "take";
+  if (action !== "take" && action !== "discard" && action !== "send") return text("bad action", 400);
+  const outcome = await settleDraft({ herdr, paneId, readLines: cfg.readLines }, body.draft, action, cfg.submitKeys);
   // The draft's length, not its words: the box may hold what was never meant to be sent.
-  audit.record({ action: "draft.clear", paneId, session, device, detail: { chars: body.draft.length, cleared: outcome.ok } });
+  audit.record({ action: action === "send" ? "draft.send" : "draft.clear", paneId, session, device, detail: { chars: body.draft.length, action, done: outcome.ok } });
   return json(outcome satisfies ActionResponse, req.headers.get("accept-encoding"));
 }
 

@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.39.0] - 2026-10-21
+## [1.40.0] - 2026-10-21
 
 ### Changed
 
@@ -18,6 +18,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 - Opening and closing a turn, a group, a command or a thought folds open in 180 ms and shut in 120 ms; under reduced motion it only fades; a search hit inside one is simply there (0b29b720, 3aadc6af, 22e7ce9a).
 - `bun scripts/e2e/run.ts commands` replays the command demo at 1440×900 and 390×844 and checks the grouping (c5f2088b).
+
+## [1.39.0] - 2026-10-21
+
+### Added
+
+- Text in the agent's box shows beside the composer with Send it first, Add to my message and Discard; a Send over it waits for that tap and then goes, instead of sweeping it or queueing behind it for good; Don't send mine takes it back (14755815, 111c8994, b60eed62, 1a7befeb).
+- Send after this turn, a row of the + while the agent works (111c8994).
+
+### Changed
+
+- Send while the agent works goes now, as its terminal's Enter: no "When should it read this?" question (111c8994).
+- In the chat's Terminal view and a desk's Terminal tab the box types into the pane; back in the chat it is the chat's box, with its draft (111c8994).
+- A stopped send says what is left in the agent's box and which button settles it, not "check Terminal" (14755815).
+
+### Fixed
+
+- Messages waiting in the queue are drawn in the thread at its end, with their pictures, never as a section over the chat (14755815, 111c8994).
 
 ## [1.38.5] - 2026-10-21
 

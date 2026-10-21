@@ -7,7 +7,7 @@ import { TranscriptView } from "./transcript-view";
 import { PaneCwdContext } from "./work-log-tools";
 import type { TranscriptEntry, TranscriptPart } from "@/lib/types";
 
-// A turn reads the same on a phone and a desk (ADR 0114): the agent's words, and between two of them
+// A turn reads the same on a phone and a desk (ADR 0115): the agent's words, and between two of them
 // its steps. A single call is its own row; several fold under one line that says what they did.
 
 const ts = "2026-10-20T10:00:00Z";

@@ -4,6 +4,8 @@
   (`web/src/lib/grammar/PROBES_2026_10_NOTES.md`) filled in the measured semantics below. The
   bridge side is built; the journal reader and audit trail still have to be handed to the queue
   in `bridge/server.ts`, and the send-time choice is the phone's (C1).
+- **Amended by:** [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md): Send while the agent
+  works goes now, and "Queue for later" is the + menu's "Send after this turn"; nothing asks at send time.
 - **Supersedes:** the message-queue half of [ADR 0025](./0025-artifacts-and-server-message-queue.md),
   specifically "Automatic sends wait for an idle/done agent". The artifacts half of 0025 stays in
   force, and so does the rest of its queue design (durable bridge file, enqueue ids, persisted
