@@ -322,7 +322,7 @@ the unit name; the Herdr action runs from anywhere.
   between the text and Enter, Claude's `waiting` refuses or stops the send, the log (a `user` row or an
   `enqueue`) confirms it, a retry asks the log before typing, and every wait is bounded at 15 s and ends
   on the event; `bun scripts/bench/send-stress.ts <your own test pane>` must show 0 stuck and 0
-  duplicated sends ([ADR 0115](./.adr/0115-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
+  duplicated sends ([ADR 0116](./.adr/0116-enter-follows-the-text-and-claudes-log-is-the-witness.md)).
 - **A password prompt is recognised so Nenu can SAY what it is, never so it can send** — no
   automatic Enter, no relaxed verification, no secret channel; the remedy offered is the operator's
   own tap on "Type" ([ADR 0017](./.adr/0017-recognising-a-password-prompt-changes-what-collie-says.md)).

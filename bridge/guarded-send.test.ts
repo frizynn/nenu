@@ -636,7 +636,7 @@ describe("guardedSend: what Claude logged", () => {
   });
 });
 
-describe("guardedSend: Enter behind the text, the log as witness (ADR 0115)", () => {
+describe("guardedSend: Enter behind the text, the log as witness (ADR 0116)", () => {
   const text = "deploy the staging build";
   /** Claude's log of the send: nothing until `after` looks, then the text (or what `logs` says). */
   function log(after = 1, logs: string | undefined = text) {
@@ -726,7 +726,7 @@ describe("guardedSend: Enter behind the text, the log as witness (ADR 0115)", ()
   });
 });
 
-describe("guardedSend: a loaded host (ADR 0115)", () => {
+describe("guardedSend: a loaded host (ADR 0116)", () => {
   test("text painted late, well past the old 2.5 s window, is still verified and sent", async () => {
     const term = new Term();
     term.echoAfter = 30;

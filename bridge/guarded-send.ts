@@ -128,7 +128,7 @@ export const LOCAL_DELAYS_MS: readonly number[] = [0, 20, 20, 30, 30, 50, 50, 10
 export const VERIFY_BUDGET_MS = LOCAL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
 /**
  * The bound on a wait for something the terminal or the CLI will do: paint the text, draw a picture's
- * token, empty the box, log the message (ADR 0115). It is no guess at how long that takes, which a
+ * token, empty the box, log the message (ADR 0116). It is no guess at how long that takes, which a
  * loaded host stretches past any guess: every wait ends on the first look that sees it, and the bound
  * is counted in the pauses between looks, so where looks themselves are slow a wait only lasts longer.
  */
@@ -313,7 +313,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   const send = new Send(deps, request, adapter, prior);
   const paste = adapter?.bracketedPaste;
   // With Enter right behind it, typed text goes as a paste whatever its length: 760 characters typed
-  // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0115).
+  // with Enter on their heels stayed in Claude's box, Enter untaken (measured 2.1.306, ADR 0116).
   const logFirst = deps.received !== undefined && adapter?.composerReady !== undefined && logWitnesses(request);
   const pasted = (text: string) => logFirst || request.paste === true || paste === true || (typeof paste === "function" && paste(text));
   // Pictures in their places go piece by piece, each path pasted alone (ADR 0104); else one write.
@@ -348,7 +348,7 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
   // second copy. Text it delivered that is no longer in the box may have been submitted by an Enter
   // whose ack was lost, so nothing is typed; neither when the box cannot be read to tell.
   if (prior?.typeAttempted && seen === null) return send.fail(UNCHECKED, false);
-  // The CLI's log says whether an earlier try reached the agent (ADR 0115): if it logged the message
+  // The CLI's log says whether an earlier try reached the agent (ADR 0116): if it logged the message
   // nothing is typed again, and a log that holds nothing since that try proves it never arrived.
   let earlier: string | null | undefined;
   if (prior?.typeAttempted && prior.typedAt !== undefined && deps.received) {
@@ -527,7 +527,7 @@ function logWitnesses(request: SendRequest): boolean {
 }
 
 /**
- * Enter right behind the text, and the CLI's log as the witness (ADR 0115). The pre-flight read, or
+ * Enter right behind the text, and the CLI's log as the witness (ADR 0116). The pre-flight read, or
  * the sweep's, was the last look before the text, as a read used to be the last look before Enter;
  * the terminal hands Claude the text and the Enter in order however late it reads them, so there is
  * no window to wait out first. The message is sent once the log has it (or Claude queued it, which
