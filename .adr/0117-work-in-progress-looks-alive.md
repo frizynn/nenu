@@ -7,12 +7,13 @@
   decision 3 ("nothing spins") and [ADR 0116](./0116-a-turn-reads-as-t3-code-draws-its-work.md)
   decision 4 (the step in progress as the turn's bottom row, with the live mark).
 - **Trail:** `web/src/lib/live-motion.ts` · `web/src/components/work-activity-label.tsx` (`Glow`) ·
-  `web/src/components/status-badge.tsx` (`WorkingMark`) · `web/src/index.css` (`--motion-glow`,
-  `.glow-*`, `.mark-turn`, `.row-enter`) · `web/src/lib/enter.tsx` · `web/src/lib/work-timeline.ts`
+  `web/src/components/status-badge.tsx` (`WorkingMark`) · `web/src/index.css` (`.glow-*`,
+  `.row-enter`) · `web/src/lib/enter.tsx` · `web/src/lib/work-timeline.ts`
   (`workSegments`) · `web/src/components/work-log-tools.tsx` (`StepItem`, `ThinkingNow`) ·
   `web/src/lib/local-sends.ts` (`pendingSends`, `landed`) · `bridge/guarded-send.ts`
   (`takeBackQueue`) · `web/src/lib/harness/claude/chrome.ts` (`GLUED_EDITOR_HINT`,
-  `inputBoxShowsHistory`) · `web/src/calm-motion.test.ts`
+  `inputBoxShowsHistory`) · `web/src/calm-motion.test.ts` ·
+  `scripts/e2e/live-motion.ts` · `scripts/e2e/one-bubble.ts`
 
 ## Context
 
@@ -37,22 +38,31 @@ a bridge built from `main` (1.41.0), 1440×900 and 390×844:
   their first line, cut with "…", picks by position, and forks the conversation (measured).
 
 T3 Code (`apps/web/src/index.css`, `live-activity-focus`) shows a live line with a light that passes
-over its words: a window and the copy inside it slide opposite ways by `transform`, in 30 steps per
-2.2 s, paused off screen.
+over its words: a window and the copy inside it slide opposite ways by `transform`, a CSS animation in
+30 steps per 2.2 s, paused off screen.
+
+`bun scripts/e2e/live-motion.ts` measures the browser's CPU (headless Chrome, no GPU, every process
+it launched) over 30 s on a desk with 40 agents working, Home and a chat whose turn runs, each with
+motion allowed and reduced, alternated twice. Copying T3 Code's CSS cost 1.7 to 2.7 s per 30 s on
+either screen, against 0.3 to 0.5 s still; 2 marks cost what 17 did, and 10 steps a pass what 30
+did, because a running CSS animation keeps the compositor drawing at the display's rate.
 
 ## Decision
 
 1. **Only what shows an agent works now may move for as long as it lasts**: the glow across a running
    turn's "Working for 9s", its step in progress and its "Thinking…", and the working mark's dashed
-   circle turning a sixth of a turn per pass (its six dashes land where the next were). Each moves by
-   `transform` alone, in `steps(30)` over `--motion-glow` (2.2 s), on a composited layer, and only
-   while `lib/live-motion.ts` says it may: on screen, on a shown page, with no idle lock and motion not
-   reduced. Otherwise the motion is not in the page at all (no glow copy, no class). Everything else
-   still answers a tap and ends (ADR 0111), and `calm-motion.test` names these three rules as the only
-   ones that run forever.
+   circle turning a sixth of a turn per 2.2 s pass (its six dashes land where the next were). They step
+   by hand: one shared timer in `lib/live-motion.ts` writes a `transform` per step (the glow 20 steps a
+   pass, the mark 10, on the same ticks), each on its own layer, and only while it may move: on screen,
+   on a shown page, with no idle lock and motion not reduced. Otherwise it is still and its glow copy
+   is not in the page. No CSS animation runs forever: one that runs, even in `steps()`, keeps the
+   compositor drawing every frame (measured below), and `calm-motion.test` still allows none.
 2. **The step in progress sits where it will stay.** It is a row of its run, its own icon, its words
    glowing, and it turns done in place. Between steps a "Thinking…" row stands where the next step
-   lands. A thought being written shows its first line there.
+   lands. A thought being written shows its first line there. A message Claude read from its queue
+   mid-turn (it carries that turn's id) sits between the work it split: the turn's line keeps the
+   whole turn's time and its glow, and the work after it folds under its own "Continued for" line,
+   as T3 Code draws a steer.
 3. **What joins the thread while it is read eases in** (a step, a thought, the agent's words, a
    message on its way): a fade and a short rise, 180 ms, transform and opacity only. What was there
    when the thread or a fold was drawn never moves. The operator's own message does not ease in when
@@ -71,8 +81,11 @@ over its words: a window and the copy inside it slide opposite ways by `transfor
 
 ## Consequences
 
-- Work in progress costs a few composited frames a second per visible mark; off screen, hidden or
-  locked, nothing. Measured cost: see the PR (`bun scripts/e2e/live-motion.ts`).
+- Work in progress costs, measured on the bench above with motion allowed against reduced (the
+  same build): Home with 17 working marks on screen +0.4 to 0.75 s of CPU per 30 s (0.65 to 0.99 s
+  against 0.24 s); a chat whose turn runs, its glow and 13 marks, +1.0 to 1.2 s (1.46 to 1.65 s
+  against 0.28 to 0.45 s). Off screen, on a hidden page or under the idle lock, nothing. A GPU
+  composites these steps for less; the bench has none.
 - Words that glow are drawn twice while they move; the copy is `aria-hidden`, and a still glow has
   none, so find and screen readers meet them once.
 - Taking back one message of several brings them all back; Remove says the others are in the box.

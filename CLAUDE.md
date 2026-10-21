@@ -253,8 +253,8 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
 - **Work in progress looks alive, and nothing else moves for long** (`lib/live-motion.ts`): the glow on
   a running turn's "Working for", its step in progress and "Thinking…", and the working circle's slow
-  turn, by transform in 30 steps per 2.2 s, only on screen on a shown page with no idle lock or reduced
-  motion. The step in progress sits in its run and turns done in place; rows that arrive while the
+  turn, stepped by hand from one timer (never a CSS animation, which draws every frame), only on
+  screen on a shown page with no idle lock or reduced motion. The step in progress sits in its run and turns done in place; rows that arrive while the
   thread is read ease in (`lib/enter.tsx`). A sent message is on screen once (`pendingSends`), and one
   in Claude's own queue is taken back with Up under the write lock (`takeBackQueue`); a message Claude
   read is never rewound from Nenu. `bun scripts/e2e/live-motion.ts` measures the cost
