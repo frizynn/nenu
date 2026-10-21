@@ -1516,7 +1516,7 @@ describe("Composer — terminal-draft preview", () => {
     await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
   });
 
-  it.each(["[Image #1] fix this", "why does this fail [Pasted text #1 +80 lines]"])(
+  it.each(["[Image #1] fix this", "fix this [Ima ge #1]", "why does this fail [Pasted text #1 +80 lines]"])(
     "offers no Take over for a draft holding what only the CLI has: %s",
     async (held) => {
       // A copy would carry the literal token, and its Send would sweep the real picture or paste.

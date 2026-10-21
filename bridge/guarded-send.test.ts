@@ -876,6 +876,7 @@ describe("clearTakenDraft", () => {
   test.each([
     ["a picture the CLI attached", "[Image #1] fix this"],
     ["a paste the CLI collapsed", "why does this fail [Pasted text #1 +80 lines]"],
+    ["a picture cut where the box wrapped", "fix this [Ima ge #1]"],
   ])("leaves a draft holding %s: only the CLI has it, and the phone's copy is its token", async (_case, held) => {
     const term = new Term();
     term.draft = held;

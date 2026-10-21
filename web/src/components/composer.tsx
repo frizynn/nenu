@@ -1352,8 +1352,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
             text={effectiveRaw}
-            // No Take over when the line holds something only the CLI has: its own opaque token
-            // (Claude's `[Pasted text #N +M lines]`) or an attached picture's `[Image #N]`. A copy
+            // No Take over when the line holds something only the CLI has (`holdsCliToken`): a copy
             // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
             // preview keeps showing it, and Type into terminal edits it in place.
             onTakeOver={holdsCliToken(effectiveRaw) ? null : takeOverDraft}

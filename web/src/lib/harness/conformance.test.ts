@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseAnsi } from "../ansi";
 import { splitLines } from "../blocks";
 import { claudeAdapter } from "./claude";
+import { holdsCliToken } from "./inline-images";
 import { describeAdapterConformance, isValidHerdrKey } from "./conformance";
 
 // The Claude adapter is the reference implementation the conformance suite gates. The fixture
@@ -108,6 +109,8 @@ describe("claude--draft-paste-placeholder.txt — a collapsed long send is compo
     expect(claudeAdapter.buildBlocks(lines).every((b) => b.kind === "raw")).toBe(true);
     const draft = claudeAdapter.extractInputDraft(lines)!;
     expect(claudeAdapter.draftCarriesSend!("one\ntwo\nthree\nfour", draft)).toBe(true);
+    // Read off a real screen: the stranded-draft preview offers no Take over for it (ADR 0112).
+    expect(holdsCliToken(draft)).toBe(true);
   });
 });
 
