@@ -119,6 +119,24 @@ export function removeLocalSend(scope: string, id: string) {
   if (list.some((send) => send.id === id)) write(scope, list.filter((send) => send.id !== id));
 }
 
+/**
+ * Below this many characters a message must be a whole turn to match: "ok" may well start a later
+ * message the operator typed in the terminal.
+ */
+const PARTIAL_MATCH_CHARS = 20;
+
+/**
+ * Whether a journal user turn is this message. Typed into a box that still held text (a draft, a
+ * queued message the CLI put back), it reaches the agent joined to that text, before or after it.
+ */
+function turnCarries(turn: string, sent: string): boolean {
+  if (turn === sent) return true;
+  const [prose = "", images = "0"] = sent.split("\u0000");
+  const [turnProse = "", turnImages = "0"] = turn.split("\u0000");
+  return prose.length >= PARTIAL_MATCH_CHARS && Number(turnImages) >= Number(images)
+    && (turnProse.startsWith(prose) || turnProse.endsWith(prose));
+}
+
 /** Drop every bubble the journal now shows. `entries` is the live (not frozen) history window. */
 export function reconcileLocalSends(scope: string, entries: readonly TranscriptEntry[]) {
   const list = listLocalSends(scope);
@@ -133,7 +151,7 @@ export function reconcileLocalSends(scope: string, entries: readonly TranscriptE
   const next: LocalSend[] = [];
   for (const send of list) {
     const key = messageMatchKey(send.text);
-    const matches = users.filter((user) => user.key === key).map((user) => user.uuid);
+    const matches = users.filter((user) => turnCarries(user.key, key)).map((user) => user.uuid);
     if (!send.baseline) {
       next.push({ ...send, baseline: matches });
       changed = true;

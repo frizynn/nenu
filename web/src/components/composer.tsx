@@ -243,6 +243,8 @@ interface SendFailure {
   quote?: string;
   /** What Try again sends: the message, when it is still where it was (the box, or a quick reply). */
   retry: { text: string; isDraft: boolean } | null;
+  /** The bubble left holding a message that may be in the pane: once the journal shows it, it was sent. */
+  bubble?: string;
 }
 
 /** How a send goes: its mode while the agent works, and whether the agent's box's text was settled. */
@@ -409,6 +411,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const sendScope = localSendScope(paneId, session);
   const localSends = useLocalSends(sendScope);
   const queueSlot = useQueueSlot(sendScope);
+  // A refusal that says nothing was sent goes with its bubble: the journal showed the message.
+  useEffect(() => {
+    if (failure?.bubble && !localSends.some((send) => send.id === failure.bubble)) setFailure(null);
+  }, [failure, localSends]);
   useEffect(() => {
     const accepted = queue.accepted;
     if (accepted) {
@@ -1009,7 +1015,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setDelivering(false);
         // A toolbar action is not a message: its failure is a toast, with nothing to "try again".
         if (action) setStatus(res.error, "error");
-        else if (!secret) refused(res.error, delivered, t, isDraft);
+        else if (!secret) refused(res.error, delivered, t, isDraft, false, delivered ? started.id : null);
         return false;
       }
     } catch (e) {
@@ -1022,7 +1028,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       failSend(started, error, false, unknown);
       setDelivering(false);
       if (action) setStatus(error, "error");
-      else refused(error, unknown, t, isDraft);
+      else refused(error, unknown, t, isDraft, false, unknown ? started.id : null);
       return false;
     } finally {
       setSending(false);
@@ -1031,9 +1037,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   /** Say a refused send above the box. Try again is offered only while resending cannot type a
    *  second copy, and only when the message is still where the operator left it. */
-  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false) {
+  function refused(error: string, delivered: boolean, text: string, isDraft: boolean, overridable = false, bubble: string | null = null) {
     const inPlace = !isDraft || outgoing() === text;
     setFailure({
+      ...(bubble ? { bubble } : {}),
       error,
       delivered,
       hint: delivered ? "Check the terminal before sending again." : undefined,
