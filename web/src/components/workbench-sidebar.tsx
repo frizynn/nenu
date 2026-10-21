@@ -416,7 +416,10 @@ interface TreeFolds {
   onExpand: (key: string, open: boolean) => void;
 }
 
-const STATE_WORD: Partial<Record<NodeState, string>> = { needs: "needs you", review: "review", closing: "merged" };
+/** A tree row's word and its tone: red asks for you, blue is to review, green has merged and closes on its own. */
+const STATE_WORD: Partial<Record<NodeState, { word: string; tone: string }>> = {
+  needs: { word: "needs you", tone: "text-status-blocked" }, review: { word: "review", tone: "text-primary" }, closing: { word: "merged", tone: "text-status-done" },
+};
 
 function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }: TreeFolds & {
   project: ProjectView;
@@ -551,7 +554,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
-  const word = ask ? ASK[ask].word : STATE_WORD[state];
+  const word = ask ? { word: ASK[ask].word, tone: STATE_WORD.needs!.tone } : STATE_WORD[state];
   const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
@@ -568,7 +571,7 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
-        {word && <span aria-hidden className={cn("nav-row-word", state === "review" ? "text-primary" : "text-status-blocked")}>{word}</span>}
+        {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
       </Link>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChatCircle, ChevronRight, GitPullRequest, History, Plus } from "@/components/ui/icon";
 
@@ -18,7 +18,7 @@ import { useRoutines } from "@/hooks/use-routines";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { askSections } from "@/lib/asks";
 import { coordinatorState, flatten, nodeState, orgTree, STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { historyDays, routinesFor, waitingGroups } from "@/lib/project-work";
+import { finishedCount, routinesFor, waitingGroups } from "@/lib/project-work";
 import { nodePath, panePath, projectHistoryPath, projectPath } from "@/lib/nav";
 import { isOpenThread } from "@/lib/projects";
 import { isReadOnly, type AgentView, type DeviceAuth, type ProjectThreadView, type ProjectView, type RoutineView } from "@/lib/types";
@@ -48,7 +48,7 @@ export function DeskCoordinator({ project, thread, panes, device, session, onCha
   // Read again when its own report or STATUS.md moves: the page draws no other thread's report (ADR 0109).
   const read = useThreadSummaries(project, thread ? [thread] : []);
   // As many as the History "N finished" opens lists, searched for this coordinator's name.
-  const finished = historyDays(project, thread?.title ?? "").reduce((sum, day) => sum + day.rows.length, 0);
+  const finished = useMemo(() => finishedCount(project, thread?.title), [project, thread?.title]);
   const asks = useAsks([project]);
   const routines = useRoutines(project.slug, session);
   // Only what waits on you: what it is doing and what it did are its Status (ADR 0109).
