@@ -374,7 +374,7 @@ export function useMessageQueue(
    * Resolves the row id, or null when it was not saved.
    */
   const add = useCallback(
-    async (text: string, deliveryMode: DeliveryMode): Promise<string | null> => {
+    async (text: string, deliveryMode: DeliveryMode, claim?: (id: string) => void): Promise<string | null> => {
       if (!page?.available || mutating.current) return null;
       const waiting = pendingFor(page.scope);
       if (waiting && waiting.text !== text) {
@@ -390,6 +390,9 @@ export function useMessageQueue(
           : { id: crypto.randomUUID(), text, scope: page.scope, createdAt: Date.now(), deliveryMode };
       pending.current = row;
       savePending(storageKey, row);
+      // The bubble that stands for this message owns its row before the row can reach the page, so
+      // the row is never drawn as a message of its own beside it.
+      claim?.(row.id);
       const key = current.current;
       // Only a lost answer keeps the row for a resend. A refusal (too long, terminal controls, a full
       // queue) would be refused again, and would hold every later send in this conversation.

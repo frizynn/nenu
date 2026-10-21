@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import {
-  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, reconcileLocalSends,
+  SENT_TTL_MS, addLocalSend, listLocalSends, localImageUrl, localSendScope, pendingSends, reconcileLocalSends,
   rememberLocalImage, removeLocalSend, resetLocalSends, updateLocalSend, useLocalSends,
 } from "./local-sends";
 import { isWorkHeld } from "./reload-guard";
@@ -12,15 +12,37 @@ const scope = localSendScope("w1:p1", undefined);
 const user = (uuid: string, text: string): TranscriptEntry => ({ uuid, ts: "2026-10-06T10:00:00Z", role: "user", parts: [{ kind: "text", text }] });
 
 describe("local sends", () => {
-  it("keeps a bubble until the journal gains a NEW matching user turn", () => {
+  it("draws a bubble until the journal gains a NEW matching user turn", () => {
     const earlier = [user("u1", "continue")];
     addLocalSend(scope, "continue");
     reconcileLocalSends(scope, earlier); // the old "continue" is baseline, not this send
-    expect(listLocalSends(scope)).toHaveLength(1);
-    reconcileLocalSends(scope, [...earlier, user("u2", "something else")]);
-    expect(listLocalSends(scope)).toHaveLength(1);
-    reconcileLocalSends(scope, [...earlier, user("u3", "  continue ")]);
-    expect(listLocalSends(scope)).toHaveLength(0);
+    expect(pendingSends(listLocalSends(scope), earlier)).toHaveLength(1);
+    const other = [...earlier, user("u2", "something else")];
+    reconcileLocalSends(scope, other);
+    expect(pendingSends(listLocalSends(scope), other)).toHaveLength(1);
+    const landed = [...earlier, user("u3", "  continue ")];
+    // The render that draws the journal's turn no longer draws the bubble, before any effect runs.
+    expect(pendingSends(listLocalSends(scope), landed)).toHaveLength(0);
+    reconcileLocalSends(scope, landed);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ landed: "u3" })]);
+    expect(pendingSends(listLocalSends(scope), earlier)).toHaveLength(0);
+  });
+
+  it("keeps a landed bubble's queue row claimed for a while, then forgets it", () => {
+    vi.useFakeTimers();
+    try {
+      const id = addLocalSend(scope, "queued words");
+      updateLocalSend(scope, id, { state: "queued", queueId: "row-1", native: "enqueued" });
+      reconcileLocalSends(scope, []);
+      reconcileLocalSends(scope, [user("u9", "queued words")]);
+      // The queue still reports the row in Claude's queue: it stays this bubble's, so it is not drawn alone.
+      updateLocalSend(scope, id, { native: "enqueued" });
+      expect(listLocalSends(scope)).toEqual([expect.objectContaining({ queueId: "row-1", landed: "u9" })]);
+      vi.advanceTimersByTime(SENT_TTL_MS);
+      expect(listLocalSends(scope)).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reuses a failed bubble when the same message is retried", () => {

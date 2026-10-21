@@ -437,7 +437,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     const page = queue.page;
     if (!page?.available) return;
     for (const echo of listLocalSends(sendScope)) {
-      if (!echo.queueId) continue;
+      if (!echo.queueId || echo.landed) continue;
       // A delivered bubble still learns what the CLI's own queue did with it (Claude's journal).
       if (echo.state === "sent") {
         const done = queue.delivered.find((item) => item.id === echo.queueId);
@@ -499,7 +499,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (!t || sending || queue.busy) return false;
     if (!queue.page?.available) { setStatus("Connect a conversation to queue messages.", "info"); return false; }
     const started = beginSend(t, isDraft, !isSlashCommand(t));
-    const rowId = await queue.add(t, mode);
+    const rowId = await queue.add(t, mode, (id) => { if (started.id) updateLocalSend(sendScope, started.id, { queueId: id }); });
     if (rowId) {
       if (started.id) updateLocalSend(sendScope, started.id, { state: "queued", queueState: "queued", queueId: rowId, deliveryMode: mode });
       if (outgoing() === t) clearComposer();
