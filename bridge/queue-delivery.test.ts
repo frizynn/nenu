@@ -157,6 +157,28 @@ test("a picture that never shows is cleared from the box, so the row may go agai
   expect(keys.flat()).not.toContain("Enter");
 });
 
+test("the queue's clear checks the conversation as its writes do", async () => {
+  const path = "/home/you/.local/state/nenu/uploads/w1_p1-mvi3xqqi-12f60762.png";
+  let draft = "";
+  const keys: string[][] = [];
+  let looks = 0;
+  const result = await deliverQueuedMessage(
+    { ...row, text: `look at this ${path} please` },
+    terminal("claude", () => screen(draft), keys),
+    async (text, submit) => {
+      if (!submit && !text.startsWith("/")) draft += text;
+      return { ok: true };
+    },
+    // The two writes see the conversation; by the clear, the pane runs another one.
+    async () => ++looks <= 2,
+    "enter",
+    { sleep: noSleep },
+  );
+  expect(result.status).toBe("uncertain");
+  expect(keys).toEqual([]);
+  expect(draft).toBe("look at this ");
+});
+
 test("Enter acknowledgement with a stranded draft is uncertain and never types twice", async () => {
   let draft = "";
   let types = 0;

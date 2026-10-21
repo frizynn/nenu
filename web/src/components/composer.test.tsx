@@ -1516,23 +1516,17 @@ describe("Composer — terminal-draft preview", () => {
     await waitFor(() => expect(clears).toEqual([{ draft: "take me over" }]));
   });
 
-  it("Take over leaves the terminal alone when its draft holds a picture only the CLI has", async () => {
-    const user = userEvent.setup();
-    const clears: unknown[] = [];
-    server.use(
-      http.post(/\/api\/pane\/[^/]+\/clear-draft$/, async ({ request }) => {
-        clears.push(await request.json());
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    renderDraftHarness();
-    strandDraft("[Image #1] fix this");
-    await screen.findByText(/draft in terminal/i);
-    await user.click(screen.getByRole("button", { name: /take over/i }));
-    expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("[Image #1] fix this");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(clears).toEqual([]);
-  });
+  it.each(["[Image #1] fix this", "why does this fail [Pasted text #1 +80 lines]"])(
+    "offers no Take over for a draft holding what only the CLI has: %s",
+    async (held) => {
+      // A copy would carry the literal token, and its Send would sweep the real picture or paste.
+      renderDraftHarness();
+      strandDraft(held);
+      await screen.findByText(/draft in terminal/i);
+      expect(screen.queryByRole("button", { name: /take over/i })).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/type a reply/i)).toHaveValue("");
+    },
+  );
 
   it("Take over copies the CURRENT draft into the composer, marks it handled, and hides the preview", async () => {
     const user = userEvent.setup();

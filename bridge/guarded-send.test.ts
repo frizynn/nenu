@@ -368,6 +368,20 @@ describe("guardedSend", () => {
     expect(term.keys()).toEqual([]);
   });
 
+  test("a retry whose earlier text may have gone never clears the box it stops on", async () => {
+    // "Send it again" would contradict the retry's own answer: the earlier text may be submitted.
+    // With a picture only the whole message carries it, so a part of it stops the send at Enter.
+    const term = new Term();
+    term.draft = "[Image #1] what is this?";
+    term.onRead = (n, t) => {
+      if (n === 2) t.draft = "[Image #1] what";
+    };
+    const { outcome } = await run(term, { text: `${red} what is this?` }, { prior: { typeAttempted: true, textDelivered: true } });
+    expect(outcome).toMatchObject({ ok: false, textDelivered: true });
+    if (!outcome.ok) expect(outcome.error).toContain("check Terminal");
+    expect(term.keys()).toEqual([]);
+  });
+
   test("a retry after a cleared send types it again", async () => {
     const term = new Term();
     term.pictureReads = -1;

@@ -5,7 +5,7 @@
   1.38.1: a picture left its path typed in Claude's box, the queue stuck behind it, and the phone
   could neither type nor delete in the terminal.
 - **Trail:** `bridge/guarded-send.ts` (`typePieces`, `pictureDrawn`, `unsent`, `clearTakenDraft`) ·
-  `web/src/lib/harness/inline-images.ts` (`pathShows`, `draftIsPartOfSend`) · `bridge/queue-delivery.ts` ·
+  `web/src/lib/harness/inline-images.ts` (`pathShows`, `draftIsPartOfSend`, `holdsCliToken`) · `bridge/queue-delivery.ts` ·
   `bridge/message-queue.ts` (`CLEARED_TRIES`) · `bridge/routes/reply.ts` (`clear-draft`) ·
   `web/src/components/composer.tsx` (`takeOverDraft`) · `scripts/e2e/take-over.ts`
 
@@ -36,8 +36,9 @@ or mid-turn (`[Image #4]` in its own queue).
 3. **A queued row whose delivery cleared the box goes again**, at most three times, then pauses.
 4. **Take over moves the draft**: the composer gets the text, and the bridge clears the box only while
    a fresh read, under the pane's write lock, shows that exact text (`clear-draft`). A read-only
-   device only copies, and so does a draft holding `[Image #N]` or a collapsed paste: the copy is only
-   the token, and the picture or the pasted text lives in the CLI alone.
+   device only copies. A draft holding `[Image #N]` or a collapsed paste offers no Take over at all: a
+   copy would be only the token, and its Send would sweep the picture or paste that lives in the CLI
+   alone. Type into terminal edits it in place; the bridge refuses to clear it either way.
 
 ## Consequences
 

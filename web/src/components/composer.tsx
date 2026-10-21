@@ -796,8 +796,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setHandledKey(normalizeDraft(draft));
     setPreviewLatched(false);
     focusInputEnd();
-    // A picture or a paste only the CLI holds is a token in this copy: clearing it would lose it.
-    if (locked || holdsCliToken(draft)) return;
+    if (locked) return;
     api.clearTerminalDraft(paneId, draft, session).then(
       (res) => { if (!res.ok) setStatus(res.error ?? "The terminal still holds its copy.", "info"); },
       () => setStatus("The terminal still holds its copy: Nenu couldn't reach it.", "info"),
@@ -1353,10 +1352,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         {showPreview && effectiveRaw !== null && (
           <TerminalDraftPreview
             text={effectiveRaw}
-            // No Take over when the line is only the harness's own opaque token (Claude's
-            // `[Pasted text #N +M lines]`): pulling that into the composer would send the literal
-            // string. The preview keeps showing it — the screen really does say that.
-            onTakeOver={adapter?.draftIsOpaque?.(effectiveRaw) ? null : takeOverDraft}
+            // No Take over when the line holds something only the CLI has: its own opaque token
+            // (Claude's `[Pasted text #N +M lines]`) or an attached picture's `[Image #N]`. A copy
+            // would carry the literal token, and its Send would sweep the real one (ADR 0112). The
+            // preview keeps showing it, and Type into terminal edits it in place.
+            onTakeOver={adapter?.draftIsOpaque?.(effectiveRaw) || holdsCliToken(effectiveRaw) ? null : takeOverDraft}
           />
         )}
         {/* The password-prompt notice (#103). Sits here, in the same in-flow slot as the other two
