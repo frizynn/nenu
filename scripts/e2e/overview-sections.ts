@@ -9,7 +9,7 @@ import type { DemoHerd, OrgSeed } from "./scenario.ts";
 // A coordinator's chat panel, the way awam-org's Mi Cúcula looked on 2026-10-21: work three levels
 // deep (its own threads, two coordinators under it, one more under one of those), 16 finished, two
 // questions waiting on you whose task the tracker does not have. At 1440×900 the desk's Overview, at
-// 390×844 the phone's Status tab. Measures how far down the first running thread sits, how many open
+// 390×844 the phone's Status view. Measures how far down the first running thread sits, how many open
 // rows the panel lists, any text closer than 10 px to its card's edge and any "missing" chip; then
 // folds, hides and reorders sections, reloads to see the device kept them, and resets.
 // Exits 1 when a check fails, unless --loose (to measure a build that predates the sections).
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
       await context.close();
     }
 
-    // A phone: the coordinator's Status tab.
+    // A phone: the coordinator's Status view.
     const context = await browser.newContext({ ...PHONE, timezoneId: "America/Argentina/Buenos_Aires", locale: "en-US" });
     const page = await context.newPage();
     await page.clock.install({ time: bridge.now() });

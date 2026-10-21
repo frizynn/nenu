@@ -61,11 +61,13 @@ export function ActionGroups({ groups, onRun }: { groups: ConversationActionGrou
       {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5"><SectionLabel>{group.label}</SectionLabel></h4>}
       {group.actions.map(({ id, label, icon: Icon, run, disabled, on, waiting }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
+          // Said whole: Chrome reads text split across the row's flex items as "Status , 1".
+          aria-label={waiting ? `${label}, ${waiting} waiting on you` : undefined}
           onClick={() => onRun(run)}
           className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
-          {waiting !== undefined && waiting > 0 && <span className="waiting-count"><span aria-hidden="true">{waiting}</span><span className="sr-only">{`, ${waiting} waiting on you`}</span></span>}
+          {waiting !== undefined && waiting > 0 && <span aria-hidden="true" className="waiting-count">{waiting}</span>}
           {on && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
         </button>
       ))}
