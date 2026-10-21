@@ -5,7 +5,7 @@
   [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md) point 1's period
   names: the bar's chats sit under Today, Yesterday, Previous 7 days, Previous 30 days and Older, and
   only under the ones that hold a chat on screen. Amended by
-  [ADR 0109](./0109-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md): the rows
+  [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md): the rows
   are Home's first tab, quiet projects fold at its end, and a row with asks opens its project.
 - **Trail:** `web/src/components/home-projects.tsx` · `web/src/lib/desk-nav.ts` (`projectPulse`) ·
   `web/src/routes/projects.tsx` · `web/src/components/desk-nav.tsx` · `scripts/e2e/home-projects.ts`

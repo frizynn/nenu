@@ -1,4 +1,4 @@
-# 0109. Projects is Home's first tab, and a phone enters a coordinator on its page
+# 0110. Projects is Home's first tab, and a phone enters a coordinator on its page
 
 - **Status:** Accepted (2026-10-21). Requested by the operator. Amends
   [ADR 0107](./0107-home-lists-the-projects-as-rows.md): the rows stay, under a tab instead of above the

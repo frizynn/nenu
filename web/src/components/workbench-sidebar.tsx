@@ -276,7 +276,7 @@ function hitState(hit: SearchHit): string {
 /**
  * A phone's drawer or Search sheet before anything is typed. The drawer leads with the chats waiting on
  * you, above the projects, and ends with the ones that moved last, so a coordinator is a tap into its
- * project from the top (ADR 0109).
+ * project from the top (ADR 0110).
  */
 function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boolean; onNewChat?: () => void }) {
   const { paneId } = useParams();
@@ -419,7 +419,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   open: boolean;
   /**
    * A phone's drawer or Search sheet: the project opens on its coordinators, each a way into its page,
-   * and the threads that work, wait on you or wait for a review; no count, no History (ADR 0109).
+   * and the threads that work, wait on you or wait for a review; no count, no History (ADR 0110).
    */
   phone?: boolean;
   /** The project's workspace panes outside every thread, listed after its threads. */

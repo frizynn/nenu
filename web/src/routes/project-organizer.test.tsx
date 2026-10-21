@@ -9,7 +9,7 @@ import { server } from "@/test/setup";
 import { __forgetSummaries } from "@/hooks/use-thread-summaries";
 import { ProjectRoute } from "./project";
 
-// A project that organizes coordinators (ADR 0092): each a row into its page (ADR 0109), the project's
+// A project that organizes coordinators (ADR 0092): each a row into its page (ADR 0110), the project's
 // own first while it runs, the threads at the top level apart, and a node can move under another.
 
 // A desk: row actions show as words, not behind a ⋯.

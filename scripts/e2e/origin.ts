@@ -98,7 +98,7 @@ try {
     }
   };
   const click = (selector: string) => async (page: Page) => { await page.locator(`${selector} >> visible=true`).first().click({ timeout: 5000 }); };
-  // Home opens on its Projects tab (ADR 0109); a session's row is under Recents.
+  // Home opens on its Projects tab (ADR 0110); a session's row is under Recents.
   const fromRecents = (selector: string) => async (page: Page) => {
     await page.getByRole("tab", { name: "Recents" }).first().click({ timeout: 5000 });
     await click(selector)(page);

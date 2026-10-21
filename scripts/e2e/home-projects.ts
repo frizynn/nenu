@@ -191,7 +191,7 @@ async function main(): Promise<void> {
       seen.homeText = (await page.locator("main").innerText()).split("\n").slice(0, 40);
       await context.close();
     }
-    // A project's row opens the project, asks or not (ADR 0109); its page leads to them.
+    // A project's row opens the project, asks or not (ADR 0110); its page leads to them.
     for (const [name, device, want] of [["1440", DESKTOP, "/project/acme-shop"], ["390", PHONE, "/project/acme-shop"]] as const) {
       const { page, context } = await open(device);
       await page.locator("#home-list").getByRole("link", { name: /^Acme Shop/ }).click();

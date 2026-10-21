@@ -2371,7 +2371,7 @@ async function back(): Promise<void> {
       await log("project");
       if (way.coordinator) {
         // A desk's project folds a coordinator's card on its name; its › opens the coordinator's page,
-        // and Open chat its chat (ADR 0102). A phone's row opens the page too (ADR 0109).
+        // and Open chat its chat (ADR 0102). A phone's row opens the page too (ADR 0110).
         if (device === DESKTOP) await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
         else await open(way.coordinator.title);
         await page.waitForURL("**/project/acme/node/**", { timeout: 10_000 });

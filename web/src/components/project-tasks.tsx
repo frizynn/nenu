@@ -113,7 +113,7 @@ interface OrgTreeProps {
   onChanged: () => Promise<void> | void;
   now?: number;
   /**
-   * The phone's project page (ADR 0092, ADR 0109): each open coordinator is one row that opens its page,
+   * The phone's project page (ADR 0092, ADR 0110): each open coordinator is one row that opens its page,
    * and the threads at the project's top level sit apart from the coordinators.
    */
   organize?: Organize;
