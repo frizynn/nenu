@@ -5,7 +5,7 @@ import { DESKTOP, PHONE, type Browser, type Page } from "./browser.ts";
 import type { TestBridge } from "./bridge.ts";
 import type { Check } from "./inline-images.ts";
 
-// The usage-limit bench (ADR 0118), on a desk and a phone in WebKit, against a Claude pane whose
+// The usage-limit bench (ADR 0120), on a desk and a phone in WebKit, against a Claude pane whose
 // account hit its usage limit: Claude's own rows from the operator's coordinator on 2026-10-21 in its
 // transcript, its session file at rest, and the notice it prints under the box on screen.
 //   1. The chat says "Usage limit · resets …" with Continue now; the desk's bar draws when it resets.
