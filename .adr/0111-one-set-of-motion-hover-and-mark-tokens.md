@@ -48,8 +48,8 @@ another "200 ms feels right here".
 ## Consequences
 
 - `calm-motion.test` fails on a literal duration or curve in a stylesheet, on any other duration
-  class and on a numeric `*_OPEN/SHUT/EXIT/ENTER/FADE/SLIDE_MS` timer; `design-system.test` fails on another hover tint. A new motion picks a length by what it
-  answers, not by feel.
+  class and on a numeric `*_OPEN/SHUT/EXIT/ENTER/FADE/SLIDE_MS` timer; `design-system.test` fails on
+  another hover tint. A new motion picks a length by what it answers, not by feel.
 - The page slide's iOS curve `(0.32, 0.72, 0, 1)` is gone; the shared curve starts as fast and settles
   a little sooner. Revisit only with a measured reason that applies to every slide, not one page.
 - A component that needs a fourth length is a sign it is two motions; split it before adding a token.

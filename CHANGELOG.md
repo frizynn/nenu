@@ -10,20 +10,18 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [1.38.1] - 2026-10-21
 
-One pass so the pages built in parallel read as one app (ADR 0111).
-
 ### Changed
 
-- Everything that moves uses three lengths (120 ms controls, 180 ms panels, 280 ms pages) and one curve, `cubic-bezier(0.2, 0, 0, 1)` (52a0efe8).
+- Everything that moves uses three lengths (120 ms controls, 180 ms panels, 280 ms pages) and one curve, `cubic-bezier(0.2, 0, 0, 1)`, script timers included (52a0efe8, 16c7f636).
 - One 6 px status dot everywhere; one hover fill for rows and controls (cfd8f63f, d0660324).
 - A desk's Home tabs are underlined like a project's (00559da8).
-- Buttons and panel text sit on the type scale: no 14 px labels (24ba3b9a).
+- Buttons and panel text sit on the type scale: no 14 px labels; row titles stay a step above their detail (24ba3b9a, 2c325a8e, 16c7f636).
 - Icons at 12, 14, 16 or 20 px; icon buttons take the button's corner (de344040).
 - A coordinator's page no longer repeats the Threads tab's count (4aec1cd0).
 
 ### Fixed
 
-- Context: one mark per file header, repositories and branches drawn as the files' rows, prose line height, and a link to a listed file opens it in place (fa4b694e, 13667a8e).
+- Context: one mark per file header, repositories and branches drawn as the files' rows, prose line height, and a link to a listed file, also beside the linking file, opens it in place (fa4b694e, 13667a8e, 16c7f636).
 - Routines read "next in 4h", not "next in in 4h" (01bebb07).
 
 ## [1.38.0] - 2026-10-21
