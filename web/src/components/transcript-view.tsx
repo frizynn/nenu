@@ -199,7 +199,7 @@ function Turn({
   if (entry.role === "summary" || entry.role === "note") {
     const recap = entry.parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n\n").trim();
     return (
-      <div title={time || undefined}>
+      <div>
         {entry.role === "summary"
           ? <CompactionLine text={recap} time={time}
               truncated={entry.parts.some((part) => part.kind === "text" && part.truncated)} query={query} focused={focused} />
@@ -212,13 +212,12 @@ function Turn({
   // A chat, not a log: your messages are soft bubbles on the right, raised a step off the page as the
   // composer is, and the agent's are plain text on the left. The header already names the agent, so
   // neither side repeats a speaker label; the time sits under your bubble, at the end of a finished
-  // turn's line, and on hover for the agent.
+  // turn's line. No row carries a hover title: the system's tooltip faded in over the thread as a ghost
+  // of its time (a desk, macOS, 1.41.1).
   // What a command of theirs loaded (a skill's body) is not their words: a line beside the bubble.
   if (entry.role === "user") {
     const loaded = entry.parts.filter((part) => part.kind === "context");
     return (
-      // No hover title: the system's tooltip faded in over the bubble as a ghost of its time (a desk,
-      // macOS, 1.41.1), and the run's time is already under its first bubble.
       <div data-speaker="user" className="flex flex-col items-end">
         <div className="max-w-[min(85%,28rem)] min-w-0 space-y-1.5 rounded-xl border bg-card px-3.5 py-2.5 [overflow-wrap:anywhere] select-text">
           <UserWords entry={entry} query={query} focused={focused} inline={inline} />
@@ -231,7 +230,7 @@ function Turn({
   // Their words, as they wrote them (Markdown), for pasting anywhere else.
   const words = entry.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n\n");
   return (
-    <div data-speaker="assistant" className={cn("space-y-1.5 px-0.5 select-text", enter)} title={time || undefined}>
+    <div data-speaker="assistant" className={cn("space-y-1.5 px-0.5 select-text", enter)}>
       {entry.parts.map((part, i) => (
         <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} />
       ))}

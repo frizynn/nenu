@@ -880,9 +880,10 @@ describe("TranscriptView — the work timeline", () => {
   });
 
   // The system's tooltip of a hover title faded in over the bubble as a ghost of its time (1.41.1).
-  it("gives the operator's bubble no hover title", () => {
-    const { container } = render(<TranscriptView entries={[ask]} activityStatus="done" />);
+  it("gives no row of the thread a hover title", () => {
+    const { container } = render(<TranscriptView entries={settled} activityStatus="done" />);
     expect(container.querySelector('[data-speaker="user"]')).not.toHaveAttribute("title");
+    expect([...container.querySelectorAll("[data-turn], [data-speaker], [data-notice]")].filter((el) => el.hasAttribute("title"))).toEqual([]);
   });
 
   it("draws the live line as its word glowing beside a quiet time, read as Working for", () => {
