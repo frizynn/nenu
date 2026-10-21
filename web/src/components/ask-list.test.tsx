@@ -112,3 +112,14 @@ it("sends nothing from a read-only device", () => {
   setup({ paneId: "w1:coord", readOnly: true });
   expect(within(screen.getByRole("region", { name: "Does not close" })).queryByRole("button", { name: "Ask the coordinator" })).not.toBeInTheDocument();
 });
+
+it("draws no chip for a task the tracker does not have, and says so in its context", async () => {
+  const list: AsksList = { asks: [ask("waiting", "needs-decision", 5, "Launch the sweep fix (task sweep-trabajo-vivo)", { answerable: true,
+    links: [link("task", "task:sweep-trabajo-vivo", { target: "sweep-trabajo-vivo", state: "missing" })] })], decisions: [], answers: true };
+  const router = createMemoryRouter([{ path: "*", element: <AskSections sections={askSections(list, [project()])} whose answers readOnly={false} /> }]);
+  render(<RouterProvider router={router} />);
+  expect(screen.queryByRole("list", { name: "Links" })).not.toBeInTheDocument();
+  expect(screen.queryByText("missing")).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Context" }));
+  expect(await screen.findByText(/not in the tracker/)).toBeInTheDocument();
+});

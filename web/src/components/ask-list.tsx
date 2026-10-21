@@ -174,9 +174,15 @@ function Answered({ answer, at }: { answer?: string; at?: string }) {
   return <p className="text-footnote text-muted-foreground"><span className="font-medium text-status-done">Answered</span> {timeAgo(Date.parse(at), Date.now())}</p>;
 }
 
+/**
+ * A row's links as chips. A task the tracker does not have is left out: it opens nothing, its name is
+ * in the row's words already, and Context still says it is not in the tracker.
+ */
 function Chips({ entry, links, session }: { entry: AskEntry; links: AskEntry["links"]; session?: string }) {
+  const shown = links.filter((link) => !(link.kind === "task" && link.state === "missing"));
+  if (!shown.length) return null;
   return <ul aria-label="Links" className="mt-1.5 flex flex-wrap gap-1.5">
-    {links.map((link, index) => <li key={index}><Chip chip={linkChip(link)} project={entry.project.slug} session={session} /></li>)}
+    {shown.map((link, index) => <li key={index}><Chip chip={linkChip(link)} project={entry.project.slug} session={session} /></li>)}
   </ul>;
 }
 

@@ -208,6 +208,27 @@ export function moveTargets(tree: OrgTree, node: OrgNode): { root: boolean; coor
   };
 }
 
+/** What runs under one coordinator: its own threads, or one of its coordinators with everything under it. */
+export interface WorkGroup {
+  /** Absent for the threads the coordinator runs itself. */
+  coordinator?: OrgNode;
+  /** Most urgent first; a nested coordinator's rows follow it one level deeper. */
+  rows: Placed[];
+}
+
+/**
+ * The open work under a coordinator, `threads` being its whole subtree, in the tree's own order (ADR
+ * 0064): one group per coordinator under it, each holding its own subtree, then the threads it runs
+ * itself.
+ */
+export function workUnder(threads: readonly ProjectThreadView[]): WorkGroup[] {
+  const top = orgTree(threads).open;
+  const placed = (nodes: readonly OrgNode[], depth: number): Placed[] => nodes.flatMap((node) => [{ node, depth }, ...placed(node.children, depth + 1)]);
+  const own = top.filter((node) => node.thread.role !== "coordinator");
+  const coordinators = top.filter((node) => node.thread.role === "coordinator").map((node): WorkGroup => ({ coordinator: node, rows: placed(node.children, 0) }));
+  return [...coordinators, ...(own.length ? [{ rows: placed(own, 0) }] : [])];
+}
+
 /** Whether a project organizes coordinators: one open under it at least. A project with only its own coordinator is drawn as before. */
 export function organizes(tree: OrgTree): boolean {
   return tree.open.some((node) => node.thread.role === "coordinator");

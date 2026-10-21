@@ -158,7 +158,11 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
   cards (a coordinator's own also what its page held, ADR 0115); model and context come from the chat's own reading, and the project's own views are not in the panel
-  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
+  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). Every section of the panel and of a phone's
+  Status tab folds under its head (`panel-sections.tsx`), Arrange moves and hides them per device with a Reset, no
+  tabs inside Overview, and a coordinator's Threads lists its whole subtree first, by coordinator;
+  `bun scripts/e2e/overview-sections.ts` must pass ([ADR 0119](./.adr/0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md)).
+  A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
   `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
   ([ADR 0105](./.adr/0105-a-docked-thread-takes-the-panels-place-at-its-width.md)).
