@@ -12,10 +12,10 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- A running turn looks alive: "Working" glows with its time beside it in a quiet ink (9s), the step in progress and "Thinking…" glow, and the working mark turns slowly in the bar, Home, a project and the chips; only on screen, never under reduced motion (e6fc4d17, 5ebe2770, ab86cb45, f0bf4605, 721a6df7).
+- A running turn looks alive: "Working" glows with its time beside it in a quiet ink (9s), the step in progress and "Thinking…" glow, and the working mark turns slowly in the bar, Home, a project and the chips; only on screen, never under reduced motion (e6fc4d17, 5ebe2770, ab86cb45, f0bf4605, 721a6df7, cf053b5a).
 - Between steps a "Thinking…" row stands where the next step lands; the step in progress sits in its run and turns done in place, with no row jumping up (e6fc4d17).
 - Steps, thoughts and the agent's words that arrive while you read ease in (e6fc4d17).
-- A waiting message has Edit and Remove on its line, one tap each; one already in Claude's own queue is taken back from it, its words kept whole (a7f47870, 14060638, 62814399).
+- A waiting message has Edit and Remove on its line, one tap each; one already in Claude's own queue is taken back from it, its words kept whole (a7f47870, 14060638, 62814399, cf053b5a).
 - `bun scripts/e2e/one-bubble.ts` fails when a sent message is on screen twice in any frame; `bun scripts/e2e/live-motion.ts` measures what the live motion costs (e89703c0, ab86cb45).
 
 ### Changed
@@ -28,7 +28,7 @@ All notable changes to Nenu are recorded here. The format follows
 ### Fixed
 
 - A message sent from Nenu no longer shows twice for a moment, as its bubble beside its queue row or beside the journal's turn (08c97564).
-- Your message's bubble no longer shows its time as a faint tooltip over itself on a desk (721a6df7).
+- Your message's bubble no longer shows its time as a faint tooltip over itself on a desk, nor does any row of the thread (721a6df7, f2006acc).
 - Nenu again sees Claude's box when a draft of two lines puts "ctrl+g to edit in Vim" right after a long statusline; until now it refused to send and hid the text left there (b9d83a54).
 
 ## [1.41.1] - 2026-10-21
