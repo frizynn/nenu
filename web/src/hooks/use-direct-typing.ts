@@ -140,9 +140,9 @@ export function useDirectTyping({
   const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
   const sender = useOrderedKeySender(sendKeys, () => {
     resetMode();
-    // A failed batch is the connection's word, not the view's: a terminal view stays off until it is
-    // entered again.
-    optedOut.current = true;
+    // A failed batch is the connection's word, not the view's: a terminal view on screen stays off
+    // until it is entered again. Armed from the + with no view, there is nothing to keep off.
+    if (autoRef.current) optedOut.current = true;
     // Stop the phone keyboard too: otherwise continued typing after a transport failure silently
     // becomes a buffered Reply, which is a different action with an eventual Enter attached.
     dropKeyboard();

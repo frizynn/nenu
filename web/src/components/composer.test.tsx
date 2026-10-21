@@ -1056,6 +1056,29 @@ describe("Composer — typing into the terminal", () => {
     expect(loadDraft(undefined, "w1:p1")).toBe("keep this draft");
   });
 
+  it("a key batch that failed from the + row never keeps a Terminal view entered later from being the terminal", async () => {
+    server.use(http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: false, error: "gone" }, { status: 502 })));
+    function Harness() {
+      const [terminalView, setTerminalView] = useState(false);
+      const [controls, setControls] = useState<ComposerControl[]>([]);
+      return <>
+        <button type="button" onClick={() => setTerminalView(true)}>terminal view</button>
+        <div data-testid="controls"><ActionGroups groups={[{ label: "Controls", actions: controls }]} onRun={(run) => run()} /></div>
+        <Composer paneId="w1:p1" agent="claude" isShell={false} gone={false} readOnly={false} dialogPresent={false}
+          text="pane output" terminalDraft={null} rawTerminalDraft={null}
+          prefs={{ wrap: true, fontSize: 11, rawTerminal: terminalView, tapToFocus: true }}
+          setWrap={vi.fn()} stepFontSize={vi.fn()} setRawTerminal={vi.fn()} setTapToFocus={vi.fn()} onSent={vi.fn()}
+          terminalView={terminalView} onControlsChange={setControls} />
+      </>;
+    }
+    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Harness /> }])} />);
+    fireEvent.click(control(/^type into terminal$/i));
+    fireEvent.change(screen.getByPlaceholderText(/type into the terminal/i), { target: { value: "x" } });
+    await waitFor(() => expect(screen.queryByPlaceholderText(/type into the terminal/i)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "terminal view" }));
+    expect(await screen.findByPlaceholderText(/type into the terminal/i)).toBeInTheDocument();
+  });
+
   it("a Terminal view entered while a send is on its way becomes the terminal once it lands", async () => {
     let release = () => {};
     serveSend((body) => new Promise((resolve) => { release = () => resolve({ ok: true, requestId: body.requestId, ack: "submitted" }); }));

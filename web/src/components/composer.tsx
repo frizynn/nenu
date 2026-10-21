@@ -768,7 +768,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // A message waiting for the operator's call on that text: Send it first, Add to my message or Discard.
   const [draftPick, setDraftPick] = useState<{ text: string; isDraft: boolean; mode?: DeliveryMode } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
-  useEffect(() => setDraftPick(null), [paneId, session, locked]);
+  useEffect(() => {
+    setDraftPick(null);
+    setSettledHere(false);
+    setDraftBusy(false);
+  }, [paneId, session, locked]);
+  // The pane a settle was asked for: an answer that lands after a pane switch belongs to no one here.
+  const paneNow = useRef(sendScope);
+  paneNow.current = sendScope;
   // A pick dies with the page: a message must not go on its own while nobody is looking.
   useEffect(() => {
     const onHidden = () => { if (document.visibilityState === "hidden") setDraftPick(null); };
@@ -788,7 +795,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, [rawEmpty]);
   // A settle here answered once the bridge read the box empty: nothing to wait for then.
   const [settledHere, setSettledHere] = useState(false);
-  const boxSettled = boxEmpty || settledHere || (effectiveRaw !== null && normalizeDraft(effectiveRaw) === handledKey);
+  const boxSettled = boxEmpty || settledHere;
   useEffect(() => {
     // Not while Add to my message is still emptying the box: the message must carry its text.
     if (!draftPick || !boxSettled || sending || draftBusy) return;
@@ -803,7 +810,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (hostDraft === null || locked || draftBusy) return;
     const draft = hostDraft;
     setDraftBusy(true);
+    const scope = sendScope;
     const res = await api.settleTerminalDraft(paneId, draft, session, action).catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+    if (paneNow.current !== scope) return;
     setDraftBusy(false);
     if (!res.ok) {
       setStatus(res.error ?? "The agent's box was left as it is.", "error");
@@ -830,7 +839,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (draftPick && !locked) {
       if (draftBusy) return;
       setDraftBusy(true);
+      const scope = sendScope;
       const res = await api.settleTerminalDraft(paneId, draft, session, "take").catch(() => ({ ok: false, error: "Nenu couldn't reach the terminal. Try again." }));
+      if (paneNow.current !== scope) return;
       setDraftBusy(false);
       if (!res.ok) {
         setStatus(res.error ?? "The agent's box was left as it is.", "error");
