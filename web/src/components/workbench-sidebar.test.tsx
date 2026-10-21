@@ -482,6 +482,25 @@ describe("the sidebar", () => {
     expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
+  it("leads a phone's drawer with what waits on you, then the projects, each opening on its coordinators' pages and the work that moves", async () => {
+    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={herd} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
+    render(<RouterProvider router={router} />);
+    const scroll = document.querySelector(".nav-scroll")!;
+    expect([...scroll.querySelectorAll(":scope > section")].map((section) => section.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces", "Recent"]);
+    const project = within(screen.getByRole("region", { name: "Acme" }));
+    // No count of open tasks beside the name: what moves is inside.
+    expect(screen.getByRole("region", { name: "Acme" }).querySelector(".nav-project .nav-count")).toBeNull();
+    await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
+    expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/project/acme/node/root");
+    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/project/acme/node/t1");
+    expect(project.getByRole("link", { name: /^panel depo/ })).toHaveAttribute("href", "/pane/depo");
+    expect(project.getByRole("link", { name: /^panel merca/ })).toBeInTheDocument();
+    // An open thread that runs nowhere, a pane outside every thread and History stay on the project's page.
+    expect(project.queryByRole("link", { name: /^landing/ })).not.toBeInTheDocument();
+    expect(project.queryByRole("link", { name: /^stray/ })).not.toBeInTheDocument();
+    expect(project.queryByRole("button", { name: /^History/ })).not.toBeInTheDocument();
+  });
+
   it("opens History on its five newest nodes and leaves the rest to the project page", async () => {
     const done = (n: number, day: number, extra: Partial<ProjectView["threads"][number]> = {}) =>
       thread(`h${n}`, `done ${n}`, "root", { status: "resolved", updated: `2026-10-0${day}T00:00:00Z`, ...extra });
@@ -560,13 +579,13 @@ describe("the sidebar", () => {
     expect(footer).toHaveTextContent("Not connected");
   });
 
-  it("keeps a phone sheet's footer as it was: the link dot, the host and what it holds", () => {
+  it("keeps a phone sheet's footer to the link dot and the host: what it holds is Home's to count", () => {
     const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="sheet" request={{ target: "search", seq: 1 }} /> }]);
     render(<RouterProvider router={router} />);
     const footer = document.querySelector<HTMLElement>(".nav-host")!;
     expect(footer.querySelector(".rounded-full")).toHaveClass("bg-status-done");
     expect(footer).toHaveTextContent("herdr · localhost");
-    expect(footer).toHaveTextContent("2 workspaces · 6 agents");
+    expect(footer).not.toHaveTextContent(/workspaces|agents/);
   });
 
   it("keeps a row's shortcut out of sight until a pointer rests on the row or a key lands on it", () => {

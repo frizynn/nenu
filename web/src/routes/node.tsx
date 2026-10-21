@@ -107,13 +107,16 @@ function NodePage() {
     const ask = awaits(thread);
     const note = ask ? ASK[ask].label : thread.note;
     const status = summaries.get(thread.id)?.status;
+    // A coordinator's page leads with its work: closing it is a quiet action at the end.
+    const closable = state !== "resolved" && !readOnly;
     body = <>
       <TasksHeader title={thread.title} paused={project.status === "paused"} subtitle={<>
         {coordinator ? "Coordinator" : "Thread"} under <Link className="hit-area font-medium text-primary underline-offset-2 hover:underline"
           to={parent ? nodePath(project.slug, parent.id, data.session) : projectPath(project.slug, data.session)}>{parent ? parent.title : project.name}</Link>
       </>} />
+      {/* Its threads are the list under the page, so the card names none of them again. */}
       {coordinator
-        ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage}
+        ? <CoordinatorHead project={project} coordinatorId={thread.id} status={status} usage={summaries.get(thread.id)?.usage} listsAgents={false}
           asks={asks} summaries={summaries} session={data.session} readOnly={readOnly} onOpenNode={openNode(project.slug)} onOpenStatusNode={openStatusNode(project.slug)} />
         : status && <CoordinatorStatus status={status} project={project} onOpenNode={openStatusNode(project.slug)} />}
       <section aria-label="Node" className="mb-5 rounded-xl border border-border bg-card/40 px-3.5 py-3 text-subhead">
@@ -125,10 +128,10 @@ function NodePage() {
             <ExternalLink aria-hidden className="size-3.5" />GitHub</a>}</p>}
         {thread.branch && <p className="mt-1.5 truncate font-mono text-code text-muted-foreground">{thread.branch}</p>}
         <OwnReport project={project} thread={thread} summary={summaries.get(thread.id)} />
-        {(running || (state !== "resolved" && !readOnly)) && <div className="mt-3 flex flex-wrap gap-2">
+        {(running || (closable && !coordinator)) && <div className="mt-3 flex flex-wrap gap-2">
           {running && <Button type="button" size="lg" onClick={() => navigate(panePath(thread.paneId!, data.session))}>
             <ChatCircle aria-hidden className="size-4" />Open chat</Button>}
-          {state !== "resolved" && !readOnly && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
+          {closable && !coordinator && <Button type="button" size="lg" variant="outline" onClick={() => setClosing(true)}
             className="border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive">
             Close {coordinator ? "coordinator" : "thread"}</Button>}
         </div>}
@@ -136,6 +139,7 @@ function NodePage() {
       {coordinator && <CoordinatorWork key={thread.id} coordinator={thread} summaries={summaries} failed={failed}
         project={project} threads={subtree} panes={data.agents} session={data.session} readOnly={readOnly}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} onChanged={refresh} />}
+      {coordinator && closable && <button type="button" className="task-history-toggle text-destructive" onClick={() => setClosing(true)}>Close coordinator…</button>}
       <CloseNodeDialog project={project} node={closing ? node : null} session={data.session} onCancel={() => setClosing(false)}
         onClosed={() => { setClosing(false); void refresh(); }} />
     </>;

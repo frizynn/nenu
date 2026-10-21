@@ -69,8 +69,8 @@ it("offers a live node's chat without jumping to it, and closes an open one afte
   const main = within(await screen.findByRole("main"));
   expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
   expect(within(main.getByRole("list", { name: "Open threads" })).getByRole("button", { name: /^Docs/ })).toHaveTextContent("pane closed");
-  // Lead still runs Docs, so Close explains instead of closing.
-  await user.click(main.getByRole("button", { name: "Close coordinator" }));
+  // Lead still runs Docs, so Close (a quiet action at the end of its page) explains instead of closing.
+  await user.click(main.getByRole("button", { name: "Close coordinator…" }));
   expect(screen.getByRole("dialog", { name: "Close its work first" })).toHaveTextContent("Lead still has 1 open under it.");
   await user.click(screen.getByRole("button", { name: "OK" }));
   await user.click(main.getByRole("button", { name: "Open chat" }));

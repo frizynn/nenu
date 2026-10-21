@@ -11,7 +11,6 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { moveOrgNode, resolveOrgNode } from "@/lib/api";
 import { timeAgoShort } from "@/lib/format";
 import { ASK, STATE_LABEL, awaits, closeRefusal, historyCount, holds, moveTargets, nodeState, openUnder, organizes, orgTree, type OrgNode, type OrgTree } from "@/lib/org-tree";
-import { cn } from "@/lib/utils";
 import { STATUS_LABEL, type AgentView, type ProjectThreadView, type ProjectView, type StatusFile, type ThreadPullRequest } from "@/lib/types";
 
 /** One line about a pull request: number, review and checks, as far as Organizations reported them. */
@@ -114,15 +113,15 @@ interface OrgTreeProps {
   onChanged: () => Promise<void> | void;
   now?: number;
   /**
-   * The project page's tree (ADR 0092): each open coordinator folds over its card, its work and a way
-   * to start more under it, and the threads at the project's top level sit apart from the coordinators.
+   * The phone's project page (ADR 0092, ADR 0109): each open coordinator is one row that opens its page,
+   * and the threads at the project's top level sit apart from the coordinators.
    */
   organize?: Organize;
 }
 
 export interface Organize {
-  /** A coordinator's card, drawn when its row opens; the project's own is `root`. */
-  card: (coordinatorId: string) => ReactNode;
+  /** Opens a coordinator's page; the project's own is `root`. */
+  openCoordinator: (coordinatorId: string) => void;
 }
 
 interface ProjectTasksProps extends Omit<OrgTreeProps, "threads"> {
@@ -217,27 +216,24 @@ export function OrgTreeList({ project, threads, panes, session, currentPaneId, r
   const branch = (node: OrgNode): ReactNode => {
     const { thread, state } = node;
     const resolved = state === "resolved";
-    // On the project page an open coordinator folds over its card and work, closed until opened.
+    // On the project page an open coordinator is a way into its page, which lists its work.
     const organized = !resolved && thread.role === "coordinator" ? organize : undefined;
     // Elsewhere open coordinators always show their work; a resolved one folds until opened.
-    const open = organized ? folds[thread.id] ?? false : !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
+    const open = !resolved || (folds[thread.id] ?? node.children.some((child) => holds(child, onScreen)));
     const toggle = () => setFolds((current) => ({ ...current, [thread.id]: !open }));
     const actions = resolved || readOnly ? undefined : [
       ...(movable(node) ? [{ label: "Move", name: `Move ${thread.title}`, icon: ArrowRight, run: () => setMoving(node), menuLabel: "Move to…", destructive: false }] : []),
       { label: "Close", name: `Close ${thread.title}`, icon: CircleX, run: () => setClosing(node), menuLabel: thread.role === "coordinator" ? "Close coordinator…" : "Close thread…" },
     ];
-    const work = node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className={cn("task-list", !organized && "task-branch")}>{node.children.map(branch)}</ul>;
+    if (organized) {
+      return <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, true)} age={threadAge(thread, now)} current={onScreen(node)}
+        onOpen={() => organized.openCoordinator(thread.id)} opens="page" actions={actions} />;
+    }
     return (
-      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes, Boolean(organized))} age={threadAge(thread, now)} current={onScreen(node)}
+      <TaskRow key={thread.id} state={state} title={thread.title} detail={nodeDetail(node, panes)} age={threadAge(thread, now)} current={onScreen(node)}
         onOpen={() => thread.paneId ? onOpenPane(thread.paneId) : onOpenNode(thread.id)} opens={thread.paneId ? "chat" : "details"}
-        fold={organized || (resolved && node.children.length > 0) ? { open, onToggle: toggle } : undefined} actions={actions}>
-        {open && (organized
-          ? <div className="task-branch task-fold-body" aria-label={`Inside ${thread.title}`} role="group">
-            {organized.card(thread.id)}
-            {work}
-            {!readOnly && <NewNodeActions project={project} under={{ id: thread.id, title: thread.title }} session={session} onStarted={() => void onChanged()} />}
-          </div>
-          : work)}
+        fold={resolved && node.children.length > 0 ? { open, onToggle: toggle } : undefined} actions={actions}>
+        {open && node.children.length > 0 && <ul aria-label={`${thread.title} threads`} className="task-list task-branch">{node.children.map(branch)}</ul>}
       </TaskRow>
     );
   };

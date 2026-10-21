@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
+import { ChevronRight } from "@/components/ui/icon";
 
 import { ColumnPage } from "@/components/column-page";
-import { CoordinatorHead } from "@/components/coordinator-card";
 import { DeskProject } from "@/components/desk-project";
+import { NodeDot } from "@/components/node-row";
 import { ProjectMissing } from "@/components/project-missing";
-import { ProjectTasks } from "@/components/project-tasks";
+import { ProjectGlyph } from "@/components/project-glyph";
+import { ProjectTasks, TasksHeader } from "@/components/project-tasks";
 import { asksAvailable, useAsks } from "@/hooks/use-asks";
 import { useDesk } from "@/hooks/use-desk";
 import { coordinatorAsks } from "@/lib/asks";
 import { useThreadSummaries } from "@/hooks/use-thread-summaries";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import { nodePath, panePath } from "@/lib/nav";
-import { openCoordinators, organizes, orgTree, type OrgNode } from "@/lib/org-tree";
+import { asksPath, nodePath, panePath } from "@/lib/nav";
+import { organizes, orgTree } from "@/lib/org-tree";
 import { isReadOnly, type StatusFile } from "@/lib/types";
 import { projectChat, runningCoordinator } from "@/lib/projects";
 
@@ -35,9 +37,9 @@ function DeskProjectRoute() {
 
 // A project with only its own coordinator opens on that coordinator's conversation; the pane route
 // frames it with the task list. A project that organizes coordinators is their page (ADR 0092): each
-// one folds over its card and work, the project's own first while it runs, and the threads at the top
-// level apart. Without a live coordinator either way, the project is its organization: a way to start
-// the coordinator, the open tree, History, and New.
+// one a row into its page (ADR 0109), the project's own first while it runs, and the threads at the
+// top level apart, under what waits on you there. Without a live coordinator either way, the project is
+// its organization: a way to start the coordinator, the open tree, History, and New.
 function PhoneProjectRoute() {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData;
   const { projectSlug = "" } = useParams();
@@ -47,12 +49,11 @@ function PhoneProjectRoute() {
   const tree = project ? orgTree(project.threads) : undefined;
   const organizer = tree !== undefined && organizes(tree);
   const coordinator = projectChat(project, data.agents);
-  const coordinators = organizer && tree ? openCoordinators(tree).map(({ node }) => node.thread) : [];
-  const read = useThreadSummaries(coordinator ? undefined : project, coordinators);
-  // Only the cards read the asks, and only a project that organizes coordinators draws them.
+  const read = useThreadSummaries(coordinator ? undefined : project, []);
+  // Whether its STATUS.md says something, for a project that organizes coordinators.
   const asks = useAsks(organizer ? data.projects : undefined);
-  // Its STATUS.md and its coordinators' cards head the page, so the page waits for them (briefly) before
-  // drawing what they would push down; a project read again draws them at once (useThreadSummaries).
+  // Its STATUS.md heads the page, so the page waits for it (briefly) before drawing what it would push
+  // down; a project read again draws it at once (useThreadSummaries).
   const waited = useWaited(projectSlug, HOLD_MS);
   const held = !waited && !(read.ready && asks.loaded);
   if (coordinator) return <Navigate to={panePath(coordinator, data.session)} replace />;
@@ -65,21 +66,23 @@ function PhoneProjectRoute() {
     Boolean(status.objective || status.needsDecision?.length || coordinatorAsks(asks.list, projectSlug, "root")?.asks.length);
   const headStatus = !organizer || (project && !runningCoordinator(project) && rootStatus && says(rootStatus)) ? rootStatus : undefined;
 
-  const live = (paneId: string | undefined) => paneId !== undefined && data.agents.some((pane) => pane.paneId === paneId);
-  const openNode = ({ thread }: OrgNode) =>
-    navigate(thread.paneId && live(thread.paneId) ? panePath(thread.paneId, data.session) : nodePath(projectSlug, thread.id, data.session));
-  const card = (coordinatorId: string) => project && <CoordinatorHead project={project} coordinatorId={coordinatorId} listsAgents={false}
-    status={(coordinatorId === "root" ? read.status : read.summaries.get(coordinatorId)?.status) ?? undefined}
-    usage={(coordinatorId === "root" ? read.usage : read.summaries.get(coordinatorId)?.usage) ?? undefined}
-    asks={asks} summaries={read.summaries} session={data.session} readOnly={isReadOnly(data.device)} onOpenNode={openNode} onOpenStatusNode={(id) => navigate(nodePath(projectSlug, id, data.session))} />;
+  const waiting = project?.waitingAsks ?? 0;
 
+  // The goal stays on the desk's page: on a phone the name, what waits on you and what runs come first.
   return <ColumnPage data={data} title={project?.name ?? "Project"}>
-    {!project ? <ProjectMissing session={data.session} /> : held ? null
-      // Keyed by project: its folds are its own, and node ids repeat across projects.
-      : <ProjectTasks key={project.slug} project={project} status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
-        organize={{ card }}
+    {!project ? <ProjectMissing session={data.session} /> : held ? null : <>
+      <TasksHeader title={project.name} paused={project.status === "paused"} mark={<ProjectGlyph slug={project.slug} pick={project} size={20} className="mt-1" />} />
+      {waiting > 0 && <Link to={asksPath(data.session, project.slug)}
+        className="mb-4 flex min-h-11 items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-subhead">
+        <NodeDot state="needs" /><span className="flex-1 font-medium">{waiting} {waiting === 1 ? "waits" : "wait"} on you</span>
+        <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
+      </Link>}
+      {/* Keyed by project: its folds are its own, and node ids repeat across projects. */}
+      <ProjectTasks key={project.slug} project={project} bare status={headStatus} panes={data.agents} session={data.session} readOnly={isReadOnly(data.device)}
+        organize={{ openCoordinator: (id) => navigate(nodePath(project.slug, id, data.session)) }}
         onOpenPane={(id) => navigate(panePath(id, data.session))} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))}
-        onChanged={() => revalidator.revalidate()} />}
+        onChanged={() => revalidator.revalidate()} />
+    </>}
   </ColumnPage>;
 }
 

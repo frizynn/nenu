@@ -189,8 +189,9 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
               onOpen={() => { picking.current = true; }} />
           : phone
             ? <>
-              {variant === "drawer" && <DrawerSections data={data} />}
+              {variant === "drawer" && <DrawerSections data={data} part="needsYou" />}
               <SidebarTree data={data} folded onNewChat={onNewChat} />
+              {variant === "drawer" && <DrawerSections data={data} part="recent" />}
               <MachinesSlot data={data} place="nav" />
             </>
             : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
@@ -277,27 +278,23 @@ function hitState(hit: SearchHit): string {
   return hit.pane.kind === "shell" ? "shell" : STATUS_LABEL[hit.pane.status];
 }
 
-/** What the drawer leads with: the chats waiting on you, then the ones that moved last. */
-function DrawerSections({ data }: { data: HomeData }) {
+/**
+ * The drawer's chats: what waits on you leads it, above the projects; the ones that moved last follow
+ * the projects and workspaces, so a coordinator is a tap into its project from the top.
+ */
+function DrawerSections({ data, part }: { data: HomeData; part: "needsYou" | "recent" }) {
   const { paneId } = useParams();
-  const { needsYou: needs, recent } = drawerSections(data, paneId);
+  const chats = drawerSections(data, paneId)[part];
   const now = Date.now();
-  const row = (chat: DrawerChat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
-    session={data.session} />;
-  return <>
-    {needs.length > 0 && (
-      <section aria-label="Needs you" className="nav-group">
-        <h3 className="nav-label">Needs you <span className="nav-count">{needs.length}</span></h3>
-        {needs.map(row)}
-      </section>
-    )}
-    {recent.length > 0 && (
-      <section aria-label="Recent" className="nav-group">
-        <h3 className="nav-label">Recent</h3>
-        {recent.map(row)}
-      </section>
-    )}
-  </>;
+  if (!chats.length) return null;
+  const label = part === "needsYou" ? "Needs you" : "Recent";
+  return (
+    <section aria-label={label} className="nav-group">
+      <h3 className="nav-label">{label}{part === "needsYou" && <> <span className="nav-count">{chats.length}</span></>}</h3>
+      {chats.map((chat: DrawerChat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
+        session={data.session} />)}
+    </section>
+  );
 }
 
 /**
@@ -337,8 +334,8 @@ function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNe
         <h3 className="nav-label">Projects</h3>
         {folded && <AsksRow data={data} current={false} />}
         {projects.map((project) => (
-          <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded}
-            expanded={prefs.expanded} onExpand={setExpanded} panes={projectPanes(data, project)} />
+          <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded} phone={folded}
+            expanded={prefs.expanded} onExpand={setExpanded} panes={folded ? [] : projectPanes(data, project)} />
         ))}
       </section>
     )}
@@ -386,16 +383,14 @@ function useRevealProject(currentProject: string | undefined, setExpanded: (slug
  * The host Nenu reaches Herdr on, whether that link is up, and how much it holds. The desk's footer
  * names the host alone, as Cursor's names its account, behind the machine mark the composer uses and in
  * the column of the rows' icons: the link's dot and "Not connected" show only once Herdr is out of
- * reach, and the counts are Home's to give.
+ * reach. A phone names the host after Herdr; neither counts workspaces or agents, which are Home's to give.
  */
 function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
   const connected = data.bridge === "connected" && !data.error;
   const { hostname } = window.location;
   // With more than one machine, the one on screen by Herdr's name for it; else as the browser names it.
   const host = currentMachine(data)?.label ?? (/^[\d.]+$|:/.test(hostname) ? hostname : hostname.split(".")[0] || "local");
-  const agents = data.agents.length;
-  const meta = !connected ? "Not connected"
-    : !desk && `${data.workspaces.length} ${data.workspaces.length === 1 ? "workspace" : "workspaces"} · ${agents} ${agents === 1 ? "agent" : "agents"}`;
+  const meta = !connected ? "Not connected" : undefined;
   return (
     <div className="nav-host">
       {desk && connected
@@ -418,10 +413,15 @@ interface TreeFolds {
 
 const STATE_WORD: Partial<Record<NodeState, string>> = { needs: "needs you", review: "review" };
 
-function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }: TreeFolds & {
+function ProjectSection({ project, data, open, expanded, onExpand, panes = [], phone = false }: TreeFolds & {
   project: ProjectView;
   data: HomeData;
   open: boolean;
+  /**
+   * A phone's drawer or Search sheet: the project opens on its coordinators, each a way into its page,
+   * and the threads that work, wait on you or wait for a review; no count, no History (ADR 0109).
+   */
+  phone?: boolean;
   /** The project's workspace panes outside every thread, listed after its threads. */
   panes?: AgentView[];
 }) {
@@ -435,7 +435,11 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
   // Open coordinators start open and resolved ones folded; the node on screen opens them.
   const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
-      fold={fold} />;
+      fold={fold} page={phone && node.thread.role === "coordinator"} />;
+    if (phone) {
+      const children = node.children.filter(shownOnPhone);
+      return children.length ? <div key={node.thread.id} role="group" aria-label={node.thread.title}>{row()}{children.map((child) => branch(child, depth + 1))}</div> : row();
+    }
     if (node.children.length === 0) return row();
     const key = `${project.slug}/${node.thread.id}`;
     const nodeOpen = expanded[key] ?? (node.state !== "resolved" || node.children.some((child) => holds(child, isCurrent)));
@@ -450,6 +454,8 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
   const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
   const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
   const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
+  // A phone opens the project's coordinator on its page, as it opens every coordinator; its page offers the chat.
+  const coordinatorTo = phone ? nodePath(project.slug, "root", session) : panePath(project.coordinator?.paneId ?? "", session);
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
@@ -462,8 +468,8 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
           <span className="nav-row-text">{project.name}</span>
           {status && <StatusDot status={status} surface="bg-transparent" className="size-2" />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
-          {openCount > 0 && <span className="nav-count" aria-hidden>{openCount}</span>}
-          {openCount > 0 && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
+          {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
+          {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
         </Link>
         <button type="button" className="nav-disclosure nav-disclosure-end" aria-label={`${project.name} tasks`} aria-expanded={open} aria-controls={listId}
           onClick={() => onExpand(project.slug, !open)}>
@@ -473,9 +479,9 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
       {open && (
         <div id={listId}>
           {project.coordinator && (
-            <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(project.coordinator.paneId, session)}
-              aria-current={project.coordinator.paneId === paneId ? "page" : undefined}>
-              <span className="nav-tree-mark"><OpeningMark to={panePath(project.coordinator.paneId, session)}><Workflow aria-hidden size={14} /></OpeningMark></span>
+            <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={coordinatorTo}
+              aria-current={project.coordinator.paneId === paneId || (phone && projectSlug === project.slug && nodeId === "root") ? "page" : undefined}>
+              <span className="nav-tree-mark"><OpeningMark to={coordinatorTo}><Workflow aria-hidden size={14} /></OpeningMark></span>
               <span className="nav-row-text">Coordinator</span>
               <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
               {isAttention(project.coordinator.liveStatus)
@@ -483,7 +489,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
                 : <span className="nav-row-note">{project.coordinator.agent}</span>}
             </Link>
           )}
-          {tree.open.map((node) => branch(node, 1))}
+          {(phone ? tree.open.filter(shownOnPhone) : tree.open).map((node) => branch(node, 1))}
           {panes.map((pane) => (
             <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)}
               aria-current={pane.paneId === paneId ? "page" : undefined}>
@@ -493,7 +499,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
               <span className="nav-row-note">{pane.kind === "shell" ? "shell" : pane.agent}</span>
             </Link>
           ))}
-          {tree.history.length > 0 && <>
+          {!phone && tree.history.length > 0 && <>
             <button type="button" className="nav-row nav-history" aria-expanded={historyOpen}
               title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
               <ChevronRight aria-hidden size={14} />History <span className="nav-count">{historyTotal}</span>
@@ -510,6 +516,9 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [] }:
     </section>
   );
 }
+
+/** What a phone's project lists: its coordinators, and the threads that work or wait on you. */
+const shownOnPhone = (node: OrgNode): boolean => node.thread.role === "coordinator" || node.state === "needs" || node.state === "working" || node.state === "review";
 
 /** How many resolved nodes the sidebar's History lists before handing the rest to the project page. */
 const HISTORY_PREVIEW = 5;
@@ -539,8 +548,8 @@ interface ThreadRowFold {
   onToggle: () => void;
 }
 
-/** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
-function ThreadRow({ node, depth, slug, session, current, fold }: {
+/** A node's row: its chat when it runs in a live pane, its detail otherwise, or with `page` its page; never the project page. */
+function ThreadRow({ node, depth, slug, session, current, fold, page = false }: {
   node: OrgNode;
   depth: number;
   slug: string;
@@ -548,12 +557,13 @@ function ThreadRow({ node, depth, slug, session, current, fold }: {
   current: boolean;
   /** Present on a coordinator with nodes under it. */
   fold?: ThreadRowFold;
+  page?: boolean;
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
   const word = ask ? ASK[ask].word : STATE_WORD[state];
   const note = thread.paneId || state === "resolved" ? undefined : thread.status === "open" ? "not running" : thread.status;
-  const to = thread.paneId ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
+  const to = thread.paneId && !page ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
     <div className="nav-thread">
       {fold && (
