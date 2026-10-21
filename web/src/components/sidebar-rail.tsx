@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router";
 import { House, LayoutGrid, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { ProjectGlyph } from "@/components/project-glyph";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StatusDot } from "@/components/status-badge";
 import { looseWorkspaces } from "@/components/workbench-sidebar";
 import { liveliest, projectAgents } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
@@ -164,7 +164,7 @@ function RailTile({ tile, mark }: { tile: Tile; mark: ReactNode }) {
   return (
     <Link className="rail-link hit-area" to={tile.to} data-rail-tip={tile.name} aria-current={tile.current ? "page" : undefined}>
       {mark}
-      {tile.status && <StatusDot status={tile.status} className="rail-tile-dot size-2" />}
+      {tile.status && !resting(tile.status) && <StatusDot status={tile.status} className="rail-tile-dot" />}
       <span className="sr-only">{tile.status ? `${tile.name}, ${STATUS_LABEL[tile.status]}` : tile.name}</span>
     </Link>
   );

@@ -9,7 +9,7 @@ import { ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StatusDot } from "@/components/status-badge";
 import { ChatRow, Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { MachinesSlot } from "@/components/machines-slot";
@@ -174,7 +174,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
           aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
-          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{attention}</span>}
+          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{attention}</span>}
         </Link>}
         {!phone && !!data.projects?.length && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
           <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
@@ -309,7 +309,7 @@ function AsksRow({ data, current }: { data: HomeData; current: boolean }) {
       aria-label={waiting > 0 ? `Your asks, ${waiting} ${waiting === 1 ? "waits" : "wait"} on you` : undefined}>
       <span className="nav-lead"><ListChecks aria-hidden size={16} /></span>
       <span className="nav-row-text">Your asks</span>
-      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{waiting}</span>}
+      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{waiting}</span>}
     </Link>
   );
 }
@@ -459,7 +459,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
   const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
   const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
-  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0113).
+  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0114).
   const coordinatorPaneId = coordinatorPane(project, "root", data.agents);
   const coordinatorTo = coordinatorPaneId ? panePath(coordinatorPaneId, session) : nodePath(project.slug, "root", session);
   return (
@@ -472,7 +472,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
-          {status && <StatusDot status={status} surface="bg-transparent" />}
+          {status && !resting(status) && <StatusDot status={status} />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
           {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
           {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
@@ -570,7 +570,7 @@ function ThreadRow({ node, depth, slug, session, current, live, fold }: {
   const ask = awaits(thread);
   const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
   // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
-  const note = thread.paneId || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
+  const note = (thread.paneId && live) || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
   const to = thread.paneId && live ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
     <div className="nav-thread">
@@ -585,7 +585,7 @@ function ThreadRow({ node, depth, slug, session, current, live, fold }: {
         <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
-        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} />)}</span>}
+        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.filter((child) => child.state !== "idle").slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-3" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
       </Link>

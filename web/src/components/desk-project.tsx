@@ -78,7 +78,7 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
 }
 
 /**
- * The open work, a row per coordinator that enters its chat, its threads folded under it (ADR 0113);
+ * The open work, a row per coordinator that enters its chat, its threads folded under it (ADR 0114);
  * finished work is History (`?work=finished`), one quiet step away (ADR 0106): by day, newest first,
  * with a search. A desk's project page and a phone's draw it alike.
  */

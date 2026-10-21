@@ -157,7 +157,7 @@ the unit name; the Herdr action runs from anywhere.
   each read only while on screen, folded with ⌘⌥B
   ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
-  cards (a coordinator's own also what its page held, ADR 0113); model and context come from the chat's own reading, and the project's own views are not in the panel
+  cards (a coordinator's own also what its page held, ADR 0114); model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). A thread docked beside its coordinator
   takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
   `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
@@ -170,7 +170,7 @@ the unit name; the Herdr action runs from anywhere.
   only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status tab
   (`coordinator-sections.tsx`), and the back climbs coordinator → project → Projects on a desk too;
   `bun scripts/e2e/coordinator-chat.ts` must reach a running one in 2 taps from Home
-  ([ADR 0113](./.adr/0113-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
+  ([ADR 0114](./.adr/0114-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
   (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
   holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
   opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass
@@ -182,7 +182,7 @@ the unit name; the Herdr action runs from anywhere.
   itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
   A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
   coordinators: only while it says something, ADR 0092; on a desk, its chat's Status and never the
-  project page, ADR 0102, ADR 0113), drawn as written through
+  project page, ADR 0102, ADR 0114), drawn as written through
   `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
   ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
   **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's
@@ -203,7 +203,7 @@ the unit name; the Herdr action runs from anywhere.
   waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
   where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
 - **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
-  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0113), the
+  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0114), the
   project's own last and otherwise a small Start beside New; it never redirects to that chat. "+" goes
   project → coordinator → chat, and Move shows only where `node move --help` exits 0 and the node's
   `actions` list `move`
@@ -223,7 +223,7 @@ the unit name; the Herdr action runs from anywhere.
   are Home's first tab, before Recents, Workspaces and PRs, and absent with no project
   (`bun scripts/e2e/no-projects.ts` must pass): live projects first, the quiet ones folded at its end,
   and a row always opens its project. On a phone a coordinator opens its chat (its page where it has
-  none, ADR 0113), from the project and the drawer, and the drawer lists Projects after Needs you without
+  none, ADR 0114), from the project and the drawer, and the drawer lists Projects after Needs you without
   History or counts; `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
   ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
@@ -238,16 +238,21 @@ the unit name; the Herdr action runs from anywhere.
   ([ADR 0078](./.adr/0078-page-motion-runs-only-on-navigations-the-app-starts.md)).
 - **Motion, hover and status marks come from one set of tokens** (`web/src/index.css`): 120 ms for a
   control, 180 ms for a panel, 280 ms for a page, all on `--motion-ease`; one hover fill
-  (`hover:bg-hover`); one 6 px status dot; a desk's page tabs underlined. `calm-motion.test` and
+  (`hover:bg-hover`); one status mark (ADR 0113); a desk's page tabs underlined. `calm-motion.test` and
   `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
+- **A state is a still glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
+  `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
+  nothing at rest. Colour only for what asks for you, nothing spins, and a resting chat in the desk's
+  bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
+  ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
   replaces itself with its parent (`useGoBack`). A move up to a named node is `navigate(-1)` when that node
   is the entry before and a replace otherwise (`useGoUp`); a sibling replaces, a coordinator's thread
   pushes, and a phone's tab is `?view=`, replaced. `bun scripts/e2e/run.ts back` must end three backs at
-  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0113) and `bun scripts/e2e/origin.ts` must land 12 of 12
+  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0114) and `bun scripts/e2e/origin.ts` must land 12 of 12
   ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
   [ADR 0097](./.adr/0097-the-back-control-returns-to-the-screen-you-came-from.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only

@@ -74,7 +74,7 @@ export function SessionSwitcher({ sessions, current }: SessionSwitcherProps) {
                   aria-current={isActive(s) ? "page" : undefined}
                   className="nav-pane"
                 >
-                  <RowBody mark={<StatusDot status={sessionState(s)} surface="bg-transparent" />}
+                  <RowBody mark={<StatusDot status={sessionState(s)} />}
                     title={s.name} detail={sessionDetail(s) || undefined} />
                 </button>
               </li>

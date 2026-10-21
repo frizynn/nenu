@@ -4,7 +4,7 @@
   [ADR 0107](./0107-home-lists-the-projects-as-rows.md): the rows stay, under a tab instead of above the
   tabs, and a row with asks opens its project. Amends [ADR 0092](./0092-a-project-organizes-its-coordinators.md)
   point 1 on a phone: a coordinator's row opens its page instead of folding over its card. Point 3 amended by
-  [ADR 0113](./0113-a-tap-on-a-coordinator-enters-its-chat.md): the row enters the coordinator's chat.
+  [ADR 0114](./0114-a-tap-on-a-coordinator-enters-its-chat.md): the row enters the coordinator's chat.
 - **Trail:** `web/src/components/home-projects.tsx` · `web/src/components/home-panels.tsx` (`HomeSessions`) ·
   `web/src/routes/project.tsx` · `web/src/components/project-tasks.tsx` (`organize`) ·
   `web/src/components/workbench-sidebar.tsx` (`ProjectSection`, `DrawerSections`) · `web/src/routes/node.tsx` ·

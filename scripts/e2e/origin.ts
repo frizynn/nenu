@@ -142,7 +142,7 @@ try {
   }, "/", { system: true });
 
   // #208: Home → project → coordinator's chat → Threads → ‹ → ‹ ends at the entry + 2: a phone's row
-  // enters the coordinator's chat, with no page between (ADR 0113).
+  // enters the coordinator's chat, with no page between (ADR 0114).
   const context = await browser.newContext({ ...PHONE, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
   const page = await context.newPage();
   await page.goto(bridge.url + "/");

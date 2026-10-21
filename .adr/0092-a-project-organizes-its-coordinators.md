@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (2026-10-17). Requested by the operator. Amends
   [ADR 0090](./0090-a-coordinators-status-file-is-drawn-as-written.md): on a project that organizes
-  coordinators, the project coordinator's STATUS.md heads the page only while it says something. Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): a card per coordinator, the project coordinator's last, and no redirect to its chat. On a phone, by [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md): a coordinator's row opens its page instead of folding over its card. On both, by [ADR 0113](./0113-a-tap-on-a-coordinator-enters-its-chat.md): a row enters the coordinator's chat and folds its threads down in place.
+  coordinators, the project coordinator's STATUS.md heads the page only while it says something. Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): a card per coordinator, the project coordinator's last, and no redirect to its chat. On a phone, by [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md): a coordinator's row opens its page instead of folding over its card. On both, by [ADR 0114](./0114-a-tap-on-a-coordinator-enters-its-chat.md): a row enters the coordinator's chat and folds its threads down in place.
 - **Trail:** `web/src/components/new-dialog.tsx` (`CoordinatorsPane`) · `web/src/components/project-tasks.tsx`
   (`organize`, `MoveNodeDialog`) · `web/src/components/project-coordinator.tsx` · `web/src/routes/project.tsx` ·
   `web/src/lib/org-tree.ts` (`openCoordinators`, `moveTargets`) · `bridge/org-cli.ts` (`moveNode`, `canMoveNodes`) ·

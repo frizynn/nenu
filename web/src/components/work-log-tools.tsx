@@ -13,6 +13,7 @@ import { FIND_CURRENT_HIT, FIND_HIT, MarkdownText } from "./markdown-text";
 import { MediaViewerContext, type MediaViewer } from "./file-preview-provider";
 import { ImageStrip, type StripImage } from "./message-images";
 import { Elapsed, LiveGlyph } from "./work-activity-label";
+import { StateMark } from "@/components/status-badge";
 
 // A turn's work as a timeline: one line per step, its icon, a verb and what it acted on, in the quiet
 // greys, so the steps read as the agent working and its prose as what it says. A step with
@@ -169,7 +170,7 @@ function FailedChip() {
 /** A call the operator has to answer for says so on its line: the blocked dot, and the words plain (direction.md). */
 function WaitingChip() {
   return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 text-caption text-foreground">
-    <span aria-hidden="true" className="size-1.5 rounded-full bg-status-blocked" />Waiting on you
+    <StateMark state="needs" />Waiting on you
   </span>;
 }
 

@@ -129,7 +129,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   }, { replace: true });
   const panelShown = desk && inspector.open && !docked;
 
-  // A coordinator's chat holds what its page did (ADR 0113): a desk's panel and a phone's Status tab.
+  // A coordinator's chat holds what its page did (ADR 0114): a desk's panel and a phone's Status tab.
   // A phone reads the asks for its Status tab's count; a desk's Overview reads them while it is on screen.
   const asks = useAsks(scope.coordinating && !desk ? [project] : undefined);
   const coordinatorId = thread?.id ?? "root";
@@ -168,8 +168,8 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
     <ThreadChips threads={scope.siblings} currentPaneId={paneId} onOpen={openPane} coordinator={chipCoordinator} />
   ) : undefined;
 
-  // A coordinator's own Threads tab sits under its chat's title, which already names it.
-  const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} bare={scope.coordinating} panes={data.agents} session={data.session}
+  // A coordinator's own Threads tab sits under its chat's title, which already names it; a paused project keeps its heading for the mark.
+  const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} bare={scope.coordinating && project.status !== "paused"} panes={data.agents} session={data.session}
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
   const overlay = phoneTabs && view !== "chat" ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">

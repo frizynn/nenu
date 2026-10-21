@@ -43,7 +43,7 @@ function DeskProjectRoute() {
 // A project with only its own coordinator opens on that coordinator's conversation; the pane route
 // frames it with the task list. A project that organizes coordinators is their page (ADR 0092), drawn
 // as a desk draws it: a row per coordinator that enters its chat, its threads folded under it, the
-// project's own last with the threads started from the project (ADR 0113). Without a live coordinator
+// project's own last with the threads started from the project (ADR 0114). Without a live coordinator
 // and nothing to organize, the project is its organization: a way to start the coordinator, the open
 // tree, History, and New.
 function PhoneProjectRoute() {

@@ -10,7 +10,7 @@ import { herdSeed } from "./scenario.ts";
 // whose running project coordinator organizes open coordinators (one nested), one whose running
 // coordinator only has workers, and a quiet one. Walks Home, the drawer, the project and each
 // coordinator at 390x844, counting taps from Home (2, a nested one too: it is its own row) and from
-// the drawer (3), landing on its chat where it runs and on its page where it does not (ADR 0113), and
+// the drawer (3), landing on its chat where it runs and on its page where it does not (ADR 0114), and
 // captures every screen, plus Home at 1440. Exits 1 on any failure.
 //
 //   bun scripts/e2e/phone-nav.ts [--port 8871] [--out DIR] [--tag before|after]

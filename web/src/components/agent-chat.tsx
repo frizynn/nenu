@@ -68,7 +68,7 @@ import { PaneStrip } from "@/components/pane-strip";
 import { PaneActionsSheet } from "@/components/pane-actions-sheet";
 import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
-import { StatusDot } from "@/components/status-badge";
+import { resting, StateMark, StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { submitPreviewChoice, submitPreviewKeys, submitPreviewNote, submitPreviewPoint } from "@/lib/preview-action";
@@ -99,7 +99,7 @@ import type {
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
 
 /**
- * Where a project pane's back leads, one level up the project's tree (ADR 0113), shown on a desk too:
+ * Where a project pane's back leads, one level up the project's tree (ADR 0114), shown on a desk too:
  * a coordinator goes to its parent coordinator (its chat while that runs, else its page) or to the
  * project; a worker to the coordinator it runs under, the project's own for one at the root. A phone's
  * project that opens on its own coordinator's chat leaves that chat nothing above but Home, the caller's
@@ -1085,7 +1085,7 @@ export function AgentChat({
     <span data-chat-subtitle title={agent.cwd || undefined} className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
       {isShell
         ? <SquareTerminal aria-hidden="true" className="size-3.5 shrink-0" />
-        : <StatusDot status={agent.status} className={cn(connecting && "opacity-40")} />}
+        : !resting(agent.status) && <StatusDot status={agent.status} className={cn(connecting && "opacity-40")} />}
       <span className="min-w-0 truncate">{place?.place}</span>
       {place?.tab && <><span aria-hidden="true" className="shrink-0">›</span><span className="max-w-[60%] shrink-0 truncate">{place.tab}</span></>}
     </span>
@@ -1477,7 +1477,7 @@ function InlineDialogSlot() {
 function TerminalWaitRow({ hint, agent, onShow, onKeys }: { hint: string; agent?: string; onShow: () => void; onKeys: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   // It needs the operator, so its dot is the blocked one the pane carries in the header.
-  const dot = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />;
+  const dot = <StateMark state="needs" />;
   return (
     <section aria-label="Terminal waiting" className="mb-2">
       {collapsed ? (

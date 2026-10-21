@@ -504,7 +504,7 @@ describe("the sidebar", () => {
     // No count of open tasks beside the name: what moves is inside.
     expect(screen.getByRole("region", { name: "Acme" }).querySelector(".nav-project .nav-count")).toBeNull();
     await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
-    // A coordinator that runs is entered at its chat, as on the project page (ADR 0113): no › to a page.
+    // A coordinator that runs is entered at its chat, as on the project page (ADR 0114): no › to a page.
     expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/pane/c");
     expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/pane/lead");
     expect(project.getByRole("link", { name: /^rediseño mobile/ }).lastElementChild?.tagName.toLowerCase()).not.toBe("svg");

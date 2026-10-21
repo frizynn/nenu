@@ -137,7 +137,7 @@
 .desk-card + .desk-card { margin-top: 12px; }
 .desk-card-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; }
 .desk-card-head:has(+ *) { border-bottom: 1px solid var(--border); }
-/* A coordinator's row: the whole of it enters the coordinator's chat (ADR 0113). */
+/* A coordinator's row: the whole of it enters the coordinator's chat (ADR 0114). */
 .desk-card-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; align-self: stretch; margin-block: -8px; padding-block: 8px; padding-inline: 6px; border-radius: var(--radius-md); text-align: left; }
 @media (hover: hover) { .desk-card-head:has(.desk-card-open:hover) { background: var(--workbench-row-hover); } }
 .desk-card-mark { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--muted); color: var(--muted-foreground); }

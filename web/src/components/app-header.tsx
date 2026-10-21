@@ -35,7 +35,7 @@ export interface HeaderBack {
    *  stays on a desk, where the sidebar cannot reach it. */
   inPlace?: boolean;
   /** Stays on a desk with the parent's name beside it: inside a project, where the way up is a level of
-   *  the project's own tree (coordinator → project → Projects, ADR 0113). */
+   *  the project's own tree (coordinator → project → Projects, ADR 0114). */
   desk?: boolean;
 }
 

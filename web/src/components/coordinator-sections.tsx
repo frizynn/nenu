@@ -28,7 +28,7 @@ export function OverviewCard({ label, head, children }: { label: string; head?: 
 }
 
 /**
- * What a coordinator's page held, inside its chat (ADR 0113): what waits on you there, answered in
+ * What a coordinator's page held, inside its chat (ADR 0114): what waits on you there, answered in
  * place; then `children` (a desk's panel puts its threads and changes here); the routines that reach
  * it; its Status (its card, what was asked of it, STATUS.md, its own report); and Move and Close. A
  * desk draws it in the chat's panel, under This coordinator; a phone in the chat's Status tab.

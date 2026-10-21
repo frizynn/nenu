@@ -11,7 +11,7 @@ import { ProjectTasks } from "@/components/project-tasks";
 import { ProjectRoute } from "./project";
 
 // A project that organizes coordinators (ADR 0092): a row per coordinator that enters its chat, its
-// threads folded under it (ADR 0113), and a node can move under another from the tree its chat lists.
+// threads folded under it (ADR 0114), and a node can move under another from the tree its chat lists.
 
 // A desk: row actions show as words, not behind a ⋯.
 vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: () => false }));

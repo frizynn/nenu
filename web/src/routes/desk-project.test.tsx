@@ -13,7 +13,7 @@ import { ProjectRoute } from "./project";
 import { RoutinesRoute } from "./routines";
 
 // A desk's project and coordinator pages (ADR 0102): tabs in the address, a row per coordinator that
-// enters its chat (ADR 0113), what waits on you by coordinator, routines that turn on and off, a
+// enters its chat (ADR 0114), what waits on you by coordinator, routines that turn on and off, a
 // coordinator's page where it has no chat, and the old pages landing there.
 
 vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: (query: string) => query === "(min-width: 1024px)" }));
