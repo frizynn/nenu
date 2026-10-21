@@ -20,7 +20,7 @@ export const DIALOG_CARD = "flex min-w-0 flex-col gap-3 rounded-xl border border
 export function WaitingOnYou() {
   return (
     <span className="flex shrink-0 items-center gap-2 font-medium text-foreground">
-      <span aria-hidden className="size-2 rounded-full bg-status-blocked" />
+      <span aria-hidden className="size-1.5 rounded-full bg-status-blocked" />
       Waiting on you
     </span>
   );

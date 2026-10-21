@@ -27,7 +27,7 @@ export function AskMark({ group }: { group: AskGroup }) {
   const box = "flex size-4 shrink-0 items-center justify-center";
   if (group === "unclosed") return <span className={box}><TriangleAlert aria-hidden size={14} className="text-status-working" /></span>;
   if (group === "done") return <span className={box}><Check aria-hidden size={14} className="text-status-done" /></span>;
-  return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" className="size-2" /></span>;
+  return <span className={box}><StatusDot status={group === "waiting" ? "blocked" : "working"} surface="bg-transparent" /></span>;
 }
 
 

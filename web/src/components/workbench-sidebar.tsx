@@ -174,7 +174,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {!phone && <Link className="nav-row" to={homePath(data.session)} aria-current={pathname === "/" ? "page" : undefined}
           aria-label={attention > 0 ? `Home, ${needYou(attention)}` : undefined}>
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
-          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" className="size-1.5" />{attention}</span>}
+          {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{attention}</span>}
         </Link>}
         {!phone && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
           <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
@@ -309,7 +309,7 @@ function AsksRow({ data, current }: { data: HomeData; current: boolean }) {
       aria-label={waiting > 0 ? `Your asks, ${waiting} ${waiting === 1 ? "waits" : "wait"} on you` : undefined}>
       <span className="nav-lead"><ListChecks aria-hidden size={16} /></span>
       <span className="nav-row-text">Your asks</span>
-      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" className="size-1.5" />{waiting}</span>}
+      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{waiting}</span>}
     </Link>
   );
 }
@@ -395,7 +395,7 @@ function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
     <div className="nav-host">
       {desk && connected
         ? <Laptop aria-hidden size={16} className="nav-host-mark" />
-        : <span className={cn("nav-host-dot size-2 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
+        : <span className={cn("nav-host-dot size-1.5 shrink-0 rounded-full", connected ? "bg-status-done" : "bg-status-blocked")} aria-hidden />}
       <span className="nav-host-text">
         <span className="nav-host-name">{desk ? host : `herdr · ${host}`}</span>
         {meta && <span className="nav-host-meta">{meta}</span>}
@@ -470,7 +470,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
             </OpeningMark>
           </span>
           <span className="nav-row-text">{project.name}</span>
-          {status && <StatusDot status={status} surface="bg-transparent" className="size-2" />}
+          {status && <StatusDot status={status} surface="bg-transparent" />}
           {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
           {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
           {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
@@ -582,7 +582,7 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
         <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
-        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-1.5" />)}</span>}
+        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
         {page && <ChevronRight aria-hidden size={14} className="shrink-0 text-muted-foreground" />}

@@ -64,7 +64,7 @@ export function Chip({ label, tag, active, focused, status, icon, onClick, onLon
       title={label}
       className="strip-chip"
     >
-      {icon ?? (status && <StatusDot status={status} surface="bg-transparent" className="size-2" />)}
+      {icon ?? (status && <StatusDot status={status} surface="bg-transparent" />)}
       <span className="strip-chip-label">{label}</span>
       {tag && <span className="strip-chip-tag"> · {tag}</span>}
       {status && <span className="sr-only">, {STATUS_LABEL[status]}</span>}

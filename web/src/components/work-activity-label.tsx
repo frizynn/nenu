@@ -39,7 +39,7 @@ export function Elapsed({ since, prefix = "", fallback = "", className }: { sinc
 /** The live mark: a still dot in the working colour. The words say the state; nothing here moves. */
 export function LiveGlyph({ className }: { className?: string }) {
   return <span data-live-glyph aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center text-status-working", className)}>
-    <span className="size-2 rounded-full bg-current" />
+    <span className="size-1.5 rounded-full bg-current" />
   </span>;
 }
 

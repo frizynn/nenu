@@ -98,7 +98,7 @@ function Row({ who, to, opening, line, lineRef, label = line, below, actions }: 
 }) {
   return (
     <div className="relative flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-card py-2.5 pr-3 pl-3.5">
-      <StatusDot status="blocked" surface="bg-card" className="size-1.5" />
+      <StatusDot status="blocked" surface="bg-card" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link to={to} aria-busy={opening || undefined} aria-label={[who.name, who.where, typeof label === "string" ? label : null].filter(Boolean).join(", ")}
           className="flex min-w-0 flex-col rounded-md after:absolute after:inset-0 after:rounded-xl">

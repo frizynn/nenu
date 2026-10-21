@@ -82,7 +82,7 @@ function DeskProjects({ data, now, onNewProject }: { data: HomeData; now: number
             <span className="nav-lead"><OpeningMark to={to}><ProjectGlyph slug={project.slug} pick={project} /></OpeningMark></span>
             <span className="nav-row-text">{project.name}</span>
             <span className="nav-row-meta" aria-hidden>
-              {status && <StatusDot status={status} surface="bg-transparent" className="size-1.5" />}
+              {status && <StatusDot status={status} surface="bg-transparent" />}
               {at > 0 && timeAgoShort(at, now)}
             </span>
             <span className="sr-only">{[status && STATUS_LABEL[status], at > 0 && timeAgo(at, now)].filter(Boolean).map((part) => `, ${part}`).join("")}</span>
@@ -162,7 +162,7 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
   return (
     <Link className="nav-row" to={to} aria-current={current ? "page" : undefined}>
       <span className="nav-lead">
-        <OpeningMark to={to}>{state ? <NodeDot state={state} className="size-1.5" /> : pane && <PaneMark pane={pane} />}</OpeningMark>
+        <OpeningMark to={to}>{state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />}</OpeningMark>
       </span>
       <span className="nav-row-text">{chat.title}</span>
       {word && <span className="sr-only">, {word}</span>}

@@ -504,7 +504,7 @@ function Frame({ ref, compact, answered, label, busy = false, children }: { ref?
  *  chevron turns into the spinner every opening row on Home shows. Section already says Needs you. */
 function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?: () => void; opening: boolean }) {
   const who = <>
-    <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-blocked" />
+    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-status-blocked" />
     <span className="min-w-0 flex-1 truncate text-subhead font-medium text-foreground">{title ?? "Waiting on you"}</span>
   </>;
   if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;

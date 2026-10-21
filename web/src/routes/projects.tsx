@@ -59,8 +59,8 @@ function ProjectCard({ project, agents, projects, now, session }: { project: Pro
       <span className="text-headline">{project.name}</span>
       {project.goal && <span className="mt-1 line-clamp-2 text-footnote text-muted-foreground">{project.goal}</span>}
       <span className="mt-3 flex flex-wrap gap-x-3 text-footnote text-muted-foreground">
-        {waiting > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="needs" className="size-1.5" />{waiting} waiting on you</span>}
-        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" className="size-1.5" />{working} working</span>}
+        {waiting > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="needs" />{waiting} waiting on you</span>}
+        {working > 0 && <span className="inline-flex items-center gap-1.5"><NodeDot state="working" />{working} working</span>}
         {project.status === "paused" && <span>Paused</span>}
       </span>
       <span aria-hidden className="flex-1" />

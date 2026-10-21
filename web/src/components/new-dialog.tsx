@@ -320,13 +320,13 @@ function CoordinatorsPane({ project, session, readOnly, onOpen, onNew }: {
   const roles = readOnly ? [] : startableRoles(project);
   const rows: ChoiceRow[] = [
     ...(root ? [{
-      key: "root", title: "Project coordinator", mark: <NodeDot state={coordinatorState(root.liveStatus) ?? "idle"} className="size-2.5" />,
+      key: "root", title: "Project coordinator", mark: <NodeDot state={coordinatorState(root.liveStatus) ?? "idle"} />,
       detail: [STATE_LABEL[coordinatorState(root.liveStatus) ?? "idle"], root.agent].join(" · "), onChoose: () => onOpen(panePath(root.paneId, session)),
     }] : []),
     ...coordinators.map(({ node, depth }) => {
       const parent = depth > 0 ? project.threads.find((t) => t.id === node.thread.parentId) : undefined;
       return {
-        key: node.thread.id, title: node.thread.title, mark: <NodeDot state={node.state} className="size-2.5" />,
+        key: node.thread.id, title: node.thread.title, mark: <NodeDot state={node.state} />,
         detail: [STATE_LABEL[node.state], node.thread.agent, parent && `under ${parent.title}`].filter(Boolean).join(" · "),
         onChoose: () => onOpen(node.thread.paneId ? panePath(node.thread.paneId, session) : nodePath(project.slug, node.thread.id, session)),
       };

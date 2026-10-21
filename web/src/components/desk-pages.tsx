@@ -94,7 +94,7 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
   const settled = pr && pr.state !== "open" && pr.state !== "draft" && node.state !== "closing" ? pr.state : undefined;
   // A thread under a nested coordinator sits one step in, as the tree draws it.
   return <button type="button" className="desk-row" style={depth ? { paddingLeft: 22 + depth * 20 } : undefined} onClick={() => onOpen(node)}>
-    <NodeDot state={node.state} className="size-1.5" />
+    <NodeDot state={node.state} />
     <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     {pr?.number !== undefined && <span className="desk-chip"><GitPullRequest aria-hidden size={12} />#{pr.number}{settled && ` ${settled}`}</span>}
     <span className="desk-row-end">{rowEnd(node, now)}</span>
@@ -136,7 +136,7 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
       <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
         {!card.coordinator && <span>{foldable ? "Threads started straight from the project" : "No threads started from the project"}</span>}
         {card.coordinator && parts.length === 0 && <span>{foldable ? `${card.rows.length} ${card.rows.length === 1 ? "thread" : "threads"}` : "No open threads"}</span>}
-        {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} className="size-1.5" />{part.text}</span>)}
+        {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} />{part.text}</span>)}
         {ownState && <span>{ownState}</span>}
       </span>
     </span>

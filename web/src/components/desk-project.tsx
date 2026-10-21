@@ -172,7 +172,7 @@ function HistoryItem({ row, onOpen }: { row: HistoryRow; onOpen: (node: OrgNode)
   const at = Date.parse(thread.updated ?? "");
   return <button type="button" className="desk-row" onClick={() => onOpen(row.node)}>
     <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
-      {row.threads !== undefined ? <Workflow aria-hidden size={14} /> : <NodeDot state="resolved" className="size-1.5" />}
+      {row.threads !== undefined ? <Workflow aria-hidden size={14} /> : <NodeDot state="resolved" />}
     </span>
     <span className="min-w-0 flex-1 truncate">{thread.title}
       <span className="desk-row-by">{row.threads !== undefined ? `Coordinator · ${plural(row.threads, "thread")}` : row.by}</span>

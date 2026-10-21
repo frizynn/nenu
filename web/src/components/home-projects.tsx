@@ -41,7 +41,7 @@ function PulseLine({ project, pulse, className }: { project: ProjectView; pulse:
           {project.status === "paused" && <span className="shrink-0">Paused</span>}
           {parts.map((part) => (
             <span key={part.state} className="inline-flex min-w-0 items-center gap-1.5 tabular-nums">
-              <NodeDot state={part.state} className="size-1.5" /><span className="truncate">{part.text}</span>
+              <NodeDot state={part.state} /><span className="truncate">{part.text}</span>
             </span>
           ))}
         </>}
