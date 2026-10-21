@@ -154,10 +154,11 @@ async function run(): Promise<void> {
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     let stop = churn(fake);
     try {
-      // A thread in a project: its ‹ goes up, the band under its header (sibling chips before 1.23.0,
-      // Chat · Threads · PRs since) switches beside it.
+      // A thread in a project: its ‹ goes up, and its views switch beside it (sibling chips before 1.23.0,
+      // Chat · Threads · PRs under the header since, the ⋯'s rows since 1.42.0, its toast-prone corner).
       const taps: Array<Record<string, unknown>> = [];
-      for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", 'nav[aria-label="Threads"] button, [role="tablist"][aria-label="Project"] [role="tab"][aria-selected="false"]']] as const) {
+      const views = 'header button[aria-label^="Conversation actions"]';
+      for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", views]] as const) {
         await page.goto(bridge.url + chat);
         await page.locator("textarea").first().waitFor({ timeout: 15_000 });
         // Wait for the fleet to be finishing, so a phone that raises a toast has one up.
@@ -165,6 +166,8 @@ async function run(): Promise<void> {
         const toasts = await toastShown(page);
         if (name === "back") await shoot(page, "phone-chat-while-agents-finish");
         const hit = await tap(page, selector);
+        // The ⋯ opens its menu; the view is its Threads row.
+        if (selector === views && hit !== "notification") { await page.waitForTimeout(400); await tap(page, '[role="dialog"][aria-label="Conversation actions"] button:has-text("Threads")'); }
         await page.waitForTimeout(1200);
         // A tab of the thread's band switches in place, and since 1.23.0 it says so in the query.
         const landed = new URL(page.url()).pathname + new URL(page.url()).search;

@@ -11,7 +11,10 @@ import { herdSeed } from "./scenario.ts";
 // Then the back control from that chat, as far as it climbs (coordinator → project → Projects). Over
 // phone-nav.ts's herd: Acme organizes coordinators (its own and Rediseño mobile run in a pane,
 // Migración de stock does not), and Nenu runs only its own coordinator. Captures each screen.
-// Exits 1 when a running coordinator takes more than 2 taps or its chat has no back to its project.
+// On a phone its views are the ⋯'s rows (ADR 0118): nothing stands between the title and the chat, each
+// view is 2 taps from it (⋯, the row) and Chat 1 tap back, and what waits on you is counted on the ⋯.
+// Exits 1 when a running coordinator takes more than 2 taps or its chat has no back to its project, or
+// when a phone's chat draws a band of views, a view takes more taps, or Acme's waiting ask is not on its ⋯.
 //
 //   bun scripts/e2e/coordinator-chat.ts [--port 8874] [--out DIR] [--tag before|after] [--loose]
 //
@@ -31,13 +34,15 @@ const TARGETS = [
   ["nenu", "Nenu", "Project coordinator", true],
 ] as const;
 
-interface Walk { device: string; coordinator: string; taps: number; path: string; composer: boolean; steps: string[]; back: string[] }
+interface Walk { device: string; coordinator: string; taps: number; path: string; composer: boolean; menu: string | null; band: number; steps: string[]; back: string[] }
+interface View { view: string; taps: number; overlayTop: number | null; backToChat: number; composer: boolean }
 
 async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
   const failures: string[] = [];
   const walks: Walk[] = [];
+  const views: View[] = [];
   const bridge = await startTestBridge({ port, fake: true, epoch: EPOCH, org: herdSeed });
   let browser: Browser | null = null;
   try {
@@ -79,7 +84,9 @@ async function main(): Promise<void> {
           const chat = page.getByRole("button", { name: /^Open chat$/ }).first();
           if (await chat.count() && await chat.isVisible()) await tap("Open chat", () => chat.click());
         }
-        const walk: Walk = { device: size, coordinator: `${project} · ${title}`, taps, path: here(page), composer: await composer(page), steps, back: [] };
+        const menu = page.getByRole("button", { name: /^Conversation actions/ }).first();
+        const walk: Walk = { device: size, coordinator: `${project} · ${title}`, taps, path: here(page), composer: await composer(page),
+          menu: await menu.count() ? await menu.getAttribute("aria-label") : null, band: await bandHeight(page), steps, back: [] };
         const name = `${slug}-${title.split(" ")[0]!.toLowerCase()}-${size}`;
         await shoot(page, `reach-${name}`);
         // The back control, climbing: the chat's parent, then the project's.
@@ -93,6 +100,9 @@ async function main(): Promise<void> {
         }
         walks.push(walk);
         if (live && (!walk.composer || taps > 2)) failures.push(`${size}: ${walk.coordinator} took ${taps} taps, composer ${walk.composer}, at ${walk.path}`);
+        if (live && size === "390" && walk.band > 0) failures.push(`390: ${walk.coordinator}'s chat draws ${walk.band}px of views under its title`);
+        // Acme's own coordinator holds the herd's one waiting ask.
+        if (live && size === "390" && slug === "acme" && title === "Project coordinator" && !walk.menu?.includes("1 waiting on you")) failures.push(`390: ${walk.coordinator}'s ⋯ reads "${walk.menu}"`);
         // A phone's project that opens on its own coordinator's chat is that chat: its back goes Home.
         const up = size === "390" && taps === 1 ? "Back to Home" : `/project/${slug}`;
         if (live && !walk.back[0]?.includes(up)) failures.push(`${size}: ${walk.coordinator}'s back went ${walk.back[0]}`);
@@ -114,9 +124,23 @@ async function main(): Promise<void> {
         if (await chat.count()) { await chat.click(); await settle(page); }
       }
       await shoot(page, `chat-rediseno-${size}`);
-      for (const view of ["Threads", "Status"]) {
-        const segment = page.getByRole("tab", { name: new RegExp(`^${view}`) }).first();
-        if (size === "390" && await segment.count()) { await segment.click(); await page.waitForTimeout(800); await shoot(page, `chat-rediseno-${view.toLowerCase()}-${size}`); }
+      if (size === "390") {
+        // Each view from the chat: the ⋯, its row; then the small switch's Chat, back to the box.
+        for (const view of ["Threads", "PRs", "Status"]) {
+          let taps = 0;
+          await page.getByRole("button", { name: /^Conversation actions/ }).first().click(); taps++;
+          await page.waitForTimeout(400);
+          if (view === "Threads") await shoot(page, `chat-rediseno-menu-${size}`);
+          await page.getByRole("dialog", { name: "Conversation actions" }).getByRole("button", { name: new RegExp(`^${view}`) }).click(); taps++;
+          await page.waitForTimeout(800);
+          await shoot(page, `chat-rediseno-${view.toLowerCase()}-${size}`);
+          const overlay = await page.locator(".project-overlay").first().boundingBox();
+          await page.getByRole("tablist", { name: "Project" }).getByRole("tab", { name: "Chat" }).click();
+          await page.waitForTimeout(800);
+          const entry: View = { view, taps, overlayTop: overlay && Math.round(overlay.y), backToChat: 1, composer: await composer(page) };
+          views.push(entry);
+          if (taps > 2 || overlay === null || !entry.composer) failures.push(`390: ${view} took ${taps} taps, overlay ${overlay ? "shown" : "missing"}, back to the box ${entry.composer}`);
+        }
       }
       await context.close();
     }
@@ -124,10 +148,17 @@ async function main(): Promise<void> {
     await browser?.close();
     await bridge.stop();
   }
-  const result = { tag, walks, shots, failures };
+  const result = { tag, walks, views, shots, failures };
   await writeFile(join(outDir, `${tag}-coordinator-chat.json`), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify({ tag, walks, failures }, null, 2));
+  console.log(JSON.stringify({ tag, walks, views, failures }, null, 2));
   if (failures.length && !values.loose) process.exit(1);
+}
+
+/** The px a chat's views take between its header and the next strip: 0 where the ⋯ holds them. */
+async function bandHeight(page: Page): Promise<number> {
+  const band = page.locator("[data-chat-chrome] [role=tablist][aria-label='Project']").first();
+  const box = await band.count() ? await band.boundingBox() : null;
+  return box ? Math.round(box.height) : 0;
 }
 
 if (import.meta.main) await main();

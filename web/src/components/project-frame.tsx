@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { useNavigate, useRevalidator, useSearchParams } from "react-router";
 
 import type { ProjectChipsSource } from "@/components/composer-chips";
+import type { ConversationActionGroup } from "@/components/conversation-actions";
 import { CoordinatorSections, waitingAt } from "@/components/coordinator-sections";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { startableRoles } from "@/components/node-start";
@@ -9,6 +10,7 @@ import { ProjectTasks, coordinatedThreads, threadTree } from "@/components/proje
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, type SessionInspectorState, type SessionPanelLink } from "@/components/session-inspector";
 import { DockedThread, ThreadChips, threadChipsShown } from "@/components/split-view";
 import { PrList, prLists } from "@/components/threads-panel";
+import { ChatCircleText, FolderTree, GitPullRequest, Inbox } from "@/components/ui/icon";
 import { loadThreadOverview } from "@/lib/desk-chunks";
 import type { HomeData } from "@/lib/loaders";
 import { armMotion, useGoUp } from "@/lib/motion";
@@ -28,6 +30,8 @@ export interface ProjectChatSlots {
   headerTrail?: ReactNode;
   overlay?: ReactNode;
   strip?: ReactNode;
+  /** A phone's views as the ⋯ menu's first rows, and what waits on you behind them. */
+  menu?: ConversationActionGroup & { waiting?: number };
   projectChips?: ProjectChipsSource;
   /** The desk's session panel beside the chat, absent while a thread is docked there instead. */
   sessionPanel?: SessionPanelLink;
@@ -65,8 +69,8 @@ export function projectScope(owner: PaneProject, data: Pick<HomeData, "agents">)
  * A pane that belongs to a project renders inside this frame. A desk keeps the session panel beside
  * the chat, with the thread's overview as its first tab, or docks a thread there (`?thread=`); the
  * sidebar lists the threads, so the chat carries none of them. On a phone a coordinator and its threads
- * switch between Chat, Threads and PRs in place, in the same band under the title, keeping the chat
- * mounted so its draft and scroll survive; every chat counts the threads around it, their pull requests
+ * switch between Chat, Threads, PRs and Status from the header's ⋯, which counts what waits on you; an
+ * open view draws a small switch under the title, and the chat stays mounted so its draft and scroll survive; every chat counts the threads around it, their pull requests
  * and the project's routines in the chips above the composer. Moving down the tree pushes, across it
  * replaces the page, and up it goes back (useGoUp), so the history holds one entry per level.
  */
@@ -150,10 +154,17 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   const parent = !thread ? undefined : parentNode ? up(parentNode.title, parentNode.id, parentNode.paneId) : up(project.name, "root", project.coordinator?.paneId);
   const headerTrail = desk && !panelShown && !docked ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined;
 
-  const phoneTabs = !desk ? (
+  // A phone's views: the ⋯ menu lists them, and only an open one draws a band (ADR 0118).
+  const phoneViews = !desk ? ([["chat", "Chat", ChatCircleText, null], ["threads", "Threads", FolderTree, openCount], ["prs", "PRs", GitPullRequest, prCount],
+    ...(scope.coordinating ? [["status", "Status", Inbox, waiting]] as const : [])] as const) : undefined;
+  const menu = phoneViews ? { label: "Show", waiting, actions: phoneViews.map(([key, label, icon, count]) => ({
+    id: `view-${key}`, label: count && key !== "status" ? `${label} · ${count}` : label, icon, on: view === key,
+    waiting: key === "status" ? count ?? 0 : undefined, run: () => setView(key) })) } : undefined;
+  // An open view keeps the same switch, at a chat line's height, so Chat and the other views stay a tap away.
+  const phoneTabs = phoneViews && view !== "chat" ? (
     <div className="project-segmented-band">
-      <div role="tablist" aria-label="Project" className="project-segmented">
-        {([["chat", "Chat", null], ["threads", "Threads", openCount], ["prs", "PRs", prCount], ...(scope.coordinating ? [["status", "Status", waiting]] as const : [])] as const).map(([key, label, count]) => (
+      <div role="tablist" aria-label="Project" className="project-segmented project-segmented-compact">
+        {phoneViews.map(([key, label, , count]) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className="project-segment">
             {label}{count !== null && count > 0 && <span className="project-segment-count" data-waiting={key === "status" ? "" : undefined}>{count}</span>}
           </button>
@@ -171,7 +182,7 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   // A coordinator's own Threads tab sits under its chat's title, which already names it; a paused project keeps its heading for the mark.
   const tasks = <ProjectTasks project={project} threads={scope.threads} coordinator={scope.coordinator} title={scope.panelTitle} subtitle={scope.subtitle} bare={scope.coordinating && project.status !== "paused"} panes={data.agents} session={data.session}
     currentPaneId={paneId} readOnly={readOnly} onOpenPane={openPane} onOpenNode={openNode} onChanged={refresh} />;
-  const overlay = phoneTabs && view !== "chat" ? (
+  const overlay = phoneTabs ? (
     <div className="flex min-h-0 flex-1 flex-col">{phoneTabs}<div className="project-overlay">
       {view === "threads" ? tasks
         : view === "status" && scope.coordinating ? <div className="flex flex-col gap-3">{sections()}</div>
@@ -185,8 +196,10 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
         title: thread?.title ?? project.name,
         headerTrail,
         overlay,
-        // Project chips or tabs replace the workspace tabs; on a desk the panel stands in for them.
-        strip: phoneTabs ?? chips ?? (desk ? null : undefined),
+        // On a phone the ⋯ holds the views, so nothing stands between the title and the chat; on a desk
+        // the chips or the panel replace the workspace tabs.
+        strip: phoneViews ? null : chips ?? (desk ? null : undefined),
+        menu,
         projectChips: { project, thread, threads: scope.threads, session: data.session, readOnly, onOpenPane: openPane, onOpenNode: openNode, onChanged: refresh },
         sessionPanel: desk && !docked ? { ...panelLink(inspector), report: inspector.setReading } : undefined,
       })}

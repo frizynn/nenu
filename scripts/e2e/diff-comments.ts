@@ -141,7 +141,9 @@ async function phone(browser: Browser, scheme: "dark" | "light") {
   // From the coordinator's chat: the thread's pull request, its size opening the viewer.
   const { page, close } = await open(browser, PHONE, scheme, coordinator);
   seen[`phone ${scheme} hover: none`] = await page.evaluate(() => matchMedia("(hover: none)").matches, null);
-  await page.getByRole("tab", { name: /^PRs/ }).click();
+  // A phone's views are the ⋯'s rows (ADR 0118).
+  await page.getByRole("button", { name: /^Conversation actions/ }).first().click();
+  await page.getByRole("dialog", { name: "Conversation actions" }).getByRole("button", { name: /^PRs/ }).click();
   await page.locator(".project-overlay").waitFor({ timeout: 5000 });
   await page.locator(".project-overlay").getByRole("button", { name: /^View changes/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "PR #42 changes" });

@@ -12,6 +12,8 @@ export interface ConversationAction {
   disabled?: boolean;
   /** An open dock or an armed mode, shown as a check. */
   on?: boolean;
+  /** What waits on you behind this row, as a red count at its end. */
+  waiting?: number;
 }
 
 export interface ConversationActionGroup {
@@ -24,18 +26,21 @@ interface Props {
   recovery?: ReactNode;
   /** The pane's folder, as a quiet line at the foot of the menu: the header names the place instead. */
   folder?: string;
+  /** What waits on you behind the menu's rows, as a red count on the ⋯ so it shows with the menu shut. */
+  waiting?: number;
 }
 
 /** The pane's one ⋯ menu: the pane's views, grouped and named when there is more than one group. */
-export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder }, ref) {
+export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder, waiting = 0 }, ref) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   useImperativeHandle(ref, () => trigger.current!, []);
   const run = (action: () => void) => { setOpen(false); action(); };
   return <>
-    <button ref={trigger} type="button" aria-label="Conversation actions" aria-haspopup="dialog" aria-expanded={open}
-      onClick={() => setOpen(!open)} className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted lg:size-8">
+    <button ref={trigger} type="button" aria-label={waiting > 0 ? `Conversation actions, ${waiting} waiting on you` : "Conversation actions"} aria-haspopup="dialog" aria-expanded={open}
+      onClick={() => setOpen(!open)} className="relative flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted lg:size-8">
       <Ellipsis aria-hidden="true" className="size-5 lg:size-4" />
+      {waiting > 0 && <span aria-hidden="true" className="waiting-count waiting-count-corner">{waiting}</span>}
     </button>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
       <ActionGroups groups={groups} onRun={run} />
@@ -55,12 +60,13 @@ export function ActionGroups({ groups, onRun }: { groups: ConversationActionGrou
   return shown.map((group, index) => (
     <section key={group.label} aria-label={group.label} className={cn(index > 0 && "mt-1 border-t border-border/60 pt-1")}>
       {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5"><SectionLabel>{group.label}</SectionLabel></h4>}
-      {group.actions.map(({ id, label, icon: Icon, run, disabled, on }) => (
+      {group.actions.map(({ id, label, icon: Icon, run, disabled, on, waiting }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
           onClick={() => onRun(run)}
           className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
+          {waiting !== undefined && waiting > 0 && <span className="waiting-count">{waiting}</span>}
           {on && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
         </button>
       ))}
