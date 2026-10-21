@@ -161,7 +161,8 @@ it("floats the panel over the thread: the box and the conversation stay where th
   const box = document.querySelector(".composer-box")!;
   const scroller = screen.getByRole("region", { name: "Live conversation" }).querySelector<HTMLElement>(".overflow-y-auto")!;
   scroller.scrollTop = 120;
-  const line = chips.parentElement!;
+  // The line folds in and out; the panel sits beside that fold, so a line folding never takes it along.
+  const line = chips.closest(".composer-fold")!;
   const before = line.previousElementSibling;
   await user.click(within(chips).getByRole("button", { name: "Working, 1" }));
   const panel = screen.getByRole("dialog", { name: "Working" });
@@ -257,12 +258,26 @@ it("folds the threads that ended under what still works, a step back from the li
   expect(source.onOpenNode).toHaveBeenCalledWith("t-02");
 });
 
-it("raises no chip for threads that ended alone, and draws a finished-only chip quietly", async () => {
+it("raises no chip for threads that ended alone", async () => {
   const quietThreads = threads.filter((thread) => thread.id === own.id || thread.status === "resolved").map((thread) => ({ ...thread, pr: undefined }));
   renderChat({ threads: quietThreads, thread: { ...own, pr: undefined }, project: { ...project, threads: quietThreads } });
   await screen.findByRole("textbox");
   await act(async () => {});
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
+});
+
+// Beside a project's resolved threads, the pages the session published still open unfolded: the menu
+// row says Published, and that is what the panel opens on (ADR 0108).
+it("opens Published from the ⋯ menu on its pages, beside the project's resolved threads", async () => {
+  server.use(http.get(/\/api\/pane\/[^/]+\/activity$/, () => HttpResponse.json({ available: true, sessionKey: "k", workflows: [], tasks: [],
+    artifacts: [{ id: "art_1", url: "https://claude.ai/code/artifact/00000000-test", title: "Cart redesign", icon: "canvas", version: "1-a", at: Date.now() }] })));
+  const quietThreads = threads.filter((thread) => thread.id === own.id || thread.status === "resolved").map((thread) => ({ ...thread, pr: undefined }));
+  const { user } = renderChat({ threads: quietThreads, thread: { ...own, pr: undefined }, project: { ...project, threads: quietThreads } });
+  await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+  await user.click(await screen.findByRole("button", { name: "Published · 1" }));
+  const panel = screen.getByRole("dialog", { name: "Published" });
+  expect(within(panel).getByRole("button", { name: "Published (1)" })).toHaveAttribute("aria-expanded", "true");
+  expect(within(panel).getByRole("link", { name: /Cart redesign/ })).toBeVisible();
 });
 
 it("keeps every chip still: nothing in the row animates on its own", async () => {
@@ -272,14 +287,13 @@ it("keeps every chip still: nothing in the row animates on its own", async () =>
   expect(chips.querySelectorAll('[class*="animate-"]')).toHaveLength(0);
 });
 
-// They took two lines for two things that fit in one: the chips, then Stop alone on the row under them.
-it("puts the chips and Stop on one line above the box, Stop at its end", async () => {
+// Stop took a line of its own above the box (ADR 0108): it sits in the box, and the line holds chips only.
+it("keeps Stop in the box beside Send, never on the chips' line", async () => {
   renderChat();
   const chips = await row();
-  const stop = screen.getByRole("group", { name: "Agent working" });
-  expect(within(stop).getByRole("button", { name: "Stop" })).toBeVisible();
-  expect(stop.parentElement).toBe(chips.parentElement);
-  expect(chips.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const stop = screen.getByRole("button", { name: "Stop" });
+  expect(stop.closest(".composer-box")).not.toBeNull();
+  expect(chips.contains(stop)).toBe(false);
 });
 
 it("draws no row for a chat with nothing around it", async () => {
@@ -301,10 +315,12 @@ it("lists the project's routines behind Routines, read when the chat opens and a
     ] });
   }));
   const { user } = renderChat();
-  // Two of three listen: the count is what is switched on.
-  const chip = await within(await row()).findByRole("button", { name: "Routines, 2" });
-  expect(reads).toEqual(["acme-shop"]);
-  await user.click(chip);
+  await waitFor(() => expect(reads).toEqual(["acme-shop"]));
+  // They ask nothing of you here: off the line, one tap into the ⋯ menu (ADR 0108). Two of three
+  // listen: the count is what is switched on.
+  expect(within(await row()).queryByRole("button", { name: /^Routines/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+  await user.click(await screen.findByRole("button", { name: "Routines · 2" }));
   const panel = screen.getByRole("dialog", { name: "Routines" });
   const item = (name: string) => within(panel).getByText(name).closest("li")!;
   expect(item("pr-followup")).toHaveTextContent("on checks-failed, review");

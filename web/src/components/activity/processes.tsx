@@ -116,8 +116,8 @@ function DetailButton({ name, label = "Details", onClick }: { name: string; labe
 }
 
 /** A folded section under the live rows: its title with a count, and `extra` beside it while open. */
-function Fold({ title, count, extra, children }: { title: string; count: number; extra?: (open: boolean) => ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+function Fold({ title, count, extra, defaultOpen = false, children }: { title: string; count: number; extra?: (open: boolean) => ReactNode; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="mt-1 border-t border-border/60 pt-1">
       <div className="flex items-center">
@@ -135,11 +135,15 @@ function Fold({ title, count, extra, children }: { title: string; count: number;
 
 /**
  * Waiting first, then running, then a folded "Done (n)" with the newest few and the claude.ai pages
- * the session published. Rows expand in place. `finished` is other work that ended (a project's
+ * the session published. `quiet` (finished work, opened from the ⋯ menu: nothing live in the panel)
+ * opens the finished rows unfolded, and the pages too when the session finished nothing itself, with
+ * nothing said about what runs: it is what the menu row named.
+ * Rows expand in place. `finished` is other work that ended (a project's
  * resolved threads), folded in with the session's own.
  */
-export function ProcessesList({ processes, artifacts = [], finished, now, stale, onRetry, onDetail, onOpenSubagent }: {
+export function ProcessesList({ processes, artifacts = [], finished, quiet = false, now, stale, onRetry, onDetail, onOpenSubagent }: {
   processes: Processes;
+  quiet?: boolean;
   artifacts?: ActivityArtifact[];
   finished?: { count: number; rows: ReactNode };
   now: number;
@@ -159,14 +163,14 @@ export function ProcessesList({ processes, artifacts = [], finished, now, stale,
         <span>Couldn’t refresh. Showing last known activity.</span>
         {onRetry && <button type="button" onClick={onRetry} className="min-h-11 rounded-md px-2 text-foreground hover:bg-muted/50 lg:min-h-8">Retry</button>}
       </div>}
-      {live.length === 0 && <p className="px-2 py-2 text-sm text-muted-foreground">Nothing running in the background.</p>}
+      {live.length === 0 && !quiet && <p className="px-2 py-2 text-sm text-muted-foreground">Nothing running in the background.</p>}
       {live.length > 0 && <ul aria-label="In progress" className="flex flex-col">{live.map(row)}</ul>}
-      {doneCount > 0 && <Fold title="Done" count={doneCount} extra={(open) => open && processes.done.length > DONE_PREVIEW &&
+      {doneCount > 0 && <Fold title="Done" count={doneCount} defaultOpen={quiet} extra={(open) => open && processes.done.length > DONE_PREVIEW &&
         <button type="button" onClick={() => setAll(!all)} className="min-h-11 px-2 text-xs text-muted-foreground hover:text-foreground lg:min-h-8">{all ? "Show less" : "Show all"}</button>}>
         {finished && finished.count > 0 && finished.rows}
         {processes.done.length > 0 && <ul aria-label="Done" className="flex flex-col">{done.map(row)}</ul>}
       </Fold>}
-      {artifacts.length > 0 && <Fold title="Published" count={artifacts.length}><ArtifactList artifacts={artifacts} /></Fold>}
+      {artifacts.length > 0 && <Fold title="Published" count={artifacts.length} defaultOpen={quiet && processes.done.length === 0}><ArtifactList artifacts={artifacts} /></Fold>}
     </div>
   );
 }

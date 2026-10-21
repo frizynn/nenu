@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-10-21
+
+### Changed
+
+- The line above the box shows only what asks for you or runs (Needs you, Working, PRs); finished work and routines moved to the chat's ⋯ menu, which opens the same panel on its rows (5c33fb09, 12423225, 21ab5094).
+- Stop is a round button in the box beside Send, so a running turn no longer takes a line of its own above the box (5c33fb09, 12423225).
+
+### Fixed
+
+- Opening a project's chat no longer folds an empty line shut two seconds in (2cb05671).
+
 ## [1.35.1] - 2026-10-21
 
 ### Fixed
