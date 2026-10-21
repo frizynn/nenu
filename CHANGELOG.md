@@ -8,6 +8,22 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-10-21
+
+### Added
+
+- Every section of a chat's panel, and of a phone's Status tab, folds under its head with what it holds still said beside it; Arrange moves and hides sections, kept on this device, with a Reset; what waits on you can fold but never hide (eed1f71d, 8a4cfc5f).
+- `bun scripts/e2e/overview-sections.ts` measures a coordinator's panel at 1440×900 and 390×844, then folds, hides, reorders and reloads (44aeb729).
+
+### Changed
+
+- A coordinator's Threads comes first and lists the open work of its whole subtree, grouped by the coordinators under it as the tree draws them, each row its state, what it does and a tap to open it (eed1f71d, 8a4cfc5f, 6f62902b).
+
+### Fixed
+
+- "Nothing running" sits inside its card's margin (eed1f71d).
+- A task the tracker does not have draws no "missing" chip; its context says it is not in the tracker (1d46153c).
+
 ## [1.41.2] - 2026-10-21
 
 ### Fixed

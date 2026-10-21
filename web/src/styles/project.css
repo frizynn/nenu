@@ -100,7 +100,6 @@
    its value on the left and gives it on the right; a link in a row reads as text until hovered. */
 .overview-card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .overview-card-head { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
-.overview-card-action { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; margin: -8px -14px; padding: 8px 14px; border-start-start-radius: var(--radius-lg); border-start-end-radius: var(--radius-lg); cursor: pointer; }
 .overview-body { display: flex; flex-direction: column; gap: 2px; padding: 0 14px 12px; }
 .overview-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 .overview-link { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border-radius: var(--radius-sm); cursor: pointer; }
@@ -110,10 +109,28 @@
 .overview-meter { display: inline-flex; width: 44px; height: 5px; overflow: hidden; border-radius: 9999px; background: var(--muted); }
 .overview-meter > span { display: block; height: 100%; background: var(--primary); }
 .overview-threads { display: flex; flex-direction: column; padding: 0 0 6px; }
+/* A panel section (components/panel-sections): its head folds it, its chevron turning with the fold. */
+.panel-section-toggle { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; align-self: stretch; margin: -8px 0 -8px -14px; padding: 8px 0 8px 14px; border-start-start-radius: var(--radius-lg); text-align: left; cursor: pointer; }
+.panel-section-toggle:disabled { cursor: default; }
+.panel-section-toggle:last-child { margin-right: -14px; padding-right: 14px; border-start-end-radius: var(--radius-lg); }
+.panel-section-chevron { flex-shrink: 0; margin-left: auto; color: var(--muted-foreground); }
+.panel-section-meta { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--muted-foreground); font-weight: 400; white-space: nowrap; text-overflow: ellipsis; }
+.panel-section-tool { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
+.panel-section-tool:disabled { opacity: 0.35; cursor: default; }
+.panel-section-show { padding: 0 8px; font-weight: 400; }
+.overview-card[data-hidden] > .overview-card-head > .panel-section-toggle { opacity: 0.5; }
+/* A coordinator's open work: a row per node, its state, its name and what it is doing; each coordinator under it a group. */
+.overview-work { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 6px 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
+.overview-work[data-coordinator] { font-weight: 500; }
+.overview-group + .overview-group { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--border); }
+[aria-current="true"] > .overview-work { background: var(--workbench-row-selected); }
+/* What a coordinator's page held, in its Status section: its card and STATUS.md without a second frame. */
+.overview-status { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 12px; }
+.overview-status section:is([aria-label="Coordinator card"], [aria-label="Status"]) { margin: 0; padding: 0; border: 0; background: none; }
 .overview-thread { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 0 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
 [aria-current="true"] > .overview-thread { background: var(--workbench-row-selected); }
 @media (hover: hover) {
-  .overview-card-action:hover, .overview-thread:hover { background: var(--workbench-row-hover); }
+  .overview-thread:hover, .overview-work:hover, .panel-section-toggle:not(:disabled):hover, .panel-section-tool:not(:disabled):hover { background: var(--workbench-row-hover); }
   .overview-link:hover, .overview-file:hover, .overview-more:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 }
 
