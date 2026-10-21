@@ -22,7 +22,7 @@ import { StateMark } from "@/components/status-badge";
 // did in the quiet greys, so the steps read as the agent working and its prose as what it says. A
 // command reads as itself; a thought as its opening words. Several calls between two of the agent's
 // texts fold under one line ("Ran 3 commands"), and a step opens onto its command, coloured as a shell
-// reads it, and its output in grey (ADR 0115).
+// reads it, and its output in grey (ADR 0116).
 
 type ToolPart = Extract<TranscriptPart, { kind: "tool" }>;
 

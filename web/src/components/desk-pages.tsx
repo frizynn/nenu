@@ -7,14 +7,24 @@ import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
 import { coordinatorName } from "@/lib/asks";
-import { STATE_LABEL, type OrgNode } from "@/lib/org-tree";
+import { STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { cardSummary, waitingGroups, type WorkCard } from "@/lib/project-work";
 import { nodePath, panePath } from "@/lib/nav";
+import { coordinatorPane } from "@/lib/projects";
 import type { AgentView, AsksList, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // The parts a desk's project page and coordinator page share (ADR 0102): the heading, the tabs kept in
 // the address, a coordinator's card over its threads, and what waits on you by coordinator.
+
+/** Enters a coordinator (ADR 0115), `root` being the project's own: its chat while it runs, its page otherwise. */
+export function useOpenCoordinator(project: ProjectView, panes: readonly AgentView[], session?: string): (id: string) => void {
+  const navigate = useNavigate();
+  return (id) => {
+    const pane = coordinatorPane(project, id, panes);
+    navigate(pane ? panePath(pane, session) : nodePath(project.slug, id, session));
+  };
+}
 
 /** Opens a node inside Nenu (ADR 0064): its chat while it runs in a live pane, its page otherwise. */
 export function useOpenNode(project: ProjectView, panes: readonly AgentView[], session?: string): (node: OrgNode) => void {
@@ -23,10 +33,10 @@ export function useOpenNode(project: ProjectView, panes: readonly AgentView[], s
     ? panePath(thread.paneId, session) : nodePath(project.slug, thread.id, session));
 }
 
-/** A page's crumb, title, second line and actions. */
-export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb: ReactNode; title: string; mark?: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+/** A page's crumb (where the header's back does not already say it), title, second line and actions. */
+export function DeskHead({ crumb, title, mark, subtitle, actions }: { crumb?: ReactNode; title: string; mark?: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return <header className="mb-5">
-    <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-1 text-footnote text-muted-foreground">{crumb}<ChevronRight aria-hidden className="size-3" /></nav>
+    {crumb && <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-1 text-footnote text-muted-foreground">{crumb}<ChevronRight aria-hidden className="size-3" /></nav>}
     <div className="flex items-center gap-3">
       <h1 className="flex min-w-0 flex-1 items-center gap-2.5 text-title break-words">{mark}{title}</h1>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -105,11 +115,12 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
 const CARD_ROWS = 20;
 
 /**
- * A coordinator's card: its fold, then its name and what its threads are doing, which opens its page
- * wherever it is tapped (ADR 0109), and + to start a thread under it; its threads under it. The project
- * coordinator's card holds the threads started from the project.
+ * A coordinator's row on its project (ADR 0115): its name and what is live there, which enters its chat
+ * wherever it is tapped; a chevron before it, on a row with threads, folds them down in place; + starts a
+ * thread under it, shown on a desk's hover. The project coordinator's row holds the threads started from
+ * the project.
  */
-export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, ownState }: {
+export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, own }: {
   card: WorkCard;
   waiting: number;
   open: boolean;
@@ -118,29 +129,17 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   onOpenCoordinator: () => void;
   /** Absent where nothing can be started (a paused project, a read-only device). */
   onNewThread?: () => void;
-  /** What the coordinator itself is doing, said after its threads. */
-  ownState?: string;
+  /** What the coordinator itself is doing, when it is live: its own needs or work. */
+  own?: NodeState;
 }) {
   const [limit, setLimit] = useState(CARD_ROWS);
   const summaryId = useId();
   const name = card.coordinator?.thread.title ?? "Project coordinator";
-  const parts = cardSummary(card.rows, waiting);
+  const parts = liveLine(card.rows, waiting, own);
   const Mark = card.coordinator ? Workflow : ChatCircle;
   const hidden = card.rows.length - limit;
-  // A card with no threads has nothing to unfold: its head says so and draws no chevron.
+  // A row with no threads has nothing to unfold, and draws no chevron.
   const foldable = card.rows.length > 0;
-  const head = <>
-    <span className="desk-card-mark"><Mark aria-hidden size={16} /></span>
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-subhead font-medium">{name}</span>
-      <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
-        {!card.coordinator && <span>{foldable ? "Threads started straight from the project" : "No threads started from the project"}</span>}
-        {card.coordinator && parts.length === 0 && <span>{foldable ? `${card.rows.length} ${card.rows.length === 1 ? "thread" : "threads"}` : "No open threads"}</span>}
-        {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} />{part.text}</span>)}
-        {ownState && <span>{ownState}</span>}
-      </span>
-    </span>
-  </>;
   return <section aria-label={name} className="desk-card">
     <div className="desk-card-head">
       {foldable
@@ -148,11 +147,18 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
           <ChevronRight aria-hidden className={cn("desk-fold size-3.5", open && "rotate-90")} />
         </button>
         : <span aria-hidden className="w-3.5 shrink-0" />}
-      {/* Named for what it does; what its threads are doing is said as its description. */}
-      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>{head}</button>
-      {onNewThread && <button type="button" className="desk-icon-button" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={16} /></button>}
-      {/* The head already opens the page; the chevron only says so, and is not a second stop for the keyboard. */}
-      <button type="button" tabIndex={-1} aria-hidden className="desk-icon-button" onClick={onOpenCoordinator}><ChevronRight aria-hidden size={16} /></button>
+      {/* Named for what it does; what is live there is said as its description. */}
+      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>
+        <span className="desk-card-mark"><Mark aria-hidden size={16} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-subhead font-medium">{name}</span>
+          <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
+            {parts.length === 0 && <span>Nothing running</span>}
+            {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} />{part.text}</span>)}
+          </span>
+        </span>
+      </button>
+      {onNewThread && <button type="button" className="desk-icon-button desk-card-add" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={16} /></button>}
     </div>
     {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal">
       {card.rows.slice(0, limit).map((node) => <WorkRow key={node.thread.id} node={node} onOpen={onOpenNode} />)}
@@ -161,6 +167,14 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
       </button>}
     </div>}
   </section>;
+}
+
+/** A row's one line: what waits on you, then what works, the coordinator's own work said once. */
+function liveLine(rows: readonly OrgNode[], waiting: number, own?: NodeState): Array<{ text: string; state: NodeState }> {
+  const parts = cardSummary(rows, waiting);
+  if (own === "needs" && !parts.some((part) => part.state === "needs")) parts.unshift({ text: "needs you", state: "needs" });
+  if (own === "working" && !parts.some((part) => part.state === "working")) parts.push({ text: "working", state: "working" });
+  return parts;
 }
 
 /** Questions a group shows before Show more. */

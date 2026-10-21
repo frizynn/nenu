@@ -8,7 +8,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
-## [1.40.0] - 2026-10-21
+## [1.41.0] - 2026-10-21
 
 ### Changed
 
@@ -18,6 +18,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 - Opening and closing a turn, a group, a command or a thought folds open in 180 ms and shut in 120 ms; under reduced motion it only fades; a search hit inside one is simply there (0b29b720, 3aadc6af, 22e7ce9a).
 - `bun scripts/e2e/run.ts commands` replays the command demo at 1440×900 and 390×844 and checks the grouping (c5f2088b).
+
+## [1.40.0] - 2026-10-21
+
+### Added
+
+- A coordinator's chat holds what its page did: the desk panel's Overview and a new Status tab on a phone, with Waiting on you, Routines, Status, Move and Close (120093ed, a50b25ae).
+
+### Changed
+
+- A tap anywhere on a coordinator's row enters its chat, on a desk and a phone; its threads fold down under the row, and the page in between is gone (only a coordinator with no live pane keeps one). 3 taps from Home to its box become 2 (120093ed).
+- A ← back at the top left climbs coordinator → project → Projects, now on a desk too (120093ed).
 
 ## [1.39.0] - 2026-10-21
 

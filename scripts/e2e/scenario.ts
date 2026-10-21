@@ -669,3 +669,39 @@ export function deskOrg(herd: Pick<DemoHerd, "working" | "idle" | "blocked">, at
   );
   return seed;
 }
+
+/**
+ * Projects shaped like the operator's on 2026-10-21: Acme, whose running project coordinator organizes
+ * open coordinators (one nested), Nenu, whose running coordinator only has workers, and a quiet one.
+ */
+export function herdSeed(herd: DemoHerd, now: number): OrgSeed {
+  const org = orgTreeSeed(herd, now, { coordinator: true });
+  // The working demo pane is Nenu's coordinator here, so Acme's thread on it runs nowhere.
+  const acme = org.projects[0]!;
+  acme.threads = acme.threads.map((thread) => thread.id === "t-0103" ? { ...thread, workspace_id: "", tab_id: "", pane_id: "" } : thread);
+  const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  const node = (id: number, title: string, group: string, minutes: number) => ({
+    id: `t-${String(id).padStart(4, "0")}`, title, parent_id: "root", role: "worker", status: group === "resolved" ? "resolved" : "open", group,
+    group_label: group, note: "", branch: "", workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes),
+    report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null,
+  });
+  return {
+    ...org,
+    answers: true,
+    asks: [{ project: "acme", coordinator: { id: "root", title: "" }, line: 4, state: "needs-decision", text: "Cuotas sin interés : recomiendo 3",
+      answer: "", links: [], actions: ["answer"], confirmed: "", mismatch: "" }],
+    projects: [
+      ...org.projects,
+      {
+        slug: "nenu", name: "Nenu", goal: "La app para ver y manejar los proyectos desde el celular", status: "active",
+        coordinator: { pane_id: herd.working, workspace_id: herd.working.split(":")[0]!, tab_id: "w1:t1" },
+        threads: [
+          ...Array.from({ length: 9 }, (_, n) => node(n + 1, `Tarea cerrada ${n + 1}`, "resolved", 600 + n * 90)),
+          node(11, "Simplificar el coordinador", "working", 3), node(12, "Chip Done", "ready-for-review", 25),
+          node(13, "Chat al final", "working", 8), node(14, "Home con Projects", "working", 1),
+        ],
+      },
+      { slug: "herdr-org", name: "Herdr Org", goal: "Organizations", status: "active", threads: Array.from({ length: 6 }, (_, n) => node(n + 1, `Hecha ${n + 1}`, "resolved", 3000 + n * 60)) },
+    ],
+  };
+}

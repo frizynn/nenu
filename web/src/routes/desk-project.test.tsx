@@ -12,8 +12,9 @@ import { NodeRoute } from "./node";
 import { ProjectRoute } from "./project";
 import { RoutinesRoute } from "./routines";
 
-// A desk's project and coordinator pages (ADR 0102): tabs in the address, a card per coordinator, what
-// waits on you by coordinator, routines that turn on and off, and the old pages landing there.
+// A desk's project and coordinator pages (ADR 0102): tabs in the address, a row per coordinator that
+// enters its chat (ADR 0115), what waits on you by coordinator, routines that turn on and off, a
+// coordinator's page where it has no chat, and the old pages landing there.
 
 vi.mock("@/hooks/use-media-query", () => ({ useMediaQuery: (query: string) => query === "(min-width: 1024px)" }));
 
@@ -41,6 +42,8 @@ let edited: unknown[] = [];
 beforeEach(() => {
   toggled = [];
   edited = [];
+  // The project page keeps its folds for the tab: each test starts with them closed.
+  sessionStorage.clear();
   __forgetSummaries();
   server.use(
     http.get("/api/org/summary", () => HttpResponse.json({ ok: true, coordinator: null, usage: null, status: null, threads: [] })),
@@ -63,9 +66,9 @@ beforeEach(() => {
   );
 });
 
-function setup(path: string) {
+function setup(path: string, agents = data.agents) {
   const router = createMemoryRouter([{
-    id: ROOT_ROUTE_ID, path: "/", loader: () => data, element: <Outlet />,
+    id: ROOT_ROUTE_ID, path: "/", loader: () => ({ ...data, agents }), element: <Outlet />,
     children: [
       { path: "projects", element: <p>PROJECTS</p> },
       { path: "asks", element: <AsksRoute /> },
@@ -80,31 +83,40 @@ function setup(path: string) {
 }
 
 describe("a desk's project page", () => {
-  it("is the project's own page, never its coordinator's chat, with a card per coordinator and the project coordinator's last", async () => {
-    const { router } = setup("/project/hub");
+  it("is the project's own page, never its coordinator's chat, with a row per coordinator and the project coordinator's last", async () => {
+    const { router, user } = setup("/project/hub");
     expect(within(await screen.findByRole("main")).getByRole("heading", { level: 1, name: /Hub/ })).toBeInTheDocument();
     const cards = within(screen.getByRole("tabpanel")).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
     expect(cards).toEqual(["Lead", "Project coordinator"]);
     const lead = within(screen.getByRole("region", { name: "Lead" }));
     expect(await lead.findByText("1 waiting on you")).toBeInTheDocument();
+    // Folded until asked: its threads show under it, in place.
+    expect(lead.queryByRole("button", { name: /Docs/ })).toBeNull();
+    await user.click(lead.getByRole("button", { name: "Show Lead threads" }));
     expect(lead.getByRole("button", { name: /Docs/ })).toHaveTextContent("#58");
+    await user.click(screen.getByRole("button", { name: "Show Project coordinator threads" }));
     expect(within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: /Hotfix/ })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/project/hub");
+    // The header's back says where up is: the crumb no longer repeats it.
+    expect(screen.getByRole("link", { name: "Back to Projects" })).toHaveTextContent("Projects");
+    expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
   });
 
-  it("opens a coordinator on a tap anywhere on its card's head; the fold is its own button", async () => {
+  it("enters a coordinator's chat on a tap anywhere on its row; the fold is its own button, and there is no ›", async () => {
     const { user, router } = setup("/project/hub");
     const lead = within(await screen.findByRole("region", { name: "Lead" }));
+    await user.click(lead.getByRole("button", { name: "Show Lead threads" }));
     // A merged pull request closes on its own: not counted, nor read, as work to review.
     expect(lead.getByRole("button", { name: /Copy fix/ })).toHaveTextContent("merged, closes on its own");
     expect(lead.queryByText(/to review/)).toBeNull();
     await user.click(lead.getByRole("button", { name: "Hide Lead threads" }));
     expect(lead.queryByRole("button", { name: /Docs/ })).toBeNull();
     expect(router.state.location.pathname).toBe("/project/hub");
-    // Named for what it does, it still says what its threads do.
+    // Named for what it does, it still says what is live there; its head ends at its +.
     expect(lead.getByRole("button", { name: "Open Lead" })).toHaveAccessibleDescription(/1 waiting on you/);
+    expect(lead.getByRole("button", { name: "Open Lead" }).parentElement?.lastElementChild).toHaveAccessibleName("New thread under Lead");
     await user.click(lead.getByText("1 waiting on you"));
-    expect(router.state.location.pathname).toBe("/project/hub/node/t-3");
+    expect(router.state.location.pathname).toBe("/pane/lead");
   });
 
   it("keeps finished work in History, one step away, by day and searched by who ran it", async () => {
@@ -172,9 +184,15 @@ describe("a desk's project page", () => {
   });
 });
 
-describe("a desk's coordinator page", () => {
+// A coordinator that runs is its chat; one with no live pane keeps its page.
+describe("a desk's coordinator page, where it has no chat", () => {
+  it("is its chat while it runs", async () => {
+    const { router } = setup("/project/hub/node/t-3?tab=waiting");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/pane/lead"));
+  });
+
   it("has its tabs, and Routines lists only what reaches it", async () => {
-    const { user } = setup("/project/hub/node/t-3");
+    const { user } = setup("/project/hub/node/t-3", []);
     expect(within(await screen.findByRole("main")).getByRole("heading", { level: 1, name: "Lead" })).toBeInTheDocument();
     const tabs = () => within(screen.getByRole("tablist", { name: "Lead" })).getAllByRole("tab").map((tab) => tab.textContent);
     await waitFor(() => expect(tabs()).toEqual(["Threads2", "Waiting on you1", "Routines1", "Status"]));
@@ -186,16 +204,16 @@ describe("a desk's coordinator page", () => {
   });
 
   it("lists only its live work, with what finished one line to the project's History, and no Summary", async () => {
-    const { user, router } = setup("/project/hub/node/t-3");
+    const { user, router } = setup("/project/hub/node/t-3", []);
     const panel = within(await screen.findByRole("tabpanel"));
     expect(panel.getByRole("button", { name: /Docs/ })).toBeInTheDocument();
     expect(panel.getByRole("button", { name: /Copy fix/ })).toHaveTextContent("merged, closes on its own");
     expect(panel.queryByText("Shipped")).toBeNull();
     expect(screen.queryByRole("tab", { name: "Summary" })).toBeNull();
-    // Open chat and New thread are one kind of button.
+    // Nothing to open: no chat runs it.
     const main = within(screen.getByRole("main"));
-    const [chat, start] = [main.getByRole("button", { name: /Open chat/ }), main.getByRole("button", { name: /New thread/ })];
-    expect(chat.className).toBe(start.className);
+    expect(main.queryByRole("button", { name: /Open chat/ })).toBeNull();
+    expect(main.getByRole("button", { name: /New thread/ })).toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: /1 finished/ }));
     expect(`${router.state.location.pathname}${router.state.location.search}`).toBe("/project/hub?work=finished&q=Lead");
     // History opens searching for this coordinator's own threads.
@@ -204,7 +222,7 @@ describe("a desk's coordinator page", () => {
   });
 
   it("waits on you only for what does; Status reads every ask as a request with its state, done ones folded", async () => {
-    const { user } = setup("/project/hub/node/t-3?tab=waiting");
+    const { user } = setup("/project/hub/node/t-3?tab=waiting", []);
     const waiting = within(await screen.findByRole("tabpanel"));
     expect(await waiting.findByText("Which plan?")).toBeInTheDocument();
     expect(waiting.queryByText("Old plan")).toBeNull();
@@ -224,8 +242,11 @@ describe("a desk's coordinator page", () => {
 
 describe("the old pages on a desk", () => {
   it("send Your asks to the project's or coordinator's Waiting on you, and Routines to Projects", async () => {
-    const asks = setup("/asks?project=hub&coordinator=t-3").router;
+    const asks = setup("/asks?project=hub&coordinator=t-3", []).router;
     await waitFor(() => expect(asks.state.location.pathname + asks.state.location.search).toBe("/project/hub/node/t-3?tab=waiting"));
+    // A coordinator that runs is entered at its chat, whose panel holds what waits on you there.
+    const running = setup("/asks?project=hub&coordinator=t-3").router;
+    await waitFor(() => expect(running.state.location.pathname).toBe("/pane/lead"));
     const routines = setup("/routines").router;
     await waitFor(() => expect(routines.state.location.pathname).toBe("/projects"));
   });

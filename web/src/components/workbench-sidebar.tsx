@@ -27,7 +27,7 @@ import type { HomeData } from "@/lib/loaders";
 import { asksPath, homePath, nodePath, panePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { isOpenThread, projectForPane } from "@/lib/projects";
+import { coordinatorPane, isOpenThread, projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
 
 export interface SidebarRequest {
@@ -422,7 +422,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   data: HomeData;
   open: boolean;
   /**
-   * A phone's drawer or Search sheet: the project opens on its coordinators, each a way into its page,
+   * A phone's drawer or Search sheet: the project opens on its coordinators, each a way into its chat,
    * and the threads that work, wait on you or wait for a review; no count, no History (ADR 0110).
    */
   phone?: boolean;
@@ -439,7 +439,8 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   // Open coordinators start open and resolved ones folded; the node on screen opens them.
   const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
-      fold={fold} page={phone && node.thread.role === "coordinator"} />;
+      live={node.thread.paneId !== undefined && data.agents.some((agent) => agent.paneId === node.thread.paneId)}
+      fold={fold} />;
     if (phone) {
       const children = node.children.filter(shownOnPhone);
       return children.length ? <div key={node.thread.id} role="group" aria-label={node.thread.title}>{row()}{children.map((child) => branch(child, depth + 1))}</div> : row();
@@ -458,8 +459,9 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
   const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
   const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
-  // A phone opens the project's coordinator on its page, as it opens every coordinator; its page offers the chat.
-  const coordinatorTo = phone ? nodePath(project.slug, "root", session) : panePath(project.coordinator?.paneId ?? "", session);
+  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0115).
+  const coordinatorPaneId = coordinatorPane(project, "root", data.agents);
+  const coordinatorTo = coordinatorPaneId ? panePath(coordinatorPaneId, session) : nodePath(project.slug, "root", session);
   return (
     <section aria-label={project.name} className="nav-project-section">
       <div className="nav-project">
@@ -484,7 +486,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
         <div id={listId}>
           {project.coordinator && (
             <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={coordinatorTo}
-              aria-current={project.coordinator.paneId === paneId || (phone && projectSlug === project.slug && nodeId === "root") ? "page" : undefined}>
+              aria-current={project.coordinator.paneId === paneId || (projectSlug === project.slug && nodeId === "root") ? "page" : undefined}>
               <span className="nav-tree-mark"><OpeningMark to={coordinatorTo}><Workflow aria-hidden size={14} /></OpeningMark></span>
               <span className="nav-row-text">Coordinator</span>
               <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
@@ -552,23 +554,24 @@ interface ThreadRowFold {
   onToggle: () => void;
 }
 
-/** A node's row: its chat when it runs in a live pane, its detail otherwise, or with `page` its page; never the project page. */
-function ThreadRow({ node, depth, slug, session, current, fold, page = false }: {
+/** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
+function ThreadRow({ node, depth, slug, session, current, live, fold }: {
   node: OrgNode;
   depth: number;
   slug: string;
   session?: string;
   current: boolean;
+  /** Its pane is in the snapshot: Organizations keeps a pane id after the pane closed. */
+  live: boolean;
   /** Present on a coordinator with nodes under it. */
   fold?: ThreadRowFold;
-  page?: boolean;
 }) {
   const { thread, state } = node;
   const ask = awaits(thread);
   const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
   // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
-  const note = thread.paneId || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
-  const to = thread.paneId && !page ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
+  const note = (thread.paneId && live) || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
+  const to = thread.paneId && live ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
   return (
     <div className="nav-thread">
       {fold && (
@@ -585,7 +588,6 @@ function ThreadRow({ node, depth, slug, session, current, fold, page = false }: 
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.filter((child) => child.state !== "idle").slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-3" />)}</span>}
         {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
         {note && !word && !fold && <span className="nav-row-note">{note}</span>}
-        {page && <ChevronRight aria-hidden size={14} className="shrink-0 text-muted-foreground" />}
       </Link>
     </div>
   );

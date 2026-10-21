@@ -1,4 +1,4 @@
-# 0115. A turn reads as T3 Code draws its work, the same on a phone and a desk
+# 0116. A turn reads as T3 Code draws its work, the same on a phone and a desk
 
 - **Status:** Accepted (2026-10-21). Requested by the operator ("los comandos deben verse así", four
   captures of T3 Code). Reverses the desk's own work log of `c16199e7` (a turn never folds on a desk;

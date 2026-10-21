@@ -6,11 +6,11 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
-// A coordinator's page and the way into it (ADR 0109), at 1440 and 390 px with Google Chrome headless:
-// a tap anywhere on a coordinator's card on the project page opens its page; the page lists only live
-// work, with finished work one line to History; Open chat and New thread are one box; Waiting on you
-// holds only what waits on you; the Asked lines read as requests with a state, done ones folded; and
-// the opened STATUS.md scrolls with the page under a wheel over it.
+// What a coordinator's page held, now inside its chat (ADR 0115), and the way in, at 1440 and 390 px with
+// Google Chrome headless: a tap anywhere on a coordinator's row on the project page enters its chat; a
+// desk's panel and a phone's Status tab hold no report cards, a Waiting on you with only what waits on
+// you, the Asked lines read as requests with a state (done ones folded, ADR 0109), and an opened
+// STATUS.md that scrolls under a wheel over it.
 //
 //   bun scripts/e2e/coordinator-page.ts --fixture FILE [--project SLUG] [--coordinator SLUG] [--port 8873] [--out DIR]
 //
@@ -107,72 +107,67 @@ async function main(): Promise<void> {
       const page = await context.newPage();
       const open = async (path: string) => { await page.goto(bridge.url + path); await page.waitForTimeout(3000); };
 
-      // 1. The project page: a tap on the coordinator's card, away from its buttons, opens its page. A
-      // phone opens a project whose coordinator runs on its chat (ADR 0092), so it has no card to tap.
+      // 1. The project page: a tap on the coordinator's row, away from its buttons, enters its chat. A
+      // phone opens a project whose coordinator runs on its chat (ADR 0092), so it has no row to tap.
       await open(`/project/${projectSlug}`);
       await shoot(page, `1-project-${size}`);
-      const name = page.getByText("Project coordinator", { exact: true }).first();
+      const name = page.locator(".desk-card-open").filter({ hasText: "Project coordinator" }).getByText("Project coordinator", { exact: true }).first();
       if (size === "390") lines.push(`390: the project page opens ${new URL(page.url()).pathname}`);
       else if (await name.count()) {
         await name.click();
         await page.waitForTimeout(1500);
-        check(page.url().includes("/node/root"), `${size}: a tap on the coordinator's name opens its page (${new URL(page.url()).pathname})`);
-        await shoot(page, `1-project-tapped-${size}`);
+        check(new URL(page.url()).pathname.startsWith("/pane/"), `${size}: a tap on the coordinator's name enters its chat (${new URL(page.url()).pathname})`);
       } else check(false, `${size}: the project page names its coordinator`);
 
-      // 2–4. The coordinator page: live work, its header, Waiting on you.
+      // 2–4. Its chat, with what its page held: a desk's panel, a phone's Status tab. The node address lands there too.
       await open(coordinatorPath);
-      await shoot(page, `2-coordinator-${size}`);
-      check(await page.getByRole("tab", { name: "Summary" }).count() === 0, `${size}: no Summary switch on the coordinator page`);
-      const doneCards = await page.locator("main article").count();
-      check(doneCards === 0, `${size}: no report cards in the list (${doneCards})`);
-      if (size === "1440") {
-        const boxes = await page.locator("main header button").evaluateAll((list) => list.map((button) => {
-          const box = button.getBoundingClientRect();
-          const style = getComputedStyle(button);
-          return { label: (button as HTMLElement).innerText.trim(), height: box.height, radius: style.borderRadius, padding: `${style.paddingLeft}/${style.paddingRight}`, background: style.backgroundColor };
-        }));
-        lines.push(`header buttons: ${boxes.map((box) => `${box.label} ${box.height}px r${box.radius} p${box.padding} bg ${box.background}`).join(" | ")}`);
-        check(new Set(boxes.map((box) => `${box.height} ${box.radius} ${box.padding}`)).size <= 1, "1440: header buttons share height, radius and padding");
-        const head = await page.locator("main header").boundingBox();
-        if (head) await page.screenshot({ path: join(outDir, "3-header-1440.png"), clip: { x: head.x - 8, y: head.y - 8, width: head.width + 16, height: head.height + 16 } });
+      check(new URL(page.url()).pathname.startsWith("/pane/"), `${size}: the coordinator's address lands on its chat`);
+      if (size === "390") {
+        const tab = page.getByRole("tab", { name: /^Status/ });
+        check(await tab.count() === 1, "390: the chat has a Status tab");
+        await tab.first().click().catch(() => {});
+        await page.waitForTimeout(1200);
       }
-      await open(`${coordinatorPath}?tab=waiting`);
-      await shoot(page, `4-waiting-${size}`);
-      // A phone has no tabs: its page is the card, where Done is one folded line.
-      const other = await page.locator("main section[aria-label='Done'] li, main section[aria-label='Other lines'], main section[aria-label='Not marked']").count();
+      const held = size === "390" ? ".project-overlay" : ".session-panel";
+      await shoot(page, `2-coordinator-${size}`);
+      check(await page.locator(`${held} section.overview-card[aria-label='Waiting on you']`).count() === 1, `${size}: Waiting on you is in the chat's ${size === "390" ? "Status tab" : "panel"}`);
+      const doneCards = await page.locator(`${held} article`).count();
+      check(doneCards === 0, `${size}: no report cards (${doneCards})`);
+      const other = await page.locator(`${held} section[aria-label='Waiting on you'] :is(section[aria-label='Done'], section[aria-label='Other lines'], section[aria-label='Not marked'])`).count();
       check(other === 0, `${size}: Waiting on you shows nothing done and no "Other lines"`);
 
       // 5–6. Status: the Asked lines as requests, then the opened STATUS.md, scrolled with a wheel over it.
-      await open(`${coordinatorPath}?tab=status`);
-      await shoot(page, `5-status-${size}`);
-      const card = await page.locator("main section[aria-label='Coordinator card']").innerText().catch(() => "");
-      check(!/\[in-progress\]/.test(card) && await page.locator("main section[aria-label='Other lines'], main section[aria-label='Not marked']").count() === 0,
+      const card = await page.locator(`${held} section[aria-label='Coordinator card']`).innerText().catch(() => "");
+      check(!/\[in-progress\]/.test(card) && await page.locator(`${held} :is(section[aria-label='Other lines'], section[aria-label='Not marked'])`).count() === 0,
         `${size}: the card reads the Asked lines as requests: no "Other lines", no raw [in-progress]`);
-      const show = page.getByRole("button", { name: /Show STATUS\.md/ });
+      const status = page.locator(`${held} section[aria-label='Coordinator status']`);
+      if (await status.count()) await status.scrollIntoViewIfNeeded();
+      await shoot(page, `5-status-${size}`);
+      const show = page.locator(held).getByRole("button", { name: /Show STATUS\.md/ });
       if (await show.count()) await show.click();
       await page.waitForTimeout(800);
       await shoot(page, `6-status-open-${size}`);
-      const section = page.locator("main section[aria-label=Status]");
+      const file = `${held} section[aria-label=Status]`;
+      const section = page.locator(file);
       if (await section.count()) await section.scrollIntoViewIfNeeded();
       const box = await section.boundingBox();
-      const before = await scroller(page, "main section[aria-label=Status]");
+      const before = await scroller(page, file);
       if (box && before) {
         // Over the file's text, inside the screen, away from anything fixed at its edges.
         await page.mouse.move(box.x + box.width / 2, Math.min(Math.max(box.y + 80, 120), device.viewport.height / 2));
         await page.mouse.wheel(0, 900);
         await page.waitForTimeout(600);
-        const after = await scroller(page, "main section[aria-label=Status]");
-        const bottom = await page.locator("main section[aria-label=Status]").evaluate((el) => el.getBoundingClientRect().bottom);
+        const after = await scroller(page, file);
+        const bottom = await section.evaluate((el) => el.getBoundingClientRect().bottom);
         lines.push(`${size}: status scroller ${before.top}→${after?.top} of ${before.height}/${before.client}, section bottom ${Math.round(bottom)}`);
-        check((after?.top ?? 0) > before.top, `${size}: a wheel over the opened STATUS.md scrolls the page`);
+        check((after?.top ?? 0) > before.top, `${size}: a wheel over the opened STATUS.md scrolls its column`);
         await shoot(page, `6-status-scrolled-${size}`);
       } else lines.push(`${size}: status ${box ? "fits without scrolling" : "not drawn"}`);
-      const all = page.getByRole("button", { name: "Show all" });
+      const all = page.locator(held).getByRole("button", { name: "Show all" });
       if (await all.count()) {
         await all.click();
         await page.waitForTimeout(500);
-        const text = await page.locator("main section[aria-label=Status]").innerText();
+        const text = await section.innerText();
         check(/## Decisions|Decisions/.test(text), `${size}: Show all opens the whole file`);
       }
       await context.close();
