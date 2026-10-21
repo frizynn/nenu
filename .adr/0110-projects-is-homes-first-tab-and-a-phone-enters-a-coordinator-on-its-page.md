@@ -36,10 +36,6 @@ and the project with only its own coordinator still opens on that chat (ADR 0092
    is what Home opens on; the choice is remembered on the device under a new key, so a choice made
    before the tab existed opens on Projects once. Projects and PRs show only while there is one, and a
    remembered tab that is not there opens the first one left, kept for when it comes back.
-5. **Without a project nothing says Projects** (amended 2026-10-21): not Home's tab, nor on a desk the
-   bar's Projects row, its Projects heading with its +, or the folded rail's Projects button. Someone
-   without Organizations, or with no project in it, sees Recents first; New project stays in New, and
-   `/projects` still answers a link.
 2. **The Projects tab leads with live projects**: something waits on you, works, or is ready to
    review there. The rest (nothing running, paused last) fold under one "Quiet" row at its end. Each
    row is ADR 0107's, and always opens its project; the project page says what waits on you there.
@@ -52,6 +48,10 @@ and the project with only its own coordinator still opens on that chat (ADR 0092
    a project opens on its coordinators and the threads that wait on you, work or wait for a review,
    with no History and no open-task count. Home's headline
    leaves idle agents out, a phone's Home leaves the date out, and no footer counts workspaces or agents.
+5. **Without a project no list or bar says Projects** (amended 2026-10-21): not Home's tab, nor on a desk
+   the bar's Projects row, its Projects heading with its +, or the folded rail's Projects button. Someone
+   without Organizations, or with no project in it, sees Recents first; New project stays in New, under
+   its own Projects group, and `/projects` still answers a link.
 
 `bun scripts/e2e/no-projects.ts` loads Home at 390x844 and 1440x900 over four herds: one project,
 Organizations with none, no Organizations, and one that never answers. The tabs come with the first

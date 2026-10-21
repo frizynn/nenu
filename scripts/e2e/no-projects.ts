@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -36,10 +36,15 @@ const oneProject = (herd: DemoHerd, now: number): OrgSeed => ({
 
 interface Herd { name: string; projects: boolean; start: (port: number) => Promise<TestBridge> }
 
+// The hanging Organizations' folder, removed once the run ends.
+const scratch: string[] = [];
+
 async function hanging(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "nenu-e2e-hang-"));
+  scratch.push(dir);
   const bin = join(dir, "herdr-organizations");
-  await writeFile(bin, "#!/bin/sh\nsleep 60\n");
+  // Longer than a load is watched; a read still running when its bridge stops ends on its own soon after.
+  await writeFile(bin, "#!/bin/sh\nexec sleep 15\n");
   await chmod(bin, 0o755);
   return bin;
 }
@@ -115,6 +120,7 @@ async function main(): Promise<void> {
     }
   } finally {
     await browser?.close();
+    for (const dir of scratch) await rm(dir, { recursive: true, force: true });
   }
 
   async function shoot(page: Page, name: string) {

@@ -176,7 +176,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
           {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" surface="bg-transparent" />{attention}</span>}
         </Link>}
-        {!phone && (data.projects?.length ?? 0) > 0 && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
+        {!phone && !!data.projects?.length && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
           <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
         </Link>}
       </div>}
