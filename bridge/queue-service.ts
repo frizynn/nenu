@@ -140,6 +140,9 @@ export class QueueService {
     if (live !== row.conversation)
       return { stranded: "The conversation in this pane changed. Send it here or remove it." };
     if (row.held !== undefined) return { wait: "stopped" };
+    // The usage limit holds it until the reset or a reply on the account; "Send now" lifts only that
+    // (ADR 0118). Typed now, Claude would log it and the limit would refuse it at once.
+    if (current.pane.turn?.limit && !row.sendNow) return { wait: "limit" };
     const mode = effectiveMode(row);
     if (mode === "afterTurn" && !this.turnStarted(row.scope, current.pane)) return { wait: "turn-start" };
     const readiness = await queueReadiness(current.pane, current.herdr, mode);

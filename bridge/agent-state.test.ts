@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { appendFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -150,6 +150,60 @@ describe("Claude panes", () => {
     service.sync("s", herdr([PID]), []);
     expect(service.get("s", "w1:p1")).toBeUndefined();
     expect(w.paths()).toEqual([]);
+  });
+});
+
+describe("Claude panes at their usage limit", () => {
+  const OTHER_PID = 4343;
+  const OTHER_ID = "0c3e2a6d-1b7a-4f1e-9d55-3c1f2e7a9b10";
+  const RESETS = 1792632000 * 1000;
+  const NOW = Date.parse("2026-10-21T21:45:00.000Z");
+  const limited = async () => (await readFile(join(import.meta.dirname, "test-support", "agent-state", "claude-2.1.306-transcript-usage-limit.jsonl"), "utf8")).split("\n").slice(0, 8).join("\n") + "\n";
+
+  test("a Claude at rest reads its limit from the transcript, and a reply on its account clears it", async () => {
+    const w = watches();
+    const other = join(claudeProjects, "-w", `${OTHER_ID}.jsonl`);
+    let now = NOW;
+    const { service, events } = states(w, { now: () => now, claudeTranscript: async (id) => (id === SESSION_ID ? transcript : id === OTHER_ID ? other : null) });
+    await writeFile(transcript, await limited());
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", NOW - 60_000));
+    await writeFile(join(sessions, `${OTHER_PID}.json`), JSON.stringify({ pid: OTHER_PID, sessionId: OTHER_ID, kind: "interactive", procStart: "Sun Oct 11 12:59:42 2026", status: "idle", statusUpdatedAt: NOW - 60_000 }));
+    await writeFile(other, "");
+    const herdrs = { processInfo: async (paneId: string) => ({ foreground_processes: [{ pid: paneId === "w1:p1" ? PID : OTHER_PID }] }) };
+    service.sync("s", herdrs, [pane("claude"), pane("claude", { paneId: "w1:p2" })]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, limit: { resetsAt: RESETS }, source: "claude-session" });
+    expect(service.get("s", "w1:p2")).toEqual({ running: false, source: "claude-session" });
+
+    // The account is switched and the other Claude gets a reply through: the first is free again.
+    events.length = 0;
+    now = Date.parse("2026-10-21T22:00:30.000Z");
+    await writeFile(join(sessions, `${OTHER_PID}.json`), JSON.stringify({ pid: OTHER_PID, sessionId: OTHER_ID, kind: "interactive", procStart: "Sun Oct 11 12:59:42 2026", status: "busy", statusUpdatedAt: now - 20_000 }));
+    w.fire(sessions, `${OTHER_PID}.json`);
+    await settle();
+    await appendFile(other, JSON.stringify({ type: "assistant", timestamp: "2026-10-21T22:00:15.612Z", message: { content: [{ type: "text", text: "on it" }] } }) + "\n");
+    w.fire(other);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+    expect(events).toContainEqual({ session: "s", topic: "pane", paneId: "w1:p1" });
+    service.close();
+  });
+
+  test("the limit drops on its own when the reset passes", async () => {
+    const w = watches();
+    let now = RESETS - 50;
+    const { service } = states(w, { now: () => now });
+    await writeFile(transcript, await limited());
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", NOW));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")?.limit).toEqual({ resetsAt: RESETS });
+    now = RESETS + 1;
+    // The timer is set for the reset plus a second; waiting it out here would be slow.
+    service.poke("s", "w1:p1");
+    await settle();
+    expect(service.get("s", "w1:p1")?.limit).toBeUndefined();
+    service.close();
   });
 });
 

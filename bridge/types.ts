@@ -114,6 +114,11 @@ export interface TurnState {
   background?: boolean;
   /** What Escape does to the CLI's own queue, when its files say (Claude): `sends` or nothing. */
   queued?: "sends" | null;
+  /**
+   * Claude, at rest: the account's usage limit refused its last request (its own `usage_limit_reached`
+   * row), with the epoch ms the limit resets. Gone once the reset passed or a reply came through.
+   */
+  limit?: { resetsAt: number };
   source: "claude-session" | "codex-rollout";
 }
 
@@ -861,7 +866,7 @@ export type SendOutcome =
 
 /** Why a queued row is still waiting. `stopped` mirrors the row's stored `held`; the others live in
  *  memory and are never written as a revision bump. */
-export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped";
+export type QueueWaitReason = "dialog" | "draft" | "working" | "turn-start" | "disconnected" | "stopped" | "limit";
 
 /** What the CLI's own queue did with a delivered row, read from its journal. */
 export type NativeQueueState = "enqueued" | "absorbed" | "recalled";

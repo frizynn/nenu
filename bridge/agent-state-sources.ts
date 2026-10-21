@@ -79,6 +79,10 @@ export function claudeSessionDirs(projectRoots: readonly string[]): string[] {
 export class ClaudeTurnScan {
   lastMove = -Infinity;
   lastEnd = -Infinity;
+  /** When a real reply last came through: an assistant row that is not an API error. */
+  lastReply = -Infinity;
+  /** The usage limit that refused the latest request, until a reply came through after it. */
+  limit: { at: number; resetsAt: number } | undefined;
   private fifo: { content: string; notice: boolean }[] = [];
 
   line(text: string): void {
@@ -94,6 +98,13 @@ export class ClaudeTurnScan {
     } else if (row.type === "assistant") {
       this.lastMove = Math.max(this.lastMove, at);
       if (record(row.message).stop_reason === "end_turn") this.lastEnd = Math.max(this.lastEnd, at);
+      if (row.apiError === "usage_limit_reached") {
+        const resetsAt = limitResetsAt(row);
+        if (resetsAt !== null && at >= (this.limit?.at ?? -Infinity)) this.limit = { at, resetsAt };
+      } else if (row.isApiErrorMessage !== true) {
+        this.lastReply = Math.max(this.lastReply, at);
+        if (this.limit && at > this.limit.at) this.limit = undefined;
+      }
     } else if (row.type === "user" && row.isMeta !== true && row.isCompactSummary !== true) {
       const said = userText(record(row.message).content);
       if (INTERRUPTED.test(said)) this.lastEnd = Math.max(this.lastEnd, at);
@@ -127,6 +138,15 @@ export class ClaudeTurnScan {
   }
 }
 
+/**
+ * When the limit on a `usage_limit_reached` row resets, in epoch ms. Claude 2.1.306 writes it twice,
+ * in seconds: `quotaLimits.resetsAt` and `apiErrorParams.rate_limit_info.resetsAt` (measured).
+ */
+function limitResetsAt(row: Record<string, unknown>): number | null {
+  const seconds = record(row.quotaLimits).resetsAt ?? record(record(row.apiErrorParams).rate_limit_info).resetsAt;
+  return typeof seconds === "number" && Number.isFinite(seconds) && seconds > 1e9 ? seconds * 1000 : null;
+}
+
 const MAX_QUEUED = 64;
 /** "[Request interrupted by user]" and "[Request interrupted by user for tool use]" (measured). */
 const INTERRUPTED = /^\[Request interrupted by user\b/;
@@ -150,13 +170,31 @@ function userText(content: unknown): string {
  * the spell began; it defaults to the file's last status change, which a dialog answered mid-spell
  * moves (waiting → busy), so the service passes the spell's real start when it saw one.
  */
-export function claudeTurn(file: ClaudeSessionFile, scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null, busySince = file.statusUpdatedAt): TurnState {
+export function claudeTurn(
+  file: ClaudeSessionFile,
+  scan: Pick<ClaudeTurnScan, "lastMove" | "lastEnd" | "queued"> | null,
+  busySince = file.statusUpdatedAt,
+  limit?: TurnState["limit"],
+): TurnState {
   const source = "claude-session" as const;
   if (file.waitingFor || file.status === "waiting") return { running: false, waiting: file.waitingFor ?? "dialog open", source };
-  if (file.status === "idle") return { running: false, source };
-  if (file.status === "shell") return { running: false, background: true, source };
+  // Only a Claude at rest is held by its limit: a turn that runs got through.
+  const held = limit ? { limit } : {};
+  if (file.status === "idle") return { running: false, ...held, source };
+  if (file.status === "shell") return { running: false, background: true, ...held, source };
   if (scan && scan.lastEnd >= busySince && scan.lastEnd >= scan.lastMove) return { running: false, background: true, source };
   return { running: true, ...(scan ? { queued: scan.queued > 0 ? "sends" as const : null } : {}), source };
+}
+
+/**
+ * Whether Claude's usage limit still holds it (ADR 0118): its transcript's latest request was refused
+ * by the limit, the reset has not passed, and no Claude of the same profile (one account) has had a
+ * reply since, which is how a switched account shows. `replied` is that profile's latest reply.
+ */
+export function claudeLimit(scan: Pick<ClaudeTurnScan, "limit"> | null, replied: number, now: number): TurnState["limit"] {
+  const limit = scan?.limit;
+  if (!limit || limit.at <= replied || now >= limit.resetsAt) return undefined;
+  return { resetsAt: limit.resetsAt };
 }
 
 // ── Codex: the rollout JSONL ────────────────────────────────────────────────────────────────────
