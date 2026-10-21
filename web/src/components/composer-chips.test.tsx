@@ -161,20 +161,18 @@ it("floats the panel over the thread: the box and the conversation stay where th
   const box = document.querySelector(".composer-box")!;
   const scroller = screen.getByRole("region", { name: "Live conversation" }).querySelector<HTMLElement>(".overflow-y-auto")!;
   scroller.scrollTop = 120;
-  // The line folds in and out; the panel sits beside that fold, so a line folding never takes it along.
-  const line = chips.closest(".composer-fold")!;
-  const before = line.previousElementSibling;
+  // The chips sit under the box, in the row the model is in; nothing of theirs is above the box.
+  expect(screen.getByRole("group", { name: "Message tools" })).toContainElement(chips);
+  const above = box.parentElement!.previousElementSibling;
   await user.click(within(chips).getByRole("button", { name: "Working, 1" }));
   const panel = screen.getByRole("dialog", { name: "Working" });
-  // The panel is the line's own overlay, not a row of the composer: nothing is inserted above the line.
-  expect(panel.parentElement).toBe(line.parentElement);
-  expect(panel.parentElement).toHaveClass("composer-chips");
-  expect(line.previousElementSibling).toBe(panel);
+  // The panel is an overlay anchored to the box's dock, not a row of the composer.
+  expect(panel.closest(".composer-dock")).toBe(box.closest(".composer-dock"));
+  expect(box.parentElement!.previousElementSibling).toBe(above);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "Working" })).not.toBeInTheDocument();
-  expect(line.previousElementSibling).toBe(before);
   expect(document.querySelector(".composer-box")).toBe(box);
   expect(scroller.scrollTop).toBe(120);
 });

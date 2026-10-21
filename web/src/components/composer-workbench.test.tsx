@@ -306,9 +306,11 @@ it("gives a draft the + column's width while the phone keyboard is up, so it wra
 
 it("gives the thread the meta row's height while the phone keyboard is up", () => {
   const css = readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8");
-  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
-  // The chips above the box step aside too; an open chip's panel stays until it is closed.
-  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-chip-row", ["@media (max-width: 1023px) and (pointer: coarse)"])).toMatchObject({ display: "none" });
+  const typing = ["@media (max-width: 1023px) and (pointer: coarse)"];
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta", typing)).toMatchObject({ "min-height": "0", padding: "0" });
+  // The model, the place and the chips step aside; an open chip's panel, inside the row, stays until it is closed.
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-meta > :not(.composer-chips)", typing)).toMatchObject({ display: "none" });
+  expect(declarations(css, ".workbench-chat[data-keyboard-open] .composer-chip-row", typing)).toMatchObject({ display: "none" });
 });
 
 it("paints the armed Send in the accent its box wears, so armed reads as one signal", async () => {

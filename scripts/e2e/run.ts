@@ -39,7 +39,7 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
 //   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
-//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips above the box and Stop in it: seven moments, phone and desk, the height they take
+//   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips under the box and Stop in it: seven moments, phone and desk, nothing above the box
 //   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; what opening a panel moves
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
@@ -3366,14 +3366,15 @@ async function chipLine(): Promise<void> {
         }
       }
     }
-    // Stop sits in the box whenever a turn runs, keyboard up or not; with no live chip nothing sits
-    // between the thread and the box; and nothing pushes the page sideways.
+    // Stop sits in the box whenever a turn runs, keyboard up or not; nothing ever sits between the
+    // thread and the box, chips or not (ADR 0108): they are in the row under it, clear of the model and
+    // the place; and nothing pushes the page sideways.
     type Seen = ReturnType<typeof measureAboveBox>;
     const working = new Set<string>(moments.filter((m) => m.status === "working").map((m) => m.name));
     const failed = Object.entries(seen as Record<string, Seen>).filter(([key]) => !key.endsWith("-panel") && !key.endsWith("-menu")).filter(([key, m]) => !m || m.pageScrollsSideways
       || (working.has(momentOf[key] ?? "") && !m.stopInBox)
       || (m.stop && (m.stop.left < 0 || m.stop.right > m.viewportWidth))
-      || (m.chipLabels.length === 0 && m.aboveBox !== null && m.aboveBox > 0)).map(([key]) => key);
+      || (m.aboveBox !== null && m.aboveBox > 0) || !m.chipsUnderBox || m.chipsOverlap).map(([key]) => key);
     // Opened from the ⋯ menu, finished work's panel floats: the box stays where it was.
     for (const [key, value] of Object.entries(seen)) {
       if (key.endsWith("-finished-panel") && (value as { box?: number }).box !== (seen[key.replace(/-finished-panel$/, "")] as Seen)?.boxTop) failed.push(key);
@@ -3421,6 +3422,11 @@ function measureAboveBox() {
   const reach = sr && sr.height > 0 ? [-21, 21].map((dy) => document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2 + dy)?.closest("button") === stop) : null;
   const chipsRect = rect(chipRow);
   const inBox = stop?.closest(".composer-box") !== null && stop !== null && sr !== undefined && sr.height > 0;
+  // The chips sit in the row under the box, and touch neither the model nor the place beside them.
+  const meta = document.querySelector(".composer-meta");
+  const neighbours = Array.from(meta?.children ?? []).filter((el) => !el.classList.contains("composer-chips")).map((el) => el.getBoundingClientRect())
+    .filter((r) => r.width > 0);
+  const overlaps = chipsRect !== null && neighbours.some((r) => r.left < chipsRect.right - 1 && r.right > chipsRect.left + 1);
   return {
     gap: last === null ? null : Math.round(box.top - last),
     aboveBox: thread ? Math.round(box.top - thread.bottom) : null,
@@ -3428,6 +3434,8 @@ function measureAboveBox() {
     chips: chipsRect,
     chipLabels: Array.from(chipRow?.querySelectorAll("button") ?? []).map((b) => b.getAttribute("aria-label")),
     chipsScroll: chipRow ? { scrollWidth: chipRow.scrollWidth, clientWidth: chipRow.clientWidth } : null,
+    chipsUnderBox: chipsRect === null || (chipRow!.closest(".composer-meta") !== null && chipsRect.top >= box.bottom),
+    chipsOverlap: overlaps,
     stop: rect(stop),
     stopInBox: inBox,
     stopReach: reach,
