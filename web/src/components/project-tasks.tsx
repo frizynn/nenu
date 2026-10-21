@@ -343,7 +343,7 @@ function MoveNodeDialog({ project, tree, node, session, onMoved, onCancel }: {
       description={<><span className="font-medium text-foreground">{node.thread.title}</span>{node.children.length > 0 && ", with everything under it,"} goes under:</>}>
       <div role="radiogroup" aria-label="New parent" className="mt-3 flex max-h-72 flex-col gap-1 overflow-y-auto">
         {options.map((option) => (
-          <label key={option.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 hover:bg-accent/60" style={{ paddingLeft: `${0.5 + option.depth}rem` }}>
+          <label key={option.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 hover:bg-hover" style={{ paddingLeft: `${0.5 + option.depth}rem` }}>
             <input type="radio" name="parent" value={option.id} checked={parent === option.id} onChange={() => setParent(option.id)} />
             <span className="min-w-0 flex-1 break-words text-body">{option.title}</span>
           </label>

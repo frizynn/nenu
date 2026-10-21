@@ -245,8 +245,8 @@ function Chip({ chip, project, session }: { chip: ReturnType<typeof linkChip>; p
     {chip.href && <ExternalLink aria-hidden className="size-3 shrink-0" />}
   </>;
   const shape = "inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted px-2 text-caption text-muted-foreground";
-  if (chip.thread) return <Link to={nodePath(project, chip.thread, session)} className={cn(shape, "hover:bg-accent")}>{body}</Link>;
-  if (chip.href) return <a href={chip.href} target="_blank" rel="noreferrer" className={cn(shape, "hover:bg-accent")}>{body}</a>;
+  if (chip.thread) return <Link to={nodePath(project, chip.thread, session)} className={cn(shape, "hover:bg-hover")}>{body}</Link>;
+  if (chip.href) return <a href={chip.href} target="_blank" rel="noreferrer" className={cn(shape, "hover:bg-hover")}>{body}</a>;
   return <span className={shape}>{body}</span>;
 }
 

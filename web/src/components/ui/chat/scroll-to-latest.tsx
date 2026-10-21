@@ -29,7 +29,7 @@ export function ScrollToLatest({ onClick, waiting = false, count = 0, changed = 
         className={cn(
           "pointer-events-auto relative flex h-9 shrink-0 items-center justify-center rounded-full shadow-(--shadow-float) transition-[scale,background-color] duration-120 ease-out active:scale-[0.97] animate-in fade-in slide-in-from-bottom-1 coarse:h-11 motion-reduce:animate-none motion-reduce:transition-none",
           pill ? "gap-1.5 px-4 text-footnote font-medium" : "w-9 coarse:w-11",
-          fresh ? "bg-foreground text-background hover:bg-foreground/90" : "border bg-popover text-popover-foreground hover:bg-accent",
+          fresh ? "bg-foreground text-background hover:bg-foreground/90" : "border bg-popover text-popover-foreground hover:bg-hover",
         )}>
         {pill && <><span className="sr-only">Scroll to latest,</span>{" "}</>}
         {waiting

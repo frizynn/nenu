@@ -152,7 +152,7 @@ export const PRIMARY_ACTION = cn(buttonVariants({ size: "block" }));
 export const NEUTRAL_ACTION = cn(buttonVariants({ variant: "secondary", size: "block" }));
 /** An escape or a utility under the card (Cancel, Chat about this, Add a note…): plain text, neutral. */
 export const SECONDARY_ACTION =
-  "inline-flex min-h-11 select-none items-center gap-1.5 rounded-lg px-2 text-subhead font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted disabled:text-disabled-foreground";
+  "inline-flex min-h-11 select-none items-center gap-1.5 rounded-lg px-2 text-subhead font-medium text-muted-foreground transition-colors hover:bg-hover hover:text-foreground active:bg-muted disabled:text-disabled-foreground";
 /** The row of SECONDARY_ACTIONs, bled into the card's padding so their text lines up with the content. */
 export const SECONDARY_ROW = "-mx-2 -mb-2 flex flex-wrap items-center";
 

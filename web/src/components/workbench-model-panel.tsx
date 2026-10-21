@@ -85,7 +85,7 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
               <EffortStepper effort={effort} disabled={locked} onStep={(key) => onMenuAction?.({ keys: [key], nav: true }, menu.menu)} />
             </div>
             : reportedEffort && (!modelPresent && effortIn === "arrows"
-              ? <button type="button" disabled={locked || loadingEffort} className={`${ROW} hover:bg-accent active:bg-accent disabled:text-disabled-foreground`} onClick={loadEffort}>
+              ? <button type="button" disabled={locked || loadingEffort} className={`${ROW} hover:bg-hover active:bg-accent disabled:text-disabled-foreground`} onClick={loadEffort}>
                 <span className="flex-1 text-body">Effort</span>
                 <span className="text-footnote capitalize text-muted-foreground">{reportedEffort}</span>
                 {loadingEffort ? <Pending aria-label="Opening the agent's picker" className="size-4 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
@@ -97,7 +97,7 @@ export function WorkbenchModelPanel({ scope, open, anchorRef, agent, text, menu,
                 </span>
                 <span className="text-footnote capitalize text-muted-foreground">{reportedEffort}</span>
               </div>)}
-            <button type="button" disabled={locked} className="mb-1 min-h-11 w-full rounded-lg text-footnote text-muted-foreground hover:bg-accent"
+            <button type="button" disabled={locked} className="mb-1 min-h-11 w-full rounded-lg text-footnote text-muted-foreground hover:bg-hover"
               onClick={loadAdvanced}>More model settings</button>
           </>} />
       : <div className="p-3 text-footnote text-muted-foreground max-lg:px-4">

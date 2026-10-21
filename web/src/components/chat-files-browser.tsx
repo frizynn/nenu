@@ -249,7 +249,7 @@ export function ChatFilesBrowser({
         aria-label="Artifacts and files"
         title="Artifacts and files"
         onClick={() => { begin(); setOpen(true); }}
-        className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 active:bg-muted lg:size-8"
+        className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover active:bg-muted lg:size-8"
       >
         <Paperclip aria-hidden="true" className="size-4" />
       </button>}
@@ -296,7 +296,7 @@ export function ChatFilesBrowser({
             {shown.map((reference) => (
               <li key={reference.path}>
                 <FileLink path={reference.path} onOpen={() => openReference(reference.path)} label={`Open ${reference.name}`}
-                  className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
+                  className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><FileIcon name={reference.name} /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-footnote font-medium">{reference.name}</span>

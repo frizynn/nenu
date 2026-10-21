@@ -510,7 +510,7 @@ function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?:
   if (!onOpen) return <div className="flex min-h-11 min-w-0 items-center gap-2.5">{who}</div>;
   return (
     <button type="button" onClick={onOpen} aria-busy={opening || undefined}
-      className="-mx-2 flex min-h-11 min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-muted active:bg-muted">
+      className="-mx-2 flex min-h-11 min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-hover active:bg-muted">
       {who}
       <span className="sr-only">, open thread</span>
       {opening
@@ -524,7 +524,7 @@ function CompactHeader({ title, onOpen, opening }: { title?: ReactNode; onOpen?:
 function StepButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" aria-label={label} disabled={disabled} onClick={onClick}
-      className="hit-area flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted active:bg-muted disabled:text-muted-foreground">
+      className="hit-area flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-hover active:bg-muted disabled:text-muted-foreground">
       {children}
     </button>
   );

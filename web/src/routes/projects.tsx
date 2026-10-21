@@ -54,7 +54,7 @@ function ProjectCard({ project, agents, projects, now, session }: { project: Pro
   const { waiting, working, coordinators, threads, at } = projectPulse(project, agents, projects);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
-    <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-accent/40">
+    <Link to={projectPath(project.slug, session)} className="desk-card flex h-full flex-col p-4 hover:bg-hover">
       <span className="desk-card-mark mb-3 size-9"><ProjectGlyph slug={project.slug} pick={project} size={18} /></span>
       <span className="text-headline">{project.name}</span>
       {project.goal && <span className="mt-1 line-clamp-2 text-footnote text-muted-foreground">{project.goal}</span>}

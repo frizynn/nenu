@@ -230,6 +230,8 @@
   --color-switch-off: var(--switch-off);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  /* The one hover fill, rows and controls alike; a press steps up to accent. */
+  --color-hover: var(--workbench-row-hover);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);

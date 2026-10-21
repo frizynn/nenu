@@ -43,7 +43,7 @@ export function SkillPicker({ id, skills, total, activeIndex, onSelect, label = 
             id={`${id}-option-${index}`}
             role="option"
             aria-selected={activeIndex === index}
-            className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 ${activeIndex === index ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"}`}
+            className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 ${activeIndex === index ? "bg-accent text-accent-foreground" : "hover:bg-hover"}`}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onSelect(skill)}
           >

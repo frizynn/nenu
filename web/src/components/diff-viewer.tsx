@@ -227,7 +227,7 @@ function CommentableLine({ at, commenting, row }: { at: DiffLine; commenting: Co
           <button type="button" aria-label={`Edit comment on ${name}`} onClick={(event) => { event.stopPropagation(); setEditing(true); }}
             className="min-w-0 flex-1 whitespace-normal break-words text-left">{saved.text}</button>
           <button type="button" aria-label={`Remove comment on ${name}`} onClick={(event) => { event.stopPropagation(); save(""); }}
-            className="hit-area grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">
+            className="hit-area grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
             <X aria-hidden className="size-3" />
           </button>
         </div>}

@@ -11,7 +11,7 @@ import { artifactCandidate, artifactSections, fileExtension, type ChatFileRefere
 import { cn } from "@/lib/utils";
 import { FileLink } from "./file-link";
 
-const ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring";
+const ROW = "flex min-h-14 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring";
 const TILE = "flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground";
 const KIND_LABEL: Record<string, string> = { md: "Markdown", markdown: "Markdown", mdx: "Markdown", pdf: "PDF", html: "HTML page", htm: "HTML page" };
 

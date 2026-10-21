@@ -185,7 +185,7 @@ function AttachmentChip({
       )}
       <button
         type="button"
-        className="hit-area grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="hit-area grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground"
         onPointerDown={(e) => e.preventDefault()}
         onClick={onRemove}
         aria-label={`Remove ${label}`}

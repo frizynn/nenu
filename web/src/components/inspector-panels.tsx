@@ -141,7 +141,7 @@ function Changes({ paneId, session, pr }: { paneId: string; session?: string; pr
         </div>
         <span className="flex-1" />
         <button type="button" aria-label="Read the diff again" title="Read the diff again" onClick={() => setAttempt((n) => n + 1)}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground">
           <RefreshCw aria-hidden className="size-3.5" />
         </button>
       </div>

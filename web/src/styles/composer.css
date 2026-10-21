@@ -35,7 +35,7 @@
 .composer-notice-body { margin-top: 2px; overflow-wrap: anywhere; }
 .composer-notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-notice-dismiss { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; margin: -4px -4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
-@media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--accent); } }
+@media (hover: hover) { .composer-notice-dismiss:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
 /* A row above the box (the chips' line, a notice) folds open and shut, so the thread moves with it
    instead of jumping (composer-fold.tsx). Clipped only while it moves, so a settled row keeps its 44px hits. */
 .composer-fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--motion-panel) var(--motion-ease), opacity var(--motion-panel) var(--motion-ease); }
@@ -63,7 +63,7 @@
 .composer-meta { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 6px 0; font-size: var(--text-footnote); color: var(--muted-foreground); }
 .composer-quiet { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); white-space: nowrap; cursor: pointer; }
 .composer-quiet[aria-expanded="true"] { color: var(--foreground); background: var(--accent); }
-@media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--accent); } }
+@media (hover: hover) { .composer-quiet:hover:not(:disabled) { color: var(--foreground); background: var(--workbench-row-hover); } }
 .composer-quiet:disabled { color: var(--disabled-foreground); cursor: default; }
 /* The meta row's targets reach down into the home indicator's inset, not up into the box, where the
    + needs its own 44px: its reach ends 1px above the box's edge on a phone and 1px below it from 768px,
@@ -132,11 +132,11 @@
 .composer-chip-panel-head h2 { font-weight: 400; }
 .composer-chip-panel-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 8px 8px; }
 .composer-chip-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
-@media (hover: hover) { .composer-chip-icon:hover { color: var(--foreground); background: var(--accent); } }
+@media (hover: hover) { .composer-chip-icon:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
 @media (pointer: coarse) { .composer-chip-icon { width: 44px; height: 44px; margin: -8px -8px -8px 0; } }
 .composer-chip-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 6px; border-radius: var(--radius-md); font-size: var(--text-footnote); text-align: left; }
 @media (pointer: coarse) { .composer-chip-item { min-height: 44px; } }
-@media (hover: hover) { button.composer-chip-item:hover { background: var(--accent); } }
+@media (hover: hover) { button.composer-chip-item:hover { background: var(--workbench-row-hover); } }
 /* Under the box, after the model: the branch the chat works on and the machine it runs on. */
 .composer-place { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; padding: 0 6px; }
 .composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }

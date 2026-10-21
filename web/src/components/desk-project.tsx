@@ -196,7 +196,7 @@ function NewMenu({ project, roles, onStarted }: { project: ProjectView; roles: r
     </DeskAction>
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="New" className="w-72 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
       {items.filter((item) => roles.includes(item.role)).map(({ role, label, detail, icon: Icon }) => (
-        <button key={role} type="button" onClick={() => start(role)} className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-accent">
+        <button key={role} type="button" onClick={() => start(role)} className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-hover">
           <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span><span className="block text-subhead">{label}</span><span className="block text-footnote text-muted-foreground">{detail}</span></span>
         </button>

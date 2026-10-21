@@ -257,7 +257,7 @@ export function sessionPr(data: Pick<HomeData, "pullRequests">, paneId: string, 
   return pr && { number: pr.number, title: thread.title, url: pr.url, head: thread.branch || undefined, state: pr.state, review: pr.review, checks: pr.checks, diff: pr.diff };
 }
 
-export const ICON_BUTTON = "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground active:bg-muted aria-pressed:bg-accent aria-pressed:text-foreground";
+export const ICON_BUTTON = "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted aria-pressed:bg-accent aria-pressed:text-foreground";
 
 /** The chat header's way back to a folded panel, with the PR's size when Nenu already knows it. */
 export function InspectorToggle({ inspector, pr }: { inspector: SessionInspectorState; pr?: SessionPr }) {

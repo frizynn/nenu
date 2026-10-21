@@ -48,7 +48,7 @@ export function WorkflowAgentList({ workflow, now, selectedAgentId, onSelectAgen
                 type="button"
                 aria-pressed={on}
                 onClick={() => onSelectAgent?.(agent.id)}
-                className={cn("flex min-h-11 items-center gap-2 rounded-md px-2 text-left text-footnote hover:bg-muted/40", on && "bg-muted")}
+                className={cn("flex min-h-11 items-center gap-2 rounded-md px-2 text-left text-footnote hover:bg-hover", on && "bg-muted")}
               >
                 <StateDot state={agent.state} />
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">

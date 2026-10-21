@@ -16,7 +16,7 @@
 .file-preview-subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); color: var(--muted-foreground); }
 .file-preview-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
 .file-preview-action { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), scale var(--motion-control) var(--motion-ease); }
-@media (hover: hover) and (pointer: fine) { .file-preview-action:hover { background: var(--accent); color: var(--foreground); } }
+@media (hover: hover) and (pointer: fine) { .file-preview-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 .file-preview-action:active { scale: 0.97; }
 @media (pointer: coarse) { .file-preview-action { width: 44px; height: 44px; } }
 

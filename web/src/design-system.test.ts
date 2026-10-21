@@ -243,3 +243,15 @@ describe("fields", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("hover", () => {
+  it("lights a row or a control with one fill, never a tint of its own", () => {
+    // Six tints (accent, accent/60, muted, muted/50, …) read as six apps; `hover:bg-hover` and
+    // var(--workbench-row-hover) are the one fill. Only a control that rests on a fill steps above it.
+    const offenders = filesEndingIn(src, ".tsx").flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/\bhover:bg-(accent|muted)(?![\w-])(\/\d+)?/g)]
+        .filter((m) => !/session-switcher\.tsx$/.test(file))
+        .map((m) => `${relative(src, file)}: ${m[0]}`));
+    expect(offenders).toEqual([]);
+  });
+});
