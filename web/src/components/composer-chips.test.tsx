@@ -152,6 +152,8 @@ it("in a narrow box, keeps a long branch and the machine behind one tap, never c
   expect(declarations(css, ".composer-place-tap").display).toBe("none");
   expect(declarations(css, ".composer-place-whole", narrow).display).toBe("none");
   expect(declarations(css, ".composer-place-tap", narrow).display).toBe("flex");
+  // After the base rules, which would override it at the same specificity.
+  expect(css.lastIndexOf("@container composer (max-width: 479px)")).toBeGreaterThan(css.indexOf(".composer-place-tap { display: none; }"));
   const thread = { ...own, branch: LONG_BRANCH };
   const { user } = renderChat({ thread, threads: threads.map((t) => (t.id === own.id ? thread : t)) });
   const place = await screen.findByRole("group", { name: "Message tools" });

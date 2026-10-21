@@ -76,7 +76,7 @@ box. What gives way is read off the box's own width (a container query), so a ph
 docked beside its coordinator take the same row: under 480 px only Needs you keeps its word and, while
 chips are there, the model's effort and the context's number step aside (the picker and the ring's
 panel still say them), then the model's name truncates, and the place is one button that opens the
-branch and the machine; under 300 px the context's ring steps aside too (the session panel says it),
+branch and the machine; under 300 px the context's ring steps aside too (the thread's full view says it),
 never the model's button, from which the model panel opens on its own. In a wide box the branch and
 the machine truncate side by side when the row is full. The panel a chip opens still floats over the
 thread from the box's top edge. With the phone's keyboard up the row gives its height back, chips

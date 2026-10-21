@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Changed
 
-- Needs you, Working and PRs sit in the row under the box, beside the model; no line above the box takes the thread's height. In a narrow box (a phone, a docked thread) only Needs you keeps its word, and the model's effort and context number step aside for them (1d576f22, 35381102, 289f8f7e, 1bb500ed).
+- Needs you, Working and PRs sit in the row under the box, beside the model; no line above the box takes the thread's height. In a narrow box (a phone, a docked thread) only Needs you keeps its word, the model's effort and context number step aside for them, and the branch and machine are one tap (1d576f22, 35381102, 289f8f7e, 1bb500ed).
 
 ### Fixed
 
