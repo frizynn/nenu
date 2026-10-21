@@ -143,10 +143,13 @@ export const PATH_SETTLED_MS = 1_000;
 /** The longest a picture's wait runs on while the CLI says it is still pasting. */
 export const PASTING_CAP_MS = 60_000;
 /**
- * The waits of one whole send, pictures included: past it a picture's wait no longer runs on for
- * Pasting…, so a send answers within the phone's timeout (web/src/lib/api.ts) and Bun's idle timeout.
+ * When, from the send's start by the clock, its pictures stop being waited for. What can follow is at
+ * most three bounded waits (a clear, a late picture, its clear: 45 s of pauses), so on a host whose
+ * reads are quick the send answers inside the phone's 110 s (web/src/lib/api.ts). On a starved one the
+ * reads themselves can push it past that; the phone then says it had no answer, and its retry, with
+ * the same request id, joins this send instead of typing again (WriteLedger).
  */
-export const SEND_BUDGET_MS = 75_000;
+export const PICTURES_BY_MS = 55_000;
 
 // ── The trigger regex ─────────────────────────────────────────────────────────────────────────────
 
@@ -244,8 +247,9 @@ class Send {
     unverified: false,
   };
   readonly sleep: Sleep;
-  /** The pauses this send has taken so far, against {@link SEND_BUDGET_MS}. */
-  slept = 0;
+  private readonly clock: () => number;
+  /** When this send started, by its clock. */
+  readonly startedAt: number;
 
   constructor(
     private readonly deps: GuardedSendDeps,
@@ -253,13 +257,16 @@ class Send {
     private readonly adapter: HarnessAdapter | undefined,
     private readonly prior?: PriorAttempt,
   ) {
-    const sleep = deps.sleep ?? defaultSleep;
-    this.sleep = (ms) => {
-      this.slept += ms;
-      return sleep(ms);
-    };
+    this.sleep = deps.sleep ?? defaultSleep;
+    this.clock = deps.now ?? Date.now;
+    this.startedAt = this.clock();
     if (prior?.typeAttempted) this.trace.typeAttempted = true;
     if (prior?.typedAt !== undefined) this.trace.typedAt = prior.typedAt;
+  }
+
+  /** Time since the send started, read latency included. */
+  elapsed(): number {
+    return this.clock() - this.startedAt;
   }
 
   get priorDelivered(): boolean {
@@ -524,7 +531,8 @@ async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, 
   let shownFor: number | null = null;
   let waited = 0;
   let pastingFor = 0;
-  for (let i = 0; waited < WAIT_BUDGET_MS && pastingFor < PASTING_CAP_MS; i++) {
+  // The bound, the Pasting… cap, and the send's own clock for all its pictures together.
+  for (let i = 0; waited < WAIT_BUDGET_MS && pastingFor < PASTING_CAP_MS && send.elapsed() < PICTURES_BY_MS; i++) {
     const delay = WAIT_DELAYS_MS[Math.min(i, WAIT_DELAYS_MS.length - 1)]!;
     if (delay > 0) await send.sleep(delay);
     let pasting = false;
@@ -537,8 +545,7 @@ async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, 
     } catch {
       // A failed read shows nothing; the bounded loop is the timeout.
     }
-    // Past the send's whole budget, Pasting… no longer holds the bound back.
-    if (pasting && send.slept < SEND_BUDGET_MS) pastingFor += delay;
+    if (pasting) pastingFor += delay;
     else waited += delay;
   }
   return null;

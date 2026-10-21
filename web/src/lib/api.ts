@@ -110,8 +110,8 @@ export function isDefiniteRefusal(error: unknown): boolean {
 const GET_TIMEOUT_MS = 10_000;
 //   - Mutations drive a real terminal on the host, which can legitimately take a beat — more slack.
 const MUTATION_TIMEOUT_MS = 20_000;
-//   - A send waits for a loaded agent's box and log, pictures included, within the bridge's
-//     75 s budget (bridge/guarded-send.ts SEND_BUDGET_MS) plus its confirm; under Bun's 120 s idle timeout.
+//   - A send waits for a loaded agent's box and log: its pictures until 55 s into the send
+//     (bridge/guarded-send.ts PICTURES_BY_MS), then at most three 15 s waits; under Bun's 120 s idle timeout.
 const SEND_TIMEOUT_MS = 110_000;
 const ORG_LIST_TIMEOUT_MS = 15_000;
 const ORG_MUTATION_TIMEOUT_MS = 35_000;

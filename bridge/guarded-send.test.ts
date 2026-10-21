@@ -10,7 +10,7 @@ import {
   TRIGGER_PATTERN_MAX,
   TRIGGER_PREFIX_MAX,
   PASTING_CAP_MS,
-  SEND_BUDGET_MS,
+  PICTURES_BY_MS,
   WAIT_BUDGET_MS,
   WAIT_DELAYS_MS,
   WriteLedger,
@@ -405,9 +405,31 @@ describe("guardedSend", () => {
     const { outcome } = await guardedSend({ herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void sleeps.push(ms) }, { text: placed, requestId: "r1" });
     expect(outcome).toMatchObject({ ok: false, stage: "type", textDelivered: false });
     const total = sleeps.reduce((a, b) => a + b, 0);
-    // The cap held the wait, and the send's own budget the whole of it.
-    expect(total).toBeGreaterThanOrEqual(PASTING_CAP_MS);
-    expect(total).toBeLessThan(SEND_BUDGET_MS + 3 * WAIT_BUDGET_MS);
+    // The cap held the wait: about a minute of it, then the clear and the late watch.
+    expect(total).toBeGreaterThanOrEqual(PICTURES_BY_MS);
+    expect(total).toBeLessThan(PASTING_CAP_MS + 3 * WAIT_BUDGET_MS);
+  });
+
+  test("the send's pictures stop by its clock: a second picture pasting forever after a slow first fits the phone's wait", async () => {
+    const term = new Term();
+    term.saysPasting = true;
+    let pastes = 0;
+    const paste = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      // The first picture takes about 50 s of Pasting…; the second never ends.
+      if (typed.startsWith("\x1b[200~/")) term.pictureReads = ++pastes === 1 ? 200 : 100_000;
+      return paste(paneId, typed);
+    };
+    let clock = 0;
+    const { outcome } = await guardedSend(
+      { herdr: term, paneId: "w1:p1", readLines: 200, submitKeys: ["Enter"], sleep: async (ms) => void (clock += ms), now: () => clock },
+      { text: placed, requestId: "r1" },
+    );
+    expect(outcome.ok).toBe(false);
+    expect(term.pictures).toBe(2);
+    // Pictures stopped at PICTURES_BY_MS; what follows is at most three bounded waits.
+    expect(clock).toBeLessThan(PICTURES_BY_MS + 3 * WAIT_BUDGET_MS);
+    expect(clock).toBeLessThan(110_000);
   });
 
   test("a path the box shows while Claude says Pasting… is not taken for the path staying text", async () => {
