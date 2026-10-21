@@ -400,11 +400,9 @@ export async function guardedSend(deps: GuardedSendDeps, request: SendRequest, p
 
   // The CLI's state once more before Enter: a dialog it reports stops the send, and a turn that
   // started meanwhile (a sweep or a picture's wait can take seconds) sends it the mid-turn way.
-  if (logFirst && deps.received) {
-    const atEnter = deps.turn?.();
-    if (dialogReported(atEnter, request)) return dialogUp(send);
-    if (idle(atEnter)) return await submitAndLog(send, deps, adapter, deps.received, since);
-  }
+  const atEnter = deps.turn?.();
+  if (dialogReported(atEnter, request)) return dialogUp(send);
+  if (logFirst && deps.received && idle(atEnter)) return await submitAndLog(send, deps, adapter, deps.received, since);
 
   send.trace.phase = "verify";
   if (!(await verify(send, deps))) {
@@ -489,8 +487,10 @@ async function afterLatePicture(send: Send, deps: GuardedSendDeps, adapter: Harn
       continue;
     }
     if (seen.draft === null || seen.composer !== true) continue;
-    if (!draftIsPartOfSend(send.request.text, seen.draft) && !onlyItsPictures(send.request.text, seen.draft)) return send.fail(`${PICTURE_UNSEEN.why} ${PICTURE_UNSEEN.left}`, true);
-    if ((await sweep(send, deps, adapter, seen)) !== null) return send.fail(`${PICTURE_UNSEEN.why} ${PICTURE_UNSEEN.left}`, true);
+    if (!draftIsPartOfSend(send.request.text, seen.draft) && !onlyItsPictures(send.request.text, seen.draft)) return leftInBox(send, PICTURE_UNSEEN);
+    if (dialogReported(deps.turn?.(), send.request)) return leftInBox(send, PICTURE_UNSEEN);
+    // Only the one picture the send stopped at can still be on its way: once it is cleared, done.
+    return (await sweep(send, deps, adapter, seen)) === null ? stopped : leftInBox(send, PICTURE_UNSEEN);
   }
   return stopped;
 }
@@ -530,7 +530,8 @@ async function pictureDrawn(send: Send, count: number, path: string): Promise<"t
  */
 async function unsent(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter, stopped: Stopped): Promise<GuardedSendResult> {
   // An earlier try's text may already have gone: "send it again" would contradict the retry's answer.
-  if (send.priorDelivered) return send.fail(`${stopped.why} ${stopped.left}`, true);
+  // Every sweep after typing comes through here, so a dialog the CLI reports gets none of its keys.
+  if (send.priorDelivered || dialogReported(deps.turn?.(), send.request)) return leftInBox(send, stopped);
   try {
     const seen = await send.read();
     if (seen.composer === true && draftIsPartOfSend(send.request.text, seen.draft) && (await sweep(send, deps, adapter, seen)) === null) {
@@ -539,6 +540,11 @@ async function unsent(send: Send, deps: GuardedSendDeps, adapter: HarnessAdapter
   } catch {
     // Unread, the box is left as it is.
   }
+  return leftInBox(send, stopped);
+}
+
+/** A stop that leaves the box as it is: why, and what is left there. */
+function leftInBox(send: Send, stopped: Stopped): GuardedSendResult {
   return send.fail(`${stopped.why} ${stopped.left}`, true);
 }
 
@@ -595,7 +601,7 @@ function dialogReported(turn: ReturnType<NonNullable<GuardedSendDeps["turn"]>>, 
  */
 function dialogUp(send: Send): GuardedSendResult {
   send.trace.phase = "submit";
-  return send.fail(`${DIALOG_UP.why} ${DIALOG_UP.left}`, true);
+  return leftInBox(send, DIALOG_UP);
 }
 
 /** Claude with no turn, no background work and no dialog: then only the operator opens a dialog. */

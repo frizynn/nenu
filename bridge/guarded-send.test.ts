@@ -754,6 +754,22 @@ describe("guardedSend: Enter behind the text at an idle Claude, the log as witne
     expect(term.draft + term.pending).toBe(text);
   });
 
+  test("mid-turn, a dialog drawn and reported right after the text stops the send at once, with no key", async () => {
+    const term = new Term();
+    const send = term.sendPaneText;
+    term.sendPaneText = async (paneId, typed) => {
+      await send(paneId, typed);
+      term.dialog = "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel";
+    };
+    const turn = () => (term.dialog ? { running: false, waiting: "permission prompt" } : { running: true });
+    const { outcome } = await guardedSend(deps(term, { received: log().received, turn }), { text, requestId: "r1" });
+    expect(outcome).toMatchObject({ ok: false, stage: "submit", textDelivered: true });
+    expect(outcome.ok ? "" : outcome.error).toContain("dialog");
+    expect(term.count("pane.send_keys")).toBe(0);
+    // Stopped on the CLI's word, not after the verify bound.
+    expect(term.count("pane.read")).toBeLessThan(4);
+  });
+
   test("a retry whose earlier try the log has is sent, even with a dialog up now or the box unread", async () => {
     const dialog = new Term();
     const waiting = () => ({ running: false, waiting: "permission prompt" });
