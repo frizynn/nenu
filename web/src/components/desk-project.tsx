@@ -67,7 +67,7 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
     <DeskTabs label={project.name} tabs={tabs} tab={tab} onChange={setTab} />
     <div role="tabpanel" aria-label={tabs.find((candidate) => candidate.id === tab)!.label}>
       {tab === "work" && <ProjectWork project={project} waiting={(id) => waiting.find((group) => group.coordinator.id === id)?.count ?? 0}
-        canStart={roles.includes("worker")} onOpenNode={openNode} onChanged={onChanged} onOpenCoordinator={openCoordinator} />}
+        canStart={roles.includes("worker")} readOnly={readOnly} session={session} onOpenNode={openNode} onChanged={onChanged} onOpenCoordinator={openCoordinator} />}
       {tab === "waiting" && (asks.list
         ? <WaitingByCoordinator list={asks.list} project={project} session={session} readOnly={readOnly} />
         : <p className="px-1 text-subhead text-muted-foreground">{!asks.loaded ? "Reading…" : asks.failed ?? "This Herdr Organizations can’t list asks yet; update it to see them here."}</p>)}
@@ -82,10 +82,13 @@ export function DeskProject({ project, panes, device, session, onChanged }: {
  * finished work is History (`?work=finished`), one quiet step away (ADR 0106): by day, newest first,
  * with a search. A desk's project page and a phone's draw it alike.
  */
-export function ProjectWork({ project, waiting, canStart, onOpenNode, onOpenCoordinator, onChanged }: {
+export function ProjectWork({ project, waiting, canStart, readOnly, session, onOpenNode, onOpenCoordinator, onChanged }: {
   project: ProjectView;
   waiting: (coordinatorId: string) => number;
   canStart: boolean;
+  /** A read-only device draws the marks and picks none. */
+  readOnly: boolean;
+  session?: string;
   onOpenNode: (node: OrgNode) => void;
   onOpenCoordinator: (id: string) => void;
   onChanged: () => void;
@@ -113,14 +116,17 @@ export function ProjectWork({ project, waiting, canStart, onOpenNode, onOpenCoor
     <div className="desk-toolbar">
       <span className="min-w-0 flex-1 truncate">{cards.length > 1 && `${plural(cards.length - 1, "coordinator")} · `}{plural(threads, "thread")} open</span>
     </div>
-    {cards.map((card) => {
-      const id = card.coordinator?.thread.id ?? "root";
-      const open = folds[id] ?? false;
-      return <CoordinatorWorkCard key={id} card={card} waiting={waiting(id)} open={open} own={card.coordinator ? card.coordinator.state : rootState}
-        onToggle={() => setFolds((current) => ({ ...current, [id]: !open }))}
-        onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
-        onNewThread={canStart ? () => newThread(id) : undefined} />;
-    })}
+    <ul aria-label="Coordinators" className="coord-list">
+      {cards.map((card) => {
+        const id = card.coordinator?.thread.id ?? "root";
+        const open = folds[id] ?? false;
+        return <CoordinatorWorkCard key={id} project={project} card={card} waiting={waiting(id)} open={open} own={card.coordinator ? card.coordinator.state : rootState}
+          session={session} editable={!readOnly} onChanged={onChanged}
+          onToggle={() => setFolds((current) => ({ ...current, [id]: !open }))}
+          onOpenNode={onOpenNode} onOpenCoordinator={() => onOpenCoordinator(id)}
+          onNewThread={canStart ? () => newThread(id) : undefined} />;
+      })}
+    </ul>
     {/* What finished is reachable, never in the way: one quiet line after the live work (ADR 0109). */}
     {finished > 0 && <button type="button" className="quiet-action desk-history-link" onClick={() => showHistory(true)}>
       <History aria-hidden className="size-3.5" />History<span className="tabular-nums text-subtle-foreground">{finished}</span>

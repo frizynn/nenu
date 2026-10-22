@@ -140,7 +140,7 @@ async function main(): Promise<void> {
       for (const [label, query] of [["open", ""], ["finished", "?work=finished"]] as const) {
         await page.goto(`${bridge.url}/project/${slug}${query}`);
         await page.waitForTimeout(2000);
-        const toggle = "main section.desk-card button[aria-expanded]";
+        const toggle = "main .coord-list .coord-fold[aria-expanded]";
         if (!await page.locator(toggle).count()) { lines.push(`fold ${label}: no card to fold`); continue; }
         for (const rate of [1, 4]) {
           await cdp.send("Emulation.setCPUThrottlingRate", { rate });
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
         }
         await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
         const rows = await page.locator("main [role=group] button, main li button").count();
-        lines.push(`${label}: ${await page.locator("main section.desk-card").count()} cards, ${rows} rows`);
+        lines.push(`${label}: ${await page.locator("main .coord-list li").count()} cards, ${rows} rows`);
         await shoot(page, `work-${label}-1440`);
       }
       // Finished work as History: searched by a coordinator's name.

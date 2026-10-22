@@ -1,11 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, House, Laptop, LayoutGrid, ListChecks, Plus, Search, Settings2, SquarePen, Workflow } from "@/components/ui/icon";
+import { ChevronRight, House, Laptop, LayoutGrid, ListChecks, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { DeskLists } from "@/components/desk-nav";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NodeDot } from "@/components/node-row";
-import { ProjectGlyph } from "@/components/project-glyph";
+import { CoordinatorGlyph, ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -439,6 +439,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
   // Open coordinators start open and resolved ones folded; the node on screen opens them.
   const branch = (node: OrgNode, depth: number): ReactNode => {
     const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
+      mark={node.thread.role === "coordinator" ? <CoordinatorGlyph project={project} id={node.thread.id} size={14} /> : undefined}
       live={node.thread.paneId !== undefined && data.agents.some((agent) => agent.paneId === node.thread.paneId)}
       fold={fold} />;
     if (phone) {
@@ -487,7 +488,7 @@ function ProjectSection({ project, data, open, expanded, onExpand, panes = [], p
           {project.coordinator && (
             <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={coordinatorTo}
               aria-current={project.coordinator.paneId === paneId || (projectSlug === project.slug && nodeId === "root") ? "page" : undefined}>
-              <span className="nav-tree-mark"><OpeningMark to={coordinatorTo}><Workflow aria-hidden size={14} /></OpeningMark></span>
+              <span className="nav-tree-mark"><OpeningMark to={coordinatorTo}><CoordinatorGlyph project={project} id="root" size={14} /></OpeningMark></span>
               <span className="nav-row-text">Coordinator</span>
               <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
               {isAttention(project.coordinator.liveStatus)
@@ -555,9 +556,11 @@ interface ThreadRowFold {
 }
 
 /** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
-function ThreadRow({ node, depth, slug, session, current, live, fold }: {
+function ThreadRow({ node, depth, slug, session, current, live, fold, mark }: {
   node: OrgNode;
   depth: number;
+  /** A coordinator's own mark (ADR 0122), in place of its state's: its word at the end says that. */
+  mark?: ReactNode;
   slug: string;
   session?: string;
   current: boolean;
@@ -582,7 +585,7 @@ function ThreadRow({ node, depth, slug, session, current, live, fold }: {
       )}
       <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head", state === "resolved" && "nav-tree-resolved")} style={depthStyle(depth)}
         to={to} aria-current={current ? "page" : undefined}>
-        <span className="nav-tree-mark"><OpeningMark to={to}><NodeDot state={state} /></OpeningMark></span>
+        <span className="nav-tree-mark"><OpeningMark to={to}>{mark ?? <NodeDot state={state} />}</OpeningMark></span>
         <span className="nav-row-text">{thread.title}</span>
         <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
         {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.filter((child) => child.state !== "idle").slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-3" />)}</span>}

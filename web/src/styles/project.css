@@ -158,9 +158,6 @@
 .desk-card + .desk-card { margin-top: 12px; }
 .desk-card-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; }
 .desk-card-head:has(+ *) { border-bottom: 1px solid var(--border); }
-/* A coordinator's row: the whole of it enters the coordinator's chat (ADR 0115). */
-.desk-card-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; align-self: stretch; margin-block: -8px; padding-block: 8px; padding-inline: 6px; border-radius: var(--radius-md); text-align: left; }
-@media (hover: hover) { .desk-card-head:has(.desk-card-open:hover) { background: var(--workbench-row-hover); } }
 .desk-card-mark { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--muted); color: var(--muted-foreground); }
 .desk-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .desk-icon-button:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -169,6 +166,53 @@
 .desk-card-add:focus-visible { opacity: 1; }
 @media (hover: hover) { .desk-card-head:hover .desk-card-add { opacity: 1; } }
 @media (hover: none), (pointer: coarse) { .desk-card-add { display: none; } }
+/* A project's coordinators as one list (ADR 0122): a row each, its own mark, a coordinator under another one step in. */
+.coord-list { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); overflow: hidden; }
+.coord-item + .coord-item { border-top: 1px solid var(--border); }
+.coord-head { --step: 16px; display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 12px 8px calc(4px + var(--depth, 0) * var(--step)); }
+@media (hover: hover) { .coord-head:has(.coord-open:hover) { background: var(--workbench-row-hover); } }
+@media (hover: hover) { .coord-head:hover .desk-card-add { opacity: 1; } }
+.coord-fold { width: 28px; flex-shrink: 0; margin-right: -6px; }
+.coord-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 16px; align-self: stretch; margin-block: -8px; padding-block: 8px; text-align: left; }
+/* A long name takes two lines on a phone, one on a desk. */
+.coord-name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--text-subhead); font-weight: 500; overflow-wrap: anywhere; }
+.coord-line { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; color: var(--muted-foreground); font-size: var(--text-footnote); }
+.coord-line-desk, .coord-counts { display: none; }
+.coord-when { min-width: 28px; flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; text-align: right; }
+.coord-threads { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--muted) 35%, transparent); }
+.coord-threads .desk-row { padding-left: calc(54px + var(--depth, 0) * 16px); }
+/* On a desk what is live reads down the list as three columns: waits on you, to review, working. */
+@media (min-width: 640px) {
+  .coord-head { --step: 28px; padding-left: calc(8px + var(--depth, 0) * var(--step)); }
+  .coord-threads .desk-row { padding-left: calc(58px + var(--depth, 0) * 28px); }
+  .coord-name { -webkit-line-clamp: 1; overflow-wrap: normal; white-space: nowrap; text-overflow: ellipsis; display: block; }
+  .coord-line { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .coord-line-desk { display: block; color: var(--subtle-foreground); font-size: var(--text-footnote); }
+  .coord-counts { display: grid; flex-shrink: 0; grid-template-columns: repeat(3, 44px); }
+  .coord-count { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: var(--text-footnote); font-variant-numeric: tabular-nums; }
+  .coord-count[data-state="needs"] { color: var(--foreground); font-weight: 500; }
+}
+/* A coordinator's mark: its glyph on a wash of its own hue. */
+.mark-tile { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--radius-md); background: color-mix(in srgb, var(--mark) 14%, transparent); }
+.mark-tile-button { position: relative; transition: box-shadow var(--motion-control) var(--motion-ease); }
+.mark-tile-button::after { content: ""; position: absolute; inset: -6px; }
+@media (hover: hover) { .mark-tile-button:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--mark) 55%, transparent); } }
+.mark-tile-button:focus-visible, .mark-tile-button[aria-expanded="true"] { box-shadow: 0 0 0 1.5px var(--mark); outline: none; }
+.mark-picker { display: flex; flex-direction: column; gap: 14px; padding: 0 16px 8px; }
+@media (min-width: 1024px) { .mark-picker { padding: 0; } }
+/* Six to a row in a desk's popover, eight across a phone's sheet: three or four rows, every glyph at once. */
+.mark-picker-glyphs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
+.mark-picker-glyph { display: flex; height: 40px; align-items: center; justify-content: center; border-radius: var(--radius-md); }
+@media (pointer: coarse) { .mark-picker-glyph { height: 44px; } }
+@media (hover: hover) { .mark-picker-glyph:hover { background: var(--workbench-row-hover); } }
+/* Another coordinator's glyph: still a tap away, quieter, so two rows are not told apart by colour alone. */
+.mark-picker-glyph[data-used] { opacity: 0.35; }
+.mark-picker-glyph[aria-checked="true"] { opacity: 1; }
+.mark-picker-glyph[aria-checked="true"] { background: color-mix(in srgb, var(--mark) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--mark); }
+.mark-picker-hues { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.mark-picker-hue { position: relative; width: 26px; height: 26px; border-radius: 9999px; background: var(--mark); }
+.mark-picker-hue::after { content: ""; position: absolute; inset: -6px; }
+.mark-picker-hue[aria-checked="true"] { box-shadow: 0 0 0 2px var(--popover, var(--card)), 0 0 0 3.5px var(--mark); }
 .desk-row { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 40px; padding: 8px 16px 8px 22px; text-align: left; font-size: var(--text-subhead); }
 .desk-row + .desk-row { border-top: 1px solid var(--border); }
 @media (hover: hover) { .desk-row:hover { background: var(--workbench-row-hover); } }

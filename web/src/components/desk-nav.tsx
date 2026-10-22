@@ -4,7 +4,7 @@ import { ChevronDown, GitPullRequest, GitPullRequestDraft, Plus } from "@/compon
 
 import { NodeDot } from "@/components/node-row";
 import { OpeningMark, PaneMark } from "@/components/nav-rows";
-import { ProjectGlyph } from "@/components/project-glyph";
+import { CoordinatorGlyph, ProjectGlyph } from "@/components/project-glyph";
 import { AGENT_STATE, resting, StateMark, StatusDot } from "@/components/status-badge";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, liveliest, projectActivity, projectAgents, type DeskChat } from "@/lib/desk-nav";
@@ -124,7 +124,7 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
               : <h3 className="nav-label">{group.label}</h3>}
             {group.items.map((chat) => (
               <Reveal key={chat.key} folded={hides(chat)}>
-                <ChatRow chat={chat} session={data.session} current={isCurrent(chat)} />
+                <ChatRow chat={chat} session={data.session} current={isCurrent(chat)} owner={data.projects?.find((project) => project.slug === chat.project)} />
               </Reveal>
             ))}
           </section>
@@ -152,7 +152,7 @@ function prMark(pr: ThreadPr): { glyph: typeof GitPullRequest; tone?: "failing" 
  * pull request's glyph when it has one open: a draft's own glyph, red while checks fail or changes
  * are asked, green once approved, grey otherwise.
  */
-function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
+function ChatRow({ chat, session, current, owner }: { chat: DeskChat; session?: string; current: boolean; owner?: ProjectView }) {
   const { thread, pane } = chat;
   const to = chat.paneId ? panePath(chat.paneId, session) : nodePath(chat.project!, thread!.id, session);
   const state = thread ? nodeState(thread) : undefined;
@@ -165,12 +165,16 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
   // The usage limit outranks what the tree says: the agent is held until a time, whatever it was doing.
   const limit = usageLimitOf(pane);
   const live = ask !== undefined || limit !== undefined || (shown !== undefined && shown !== "idle" && shown !== "resolved") || chat.unread;
+  // A coordinator leads with its own mark, as everywhere it is named (ADR 0122); its state moves to the row's end.
+  const coordinator = owner && thread?.role === "coordinator" ? thread.id : undefined;
+  const stateMark = limit ? <StateMark state="limit" /> : state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />;
   return (
     <Link className="nav-row" to={to} aria-current={current ? "page" : undefined} data-live={live || undefined}>
       <span className="nav-lead">
-        <OpeningMark to={to}>{limit ? <StateMark state="limit" /> : state ? <NodeDot state={state} /> : pane && <PaneMark pane={pane} />}</OpeningMark>
+        <OpeningMark to={to}>{coordinator ? <CoordinatorGlyph project={owner!} id={coordinator} /> : stateMark}</OpeningMark>
       </span>
       <span className="nav-row-text">{chat.title}</span>
+      {coordinator && (limit || (state && state !== "idle" && state !== "resolved")) && <span className="nav-row-end" aria-hidden>{stateMark}</span>}
       {limit
         ? <span className="nav-limit" data-limit title={limitLine(limit)}><span className="sr-only">, usage limit, </span>resets {resetTime(limit.resetsAt)}</span>
         : word && <span className="sr-only">, {word}</span>}

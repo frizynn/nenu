@@ -71,8 +71,8 @@ const titlesOf = (list: HTMLElement) => [...list.children].map((item) => item.qu
 describe("a project that organizes coordinators", () => {
   it("is a row per coordinator, the project coordinator's last with the threads started from the project, each folded", async () => {
     setup(home([project]));
-    const lead = await screen.findByRole("region", { name: "Lead" });
-    expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")).filter((name) => name !== "Status"))
+    const lead = await screen.findByRole("listitem", { name: "Lead" });
+    expect(within(screen.getByRole("list", { name: "Coordinators" })).getAllByRole("listitem").map((row) => row.getAttribute("aria-label")))
       .toEqual(["Lead", "Checkout", "Project coordinator"]);
     // The row says what is live there, in one line.
     expect(within(lead).getByRole("button", { name: /^Open Lead/ })).toHaveAccessibleDescription("1 needs you");
@@ -90,7 +90,7 @@ describe("a project that organizes coordinators", () => {
   it("says what a coordinator is doing, never that it is ready for review", async () => {
     const reported = threads.map((thread) => thread.id === "t-3" ? { ...thread, liveStatus: "done" as const, group: "ready-for-review", verdict: "done" as const } : thread);
     setup(home([{ ...project, threads: reported }]));
-    const lead = await screen.findByRole("region", { name: "Lead" });
+    const lead = await screen.findByRole("listitem", { name: "Lead" });
     expect(lead).not.toHaveTextContent(/review/i);
   });
 
@@ -105,7 +105,7 @@ describe("a project that organizes coordinators", () => {
 
   it("unfolds a row's threads in place, where it has some, and keeps the fold for the tab", async () => {
     const { user } = setup(home([project]));
-    const lead = await screen.findByRole("region", { name: "Lead" });
+    const lead = await screen.findByRole("listitem", { name: "Lead" });
     await user.click(within(lead).getByRole("button", { name: "Show Lead threads" }));
     expect(within(lead).getByRole("group", { name: "Lead threads" })).toHaveTextContent("Docs");
     // + shows on a desk's hover; a touch screen hides it (project.css) and starts a thread inside the chat.
@@ -115,7 +115,7 @@ describe("a project that organizes coordinators", () => {
     const lone: ProjectView = { ...project, threads: [...threads, node("t-8", "Wholesale", "root", { role: "coordinator", group: "idle" })] };
     cleanup();
     setup(home([lone]));
-    const wholesale = await screen.findByRole("region", { name: "Wholesale" });
+    const wholesale = await screen.findByRole("listitem", { name: "Wholesale" });
     expect(within(wholesale).queryByRole("button", { name: /threads$/ })).not.toBeInTheDocument();
   });
 
@@ -139,9 +139,9 @@ describe("a project that organizes coordinators", () => {
     const running: ProjectView = { ...project, coordinator: { paneId: "coord", agent: "codex", liveStatus: "working" },
       threads: [...threads, node("t-8", "Wholesale", "root", { role: "coordinator", group: "idle" })] };
     const { router, user } = setup(home([running], [pane("coord"), pane("lead")]));
-    const own = await screen.findByRole("region", { name: "Project coordinator" });
+    const own = await screen.findByRole("listitem", { name: "Project coordinator" });
     expect(router.state.location.pathname).toBe("/project/hub");
-    expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-label")).filter((name) => name !== "Status"))
+    expect(within(screen.getByRole("list", { name: "Coordinators" })).getAllByRole("listitem").map((row) => row.getAttribute("aria-label")))
       .toEqual(["Lead", "Checkout", "Wholesale", "Project coordinator"]);
     expect(within(own).getByRole("button", { name: /^Open Project coordinator/ })).toHaveAccessibleDescription("working");
     expect(screen.queryByRole("button", { name: "Start project coordinator" })).not.toBeInTheDocument();

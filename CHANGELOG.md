@@ -8,6 +8,17 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.46.0] - 2026-10-22
+
+### Added
+
+- Every coordinator has its own mark, no two open ones in a project alike, drawn in the Work list, the bar, the tree, its chat's header, its panel and Waiting on you; a tap on it picks another glyph and colour, kept by the bridge so every device draws the pick (4236d429, 876a64b2, 38c33710).
+
+### Changed
+
+- A project's Work tab lists its coordinators as rows of one list: a coordinator under another one step in, live work as aligned columns on a desk and under the name on a phone, when it last moved at the end (4236d429, 876a64b2).
+- A popover opens below its button when only below holds it all, and a phone's sheet takes the screen's height whatever opened it (4236d429).
+
 ## [1.45.0] - 2026-10-22
 
 ### Changed

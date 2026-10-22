@@ -1,5 +1,5 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
-import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, setRoutine, startNode, startOptions, toggleRoutine } from "../org-cli.ts";
+import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, setRoutine, startNode, startOptions, toggleRoutine, validateNodeId, validateProjectSlug } from "../org-cli.ts";
 import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -88,6 +88,14 @@ export const orgRoutes: Route[] = [
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });
     return { response: { project }, detail: { project: project.slug } };
   }),
+  // A coordinator's glyph and colour, kept by Nenu (ADR 0122): no Organizations write, so nothing is
+  // re-read; the registry tells the browsers itself.
+  orgWrite("/api/org/node/mark", "org.node.mark", "Could not change the mark.", async ({ projects }, body) => {
+    const project = validateProjectSlug(body.project);
+    const id = validateNodeId(body.id);
+    const mark = await projects.setMark(project, id, { icon: body.icon, tone: body.tone });
+    return { response: { mark: mark ?? null }, detail: { project, id, ...mark } };
+  }, { reread: false }),
   orgWrite("/api/org/thread/merge", "org.thread.merge", "Could not merge the pull request.", async ({ orgRun }, body) => {
     const merged = await mergeThread(orgRun, { project: body.project, id: body.id, method: body.method });
     return { response: { merged }, detail: { project: body.project, id: merged.id, pr: merged.pr } };
@@ -158,14 +166,15 @@ function orgRead(path: string, failure: string, read: (ctx: Services, project: s
  * projects at once so the `org` event follows the change instead of the next stat. With `settle`
  * the person waits on the change: while the write runs, what it records is read as it lands (`open`
  * records the coordinator's pane seconds before it returns), and the reply waits for the re-read,
- * so the client's next snapshot already shows the change.
+ * so the client's next snapshot already shows the change. Without `reread` the write is Nenu's own and
+ * nothing of Organizations' changed.
  */
 function orgWrite(
   path: string,
   action: string,
   failure: string,
   write: (ctx: Services, body: Record<string, unknown>, rt: SessionRouteRequest["rt"]) => Promise<{ response: Record<string, unknown>; detail: Record<string, unknown> }>,
-  { settle = false } = {},
+  { settle = false, reread = true } = {},
 ): Route {
   return {
     method: "POST",
@@ -183,7 +192,7 @@ function orgWrite(
         const { response, detail } = settle ? await ctx.projects.urgently(run) : await run();
         ctx.audit.record({ action, session: rt.name, device: deviceAuth(req, ctx.cfg).device, detail });
         if (settle) await ctx.projects.invalidate();
-        else void ctx.projects.invalidate();
+        else if (reread) void ctx.projects.invalidate();
         return json({ ok: true, ...response }, acceptEncoding);
       } catch (error) {
         return json({

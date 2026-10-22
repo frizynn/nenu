@@ -3,6 +3,7 @@ import { mkdirSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { CoordinatorMarks } from "./coordinator-marks.ts";
 import type { OrgRun } from "./org-cli.ts";
 import { keptThreads, looseWorkspaceIds, ProjectRegistry, type ProjectRegistryOptions } from "./projects.ts";
 import type { AgentView, LiveEvent, WorkspaceView } from "./types.ts";
@@ -138,6 +139,30 @@ describe("ProjectRegistry: Organizations fields", () => {
     // What the registry does not know, Organizations decides.
     expect(registry.closeRefusal("demo", "t-9999")).toBeUndefined();
     expect(registry.closeRefusal("other", "t-0003")).toBeUndefined();
+  });
+
+  test("a coordinator's picked mark is kept across a restart, reaches every session, and only for a coordinator it lists", async () => {
+    const root = fixture();
+    writeFileSync(join(root, "demo", "threads", "t-0003.toml"), `id = "t-0003"\ntitle = "Lead"\nstatus = "open"\nrole = "coordinator"\n`);
+    const file = join(root, "marks.json");
+    const events: LiveEvent[] = [];
+    const registry = registryFor(root, { marks: new CoordinatorMarks(file), live: { publish: (event) => events.push(event) } });
+    expect(registry.list("default", true, [])[0]).not.toHaveProperty("marks");
+    registry.list("other", false, []);
+
+    expect(await registry.setMark("demo", "t-0003", { icon: "leaf", tone: "teal" })).toEqual({ icon: "leaf", tone: "teal" });
+    expect(events).toEqual([{ session: "default", topic: "org" }, { session: "other", topic: "org" }]);
+    expect(registry.list("default", true, [])[0]!.marks).toEqual({ "t-0003": { icon: "leaf", tone: "teal" } });
+    // Another bridge over the same state dir reads what this one saved.
+    const restarted = registryFor(root, { marks: new CoordinatorMarks(file) });
+    expect(restarted.list("default", true, [])[0]!.marks).toEqual({ "t-0003": { icon: "leaf", tone: "teal" } });
+
+    // A worker, an unknown node or project is refused; a malformed name reads as no pick and clears it.
+    await expect(registry.setMark("demo", "t-0001", { icon: "leaf" })).rejects.toThrow("Name a coordinator this project lists.");
+    await expect(registry.setMark("demo", "t-9999", { icon: "leaf" })).rejects.toThrow("Name a coordinator");
+    await expect(registry.setMark("other", "t-0003", { icon: "leaf" })).rejects.toThrow("Name a coordinator");
+    expect(await registry.setMark("demo", "t-0003", { icon: "../x", tone: "" })).toBeUndefined();
+    expect(registry.list("default", true, [])[0]).not.toHaveProperty("marks");
   });
 
   test("a resolved thread's never-read PR is left out instead of labelled open", () => {

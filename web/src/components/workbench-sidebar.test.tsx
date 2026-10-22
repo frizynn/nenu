@@ -345,10 +345,11 @@ describe("the sidebar", () => {
     expect(word).toHaveClass("text-status-done");
   });
 
-  it("marks the project's coordinator with the workflow glyph", async () => {
+  it("marks the project's coordinator with the project's own mark (ADR 0122)", async () => {
     await openTree();
-    const coordinator = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: /^Coordinator/ });
-    expect(coordinator.querySelector("svg.icon")).toHaveClass("icon-workflow");
+    const section = within(screen.getByRole("region", { name: "Acme" }));
+    const glyph = section.getByRole("link", { name: /^Acme/ }).querySelector("svg[data-glyph]")!.getAttribute("data-glyph");
+    expect(section.getByRole("link", { name: /^Coordinator/ }).querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", glyph);
   });
 
   it("marks each project with its own glyph, never its initial, in the tree, the drawer and Search", async () => {

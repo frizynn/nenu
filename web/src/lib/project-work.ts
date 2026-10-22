@@ -11,6 +11,12 @@ export interface WorkCard {
   coordinator?: OrgNode;
   /** The threads it runs directly, in the tree's order (the most urgent first). */
   rows: OrgNode[];
+  /** How deep it sits: 0 under the project, 1 under another coordinator. */
+  depth: number;
+  /** The open coordinators right under it, each a row of its own after it. */
+  coordinators: number;
+  /** When it or a thread it runs last moved, epoch ms; 0 when nothing says. */
+  at: number;
 }
 
 const isCoordinator = (node: OrgNode) => node.thread.role === "coordinator";
@@ -22,10 +28,14 @@ const updatedAt = (thread: ProjectThreadView) => Date.parse(thread.updated ?? ""
  */
 export function workCards(project: ProjectView): WorkCard[] {
   const tree = orgTree(project.threads);
-  return [
-    ...openCoordinators(tree).map(({ node }) => ({ coordinator: node, rows: node.children.filter((child) => !isCoordinator(child)) })),
-    { rows: tree.open.filter((node) => !isCoordinator(node)) },
-  ];
+  const card = (children: readonly OrgNode[], depth: number, coordinator?: OrgNode): WorkCard => {
+    const rows = children.filter((child) => !isCoordinator(child));
+    return {
+      ...(coordinator ? { coordinator } : {}), rows, depth, coordinators: coordinator ? children.length - rows.length : 0,
+      at: Math.max(0, ...[...(coordinator ? [coordinator] : []), ...rows].map((node) => updatedAt(node.thread))),
+    };
+  };
+  return [...openCoordinators(tree).map(({ node, depth }) => card(node.children, depth, node)), card(tree.open, 0)];
 }
 
 /** A finished thread with whoever ran it, or a finished coordinator with how many threads it ran. */
@@ -91,14 +101,16 @@ export function historyDays(project: ProjectView, query = "", now = new Date()):
 }
 
 /** A card's second line: what waits on you there, then what its threads are doing. */
-export function cardSummary(rows: readonly OrgNode[], waiting: number): Array<{ text: string; state: NodeState }> {
+export function cardSummary(rows: readonly OrgNode[], waiting: number): Array<{ text: string; state: NodeState; count: number }> {
   const count = (state: NodeState) => rows.filter((row) => row.state === state).length;
   const needs = count("needs");
+  const review = count("review");
+  const working = count("working");
   return [
-    waiting > 0 && { text: `${waiting} waiting on you`, state: "needs" as const },
-    needs > 0 && { text: `${needs} ${needs === 1 ? "needs" : "need"} you`, state: "needs" as const },
-    count("review") > 0 && { text: `${count("review")} to review`, state: "review" as const },
-    count("working") > 0 && { text: `${count("working")} working`, state: "working" as const },
+    waiting > 0 && { text: `${waiting} waiting on you`, state: "needs" as const, count: waiting },
+    needs > 0 && { text: `${needs} ${needs === 1 ? "needs" : "need"} you`, state: "needs" as const, count: needs },
+    review > 0 && { text: `${review} to review`, state: "review" as const, count: review },
+    working > 0 && { text: `${working} working`, state: "working" as const, count: working },
   ].filter((part) => part !== false);
 }
 

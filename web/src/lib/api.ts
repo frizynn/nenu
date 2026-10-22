@@ -915,6 +915,11 @@ export function moveOrgNode(
   }, undefined, ORG_MUTATION_TIMEOUT_MS);
 }
 
+/** A coordinator's glyph and colour, kept by Nenu (ADR 0122); neither name clears the pick. Answers what was kept. */
+export function setCoordinatorMark(input: { project: string; id: string; icon?: string; tone?: string }, session?: string): Promise<{ ok: true; mark: { icon?: string; tone?: string } | null }> {
+  return req(withSession("/api/org/node/mark", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
+}
+
 export function createOrgProject(
   input: { name: string; goal?: string; repo?: string },
   session?: string,

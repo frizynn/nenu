@@ -3,9 +3,10 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 
 import {
-  SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readStatus, readTasks, upstreamOnly, validateProjectSlug,
+  OrgValidationError, SLUG_RE, WAITING_ACTIVITY, defaultOrgRun, offers, pickName, readOverview, readProjectDetail, readStatus, readTasks, upstreamOnly, validateProjectSlug,
   type OrgCoordinator, type OrgOverviewProject, type OrgOverviewThread, type OrgProjectDetail, type OrgRun, type OrgStatus, type OrgTask,
 } from "./org-cli.ts";
+import type { CoordinatorMarks, MarkPick } from "./coordinator-marks.ts";
 import { askGroup, decisionGroup, readAsks, type OrgAskRow, type OrgDecisionRow } from "./org-asks.ts";
 import type { ThreadReportSource } from "./org-library.ts";
 import type { OrgStatusFile } from "./org-report.ts";
@@ -84,6 +85,8 @@ export interface ProjectRegistryOptions {
   watch?: boolean;
   /** Whether only upstream herdr-projects is installed; read on every refresh. */
   upstream?: () => boolean;
+  /** The operator's picked coordinator marks (ADR 0122); without it no project carries `marks`. */
+  marks?: CoordinatorMarks;
 }
 
 function contained(path: string, root: string): boolean {
@@ -405,6 +408,7 @@ export class ProjectRegistry {
   private readonly now: () => number;
   private readonly run: OrgRun | null;
   private readonly live?: LivePublisher;
+  private readonly marks?: CoordinatorMarks;
   private readonly watchEnabled: boolean;
   private readonly upstream: () => boolean;
   private records: ProjectRecord[] = [];
@@ -443,6 +447,7 @@ export class ProjectRegistry {
     this.now = options.now ?? Date.now;
     this.run = options.run === undefined ? defaultOrgRun() : options.run;
     this.live = options.live;
+    this.marks = options.marks;
     this.watchEnabled = options.watch ?? true;
     this.upstream = options.upstream ?? upstreamOnly;
   }
@@ -454,6 +459,9 @@ export class ProjectRegistry {
       .filter((record) => record.session ? record.session === sessionName : isPrimary)
       .map((record) => {
         const coordinatorPane = livePane(record.coordinator, panes, record.roots);
+        // Only for a coordinator the project still lists: a deleted node's pick stays on disk and out of the snapshot.
+        const marks = Object.fromEntries(Object.entries(this.marks?.of(record.slug) ?? {})
+          .filter(([id]) => record.threads.some(({ view }) => view.id === id && view.role === "coordinator")));
         const workspaceIds = new Set<string>(coordinatorPane ? [coordinatorPane.workspaceId] : []);
         const threads = record.threads.map(({ view, binding }) => {
           const pane = livePane(binding, panes, record.roots);
@@ -467,6 +475,7 @@ export class ProjectRegistry {
           ...(record.goal ? { goal: record.goal } : {}),
           status: record.status,
           ...picks(record.icon, record.tone),
+          ...(Object.keys(marks).length > 0 ? { marks } : {}),
           ...(record.statusFile ? { statusUpdated: record.statusFile.updated } : {}),
           ...(record.waitingAsks !== undefined ? { waitingAsks: record.waitingAsks } : {}),
           ...(record.usage ? { usageStamp: usageStamp(record.usage) } : {}),
@@ -483,6 +492,20 @@ export class ProjectRegistry {
           workspaceIds: [...workspaceIds],
         };
       });
+  }
+
+  /**
+   * Keeps the operator's pick of a coordinator's mark and tells every session's browsers, as a change
+   * Organizations wrote would. Only a coordinator the project lists can be picked for.
+   */
+  async setMark(slug: string, id: string, pick: Record<string, unknown>): Promise<MarkPick | undefined> {
+    if (!this.marks) throw new OrgValidationError("This Nenu keeps no coordinator marks.");
+    this.read();
+    const record = this.records.find((candidate) => candidate.slug === slug);
+    if (!record?.threads.some(({ view }) => view.id === id && view.role === "coordinator")) throw new OrgValidationError("Name a coordinator this project lists.");
+    const kept = await this.marks.set(slug, id, pick);
+    for (const session of this.sessions) this.live?.publish({ session, topic: "org" });
+    return kept;
   }
 
   /**

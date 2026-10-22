@@ -104,7 +104,7 @@ function PhoneWork({ project, status, data, waiting }: { project: ProjectView; s
   const refresh = () => void revalidator.revalidate();
   return <>
     {status && <CoordinatorStatus status={status} project={project} onOpenNode={(id) => navigate(nodePath(project.slug, id, data.session))} />}
-    <ProjectWork project={project} waiting={waiting} canStart={!readOnly && startableRoles(project).includes("worker")}
+    <ProjectWork project={project} waiting={waiting} canStart={!readOnly && startableRoles(project).includes("worker")} readOnly={readOnly} session={data.session}
       onOpenNode={openNode} onOpenCoordinator={openCoordinator} onChanged={refresh} />
     {!readOnly && <div className="mt-4 flex flex-wrap gap-1">
       <NewNodeActions project={project} session={data.session} onStarted={refresh} />

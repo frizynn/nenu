@@ -215,6 +215,11 @@ the unit name; the Herdr action runs from anywhere.
   project → coordinator → chat, and Move shows only where `node move --help` exits 0 and the node's
   `actions` list `move`
   ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
+- **A coordinator has its own mark** (`lib/coordinator-mark.ts`, `mark-picker.tsx`): hashed from the slug and
+  its node id, no two open ones in a project alike, drawn wherever it is named; the Work list is one list
+  of rows with it. The operator's pick is kept by the bridge (`coordinator-marks.json`, `marks` in the
+  snapshot), never in the browser; `bun scripts/e2e/coordinator-marks.ts` must pass
+  ([ADR 0122](./.adr/0122-a-coordinator-has-its-own-mark-kept-by-nenu.md)).
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
   Home, Projects (ADR 0102), projects as flat rows and chats by when they last moved; the tree is Search's.
   Without a project, the bar, its heading and the rail say Projects nowhere (ADR 0110). An

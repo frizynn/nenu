@@ -373,6 +373,8 @@ export interface ProjectView {
   /** The glyph and colour names the project picked in Organizations; absent when it picked none. */
   icon?: string;
   tone?: string;
+  /** The glyph and colour names the operator picked for its coordinators in Nenu, by node id (ADR 0122); absent when none was. */
+  marks?: Record<string, { icon?: string; tone?: string }>;
   coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
   threads: ProjectThreadView[];
   /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */

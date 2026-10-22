@@ -86,16 +86,16 @@ describe("a desk's project page", () => {
   it("is the project's own page, never its coordinator's chat, with a row per coordinator and the project coordinator's last", async () => {
     const { router, user } = setup("/project/hub");
     expect(within(await screen.findByRole("main")).getByRole("heading", { level: 1, name: /Hub/ })).toBeInTheDocument();
-    const cards = within(screen.getByRole("tabpanel")).getAllByRole("region").map((region) => region.getAttribute("aria-label"));
+    const cards = within(screen.getByRole("list", { name: "Coordinators" })).getAllByRole("listitem").map((row) => row.getAttribute("aria-label"));
     expect(cards).toEqual(["Lead", "Project coordinator"]);
-    const lead = within(screen.getByRole("region", { name: "Lead" }));
+    const lead = within(screen.getByRole("listitem", { name: "Lead" }));
     expect(await lead.findByText("1 waiting on you")).toBeInTheDocument();
     // Folded until asked: its threads show under it, in place.
     expect(lead.queryByRole("button", { name: /Docs/ })).toBeNull();
     await user.click(lead.getByRole("button", { name: "Show Lead threads" }));
     expect(lead.getByRole("button", { name: /Docs/ })).toHaveTextContent("#58");
     await user.click(screen.getByRole("button", { name: "Show Project coordinator threads" }));
-    expect(within(screen.getByRole("region", { name: "Project coordinator" })).getByRole("button", { name: /Hotfix/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("listitem", { name: "Project coordinator" })).getByRole("button", { name: /Hotfix/ })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/project/hub");
     // The header's back says where up is: the crumb no longer repeats it.
     expect(screen.getByRole("link", { name: "Back to Projects" })).toHaveTextContent("Projects");
@@ -104,7 +104,7 @@ describe("a desk's project page", () => {
 
   it("enters a coordinator's chat on a tap anywhere on its row; the fold is its own button, and there is no ›", async () => {
     const { user, router } = setup("/project/hub");
-    const lead = within(await screen.findByRole("region", { name: "Lead" }));
+    const lead = within(await screen.findByRole("listitem", { name: "Lead" }));
     await user.click(lead.getByRole("button", { name: "Show Lead threads" }));
     // A merged pull request closes on its own: not counted, nor read, as work to review.
     expect(lead.getByRole("button", { name: /Copy fix/ })).toHaveTextContent("merged, closes on its own");
@@ -124,7 +124,7 @@ describe("a desk's project page", () => {
     await user.click(await screen.findByRole("button", { name: /History\s*1/ }));
     expect(router.state.location.search).toBe("?work=finished");
     expect(await screen.findByRole("button", { name: /Shipped\s*Lead/ })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Lead" })).toBeNull();
+    expect(screen.queryByRole("listitem", { name: "Lead" })).toBeNull();
     await user.type(screen.getByRole("searchbox", { name: "Search finished work" }), "nothing like it");
     expect(await screen.findByText("Nothing finished matches.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open work" }));

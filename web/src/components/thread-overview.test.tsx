@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import type { PaneDiff, ProjectThreadView } from "@/lib/types";
+import type { PaneDiff, ProjectThreadView, ProjectView } from "@/lib/types";
 import { server } from "@/test/setup";
 import { ThreadOverview, type ThreadOverviewProps } from "./thread-overview";
 
@@ -20,6 +20,8 @@ const siblings = [
   thread("t-09", "Search index", { status: "resolved" }),
 ];
 
+const project: ProjectView = { slug: "acme", name: "Acme", status: "active", threads: [thread("t-10", "Checkout redesign", { parentId: "root", role: "coordinator" }), ...siblings] };
+
 const files = (n: number) => Array.from({ length: n }, (_, i) => ({ path: `app/file-${i}.ts`, status: "modified" as const, additions: i + 1, deletions: 1 }));
 let diff: PaneDiff;
 let reads: string[];
@@ -33,9 +35,9 @@ beforeEach(() => {
 });
 
 function setup(overrides: Partial<ThreadOverviewProps> = {}) {
-  const parent = { title: "Checkout redesign", open: vi.fn() };
+  const parent = { title: "Checkout redesign", id: "t-10", open: vi.fn() };
   const props: ThreadOverviewProps = {
-    thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22 }, parent, coordinating: false,
+    project, readOnly: false, onChanged: vi.fn(), thread: flow, paneId: "w1:p1", reading: { model: "claude-opus-5-5", contextPercent: 22 }, parent, coordinating: false,
     threads: siblings, onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW, ...overrides,
   };
   render(<ThreadOverview {...props} />);
@@ -76,7 +78,7 @@ it("sums up the branch with its first files, and sends every tap to the Changes 
 });
 
 it("reads the branch again when the thread moves, keeping the last read on screen meanwhile", async () => {
-  const props: ThreadOverviewProps = { thread: flow, paneId: "w1:p1", reading: {}, coordinating: false, threads: [], onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW };
+  const props: ThreadOverviewProps = { project, readOnly: false, onChanged: vi.fn(), thread: flow, paneId: "w1:p1", reading: {}, coordinating: false, threads: [], onShowChanges: vi.fn(), onOpenThread: vi.fn(), now: NOW };
   const { rerender } = render(<ThreadOverview {...props} />);
   const card = () => screen.getByRole("region", { name: "Changes" });
   expect(await within(card()).findByText("2 more files")).toBeInTheDocument();
