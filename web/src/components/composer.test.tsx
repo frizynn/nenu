@@ -11,7 +11,7 @@ import { clearStatus, useStatus } from "@/lib/status";
 import { setOutageNoticeShown } from "@/lib/connection-health";
 import { isReloadHeld, __resetReloadGuard } from "@/lib/reload-guard";
 import { loadDraft, saveDraft } from "@/lib/drafts";
-import { addLocalSend, listLocalSends, localSendActions, localSendScope, setQueueSlot, updateLocalSend } from "@/lib/local-sends";
+import { addLocalSend, listLocalSends, localSendActions, localSendScope, reconcileLocalSends, setQueueSlot, updateLocalSend } from "@/lib/local-sends";
 import { server } from "@/test/setup";
 import { recordReply } from "@/test/handlers";
 import { declarations } from "@/test/css-rules";
@@ -630,6 +630,22 @@ describe("Composer — a refused send is said beside the draft", () => {
     await waitFor(() => expect(screen.getByRole("alert", { name: "Not confirmed" })).toHaveTextContent(UNSEEN));
     expect(within(sendNotice()).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
     expect(within(sendNotice()).getByRole("button", { name: "Open terminal" })).toBeVisible();
+  });
+
+  // 2026-10-22: the message reached the agent joined to text its box held; the journal then showed it.
+  it("goes away with its bubble once the journal shows the message was sent", async () => {
+    const user = userEvent.setup();
+    serveSend((body) => refusal(body, "verify", UNSEEN, true));
+    renderComposerWithStatus({ nativeWorkbench: true });
+    const scope = localSendScope("w1:p1", undefined);
+    const text = "Haceme una foto diagrama con el fondo negro";
+    await user.type(screen.getByRole("textbox"), text);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByRole("alert", { name: "Not confirmed" })).toBeVisible());
+    act(() => reconcileLocalSends(scope, []));
+    expect(screen.getByRole("alert", { name: "Not confirmed" })).toBeVisible();
+    act(() => reconcileLocalSends(scope, [{ uuid: "u1", ts: "", role: "user", parts: [{ kind: "text", text: `${text}Se cortó por el límite.` }] }]));
+    await waitFor(() => expect(screen.queryByRole("alert", { name: "Not confirmed" })).not.toBeInTheDocument());
   });
 });
 

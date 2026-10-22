@@ -45,6 +45,64 @@ describe("local sends", () => {
     }
   });
 
+  // 2026-10-22: Nenu typed a message into a box that still held earlier text, Claude got both as one
+  // turn, and the failed bubble sat under every newer turn for good, so the chat's end never moved.
+  const leftover = "Se cortó por el límite de la cuenta y ya cambió. Continuá desde donde quedaste.";
+  const failedInPane = (text: string) => {
+    const id = addLocalSend(scope, text);
+    updateLocalSend(scope, id, { state: "failed", error: "Your message didn't show in the agent's input box, so nothing was sent.", textDelivered: true });
+    return id;
+  };
+
+  it("lands a failure whose text may be in the pane on a new turn that holds it joined to other text", () => {
+    const sent = "Haceme una foto diagrama con el fondo negro y una grilla cuadriculada";
+    const id = failedInPane(sent);
+    const before = [user("u1", leftover)];
+    reconcileLocalSends(scope, before);
+    expect(pendingSends(listLocalSends(scope), before)).toHaveLength(1);
+    const joined = [...before, user("u2", `${sent}${leftover}`)];
+    expect(pendingSends(listLocalSends(scope), joined)).toHaveLength(0);
+    reconcileLocalSends(scope, joined);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ id, landed: "u2" })]);
+  });
+
+  it("lands a short one too, wherever the caret was in the box", () => {
+    const id = failedInPane("dale, seguí");
+    reconcileLocalSends(scope, []);
+    reconcileLocalSends(scope, [user("u1", `Se cortó por eldale, seguí límite de la cuenta.`)]);
+    expect(listLocalSends(scope)).toEqual([expect.objectContaining({ id, landed: "u1" })]);
+  });
+
+  it("lands one only on the first new turn: the box's text left with its next Enter", () => {
+    failedInPane("si");
+    reconcileLocalSends(scope, []);
+    const later = [user("u1", "otra cosa"), user("u2", "seguí con lo siguiente")];
+    reconcileLocalSends(scope, later);
+    expect(pendingSends(listLocalSends(scope), later)).toHaveLength(1);
+  });
+
+  it("never lands one on a turn that was already there", () => {
+    failedInPane("dale, seguí");
+    const earlier = [user("u1", "dale, seguí con el PR")];
+    reconcileLocalSends(scope, earlier);
+    reconcileLocalSends(scope, earlier);
+    expect(pendingSends(listLocalSends(scope), earlier)).toHaveLength(1);
+  });
+
+  it("needs the whole turn for any other bubble: one never typed keeps its words", () => {
+    const id = addLocalSend(scope, "Revisá el PR https://github.com/frizynn/nenu/pull/25");
+    updateLocalSend(scope, id, { state: "failed", error: "Not sent" });
+    reconcileLocalSends(scope, []);
+    const later = [user("u1", "Revisá el PR https://github.com/frizynn/nenu/pull/251 y mergealo")];
+    reconcileLocalSends(scope, later);
+    expect(pendingSends(listLocalSends(scope), later)).toHaveLength(1);
+    addLocalSend(scope, "ok");
+    reconcileLocalSends(scope, later);
+    const okay = [...later, user("u2", "okay, now the next file")];
+    reconcileLocalSends(scope, okay);
+    expect(pendingSends(listLocalSends(scope), okay)).toHaveLength(2);
+  });
+
   it("reuses a failed bubble when the same message is retried", () => {
     const id = addLocalSend(scope, "retry me");
     updateLocalSend(scope, id, { state: "failed", error: "nope" });

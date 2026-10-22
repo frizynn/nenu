@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.44.1] - 2026-10-22
+
+### Added
+
+- `bun scripts/e2e/run.ts live-journal` measures a new line's latency on a 1, 10 and 40 MB log, phone and desk, and fails while such a send holds the chat's end (44e732e0).
+
+### Fixed
+
+- A message Claude got joined to text already in its box, long or short, no longer stays as "nothing was sent" under every newer turn: the chat's end moves again, and the refusal above the box goes with it (f59d4d58, 9cf8116d, eff79ff0).
+
 ## [1.44.0] - 2026-10-22
 
 ### Added
