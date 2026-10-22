@@ -29,14 +29,18 @@ carries none.
 
 1. **A coordinator draws its own mark everywhere it is named**: the project's Work list, the desk's
    bar, the tree in Search and a phone's drawer, its chat's header, its panel and its group in Waiting
-   on you. The project's coordinator draws the project's mark.
+   on you. The project's coordinator draws the project's mark. Where a row also says its state, the
+   coordinator's mark leads and the state glyph follows its name (amends ADR 0113 for those rows).
 2. **Its own mark comes from the project's slug and its node id**, through the hash a project's mark
    uses (`lib/project-glyph.ts`), never from load order or chance. Within a project no two open
    coordinators, nor the project, draw the same own glyph: in id order, one landing on a glyph already
-   drawn takes the next free one. A pick never moves another coordinator's mark, and a coordinator
-   started later moves none. Red and amber are never offered or drawn by default: they say a state.
+   drawn takes the next free one (23 glyphs: past 22 open coordinators some repeat). A pick never moves
+   another coordinator's mark, and a coordinator started later moves none. Red and amber, and the dashed
+   circle with a check, are never offered or drawn by default: they say a state. The picker shows which
+   glyphs another coordinator already draws, dimmed but still pickable.
 3. **The pick is kept by the bridge**, in `<stateDir>/coordinator-marks.json`, names only (`icon`,
-   `tone`), for a coordinator the project lists, and comes to every browser as the project's `marks`
+   `tone`), for a coordinator the project lists (a deleted one's pick stays on disk, out of the
+   snapshot), and comes to every browser as the project's `marks`
    in the snapshot; the write tells every session's browsers (`org` event). Never `localStorage`.
 4. **The Work list is one list, a row per coordinator**, a coordinator under another one step in: its
    mark (the picker's button where the device may write), its name and what it holds, and on a desk
