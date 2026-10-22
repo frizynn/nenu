@@ -185,7 +185,8 @@ async function main(): Promise<void> {
         await tile.click();
         await page.waitForTimeout(300);
         await shoot(page, "picker-desk");
-        await page.getByRole("radio", { name: PICK.icon, exact: true }).click();
+        // A glyph another coordinator draws is named "<glyph>, used by <name>".
+        await page.getByRole("radio", { name: new RegExp(`^${PICK.icon}(,|$)`) }).click();
         await page.getByRole("radio", { name: PICK.tone, exact: true }).click();
         await page.waitForTimeout(800);
         await shoot(page, "picker-desk-picked");
