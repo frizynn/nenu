@@ -88,27 +88,14 @@ export const orgRoutes: Route[] = [
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });
     return { response: { project }, detail: { project: project.slug } };
   }),
-  {
-    // A coordinator's glyph and colour, kept by Nenu (ADR 0122): no Organizations write, so nothing is
-    // re-read; the registry tells the browsers itself.
-    method: "POST",
-    path: "/api/org/node/mark",
-    access: "write",
-    session: true,
-    async handle({ audit, cfg, projects }, { req, rt }: SessionRouteRequest) {
-      const acceptEncoding = req.headers.get("accept-encoding");
-      const body: unknown = await req.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
-      const { project, id, icon, tone } = body as Record<string, unknown>;
-      try {
-        const mark = await projects.setMark(validateProjectSlug(project), validateNodeId(id), { icon, tone });
-        audit.record({ action: "org.node.mark", session: rt.name, device: deviceAuth(req, cfg).device, detail: { project, id, ...mark } });
-        return json({ ok: true, mark: mark ?? null }, acceptEncoding);
-      } catch (error) {
-        return json({ ok: false, error: error instanceof Error ? error.message : "Could not change the mark." }, acceptEncoding, error instanceof OrgValidationError ? 400 : 500);
-      }
-    },
-  },
+  // A coordinator's glyph and colour, kept by Nenu (ADR 0122): no Organizations write, so nothing is
+  // re-read; the registry tells the browsers itself.
+  orgWrite("/api/org/node/mark", "org.node.mark", "Could not change the mark.", async ({ projects }, body) => {
+    const project = validateProjectSlug(body.project);
+    const id = validateNodeId(body.id);
+    const mark = await projects.setMark(project, id, { icon: body.icon, tone: body.tone });
+    return { response: { mark: mark ?? null }, detail: { project, id, ...mark } };
+  }, { reread: false }),
   orgWrite("/api/org/thread/merge", "org.thread.merge", "Could not merge the pull request.", async ({ orgRun }, body) => {
     const merged = await mergeThread(orgRun, { project: body.project, id: body.id, method: body.method });
     return { response: { merged }, detail: { project: body.project, id: merged.id, pr: merged.pr } };
@@ -179,14 +166,15 @@ function orgRead(path: string, failure: string, read: (ctx: Services, project: s
  * projects at once so the `org` event follows the change instead of the next stat. With `settle`
  * the person waits on the change: while the write runs, what it records is read as it lands (`open`
  * records the coordinator's pane seconds before it returns), and the reply waits for the re-read,
- * so the client's next snapshot already shows the change.
+ * so the client's next snapshot already shows the change. Without `reread` the write is Nenu's own and
+ * nothing of Organizations' changed.
  */
 function orgWrite(
   path: string,
   action: string,
   failure: string,
   write: (ctx: Services, body: Record<string, unknown>, rt: SessionRouteRequest["rt"]) => Promise<{ response: Record<string, unknown>; detail: Record<string, unknown> }>,
-  { settle = false } = {},
+  { settle = false, reread = true } = {},
 ): Route {
   return {
     method: "POST",
@@ -204,7 +192,7 @@ function orgWrite(
         const { response, detail } = settle ? await ctx.projects.urgently(run) : await run();
         ctx.audit.record({ action, session: rt.name, device: deviceAuth(req, ctx.cfg).device, detail });
         if (settle) await ctx.projects.invalidate();
-        else void ctx.projects.invalidate();
+        else if (reread) void ctx.projects.invalidate();
         return json({ ok: true, ...response }, acceptEncoding);
       } catch (error) {
         return json({

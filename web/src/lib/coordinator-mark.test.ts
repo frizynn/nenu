@@ -16,8 +16,11 @@ describe("coordinatorMarks", () => {
     const open = view.threads.filter((thread) => thread.status === "open").map((thread) => marks.get(thread.id)!.glyph);
     expect(new Set([...open, marks.get("root")!.glyph]).size).toBe(21);
     expect(marks.get("root")).toEqual(projectMark("awam-org"));
-    // Never red or amber unless picked: those say a state.
-    for (const mark of marks.values()) if (mark !== marks.get("root")) expect(MARK_HUES).toContain(mark.hue);
+    // Never red or amber unless picked, nor the dashed circle with a check: those say a state.
+    for (const mark of marks.values()) if (mark !== marks.get("root")) {
+      expect(MARK_HUES).toContain(mark.hue);
+      expect(mark.glyph).not.toBe("orbitcheck");
+    }
   });
 
   it("is the same on every read, and a coordinator started later moves no one", () => {

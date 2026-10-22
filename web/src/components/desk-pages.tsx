@@ -157,7 +157,7 @@ export function CoordinatorWorkCard({ project, card, waiting, open, onToggle, on
   const holds = [card.coordinators > 0 && plural(card.coordinators, "coordinator"), foldable && plural(card.rows.length, "thread")].filter(Boolean).join(" · ") || "No threads";
   const column = (state: NodeState) => {
     const said = parts.filter((part) => part.state === state);
-    return { shown: said.length > 0, count: said.reduce((sum, part) => sum + (Number.parseInt(part.text, 10) || 0), 0) };
+    return { shown: said.length > 0, count: said.reduce((sum, part) => sum + part.count, 0) };
   };
   return <li aria-label={name} className="coord-item" style={{ "--depth": card.depth } as CSSProperties}>
     <div className="coord-head">
@@ -197,10 +197,11 @@ export function CoordinatorWorkCard({ project, card, waiting, open, onToggle, on
 }
 
 /** A row's one line: what waits on you, then what works, the coordinator's own work said once. */
-function liveLine(rows: readonly OrgNode[], waiting: number, own?: NodeState): Array<{ text: string; state: NodeState }> {
+function liveLine(rows: readonly OrgNode[], waiting: number, own?: NodeState): ReturnType<typeof cardSummary> {
   const parts = cardSummary(rows, waiting);
-  if (own === "needs" && !parts.some((part) => part.state === "needs")) parts.unshift({ text: "needs you", state: "needs" });
-  if (own === "working" && !parts.some((part) => part.state === "working")) parts.push({ text: "working", state: "working" });
+  // The coordinator's own state counts no thread: its column draws the glyph alone.
+  if (own === "needs" && !parts.some((part) => part.state === "needs")) parts.unshift({ text: "needs you", state: "needs", count: 0 });
+  if (own === "working" && !parts.some((part) => part.state === "working")) parts.push({ text: "working", state: "working", count: 0 });
   return parts;
 }
 

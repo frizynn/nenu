@@ -459,7 +459,9 @@ export class ProjectRegistry {
       .filter((record) => record.session ? record.session === sessionName : isPrimary)
       .map((record) => {
         const coordinatorPane = livePane(record.coordinator, panes, record.roots);
-        const marks = this.marks?.of(record.slug) ?? {};
+        // Only for a coordinator the project still lists: a deleted node's pick stays on disk and out of the snapshot.
+        const marks = Object.fromEntries(Object.entries(this.marks?.of(record.slug) ?? {})
+          .filter(([id]) => record.threads.some(({ view }) => view.id === id && view.role === "coordinator")));
         const workspaceIds = new Set<string>(coordinatorPane ? [coordinatorPane.workspaceId] : []);
         const threads = record.threads.map(({ view, binding }) => {
           const pane = livePane(binding, panes, record.roots);

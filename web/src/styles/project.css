@@ -158,9 +158,6 @@
 .desk-card + .desk-card { margin-top: 12px; }
 .desk-card-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; }
 .desk-card-head:has(+ *) { border-bottom: 1px solid var(--border); }
-/* A coordinator's row: the whole of it enters the coordinator's chat (ADR 0115). */
-.desk-card-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; align-self: stretch; margin-block: -8px; padding-block: 8px; padding-inline: 6px; border-radius: var(--radius-md); text-align: left; }
-@media (hover: hover) { .desk-card-head:has(.desk-card-open:hover) { background: var(--workbench-row-hover); } }
 .desk-card-mark { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--muted); color: var(--muted-foreground); }
 .desk-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .desk-icon-button:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -208,6 +205,9 @@
 .mark-picker-glyph { display: flex; height: 40px; align-items: center; justify-content: center; border-radius: var(--radius-md); }
 @media (pointer: coarse) { .mark-picker-glyph { height: 44px; } }
 @media (hover: hover) { .mark-picker-glyph:hover { background: var(--workbench-row-hover); } }
+/* Another coordinator's glyph: still a tap away, quieter, so two rows are not told apart by colour alone. */
+.mark-picker-glyph[data-used] { opacity: 0.35; }
+.mark-picker-glyph[aria-checked="true"] { opacity: 1; }
 .mark-picker-glyph[aria-checked="true"] { background: color-mix(in srgb, var(--mark) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--mark); }
 .mark-picker-hues { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
 .mark-picker-hue { position: relative; width: 26px; height: 26px; border-radius: 9999px; background: var(--mark); }

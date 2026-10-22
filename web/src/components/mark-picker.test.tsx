@@ -49,6 +49,16 @@ it("takes the tap back and says why when the bridge refuses", async () => {
   expect(screen.getByRole("radio", { name: own })).toHaveAttribute("aria-checked", "true");
 });
 
+it("says which glyphs another coordinator already draws, and never offers a state's", async () => {
+  const two: ProjectView = { ...project, threads: [...project.threads, { id: "t-0004", title: "Other", parentId: "root", role: "coordinator", status: "open" }] };
+  const user = userEvent.setup();
+  render(<MarkTile project={two} id="t-0003" name="Lead" editable onChanged={vi.fn()} />);
+  await user.click(screen.getByRole("button", { name: "Change Lead's icon" }));
+  const other = coordinatorMark(two, "t-0004").glyph;
+  expect(screen.getByRole("radio", { name: `${other}, used by Other` })).toHaveAttribute("data-used");
+  expect(screen.queryByRole("radio", { name: /^orbitcheck/ })).toBeNull();
+});
+
 it("only draws the mark where nothing may be picked", () => {
   render(<MarkTile project={project} id="t-0003" name="Lead" editable={false} onChanged={vi.fn()} />);
   expect(screen.queryByRole("button")).toBeNull();

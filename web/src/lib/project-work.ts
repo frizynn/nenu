@@ -101,14 +101,16 @@ export function historyDays(project: ProjectView, query = "", now = new Date()):
 }
 
 /** A card's second line: what waits on you there, then what its threads are doing. */
-export function cardSummary(rows: readonly OrgNode[], waiting: number): Array<{ text: string; state: NodeState }> {
+export function cardSummary(rows: readonly OrgNode[], waiting: number): Array<{ text: string; state: NodeState; count: number }> {
   const count = (state: NodeState) => rows.filter((row) => row.state === state).length;
   const needs = count("needs");
+  const review = count("review");
+  const working = count("working");
   return [
-    waiting > 0 && { text: `${waiting} waiting on you`, state: "needs" as const },
-    needs > 0 && { text: `${needs} ${needs === 1 ? "needs" : "need"} you`, state: "needs" as const },
-    count("review") > 0 && { text: `${count("review")} to review`, state: "review" as const },
-    count("working") > 0 && { text: `${count("working")} working`, state: "working" as const },
+    waiting > 0 && { text: `${waiting} waiting on you`, state: "needs" as const, count: waiting },
+    needs > 0 && { text: `${needs} ${needs === 1 ? "needs" : "need"} you`, state: "needs" as const, count: needs },
+    review > 0 && { text: `${review} to review`, state: "review" as const, count: review },
+    working > 0 && { text: `${working} working`, state: "working" as const, count: working },
   ].filter((part) => part !== false);
 }
 

@@ -1,11 +1,11 @@
-import { useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 
 import { errorMessage } from "@/components/node-start";
 import { MarkGlyph } from "@/components/project-glyph";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { setCoordinatorMark } from "@/lib/api";
-import { coordinatorMark, type Mark } from "@/lib/coordinator-mark";
-import { GLYPH_NAMES, MARK_HUES } from "@/lib/project-glyph";
+import { COORDINATOR_GLYPHS, coordinatorMark, coordinatorMarks, type Mark } from "@/lib/coordinator-mark";
+import { MARK_HUES, type GlyphName } from "@/lib/project-glyph";
 import type { ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -18,17 +18,17 @@ export function MarkTile({ project, id, name, size = 32, session, editable, onCh
   editable: boolean; onChanged: () => void; className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const anchor = useRef<HTMLButtonElement>(null);
   const mark = coordinatorMark(project, id);
   const glyph = <MarkGlyph mark={mark} size={Math.round(size * 0.56)} />;
   const style = { width: size, height: size, "--mark": `var(--glyph-${mark.hue})` } as React.CSSProperties;
   if (!editable) return <span aria-hidden className={cn("mark-tile", className)} style={style}>{glyph}</span>;
   return <>
-    <button ref={setAnchor} type="button" className={cn("mark-tile mark-tile-button", className)} style={style}
+    <button ref={anchor} type="button" className={cn("mark-tile mark-tile-button", className)} style={style}
       aria-label={`Change ${name}'s icon`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
       {glyph}
     </button>
-    {open && <MarkPicker project={project} id={id} name={name} session={session} anchorRef={{ current: anchor }}
+    {open && <MarkPicker project={project} id={id} name={name} session={session} anchorRef={anchor}
       onDismiss={() => setOpen(false)} onChanged={onChanged} />}
   </>;
 }
@@ -54,12 +54,19 @@ export function MarkPicker({ project, id, name, session, anchorRef, onDismiss, o
     }
   };
   const { mark, pick } = shown;
+  // A glyph another open coordinator of the project (or the project) draws stays pickable, but says whose it is.
+  const used = new Map<GlyphName, string>();
+  for (const [other, drawn] of coordinatorMarks(project)) {
+    const owner = other === "root" ? project.name : project.threads.find((thread) => thread.id === other && thread.status !== "resolved")?.title;
+    if (other !== id && owner && !used.has(drawn.glyph)) used.set(drawn.glyph, owner);
+  }
   return (
     <WorkbenchPopover open onDismiss={onDismiss} anchorRef={anchorRef} label={`Icon for ${name}`} phoneBack sheetBelowDesk className="w-80 lg:w-[19rem]">
       <div className="mark-picker">
         <div role="radiogroup" aria-label="Icon" className="mark-picker-glyphs">
-          {GLYPH_NAMES.map((glyph) => (
-            <button key={glyph} type="button" role="radio" aria-checked={glyph === mark.glyph} aria-label={glyph}
+          {COORDINATOR_GLYPHS.map((glyph) => (
+            <button key={glyph} type="button" role="radio" aria-checked={glyph === mark.glyph} aria-label={used.has(glyph) ? `${glyph}, used by ${used.get(glyph)}` : glyph}
+              title={used.has(glyph) ? `Used by ${used.get(glyph)}` : undefined} data-used={used.has(glyph) || undefined}
               className="mark-picker-glyph" style={{ "--mark": `var(--glyph-${mark.hue})` } as React.CSSProperties}
               onClick={() => void save({ ...pick, icon: glyph }, { ...mark, glyph })}>
               <MarkGlyph mark={{ glyph, hue: mark.hue }} size={18} />

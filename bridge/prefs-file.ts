@@ -9,6 +9,7 @@ import { dirname } from "node:path";
  */
 export class PrefsFile<T extends object> {
   private value: T;
+  private writing: Promise<void> = Promise.resolve();
 
   constructor(private readonly file: string, private readonly coerce: (raw: unknown) => T) {
     this.value = coerce(undefined);
@@ -36,12 +37,16 @@ export class PrefsFile<T extends object> {
     return { ...this.value };
   }
 
-  async set(next: T): Promise<T> {
+  /** Writes one at a time: two at once would share the temp file, and one rename would find it gone. */
+  set(next: T): Promise<T> {
     this.value = { ...next };
-    await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
-    const tmp = `${this.file}.tmp`;
-    await writeFile(tmp, JSON.stringify(this.value, null, 2), { mode: 0o600 });
-    await rename(tmp, this.file);
-    return this.current();
+    const write = this.writing.then(async () => {
+      await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
+      const tmp = `${this.file}.tmp`;
+      await writeFile(tmp, JSON.stringify(this.value, null, 2), { mode: 0o600 });
+      await rename(tmp, this.file);
+    });
+    this.writing = write.catch(() => {});
+    return write.then(() => this.current());
   }
 }

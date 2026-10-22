@@ -11,6 +11,11 @@ export interface Mark {
   hue: HueName;
 }
 
+/** Glyphs a coordinator never draws: a dashed circle with a check reads as the to-review state mark (ADR 0113). */
+const STATE_LIKE: ReadonlySet<GlyphName> = new Set(["orbitcheck"]);
+/** The glyphs a coordinator's mark is drawn or picked from. */
+export const COORDINATOR_GLYPHS: readonly GlyphName[] = GLYPH_NAMES.filter((glyph) => !STATE_LIKE.has(glyph));
+
 const marks = new WeakMap<ProjectView, Map<string, Mark>>();
 
 const order = (id: string) => Number(id.slice(2)) || 0;
@@ -24,13 +29,13 @@ export function coordinatorMarks(project: ProjectView): Map<string, Mark> {
   const open = new Set(coordinators.filter((thread) => thread.status !== "resolved").map((thread) => thread.id));
   // Only the marks drawn before it move a coordinator off its own glyph, never a pick: picking one never
   // changes another coordinator's mark.
-  const taken = new Set<GlyphName>([out.get("root")!.glyph]);
+  const taken = new Set<GlyphName>([out.get("root")!.glyph, ...STATE_LIKE]);
   for (const { id } of coordinators) {
     const own = projectMark(`${project.slug}/${id}`);
-    if (open.has(id)) {
+    if (open.has(id) || STATE_LIKE.has(own.glyph)) {
       const start = GLYPH_NAMES.indexOf(own.glyph);
       own.glyph = GLYPH_NAMES.map((_, step) => GLYPH_NAMES[(start + step) % GLYPH_NAMES.length]!).find((glyph) => !taken.has(glyph)) ?? own.glyph;
-      taken.add(own.glyph);
+      if (open.has(id)) taken.add(own.glyph);
     }
     out.set(id, picked(own, project.marks?.[id]));
   }

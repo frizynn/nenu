@@ -223,7 +223,7 @@ const LIVE_WORD: Record<(typeof LIVE_STATES)[number], (n: number) => string> = {
  * own and then its own threads, every row its state, what it is doing and a tap to open it. What
  * finished is a link to History.
  */
-function threadsSection({ threads, panes = [], paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps): PanelSection {
+function threadsSection({ project, threads, panes = [], paneId, onOpenThread, onNewThread, finished, now = Date.now() }: ThreadOverviewProps): PanelSection {
   const groups = workUnder(threads);
   const open = groups.flatMap((group) => [...(group.coordinator ? [group.coordinator] : []), ...group.rows.map(({ node }) => node)]);
   const live = LIVE_STATES.map((state) => [state, open.filter((node) => node.state === state).length] as const).filter(([, n]) => n > 0);
@@ -236,11 +236,13 @@ function threadsSection({ threads, panes = [], paneId, onOpenThread, onNewThread
     return <li key={thread.id} aria-current={current ? "true" : undefined}>
       <button type="button" onClick={() => onOpenThread(thread)} className="overview-work" data-coordinator={coordinator || undefined}
         style={depth ? { paddingInlineStart: `${14 + depth * 16}px` } : undefined}>
-        <span className="flex h-5 shrink-0 items-center"><NodeDot state={node.state} /></span>
+        {/* A coordinator leads with its own mark (ADR 0122), its state after its name. */}
+        <span className="flex h-5 shrink-0 items-center">{coordinator ? <CoordinatorGlyph project={project} id={thread.id} size={14} /> : <NodeDot state={node.state} />}</span>
         <span className="min-w-0 flex-1 text-left">
           <span className="block truncate">{thread.title}</span>
           {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
         </span>
+        {coordinator && node.state !== "idle" && <span className="flex h-5 shrink-0 items-center"><NodeDot state={node.state} /></span>}
         <span className="shrink-0 text-xs text-muted-foreground">{threadAge(thread, now) ?? ""}</span>
       </button>
     </li>;
