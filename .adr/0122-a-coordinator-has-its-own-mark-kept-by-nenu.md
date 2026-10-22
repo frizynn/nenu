@@ -36,7 +36,8 @@ carries none.
    coordinators, nor the project, draw the same own glyph: in id order, one landing on a glyph already
    drawn takes the next free one (23 glyphs: past 22 open coordinators some repeat). A pick never moves
    another coordinator's mark, and a coordinator started later moves none. Red and amber, and the dashed
-   circle with a check, are never offered or drawn by default: they say a state. The picker shows which
+   circle with a check, are never offered or drawn by default: they say a state. The project's
+   coordinator is the exception: it draws the project's mark as the project does, whatever its glyph. The picker shows which
    glyphs another coordinator already draws, dimmed but still pickable.
 3. **The pick is kept by the bridge**, in `<stateDir>/coordinator-marks.json`, names only (`icon`,
    `tone`), for a coordinator the project lists (a deleted one's pick stays on disk, out of the

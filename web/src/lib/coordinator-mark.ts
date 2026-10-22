@@ -29,13 +29,13 @@ export function coordinatorMarks(project: ProjectView): Map<string, Mark> {
   const open = new Set(coordinators.filter((thread) => thread.status !== "resolved").map((thread) => thread.id));
   // Only the marks drawn before it move a coordinator off its own glyph, never a pick: picking one never
   // changes another coordinator's mark.
-  const taken = new Set<GlyphName>([out.get("root")!.glyph, ...STATE_LIKE]);
+  const taken = new Set<GlyphName>([out.get("root")!.glyph]);
   for (const { id } of coordinators) {
-    const own = projectMark(`${project.slug}/${id}`);
-    if (open.has(id) || STATE_LIKE.has(own.glyph)) {
-      const start = GLYPH_NAMES.indexOf(own.glyph);
-      own.glyph = GLYPH_NAMES.map((_, step) => GLYPH_NAMES[(start + step) % GLYPH_NAMES.length]!).find((glyph) => !taken.has(glyph)) ?? own.glyph;
-      if (open.has(id)) taken.add(own.glyph);
+    const own = ownMark(project.slug, id);
+    if (open.has(id)) {
+      const start = COORDINATOR_GLYPHS.indexOf(own.glyph);
+      own.glyph = COORDINATOR_GLYPHS.map((_, step) => COORDINATOR_GLYPHS[(start + step) % COORDINATOR_GLYPHS.length]!).find((glyph) => !taken.has(glyph)) ?? own.glyph;
+      taken.add(own.glyph);
     }
     out.set(id, picked(own, project.marks?.[id]));
   }
@@ -45,7 +45,14 @@ export function coordinatorMarks(project: ProjectView): Map<string, Mark> {
 
 /** One coordinator's mark; a node the project does not list draws its own. */
 export function coordinatorMark(project: ProjectView, id: string): Mark {
-  return coordinatorMarks(project).get(id) ?? picked(projectMark(`${project.slug}/${id}`), project.marks?.[id]);
+  return coordinatorMarks(project).get(id) ?? picked(ownMark(project.slug, id), project.marks?.[id]);
+}
+
+/** A coordinator's hashed mark, stepped off a glyph that reads as a state. */
+function ownMark(slug: string, id: string): Mark {
+  const mark = projectMark(`${slug}/${id}`);
+  if (STATE_LIKE.has(mark.glyph)) mark.glyph = COORDINATOR_GLYPHS[GLYPH_NAMES.indexOf(mark.glyph) % COORDINATOR_GLYPHS.length]!;
+  return mark;
 }
 
 /** The operator's pick over a coordinator's own mark, each name only where Nenu draws it. */

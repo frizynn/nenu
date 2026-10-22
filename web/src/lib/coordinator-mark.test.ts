@@ -23,6 +23,12 @@ describe("coordinatorMarks", () => {
     }
   });
 
+  it("never draws the to-review look-alike, even past the glyphs there are or for a node it does not list", () => {
+    const view = project(Array.from({ length: 60 }, (_, n) => coordinator(n + 1)));
+    for (const mark of coordinatorMarks(view).values()) if (mark !== coordinatorMarks(view).get("root")) expect(mark.glyph).not.toBe("orbitcheck");
+    for (let n = 100; n < 160; n++) expect(coordinatorMark(view, `t-0${n}`).glyph).not.toBe("orbitcheck");
+  });
+
   it("is the same on every read, and a coordinator started later moves no one", () => {
     const before = project([coordinator(1), coordinator(2), coordinator(3)]);
     const after = project([...before.threads, coordinator(4)]);
