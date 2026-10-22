@@ -12,7 +12,7 @@ All notable changes to Nenu are recorded here. The format follows
 
 ### Added
 
-- Every coordinator has its own mark, no two open ones in a project alike, drawn in the Work list, the bar, the tree, its chat's header, its panel and Waiting on you; a tap on it picks another glyph and colour, kept by the bridge so every device draws the pick (4236d429, 876a64b2).
+- Every coordinator has its own mark, no two open ones in a project alike, drawn in the Work list, the bar, the tree, its chat's header, its panel and Waiting on you; a tap on it picks another glyph and colour, kept by the bridge so every device draws the pick (4236d429, 876a64b2, 38c33710).
 
 ### Changed
 
