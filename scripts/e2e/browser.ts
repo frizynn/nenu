@@ -7,7 +7,7 @@ import { join } from "node:path";
 // the few calls the bench makes. playwright-core never downloads a browser: it uses the revision
 // already in Playwright's cache (webkit-2287 for 1.60.0).
 
-export interface Request { url(): string; method(): string }
+export interface Request { url(): string; method(): string; postDataJSON(): unknown }
 export interface Route {
   request(): Request;
   fetch(): Promise<{ text(): Promise<string> }>;

@@ -18,6 +18,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 - A red count on the ⋯ and on its Status row says what waits on you with the menu shut (be33368f, ca9f2c73, 87823561).
 
+## [1.44.1] - 2026-10-22
+
+### Added
+
+- `bun scripts/e2e/run.ts live-journal` measures a new line's latency on a 1, 10 and 40 MB log, phone and desk, and fails while such a send holds the chat's end (44e732e0).
+
+### Fixed
+
+- A message Claude got joined to text already in its box, long or short, no longer stays as "nothing was sent" under every newer turn: the chat's end moves again, and the refusal above the box goes with it (f59d4d58, 9cf8116d, eff79ff0).
+
 ## [1.44.0] - 2026-10-22
 
 ### Added
