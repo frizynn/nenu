@@ -8,6 +8,16 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-10-22
+
+### Changed
+
+- On a phone a project chat draws no tabs under its title: Chat, Threads, PRs and Status are the first rows of the ⋯, and an open view shows them as a 32 px switch; the chat gains 60 px (be33368f, 6cde2514, ca9f2c73).
+
+### Added
+
+- A red count on the ⋯ and on its Status row says what waits on you with the menu shut (be33368f, ca9f2c73, 87823561).
+
 ## [1.44.1] - 2026-10-22
 
 ### Added

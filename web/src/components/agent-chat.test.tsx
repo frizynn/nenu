@@ -6,6 +6,7 @@ import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
 
 import { __resetConnectionHealth, CONNECTION_LOST_MS, markLive } from "@/lib/connection-health";
+import { Search } from "@/components/ui/icon";
 
 // Mock the race guard at AgentChat's seam so the frozen-revision tests can observe exactly what
 // `detectedRevision` the tap handler passes (the guard's own behaviour is covered in
@@ -191,6 +192,30 @@ describe("AgentChat — header title block", () => {
     renderChat({ agent: named, agents: [named] });
     await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
     expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
+  });
+
+  // A phone's project views (ADR 0121): its rows head the menu, and what waits on you shows on the ⋯ while shut.
+  it("heads the ⋯ menu with a project's rows and counts what waits on you on the ⋯ itself", async () => {
+    const show = vi.fn();
+    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [
+      { id: "view-chat", label: "Chat", icon: Search, on: true, run: () => {} },
+      { id: "view-status", label: "Status", icon: Search, waiting: 2, run: show },
+    ] } });
+    const more = screen.getByRole("button", { name: "Conversation actions, 2 waiting on you" });
+    expect(more).toHaveTextContent("2");
+    await userEvent.click(more);
+    const menu = within(screen.getByRole("dialog", { name: "Conversation actions" }));
+    const groups = menu.getAllByRole("region");
+    expect(groups[0]).toHaveAccessibleName("Show");
+    expect(within(groups[0]!).getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+    // The row says what its count is, not only the digit.
+    await userEvent.click(within(groups[0]!).getByRole("button", { name: "Status, 2 waiting on you" }));
+    expect(show).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the ⋯ plain when nothing waits on you", () => {
+    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [{ id: "view-status", label: "Status", icon: Search, waiting: 0, run: () => {} }] } });
+    expect(screen.getByRole("button", { name: "Conversation actions" })).not.toHaveTextContent(/\d/);
   });
 
   it("drops the unlabeled grab handle: the terminal view switches panes from the title too", () => {

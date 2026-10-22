@@ -31,7 +31,7 @@ import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
-import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
+import { ConversationActions, type ConversationAction, type ConversationActionGroup } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
 import { AppHeader, type HeaderBack } from "@/components/app-header";
@@ -156,6 +156,8 @@ interface AgentChatProps {
   overlay?: ReactNode;
   /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
   strip?: ReactNode;
+  /** A project's own rows at the head of the ⋯ menu (a phone's Chat, Threads, PRs and Status). */
+  menu?: ConversationActionGroup;
   /** The project around this chat, counted in the row of chips above the composer. */
   projectChips?: ProjectChipsSource;
   /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
@@ -226,6 +228,7 @@ export function AgentChat({
   headerTrail,
   overlay,
   strip,
+  menu,
   projectChips,
   docked,
   sessionPanel,
@@ -1067,7 +1070,7 @@ export function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
-    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
+    groups={[...(menu ? [menu] : []), { label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;

@@ -34,7 +34,7 @@ export interface CoordinatorSectionsProps {
  * What a coordinator's page held, inside its chat (ADR 0115), as sections of its panel: what waits on
  * you there, answered in place; the routines that reach it; its Status (its card, what was asked of it,
  * STATUS.md, its own report). Move and Close go under them all. A desk draws them in the chat's panel
- * beside its threads and changes; a phone in the chat's Status tab.
+ * beside its threads and changes; a phone in the chat's Status view.
  */
 export function useCoordinatorSections({ project, thread, asks: given, panes, session, readOnly, onChanged }: CoordinatorSectionsProps): { sections: PanelSection[]; footer: ReactNode } {
   const navigate = useNavigate();
@@ -97,7 +97,7 @@ export function useCoordinatorSections({ project, thread, asks: given, panes, se
   return { sections, footer };
 }
 
-/** A phone's Status tab: the coordinator's sections, arranged apart from a desk's panel, which holds more. */
+/** A phone's Status view: the coordinator's sections, arranged apart from a desk's panel, which holds more. */
 export function CoordinatorSections(props: CoordinatorSectionsProps) {
   const { sections, footer } = useCoordinatorSections(props);
   return <PanelSections kind="coordinator-status" sections={sections} footer={footer} />;

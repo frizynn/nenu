@@ -11,7 +11,8 @@ import { herdSeed } from "./scenario.ts";
 // coordinator only has workers, and a quiet one. Walks Home, the drawer, the project and each
 // coordinator at 390x844, counting taps from Home (2, a nested one too: it is its own row) and from
 // the drawer (3), landing on its chat where it runs and on its page where it does not (ADR 0115), and
-// captures every screen, plus Home at 1440. Exits 1 on any failure.
+// captures every screen, plus Home at 1440. A coordinator's chat holds its views in the ⋯ and draws
+// none under its title; an open view draws them as a 32px switch (ADR 0121). Exits 1 on any failure.
 //
 //   bun scripts/e2e/phone-nav.ts [--port 8871] [--out DIR] [--tag before|after]
 
@@ -125,6 +126,24 @@ async function main(): Promise<void> {
       const { page, context } = await open(PHONE, path);
       await shoot(page, `${name}-390`);
       seen[`${name}Text`] = await text(page);
+      if (path.startsWith("/pane/")) {
+        const chrome = await page.locator("[data-chat-chrome] [role=tablist][aria-label='Project']").count();
+        const open = await page.locator("[role=tablist][aria-label='Project']").first().boundingBox().catch(() => null);
+        seen[`${name}Views`] = { inChrome: chrome, switchPx: open && Math.round(open.height) };
+        if (chrome > 0) failures.push(`${name}: the chat draws its views under its title`);
+        if (path.includes("view=") && (!open || open.height > 32)) failures.push(`${name}: the open view's switch is ${open ? Math.round(open.height) : "missing"}px`);
+        // What a finger reaches on its Chat: the px down the tab's centre that land on it (44 on a coarse pointer).
+        const reach = await page.evaluate(() => {
+          const tab = document.querySelector<HTMLElement>("[role=tablist][aria-label='Project'] [role=tab]");
+          if (!tab) return 0;
+          const box = tab.getBoundingClientRect();
+          let px = 0;
+          for (let y = Math.floor(box.top) - 12; y <= box.bottom + 12; y++) if (document.elementFromPoint(box.left + box.width / 2, y)?.closest("[role=tab]") === tab) px++;
+          return px;
+        }, null);
+        seen[`${name}Views`] = { ...(seen[`${name}Views`] as object), chatTargetPx: reach };
+        if (path.includes("view=") && reach < 44) failures.push(`${name}: the open view's Chat takes a finger over ${reach}px`);
+      }
       await context.close();
     }
     seen.walks = walks;

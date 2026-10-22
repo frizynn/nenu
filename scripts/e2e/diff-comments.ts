@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { DESKTOP, launchWebkit, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
+import { DESKTOP, launchWebkit, openPhoneView, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { homeOrg, seedDiffRepo } from "./scenario.ts";
 
@@ -141,7 +141,7 @@ async function phone(browser: Browser, scheme: "dark" | "light") {
   // From the coordinator's chat: the thread's pull request, its size opening the viewer.
   const { page, close } = await open(browser, PHONE, scheme, coordinator);
   seen[`phone ${scheme} hover: none`] = await page.evaluate(() => matchMedia("(hover: none)").matches, null);
-  await page.getByRole("tab", { name: /^PRs/ }).click();
+  await openPhoneView(page, "PRs");
   await page.locator(".project-overlay").waitFor({ timeout: 5000 });
   await page.locator(".project-overlay").getByRole("button", { name: /^View changes/ }).first().click();
   const dialog = page.getByRole("dialog", { name: "PR #42 changes" });

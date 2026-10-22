@@ -33,6 +33,10 @@
 .bottom-tab:disabled { color: var(--disabled-foreground); cursor: default; scale: none; }
 /* Anchored by its left edge just right of the icon's centre, so a second digit grows away from the icon. */
 .bottom-tab-badge { position: absolute; top: 1px; left: calc(50% + 4px); display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9999px; background: var(--status-blocked); color: var(--background); box-shadow: 0 0 0 2px var(--background); font-size: var(--text-micro); line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The same red count where a menu holds what waits on you: at a row's end, and on the ⋯ that opens it,
+   so it shows with the menu shut. */
+.waiting-count { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--status-blocked); color: var(--background); font-size: var(--text-micro); line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.waiting-count-corner { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; box-shadow: 0 0 0 2px var(--background); pointer-events: none; }
 .bottom-tab:focus-visible, .rail-link:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 }
 

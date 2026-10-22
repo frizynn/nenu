@@ -159,7 +159,7 @@ the unit name; the Herdr action runs from anywhere.
   **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
   cards (a coordinator's own also what its page held, ADR 0115); model and context come from the chat's own reading, and the project's own views are not in the panel
   ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). Every section of the panel and of a phone's
-  Status tab folds under its head (`panel-sections.tsx`), Arrange moves and hides them per device with a Reset, no
+  Status view folds under its head (`panel-sections.tsx`), Arrange moves and hides them per device with a Reset, no
   tabs inside Overview, and a coordinator's Threads lists its whole subtree first, by coordinator;
   `bun scripts/e2e/overview-sections.ts` must pass ([ADR 0119](./.adr/0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md)).
   A thread docked beside its coordinator
@@ -171,10 +171,13 @@ the unit name; the Herdr action runs from anywhere.
   Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
   A tap anywhere on a coordinator's row enters its chat, and its address redirects there; only one with
   no live pane keeps a page. Its threads fold down under its row, folded until asked, + on a desk's hover
-  only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status tab
+  only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status view
   (`coordinator-sections.tsx`), and the back climbs coordinator → project → Projects on a desk too;
   `bun scripts/e2e/coordinator-chat.ts` must reach a running one in 2 taps from Home
-  ([ADR 0115](./.adr/0115-a-tap-on-a-coordinator-enters-its-chat.md)). Never its threads' report cards
+  ([ADR 0115](./.adr/0115-a-tap-on-a-coordinator-enters-its-chat.md)). On a phone a project chat draws no
+  views under its title: Chat, Threads, PRs and Status are the ⋯'s first rows, what waits on you is a red
+  count on the ⋯, and only an open view draws them, as a 32 px switch; `coordinator-chat.ts` also measures
+  that ([ADR 0121](./.adr/0121-a-phones-project-views-are-rows-of-the-menu.md)). Never its threads' report cards
   (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
   holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
   opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass

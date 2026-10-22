@@ -8,7 +8,7 @@ import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
 
 // What a coordinator's page held, now inside its chat (ADR 0115), and the way in, at 1440 and 390 px with
 // Google Chrome headless: a tap anywhere on a coordinator's row on the project page enters its chat; a
-// desk's panel and a phone's Status tab hold no report cards, a Waiting on you with only what waits on
+// desk's panel and a phone's Status view hold no report cards, a Waiting on you with only what waits on
 // you, the Asked lines read as requests with a state (done ones folded, ADR 0109), and an opened
 // STATUS.md that scrolls under a wheel over it.
 //
@@ -119,18 +119,20 @@ async function main(): Promise<void> {
         check(new URL(page.url()).pathname.startsWith("/pane/"), `${size}: a tap on the coordinator's name enters its chat (${new URL(page.url()).pathname})`);
       } else check(false, `${size}: the project page names its coordinator`);
 
-      // 2–4. Its chat, with what its page held: a desk's panel, a phone's Status tab. The node address lands there too.
+      // 2–4. Its chat, with what its page held: a desk's panel, a phone's Status view. The node address lands there too.
       await open(coordinatorPath);
       check(new URL(page.url()).pathname.startsWith("/pane/"), `${size}: the coordinator's address lands on its chat`);
       if (size === "390") {
-        const tab = page.getByRole("tab", { name: /^Status/ });
-        check(await tab.count() === 1, "390: the chat has a Status tab");
-        await tab.first().click().catch(() => {});
+        // Its Status is a row of the ⋯ (ADR 0121).
+        await page.getByRole("button", { name: /^Conversation actions/ }).first().click().catch(() => {});
+        const row = page.getByRole("dialog", { name: "Conversation actions" }).getByRole("button", { name: /^Status/ });
+        check(await row.count() === 1, "390: the chat's ⋯ has a Status row");
+        await row.first().click().catch(() => {});
         await page.waitForTimeout(1200);
       }
       const held = size === "390" ? ".project-overlay" : ".session-panel";
       await shoot(page, `2-coordinator-${size}`);
-      check(await page.locator(`${held} section.overview-card[aria-label='Waiting on you']`).count() === 1, `${size}: Waiting on you is in the chat's ${size === "390" ? "Status tab" : "panel"}`);
+      check(await page.locator(`${held} section.overview-card[aria-label='Waiting on you']`).count() === 1, `${size}: Waiting on you is in the chat's ${size === "390" ? "Status view" : "panel"}`);
       const doneCards = await page.locator(`${held} article`).count();
       check(doneCards === 0, `${size}: no report cards (${doneCards})`);
       const other = await page.locator(`${held} section[aria-label='Waiting on you'] :is(section[aria-label='Done'], section[aria-label='Other lines'], section[aria-label='Not marked'])`).count();
