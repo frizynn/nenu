@@ -163,7 +163,7 @@ const surfaces = (desk: boolean): Surface[] => desk ? [
   {
     name: "context-return",
     start: project,
-    prepare: [{ tap: tab("Context"), until: contextFiles }, { tap: tab("Work"), until: `document.querySelector('.desk-card')` }],
+    prepare: [{ tap: tab("Context"), until: contextFiles }, { tap: tab("Work"), until: `document.querySelector('.coord-item')` }],
     settled: tab("Context"),
     target: tab("Context"),
     ready: contextFiles,
@@ -171,15 +171,15 @@ const surfaces = (desk: boolean): Surface[] => desk ? [
   {
     name: "work-finished-unfold",
     start: `${project}?work=finished`,
-    settled: `document.querySelector('.desk-card [aria-expanded=false]')`,
-    target: `document.querySelector('.desk-card [aria-expanded=false]')`,
-    ready: `document.querySelector('.desk-card [role=group] .desk-row')`,
+    settled: `document.querySelector('.coord-item .coord-fold[aria-expanded=false]')`,
+    target: `document.querySelector('.coord-item .coord-fold[aria-expanded=false]')`,
+    ready: `document.querySelector('.coord-item [role=group] .desk-row')`,
   },
   {
     name: "open-coordinator-page",
     start: `${project}?work=finished`,
-    settled: `document.querySelector('.desk-card button[aria-label^="Open "]')`,
-    target: `document.querySelector('.desk-card button[aria-label^="Open "]')`,
+    settled: `document.querySelector('.coord-item button[aria-label^="Open "]')`,
+    target: `document.querySelector('.coord-item button[aria-label^="Open "]')`,
     ready: `location.pathname.includes('/node/') && document.querySelector('[role=tabpanel] .desk-card, [role=tabpanel] .desk-row')`,
   },
   {

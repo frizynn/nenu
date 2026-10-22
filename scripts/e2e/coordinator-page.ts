@@ -111,7 +111,7 @@ async function main(): Promise<void> {
       // phone opens a project whose coordinator runs on its chat (ADR 0092), so it has no row to tap.
       await open(`/project/${projectSlug}`);
       await shoot(page, `1-project-${size}`);
-      const name = page.locator(".desk-card-open").filter({ hasText: "Project coordinator" }).getByText("Project coordinator", { exact: true }).first();
+      const name = page.locator(".coord-open").filter({ hasText: "Project coordinator" }).getByText("Project coordinator", { exact: true }).first();
       if (size === "390") lines.push(`390: the project page opens ${new URL(page.url()).pathname}`);
       else if (await name.count()) {
         await name.click();

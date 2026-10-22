@@ -153,7 +153,7 @@ async function main(): Promise<void> {
       for (const words of ["Rediseño del checkout", "Lanzamiento mayorista", "Project coordinator", "Hotfix del login", "Start project coordinator"]) {
         if (!text.includes(words)) failures.push(`${name}: no "${words}"`);
       }
-      const cards = await main.locator("section.desk-card").evaluateAll((list) => list.map((card) => card.getAttribute("aria-label")));
+      const cards = await main.locator(".coord-list li").evaluateAll((list) => list.map((card) => card.getAttribute("aria-label")));
       if (cards.at(-1) !== "Project coordinator") failures.push(`${name}: the project coordinator's card is not last (${cards.join(", ")})`);
       if (!await main.getByRole("group", { name: "Project coordinator threads" }).getByText("Hotfix del login").count()) failures.push(`${name}: the top-level thread is not in the project coordinator's card`);
       await shoot(page, `${name}-abierto`);

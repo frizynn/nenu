@@ -91,7 +91,7 @@ async function main(): Promise<void> {
         if (await row.count()) { await row.click(); taps++; await page.waitForTimeout(2500); }
         steps.push({ at: "home → project", path: here(page), taps });
         for (const title of coordinator ? [...through, coordinator] : []) {
-          const entry = page.locator(".desk-card-open", { hasText: title }).first();
+          const entry = page.locator(".coord-open", { hasText: title }).first();
           if (await entry.count()) { await entry.click(); taps++; await page.waitForTimeout(2500); }
           steps.push({ at: `home → ${title}`, path: here(page), taps });
         }

@@ -20,6 +20,7 @@ import { createOperatorQuickReplies } from "./operator-quick-replies.ts";
 import { defaultOrgRun } from "./org-cli.ts";
 import { PaneWatcher } from "./pane-watcher.ts";
 import { PaneWrites } from "./pane-writes.ts";
+import { CoordinatorMarks } from "./coordinator-marks.ts";
 import { ProjectRegistry } from "./projects.ts";
 import { PullRequestRegistry } from "./pull-requests.ts";
 import { freshAgentView, QueueService } from "./queue-service.ts";
@@ -133,7 +134,7 @@ export function startServer(opts: ServerDeps) {
     conversations,
     input,
     queue,
-    projects: new ProjectRegistry({ live }),
+    projects: new ProjectRegistry({ live, marks: new CoordinatorMarks(join(cfg.stateDir, "coordinator-marks.json")) }),
     pullRequests: new PullRequestRegistry({ live }),
     orgRun: defaultOrgRun(),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,

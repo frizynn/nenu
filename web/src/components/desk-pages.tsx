@@ -1,8 +1,10 @@
-import { useId, useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useState, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ChatCircle, ChevronRight, GitPullRequest, Plus, Workflow } from "@/components/ui/icon";
+import { ChevronRight, GitPullRequest, Plus } from "@/components/ui/icon";
 
 import { AskSections } from "@/components/ask-list";
+import { MarkTile } from "@/components/mark-picker";
+import { CoordinatorGlyph } from "@/components/project-glyph";
 import { NodeDot } from "@/components/node-row";
 import { threadAge } from "@/components/project-tasks";
 import { Button } from "@/components/ui/button";
@@ -11,6 +13,7 @@ import { STATE_LABEL, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { cardSummary, waitingGroups, type WorkCard } from "@/lib/project-work";
 import { nodePath, panePath } from "@/lib/nav";
 import { coordinatorPane } from "@/lib/projects";
+import { timeAgoShort } from "@/lib/format";
 import type { AgentView, AsksList, ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -115,12 +118,15 @@ export function WorkRow({ node, onOpen, depth = 0, now = Date.now() }: { node: O
 const CARD_ROWS = 20;
 
 /**
- * A coordinator's row on its project (ADR 0115): its name and what is live there, which enters its chat
- * wherever it is tapped; a chevron before it, on a row with threads, folds them down in place; + starts a
- * thread under it, shown on a desk's hover. The project coordinator's row holds the threads started from
- * the project.
+ * A coordinator's row on its project (ADR 0115, ADR 0122): its own mark, its name and what is live there,
+ * which enters its chat wherever it is tapped; a chevron before it, on a row with threads, folds them
+ * down in place; + starts a thread under it, shown on a desk's hover. Its mark opens the picker where
+ * the operator may pick. A coordinator under another sits one step in. On a desk what is live reads as
+ * aligned columns, on a phone as the line under its name. The project coordinator's row holds the
+ * threads started from the project and draws the project's mark.
  */
-export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, own }: {
+export function CoordinatorWorkCard({ project, card, waiting, open, onToggle, onOpenNode, onOpenCoordinator, onNewThread, own, session, editable, onChanged, now = Date.now() }: {
+  project: ProjectView;
   card: WorkCard;
   waiting: number;
   open: boolean;
@@ -131,42 +137,63 @@ export function CoordinatorWorkCard({ card, waiting, open, onToggle, onOpenNode,
   onNewThread?: () => void;
   /** What the coordinator itself is doing, when it is live: its own needs or work. */
   own?: NodeState;
+  session?: string;
+  /** The device may pick the coordinator's mark. */
+  editable: boolean;
+  onChanged: () => void;
+  now?: number;
 }) {
   const [limit, setLimit] = useState(CARD_ROWS);
   const summaryId = useId();
+  const id = card.coordinator?.thread.id ?? "root";
   const name = card.coordinator?.thread.title ?? "Project coordinator";
   const parts = liveLine(card.rows, waiting, own);
-  const Mark = card.coordinator ? Workflow : ChatCircle;
   const hidden = card.rows.length - limit;
   // A row with no threads has nothing to unfold, and draws no chevron.
   const foldable = card.rows.length > 0;
-  return <section aria-label={name} className="desk-card">
-    <div className="desk-card-head">
+  // A column's count, or just its glyph for the coordinator's own state ("needs you", "working").
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  // What it holds, said where nothing is live: a coordinator over others is not one with nothing.
+  const holds = [card.coordinators > 0 && plural(card.coordinators, "coordinator"), foldable && plural(card.rows.length, "thread")].filter(Boolean).join(" · ") || "No threads";
+  const column = (state: NodeState) => {
+    const said = parts.filter((part) => part.state === state);
+    return { shown: said.length > 0, count: said.reduce((sum, part) => sum + (Number.parseInt(part.text, 10) || 0), 0) };
+  };
+  return <li aria-label={name} className="coord-item" style={{ "--depth": card.depth } as CSSProperties}>
+    <div className="coord-head">
       {foldable
-        ? <button type="button" className="desk-icon-button -mr-2 -ml-1.5" aria-label={`${open ? "Hide" : "Show"} ${name} threads`} aria-expanded={open} onClick={onToggle}>
+        ? <button type="button" className="desk-icon-button coord-fold" aria-label={`${open ? "Hide" : "Show"} ${name} threads`} aria-expanded={open} onClick={onToggle}>
           <ChevronRight aria-hidden className={cn("desk-fold size-3.5", open && "rotate-90")} />
         </button>
-        : <span aria-hidden className="w-3.5 shrink-0" />}
+        : <span aria-hidden className="coord-fold" />}
+      <MarkTile project={project} id={id} name={name} session={session} editable={editable && id !== "root"} onChanged={onChanged} />
       {/* Named for what it does; what is live there is said as its description. */}
-      <button type="button" className="desk-card-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>
-        <span className="desk-card-mark"><Mark aria-hidden size={16} /></span>
+      <button type="button" className="coord-open" aria-label={`Open ${name}`} aria-describedby={summaryId} onClick={onOpenCoordinator}>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-subhead font-medium">{name}</span>
-          <span id={summaryId} className="flex flex-wrap items-center gap-x-3 text-footnote text-muted-foreground">
-            {parts.length === 0 && <span>Nothing running</span>}
+          <span className="coord-name">{name}</span>
+          <span id={summaryId} className="coord-line">
+            {parts.length === 0 && <span>{holds}</span>}
             {parts.map((part) => <span key={part.text} className="inline-flex items-center gap-1.5"><NodeDot state={part.state} />{part.text}</span>)}
           </span>
+          <span aria-hidden className="coord-line-desk">{holds}</span>
         </span>
+        <span aria-hidden className="coord-counts">
+          {(["needs", "review", "working"] as const).map((state) => {
+            const { shown, count } = column(state);
+            return <span key={state} className="coord-count" data-state={state}>{shown && <><NodeDot state={state} />{count > 0 && count}</>}</span>;
+          })}
+        </span>
+        <span className="coord-when">{card.at > 0 && timeAgoShort(card.at, now)}</span>
       </button>
       {onNewThread && <button type="button" className="desk-icon-button desk-card-add" aria-label={`New thread under ${name}`} aria-haspopup="dialog" onClick={onNewThread}><Plus aria-hidden size={16} /></button>}
     </div>
-    {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal">
+    {open && foldable && <div role="group" aria-label={`${name} threads`} className="desk-reveal coord-threads">
       {card.rows.slice(0, limit).map((node) => <WorkRow key={node.thread.id} node={node} onOpen={onOpenNode} />)}
       {hidden > 0 && <button type="button" className="desk-row justify-center text-muted-foreground" onClick={() => setLimit(limit + CARD_ROWS)}>
         Show {Math.min(CARD_ROWS, hidden)} more
       </button>}
     </div>}
-  </section>;
+  </li>;
 }
 
 /** A row's one line: what waits on you, then what works, the coordinator's own work said once. */
@@ -195,7 +222,7 @@ function WaitingGroup({ group, list, project, session, readOnly }: {
   const entries = all ? group.entries : group.entries.slice(0, GROUP_ROWS);
   return <section aria-label={name} className="desk-card">
     <div className="desk-card-head min-h-11">
-      <h2 className="flex flex-1 items-center gap-2 text-footnote font-semibold">{name}<span className="desk-tab-count" data-waiting="">{group.count}</span></h2>
+      <h2 className="flex flex-1 items-center gap-2 text-footnote font-semibold"><CoordinatorGlyph project={project} id={group.coordinator.id} />{name}<span className="desk-tab-count" data-waiting="">{group.count}</span></h2>
       <Link to={nodePath(project.slug, group.coordinator.id, session)} className="quiet-action">Open coordinator<ChevronRight aria-hidden className="size-3.5" /></Link>
     </div>
     <div className="px-3 py-1">

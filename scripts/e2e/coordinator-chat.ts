@@ -76,7 +76,7 @@ async function main(): Promise<void> {
         if (await row.count()) await tap(project, () => row.click());
         // A project that opens on its own coordinator's chat is already there.
         if (!here(page).startsWith("/pane/")) {
-          const entry = page.locator(".desk-card-open, .task-main").filter({ hasText: title }).first();
+          const entry = page.locator(".coord-open, .task-main").filter({ hasText: title }).first();
           if (await entry.count()) await tap(title, () => entry.click());
         }
         // The page in between, where there is one: its Open chat.
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
       await shoot(page, `project-acme-${size}`);
       const fold = page.getByRole("button", { name: /^Show Rediseño mobile threads$/ }).first();
       if (await fold.count()) { await fold.click(); await page.waitForTimeout(600); await shoot(page, `project-acme-unfolded-${size}`); }
-      const entry = page.locator(".desk-card-open, .task-main").filter({ hasText: "Rediseño mobile" }).first();
+      const entry = page.locator(".coord-open, .task-main").filter({ hasText: "Rediseño mobile" }).first();
       if (await entry.count()) await entry.click();
       await settle(page);
       if (!here(page).startsWith("/pane/")) {

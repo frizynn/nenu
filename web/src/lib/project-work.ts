@@ -11,6 +11,12 @@ export interface WorkCard {
   coordinator?: OrgNode;
   /** The threads it runs directly, in the tree's order (the most urgent first). */
   rows: OrgNode[];
+  /** How deep it sits: 0 under the project, 1 under another coordinator. */
+  depth: number;
+  /** The open coordinators right under it, each a row of its own after it. */
+  coordinators: number;
+  /** When it or a thread it runs last moved, epoch ms; 0 when nothing says. */
+  at: number;
 }
 
 const isCoordinator = (node: OrgNode) => node.thread.role === "coordinator";
@@ -22,10 +28,14 @@ const updatedAt = (thread: ProjectThreadView) => Date.parse(thread.updated ?? ""
  */
 export function workCards(project: ProjectView): WorkCard[] {
   const tree = orgTree(project.threads);
-  return [
-    ...openCoordinators(tree).map(({ node }) => ({ coordinator: node, rows: node.children.filter((child) => !isCoordinator(child)) })),
-    { rows: tree.open.filter((node) => !isCoordinator(node)) },
-  ];
+  const card = (children: readonly OrgNode[], depth: number, coordinator?: OrgNode): WorkCard => {
+    const rows = children.filter((child) => !isCoordinator(child));
+    return {
+      ...(coordinator ? { coordinator } : {}), rows, depth, coordinators: coordinator ? children.length - rows.length : 0,
+      at: Math.max(0, ...[...(coordinator ? [coordinator] : []), ...rows].map((node) => updatedAt(node.thread))),
+    };
+  };
+  return [...openCoordinators(tree).map(({ node, depth }) => card(node.children, depth, node)), card(tree.open, 0)];
 }
 
 /** A finished thread with whoever ran it, or a finished coordinator with how many threads it ran. */

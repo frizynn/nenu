@@ -27,6 +27,8 @@ interface WorkbenchPopoverProps {
 // The popover positions itself with inline left/top/bottom from its anchor; the important utilities
 // are what lets a class win over that inline placement on a phone. The body there is full bleed: its
 // rows own the 16px gutter, so they start where the sheet's title does.
+/** Where the desk starts: below it a `sheetBelowDesk` popover is a sheet (Tailwind's `lg`). */
+const DESK_WIDTH = 1024;
 const PHONE_SHEET = [
   "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
   "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
@@ -80,9 +82,15 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
       const left = Math.max(viewportLeft + 12, Math.min(rect.left, viewportLeft + viewportWidth - width - 12));
       const above = rect.top - viewportTop - 20;
       const below = viewportBottom - rect.bottom - 20;
-      const next = above >= 160 || above >= below
-        ? { left, bottom: window.innerHeight - rect.top + 8, height: Math.max(80, above) }
-        : { left, top: rect.bottom + 8, height: Math.max(80, below) };
+      // Above unless only below holds it all: what it holds, plus its header.
+      const want = (panel.lastElementChild?.scrollHeight ?? 0) + (panel.firstElementChild?.getBoundingClientRect().height ?? 0);
+      const placeAbove = above >= want || (below < want && (above >= 160 || above >= below));
+      // A sheet sits on the bottom edge whatever opened it: its room is the screen's, not the anchor's side.
+      const sheet = sheetBelowDesk && viewportWidth < DESK_WIDTH;
+      const room = sheet ? (viewport?.height ?? window.innerHeight) * 0.75 : placeAbove ? above : below;
+      const next = placeAbove
+        ? { left, bottom: window.innerHeight - rect.top + 8, height: Math.max(80, room) }
+        : { left, top: rect.bottom + 8, height: Math.max(80, room) };
       setPosition((previous) => previous?.left === next.left && previous?.top === next.top && previous?.bottom === next.bottom && previous?.height === next.height ? previous : next);
     };
     place();
@@ -100,7 +108,7 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
       window.visualViewport?.removeEventListener("scroll", place);
       observer?.disconnect();
     };
-  }, [open, anchorRef]);
+  }, [open, anchorRef, sheetBelowDesk]);
 
   useEffect(() => {
     if (!open) return;

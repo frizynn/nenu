@@ -62,6 +62,8 @@ export type HueName = (typeof HUE_NAMES)[number];
 /** Red and amber say "needs you" and "working" everywhere else, so only a project's own pick draws them. */
 const STATE_HUES: ReadonlySet<HueName> = new Set(["red", "amber"]);
 const HASHED_HUES = HUE_NAMES.filter((hue) => !STATE_HUES.has(hue));
+/** The hues a coordinator's mark can be picked in: never red or amber, so a state keeps its colour (ADR 0122). */
+export const MARK_HUES: readonly HueName[] = HASHED_HUES;
 
 const utf8 = new TextEncoder();
 
@@ -78,8 +80,8 @@ export interface MarkPick {
   tone?: string;
 }
 
-const isGlyph = (name: string | undefined): name is GlyphName => !!name && Object.hasOwn(GLYPHS, name);
-const isHue = (name: string | undefined): name is HueName => (HUE_NAMES as readonly string[]).includes(name ?? "");
+export const isGlyph = (name: string | undefined): name is GlyphName => !!name && Object.hasOwn(GLYPHS, name);
+export const isHue = (name: string | undefined): name is HueName => (HUE_NAMES as readonly string[]).includes(name ?? "");
 
 /**
  * A project's mark: what it picked, where Nenu draws that name; otherwise its slug's. The hash's low

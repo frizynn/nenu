@@ -4,8 +4,10 @@ import { ChevronRight, FileCode, History, Plus } from "@/components/ui/icon";
 import { useCoordinatorSections, type CoordinatorSectionsProps } from "@/components/coordinator-sections";
 import { DiffStat } from "@/components/diff-stat";
 import { useDiffRead, type DiffRead } from "@/components/diff-viewer";
+import { MarkTile } from "@/components/mark-picker";
 import { NodeDot } from "@/components/node-row";
 import { PanelSections, type PanelSection } from "@/components/panel-sections";
+import { CoordinatorGlyph } from "@/components/project-glyph";
 import { threadAge, threadDetail } from "@/components/project-tasks";
 import type { SessionPr, SessionReading } from "@/components/session-inspector";
 import { fetchSessionDiff } from "@/lib/api";
@@ -15,7 +17,7 @@ import { modelDisplayName } from "@/lib/model-display";
 import { coordinatorState, nodeState, STATE_LABEL, workUnder, type NodeState, type OrgNode } from "@/lib/org-tree";
 import { isOpenThread } from "@/lib/projects";
 import { agentLabel } from "@/lib/spawn";
-import type { AgentView, ProjectThreadView } from "@/lib/types";
+import type { AgentView, ProjectThreadView, ProjectView } from "@/lib/types";
 
 /** The files the Changes card names before it sends the rest to the Changes tab. */
 const FILES_SHOWN = 5;
@@ -23,10 +25,17 @@ const FILES_SHOWN = 5;
 /** A coordinator the overview names, and the way to it. */
 export interface CoordinatorLink {
   title: string;
+  /** Its node id, `root` for the project's coordinator: what draws its mark. */
+  id: string;
   open: () => void;
 }
 
 export interface ThreadOverviewProps {
+  /** The project, for the coordinators' marks (ADR 0122). */
+  project: ProjectView;
+  /** A read-only device draws a coordinator's mark and picks none. */
+  readOnly: boolean;
+  onChanged: () => void;
   /** The pane's thread; absent on the project coordinator's own pane. */
   thread?: ProjectThreadView;
   /** The pane as Herdr lists it, for the agent and, without a thread, its state. */
@@ -93,7 +102,7 @@ function Row({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-function thisSection({ thread, pane, pr, reading, parent, coordinating, now = Date.now() }: ThreadOverviewProps): PanelSection {
+function thisSection({ project, readOnly, onChanged, session, thread, pane, pr, reading, parent, coordinating, now = Date.now() }: ThreadOverviewProps): PanelSection {
   const state: NodeState = thread ? nodeState(thread) : (pane && coordinatorState(pane.status)) ?? "idle";
   const age = thread && threadAge(thread, now);
   const agent = thread?.agent ?? pane?.agent;
@@ -107,8 +116,13 @@ function thisSection({ thread, pane, pr, reading, parent, coordinating, now = Da
     brief: <span className="panel-section-meta"><NodeDot state={state} />{STATE_LABEL[state]}</span>,
     body: <dl className="overview-body">
       <Row name="Status"><NodeDot state={state} />{STATE_LABEL[state]}{age && <span className="text-muted-foreground">· {age}</span>}</Row>
+      {/* Its mark, picked here as on the project's list; the project's coordinator draws the project's. */}
+      {coordinating && <Row name="Icon">
+        <MarkTile project={project} id={thread?.id ?? "root"} name={thread?.title ?? project.name} size={26} session={session} editable={!readOnly && thread !== undefined} onChanged={onChanged} />
+      </Row>}
       {parent && <Row name="Coordinator">
         <button type="button" onClick={parent.open} className="overview-link">
+          <CoordinatorGlyph project={project} id={parent.id} size={14} />
           <span className="truncate">{parent.title}</span><ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
       </Row>}

@@ -152,12 +152,13 @@ export function ProjectFrame({ owner, paneId, data, inspector, children }: {
   // Who this pane answers to, a step up the tree: its parent coordinator, else (as coordinatedThreads
   // reads a parent it cannot find) the project's.
   const live = (id?: string): id is string => id !== undefined && data.agents.some((pane) => pane.paneId === id);
-  const up = (title: string, nodeId: string, paneId?: string) => ({ title, open: () => goUp(live(paneId) ? panePath(paneId, data.session) : nodePath(project.slug, nodeId, data.session)) });
+  const up = (title: string, nodeId: string, paneId?: string) => ({ title, id: nodeId, open: () => goUp(live(paneId) ? panePath(paneId, data.session) : nodePath(project.slug, nodeId, data.session)) });
   const parentNode = thread && project.threads.find((candidate) => candidate.id === thread.parentId);
   const parent = !thread ? undefined : parentNode ? up(parentNode.title, parentNode.id, parentNode.paneId) : up(project.name, "root", project.coordinator?.paneId);
   // What a thread's and a coordinator's Overview share.
   const overview = {
     thread, pane: data.agents.find((pane) => pane.paneId === paneId), panes: data.agents, paneId, session: data.session, pr, reading: inspector.reading, parent,
+    project, readOnly, onChanged: refresh,
     onShowChanges: () => inspector.setTab("changes"),
     onOpenThread: (candidate: ProjectThreadView) => {
       if (!candidate.paneId) openNode(candidate.id);

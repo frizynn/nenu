@@ -1,5 +1,5 @@
 import { libraryFileResponse, reportResponse } from "../org-library.ts";
-import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, setRoutine, startNode, startOptions, toggleRoutine } from "../org-cli.ts";
+import { answerAsk, coordinatorChoices, createProject, explainThread, listRoutines, mergeThread, moveNode, openProject, OrgValidationError, prAction, prCreate, replaceCoordinator, resolveNode, setThreadFlags, setRoutine, startNode, startOptions, toggleRoutine, validateNodeId, validateProjectSlug } from "../org-cli.ts";
 import { nenuDirs } from "../uploads.ts";
 import { deviceAuth } from "./access.ts";
 import type { Route, Services, SessionRouteRequest } from "./context.ts";
@@ -88,6 +88,27 @@ export const orgRoutes: Route[] = [
     const project = await createProject(orgRun, { name: body.name, goal: body.goal, repo: body.repo });
     return { response: { project }, detail: { project: project.slug } };
   }),
+  {
+    // A coordinator's glyph and colour, kept by Nenu (ADR 0122): no Organizations write, so nothing is
+    // re-read; the registry tells the browsers itself.
+    method: "POST",
+    path: "/api/org/node/mark",
+    access: "write",
+    session: true,
+    async handle({ audit, cfg, projects }, { req, rt }: SessionRouteRequest) {
+      const acceptEncoding = req.headers.get("accept-encoding");
+      const body: unknown = await req.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json({ ok: false, error: "Request body must be a JSON object." }, acceptEncoding, 400);
+      const { project, id, icon, tone } = body as Record<string, unknown>;
+      try {
+        const mark = await projects.setMark(validateProjectSlug(project), validateNodeId(id), { icon, tone });
+        audit.record({ action: "org.node.mark", session: rt.name, device: deviceAuth(req, cfg).device, detail: { project, id, ...mark } });
+        return json({ ok: true, mark: mark ?? null }, acceptEncoding);
+      } catch (error) {
+        return json({ ok: false, error: error instanceof Error ? error.message : "Could not change the mark." }, acceptEncoding, error instanceof OrgValidationError ? 400 : 500);
+      }
+    },
+  },
   orgWrite("/api/org/thread/merge", "org.thread.merge", "Could not merge the pull request.", async ({ orgRun }, body) => {
     const merged = await mergeThread(orgRun, { project: body.project, id: body.id, method: body.method });
     return { response: { merged }, detail: { project: body.project, id: merged.id, pr: merged.pr } };

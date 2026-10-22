@@ -86,6 +86,7 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
 import { liveCoordinator, projectChat, projectForPane } from "@/lib/projects";
+import { CoordinatorGlyph } from "@/components/project-glyph";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
@@ -1061,6 +1062,9 @@ export function AgentChat({
   // The pane's one name, as its row in the sidebar and Home say it, and where it lives under it.
   const title = titleOverride ?? (agent ? displayName(agent, projects) : "");
   const place = agent && displayPlace(agent, projects);
+  // A coordinator's chat carries its mark before its name, as its row does (ADR 0122); the project's own draws the project's.
+  const owner = projectForPane(projects, paneId);
+  const markId = owner && (!owner.thread ? "root" : owner.thread.role === "coordinator" ? owner.thread.id : undefined);
 
   const findBar = findOpen ? (
     <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch} subject={findSubject}
@@ -1081,6 +1085,7 @@ export function AgentChat({
   const opensNavigation = !desktop && navigation !== undefined;
   const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
     <span className="flex min-w-0 items-center gap-1">
+      {owner && markId && <CoordinatorGlyph project={owner.project} id={markId} size={16} className="mr-1" />}
       <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
       {!project && opensNavigation && <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
       {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}

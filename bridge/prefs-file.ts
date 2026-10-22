@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -16,6 +17,15 @@ export class PrefsFile<T extends object> {
   async load(): Promise<void> {
     try {
       this.value = this.coerce(await Bun.file(this.file).json());
+    } catch {
+      /* none saved yet — keep defaults */
+    }
+  }
+
+  /** As {@link load}, at once: for a setting the first snapshot has to carry. */
+  loadSync(): void {
+    try {
+      this.value = this.coerce(JSON.parse(readFileSync(this.file, "utf8")));
     } catch {
       /* none saved yet — keep defaults */
     }
