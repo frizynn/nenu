@@ -244,7 +244,7 @@ describe("Recents and Workspaces", () => {
     const { user, router, main } = await setup(tabbed);
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
     const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
-    // One row per workspace, the one that moved last first, saying how it is and how much it holds;
+    // One row per workspace, in Herdr's order, saying how it is and how much it holds;
     // no session and no tab is a row of its own until its workspace opens.
     const rows = panel.getAllByRole("button");
     expect(rows.map((row) => row.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
@@ -306,6 +306,51 @@ describe("Recents and Workspaces", () => {
     expect(panel.queryByRole("button", { name: /^ops,/ })).toBeNull();
     await user.click(ops);
     expect(router.state.location.pathname).toBe("/pane/w3%3Aa");
+  });
+
+  it("lists the workspaces in Herdr's order, by name or in an order dragged into place, and keeps the choice", async () => {
+    // ops moved last: Herdr's order still puts it third.
+    const ops = { ...data.agents[0]!, paneId: "w3:a", workspaceId: "w3", workspaceLabel: "ops", tabId: "t-ops", paneLabel: "Search metrics", lastActiveAt: now };
+    const three: HomeData = {
+      ...recentData,
+      workspaces: [...recentData.workspaces, { workspaceId: "w3", number: 3, label: "ops", focused: false, activeTabId: "t-ops", tabCount: 1, paneCount: 1 }],
+      tabs: [{ tabId: "t-ops", workspaceId: "w3", number: 1, label: "1", focused: true, paneCount: 1 }],
+      agents: [...recentData.agents, ops],
+    };
+    const open = async () => {
+      const { user, main } = await setup(three);
+      await user.click(main.getByRole("tab", { name: "Workspaces" }));
+      return { user, main, panel: within(main.getByRole("tabpanel", { name: "Workspaces" })) };
+    };
+    const names = (panel: ReturnType<typeof within>) => panel.getAllByRole("listitem").map((row: HTMLElement) => row.firstElementChild?.getAttribute("aria-label")?.split(",")[0]);
+    const handles = (panel: ReturnType<typeof within>) => panel.getAllByRole("button", { name: /^Move / }).map((handle: HTMLElement) => handle.getAttribute("aria-label"));
+
+    let { user, main, panel } = await open();
+    expect(names(panel)).toEqual(["Nenu", "hub", "ops"]);
+    const order = main.getByRole("combobox", { name: "Order" });
+    expect(within(order).getAllByRole("option").map((option) => option.textContent)).toEqual(["Herdr order", "Name", "Custom", "Reorder…"]);
+    await user.selectOptions(order, "name");
+    expect(names(panel)).toEqual(["hub", "Nenu", "ops"]);
+
+    // Reorder starts from the order on screen; a row is its handle and opens nothing until Done.
+    await user.selectOptions(order, "arrange");
+    expect(handles(panel)).toEqual(["Move hub", "Move Nenu", "Move ops"]);
+    expect(panel.queryAllByRole("link")).toHaveLength(0);
+    panel.getByRole("button", { name: "Move ops" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(handles(panel)).toEqual(["Move hub", "Move ops", "Move Nenu"]);
+    await user.click(main.getByRole("button", { name: "Done" }));
+    expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
+    expect(main.getByRole("combobox", { name: "Order" })).toHaveValue("custom");
+
+    // A reload keeps it, and Herdr's order is one choice away, the custom one kept for later.
+    cleanup();
+    ({ user, main, panel } = await open());
+    expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
+    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "herdr");
+    expect(names(panel)).toEqual(["Nenu", "hub", "ops"]);
+    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "custom");
+    expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
   });
 
   describe("a tab of several panes", () => {

@@ -31,6 +31,14 @@
 .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 /* Hover only where a pointer hovers: a tap leaves :hover stuck on a touch screen until the next tap. */
 @media (hover: hover) { .quiet-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
+/* Home's workspaces while they are reordered (ui/list-reorder): the row dragged by its handle lifts over
+   its neighbours, which slide aside into the place it leaves while it follows the pointer. */
+.workspace-reorder-row[data-lifted] { position: relative; z-index: 1; background: var(--background); box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); }
+.workspace-reorder-row[data-lifted] > div { background: var(--workbench-row-selected); }
+@media (min-width: 640px) { .workspace-reorder-row[data-lifted] { border-radius: var(--radius-lg); } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-reordering] > .workspace-reorder-row:not([data-lifted]) { transition: translate var(--motion-control) var(--motion-ease); }
+}
 
 .task-list { display: flex; flex-direction: column; gap: 1px; }
 /* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */

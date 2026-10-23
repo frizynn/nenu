@@ -8,6 +8,7 @@ import { displayName } from "@/lib/display-name";
 import { panePath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
 import { cn } from "@/lib/utils";
+import { orderWorkspaces, useWorkspaceOrder } from "@/lib/workspace-order";
 import { defaultOpen, opensDirectly, tabFolds, tabStartsOpen, workspaceTree, type AgentCounts, type TabBranch, type WorkspaceBranch } from "@/lib/workspace-tree";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 
@@ -34,7 +35,8 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
   /** An untouched workspace starts folded instead of following {@link defaultOpen}. */
   startFolded?: boolean;
 }) {
-  const branches = workspaceTree(source, currentPaneId);
+  const { order } = useWorkspaceOrder();
+  const branches = orderWorkspaces(workspaceTree(source, currentPaneId), (branch) => branch.workspace.workspaceId, (branch) => branch.name, order);
   return branches.map((branch) => (
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId} projects={source.projects}

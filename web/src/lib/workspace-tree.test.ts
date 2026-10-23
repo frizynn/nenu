@@ -17,7 +17,7 @@ function pane(paneId: string, workspaceId: string, times: { active?: number; see
 const tab = (workspaceId: string): TabView => ({ tabId: `${workspaceId}:t`, workspaceId, number: 1, label: "main", focused: false, paneCount: 1 });
 
 describe("workspaceTree", () => {
-  it("puts the workspace whose agent moved last first, and only marks the one on screen", () => {
+  it("keeps Herdr's order whatever its agents did last, and only marks the one on screen", () => {
     const herd = {
       workspaces: [workspace("old", 1), workspace("here", 2), workspace("busy", 3), workspace("visited", 4)],
       tabs: [tab("old"), tab("here"), tab("busy"), tab("visited")],
@@ -30,7 +30,7 @@ describe("workspaceTree", () => {
       shellPanes: [],
     };
     const branches = workspaceTree(herd, "here:p");
-    expect(branches.map((branch) => branch.workspace.workspaceId)).toEqual(["busy", "here", "old", "visited"]);
+    expect(branches.map((branch) => branch.workspace.workspaceId)).toEqual(["old", "here", "busy", "visited"]);
     expect(branches.filter((branch) => branch.current).map((branch) => branch.workspace.workspaceId)).toEqual(["here"]);
   });
 

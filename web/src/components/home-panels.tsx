@@ -1,11 +1,12 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, LayoutTemplate, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
+import { ArrowUpDown, ChevronDown, ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
+import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
@@ -16,6 +17,7 @@ import { ASK } from "@/lib/org-tree";
 import { projectForPane } from "@/lib/projects";
 import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ORDER_LABEL, orderWorkspaces, placeOrder, useWorkspaceOrder, type WorkspaceOrderMode } from "@/lib/workspace-order";
 import { tabFolds, tabStartsOpen } from "@/lib/workspace-tree";
 
 /** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
@@ -202,9 +204,10 @@ const FOLDS = {
 /**
  * A row that folds the rows under it, a Herdr workspace or a tab of several panes: its name, how it
  * is, how many it holds and when the latest moved. A tap unfolds its rows in place, or opens `to`
- * when there is nothing to unfold.
+ * when there is nothing to unfold. While its list is reordered it opens nothing and its end is the
+ * handle that drags it.
  */
-function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, children }: {
+function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, reorder, children }: {
   kind: keyof typeof FOLDS;
   id: string;
   name: string;
@@ -214,6 +217,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
   onToggle: () => void;
   to?: string;
   busy?: boolean;
+  reorder?: ListReorder;
   children: ReactNode;
 }) {
   const { icon: Icon, one, many, rows } = FOLDS[kind];
@@ -222,19 +226,31 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
   const at = Math.max(0, ...chats.map((chat) => chat.at));
   const listId = `home-${kind}-${id}`;
   const label = `${name}, ${state.word}, ${count}`;
-  const className = cn("grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
-    busy && "bg-[var(--workbench-row-hover)]");
+  const grid = "grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 text-left sm:min-h-12 sm:rounded-lg sm:px-2.5";
+  const className = cn(grid, "hover:bg-[var(--workbench-row-hover)]", busy && "bg-[var(--workbench-row-hover)]");
   const body = <>
     <Icon aria-hidden className="row-span-2 size-4 justify-self-center text-muted-foreground" />
     <span className="col-start-2 truncate text-body sm:text-subhead">{name}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 text-footnote text-muted-foreground">
       <span className={cn("shrink-0", state.tone)}>{state.word}</span><span aria-hidden>·</span><span className="truncate">{count}</span>
     </span>
-    <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
-      {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
-      {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
-    </span>
+    {reorder
+      ? <button type="button" aria-label={`Move ${name}`} {...reorder.handle(id)}
+        className="col-start-3 row-span-2 row-start-1 -my-2 -mr-1 flex size-11 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing sm:-mr-2.5">
+        <GripVertical aria-hidden className="size-4" />
+      </button>
+      : <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+        {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
+        {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
+      </span>}
   </>;
+  if (reorder) {
+    return (
+      <li data-reorder-key={id} data-lifted={reorder.dragging === id || undefined} className="workspace-reorder-row flex flex-col">
+        <div className={cn(grid, "bg-background")}>{body}</div>
+      </li>
+    );
+  }
   return (
     <li className="flex flex-col">
       {to
@@ -251,7 +267,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
  * panes is a row of its own that folds them (lib/workspace-tree.ts). A workspace of one tab or one
  * session has nothing to unfold: the tap opens its `entry` pane.
  */
-function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row }: {
+function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row, reorder }: {
   group: WorkspaceChats;
   now: number;
   open: boolean;
@@ -261,11 +277,12 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
   session?: string;
   opening: string | null;
   row: (chat: RecentChat, inTab: boolean) => ReactNode;
+  reorder?: ListReorder;
 }) {
   const to = group.entry && panePath(group.entry, session);
   return (
     <FoldRow kind="workspace" id={group.workspaceId} name={group.name} chats={workspaceSessions(group)} now={now} open={open} onToggle={onToggle}
-      to={to} busy={!!to && isOpening(opening, to)}>
+      to={to} busy={!!to && isOpening(opening, to)} reorder={reorder}>
       {group.tabs.map((tab) => tabFolds(tab.chats.length, group.tabs.length)
         ? <FoldRow key={tab.tabId} kind="tab" id={tab.tabId} name={tab.label} chats={tab.chats} now={now} open={tabOpen(tab)} onToggle={() => onTab(tab)}>
           {tab.chats.map((chat) => row(chat, true))}
@@ -281,7 +298,8 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
  * Workspaces, one row per Herdr workspace that opens in place on its sessions; or PRs, every pull
  * request, drawn by `pullRequests`. Projects and PRs are there only while there is one. A desk narrows
  * the session lists to one project. All read the snapshot Home already has; the list is remembered on
- * this device, the project is not.
+ * this device, the project is not. Workspaces come in the order chosen on this device: Herdr's, by
+ * name, or the operator's, dragged by each row's handle after Reorder (lib/workspace-order.ts).
  */
 export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, reviews: everyReview, projectRows, pullRequests, projects, session, now, opening }: {
   recent: readonly RecentChat[];
@@ -309,7 +327,10 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
   const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
-  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length && !projects.length) return null;
+  const { order, set: setOrder } = useWorkspaceOrder();
+  // Reordering: each workspace row is its handle, and opens nothing until Done.
+  const [arranging, setArranging] = useState(false);
+  const reorderList = useRef<HTMLUListElement>(null);
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
@@ -320,6 +341,21 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
     // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
     return { ...group, tabs, entry: workspaceSessions({ tabs }).some((chat) => chat.agent.paneId === group.entry) ? group.entry : undefined };
   }).filter((group) => group.tabs.length > 0);
+  const workspaceId = (group: WorkspaceChats) => group.workspaceId;
+  const workspaceName = (group: WorkspaceChats) => group.name;
+  const ordered = orderWorkspaces(workspaces, workspaceId, workspaceName, order);
+  const everyId = orderWorkspaces(everyWorkspace, workspaceId, workspaceName, order).map(workspaceId);
+  const reorder = useListReorder({ list: reorderList, keys: ordered.map(workspaceId), onMove: (shown) => setOrder({ mode: "custom", custom: placeOrder(everyId, shown) }) });
+  // Reorder starts from the order on screen, and so does Custom the first time.
+  const chooseOrder = (value: WorkspaceOrderMode | "arrange") => {
+    if (value === "arrange" || (value === "custom" && order.custom.length === 0)) {
+      setOrder({ mode: "custom", custom: everyId });
+      setArranging(true);
+    } else {
+      setOrder({ ...order, mode: value });
+    }
+  };
+  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length && !projects.length) return null;
   const tabOpen = (tab: TabChats) => tabsOpen[tab.tabId] ?? tabStartsOpen(tab.chats.map((chat) => chat.agent));
   // A pull request belongs to a project through the session or the thread it opens.
   const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
@@ -331,7 +367,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           className={desk ? "flex items-center gap-5" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
-              onClick={() => { setList(key); rememberList(key); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
+              onClick={() => { setList(key); rememberList(key); setArranging(false); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
           ))}
         </div>
         {/* Always laid out beside the tabs, so its arrival moves neither them nor the rows; a phone gives the
@@ -354,6 +390,17 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
             </select>
           </label>
         )}
+        {list === "workspaces" && everyWorkspace.length > 1 && (arranging
+          ? <button type="button" onClick={() => setArranging(false)} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
+          : <label className={cn("quiet-action relative shrink-0 focus-within:ring-2 focus-within:ring-ring max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
+            <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
+            <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>
+            <select aria-label="Order" value={order.mode} onChange={(event) => chooseOrder(event.target.value as WorkspaceOrderMode | "arrange")}
+              className="absolute inset-0 cursor-pointer opacity-0">
+              {(Object.keys(ORDER_LABEL) as WorkspaceOrderMode[]).map((mode) => <option key={mode} value={mode}>{ORDER_LABEL[mode]}</option>)}
+              <option value="arrange">Reorder…</option>
+            </select>
+          </label>)}
       </div>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
         {list === "projects"
@@ -366,8 +413,9 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
-          : <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
-            {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
+          : <ul ref={reorderList} aria-label={arranging ? "Workspaces, drag a handle to move one" : undefined}
+            className="relative flex flex-col max-sm:divide-y max-sm:divide-border">
+            {ordered.map((group) => <WorkspaceRow reorder={arranging ? reorder : undefined} key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}
               tabOpen={tabOpen} onTab={(tab) => setTabsOpen((prev) => ({ ...prev, [tab.tabId]: !tabOpen(tab) }))}
               row={(chat, inTab) => row(chat, group.name, inTab)} />)}
