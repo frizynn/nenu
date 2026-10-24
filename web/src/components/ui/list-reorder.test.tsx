@@ -73,6 +73,17 @@ it("ends a drag whose row went away, and the next one works", () => {
   expect(rows()).toEqual(["c", "b"]);
 });
 
+it("ends a drag over rows that changed under it, so the drop never lands where it wasn't shown", () => {
+  const onMove = vi.fn();
+  render(<List initial={["a", "b", "c", "d"]} onMove={onMove} />);
+  press("b", 75);
+  to(140);
+  fireEvent.click(screen.getByRole("button", { name: "Close the first" }));
+  to(140, "pointerUp");
+  expect(onMove).not.toHaveBeenCalled();
+  expect(rows()).toEqual(["b", "c", "d"]);
+});
+
 it("puts a row back where it was when the system takes the pointer", () => {
   render(<List initial={["a", "b"]} />);
   press("a", 25);

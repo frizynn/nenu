@@ -331,14 +331,17 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   // Reordering: each workspace row is its handle, and opens nothing until Done.
   const [arranging, setArranging] = useState(false);
   const reorderList = useRef<HTMLUListElement>(null);
-  // Entering or leaving Reorder swaps the control under the focus: the focus follows to its stand-in.
+  // Entering Reorder, or leaving it from a focused Done, swaps the control under the focus: the focus
+  // follows to its stand-in, the tab when one workspace leaves no Order to choose. Only from a focused
+  // Done: a tap (iOS focuses no tapped button) or a tab must not open the Order picker.
   const orderControl = useRef<HTMLSelectElement>(null);
   const doneControl = useRef<HTMLButtonElement>(null);
-  const wasArranging = useRef(false);
+  const focusNext = useRef<"done" | "order" | null>(null);
   useEffect(() => {
-    if (arranging === wasArranging.current) return;
-    wasArranging.current = arranging;
-    (arranging ? doneControl : orderControl).current?.focus();
+    const next = focusNext.current;
+    focusNext.current = null;
+    if (next === "done") doneControl.current?.focus();
+    else if (next === "order") (orderControl.current ?? document.getElementById("home-list-workspaces"))?.focus();
   }, [arranging]);
   // What an arrow key on a handle did, for a screen reader.
   const [moveSaid, setMoveSaid] = useState("");
@@ -368,6 +371,8 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const chooseOrder = (value: WorkspaceOrderMode | "arrange") => {
     if (value === "arrange" || (value === "custom" && order.custom.length === 0)) {
       setOrder({ mode: "custom", custom: everyId });
+      setMoveSaid("");
+      focusNext.current = "done";
       setArranging(true);
     } else {
       setOrder({ ...order, mode: value });
@@ -409,7 +414,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           </label>
         )}
         {list === "workspaces" && (arranging || everyWorkspace.length > 1) && (arranging
-          ? <button ref={doneControl} type="button" onClick={() => setArranging(false)} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
+          ? <button ref={doneControl} type="button" onClick={(event) => { if (document.activeElement === event.currentTarget) focusNext.current = "order"; setArranging(false); }} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
           : <label className={cn("quiet-action relative shrink-0 focus-within:ring-2 focus-within:ring-ring max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
             <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
             <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>

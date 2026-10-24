@@ -60,7 +60,7 @@ export interface ListReorder {
  * Rows carry `data-reorder-key`, inside `list`, in the order of `keys`; each row's handle spreads
  * `handle(key)`. A drop, or an arrow key, hands `onMove` every key in the new order and the one that
  * moved. A drag ends
- * without a move when `enabled` goes off or its row leaves `keys`.
+ * without a move when `enabled` goes off or `keys` change under it.
  */
 export function useListReorder({ list, keys, enabled, onMove }: {
   list: RefObject<HTMLElement | null>;
@@ -135,12 +135,12 @@ export function useListReorder({ list, keys, enabled, onMove }: {
     };
   }
 
-  // A drag whose row went away (its workspace closed, a filter left it out), or whose list stopped
-  // being reordered, ends where it is.
+  // A drag over rows that changed (a workspace closed, a filter left one out), or whose list stopped
+  // being reordered, ends where it is: the places it measured no longer match the screen.
   const keyText = keys.join("\n");
   useEffect(() => {
     const d = drag.current;
-    if (d && (!enabled || !keyText.split("\n").includes(d.key))) end.current(false);
+    if (d && (!enabled || keyText !== d.keys.join("\n"))) end.current(false);
   }, [enabled, keyText]);
   useEffect(() => () => end.current(false), []);
 

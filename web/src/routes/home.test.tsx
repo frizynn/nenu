@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
@@ -363,8 +363,18 @@ describe("Recents and Workspaces", () => {
     await update({ ...recentData, workspaces: recentData.workspaces.slice(0, 1), agents: recentData.agents.filter((agent) => agent.workspaceId === recentData.workspaces[0]!.workspaceId) });
     await user.click(main.getByRole("button", { name: "Done" }));
     expect(main.queryByRole("button", { name: /^Move / })).toBeNull();
-    // One workspace has no order to choose.
+    // One workspace has no order to choose: the focus goes back to its tab.
     expect(main.queryByRole("combobox", { name: "Order" })).toBeNull();
+    expect(main.getByRole("tab", { name: "Workspaces" })).toHaveFocus();
+  });
+
+  it("leaves the focus alone when Done is tapped, so a phone's tap never opens the Order picker", async () => {
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "arrange");
+    main.getByRole("button", { name: "Done" }).blur();
+    fireEvent.click(main.getByRole("button", { name: "Done" }));
+    expect(main.getByRole("combobox", { name: "Order" })).not.toHaveFocus();
   });
 
   describe("a tab of several panes", () => {
