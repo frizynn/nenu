@@ -325,7 +325,9 @@ describe("Recents and Workspaces", () => {
     await user.keyboard("{ArrowUp}");
     expect(handles(panel)).toEqual(["Move hub", "Move ops", "Move Nenu"]);
     expect(main.getByRole("status")).toHaveTextContent("ops, 2 of 3");
-    await waitFor(() => expect(panel.getByRole("button", { name: "Move ops" })).toHaveFocus());
+    // The handle takes its focus back on the next frame; let it, before the keys go to Done.
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(panel.getByRole("button", { name: "Move ops" })).toHaveFocus();
     // Done from a key hands the focus back to Order.
     main.getByRole("button", { name: "Done" }).focus();
     await user.keyboard("{Enter}");
