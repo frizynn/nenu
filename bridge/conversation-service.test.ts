@@ -46,6 +46,17 @@ describe("identity recovery", () => {
     expect(methods).toContain("thread/loaded/list");
     expect(methods.every(method => method === "thread/loaded/list" || method === "thread/read")).toBe(true);
   });
+  test("a Claude pane matches by its session file and asks `claude agents` only on a miss", async () => {
+    let spawned = 0;
+    const agents = { list: async () => { spawned++; return [{ id: "bg1", sessionId: other, cwd: "/tmp" }]; } };
+    const files = { list: async () => [{ pid: 123, sessionId: id, cwd: "/tmp", startedAt: 1 }] };
+    const service = new ConversationService({ request: async () => { throw new Error("Codex must not run"); } }, agents, undefined, undefined, files);
+    const claude = { ...pane, agent: "claude" };
+    expect((await service.resolve(claude, { processInfo: async () => info(["claude"], 123) })).agentSession).toEqual({ kind: "id", value: id });
+    expect(spawned).toBe(0);
+    expect((await service.resolve(claude, { processInfo: async () => info(["claude", "attach", "bg1"], 456) })).agentSession).toEqual({ kind: "id", value: other });
+    expect(spawned).toBe(1);
+  });
   test("matches explicit native arguments, never a same-directory guess", () => {
     expect(explicitSession(info(["/bin/claude", "--session-id", id]), "claude")).toBe(id);
     expect(explicitSession(info(["/bin/codex", "resume", "--remote", "unix://", id]), "codex")).toBe(id);

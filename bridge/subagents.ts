@@ -1,4 +1,5 @@
-import { ClaudeSessions } from "./claude-sessions.ts";
+import { ClaudeSessionFiles } from "./claude-sessions.ts";
+import { claudeSessionDirs } from "./agent-state-sources.ts";
 import { CodexTranscriptSource } from "./journal/codex.ts";
 import { join } from "node:path";
 import { CodexSubagents } from "./subagents-codex.ts";
@@ -9,9 +10,13 @@ import type { SubagentsResponse, SubagentHistoryResponse, SubagentView } from ".
 
 export class Subagents {
   private claude: ClaudeSubagents;
-  private runtimes = new ClaudeSessions();
   private cache = new Map<string, { expires: number; value: Promise<{ agents: SubagentView[]; truncated: boolean }> }>();
-  constructor(roots: { claude: readonly string[]; codex: readonly string[] }, stateDir: string, private codex = new CodexSubagents(undefined, new CodexTranscriptSource(roots.codex))) {
+  constructor(
+    roots: { claude: readonly string[]; codex: readonly string[] },
+    stateDir: string,
+    private codex = new CodexSubagents(undefined, new CodexTranscriptSource(roots.codex)),
+    private runtimes: Pick<ClaudeSessionFiles, "list"> = new ClaudeSessionFiles(claudeSessionDirs(roots.claude)),
+  ) {
     this.claude = new ClaudeSubagents(roots.claude, join(stateDir, "subagents"));
   }
   async list(pane: AgentView): Promise<SubagentsResponse> {
