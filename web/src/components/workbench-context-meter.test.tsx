@@ -56,3 +56,14 @@ it("draws no bar for a window that has reset since it was read", async () => {
   expect(screen.getByText("Window not started")).toBeInTheDocument();
   expect(screen.queryByRole("progressbar", { name: "5-hour limit used" })).not.toBeInTheDocument();
 });
+
+it("marks a weekly window taken from the account's older reading with its age", async () => {
+  const now = Date.now();
+  render(<WorkbenchContextMeter reportedPercent={24} usedTokens={null} maxTokens={null}
+    rateLimits={[{ name: "primary", usedPercent: 65, windowMinutes: 300, resetsAt: now / 1000 + 3600 },
+      { name: "secondary", usedPercent: 99, windowMinutes: 10080, resetsAt: now / 1000 + 3 * 86_400, observedAt: now - 45 * 3_600_000 }]} />);
+  await userEvent.click(screen.getByRole("button", { name: "Context window 24% used" }));
+  expect(screen.getByRole("progressbar", { name: "Weekly limit used" })).toHaveAttribute("aria-valuenow", "99");
+  expect(screen.getByText("Last read 1d ago")).toBeInTheDocument();
+  expect(screen.getAllByText(/^Last read/)).toHaveLength(1);
+});

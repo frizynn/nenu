@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { backgroundPrefix, type ScanChild, Usage } from "./runtime.ts";
+import { backgroundPrefix, type ScanChild, sessionWeekly, Usage } from "./runtime.ts";
 
 let stateDir = "";
 beforeEach(() => { stateDir = mkdtempSync(join(tmpdir(), "nenu-usage-rt-")); });
@@ -135,5 +135,41 @@ describe("usage runtime", () => {
   test("the scan runs at background priority", () => {
     expect(backgroundPrefix("darwin", () => null, () => true)).toEqual(["/usr/sbin/taskpolicy", "-b"]);
     expect(backgroundPrefix("linux", () => "/usr/bin/nice")).toEqual(["/usr/bin/nice", "-n", "19"]);
+  });
+
+  test("a session's weekly window from the scan, only while tracking is on, re-read when the scan rewrites it", async () => {
+    const now = Date.UTC(2026, 9, 24, 10);
+    const usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => {}, spawn: fakeScans().spawn, now: () => now });
+    await usage.load();
+    const write = (usedPercent: number, mtime: number) => {
+      mkdirSync(join(stateDir, "usage"), { recursive: true });
+      const path = join(stateDir, "usage", "accounts.json");
+      writeFileSync(path, JSON.stringify({ v: 1, at: now, accounts: [], limits: [], sessions: { s1: "claude:aaaa" },
+        weekly: { "claude:aaaa": { usedPercent, resetsAt: now / 1000 + 3600, observedAt: now - 5000 } } }));
+      utimesSync(path, mtime, mtime);
+    };
+    write(40, 1000);
+    expect(usage.claudeWeekly("s1")).toBeUndefined();
+    await usage.set({ on: true });
+    expect(usage.claudeWeekly("s1")).toEqual({ name: "secondary", usedPercent: 40, windowMinutes: 10080, resetsAt: now / 1000 + 3600, observedAt: now - 5000 });
+    expect(usage.claudeWeekly("s2")).toBeUndefined();
+    write(41, 2000);
+    expect(usage.claudeWeekly("s1")).toMatchObject({ usedPercent: 41 });
+    rmSync(join(stateDir, "usage"), { recursive: true });
+    expect(usage.claudeWeekly("s1")).toBeUndefined();
+  });
+});
+
+describe("sessionWeekly", () => {
+  const now = Date.UTC(2026, 9, 24, 10);
+  const file = (over: Record<string, unknown>) => ({ v: 1 as const, at: now, accounts: [], limits: [], ...over });
+  test("nothing for a reset window, an unknown session, an old file or a malformed one", () => {
+    const weekly = { "claude:aaaa": { usedPercent: 99, resetsAt: now / 1000 - 1, observedAt: now } };
+    expect(sessionWeekly(file({ sessions: { s1: "claude:aaaa" }, weekly }), "s1", now)).toBeUndefined();
+    expect(sessionWeekly(file({}), "s1", now)).toBeUndefined();
+    expect(sessionWeekly(undefined, "s1", now)).toBeUndefined();
+    expect(sessionWeekly(file({ sessions: { s1: 5 }, weekly: [] }), "s1", now)).toBeUndefined();
+    expect(sessionWeekly(file({ sessions: { s1: "claude:aaaa" }, weekly: { "claude:aaaa": { usedPercent: "99" } } }), "s1", now)).toBeUndefined();
+    expect(sessionWeekly(file({ sessions: "x", weekly: null }), "toString", now)).toBeUndefined();
   });
 });

@@ -35,3 +35,11 @@ it("names any other window by its length", () => {
   expect([300, 10080, 2880, 120, 90, 0, 7.5].map(windowLength)).toEqual(["5-hour", "Weekly", "2-day", "2-hour", "90-minute", "Usage", "Usage"]);
   expect(limitRows([{ name: "primary", usedPercent: 5 }], now)[0]!.label).toBe("Usage limit");
 });
+
+it("says when an account's weekly reading was taken once it is not fresh, and nothing for the session's own", () => {
+  const weekly = { name: "secondary" as const, usedPercent: 99, windowMinutes: 10080, resetsAt: at(80) };
+  expect(limitRows([{ ...weekly, observedAt: now - 45 * 3_600_000 }], now)[0]!.note).toBe("Last read 1d ago");
+  expect(limitRows([{ ...weekly, observedAt: now - 3 * 3_600_000 }], now)[0]!.note).toBe("Last read 3h ago");
+  expect(limitRows([{ ...weekly, observedAt: now - 30_000 }], now)[0]!.note).toBeUndefined();
+  expect(limitRows([weekly], now)[0]!.note).toBeUndefined();
+});

@@ -5,7 +5,7 @@ import { computeEtag } from "./http-cache.ts";
 import { isSessionId } from "./journal/claude.ts";
 import { containedRealpath } from "./journal/files.ts";
 import { object, shortText, SubagentFiles } from "./subagent-files.ts";
-import type { SessionTelemetry } from "./journal/types.ts";
+import type { RateLimit, SessionTelemetry } from "./journal/types.ts";
 import type { AgentView } from "./types.ts";
 
 const count = (value: unknown): number | undefined =>
@@ -89,6 +89,19 @@ export function decodeClaudeStatusline(input: unknown, now = Date.now()) {
     ...(rateLimits.length ? { rateLimits } : {}),
   };
   return { sessionId, telemetry };
+}
+
+/**
+ * A session's telemetry with the account's weekly window added when its own report has none: Claude's
+ * status line sends the weekly window only some of the time, and the panel under the context ring
+ * reads both. A weekly window the session reported always wins.
+ */
+export function withWeekly(
+  telemetry: SessionTelemetry,
+  weekly: RateLimit | undefined,
+): SessionTelemetry {
+  if (!weekly || telemetry.rateLimits?.some((limit) => limit.windowMinutes === 10080)) return telemetry;
+  return { ...telemetry, rateLimits: [...(telemetry.rateLimits ?? []), weekly] };
 }
 
 /** Save a minimal native-shaped payload so reads use the same validation as stdin. */

@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrefsFile } from "../prefs-file.ts";
+import type { RateLimit } from "../journal/types.ts";
 import type { UsageResponse, UsageScan } from "../types.ts";
 import type { AccountsFile, ScanArgs } from "./scan-main.ts";
 import type { Totals } from "./scan.ts";
@@ -24,6 +25,8 @@ export interface UsageService {
   set(patch: Partial<UsagePrefs>): Promise<UsageResponse>;
   /** An agent finished a turn (Herdr's status change to idle or done). */
   turnEnded(): void;
+  /** The weekly window of the account a Claude session bills, from the last scan, while tracking is on. */
+  claudeWeekly(session: string): RateLimit | undefined;
   stop(): void;
 }
 
@@ -31,6 +34,7 @@ export const NO_USAGE: UsageService = {
   read: async () => ({ on: false, splitByAccount: false }),
   set: async () => ({ on: false, splitByAccount: false }),
   turnEnded() {},
+  claudeWeekly: () => undefined,
   stop() {},
 };
 
@@ -125,6 +129,19 @@ export class Usage implements UsageService {
     }
   }
 
+  /** The accounts file as last parsed, re-read only when the scan rewrote it: every open pane's read asks. */
+  private accounts: { mtime: number; file: AccountsFile | undefined } | undefined;
+  private cachedAccounts(): AccountsFile | undefined {
+    let mtime: number;
+    try { mtime = statSync(join(this.deps.stateDir, "usage", "accounts.json")).mtimeMs; } catch { return undefined; }
+    if (this.accounts?.mtime !== mtime) this.accounts = { mtime, file: this.accountsFile() };
+    return this.accounts.file;
+  }
+
+  claudeWeekly(session: string) {
+    return this.prefs.current().on ? sessionWeekly(this.cachedAccounts(), session, this.now()) : undefined;
+  }
+
   private lastScan(): number | undefined {
     return this.scannedAt ?? (this.scannedAt = this.accountsFile()?.at);
   }
@@ -215,6 +232,21 @@ export class Usage implements UsageService {
   stop(): void {
     this.child?.kill();
   }
+}
+
+/**
+ * The weekly window of the account the scan named for a Claude session, the way Settings → Usage counts
+ * that session's tokens, while the window it was read in has not reset. A session the scan has not seen,
+ * or one no account was named for, has none: never the account signed in now, which another config dir
+ * or a switch since may have made someone else's (ADR 0125).
+ */
+export function sessionWeekly(file: AccountsFile | undefined, session: string, now: number): RateLimit | undefined {
+  const sessions = file?.sessions;
+  const account = sessions && typeof sessions === "object" && Object.hasOwn(sessions, session) ? sessions[session] : undefined;
+  const week = typeof account === "string" && file?.weekly && Object.hasOwn(file.weekly, account) ? file.weekly[account] : undefined;
+  if (typeof week?.usedPercent !== "number" || typeof week.resetsAt !== "number" || typeof week.observedAt !== "number") return undefined;
+  if (week.resetsAt * 1000 <= now) return undefined;
+  return { name: "secondary", usedPercent: week.usedPercent, windowMinutes: 10080, resetsAt: week.resetsAt, observedAt: week.observedAt };
 }
 
 /** The bridge's Claude config dirs and Codex homes, from the journal roots (`<dir>/projects`, `<home>/sessions`). */

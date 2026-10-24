@@ -32,7 +32,7 @@ export function contextSize(used: number | null | undefined, max: number | null 
 
 /** One measured share, wherever usage is read: its name, the share and a detail, a thin bar under them
  *  (red past 90%, as the ring is). A share no one knows draws the detail alone, with no bar. */
-export function MeterRow({ label, percent, detail, bar }: { label: string; percent?: number; detail?: string | null; bar: string }) {
+export function MeterRow({ label, percent, detail, note, bar }: { label: string; percent?: number; detail?: string | null; note?: string; bar: string }) {
   return <div>
     <div className="flex items-baseline justify-between gap-3">
       <span className="text-foreground">{label}</span>
@@ -41,6 +41,7 @@ export function MeterRow({ label, percent, detail, bar }: { label: string; perce
     {percent !== undefined && <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={bar} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
       <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: percent > 90 ? "var(--destructive)" : "var(--primary)" }} />
     </div>}
+    {note && <p className="mt-1 text-caption text-muted-foreground">{note}</p>}
   </div>;
 }
 
@@ -85,7 +86,7 @@ export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, 
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window" className="w-72" dense>
       <div className="space-y-2.5 text-footnote">
         <MeterRow label="Context" percent={percentage} detail={contextSize(used, max)} bar="Context window usage" />
-        {limitRows(rateLimits).map((row) => <MeterRow key={row.key} label={row.label} percent={row.percent} detail={row.detail} bar={`${row.label} used`} />)}
+        {limitRows(rateLimits).map((row) => <MeterRow key={row.key} label={row.label} percent={row.percent} detail={row.detail} note={row.note} bar={`${row.label} used`} />)}
         {onCompact && <button type="button" disabled={compactDisabled} onClick={() => { setOpen(false); onCompact(); }} className="hit-area mt-0.5 min-h-9 w-full rounded-lg bg-primary/10 px-3 text-footnote font-medium text-primary hover:bg-primary/20 disabled:opacity-50">Compact context</button>}
       </div>
     </WorkbenchPopover>

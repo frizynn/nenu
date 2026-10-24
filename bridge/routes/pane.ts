@@ -5,6 +5,7 @@ import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http
 import { discoverPaneModels } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
 import { object as record } from "../subagent-files.ts";
+import { withWeekly } from "../claude-telemetry.ts";
 import type { PaneReadResponse } from "../types.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { buildId, json, jsonError, secure, text, withBuildHeader } from "./http.ts";
@@ -22,10 +23,18 @@ export const panePaneActions: Record<string, PaneAction> = {
   "": {
     level: "read",
     marksSeen: false,
-    handle({ cfg, conversations, claudeTelemetry }, { req, url, rt, paneId }) {
+    handle({ cfg, conversations, claudeTelemetry, usage }, { req, url, rt, paneId }) {
       const native = async () => {
         const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
-        return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : undefined;
+        if (!original) return undefined;
+        const pane = await conversations.resolve(original, rt.herdr, rt.name).catch(() => undefined);
+        const found = await claudeTelemetry.read(pane).catch(() => undefined);
+        if (!found || pane?.agentSession?.kind !== "id") return found;
+        // Claude's status line often leaves the weekly window out; the account's last reading fills it,
+        // and nothing about that reading may cost the session's own telemetry.
+        let weekly;
+        try { weekly = usage.claudeWeekly(pane.agentSession.value); } catch { weekly = undefined; }
+        return { ...found, telemetry: withWeekly(found.telemetry, weekly) };
       };
       // A shell's start block waits for its prompt: `agent.start` launches nowhere else.
       const shell = rt.engine.current().shellPanes.some(entry => entry.paneId === paneId);
