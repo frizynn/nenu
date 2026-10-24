@@ -155,3 +155,16 @@ test("installer keeps status line options and hooks; wrapper preserves stdin and
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("the account's weekly window fills only a gap in the session's own report", async () => {
+  const { withWeekly } = await import("./claude-telemetry.ts");
+  const weekly = { name: "secondary" as const, usedPercent: 99, windowMinutes: 10080, resetsAt: 1_793_127_600, observedAt: 1 };
+  const fiveHour = { name: "primary" as const, usedPercent: 51, windowMinutes: 300, resetsAt: 1_792_845_600 };
+  const base = { source: "statusline" as const, fileTruncated: false };
+  expect(withWeekly({ ...base, rateLimits: [fiveHour] }, weekly).rateLimits).toEqual([fiveHour, weekly]);
+  expect(withWeekly(base, weekly).rateLimits).toEqual([weekly]);
+  const own = { ...fiveHour, name: "secondary" as const, windowMinutes: 10080, usedPercent: 12 };
+  expect(withWeekly({ ...base, rateLimits: [fiveHour, own] }, weekly).rateLimits).toEqual([fiveHour, own]);
+  const untouched = { ...base, rateLimits: [fiveHour] };
+  expect(withWeekly(untouched, undefined)).toBe(untouched);
+});

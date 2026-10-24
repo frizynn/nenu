@@ -187,6 +187,9 @@ export interface SessionTelemetry {
     windowMinutes?: number;
     /** Epoch seconds, as reported by the provider. */
     resetsAt?: number;
+    /** Epoch ms of the account's own reading, when this window came from Settings → Usage's per-account
+     *  data because the session's report left it out; absent on what the session reported itself. */
+    observedAt?: number;
   }>;
   /** The parsed log was tail-capped; metadata from its missing head may be unavailable. */
   fileTruncated: boolean;

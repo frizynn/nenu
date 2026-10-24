@@ -1,7 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrefsFile } from "../prefs-file.ts";
+import type { SessionTelemetry } from "../journal/types.ts";
 import type { UsageResponse, UsageScan } from "../types.ts";
+import { accountWeekly } from "./limits.ts";
 import type { AccountsFile, ScanArgs } from "./scan-main.ts";
 import type { Totals } from "./scan.ts";
 
@@ -24,6 +26,8 @@ export interface UsageService {
   set(patch: Partial<UsagePrefs>): Promise<UsageResponse>;
   /** An agent finished a turn (Herdr's status change to idle or done). */
   turnEnded(): void;
+  /** The signed-in Claude account's weekly window from the last scan, while tracking is on (limits.ts). */
+  claudeWeekly(): NonNullable<SessionTelemetry["rateLimits"]>[number] | undefined;
   stop(): void;
 }
 
@@ -31,6 +35,7 @@ export const NO_USAGE: UsageService = {
   read: async () => ({ on: false, splitByAccount: false }),
   set: async () => ({ on: false, splitByAccount: false }),
   turnEnded() {},
+  claudeWeekly: () => undefined,
   stop() {},
 };
 
@@ -123,6 +128,19 @@ export class Usage implements UsageService {
     } catch {
       return undefined;
     }
+  }
+
+  /** The accounts file as last parsed, re-read only when the scan rewrote it: every open pane's read asks. */
+  private accounts: { mtime: number; file: AccountsFile | undefined } | undefined;
+  private cachedAccounts(): AccountsFile | undefined {
+    let mtime: number;
+    try { mtime = statSync(join(this.deps.stateDir, "usage", "accounts.json")).mtimeMs; } catch { return undefined; }
+    if (this.accounts?.mtime !== mtime) this.accounts = { mtime, file: this.accountsFile() };
+    return this.accounts.file;
+  }
+
+  claudeWeekly() {
+    return this.prefs.current().on ? accountWeekly(this.cachedAccounts(), this.now()) : undefined;
   }
 
   private lastScan(): number | undefined {

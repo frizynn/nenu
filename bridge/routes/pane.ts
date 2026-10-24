@@ -5,6 +5,7 @@ import { JsonBody, notModified, notModifiedResponse, SharedLoads } from "../http
 import { discoverPaneModels } from "../models.ts";
 import { discoverPaneSkills } from "../skills.ts";
 import { object as record } from "../subagent-files.ts";
+import { withWeekly } from "../claude-telemetry.ts";
 import type { PaneReadResponse } from "../types.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { buildId, json, jsonError, secure, text, withBuildHeader } from "./http.ts";
@@ -22,10 +23,11 @@ export const panePaneActions: Record<string, PaneAction> = {
   "": {
     level: "read",
     marksSeen: false,
-    handle({ cfg, conversations, claudeTelemetry }, { req, url, rt, paneId }) {
+    handle({ cfg, conversations, claudeTelemetry, usage }, { req, url, rt, paneId }) {
       const native = async () => {
         const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
-        return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane)).catch(() => undefined) : undefined;
+        return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane))
+          .then(found => found && { ...found, telemetry: withWeekly(found.telemetry, usage.claudeWeekly()) }).catch(() => undefined) : undefined;
       };
       // A shell's start block waits for its prompt: `agent.start` launches nowhere else.
       const shell = rt.engine.current().shellPanes.some(entry => entry.paneId === paneId);

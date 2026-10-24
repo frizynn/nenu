@@ -45,7 +45,7 @@ function UsageDetails({ telemetry, stale }: { telemetry?: SessionTelemetry; stal
     <div className="space-y-4 text-footnote text-muted-foreground">
       {stale && <p className="text-destructive">Refreshing failed. These values may be out of date.</p>}
       {(percent !== undefined || size !== null) && <MeterRow label="Context" percent={percent} detail={size} bar="Context window usage" />}
-      {limits.map((limit) => <MeterRow key={limit.key} label={limit.label} percent={limit.percent} detail={limit.detail} bar={`${limit.label} used`} />)}
+      {limits.map((limit) => <MeterRow key={limit.key} label={limit.label} percent={limit.percent} detail={limit.detail} note={limit.note} bar={`${limit.label} used`} />)}
       {reported.length > 0 && <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         {reported.map(([label, value]) => <Fragment key={label}><dt>{label}</dt><dd className="text-right tabular-nums text-foreground">{tokens(value)}</dd></Fragment>)}
         {telemetry?.tokens && <><dt>Scope</dt><dd className="text-right text-foreground">{telemetry.tokens.scope === "session" ? "Session" : "Last message"}</dd></>}

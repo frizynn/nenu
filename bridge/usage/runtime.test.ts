@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backgroundPrefix, type ScanChild, Usage } from "./runtime.ts";
@@ -135,5 +135,26 @@ describe("usage runtime", () => {
   test("the scan runs at background priority", () => {
     expect(backgroundPrefix("darwin", () => null, () => true)).toEqual(["/usr/sbin/taskpolicy", "-b"]);
     expect(backgroundPrefix("linux", () => "/usr/bin/nice")).toEqual(["/usr/bin/nice", "-n", "19"]);
+  });
+
+  test("the signed-in Claude account's weekly window, only while tracking is on, re-read when the scan rewrites it", async () => {
+    const now = Date.UTC(2026, 9, 24, 10);
+    const usage = new Usage({ stateDir, roots: { claude: [], codex: [] }, onScanned: () => {}, spawn: fakeScans().spawn, now: () => now });
+    await usage.load();
+    const write = (usedPercent: number, mtime: number) => {
+      mkdirSync(join(stateDir, "usage"), { recursive: true });
+      const path = join(stateDir, "usage", "accounts.json");
+      writeFileSync(path, JSON.stringify({ v: 1, at: now, accounts: [{ id: "claude:aaaa", agent: "claude", label: "", source: "observed", active: true }],
+        limits: [{ agent: "claude", account: "claude:aaaa", observedAt: now, source: "statusline", windows: [{ name: "seven_day", windowMinutes: 10080, usedPercent, resetsAt: now / 1000 + 3600 }] }] }));
+      utimesSync(path, mtime, mtime);
+    };
+    write(40, 1000);
+    expect(usage.claudeWeekly()).toBeUndefined();
+    await usage.set({ on: true });
+    expect(usage.claudeWeekly()).toMatchObject({ usedPercent: 40, windowMinutes: 10080, observedAt: now });
+    write(41, 2000);
+    expect(usage.claudeWeekly()).toMatchObject({ usedPercent: 41 });
+    rmSync(join(stateDir, "usage"), { recursive: true });
+    expect(usage.claudeWeekly()).toBeUndefined();
   });
 });

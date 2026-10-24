@@ -1,3 +1,4 @@
+import { timeAgo } from "@/lib/format";
 import { resetTime } from "@/lib/usage-limit";
 import type { SessionTelemetry } from "@/lib/types";
 
@@ -11,7 +12,12 @@ export interface LimitRow {
   percent?: number;
   /** "resets 6:40 PM", "resets Mon 9:00 AM", or "Window not started" once it passed; absent when the agent named no reset. */
   detail?: string;
+  /** "Last read 1d ago": the window came from the account's last reading, not this session, and it is not fresh. */
+  note?: string;
 }
+
+/** A reading this recent is the present; an older one says when it was taken (as Settings → Usage does). */
+const FRESH_MS = 120_000;
 
 /** A plan window by its length: "5-hour", "Weekly", "2-day", "90-minute"; "Usage" when none was reported. */
 export function windowLength(minutes: number): string {
@@ -30,9 +36,11 @@ export function limitRows(limits: SessionTelemetry["rateLimits"], now = Date.now
       const resets = limit.resetsAt === undefined ? undefined : limit.resetsAt * 1000;
       // The windows are the account's: a reading from before the reset says nothing about the new one.
       if (resets !== undefined && resets <= now) return { key: limit.name, label, detail: "Window not started" };
+      const stale = limit.observedAt !== undefined && now - limit.observedAt > FRESH_MS;
       return {
         key: limit.name, label, percent: Math.min(100, Math.max(0, limit.usedPercent)),
         ...(resets === undefined ? {} : { detail: `resets ${resetTime(resets, now)}` }),
+        ...(stale ? { note: `Last read ${timeAgo(limit.observedAt!, now)}` } : {}),
       };
     });
 }

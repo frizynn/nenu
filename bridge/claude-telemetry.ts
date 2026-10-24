@@ -91,6 +91,19 @@ export function decodeClaudeStatusline(input: unknown, now = Date.now()) {
   return { sessionId, telemetry };
 }
 
+/**
+ * A session's telemetry with the account's weekly window added when its own report has none: Claude's
+ * status line sends the weekly window only some of the time, and the panel under the context ring
+ * reads both. A weekly window the session reported always wins.
+ */
+export function withWeekly(
+  telemetry: SessionTelemetry,
+  weekly: NonNullable<SessionTelemetry["rateLimits"]>[number] | undefined,
+): SessionTelemetry {
+  if (!weekly || telemetry.rateLimits?.some((limit) => limit.windowMinutes === 10080)) return telemetry;
+  return { ...telemetry, rateLimits: [...(telemetry.rateLimits ?? []), weekly] };
+}
+
 /** Save a minimal native-shaped payload so reads use the same validation as stdin. */
 export async function recordClaudeStatusline(input: unknown, stateDir: string) {
   const decoded = decodeClaudeStatusline(input);

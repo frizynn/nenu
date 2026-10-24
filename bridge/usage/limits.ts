@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { decodeClaudeStatusline } from "../claude-telemetry.ts";
+import type { SessionTelemetry } from "../journal/types.ts";
 import type { AccountBook, Harness } from "./accounts.ts";
 import type { CodexLimits } from "./scan.ts";
+import type { AccountsFile } from "./scan-main.ts";
 
 // Plan limits per account, from what is already on disk: Nenu's status-line snapshots (Claude), the
 // rollouts (Codex, collected by the scan), and, for accounts not in use, hats' `limits.json` or
@@ -115,6 +117,21 @@ export function claudeSwapLimits(text: string): AccountLimits[] {
     if (windows.length) out.push({ agent: "claude", account: `claude:swap-${slot}`, observedAt: fetched < 1e12 ? fetched * 1000 : fetched, source: "claude-swap", windows });
   }
   return out;
+}
+
+/**
+ * The weekly window of the Claude account in use, from the last scan's accounts file, for a session
+ * whose own status line left it out. Only when one Claude account is signed in (two config dirs on
+ * different accounts cannot say which one a session bills) and the window it was read in has not
+ * reset; never a guess.
+ */
+export function accountWeekly(file: AccountsFile | undefined, now: number): NonNullable<SessionTelemetry["rateLimits"]>[number] | undefined {
+  const active = file?.accounts.filter((a) => a.agent === "claude" && a.active) ?? [];
+  if (active.length !== 1) return undefined;
+  const reading = file!.limits.find((l) => l.account === active[0]!.id);
+  const week = reading?.windows.find((w) => w.windowMinutes === 10080);
+  if (!reading || !week || week.resetsAt === undefined || week.resetsAt * 1000 <= now) return undefined;
+  return { name: "secondary", usedPercent: week.usedPercent, windowMinutes: 10080, resetsAt: week.resetsAt, observedAt: reading.observedAt };
 }
 
 /** The newest reading per account across sources. */
