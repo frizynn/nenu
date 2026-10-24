@@ -8,6 +8,27 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-24
+
+### Added
+
+- A typed `/name` wears a blue tint in the draft and in the sent message (1bec14a7).
+
+### Changed
+
+- The subagent list reads Claude's session files instead of spawning `claude agents` (3077bbda, 46191fcf, 4f88a1da, 10cab2c9).
+- A pull-request refresh makes one GitHub call, and pull requests are read apart from the snapshot (cb705255, 4219058f, 021e999f, ce9549dd).
+- A phone no longer mounts the desk's hidden sidebar and rail; on a desk it stays mounted across the breakpoint (b12e09da, 4498455d).
+- A live event redraws the open chat and the desk's chat rows only once, and only when their pane changed (78115f22, e28543b4, fed17d4d).
+- An unchanged `sw.js` answers 304, and mutable `dist` files are gzipped (9d95a9c3).
+
+### Fixed
+
+- On Linux, Claude panes map to their session by the start ticks the session file records, without `ps` (666b7dbf, bbba7dc0).
+- Pull requests survive a bridge update (ad3637b9).
+- A chat's usage-limit line turns the day on return from sleep (550ca459, a41316c3).
+- No command tint under a masked password or in a shell, and a find match inside a command stays one piece (decba7e7, fb771d55).
+
 ## [2.1.0] - 2026-10-24
 
 ### Added
