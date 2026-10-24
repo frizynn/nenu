@@ -27,7 +27,7 @@ const nextPane = () => `w8:p${++pane}`;
 function renderDiff(target: string | undefined, open = target ?? "w8:none", onLeave?: () => void) {
   const agents = [{ paneId: target ?? "", agent: "claude", kind: "agent", paneLabel: "Checkout flow" }] as AgentView[];
   const router = createMemoryRouter([{
-    id: ROOT_ROUTE_ID, path: "/", loader: () => ({ agents, projects: [] }),
+    id: ROOT_ROUTE_ID, path: "/", loader: () => ({ agents }),
     children: [{ path: "pane/:paneId", element: <DiffBody read={read} comments={target ? { paneId: target } : undefined} onLeave={onLeave} /> }],
   }], { initialEntries: [`/pane/${encodeURIComponent(open)}`] });
   render(<RouterProvider router={router} />);

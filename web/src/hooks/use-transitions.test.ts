@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setStatus } from "@/lib/status";
-import type { AgentStatus, AgentView, ProjectView } from "@/lib/types";
+import type { AgentStatus, AgentView } from "@/lib/types";
 import { useAgentTransitions } from "./use-transitions";
 
 vi.mock("@/lib/status", () => ({ setStatus: vi.fn() }));
@@ -12,8 +12,8 @@ const agent = (paneId: string, status: AgentStatus, extra: Partial<AgentView> = 
   workspaceNumber: 1, tabId: "w1:t1", cwd: "/work/collie", focused: false, ...extra,
 });
 
-function setup(agents: AgentView[], session?: string, openPaneId: string | null = null, projects?: ProjectView[]) {
-  const hook = renderHook((props) => useAgentTransitions(props.agents, props.openPaneId, props.session, projects), {
+function setup(agents: AgentView[], session?: string, openPaneId: string | null = null) {
+  const hook = renderHook((props) => useAgentTransitions(props.agents, props.openPaneId, props.session), {
     initialProps: { agents, session, openPaneId },
   });
   return { ...hook, update: (next: AgentView[], activeSession = session, openPane = openPaneId) => {
@@ -114,18 +114,6 @@ describe("useAgentTransitions", () => {
     act(() => update([view("blocked"), agent("w1:other", "working", { agent: "claude" })]));
     expect(notify).toHaveBeenCalledExactlyOnceWith("Working Claude needs your input", "warn", undefined, {
       description: "nenu · redesign", background: true, to: "/pane/w1%3Aworking",
-    });
-  });
-
-  it("names a project's thread by its title and places it in its project", () => {
-    const projects: ProjectView[] = [{
-      slug: "nenu", name: "Nenu", status: "active",
-      threads: [{ id: "t1", title: "Fix the toast", parentId: "", role: "worker", status: "open", paneId: "one" }],
-    }];
-    const { update } = setup([agent("one", "working")], undefined, null, projects);
-    act(() => update([agent("one", "blocked")]));
-    expect(notify).toHaveBeenCalledExactlyOnceWith("Fix the toast needs your input", "warn", undefined, {
-      description: "Nenu", background: true, to: "/pane/one",
     });
   });
 

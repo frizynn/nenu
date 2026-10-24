@@ -12,7 +12,6 @@ import { isCatchingUp, isLocked } from "@/lib/idle";
 import { needsYouCount } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
-import { liveCoordinator } from "@/lib/projects";
 import { canCreate } from "@/lib/types";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
@@ -129,13 +128,9 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The tab bar steps aside where a chat owns the bottom edge: a pane with its composer, that pane's
-  // History, and a project whose live coordinator is opening its pane (the URL stays on the project while
-  // the pane loads). A project without one, and every node page, keep it.
-  const { paneId, projectSlug, nodeId } = useParams();
-  const opensPane = projectSlug !== undefined && nodeId === undefined
-    && liveCoordinator(data.projects?.find((project) => project.slug === projectSlug), data.agents) !== undefined;
-  const tabBar = paneId === undefined && !opensPane;
+  // The tab bar steps aside where a chat owns the bottom edge: a pane with its composer and that pane's History.
+  const { paneId } = useParams();
+  const tabBar = paneId === undefined;
   const active: TabBarTab = searchSheet ? "search" : location.pathname === "/" ? "home" : null;
 
   return (

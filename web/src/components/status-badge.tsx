@@ -1,31 +1,29 @@
 import { useEffect, useRef } from "react";
 
-import { Check, CircleAlert, CircleCheck, CircleDashed, GitMerge, Hourglass, type IconComponent } from "@/components/ui/icon";
+import { CircleAlert, CircleCheck, CircleDashed, Hourglass, type IconComponent } from "@/components/ui/icon";
 import { useLiveMotion } from "@/lib/live-motion";
-import type { NodeState } from "@/lib/org-tree";
 import { cn } from "@/lib/utils";
 import type { AgentStatus } from "@/lib/types";
 
-/** An agent's status in the tree's terms: a finished turn waits to be looked at, as a thread to review does. */
-export const AGENT_STATE: Record<AgentStatus, NodeState> = { blocked: "needs", working: "working", done: "review", idle: "idle", unknown: "idle" };
+/** What an agent's state asks of you: it waits on you, it finished and waits to be looked at, it works, or it rests. */
+export type AgentState = "needs" | "review" | "working" | "idle";
 
-/** A node's state, or an agent held by its usage limit until a time (ADR 0120): grey, it resumes by itself. */
-export type MarkState = NodeState | "limit";
+/** An agent's status as its mark reads it: a finished turn waits to be looked at. */
+export const AGENT_STATE: Record<AgentStatus, AgentState> = { blocked: "needs", working: "working", done: "review", idle: "idle", unknown: "idle" };
+
+/** An agent's state, or an agent held by its usage limit until a time (ADR 0120): grey, it resumes by itself. */
+export type MarkState = AgentState | "limit";
 
 /**
  * One glyph per state, told apart by its shape before its colour: what waits on you is a red alert,
- * what is ready to look at a blue check, work in progress a grey dashed circle that turns slowly, a
- * merge left its grey branch, a resolved node a grey tick. Colour is only for what asks something of
- * you, and a resting node draws nothing, so a list shows at a glance only what is alive. Only work in
+ * what is ready to look at a blue check, work in progress a grey dashed circle that turns slowly.
+ * Colour is only for what asks something of you, and a resting agent draws nothing, so a list shows at a glance only what is alive. Only work in
  * progress moves, and only while it is on screen (ADR 0118); every other mark is still.
  */
 const MARK: Record<Exclude<MarkState, "idle">, { glyph: IconComponent; tone: string }> = {
   needs: { glyph: CircleAlert, tone: "text-status-blocked" },
   review: { glyph: CircleCheck, tone: "text-primary" },
   working: { glyph: CircleDashed, tone: "text-muted-foreground" },
-  merging: { glyph: GitMerge, tone: "text-muted-foreground" },
-  closing: { glyph: GitMerge, tone: "text-muted-foreground" },
-  resolved: { glyph: Check, tone: "text-muted-foreground" },
   limit: { glyph: Hourglass, tone: "text-muted-foreground" },
 };
 
@@ -57,7 +55,7 @@ function WorkingMark({ className }: { className?: string }) {
 /** Whether an agent's status draws nothing: where no column holds the names in line, leave its mark out. */
 export const resting = (status: AgentStatus) => AGENT_STATE[status] === "idle";
 
-/** An agent's mark: the same glyph its state draws in the tree. */
+/** An agent's mark: the glyph its state draws. */
 export function StatusDot({ status, className }: { status: AgentStatus; className?: string }) {
   return <StateMark state={AGENT_STATE[status]} className={className} />;
 }

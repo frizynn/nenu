@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { ChevronDown, ChevronRight, FolderPlus, LayoutGrid, LayoutTemplate, ListFilter, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
+import { ChevronRight, FolderPlus, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
@@ -12,9 +12,7 @@ import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from 
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import { workspaceSessions, type RecentChat, type ReviewEntry, type TabChats, type WorkspaceChats } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
-import { ASK } from "@/lib/org-tree";
-import { projectForPane } from "@/lib/projects";
-import { STATUS_LABEL, type AgentStatus, type AgentView, type ProjectView } from "@/lib/types";
+import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { tabFolds, tabStartsOpen } from "@/lib/workspace-tree";
 
@@ -109,14 +107,12 @@ const sr = (text: string) => <span className="sr-only">{text}</span>;
 /** The state word a row leads its second line with, and its colour. */
 function stateOf(chat: RecentChat): { word: string; tone?: string } {
   if (chat.agent.kind === "shell") return { word: "Shell" };
-  if (chat.ask === "reply") return { word: ASK.reply.label, tone: "max-lg:text-status-blocked" };
-  if (chat.review) return { word: "Ready to review", tone: "max-lg:text-primary" };
   const status = STATUS_LABEL[chat.agent.status];
   return { word: status.charAt(0).toUpperCase() + status.slice(1), tone: STATUS_TEXT[chat.agent.status] };
 }
 
 /**
- * Title, then state, place and what tells it apart (its PR, its role or its tab); the place gives up
+ * Title, then state, place and what tells it apart (its PR or its tab); the place gives up
  * width first. A desk adds the PR's size and the agent. `group` is the name the row sits under, which
  * it then leaves out; under its tab's row (`inTab`) it leaves the tab out too, and a phone takes that
  * row's deeper indent back from its gaps, so the title keeps the width it has one level up.
@@ -156,20 +152,20 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   );
 }
 
-export type SessionList = "projects" | "recents" | "workspaces" | "prs";
+export type SessionList = "recents" | "workspaces" | "prs";
 
-const LISTS: ReadonlyArray<[SessionList, string]> = [["projects", "Projects"], ["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
+const LISTS: ReadonlyArray<[SessionList, string]> = [["recents", "Recents"], ["workspaces", "Workspaces"], ["prs", "PRs"]];
 /** The phone's segmented track for as many tabs: one column each, as wide as their words need. */
-const SEGMENTS: Record<number, string> = { 1: "grid-cols-1 sm:w-32", 2: "grid-cols-2 sm:w-60", 3: "grid-cols-3 sm:w-80", 4: "grid-cols-4 sm:w-[28rem]" };
-// v2 since Projects became the first tab: a choice remembered before it existed opens on Projects once.
+const SEGMENTS: Record<number, string> = { 1: "grid-cols-1 sm:w-32", 2: "grid-cols-2 sm:w-60", 3: "grid-cols-3 sm:w-80" };
+// A list remembered that is no longer one opens on Recents.
 const LIST_KEY = "nenu:home-list:v2";
 
 function readList(): SessionList {
   try {
     const list = localStorage.getItem(LIST_KEY);
-    return LISTS.some(([key]) => key === list) ? list as SessionList : "projects";
+    return LISTS.some(([key]) => key === list) ? list as SessionList : "recents";
   } catch {
-    return "projects";
+    return "recents";
   }
 }
 function rememberList(list: SessionList): void {
@@ -181,14 +177,14 @@ function rememberList(list: SessionList): void {
 }
 
 /** How a workspace reads at a glance: the most pressing state among its sessions, in their own words. */
-const WORKSPACE_STATES = [ASK.reply.label, STATUS_LABEL.blocked, STATUS_LABEL.working, "Ready to review", STATUS_LABEL.done, STATUS_LABEL.idle, "Shell"]
+const WORKSPACE_STATES = [STATUS_LABEL.blocked, STATUS_LABEL.working, STATUS_LABEL.done, STATUS_LABEL.idle, "Shell"]
   .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
 
 function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: string } {
   const states = chats.map(stateOf);
   const word = WORKSPACE_STATES.find((candidate) => states.some((state) => state.word === candidate));
-  // A thread waiting for your reply needs you as much as a dialog does, and both say it in red.
-  if (word === WORKSPACE_STATES[0] || word === WORKSPACE_STATES[1]) return { word: WORKSPACE_STATES[1]!, tone: "max-lg:text-status-blocked" };
+  // What needs you says it in red.
+  if (word === WORKSPACE_STATES[0]) return { word, tone: "max-lg:text-status-blocked" };
   return states.find((state) => state.word === word) ?? { word: "Empty" };
 }
 
@@ -276,53 +272,36 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
 }
 
 /**
- * Home's lists under one control: Projects, drawn by `projectRows`, what moves in each project and the
- * quiet ones folded last; Recents, every session that moved last first (what Needs you shows stays out);
- * Workspaces, one row per Herdr workspace that opens in place on its sessions; or PRs, every pull
- * request, drawn by `pullRequests`. Projects and PRs are there only while there is one. A desk narrows
- * the session lists to one project. All read the snapshot Home already has; the list is remembered on
- * this device, the project is not.
+ * Home's lists under one control: Recents, every session that moved last first (what Needs you shows
+ * stays out); Workspaces, one row per Herdr workspace that opens in place on its sessions; or PRs,
+ * every pull request, drawn by `pullRequests`, there only while there is one. All read the snapshot
+ * Home already has; the list is remembered on this device.
  */
-export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, reviews: everyReview, projectRows, pullRequests, projects, session, now, opening }: {
+export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullRequests, session, now, opening }: {
   recent: readonly RecentChat[];
   workspaces: readonly WorkspaceChats[];
   reviews: readonly ReviewEntry[];
-  /** The Projects tab's rows, shown while there is a project. */
-  projectRows: ReactNode;
   pullRequests: (entries: readonly ReviewEntry[]) => ReactNode;
-  projects: readonly ProjectView[];
   session?: string;
   now: number;
   opening: string | null;
 }) {
   const [chosen, setList] = useState<SessionList>(readList);
-  const lists = LISTS.filter(([key]) => (key !== "prs" || everyReview.length > 0) && (key !== "projects" || projects.length > 0));
+  const lists = LISTS.filter(([key]) => key !== "prs" || reviews.length > 0);
   const list = lists.some(([key]) => key === chosen) ? chosen : lists[0]![0];
-  // A desk narrows both lists to one project's sessions; "" is every project.
-  const [only, setOnly] = useState("");
   // The workspaces opened in place; none until a tap opens one.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // Each tab's fold as a tap left it; an untouched tab follows tabStartsOpen.
   const [tabsOpen, setTabsOpen] = useState<Readonly<Record<string, boolean>>>({});
-  // A desk draws the switcher as a page's underlined tabs (DeskTabs) and the filter as a quiet action; a phone keeps the segmented track.
+  // A desk draws the switcher as a page's underlined tabs (DeskTabs); a phone keeps the segmented track.
   const desk = useMediaQuery(DESK);
   // Recents keeps the order it came on screen with, so a row never moves under the finger: one that
   // finishes says New where it is. "N updates" puts them in order, as coming back to the page does.
   const held = useHeldTime((chat: RecentChat) => chat.agent.paneId, (chat) => chat.at);
-  if (!everyRecent.length && !everyWorkspace.length && !everyReview.length && !projects.length) return null;
-  const project = projects.find((candidate) => candidate.slug === only);
-  const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
-  const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
-  const recent = held.order(everyRecent.filter(kept));
+  if (!everyRecent.length && !workspaces.length && !reviews.length) return null;
+  const recent = held.order(everyRecent);
   const updates = list === "recents" ? held.moved(recent) : 0;
-  const workspaces = everyWorkspace.map((group) => {
-    const tabs = group.tabs.map((tab) => ({ ...tab, chats: tab.chats.filter(kept) })).filter((tab) => tab.chats.length > 0);
-    // A workspace whose entry pane the project leaves out unfolds what it keeps instead.
-    return { ...group, tabs, entry: workspaceSessions({ tabs }).some((chat) => chat.agent.paneId === group.entry) ? group.entry : undefined };
-  }).filter((group) => group.tabs.length > 0);
   const tabOpen = (tab: TabChats) => tabsOpen[tab.tabId] ?? tabStartsOpen(tab.chats.map((chat) => chat.agent));
-  // A pull request belongs to a project through the session or the thread it opens.
-  const reviews = everyReview.filter((entry) => !project || (entry.open !== undefined && ("paneId" in entry.open ? inProject(entry.open.paneId) : entry.open.project === project.slug)));
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
   return (
     <section aria-label="Your work" className="flex flex-col gap-2">
@@ -339,33 +318,17 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
         <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
           className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground",
             "max-sm:absolute max-sm:left-1/2 max-sm:top-full max-sm:z-10 max-sm:mt-2 max-sm:-translate-x-1/2 max-sm:bg-background max-sm:shadow-md",
-            !updates && "invisible", projects.length === 0 && "ml-auto")}>
+            !updates && "invisible", "ml-auto")}>
           {Math.max(updates, 1)} {updates <= 1 ? "update" : "updates"}
         </button>
-        {projects.length > 0 && list !== "projects" && (
-          <label className={cn("relative ml-auto min-w-0 focus-within:ring-2 focus-within:ring-ring max-sm:hidden",
-            desk ? "quiet-action -mr-2" : "inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-footnote text-muted-foreground hover:text-foreground")}>
-            <ListFilter aria-hidden className="size-3.5 shrink-0" />
-            <span className="max-w-[12rem] truncate">{project?.name ?? "All projects"}</span>
-            <ChevronDown aria-hidden className="size-3.5 shrink-0" />
-            <select aria-label="Project" value={project?.slug ?? ""} onChange={(event) => setOnly(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0">
-              <option value="">All projects</option>
-              {projects.map((candidate) => <option key={candidate.slug} value={candidate.slug}>{candidate.name}</option>)}
-            </select>
-          </label>
-        )}
       </div>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
-        {list === "projects"
-          ? projectRows
-          : list === "prs"
-          ? reviews.length
-            ? pullRequests(reviews)
-            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">No pull request in {project?.name}.</p>
+        {list === "prs"
+          ? pullRequests(reviews)
           : list === "recents"
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
-            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
+            : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">Every session is in Needs you.</p>
           : <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
             {workspaces.map((group) => <WorkspaceRow key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}
@@ -442,7 +405,7 @@ export function HomeStarters({ disabled, onFolder, onMore }: { disabled: boolean
     <section aria-label="Get started" className="flex flex-col gap-2">
       <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         <StarterRow icon={FolderPlus} title="Start an agent in a folder" hint="Pick the agent, then the folder." disabled={disabled} onClick={onFolder} />
-        <StarterRow icon={Sparkle} title="Start a project or a quick chat" hint="Many threads, or one question." disabled={disabled} onClick={onMore} />
+        <StarterRow icon={Sparkle} title="More ways to start" hint="A quick question, a tab or a workspace." disabled={disabled} onClick={onMore} />
       </div>
       <p className="text-footnote text-muted-foreground">Agents you start in Herdr show up here too.</p>
     </section>

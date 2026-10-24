@@ -1,8 +1,8 @@
 import { needsYouItems } from "@/lib/home-stats";
-import { chatRecency } from "@/lib/projects";
-import type { AgentView, ProjectView } from "@/lib/types";
+import { chatRecency } from "@/lib/recency";
+import type { AgentView } from "@/lib/types";
 
-/** How many chats Recent shows; the rest stay one tap away under Projects and Workspaces. */
+/** How many chats Recent shows; the rest stay one tap away under Workspaces. */
 export const RECENT_CHATS = 5;
 
 /** A chat row at the top of the phone's navigation; the row names it as every view does (lib/display-name.ts). */
@@ -18,12 +18,12 @@ export interface DrawerSections {
   recent: DrawerChat[];
 }
 
-/** The two sections the phone's navigation leads with, before its projects and workspaces. */
-export function drawerSections(data: { agents: readonly AgentView[]; projects?: readonly ProjectView[] }, currentPaneId: string | undefined): DrawerSections {
+/** The two sections the phone's navigation leads with, before its workspaces. */
+export function drawerSections(data: { agents: readonly AgentView[] }, currentPaneId: string | undefined): DrawerSections {
   const rows = [...data.agents]
     .sort((a, b) => chatRecency(b) - chatRecency(a))
     .map((pane): DrawerChat => ({ pane, current: pane.paneId === currentPaneId }));
-  const asking = new Set(needsYouItems(data.agents, [], data.projects).map((item) => item.paneId));
+  const asking = new Set(needsYouItems(data.agents, []).map((item) => item.paneId));
   return {
     needsYou: rows.filter((row) => asking.has(row.pane.paneId)),
     recent: rows.filter((row) => !asking.has(row.pane.paneId)).slice(0, RECENT_CHATS),

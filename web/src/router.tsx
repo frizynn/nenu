@@ -6,8 +6,6 @@ import { SpaceRoute } from "@/routes/space";
 import { DetailRoute } from "@/routes/detail";
 import { HistoryRoute } from "@/routes/history";
 import { SettingsRoute } from "@/routes/settings";
-import { NodeRoute } from "@/routes/node";
-import { ProjectRoute } from "@/routes/project";
 import { NotFoundRoute } from "@/routes/not-found";
 import { historyLoader, rootLoader, paneLoader, PANE_ROUTE_ID, ROOT_ROUTE_ID } from "@/lib/loaders";
 import { animateNavigations, armMotion, type MotionHandle } from "@/lib/motion";
@@ -55,17 +53,9 @@ export const routes: RouteObject[] = [
       // `handle.depth` is each page's place in the hierarchy: a move deeper slides in (lib/motion.ts).
       { index: true, handle: depth(0), element: <HomeRoute /> },
       { path: "space/:spaceId", handle: depth(1), element: <SpaceRoute /> },
-      { path: "project/:projectSlug", handle: depth(1), element: <ProjectRoute /> },
-      { path: "project/:projectSlug/node/:nodeId", handle: depth(2), element: <NodeRoute /> },
       { path: "settings", handle: depth(1), element: <SettingsRoute /> },
       // Its map and charts load only when it is opened (Settings → Usage).
       { path: "settings/usage", handle: depth(2), lazy: async () => ({ Component: (await import("@/routes/usage")).UsageRoute }) },
-      // Every project as a card, opened from the desk's bar: its code loads when it is opened.
-      { path: "projects", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/projects")).ProjectsRoute }) },
-      // A phone's; a desk lands on Projects (ADR 0102). Its code loads when it is opened.
-      { path: "routines", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/routines")).RoutinesRoute }) },
-      // Every coordinator's asks, opened from the projects' lists: its code loads when it is opened.
-      { path: "asks", handle: depth(1), lazy: async () => ({ Component: (await import("@/routes/asks")).AsksRoute }) },
       // Named, so RootLayout can ask for THIS route's data by id (react-router hands back undefined
       // whenever it isn't the active route) — see the "last seen" note there.
       { id: PANE_ROUTE_ID, path: "pane/:paneId", handle: depth(3), loader: paneLoader, shouldRevalidate: keepInPlace, element: <DetailRoute /> },

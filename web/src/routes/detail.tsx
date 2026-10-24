@@ -2,13 +2,11 @@ import { useEffect, useRef } from "react";
 import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 
 import { AgentChat } from "@/components/agent-chat";
-import { ProjectFrame, type ProjectChatSlots } from "@/components/project-frame";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { currentMachine } from "@/lib/machines";
 import { useGoBack } from "@/lib/motion";
 import { homePath, panePath } from "@/lib/nav";
-import { projectForPane } from "@/lib/projects";
 import { displayName } from "@/lib/display-name";
 import { paneAfterClose, tabName } from "@/lib/spaces";
 import { narrowRevalidation } from "@/lib/revalidation";
@@ -61,8 +59,6 @@ export function DetailRoute() {
   const seen = lastListed.current?.pane.paneId === paneId;
 
   const agent = listed ?? (fresh && fresh.paneId === paneId && !seen ? fresh : undefined);
-  const owner = projectForPane(root.projects, paneId);
-  const project = owner?.project;
   const gone = !agent;
 
   // The pane beside a closed one (paneAfterClose): where the route moves, and what the closed view offers.
@@ -81,45 +77,38 @@ export function DetailRoute() {
     navigate(next ? panePath(next.paneId, session) : homePath(session), { replace: true });
   }, [gone, last, next, root, navigate, session]);
 
-  const chat = (slots: Partial<ProjectChatSlots> = {}) => (
-    <AgentChat
-      key={paneId}
-      {...slots}
-      paneId={paneId}
-      session={session}
-      machine={currentMachine(root)?.label}
-      agent={agent}
-      closed={last?.pane}
-      next={next}
-      project={project ? { slug: project.slug, name: project.name, role: owner?.thread?.role ?? "coordinator" } : undefined}
-      agents={root.agents}
-      shellPanes={root.shellPanes}
-      tabs={root.tabs}
-      projects={root.projects}
-      text={pane.text}
-      pending={pane.pending}
-      nativeTelemetry={pane.nativeTelemetry}
-      atPrompt={pane.atPrompt}
-      requestedLines={pane.requestedLines}
-      revision={pane.revision}
-      device={root.device}
-      bridge={root.bridge}
-      error={root.error}
-      authError={root.authError || pane.authError}
-      // A pane outside any project, or the coordinator a project opens on: nothing above it but Home.
-      onBack={() => goBack(homePath(session))}
-      // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
-      // the browser's back leaves the chat instead of walking back through every pane visited.
-      onSelect={(id) => navigate(panePath(id, session), { replace: true })}
-    />
-  );
-
-  if (owner) return <ProjectFrame owner={owner} paneId={paneId} data={root} inspector={inspector}>{chat}</ProjectFrame>;
   const pr = sessionPr(root, paneId);
   return (
     <div className="project-frame">
-      {chat({ headerTrail: inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined,
-        sessionPanel: inspector.desk ? panelLink(inspector) : undefined })}
+      <AgentChat
+        key={paneId}
+        headerTrail={inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined}
+        sessionPanel={inspector.desk ? panelLink(inspector) : undefined}
+        paneId={paneId}
+        session={session}
+        machine={currentMachine(root)?.label}
+        agent={agent}
+        closed={last?.pane}
+        next={next}
+        agents={root.agents}
+        shellPanes={root.shellPanes}
+        tabs={root.tabs}
+        text={pane.text}
+        pending={pane.pending}
+        nativeTelemetry={pane.nativeTelemetry}
+        atPrompt={pane.atPrompt}
+        requestedLines={pane.requestedLines}
+        revision={pane.revision}
+        device={root.device}
+        bridge={root.bridge}
+        error={root.error}
+        authError={root.authError || pane.authError}
+        // Nothing above a chat but Home.
+        onBack={() => goBack(homePath(session))}
+        // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
+        // the browser's back leaves the chat instead of walking back through every pane visited.
+        onSelect={(id) => navigate(panePath(id, session), { replace: true })}
+      />
       {inspector.desk && inspector.open && <SessionInspector inspector={inspector} paneId={paneId} session={session}
         artifacts={root.agents.some((pane) => pane.paneId === paneId)} pr={pr} />}
     </div>
@@ -132,6 +121,6 @@ function closedNotice(last: { pane: AgentView; tabs: TabView[] } | null, next: A
   const tabs = last.tabs.filter((t) => t.workspaceId === last.pane.workspaceId);
   const tab = tabs.find((t) => t.tabId === last.pane.tabId);
   const tabClosed = tab !== undefined && !now.tabs.some((t) => t.tabId === tab.tabId);
-  const what = tabClosed ? `Tab ${tabName(tab.label, tabs.indexOf(tab) + 1)}` : displayName(last.pane, now.projects);
-  return `${what} closed · ${next ? `showing ${displayName(next, now.projects)}` : "back to Home"}`;
+  const what = tabClosed ? `Tab ${tabName(tab.label, tabs.indexOf(tab) + 1)}` : displayName(last.pane);
+  return `${what} closed · ${next ? `showing ${displayName(next)}` : "back to Home"}`;
 }

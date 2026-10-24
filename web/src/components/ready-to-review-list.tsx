@@ -9,7 +9,7 @@ import { fetchActivity, type ActivityResponse } from "@/lib/activity";
 import { readyToMerge, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
-import { nodePath, panePath } from "@/lib/nav";
+import { panePath } from "@/lib/nav";
 import { cn, keepUnchanged } from "@/lib/utils";
 import type { AgentView } from "@/lib/types";
 
@@ -92,14 +92,13 @@ const REVIEW_WORDS: Record<NonNullable<ReviewEntry["review"]>, { word: string; t
   approved: { word: "approved", tone: "max-lg:text-status-done" },
   changes_requested: { word: "changes requested", tone: "max-lg:text-destructive" },
   review_required: { word: "needs review" },
-  commented: { word: "commented" },
 };
 
 const rowClass = "relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5";
 
 /**
  * A pull request as one row and one tap: its title, then its number and what its checks and review
- * say in a few words, its size at the end. The tap opens its thread in Nenu, else its page on GitHub.
+ * say in a few words, its size at the end. The tap opens the chat on its branch in Nenu, else its page on GitHub.
  */
 function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: string; opening: string | null }) {
   const checks = checksWord(entry.checks);
@@ -109,7 +108,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   const facts = number ? [number, ...said] : said;
   const size = entry.diff && `+${entry.diff.additions} −${entry.diff.deletions}`;
   const label = [entry.title, number && number.word, size, ...said.map((fact) => fact.word)].filter(Boolean).join(", ");
-  const to = entry.open && ("paneId" in entry.open ? panePath(entry.open.paneId, session) : nodePath(entry.open.project, entry.open.node, session));
+  const to = entry.open && panePath(entry.open.paneId, session);
   const busy = !!to && isOpening(opening, to);
   // What a desk says in red, on the icon alone: a check failing or changes asked for.
   const blocked = !!entry.checks?.failed || entry.review === "changes_requested";

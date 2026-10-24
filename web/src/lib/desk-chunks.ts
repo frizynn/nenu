@@ -4,10 +4,8 @@
 const DESK = "(min-width: 1024px)";
 
 export const loadSessionPanel = () => import("@/components/inspector-panels");
-export const loadThreadOverview = () => import("@/components/thread-overview");
 
 export function preloadDeskChunks(): void {
   if (typeof window === "undefined" || !window.matchMedia?.(DESK).matches) return;
   void loadSessionPanel().catch(() => {});
-  void loadThreadOverview().catch(() => {});
 }

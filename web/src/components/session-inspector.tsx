@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps } from "react";
 import { PanelRightOpen } from "@/components/ui/icon";
 import { clampTo, ResizeHandle, type WidthRange } from "@/components/ui/resize-handle";
 
@@ -7,24 +7,24 @@ import { loadSessionPanel } from "@/lib/desk-chunks";
 import { isLocked } from "@/lib/idle";
 import type { HomeData } from "@/lib/loaders";
 import { MOTION_CONTROL_MS, MOTION_EASE, MOTION_PANEL_MS, reducedMotion } from "@/lib/motion";
-import type { ProjectThreadView, ThreadPullRequest } from "@/lib/types";
+import type { PullRequestView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // The panel is its own chunk: a phone never loads it, a desk on first open.
 const SessionPanel = lazy(loadSessionPanel);
 
-/** The panel's tabs; Overview only for a pane that belongs to a project. */
-export type InspectorTab = "overview" | "changes" | "files" | "terminal";
-export const INSPECTOR_TABS: readonly InspectorTab[] = ["overview", "changes", "files", "terminal"];
+/** The panel's tabs. */
+export type InspectorTab = "changes" | "files" | "terminal";
+export const INSPECTOR_TABS: readonly InspectorTab[] = ["changes", "files", "terminal"];
 
 /** The breakpoint where the workbench shows its sidebar; the panel exists only from there. */
 const DESK = "(min-width: 1024px)";
 const STORE_KEY = "nenu:session-panel:v1";
-/** The right column's widths, the session panel's and a docked thread's alike. */
+/** The right column's widths. */
 export const PANEL_WIDTH: WidthRange = { min: 320, initial: 460, max: 960, step: 16 };
 
 interface Stored { open: boolean; width: number; tab: InspectorTab }
-const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "overview" };
+const INITIAL: Stored = { open: true, width: PANEL_WIDTH.initial, tab: "changes" };
 const clampWidth = (width: number) => clampTo(PANEL_WIDTH, width);
 
 function readStored(): Stored {
@@ -63,14 +63,6 @@ export interface SessionPanelLink {
   terminal: TerminalSlots | null;
   /** Open the panel on its Terminal tab. */
   showTerminal: () => void;
-  /** What the chat read of its agent's session, for the Overview; given only where there is one. */
-  report?: (reading: SessionReading) => void;
-}
-
-/** The model and how full the context is, as the agent last reported them; absent while unknown. */
-export interface SessionReading {
-  model?: string;
-  contextPercent?: number;
 }
 
 export interface SessionInspectorState {
@@ -78,7 +70,7 @@ export interface SessionInspectorState {
   desk: boolean;
   open: boolean;
   width: number;
-  /** The tab last picked; the panel shows Changes instead where it is not offered. */
+  /** The tab last picked. */
   tab: InspectorTab;
   setOpen: (open: boolean) => void;
   setTab: (tab: InspectorTab) => void;
@@ -92,9 +84,6 @@ export interface SessionInspectorState {
   /** The Terminal tab's places, published by the tab while it is on screen. */
   terminal: TerminalSlots | null;
   setTerminal: (slots: TerminalSlots | null) => void;
-  /** The chat's reading of its session, published through `panelLink`. */
-  reading: SessionReading;
-  setReading: (reading: SessionReading) => void;
 }
 
 /**
@@ -110,10 +99,6 @@ export function useSessionInspector(): SessionInspectorState {
   /** The fold under way, cancelled by an open that comes before it ends. */
   const folding = useRef<Animation | null>(null);
   const [terminal, setTerminal] = useState<TerminalSlots | null>(null);
-  const [reading, setReadingState] = useState<SessionReading>({});
-  // Every poll hands over a fresh object; only a changed value renders the panel again.
-  const setReading = useCallback((next: SessionReading) => setReadingState((current) =>
-    current.model === next.model && current.contextPercent === next.contextPercent ? current : next), []);
   const pressed = useRef(false);
   const update = (patch: Partial<Stored>) => setStored((current) => {
     const next = { ...current, ...patch };
@@ -183,8 +168,6 @@ export function useSessionInspector(): SessionInspectorState {
     toggleRef,
     terminal,
     setTerminal,
-    reading,
-    setReading,
   };
 }
 
@@ -234,27 +217,24 @@ export function ColumnEdge({ inspector, label }: { inspector: SessionInspectorSt
     }} />;
 }
 
-/** A session's pull request as the panel's Changes shows it, from GitHub or from Organizations. */
+/** A session's pull request as the panel's Changes shows it, from GitHub. */
 export interface SessionPr {
   number?: number;
   title: string;
   url?: string;
   head?: string;
   base?: string;
-  state?: ThreadPullRequest["state"];
-  review?: ThreadPullRequest["review"];
-  checks?: ThreadPullRequest["checks"];
+  state?: "open" | "draft";
+  review?: PullRequestView["review"];
+  checks?: PullRequestView["checks"];
   diff?: { additions: number; deletions: number };
 }
 
-/** The PR of the branch a pane's folder is on (GitHub), else the one its thread carries (Organizations). */
-export function sessionPr(data: Pick<HomeData, "pullRequests">, paneId: string, thread?: ProjectThreadView): SessionPr | undefined {
-  const repo = data.pullRequests?.find((pr) => pr.paneIds.includes(paneId));
-  const pr = thread?.pr;
-  // Organizations' ticker reads checks and review GitHub's list may leave out.
-  if (repo) return { number: repo.number, title: repo.title, url: repo.url, head: repo.branch, base: repo.base, state: repo.draft ? "draft" : "open",
-    review: repo.review ?? pr?.review, checks: repo.checks ?? pr?.checks, diff: repo.diff };
-  return pr && { number: pr.number, title: thread.title, url: pr.url, head: thread.branch || undefined, state: pr.state, review: pr.review, checks: pr.checks, diff: pr.diff };
+/** The PR of the branch a pane's folder is on, from GitHub. */
+export function sessionPr(data: Pick<HomeData, "pullRequests">, paneId: string): SessionPr | undefined {
+  const pr = data.pullRequests?.find((candidate) => candidate.paneIds.includes(paneId));
+  return pr && { number: pr.number, title: pr.title, url: pr.url, head: pr.branch, base: pr.base, state: pr.draft ? "draft" : "open",
+    review: pr.review, checks: pr.checks, diff: pr.diff };
 }
 
 export const ICON_BUTTON = "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground active:bg-muted aria-pressed:bg-accent aria-pressed:text-foreground";

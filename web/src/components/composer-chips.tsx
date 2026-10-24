@@ -1,48 +1,28 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, Clock, GitBranch, GitPullRequest, Laptop, X, type IconComponent } from "@/components/ui/icon";
+import { ArrowLeft, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
 import { StateMark } from "@/components/status-badge";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { threadAge, threadDetail } from "@/components/project-tasks";
-import { fetchOrgRoutines } from "@/lib/api";
-import { timeAgoShort } from "@/lib/format";
-import { nodeState, type NodeState } from "@/lib/org-tree";
-import type { AgentView, ProjectThreadView, ProjectView, RoutineView } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
-// The chips under the composer's box (issue: Cursor-style chips): what needs you, what works and the
-// open pull requests around this chat, one chip each in the row the model sits in, and the chip's
-// panel floating over the thread. Only what asks for you or runs is a chip; finished work and routines
-// open from the ⋯ menu, and no line of their own ever sits between the thread and the box (ADR 0108).
+// The chips under the composer's box (issue: Cursor-style chips): what needs you and what works in
+// this chat's background, one chip each in the row the model sits in, and the chip's panel floating
+// over the thread. Only what asks for you or runs is a chip; finished work opens from the ⋯ menu, and
+// no line of their own ever sits between the thread and the box (ADR 0108).
 // Every mark is still: a working state is a dot, never a spinner, so an idle page draws nothing.
 
-export type ChipId = "needs" | "working" | "prs" | "routines";
-
-/** What a project hands the chat it wraps: the threads around it and how to open one. */
-export interface ProjectChipsSource {
-  project: ProjectView;
-  /** The chat's own thread; absent for the project's coordinator. */
-  thread?: ProjectThreadView;
-  /** The threads around it: a coordinator's subtree, or a thread's siblings under its coordinator. */
-  threads: readonly ProjectThreadView[];
-  session?: string;
-  readOnly: boolean;
-  onOpenPane: (paneId: string) => void;
-  onOpenNode: (id: string) => void;
-  onChanged: () => void;
-}
+export type ChipId = "needs" | "working";
 
 export interface ChipView {
   id: ChipId;
   label: string;
   /** Shown beside the label when above zero. */
   count: number;
-  /** The panel's name, when it says more than the label ("Pull requests" for "PRs"). */
+  /** The panel's name, when it says more than the label. */
   title?: string;
   mark?: ReactNode;
-  /** Asks nothing of you (finished work, routines): off the line, its panel opened from the ⋯ menu. */
+  /** Asks nothing of you (finished work): off the line, its panel opened from the ⋯ menu. */
   tucked?: boolean;
   /** The ⋯ menu row's icon, for a chip that can be tucked. */
   icon?: IconComponent;
@@ -52,96 +32,8 @@ export interface ChipView {
 /** The chips drawn in the row: every one but those tucked into the ⋯ menu. */
 export const rowChips = (chips: readonly ChipView[]) => chips.filter((chip) => !chip.tucked);
 
-const ENDED: ReadonlySet<NodeState> = new Set(["merging", "closing", "resolved"]);
-
-/** The threads around a chat, the chat's own left out: it is on screen already. */
-export function threadsAround(source: ProjectChipsSource, paneId: string) {
-  const others = source.threads.filter((thread) => thread.id !== source.thread?.id && thread.paneId !== paneId);
-  return {
-    needs: others.filter((thread) => nodeState(thread) === "needs"),
-    working: others.filter((thread) => nodeState(thread) === "working"),
-    /** What ended, newest first (resolved, or only its merge left): never a chip of its own, only
-     *  folded under what still works. */
-    resolved: others.filter((thread) => ENDED.has(nodeState(thread))).sort((a, b) => (Date.parse(b.updated ?? "") || 0) - (Date.parse(a.updated ?? "") || 0)),
-  };
-}
-
 export const NEEDS_MARK = <StateMark state="needs" />;
 export const WORKING_MARK = <StateMark state="working" />;
-/** PRs' mark: beside the word on a desk, in its place on a phone. */
-export const PRS_MARK = <GitPullRequest aria-hidden className="size-3.5 shrink-0" />;
-
-/** One row per thread: its mark, its name, what it is doing and since when. A tap opens it. */
-export function ThreadRows({ threads, panes, now, onOpen }: {
-  threads: readonly ProjectThreadView[];
-  panes: readonly AgentView[];
-  now: number;
-  onOpen: (thread: ProjectThreadView) => void;
-}) {
-  return (
-    <ul className="flex flex-col">
-      {threads.map((thread) => {
-        const state = nodeState(thread);
-        const ended = ENDED.has(state);
-        return <li key={thread.id}>
-          <button type="button" className={cn("composer-chip-item", ended && "text-muted-foreground")} onClick={() => onOpen(thread)}>
-            <span className="flex w-3.5 shrink-0 justify-center"><StateMark state={state} /></span>
-            <span className="min-w-0 flex-1 truncate">{thread.title} <span className="text-muted-foreground">{threadDetail(thread, panes)}</span></span>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{threadAge(thread, now)}</span>
-          </button>
-        </li>;
-      })}
-    </ul>
-  );
-}
-
-/**
- * A project's routines, read when the chat opens and again each time their chip opens: Organizations
- * runs them on its own clock, so nothing here polls. An Organizations that cannot list them, or a read
- * that fails, leaves the last list (none at first), never a claim that there are none.
- */
-export function useRoutines(project: string | undefined, session: string | undefined, opened: boolean): RoutineView[] {
-  const [routines, setRoutines] = useState<RoutineView[]>([]);
-  // Each opening is one more read; closing reads nothing.
-  const [opens, setOpens] = useState(0);
-  useEffect(() => { if (opened) setOpens((count) => count + 1); }, [opened]);
-  useEffect(() => {
-    if (!project) return;
-    let live = true;
-    fetchOrgRoutines(project, session).then((list) => { if (live && list.available) setRoutines(list.routines); }, () => {});
-    return () => { live = false; };
-  }, [project, session, opens]);
-  return routines;
-}
-
-/** When a routine acts next: on every PR event it names, at its next run, or never while off. */
-function routineWhen(routine: RoutineView, now: number): string {
-  if (!routine.enabled) return "off";
-  if (routine.trigger === "pr") return "on";
-  const next = Date.parse(routine.nextRun);
-  if (!Number.isFinite(next)) return "on";
-  const left = timeAgoShort(now, next);
-  return left === "now" || next <= now ? "due" : `in ${left}`;
-}
-
-export function RoutineRows({ routines, now }: { routines: readonly RoutineView[]; now: number }) {
-  return (
-    <ul className="flex flex-col">
-      {routines.map((routine) => {
-        const Icon = routine.trigger === "pr" ? GitPullRequest : Clock;
-        return (
-          <li key={routine.name} className={cn("composer-chip-item", !routine.enabled && "text-muted-foreground")}>
-            <span className="flex w-3.5 shrink-0 justify-center"><Icon aria-hidden className="size-3.5" /></span>
-            <span className="min-w-0 flex-1 truncate"><span>{routine.name}</span> <span className="text-muted-foreground">
-              {routine.trigger === "pr" ? `on ${routine.events.join(", ")}` : routine.schedule}
-            </span></span>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{routineWhen(routine, now)}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 /** The chips a chat hands its composer, which one is open, and on a phone a process's details. */
 export interface ChipLine {
@@ -266,31 +158,27 @@ export function machineName(hostname = window.location.hostname): string {
 }
 
 /**
- * Under the box: the branch the chat works on, when known, and the machine it runs on (Herdr's name
- * for it, with more than one). A wide box says both, truncating them side by side when the row is
- * full. A narrow one (a phone, a docked thread: composer.css reads the box's own width) gives the row
- * to the model and the chips, and keeps the two behind one tap, so neither is ever cut to nothing.
+ * Under the box: the machine the chat runs on (Herdr's name for it, with more than one). A wide box
+ * says it, truncating it when the row is full. A narrow one (a phone: composer.css reads the box's own
+ * width) gives the row to the model and the chips, and keeps it behind one tap, so it is never cut to
+ * nothing.
  */
-export function ComposerPlace({ branch, machine }: { branch?: string; machine?: string }) {
+export function ComposerPlace({ machine }: { machine?: string }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const host = machine ?? machineName();
-  const label = branch ? `${branch} on ${host}` : host;
   return (
     <span className="composer-place">
       <span className="composer-place-whole">
-        {branch && <span className="composer-place-item composer-place-branch" title={branch}><GitBranch aria-hidden className="size-3.5 shrink-0" /><span className="truncate font-mono">{branch}</span></span>}
         <span className="composer-place-item" title={host}><Laptop aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{host}</span></span>
       </span>
       <span className="composer-place-tap">
-        <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${label}`} aria-haspopup="dialog" aria-expanded={open}
+        <button ref={anchor} type="button" className="composer-quiet hit-area gap-1.5" aria-label={`Where this runs: ${host}`} aria-haspopup="dialog" aria-expanded={open}
           onClick={() => setOpen(!open)}>
-          {branch && <GitBranch aria-hidden className="size-3.5 shrink-0" />}
           <Laptop aria-hidden className="size-3.5 shrink-0" />
         </button>
         <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchor} label="Where this runs">
           <dl className="composer-place-detail">
-            {branch && <><dt>Branch</dt><dd className="font-mono">{branch}</dd></>}
             <dt>Machine</dt><dd>{host}</dd>
           </dl>
         </WorkbenchPopover>

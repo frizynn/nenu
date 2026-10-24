@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import type { AgentStatus, AgentView, ProjectView } from "@/lib/types";
+import type { AgentStatus, AgentView } from "@/lib/types";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { homePath, panePath } from "@/lib/nav";
 import { setStatus } from "@/lib/status";
@@ -16,8 +16,7 @@ const DESK = "(min-width: 1024px)";
 //
 // The first snapshot never fires (prev is null), so opening the app doesn't spam the status line
 // for agents that were already blocked — matching the server's transition semantics.
-export function useAgentTransitions(agents: AgentView[], openPaneId: string | null, session?: string,
-  projects?: readonly ProjectView[]) {
+export function useAgentTransitions(agents: AgentView[], openPaneId: string | null, session?: string) {
   const prev = useRef<{ session?: string; statuses: Map<string, AgentStatus> } | null>(null);
 
   useEffect(() => {
@@ -38,18 +37,18 @@ export function useAgentTransitions(agents: AgentView[], openPaneId: string | nu
     const first = attention[0]!;
     // The pane's own name, as its header and the sidebar show it. Only the bare CLI id ("claude",
     // the last fallback) gets a capital; a label is printed as the operator wrote it.
-    const name = displayName(first, projects).trim();
+    const name = displayName(first).trim();
     const subject = attention.length > 1 ? `${attention.length} agents`
       : !name ? "Agent"
       : name === first.agent ? name.charAt(0).toUpperCase() + name.slice(1) : name;
     const title = `${subject} ${attention.length === 1 ? "needs your input" : "need your input"}`;
     const locations = [...new Set(attention.map((agent) => {
-      const { place, tab } = displayPlace(agent, projects);
+      const { place, tab } = displayPlace(agent);
       return [place, tab].filter(Boolean).join(" · ");
     }))];
     const description = locations.slice(0, 3).join(", ") + (locations.length > 3 ? ` +${locations.length - 3} more` : "");
     // One agent opens its pane; several open Home, whose Needs you lists each of them.
     const to = attention.length === 1 ? panePath(first.paneId, session) : homePath(session);
     setStatus(title, "warn", undefined, { description, background: true, to });
-  }, [agents, openPaneId, session, projects]);
+  }, [agents, openPaneId, session]);
 }

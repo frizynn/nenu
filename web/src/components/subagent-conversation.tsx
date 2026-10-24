@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChatCircleDots } from "@/components/ui/icon";
+import { ChatCircleDots } from "@/components/ui/icon";
 import { fetchSubagentHistory, isApiErrorStatus } from "@/lib/api";
 import { isLocked, useLocked } from "@/lib/idle";
 import { CONNECTION_LOST_MS } from "@/lib/connection-health";
@@ -49,24 +49,19 @@ export function SubagentSubtitle({ agent, harness = "claude" }: { agent: Pick<Su
  * A subagent's conversation in place of Main's. Only what it said can be selected; the bars around it
  * are controls. Writing to it goes through Main (`onWrite` returns there with a draft addressed to it),
  * and a device that cannot write gets the explanation without the button. The chat's own header says
- * "‹ Main" and the subagent's name; a chat docked beside another, whose header is the dock's, keeps
- * this view's own row for that (`ownHeader`). On a desk it reads in the chat's column.
+ * "‹ Main" and the subagent's name. On a desk it reads in the chat's column.
  */
 export function SubagentConversation({
   paneId,
   session,
   selection,
   harness = "claude",
-  ownHeader = true,
-  onMain,
   onWrite,
 }: {
   paneId: string;
   session?: string;
   selection: SubagentSelection;
   harness?: Harness;
-  ownHeader?: boolean;
-  onMain: () => void;
   onWrite?: (draft: string) => void;
 }) {
   const locked = useLocked();
@@ -162,21 +157,6 @@ export function SubagentConversation({
       aria-label={`${child.name} conversation`}
       className="flex min-h-0 flex-1 flex-col border-t border-border/40 select-none"
     >
-      {ownHeader && <div className="flex min-h-12 items-center gap-1 border-b border-border/40 py-1 pr-4 pl-1 [-webkit-touch-callout:none]">
-        <button
-          type="button"
-          onClick={onMain}
-          aria-label="Back to Main"
-          className="flex min-h-11 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1 text-subhead text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft aria-hidden className="size-5" />
-          Main
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-subhead font-medium">{child.name}</h2>
-          <p className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={child} harness={harness} /></p>
-        </div>
-      </div>}
       {/* The list takes what the bars leave: at full height it pushed the footer out and the whole chat scrolled. */}
       <div className="min-h-0 flex-1">
       <ChatMessageList dep={page} className="chat-scroll-under px-(--page-gutter) py-3">

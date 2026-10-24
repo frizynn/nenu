@@ -26,7 +26,7 @@ const MACHINES: MachineView[] = [
 ];
 
 const data = (machines?: MachineView[], session?: string) => ({
-  ...LOCAL, bridge: "connected", projects: [], sessions: [], session, error: false, authError: false, machines,
+  ...LOCAL, bridge: "connected", sessions: [], session, error: false, authError: false, machines,
 } as unknown as HomeData);
 
 function sidebar(home: HomeData, variant: "sidebar" | "drawer" = "sidebar") {

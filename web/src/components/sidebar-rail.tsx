@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router";
-import { House, LayoutGrid, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { House, PanelLeft, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
-import { ProjectGlyph } from "@/components/project-glyph";
 import { resting, StatusDot } from "@/components/status-badge";
-import { looseWorkspaces } from "@/components/workbench-sidebar";
-import { liveliest, projectAgents } from "@/lib/desk-nav";
+import { liveliest } from "@/lib/desk-nav";
 import { needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { MOTION_CONTROL_MS } from "@/lib/motion";
-import { homePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
-import { projectForPane } from "@/lib/projects";
+import { homePath, settingsPath, workspacePath } from "@/lib/nav";
 import { workspaceName } from "@/lib/spaces";
 import { STATUS_LABEL, type AgentStatus } from "@/lib/types";
 
@@ -159,7 +156,7 @@ interface Tile {
   status?: AgentStatus;
 }
 
-/** A project draws its own glyph; a loose workspace, which has none, its two letters on its hue. */
+/** A workspace draws its two letters on its hue. */
 function RailTile({ tile, mark }: { tile: Tile; mark: ReactNode }) {
   return (
     <Link className="rail-link hit-area" to={tile.to} data-rail-tip={tile.name} aria-current={tile.current ? "page" : undefined}>
@@ -170,7 +167,7 @@ function RailTile({ tile, mark }: { tile: Tile; mark: ReactNode }) {
   );
 }
 
-/** The collapsed sidebar: the same actions as icons, then each project's glyph and two letters per loose workspace. */
+/** The collapsed sidebar: the same actions as icons, then two letters per workspace. */
 export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, onNewChat, onSearch }: {
   data: HomeData;
   attention: number;
@@ -180,18 +177,12 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
   onNewChat?: () => void;
   onSearch: () => void;
 }) {
-  const { paneId, projectSlug, spaceId } = useParams();
+  const { paneId, spaceId } = useParams();
   const tip = useRailTip();
-  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
   const currentSpace = spaceId ?? [...data.agents, ...data.shellPanes].find((pane) => pane.paneId === paneId)?.workspaceId;
-  const loose = looseWorkspaces(data);
-  const projects = (data.projects ?? []).map((project): Tile => ({
-    key: project.slug, name: project.name, to: projectPath(project.slug, data.session), current: currentProject === project.slug,
-    status: liveliest(projectAgents(project, data.agents, data.projects)),
-  }));
-  const workspaces = loose.workspaces.map((workspace): Tile => ({
+  const workspaces = data.workspaces.map((workspace): Tile => ({
     key: workspace.workspaceId, name: workspaceName(workspace), to: workspacePath(workspace.workspaceId, data, data.session),
-    current: currentSpace === workspace.workspaceId, status: liveliest(loose.agents.filter((pane) => pane.workspaceId === workspace.workspaceId)),
+    current: currentSpace === workspace.workspaceId, status: liveliest(data.agents.filter((pane) => pane.workspaceId === workspace.workspaceId)),
   }));
   const monograms = railMonograms(workspaces.map((tile) => tile.name));
   return (
@@ -205,10 +196,7 @@ export function SidebarRail({ data, attention, expandRef, sidebarId, onExpand, o
       <Link className="workbench-icon-button rail-attention" to={homePath(data.session)} aria-label={attention ? `Home, ${needYou(attention)}` : "Home"} data-rail-tip="Home">
         <House aria-hidden size={16} />{attention > 0 && <span className="rail-dot" aria-hidden />}
       </Link>
-      {projects.length > 0 && <Link className="workbench-icon-button" to={projectsPath(data.session)} aria-label="Projects" data-rail-tip="Projects"><LayoutGrid aria-hidden size={16} /></Link>}
       <span className="rail-divider" aria-hidden />
-      {projects.map((tile, i) => <RailTile key={tile.key} tile={tile} mark={<ProjectGlyph slug={tile.key} pick={data.projects?.[i]} />} />)}
-      {projects.length > 0 && workspaces.length > 0 && <span className="rail-divider" aria-hidden />}
       {workspaces.map((tile, i) => <RailTile key={tile.key} tile={tile}
         mark={<span className="rail-tile" style={{ "--rail-hue": railHue(tile.name) } as CSSProperties} aria-hidden>{monograms[i]}</span>} />)}
       <span className="flex-1" />

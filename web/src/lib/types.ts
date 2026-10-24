@@ -68,8 +68,6 @@ export interface AgentView {
    * `lastActiveAt > lastSeenAt`, so opening the pane clears it by construction.
    */
   lastSeenAt?: number;
-  /** Herdr pane tokens the bridge allows through (short key/value tags). Absent on older Herdr. */
-  tokens?: Record<string, string>;
   /** Bumps on every status transition; equal values mean nothing changed between two reads. */
   stateChangeSeq?: number;
   /** Bumps when an idle transition completed work. Absent when Herdr doesn't report it. */
@@ -174,133 +172,6 @@ export interface SessionSummary {
   blocked: number;
 }
 
-export interface ProjectThreadView {
-  id: string;
-  title: string;
-  parentId: string;
-  role: "worker" | "coordinator";
-  status: "starting" | "open" | "failed" | "resolved";
-  template?: string;
-  updated?: string;
-  paneId?: string;
-  agent?: string;
-  liveStatus?: AgentStatus;
-  /** Organizations' `last_group` for the thread (e.g. "ready"); absent when unset. */
-  group?: string;
-  /** The agent itself reported it is waiting for you (its `Waiting for you` activity); absent otherwise. */
-  selfWaiting?: true;
-  /** A conversation with a person (Organizations' `keep_open`): its ended turn waits on nobody. */
-  conversation?: true;
-  branch?: string;
-  /** The thread's pull request. Numbers appear only when Organizations reported them. */
-  pr?: ThreadPullRequest;
-  /** 1 for a direct child of the project, computed from `parentId`. */
-  depth?: number;
-  /** A report the person has not acknowledged yet. */
-  reportUnacked?: boolean;
-  groupLabel?: string;
-  /** Organizations' bracketed note: live agent state, `pane closed`, `failed: …`. `--json` only. */
-  note?: string;
-  /** The PR automation flags. Present only when Organizations has PR actions. */
-  autoFixCi?: boolean;
-  autoMerge?: boolean;
-  /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
-  prAction?: PrAction;
-  /** Organizations has another parent for it (`node move`): its `actions` lists `move`. Absent otherwise. */
-  movable?: true;
-  /** The `Status:` line of the agent's last report; absent without one. */
-  verdict?: ThreadVerdict;
-  /** When a coordinator's STATUS.md last changed; its text comes with the summaries. */
-  statusUpdated?: string;
-  /** Changes when Organizations' reading of its tokens does; the numbers come with the summaries. */
-  usageStamp?: string;
-}
-
-/** Mirror ThreadVerdict, ThreadCapture, ThreadDeliverable, PlainSummary, ThreadSummary and StatusFile in bridge/types.ts. */
-export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
-export interface ThreadCapture { path: string; caption: string }
-export interface ThreadDeliverable { path: string; kind: "html" | "pdf" }
-/** What a thread's report says and shows (`/api/org/summary`). The summary is the agent's text: draw it as text. */
-/** A summary agent's answer: its text, or why it failed; `current` is false once the report changed. */
-export interface PlainSummary { text: string; current: boolean; error?: string }
-export interface ThreadSummary {
-  id: string;
-  summary?: string;
-  /** The report in plain words from Organizations' summary agent: model-written, drawn as text. */
-  plain?: PlainSummary;
-  /** Organizations would write one on request. */
-  explainable?: true;
-  captures: ThreadCapture[];
-  deliverables: ThreadDeliverable[];
-  status?: StatusFile;
-  usage?: TokenUsage;
-}
-/** A thread's report (`/api/org/report`), mirroring bridge/org-library.ts: its Markdown as the agent wrote it, drawn as text. */
-export interface ThreadReport {
-  title: string;
-  verdict?: ThreadVerdict;
-  text: string;
-  captures: ThreadCapture[];
-  deliverables: ThreadDeliverable[];
-}
-/**
- * A coordinator's STATUS.md: the agent's Markdown, drawn as text. `updated` is RFC 3339 or empty.
- * The objective and decisions are what Organizations read out of it, absent from one that predates them.
- */
-export interface StatusFile { text: string; updated: string; objective?: string; needsDecision?: string[] }
-
-/** Mirror AskState, AskConfirmed, AskLink, Ask, AskGroup, AskCoordinator, AskRow, AskDecision, AsksList and TokenUsage in bridge/org-types.ts. */
-export type AskState = "open" | "working" | "needs-decision" | "answered" | "done" | "unknown";
-export type AskConfirmed = "in-progress" | "stopped" | "failed" | "done" | "";
-export interface AskLink { kind: "thread" | "pr" | "task" | "page"; text: string; target: string; thread: string; title: string; state: string; pr: string; prState: string }
-/** One line under a coordinator's `## Asked`. Its text and answer are the operator's and the coordinator's words: draw them as text. */
-export interface OrgAsk {
-  line: number; state: AskState; text: string; answer: string; links: AskLink[]; confirmed: AskConfirmed; mismatch: string;
-  /** RFC 3339, once the person answered this line, until the coordinator changes it. */
-  answeredAt?: string;
-  /** Organizations takes an answer on this row. */
-  answerable?: true;
-}
-export type AskGroup = "waiting" | "unclosed" | "progress" | "done" | "other";
-export interface AskCoordinator { id: string; title: string }
-export interface AskRow extends OrgAsk { project: string; coordinator: AskCoordinator; group: AskGroup }
-/**
- * A decision line: `line` 0 and no links when Organizations gave only its text; waiting until answered,
- * in progress after. `line`, `links` and `group` are absent from a bridge that predates decision rows,
- * which a rebuilt page can meet until the bridge restarts: it then reads as text that waits on you.
- */
-export interface AskDecision {
-  project: string; coordinator: AskCoordinator; text: string; line?: number; links?: AskLink[];
-  group?: "waiting" | "progress"; answeredAt?: string; answerable?: true;
-}
-/** `asks` is null when this Organizations cannot list asks. */
-/** `answers` is whether this Organizations can answer an ask (`asks answer`); absent from an older bridge. */
-export interface AsksList { asks: AskRow[] | null; decisions: AskDecision[]; answers?: boolean }
-export interface TokenUsage {
-  input: number; output: number; cacheRead: number; cacheWrite: number;
-  context: number; peakContext: number; compactions: number; updated: string; overCap: string[];
-}
-/** The project coordinator as the ticker last saw it (`/api/org/summary`); `state` is empty before it looked. Mirrors OrgCoordinator in bridge/org-cli.ts. */
-export interface CoordinatorAgent { agent: string; model: string; state: "working" | "blocked" | "idle" | "done" | "" }
-
-/** Mirror PrAsk and PrAction in bridge/types.ts. */
-export type PrAsk = "resolve-conflicts" | "fix-ci" | "address-comments";
-export type PrAction = PrAsk | "merge" | "create-pr";
-
-/** Mirrors ThreadPullRequest in bridge/types.ts. */
-export interface ThreadPullRequest {
-  url?: string;
-  number?: number;
-  state: "open" | "draft" | "merged" | "closed";
-  review?: "approved" | "changes_requested" | "review_required" | "commented";
-  checks?: { passed: number; failed: number; pending: number; failing?: string[] };
-  diff?: { additions: number; deletions: number };
-  /** Why `thread merge` would refuse, as of the ticker's last read; `null` when it would merge. `--json` only. */
-  mergeBlocker?: string | null;
-  commentCount?: number;
-  mergeable?: string;
-}
-
 /** One hunk of a file's diff; each line keeps its marker (" ", "+", "-" or "\\"). Mirrors bridge/pane-diff.ts. */
 export interface DiffHunk {
   header: string;
@@ -337,10 +208,8 @@ export type PaneDiff =
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
-    /** The project's repository, read because the pane's own folder is not in one. */
-    repo?: string;
   }
-  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed" | "no-repo" | "no-default"; message: string; repo?: string };
+  | { ok: false; reason: "no-folder" | "no-pr" | "no-base" | "head-missing" | "failed" | "no-repo" | "no-default"; message: string };
 
 /**
  * An open pull request of the person's, read with `gh` in a repo an agent works in
@@ -363,114 +232,6 @@ export interface PullRequestView {
   /** Epoch ms. */
   updatedAt?: number;
   paneIds: string[];
-}
-
-export interface ProjectView {
-  slug: string;
-  name: string;
-  goal?: string;
-  status: "active" | "paused";
-  /** The glyph and colour names the project picked in Organizations; absent when it picked none. */
-  icon?: string;
-  tone?: string;
-  /** The glyph and colour names the operator picked for its coordinators in Nenu, by node id (ADR 0122); absent when none was. */
-  marks?: Record<string, { icon?: string; tone?: string }>;
-  coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
-  threads: ProjectThreadView[];
-  /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */
-  source?: "json" | "files";
-  /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
-  prActions?: boolean;
-  /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
-  nodeActions?: boolean;
-  /** Organizations can hang a node under another parent (`node move`); absent or false hides Move. */
-  nodeMoves?: boolean;
-  /** Workspaces holding a live pane bound to this project, in this session. */
-  workspaceIds?: string[];
-  /** When the project coordinator's STATUS.md last changed; its text comes with the summaries. */
-  statusUpdated?: string;
-  /** How many of its coordinators' asks and decisions wait on you; absent when this Organizations cannot list asks. */
-  waitingAsks?: number;
-  /** The project coordinator's token reading stamp, as a thread's `usageStamp`. */
-  usageStamp?: string;
-}
-
-export type NodeRole = "worker" | "coordinator";
-
-/** A TASKS.md task from Organizations' `task list --json`. Mirrors OrgTask in bridge/org-cli.ts. */
-export interface OrgTask {
-  list: string;
-  title: string;
-  owner: { kind: "unassigned" | "me" | "agent" | "person"; profile: string; machine: string; name: string };
-  thread: string;
-  description: string;
-}
-
-/** What every thread of a project receives (`project show --json`). Mirrors bridge/org-cli.ts. */
-export interface OrgProjectDetail {
-  instructions: string;
-  memory: string;
-  memoryFiles: Array<{ name: string; text: string }>;
-  repos: Array<{ path: string; machine: string }>;
-  coordinatorProfile: string;
-  threadProfile: string;
-  maxParallelThreads: number;
-}
-
-export interface TemplateView {
-  name: string;
-  scope: "global" | "project";
-  description: string;
-  role: NodeRole;
-  canSpawn: boolean;
-  harness: string;
-  model: string;
-  reasoningEffort: string;
-  rulesChars: number;
-  memoryChars: number;
-  updated: string;
-}
-
-/** A project's routine, as `/api/org/routines` reads it from `routine list --json` (mirrors bridge/types.ts). */
-export interface RoutineView {
-  name: string;
-  trigger: "schedule" | "pr";
-  /** Who gets it: `root`, `owner`, `node:<id or title>` or `new`; empty from an Organizations that predates the field. */
-  to: string;
-  /** For `new`: the node the thread starts under. */
-  parent: string;
-  /** What it asks, as written in its file. */
-  prompt: string;
-  /** As written, such as `daily 09:00`; empty for a `pr` routine. */
-  schedule: string;
-  /** The pull request events a `pr` routine fires on; empty for a scheduled one. */
-  events: string[];
-  enabled: boolean;
-  /** RFC 3339, or empty: before the first run, and always for `pr`. */
-  lastRun: string;
-  /** RFC 3339, or empty for `pr` and for a disabled routine. */
-  nextRun: string;
-}
-
-/** What an edit changes (`routine set`): only the fields given, a schedule or pull request events, never both. */
-export interface RoutineEdit {
-  schedule?: string;
-  events?: string[];
-  /** `root`, `owner`, `new` or `node:<id>`. */
-  to?: string;
-  /** For `new`: `root` or a node id. */
-  parent?: string;
-  prompt?: string;
-}
-
-/** `available` is false when the host's Organizations has no `routine list --json`, so the list says nothing. */
-export interface RoutineList {
-  available: boolean;
-  /** This Organizations edits a routine (`routine set`); absent from an older bridge. */
-  editable?: boolean;
-  routines: RoutineView[];
-  /** Routine files that do not parse. */
-  broken: number;
 }
 
 /**
@@ -509,7 +270,6 @@ export interface SnapshotResponse {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  projects?: ProjectView[];
   /** Open pull requests from GitHub in the repos agents work in. Absent on older bridges. */
   pullRequests?: PullRequestView[];
   /** Notification quiet-hours: the active snooze deadline (epoch ms) or null. Absent on older bridges. */
@@ -845,7 +605,7 @@ export interface SubagentHistoryResponse {
 // ── Live invalidations ─────────────────────────────────────────────────────────
 
 /** What an invalidation names (mirrors LiveTopic in bridge/types.ts). Never state (ADR 0054). */
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity" | "usage";
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "activity" | "usage";
 
 // ── Interactions: a pane's dialog, detected bridge-side (mirrors bridge/types.ts) ──────────────────
 

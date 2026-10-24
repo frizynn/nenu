@@ -5,7 +5,7 @@ import { ColumnPage, PageBody } from "./column-page";
 import type { HomeData } from "@/lib/loaders";
 
 const data: HomeData = {
-  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined, sessions: [],
+  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined, sessions: [],
   session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false,
 };
 

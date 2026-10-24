@@ -15,7 +15,7 @@ import { ACCOUNTS, LIMITS, NOW, usageOn, usageSplit } from "@/test/usage";
 import { UsageRoute } from "./usage";
 
 const root: HomeData = {
-  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined,
+  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined,
   sessions: [], session: "work", snoozedUntil: null, update: undefined, error: false, authError: false,
 };
 
