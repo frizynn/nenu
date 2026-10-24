@@ -8,9 +8,10 @@ import { seedDemoHerd } from "./scenario.ts";
 
 // Home's Workspaces in the order chosen (ADR 0124), over the demo herd and six more workspaces, the
 // last one's agent working so it moved last. At 390x844 with a finger:
-// the list is Herdr's order whatever moved last, Name sorts it, Reorder drags the third row's handle
-// past the fifth, a finger on a row's body still scrolls the page and moves no row, and a reload keeps
-// the order and Custom. At 1440x900 a mouse drags the first row to third. Captures every step.
+// the list is Herdr's order whatever moved last, the Order menu's Name sorts it, Reorder drags the third
+// row's handle past the fifth, a finger on a row's body still scrolls the page and moves no row, and a
+// reload keeps the order and Custom. At 1440x900 Tab leaves the open menu for Reorder and a mouse drags
+// the first row to third. Captures every step.
 // Exits 1 on any failure.
 //
 //   bun scripts/e2e/workspace-order.ts [--port 8871] [--out DIR]
@@ -29,6 +30,14 @@ const moved = (list: readonly string[], from: number, to: number) => {
   return next;
 };
 const same = (a: readonly string[], b: readonly string[]) => JSON.stringify(a) === JSON.stringify(b);
+const orderButton = (page: Page) => page.getByRole("button", { name: /^Order: / });
+const choose = async (page: Page, label: string, shot?: () => Promise<unknown>) => {
+  await orderButton(page).click();
+  await page.waitForTimeout(250);
+  await shot?.();
+  await page.getByRole("menuitemradio", { name: label }).click();
+  await page.waitForTimeout(300);
+};
 
 async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -68,13 +77,11 @@ async function main(): Promise<void> {
       check(herdr.length >= 5, `the demo herd lists ${herdr.length} workspaces (5 or more to drag past)`);
       check(same(herdr, byNumber.filter((label) => herdr.includes(label))), "the list is in Herdr's order");
       await shoot(page, "phone-1-herdr");
-      const order = page.getByRole("combobox", { name: "Order" });
-      await order.selectOption("name");
-      await page.waitForTimeout(300);
+      await choose(page, "Name", () => shoot(page, "phone-2-menu"));
       check(same(await names(page), [...herdr].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))), "Name sorts it by name");
       await shoot(page, "phone-2-name");
-      await order.selectOption("herdr");
-      await order.selectOption("arrange");
+      await choose(page, "Herdr order");
+      await page.getByRole("button", { name: "Reorder workspaces" }).click();
       await page.waitForTimeout(300);
       check(await page.locator("#home-list a").count() === 0, "while reordering a row opens nothing");
       await shoot(page, "phone-3-reorder");
@@ -110,7 +117,7 @@ async function main(): Promise<void> {
       await page.getByRole("tab", { name: "Workspaces" }).click();
       await page.waitForTimeout(500);
       check(same(await names(page), dragged), "a reload keeps the dragged order");
-      check(await page.getByRole("combobox", { name: "Order" }).inputValue() === "custom", "and Custom");
+      check(await orderButton(page).getAttribute("aria-label") === "Order: Custom", "and Custom");
       await shoot(page, "phone-6-reloaded");
       await context.close();
     }
@@ -120,7 +127,14 @@ async function main(): Promise<void> {
       const { context, page } = await open(DESKTOP);
       const herdr = await names(page);
       await shoot(page, "desk-1-herdr");
-      await page.getByRole("combobox", { name: "Order" }).selectOption("arrange");
+      // A keyboard: Tab in the open menu shuts it and lands on Reorder.
+      await orderButton(page).click();
+      await page.waitForTimeout(250);
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(250);
+      check(await page.getByRole("menu").count() === 0, "Tab shuts the Order menu");
+      check(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"), null) === "Reorder workspaces", "and lands on Reorder");
+      await page.getByRole("button", { name: "Reorder workspaces" }).click();
       await page.waitForTimeout(300);
       const handle = (await page.locator("[data-reorder-handle]").first().boundingBox())!;
       const third = (await page.locator("[data-reorder-key]").nth(2).boundingBox())!;
