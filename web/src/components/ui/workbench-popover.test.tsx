@@ -123,3 +123,25 @@ it("titles a popover drawn as a sheet below the desk as every sheet is, and only
   expect(screen.getByRole("heading", { name: "CI monitoring" })).not.toHaveClass("max-lg:text-title");
   expect(screen.getByText("rows")).not.toHaveClass("max-lg:px-0");
 });
+
+it("stays drawn, out of reach, while its exit runs, then leaves", async () => {
+  // jsdom runs no transitions: stand in one exit the leaving cue started, finished on demand.
+  let finish = () => {};
+  const finished = new Promise<void>((resolve) => { finish = resolve; });
+  const original = HTMLElement.prototype.getAnimations;
+  HTMLElement.prototype.getAnimations = function (this: HTMLElement) {
+    return this.hasAttribute("data-leaving") ? [{ finished } as unknown as Animation] : [];
+  };
+  try {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    await userEvent.keyboard("{Escape}");
+    const leaving = document.querySelector("[data-workbench-popover]");
+    expect(leaving).toHaveAttribute("data-leaving");
+    expect(leaving).toHaveAttribute("inert");
+    await act(async () => { finish(); await finished; });
+    expect(document.querySelector("[data-workbench-popover]")).toBeNull();
+  } finally {
+    HTMLElement.prototype.getAnimations = original;
+  }
+});

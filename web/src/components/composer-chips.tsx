@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { ArrowLeft, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
 import { StateMark } from "@/components/status-badge";
-import { WorkbenchPopover } from "@/components/ui/workbench-popover";
+import { useLeaving, WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
@@ -119,18 +119,22 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     if (event.shiftKey && (active === first || active === panel.current)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
   };
-  const title = detail ? detail.title : shown?.label;
+  // A closed panel stays drawn through its exit (composer.css), out of reach, with what it last showed.
+  const { mounted, leaving } = useLeaving(Boolean(shown), panel);
+  const drawn = useRef<{ title?: string; body?: ReactNode; back?: () => void }>({});
+  if (shown) drawn.current = detail ? { title: detail.title, body: detail.content, back: detail.onBack } : { title: shown.label, body: shown.content };
+  const { title, body, back } = drawn.current;
   return (
     <div ref={line} className="composer-chips">
-      {shown && (
+      {mounted && (
         <section ref={panel} id="composer-chip-panel" role="dialog" aria-label={title} tabIndex={-1} className="composer-chip-panel"
-          onKeyDown={trap}>
+          data-leaving={leaving ? "" : undefined} inert={leaving || undefined} onKeyDown={trap}>
           <div className="composer-chip-panel-head">
-            {detail && <button type="button" aria-label="Back" onClick={detail.onBack} className="composer-chip-icon"><ArrowLeft aria-hidden className="size-4" /></button>}
+            {back && <button type="button" aria-label="Back" onClick={back} className="composer-chip-icon"><ArrowLeft aria-hidden className="size-4" /></button>}
             <h2 className="min-w-0 flex-1 truncate">{title}</h2>
             <button type="button" aria-label="Close" onClick={close} className="composer-chip-icon"><X aria-hidden className="size-3.5" /></button>
           </div>
-          <div className="composer-chip-panel-body">{detail ? detail.content : shown.content}</div>
+          <div className="composer-chip-panel-body">{body}</div>
         </section>
       )}
       {row.length > 0 && <div role="group" aria-label="Status" className="composer-chip-row">

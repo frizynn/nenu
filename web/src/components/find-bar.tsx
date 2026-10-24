@@ -37,7 +37,8 @@ export function thirdScrollTop({ scrollTop, viewTop, viewBottom, hitTop, inset =
 // the input fills the row, the match count sits inline, and prev/next/close are right-aligned, each
 // the app's icon button (44 px under a finger). Under a desk's width the header starts 4 px in, so the
 // bar pads its search glass onto the page's gutter, where the text and the strips start. Enter jumps
-// to the next match (Shift+Enter the previous), Escape closes — matching a desktop find bar.
+// to the next match (Shift+Enter the previous), Escape closes — matching a desktop find bar. It drops in
+// from the header's top edge in a control's length and leaves at once, so the header is back as you close.
 export function FindBar({
   query,
   onQueryChange,
@@ -57,7 +58,7 @@ export function FindBar({
   const countLabel = query ? (count > 0 ? `${current + 1}/${count}` : "0/0") : "";
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:pl-[calc(var(--page-gutter)-4px)] coarse:gap-2">
+    <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:pl-[calc(var(--page-gutter)-4px)] coarse:gap-2 animate-in fade-in slide-in-from-top-1 duration-120 ease-out motion-reduce:animate-none">
       <Search className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}

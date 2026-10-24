@@ -28,14 +28,47 @@ interface WorkbenchPopoverProps {
 // never takes the composer's focus), so only the placement changes, with a sheet's title.
 // The popover positions itself with inline left/top/bottom from its anchor; the important utilities
 // are what lets a class win over that inline placement on a phone. The body there is full bleed: its
-// rows own the 16px gutter, so they start where the sheet's title does.
+// rows own the 16px gutter, so they start where the sheet's title does. It leaves the way it came: a
+// card fades back toward its anchor (index.css), a sheet slides down as BottomSheet's does. Under
+// reduced motion neither moves: index.css stops both.
 /** Where the desk starts: below it a `sheetBelowDesk` popover is a sheet (Tailwind's `lg`). */
 const DESK_WIDTH = 1024;
 const PHONE_SHEET = [
   "max-lg:left-0! max-lg:right-0! max-lg:top-auto! max-lg:bottom-0! max-lg:w-full! max-lg:max-w-none!",
   "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
-  "max-lg:duration-180 max-lg:ease-out max-lg:animate-in max-lg:slide-in-from-bottom motion-reduce:animate-none",
 ].join(" ");
+const SHEET_ENTER = "max-lg:duration-180 max-lg:ease-out max-lg:animate-in max-lg:slide-in-from-bottom";
+const SHEET_LEAVE = "duration-180 ease-out animate-out slide-out-to-bottom fill-mode-forwards";
+
+/** Where it sits: over its anchor, under it, or a sheet on the bottom edge. Each enters and leaves from its own side. */
+type Side = "above" | "below" | "sheet";
+
+/**
+ * Keeps a layer drawn while it leaves: `leaving` is the cue for its exit (a `data-leaving` rule, or an
+ * `animate-out` class), and the layer goes once every animation and transition that cue started on it
+ * has ended, or at once when none runs (reduced motion, an engine without `getAnimations`, a test).
+ */
+export function useLeaving(open: boolean, layer: RefObject<HTMLElement | null>) {
+  const [drawn, setDrawn] = useState(open);
+  if (open && !drawn) setDrawn(true);
+  const leaving = drawn && !open;
+  useEffect(() => {
+    if (!leaving) return;
+    const running = layer.current?.getAnimations?.() ?? [];
+    if (running.length === 0) {
+      setDrawn(false);
+      return;
+    }
+    let current = true;
+    void Promise.allSettled(running.map((animation) => animation.finished)).then(() => {
+      if (current) setDrawn(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [leaving, layer]);
+  return { mounted: open || drawn, leaving };
+}
 
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
 export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false, sheetBelowDesk = false, dense = false }: WorkbenchPopoverProps) {
@@ -54,7 +87,8 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
     if (wasOpen.current && closedBy.current !== "outside" && closedBy.current !== "back") leaveEntry();
     wasOpen.current = false;
   }, [open, leaveEntry]);
-  const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; height: number } | null>(null);
+  const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; height: number; side: Side } | null>(null);
+  const { mounted, leaving } = useLeaving(open, panelRef);
 
   const dismiss = useCallback((reason: WorkbenchDismissReason) => {
     if (dismissed.current) return;
@@ -90,10 +124,11 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
       // A sheet sits on the bottom edge whatever opened it: its room is the screen's, not the anchor's side.
       const sheet = sheetBelowDesk && viewportWidth < DESK_WIDTH;
       const room = sheet ? (viewport?.height ?? window.innerHeight) * 0.75 : placeAbove ? above : below;
+      const side: Side = sheet ? "sheet" : placeAbove ? "above" : "below";
       const next = placeAbove
-        ? { left, bottom: window.innerHeight - rect.top + 8, height: Math.max(80, room) }
-        : { left, top: rect.bottom + 8, height: Math.max(80, room) };
-      setPosition((previous) => previous?.left === next.left && previous?.top === next.top && previous?.bottom === next.bottom && previous?.height === next.height ? previous : next);
+        ? { left, bottom: window.innerHeight - rect.top + 8, height: Math.max(80, room), side }
+        : { left, top: rect.bottom + 8, height: Math.max(80, room), side };
+      setPosition((previous) => previous?.left === next.left && previous?.top === next.top && previous?.bottom === next.bottom && previous?.height === next.height && previous?.side === next.side ? previous : next);
     };
     place();
     window.addEventListener("resize", place);
@@ -136,9 +171,12 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
     };
   }, [open, anchorRef, dismiss]);
 
-  if (!open) return null;
+  if (!mounted) return null;
   return (
-    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET, className)}>
+    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" data-side={position?.side} data-leaving={leaving ? "" : undefined} inert={leaving || undefined}
+      style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }}
+      className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET,
+        sheetBelowDesk && !leaving && SHEET_ENTER, leaving && position?.side === "sheet" && SHEET_LEAVE, className)}>
       <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} dense={dense} />
       <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain", dense ? "p-3" : "p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
     </div>

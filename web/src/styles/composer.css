@@ -140,6 +140,8 @@
 .composer-chip-count { font-variant-numeric: tabular-nums; }
 .composer-chip-panel { position: absolute; z-index: 30; left: 0; right: 0; bottom: calc(100% + 6px); display: flex; flex-direction: column; max-height: min(22rem, 45dvh, calc(var(--app-viewport-height, 100dvh) - 14rem)); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--popover); box-shadow: var(--shadow-float); outline: none; transform-origin: 24px 100%; opacity: 1; translate: 0 0; scale: 1; transition: opacity var(--motion-control) var(--motion-ease), translate var(--motion-panel) var(--motion-ease), scale var(--motion-panel) var(--motion-ease); }
 @starting-style { .composer-chip-panel { opacity: 0; translate: 0 6px; scale: 0.98; } }
+/* It leaves the way it came, in a control's length, as every exit does. */
+.composer-chip-panel[data-leaving] { opacity: 0; translate: 0 6px; scale: 0.98; transition-duration: var(--motion-control); }
 /* A desk's composer is wide: the panel keeps a list's measure, from the box's left edge. */
 @media (min-width: 768px) { .composer-chip-panel { right: auto; width: min(100%, 30rem); } }
 .composer-chip-panel-head { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 8px 0 14px; color: var(--muted-foreground); font-size: var(--text-footnote); }

@@ -53,6 +53,30 @@ it("closes the panel with Escape and hands focus back to its chip", async () => 
   expect(needs).toHaveFocus();
 });
 
+it("keeps the closed panel drawn with what it showed, out of reach, until its exit ends", async () => {
+  let finish = () => {};
+  const finished = new Promise<void>((resolve) => { finish = resolve; });
+  const original = HTMLElement.prototype.getAnimations;
+  HTMLElement.prototype.getAnimations = function (this: HTMLElement) {
+    return this.hasAttribute("data-leaving") ? [{ finished } as unknown as Animation] : [];
+  };
+  try {
+    const { user } = renderChat();
+    await user.click(within(await row()).getByRole("button", { name: "Needs you, 1" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Needs you" })).getByRole("button", { name: "Close" }));
+    const leaving = document.querySelector("#composer-chip-panel");
+    expect(leaving).toHaveAttribute("data-leaving");
+    expect(leaving).toHaveAttribute("inert");
+    expect(leaving).toHaveAccessibleName("Needs you");
+    await act(async () => { finish(); await finished; });
+    expect(document.querySelector("#composer-chip-panel")).toBeNull();
+  } finally {
+    HTMLElement.prototype.getAnimations = original;
+  }
+  const css = declarations(readFileSync(resolve(import.meta.dirname, "../styles/composer.css"), "utf8"), ".composer-chip-panel[data-leaving]");
+  expect(css).toMatchObject({ opacity: "0", "transition-duration": "var(--motion-control)" });
+});
+
 /** A viewport whose queries match the ones named, as a phone (none) or a desk ("(min-width: 768px)", …). */
 function setMedia(...matching: string[]) {
   window.matchMedia = ((query: string) => ({ matches: matching.includes(query), media: query, onchange: null,
