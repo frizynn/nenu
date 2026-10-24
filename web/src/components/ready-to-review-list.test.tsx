@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/setup";
@@ -46,4 +47,13 @@ test("a review row is one tap into its PR, its size read as text", () => {
   expect(screen.queryByRole("button", { name: /^View changes/ })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Fix, #7, +5 −1" })).toHaveAttribute("href", "/pane/w1%3Ap1");
   expect(screen.getByRole("link", { name: "Other, #8, +9 −2" })).toHaveAttribute("href", "https://github.com/a/b/pull/8");
+});
+
+// As in Recents, the rows "Show all" adds ease in where they land; those already shown stay still.
+test("eases in only the PRs Show all adds", async () => {
+  const entries: ReviewEntry[] = Array.from({ length: 7 }, (_, i) => (
+    { key: `a/b#${i}`, title: `PR ${i}`, repo: "b", number: i, draft: false, updatedAt: 0, url: `https://github.com/a/b/pull/${i}` }));
+  render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Show all 7" }));
+  expect(screen.getAllByRole("listitem").map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, false, false, true, true]);
 });
