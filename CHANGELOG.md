@@ -8,6 +8,20 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-24
+
+### Changed
+
+- Home's Workspaces sort from an Order menu that names the order on screen; Reorder is its own mode with Done, and a drag makes the order Custom (c31e3ce9, 84e97633, f883274a).
+
+### Fixed
+
+- Sheets and the phone's drawer slide in from off-screen as they slide out, and New slides away when closed instead of vanishing (befd49ea, 0e240bb3).
+- The connection, refusal and update notices fold in and out instead of jumping the screen; the idle pause fades in (71459c57, 753fd5d9).
+- Menus and small bars leave the way they came: popovers fade back toward their button, the ⋯ menu drops from it, the phone's Model sheet slides down, Find in chat eases in (339e92e4, 450b2193).
+- Composer docks fold open and shut; a question, a sent message and an attached file ease in when they arrive, and a settled message's ⋯ opens in place (e3ebf375, d6145fe1, 82294840, c4dfb068, 2018abf0).
+- Home's workspaces, the sidebar tree and Show all fold and ease in instead of jumping; Home's list switcher slides and "N updates" fades (e5e2073f, 63252bf0).
+
 ## [2.2.0] - 2026-10-24
 
 ### Added
