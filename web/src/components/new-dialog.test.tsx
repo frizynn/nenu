@@ -46,7 +46,7 @@ function setup({ data = base, entry = "/pane/w%3A2%3Ap1?s=work", host = false }:
     id: ROOT_ROUTE_ID,
     path: "/",
     loader: () => data,
-    element: <>{host ? <NewAgentHost /> : <NewDialog onClose={onClose} />}<Outlet /></>,
+    element: <>{host ? <NewAgentHost /> : <NewDialog open onClose={onClose} />}<Outlet /></>,
     children: [
       { path: "pane/:paneId", element: <p>Pane page</p> },
       { path: "space/:spaceId", element: <p>Space page</p> },
@@ -180,6 +180,24 @@ it("opens from New on the list, and closes from its header", async () => {
   expect(await screen.findByRole("dialog", { name: "New" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("slides away showing its last step when closed, then is gone", async () => {
+  let end!: () => void;
+  const finished = new Promise<void>((resolve) => { end = resolve; });
+  Object.defineProperty(Element.prototype, "getAnimations", { configurable: true, value: () => [{ animationName: "exit", finished }] });
+  onTestFinished(() => { delete (Element.prototype as { getAnimations?: unknown }).getAnimations; openNewAgent(null); });
+  const { user } = setup({ host: true });
+  onTestFinished(() => openNewDialog(false));
+  act(() => openNewDialog());
+  await user.click(await screen.findByRole("button", { name: /^Quick question/ }));
+  expect(screen.getByRole("dialog", { name: "Quick question" })).toBeInTheDocument();
+  act(() => openNewDialog(false));
+  // Out of reach while it leaves, still the step that was on screen.
+  expect(screen.getByRole("dialog", { name: "Quick question", hidden: true })).toHaveAttribute("inert");
+  end();
+  await act(async () => { await finished; });
+  expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
 });
 
 it("starts over when New is asked for again over an open flow", async () => {
