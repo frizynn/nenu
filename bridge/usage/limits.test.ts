@@ -31,6 +31,8 @@ test("a reading belongs to the account every config dir names for its session, e
   expect(accounts(["/a"])).toEqual({ [S1]: "claude:aaaaaaaaaaaaaaaa", [S2]: "claude:cccccccccccccccc" });
   expect(accounts(["/a", "/b"])).toEqual({ [S1]: "claude:unassigned", [S2]: "claude:cccccccccccccccc" });
   expect(accounts(["/a", "/b"], new Map([[S1, "/b"], [S2, "/b"]]))).toEqual({ [S1]: "claude:bbbbbbbbbbbbbbbb", [S2]: "claude:cccccccccccccccc" });
+  // Found under both dirs (one projects folder linked into two): as if no log was found.
+  expect(accounts(["/a", "/b"], new Map([[S1, ""]]))).toEqual({ [S1]: "claude:unassigned", [S2]: "claude:cccccccccccccccc" });
   expect(claudeStatuslineReadings(stateDir, book, [], new Map(), now)).toEqual([]);
 });
 

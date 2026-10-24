@@ -55,7 +55,7 @@ export function claudeStatuslineReadings(
     const decoded = decodeClaudeStatusline(stored.payload, observedAt);
     const limits = decoded?.telemetry.rateLimits;
     if (!decoded || !limits?.length) continue;
-    const own = sessionDirs.get(decoded.sessionId);
+    const own = sessionDirs.get(decoded.sessionId) || undefined;
     const named = new Set((own ? [own] : configDirs).map((configDir) => book.claude(configDir, decoded.sessionId, observedAt)));
     const account = typeof stored.account === "string" && /^claude:[0-9a-f]{16}$/.test(stored.account)
       ? stored.account

@@ -203,7 +203,8 @@ export interface ScanInput {
   chunk?: number;
   /** Asked before each log; true ends the scan there. */
   stop?: () => boolean;
-  /** Filled with each Claude session's config dir, from where its log sits (its status-line reading's account). */
+  /** Filled with each Claude session's config dir, from where its log sits (its status-line reading's
+   *  account); "" for a session found under two dirs, which cannot say which one it ran in. */
   sessionDirs?: Map<string, string>;
 }
 
@@ -291,7 +292,10 @@ export function scan(input: ScanInput): ScanResult {
       // <project>/<session>.jsonl, or <project>/<session>/subagents/agent-<id>.jsonl
       const rel = path.slice(projects.length + 1).split("/");
       const session = rel.length === 2 ? basename(rel[1]!, ".jsonl") : rel[1];
-      if (rel.length === 2) input.sessionDirs?.set(session!, configDir);
+      if (rel.length === 2) {
+        const known = input.sessionDirs?.get(session!);
+        input.sessionDirs?.set(session!, known === undefined || known === configDir ? configDir : "");
+      }
       queue(path, path, "claude", configDir, session);
     }
   }
