@@ -124,14 +124,23 @@ it("titles a popover drawn as a sheet below the desk as every sheet is, and only
   expect(screen.getByText("rows")).not.toHaveClass("max-lg:px-0");
 });
 
-it("stays drawn, out of reach, while its exit runs, then leaves", async () => {
-  // jsdom runs no transitions: stand in one exit the leaving cue started, finished on demand.
+/** jsdom runs no animations: stands in the `exit` a closing layer starts, finished on demand. */
+function stubExit() {
   let finish = () => {};
   const finished = new Promise<void>((resolve) => { finish = resolve; });
-  const original = HTMLElement.prototype.getAnimations;
-  HTMLElement.prototype.getAnimations = function (this: HTMLElement) {
-    return this.hasAttribute("data-leaving") ? [{ finished } as unknown as Animation] : [];
+  const proto = HTMLElement.prototype as { getAnimations?: HTMLElement["getAnimations"] };
+  const original = proto.getAnimations;
+  proto.getAnimations = function (this: HTMLElement) {
+    return this.hasAttribute("data-leaving") ? [{ animationName: "exit", finished } as unknown as Animation] : [];
   };
+  return {
+    finish: () => act(async () => { finish(); await finished; }),
+    restore: () => { if (original) proto.getAnimations = original; else delete proto.getAnimations; },
+  };
+}
+
+it("stays drawn, out of reach, while its exit runs, then leaves", async () => {
+  const exit = stubExit();
   try {
     render(<Harness />);
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
@@ -139,9 +148,25 @@ it("stays drawn, out of reach, while its exit runs, then leaves", async () => {
     const leaving = document.querySelector("[data-workbench-popover]");
     expect(leaving).toHaveAttribute("data-leaving");
     expect(leaving).toHaveAttribute("inert");
-    await act(async () => { finish(); await finished; });
+    await exit.finish();
     expect(document.querySelector("[data-workbench-popover]")).toBeNull();
   } finally {
-    HTMLElement.prototype.getAnimations = original;
+    exit.restore();
+  }
+});
+
+it("reopened while it leaves, stays open when the old exit ends", async () => {
+  const exit = stubExit();
+  try {
+    render(<Harness />);
+    const trigger = screen.getByRole("button", { name: "Inspect" });
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(trigger);
+    await exit.finish();
+    expect(screen.getByRole("dialog", { name: "Inspector" })).not.toHaveAttribute("data-leaving");
+    expect(screen.getByRole("dialog", { name: "Inspector" })).not.toHaveAttribute("inert");
+  } finally {
+    exit.restore();
   }
 });

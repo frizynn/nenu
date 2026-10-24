@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { usePresence } from "@/components/ui/presence";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { PanelHeader } from "@/components/ui/panel-header";
@@ -28,9 +29,9 @@ interface WorkbenchPopoverProps {
 // never takes the composer's focus), so only the placement changes, with a sheet's title.
 // The popover positions itself with inline left/top/bottom from its anchor; the important utilities
 // are what lets a class win over that inline placement on a phone. The body there is full bleed: its
-// rows own the 16px gutter, so they start where the sheet's title does. It leaves the way it came: a
-// card fades back toward its anchor (index.css), a sheet slides down as BottomSheet's does. Under
-// reduced motion neither moves: index.css stops both.
+// rows own the 16px gutter, so they start where the sheet's title does. It leaves the way it came,
+// kept drawn by usePresence while an `exit` runs: a card fades 6px back toward its anchor, a sheet
+// slides down as BottomSheet's does. Under reduced motion neither moves: index.css stops both.
 /** Where the desk starts: below it a `sheetBelowDesk` popover is a sheet (Tailwind's `lg`). */
 const DESK_WIDTH = 1024;
 const PHONE_SHEET = [
@@ -38,37 +39,11 @@ const PHONE_SHEET = [
   "max-lg:rounded-b-none max-lg:rounded-t-2xl max-lg:border-x-0 max-lg:border-b-0 max-lg:pb-[env(safe-area-inset-bottom)]",
 ].join(" ");
 const SHEET_ENTER = "max-lg:duration-180 max-lg:ease-out max-lg:animate-in max-lg:slide-in-from-bottom";
-const SHEET_LEAVE = "duration-180 ease-out animate-out slide-out-to-bottom fill-mode-forwards";
+const CARD_LEAVE = "animate-out fill-mode-forwards duration-120 ease-out fade-out";
+const SHEET_LEAVE = "max-lg:duration-180 max-lg:slide-out-to-bottom max-lg:fade-out-100";
 
 /** Where it sits: over its anchor, under it, or a sheet on the bottom edge. Each enters and leaves from its own side. */
 type Side = "above" | "below" | "sheet";
-
-/**
- * Keeps a layer drawn while it leaves: `leaving` is the cue for its exit (a `data-leaving` rule, or an
- * `animate-out` class), and the layer goes once every animation and transition that cue started on it
- * has ended, or at once when none runs (reduced motion, an engine without `getAnimations`, a test).
- */
-export function useLeaving(open: boolean, layer: RefObject<HTMLElement | null>) {
-  const [drawn, setDrawn] = useState(open);
-  if (open && !drawn) setDrawn(true);
-  const leaving = drawn && !open;
-  useEffect(() => {
-    if (!leaving) return;
-    const running = layer.current?.getAnimations?.() ?? [];
-    if (running.length === 0) {
-      setDrawn(false);
-      return;
-    }
-    let current = true;
-    void Promise.allSettled(running.map((animation) => animation.finished)).then(() => {
-      if (current) setDrawn(false);
-    });
-    return () => {
-      current = false;
-    };
-  }, [leaving, layer]);
-  return { mounted: open || drawn, leaving };
-}
 
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
 export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false, sheetBelowDesk = false, dense = false }: WorkbenchPopoverProps) {
@@ -88,7 +63,7 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
     wasOpen.current = false;
   }, [open, leaveEntry]);
   const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; height: number; side: Side } | null>(null);
-  const { mounted, leaving } = useLeaving(open, panelRef);
+  const { mounted, closing, content } = usePresence(open, { label, children }, panelRef);
 
   const dismiss = useCallback((reason: WorkbenchDismissReason) => {
     if (dismissed.current) return;
@@ -173,12 +148,15 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
 
   if (!mounted) return null;
   return (
-    <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" data-side={position?.side} data-leaving={leaving ? "" : undefined} inert={leaving || undefined}
+    <div ref={panelRef} role="dialog" aria-label={content.label} data-workbench-popover="" data-side={position?.side} data-leaving={closing ? "" : undefined} inert={closing || undefined}
       style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }}
       className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET,
-        sheetBelowDesk && !leaving && SHEET_ENTER, leaving && position?.side === "sheet" && SHEET_LEAVE, className)}>
-      <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} dense={dense} />
-      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain", dense ? "p-3" : "p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
+        closing
+          ? cn(CARD_LEAVE, position?.side === "below" ? "slide-out-to-top-[6px]" : "slide-out-to-bottom-[6px]", sheetBelowDesk && SHEET_LEAVE)
+          : sheetBelowDesk && SHEET_ENTER,
+        className)}>
+      <PanelHeader title={content.label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} dense={dense} />
+      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain", dense ? "p-3" : "p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{content.children}</div>
     </div>
   );
 }

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { ArrowLeft, Laptop, X, type IconComponent } from "@/components/ui/icon";
 
 import { StateMark } from "@/components/status-badge";
-import { useLeaving, WorkbenchPopover } from "@/components/ui/workbench-popover";
+import { usePresence } from "@/components/ui/presence";
+import { WorkbenchPopover } from "@/components/ui/workbench-popover";
 import { useBackCloses } from "@/hooks/use-back-closes";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { cn } from "@/lib/utils";
 
 // The chips under the composer's box (issue: Cursor-style chips): what needs you and what works in
 // this chat's background, one chip each in the row the model sits in, and the chip's panel floating
@@ -119,16 +121,18 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     if (event.shiftKey && (active === first || active === panel.current)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
   };
-  // A closed panel stays drawn through its exit (composer.css), out of reach, with what it last showed.
-  const { mounted, leaving } = useLeaving(Boolean(shown), panel);
-  const drawn = useRef<{ title?: string; body?: ReactNode; back?: () => void }>({});
-  if (shown) drawn.current = detail ? { title: detail.title, body: detail.content, back: detail.onBack } : { title: shown.label, body: shown.content };
-  const { title, body, back } = drawn.current;
+  // A closed panel stays drawn, out of reach, with what it last showed while it fades back the way it
+  // came, in a control's length as every exit; under reduced motion it goes at once.
+  const { mounted, closing, content } = usePresence(Boolean(shown), detail
+    ? { title: detail.title, body: detail.content, back: detail.onBack }
+    : { title: shown?.label, body: shown?.content, back: undefined }, panel);
+  const { title, body, back } = content;
   return (
     <div ref={line} className="composer-chips">
       {mounted && (
-        <section ref={panel} id="composer-chip-panel" role="dialog" aria-label={title} tabIndex={-1} className="composer-chip-panel"
-          data-leaving={leaving ? "" : undefined} inert={leaving || undefined} onKeyDown={trap}>
+        <section ref={panel} id="composer-chip-panel" role="dialog" aria-label={title} tabIndex={-1}
+          className={cn("composer-chip-panel", closing && "animate-out fill-mode-forwards duration-120 ease-out fade-out zoom-out-98 slide-out-to-bottom-[6px] motion-reduce:animate-none")}
+          data-leaving={closing ? "" : undefined} inert={closing || undefined} onKeyDown={trap}>
           <div className="composer-chip-panel-head">
             {back && <button type="button" aria-label="Back" onClick={back} className="composer-chip-icon"><ArrowLeft aria-hidden className="size-4" /></button>}
             <h2 className="min-w-0 flex-1 truncate">{title}</h2>
