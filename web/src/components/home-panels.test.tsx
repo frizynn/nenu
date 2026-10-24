@@ -1,10 +1,10 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, it } from "vitest";
 
-import type { RecentChat } from "@/lib/home-stats";
+import type { RecentChat, WorkspaceChats } from "@/lib/home-stats";
 import type { AgentView } from "@/lib/types";
 import { HomeSessions } from "./home-panels";
 
@@ -13,12 +13,12 @@ const chat = (paneId: string, at: number, unseen = false): RecentChat => ({
   title: paneId, place: "w1", tab: null, at, unseen, detail: null,
 });
 
-function setup(first: RecentChat[]) {
+function setup(first: RecentChat[], workspaces: WorkspaceChats[] = []) {
   let show: (recent: RecentChat[]) => void = () => undefined;
   function Live() {
     const [recent, setRecent] = useState(first);
     show = setRecent;
-    return <HomeSessions recent={recent} workspaces={[]} reviews={[]} pullRequests={() => null} now={1_000} opening={null} />;
+    return <HomeSessions recent={recent} workspaces={workspaces} reviews={[]} pullRequests={() => null} now={1_000} opening={null} />;
   }
   render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <Live /> }])} />);
   const rows = () => within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href"));
@@ -54,4 +54,36 @@ it("keeps sessions with the same time in the order they first came, however they
   show([chat("c", 100), chat("b", 100), chat("a", 100)]);
   expect(rows()).toEqual(["/pane/a", "/pane/b", "/pane/c"]);
   expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
+});
+
+it("eases in only the rows Show all adds", async () => {
+  setup(Array.from({ length: 8 }, (_, i) => chat(`p${i}`, 900 - i)));
+  await userEvent.setup().click(screen.getByRole("button", { name: "Show all 8" }));
+  const rows = within(screen.getByRole("tabpanel", { name: "Recents" })).getAllByRole("listitem");
+  expect(rows.map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, false, false, false, true, true]);
+});
+
+it("folds a workspace's sessions open and shut, out of reach while they leave", async () => {
+  localStorage.removeItem("nenu:home-list:v2");
+  const tab = (tabId: string, paneId: string) => ({ tabId, label: tabId, chats: [chat(paneId, 100)] });
+  setup([], [{ workspaceId: "w1", name: "Alpha", tabs: [tab("t1", "a"), tab("t2", "b")] }]);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("tab", { name: "Workspaces" }));
+  const toggle = screen.getByRole("button", { name: /^Alpha,/ });
+  await user.click(toggle);
+  const fold = () => document.getElementById("home-workspace-w1")?.closest(".fold");
+  expect(fold()).toHaveAttribute("data-phase", "opening");
+  await user.click(toggle);
+  expect(fold()).toHaveAttribute("data-phase", "shutting");
+  expect(fold()).toHaveAttribute("inert");
+  await waitFor(() => expect(fold()).toBeUndefined());
+});
+
+it("slides the phone's thumb under the chosen list", async () => {
+  localStorage.removeItem("nenu:home-list:v2");
+  setup([chat("a", 100)], [{ workspaceId: "w1", name: "Alpha", tabs: [] }]);
+  const thumb = document.querySelector<HTMLElement>(".project-segment-thumb")!;
+  expect(thumb.style.transform).toBe("translateX(0%)");
+  await userEvent.setup().click(screen.getByRole("tab", { name: "Workspaces" }));
+  expect(thumb.style.transform).toBe("translateX(100%)");
 });

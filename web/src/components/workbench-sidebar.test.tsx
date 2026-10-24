@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, cleanup as cleanupRender, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup as cleanupRender, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -83,12 +83,13 @@ describe("the sidebar's workspaces", () => {
     // On Home nothing is on screen: the workspace holding a blocked agent opens.
     expect(screen.getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Design panes" }));
-    expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
+    // Its panes fold shut, then leave the page.
+    await waitFor(() => expect(screen.queryByText("Panel prod")).not.toBeInTheDocument());
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ workspaces: { w2: false }, tabs: {} });
     // A tab's fold is remembered beside its workspace's.
     await user.click(screen.getByRole("button", { name: "Design panes" }));
     await user.click(screen.getByRole("button", { name: /^panels,/ }));
-    expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Panel prod")).not.toBeInTheDocument());
     expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ workspaces: { w2: true }, tabs: { "t-panels": false } });
   });
 
