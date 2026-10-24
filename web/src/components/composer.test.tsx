@@ -2693,6 +2693,25 @@ describe("Composer — images and the pending bubble", () => {
     expect(loadDraft(undefined, "w1:p1")).toBe(`${UPLOAD} keep me`);
   });
 
+  it("a cursor put anywhere inside a picture's chip, its glue and gap included, goes to the chip's end", async () => {
+    serveQueue(() => HttpResponse.json({ available: true, scope: "scope", messages: [] }));
+    renderComposer({ nativeWorkbench: true });
+    const box = (await attachAndType(" see")) as HTMLTextAreaElement;
+    const end = imageChip(1).length;
+    expect(box.value).toBe(`${imageChip(1)} see`);
+    for (let at = 1; at < end; at++) {
+      box.setSelectionRange(at, at);
+      fireEvent.select(box);
+      expect([at, box.selectionStart, box.selectionEnd]).toEqual([at, end, end]);
+    }
+    // Either side of it is a place to type.
+    for (const at of [0, end]) {
+      box.setSelectionRange(at, at);
+      fireEvent.select(box);
+      expect(box.selectionStart).toBe(at);
+    }
+  });
+
   it("a Backspace into a picture's chip takes the chip and the picture, and the thumbnail's X takes both too", async () => {
     serveQueue(() => HttpResponse.json({ available: true, scope: "scope", messages: [] }));
     renderComposer({ nativeWorkbench: true });
