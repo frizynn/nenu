@@ -18,11 +18,11 @@ it("shows the context and both quota windows inline, with no intermediate Usage 
   expect(screen.queryByRole("button", { name: /usage/i })).not.toBeInTheDocument();
   expect(screen.getByText("13% · 26k / 200k")).toBeVisible();
   expect(screen.getByRole("progressbar", { name: "Context window usage" })).toHaveAttribute("aria-valuenow", "13");
-  expect(screen.getByText("5h window")).toBeVisible();
-  expect(screen.getByText("Weekly")).toBeVisible();
-  expect(screen.getByText("8% used")).toBeVisible();
-  expect(screen.getByText("19% used")).toBeVisible();
-  expect(screen.getByRole("progressbar", { name: "primary rate limit used" })).toHaveAttribute("aria-valuenow", "8");
+  expect(screen.getByText("5-hour limit")).toBeVisible();
+  expect(screen.getByText("Weekly limit")).toBeVisible();
+  expect(screen.getByText("8%")).toBeVisible();
+  expect(screen.getByText("19%")).toBeVisible();
+  expect(screen.getByRole("progressbar", { name: "5-hour limit used" })).toHaveAttribute("aria-valuenow", "8");
 });
 
 it("distinguishes last-message totals from context and flags stale or clipped metrics", () => {

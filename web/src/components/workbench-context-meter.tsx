@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import { WorkbenchPopover } from "@/components/ui/workbench-popover";
+import { limitRows } from "@/lib/rate-limits";
+import type { SessionTelemetry } from "@/lib/types";
 
 // Adapted from T3 Code ContextWindowMeter.tsx and contextWindow.ts at 191a4ef.
 // MIT, Copyright (c) 2026 T3 Tools Inc. See THIRD_PARTY_NOTICES.md.
@@ -20,12 +22,36 @@ export function contextPercent(context: { usedPercent?: number; usedTokens?: num
   return used !== null && max !== null ? Math.min(100, (used / max) * 100) : null;
 }
 
+/** How much of the window is taken, as tokens: "229k / 1m", "1m window"; null while neither is known. */
+export function contextSize(used: number | null | undefined, max: number | null | undefined): string | null {
+  const u = used != null && Number.isFinite(used) && used >= 0 ? used : null;
+  const m = max != null && Number.isFinite(max) && max > 0 ? max : null;
+  if (u !== null) return `${formatContextTokens(u)}${m !== null ? ` / ${formatContextTokens(m)}` : ""}`;
+  return m !== null ? `${formatContextTokens(m)} window` : null;
+}
+
+/** One measured share, wherever usage is read: its name, the share and a detail, a thin bar under them
+ *  (red past 90%, as the ring is). A share no one knows draws the detail alone, with no bar. */
+export function MeterRow({ label, percent, detail, bar }: { label: string; percent?: number; detail?: string | null; bar: string }) {
+  return <div>
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-foreground">{label}</span>
+      <span className="tabular-nums text-muted-foreground">{[percent !== undefined ? `${Math.round(percent)}%` : null, detail].filter(Boolean).join(" · ")}</span>
+    </div>
+    {percent !== undefined && <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={bar} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+      <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: percent > 90 ? "var(--destructive)" : "var(--primary)" }} />
+    </div>}
+  </div>;
+}
+
 /** The composer row's context ring: a 16px ring and its number, and nothing at all while unreported
  *  (a hollow ring said nothing; Compact stays one Commands row away). */
-export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
+export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, rateLimits, onCompact, compactDisabled, open: controlledOpen, onOpenChange }: {
   reportedPercent?: number;
   usedTokens: number | null;
   maxTokens: number | null;
+  /** The plan windows the agent reported (5-hour, weekly), drawn under the context; none, no rows. */
+  rateLimits?: SessionTelemetry["rateLimits"];
   onCompact?: () => void;
   compactDisabled?: boolean;
   open?: boolean;
@@ -56,14 +82,11 @@ export function WorkbenchContextMeter({ reportedPercent, usedTokens, maxTokens, 
       </svg>
       <span className="workbench-context-number tabular-nums">{Math.round(percentage)}%</span>
     </button>
-    <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window">
-      <div className="space-y-3 text-footnote">
-        {(used !== null || max !== null) && <div className="flex justify-between gap-4"><span>{used !== null ? "Tokens used" : "Context window"}</span><span className="tabular-nums">{used !== null ? formatContextTokens(used) : formatContextTokens(max)}{used !== null && max !== null ? ` / ${formatContextTokens(max)}` : ""}</span></div>}
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percentage)}><div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: usageColor }} /></div>
-        {onCompact && <div className="border-t border-border pt-3">
-          <p className="mb-2 text-xs text-muted-foreground">Summarize this session to make room for the next messages.</p>
-          <button type="button" disabled={compactDisabled} onClick={() => { setOpen(false); onCompact(); }} className="min-h-11 w-full rounded-lg bg-primary/10 px-3 text-footnote font-medium text-primary hover:bg-primary/20 disabled:opacity-50">Compact context</button>
-        </div>}
+    <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label="Context window" className="w-72" dense>
+      <div className="space-y-2.5 text-footnote">
+        <MeterRow label="Context" percent={percentage} detail={contextSize(used, max)} bar="Context window usage" />
+        {limitRows(rateLimits).map((row) => <MeterRow key={row.key} label={row.label} percent={row.percent} detail={row.detail} bar={`${row.label} used`} />)}
+        {onCompact && <button type="button" disabled={compactDisabled} onClick={() => { setOpen(false); onCompact(); }} className="hit-area mt-0.5 min-h-9 w-full rounded-lg bg-primary/10 px-3 text-footnote font-medium text-primary hover:bg-primary/20 disabled:opacity-50">Compact context</button>}
       </div>
     </WorkbenchPopover>
   </div>;
