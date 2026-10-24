@@ -124,49 +124,66 @@ it("titles a popover drawn as a sheet below the desk as every sheet is, and only
   expect(screen.getByText("rows")).not.toHaveClass("max-lg:px-0");
 });
 
-/** jsdom runs no animations: stands in the `exit` a closing layer starts, finished on demand. */
-function stubExit() {
-  let finish = () => {};
-  const finished = new Promise<void>((resolve) => { finish = resolve; });
+/** jsdom runs no animations: stands in the `exit` each closing layer starts, finished on demand in order. */
+function stubExits() {
+  const pending: (() => void)[] = [];
   const proto = HTMLElement.prototype as { getAnimations?: HTMLElement["getAnimations"] };
   const original = proto.getAnimations;
   proto.getAnimations = function (this: HTMLElement) {
-    return this.hasAttribute("data-leaving") ? [{ animationName: "exit", finished } as unknown as Animation] : [];
+    if (!this.hasAttribute("data-leaving")) return [];
+    const finished = new Promise<void>((resolve) => pending.push(resolve));
+    return [{ animationName: "exit", finished } as unknown as Animation];
   };
   return {
-    finish: () => act(async () => { finish(); await finished; }),
+    finish: (index: number) => act(async () => { pending[index]!(); await Promise.resolve(); }),
     restore: () => { if (original) proto.getAnimations = original; else delete proto.getAnimations; },
   };
 }
 
-it("stays drawn, out of reach, while its exit runs, then leaves", async () => {
-  const exit = stubExit();
+it("stays drawn, out of reach, with what it last showed while its exit runs, then leaves", async () => {
+  const exits = stubExits();
+  // An owner that resets what the panel holds once it closes, as the model panel does.
+  function Resetting() {
+    const [open, setOpen] = useState(false);
+    const anchorRef = useRef<HTMLButtonElement>(null);
+    return <>
+      <button ref={anchorRef} onClick={() => setOpen(true)}>Inspect</button>
+      <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={anchorRef} label={open ? "Inspector" : "Reset"}>
+        {open ? "Advanced settings" : "Picker"}
+      </WorkbenchPopover>
+    </>;
+  }
   try {
-    render(<Harness />);
+    render(<Resetting />);
     await userEvent.click(screen.getByRole("button", { name: "Inspect" }));
     await userEvent.keyboard("{Escape}");
     const leaving = document.querySelector("[data-workbench-popover]");
     expect(leaving).toHaveAttribute("data-leaving");
     expect(leaving).toHaveAttribute("inert");
-    await exit.finish();
+    expect(leaving).toHaveAttribute("aria-label", "Inspector");
+    expect(leaving).toHaveTextContent("Advanced settings");
+    await exits.finish(0);
     expect(document.querySelector("[data-workbench-popover]")).toBeNull();
   } finally {
-    exit.restore();
+    exits.restore();
   }
 });
 
-it("reopened while it leaves, stays open when the old exit ends", async () => {
-  const exit = stubExit();
+it("closed, reopened and closed again, waits for its latest exit, not the first", async () => {
+  const exits = stubExits();
   try {
     render(<Harness />);
     const trigger = screen.getByRole("button", { name: "Inspect" });
     await userEvent.click(trigger);
     await userEvent.keyboard("{Escape}");
     await userEvent.click(trigger);
-    await exit.finish();
-    expect(screen.getByRole("dialog", { name: "Inspector" })).not.toHaveAttribute("data-leaving");
     expect(screen.getByRole("dialog", { name: "Inspector" })).not.toHaveAttribute("inert");
+    await userEvent.keyboard("{Escape}");
+    await exits.finish(0);
+    expect(document.querySelector("[data-workbench-popover]")).toHaveAttribute("data-leaving");
+    await exits.finish(1);
+    expect(document.querySelector("[data-workbench-popover]")).toBeNull();
   } finally {
-    exit.restore();
+    exits.restore();
   }
 });
