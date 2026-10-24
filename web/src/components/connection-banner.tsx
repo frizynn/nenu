@@ -3,6 +3,7 @@ import { useRevalidate } from "@/hooks/use-router";
 import { Pending, LogIn, RefreshCw, RotateCw, TriangleAlert, WifiOff } from "@/components/ui/icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Fold } from "@/components/fold";
 import { cn } from "@/lib/utils";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
@@ -32,12 +33,18 @@ interface ConnectionBannerProps {
 export const RECOVERY_QUIET_MS = 5_000;
 
 export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: ConnectionBannerProps) {
-  if (authError) return <AuthErrorBanner lastSeenAt={lastSeenAt} />;
-  return <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />;
+  return (
+    <>
+      <Fold value={authError}>{() => <AuthErrorBanner lastSeenAt={lastSeenAt} />}</Fold>
+      {!authError && <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />}
+    </>
+  );
 }
 
 // A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what
-// is down, and since when) is never cut, and every control 44px on touch.
+// is down, and since when) is never cut, and every control 44px on touch. Each one folds in and out
+// (Fold), so the screen under it slides rather than jumps; a transform would move the composer too,
+// which the layout leaves where it is.
 export const BANNER = "flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-muted py-1 pl-4 pr-2";
 
 // A refusal is not an outage, so it gets its own surface ahead of the connection state machine: no
@@ -93,7 +100,6 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   // A notice that leaves the screen (a refusal takes its place, the layout unmounts) shows nothing.
   useEffect(() => () => setOutageNoticeShown(false), []);
 
-  if (!visible) return null;
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
   // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
   // notice waits out the quiet interval saying only what is still true, never "Connected".
@@ -104,17 +110,19 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
     try { await revalidate(); } finally { setRetrying(false); }
   }
   return (
-    <div role="status" aria-live="polite" className={BANNER}>
-      <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-      <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
-        <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
-        <LastSynced at={lastSeenAt} />
-      </p>
-      <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
-        {retrying ? <Pending aria-hidden="true" className="size-4" /> : <RotateCw aria-hidden="true" className="size-4" />}
-        Retry
-      </Button>
-    </div>
+    <Fold value={visible}>{() => (
+      <div role="status" aria-live="polite" className={BANNER}>
+        <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
+          <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
+          <LastSynced at={lastSeenAt} />
+        </p>
+        <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
+          {retrying ? <Pending aria-hidden="true" className="size-4" /> : <RotateCw aria-hidden="true" className="size-4" />}
+          Retry
+        </Button>
+      </div>
+    )}</Fold>
   );
 }
 

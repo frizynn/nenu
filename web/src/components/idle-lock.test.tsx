@@ -31,6 +31,16 @@ describe("IdleLock", () => {
     expect(onUnlock).not.toHaveBeenCalled();
   });
 
+  // Resume unmounts the cover for one render before the catch-up beat mounts it again: a fade there
+  // would flash the cover out and back in.
+  it("fades in when the pause arrives, and the catch-up cover is simply there", () => {
+    const { unmount } = render(<IdleLock onUnlock={() => {}} />);
+    expect(screen.getByRole("dialog")).toHaveClass("animate-in", "fade-in");
+    unmount();
+    render(<IdleLock onUnlock={() => {}} catchingUp />);
+    expect(screen.getByRole("dialog")).not.toHaveClass("animate-in");
+  });
+
   it("never draws a lock or speaks of safety: the pause guards nothing (ADR 0007)", () => {
     const { container } = render(<IdleLock onUnlock={() => {}} />);
     expect(container.querySelector("[class*='icon-lock']")).toBeNull();
