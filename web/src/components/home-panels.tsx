@@ -5,12 +5,14 @@ import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pen
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
+import { Fold } from "@/components/fold";
 import { PaneMark } from "@/components/nav-rows";
 import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
 import { WorkspaceOrderMenu } from "@/components/workspace-order-menu";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
+import { EnterScope, useEnter } from "@/lib/enter";
 import { timeAgo, timeAgoShort } from "@/lib/format";
 import { workspaceSessions, type RecentChat, type ReviewEntry, type TabChats, type WorkspaceChats } from "@/lib/home-stats";
 import { panePath } from "@/lib/nav";
@@ -72,7 +74,8 @@ export function HomeHeading({ id, label, count, note }: { id: string; label: str
 
 /**
  * A Home list: its first `rows` items, and the rest behind "Show all". With `group`, items already
- * ordered by group show under each group's name.
+ * ordered by group show under each group's name. A row that joins once the list is drawn, as "Show
+ * all" adds them, eases in where it lands when it asks to (`useEnter`).
  */
 export function FoldedList<T>({ items, rows, group, children }: { items: readonly T[]; rows: number; group?: (item: T) => string; children: (item: T) => ReactNode }) {
   const [all, setAll] = useState(false);
@@ -84,7 +87,7 @@ export function FoldedList<T>({ items, rows, group, children }: { items: readonl
     if (last && last.label === label) last.items.push(item);
     else runs.push({ label, items: [item] });
   }
-  return <>
+  return <EnterScope>
     {runs.map((run) => <Fragment key={run.label ?? ""}>
       {run.label && <h3 className="px-1 pt-2 text-caption font-medium text-muted-foreground first:pt-0 sm:px-2.5">{run.label}</h3>}
       <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{run.items.map(children)}</ul>
@@ -94,7 +97,7 @@ export function FoldedList<T>({ items, rows, group, children }: { items: readonl
         Show all {items.length}
       </button>
     )}
-  </>;
+  </EnterScope>;
 }
 
 const DESK = "(min-width: 1024px)";
@@ -128,8 +131,9 @@ export function SessionRow({ chat, session, now, opening, group, inTab = false }
   const state = stateOf(chat);
   const to = panePath(agent.paneId, session);
   const busy = isOpening(opening, to);
+  const enter = useEnter();
   return (
-    <li>
+    <li className={enter}>
       <Link to={to} aria-busy={busy || undefined}
         className={cn("relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2 hover:bg-[var(--workbench-row-hover)] sm:min-h-12 sm:rounded-lg sm:px-2.5",
           inTab && "max-sm:gap-x-1.5", busy && "bg-[var(--workbench-row-hover)]")}>
@@ -206,11 +210,11 @@ const FOLDS = {
 
 /**
  * A row that folds the rows under it, a Herdr workspace or a tab of several panes: its name, how it
- * is, how many it holds and when the latest moved. A tap unfolds its rows in place, or opens `to`
- * when there is nothing to unfold. While its list is reordered it opens nothing and its end is the
+ * is, how many it holds and when the latest moved. A tap folds its rows open in place, or opens `to`
+ * when there is nothing to unfold; one opened by the app (`animate` off) is simply there. While its list is reordered it opens nothing and its end is the
  * handle that drags it, which fades in from the end; `settling`, just after, its time fades back.
  */
-function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, reorder, settling = false, children }: {
+function FoldRow({ kind, id, name, chats, now, open, onToggle, animate = true, to, busy = false, reorder, settling = false, children }: {
   kind: keyof typeof FOLDS;
   id: string;
   name: string;
@@ -218,6 +222,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
   now: number;
   open: boolean;
   onToggle: () => void;
+  animate?: boolean;
   to?: string;
   busy?: boolean;
   reorder?: ListReorder;
@@ -261,7 +266,9 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
       {to
         ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={className}>{body}</Link>
         : <button type="button" aria-expanded={open} aria-controls={listId} aria-label={label} onClick={onToggle} className={className}>{body}</button>}
-      {!to && open && <ul id={listId} aria-label={name} className={cn("flex flex-col max-sm:divide-y max-sm:divide-border", rows)}>{children}</ul>}
+      {!to && <Fold value={open} animate={animate}>
+        {() => <ul id={listId} aria-label={name} className={cn("flex flex-col max-sm:divide-y max-sm:divide-border", rows)}>{children}</ul>}
+      </Fold>}
     </li>
   );
 }
@@ -272,12 +279,14 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
  * panes is a row of its own that folds them (lib/workspace-tree.ts). A workspace of one tab or one
  * session has nothing to unfold: the tap opens its `entry` pane.
  */
-function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row, reorder, settling }: {
+function WorkspaceRow({ group, now, open, onToggle, tabOpen, tabTouched, onTab, session, opening, row, reorder, settling }: {
   group: WorkspaceChats;
   now: number;
   open: boolean;
   onToggle: () => void;
   tabOpen: (tab: TabChats) => boolean;
+  /** Whether a tap left the tab's fold, rather than its agents (tabStartsOpen). */
+  tabTouched: (tab: TabChats) => boolean;
   onTab: (tab: TabChats) => void;
   session?: string;
   opening: string | null;
@@ -290,7 +299,8 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
     <FoldRow kind="workspace" id={group.workspaceId} name={group.name} chats={workspaceSessions(group)} now={now} open={open} onToggle={onToggle}
       to={to} busy={!!to && isOpening(opening, to)} reorder={reorder} settling={settling}>
       {group.tabs.map((tab) => tabFolds(tab.chats.length, group.tabs.length)
-        ? <FoldRow key={tab.tabId} kind="tab" id={tab.tabId} name={tab.label} chats={tab.chats} now={now} open={tabOpen(tab)} onToggle={() => onTab(tab)}>
+        ? <FoldRow key={tab.tabId} kind="tab" id={tab.tabId} name={tab.label} chats={tab.chats} now={now} open={tabOpen(tab)} onToggle={() => onTab(tab)}
+          animate={tabTouched(tab)}>
           {tab.chats.map((chat) => row(chat, true))}
         </FoldRow>
         : tab.chats.map((chat) => row(chat, false)))}
@@ -353,6 +363,9 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   const [moveSaid, setMoveSaid] = useState("");
   const recent = held.order(everyRecent);
   const updates = list === "recents" ? held.moved(recent) : 0;
+  // The pill keeps the count it last said while it fades out.
+  const said = useRef(1);
+  if (updates) said.current = updates;
   const workspaceId = (group: WorkspaceChats) => group.workspaceId;
   const workspaceName = (group: WorkspaceChats) => group.name;
   const ordered = orderWorkspaces(workspaces, workspaceId, workspaceName, order);
@@ -386,6 +399,9 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
       <div className={cn("relative flex items-center gap-2.5", desk && "border-b border-border")}>
         <div role="tablist" aria-label="Your work"
           className={desk ? "flex items-center gap-5" : cn("project-segmented mx-0 max-sm:flex-1", SEGMENTS[lists.length])}>
+          {/* The phone's thumb slides under the chosen list, as Segmented's does; the list itself swaps at once. */}
+          {!desk && <span aria-hidden className="project-segment-thumb"
+            style={{ width: `calc((100% - 6px) / ${lists.length})`, transform: `translateX(${lists.findIndex(([key]) => key === list) * 100}%)` }} />}
           {lists.map(([key, label]) => (
             <button key={key} id={`home-list-${key}`} type="button" role="tab" aria-selected={list === key} aria-controls="home-list"
               onClick={() => { setList(key); rememberList(key); setArranging(false); }} className={desk ? "desk-tab" : "project-segment"}>{label}</button>
@@ -396,8 +412,8 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
         <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
           className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground",
             "max-sm:absolute max-sm:left-1/2 max-sm:top-full max-sm:z-10 max-sm:mt-2 max-sm:-translate-x-1/2 max-sm:bg-background max-sm:shadow-md",
-            !updates && "invisible", "ml-auto")}>
-          {Math.max(updates, 1)} {updates <= 1 ? "update" : "updates"}
+            "transition-[opacity,visibility] duration-120 ease-out motion-reduce:transition-none", !updates && "invisible opacity-0", "ml-auto")}>
+          {said.current} {said.current === 1 ? "update" : "updates"}
         </button>
       </div>
       <p role="status" className="sr-only">{arranging ? moveSaid : ""}</p>
@@ -424,7 +440,7 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
             className="relative flex flex-col max-sm:divide-y max-sm:divide-border">
             {ordered.map((group) => <WorkspaceRow reorder={arranging ? reorder : undefined} settling={settling} key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}
-              tabOpen={tabOpen} onTab={(tab) => setTabsOpen((prev) => ({ ...prev, [tab.tabId]: !tabOpen(tab) }))}
+              tabOpen={tabOpen} tabTouched={(tab) => tab.tabId in tabsOpen} onTab={(tab) => setTabsOpen((prev) => ({ ...prev, [tab.tabId]: !tabOpen(tab) }))}
               row={(chat, inTab) => row(chat, group.name, inTab)} />)}
           </ul>}
       </div>

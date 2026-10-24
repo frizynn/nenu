@@ -2,6 +2,7 @@ import { useId } from "react";
 import { Link } from "react-router";
 import { ChevronRight, LayoutGrid, LayoutTemplate } from "@/components/ui/icon";
 
+import { Fold } from "@/components/fold";
 import { OpeningMark, PaneMark, RowBody } from "@/components/nav-rows";
 import { resting, StatusDot } from "@/components/status-badge";
 import { displayName } from "@/lib/display-name";
@@ -19,7 +20,8 @@ const STATUS_TEXT: Partial<Record<AgentStatus, string>> = { blocked: "text-statu
 /**
  * The herd as Herdr holds it: a row per workspace whose name opens
  * its pane and whose chevron folds its tabs, one level in. A workspace of one tab has no chevron: its
- * row is that tab's.
+ * row is that tab's. What a tap folds open or shut moves; what the herd opens on its own (a pane that
+ * asks, the one you are on) is simply there.
  */
 export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpand, tabs, onTab, startFolded = false }: {
   source: Herd;
@@ -40,17 +42,20 @@ export function WorkspaceTree({ source, session, currentPaneId, expanded, onExpa
     <WorkspaceSection key={branch.workspace.workspaceId} branch={branch} href={workspacePath(branch.workspace.workspaceId, source, session)}
       session={session} currentPaneId={currentPaneId}
       open={expanded[branch.workspace.workspaceId] ?? (!startFolded && defaultOpen(branch, branches.length))}
+      animate={branch.workspace.workspaceId in expanded}
       onToggle={(open) => onExpand(branch.workspace.workspaceId, open)} tabs={tabs} onTab={onTab} />
   ));
 }
 
-function WorkspaceSection({ branch, href, session, currentPaneId, open, onToggle, tabs, onTab }: {
+function WorkspaceSection({ branch, href, session, currentPaneId, open, animate, onToggle, tabs, onTab }: {
   branch: WorkspaceBranch;
   /** Where the workspace's name opens (see workspacePath). */
   href: string;
   session?: string;
   currentPaneId?: string;
   open: boolean;
+  /** Whether a tap set `open`, so a change of it folds rather than appears. */
+  animate: boolean;
   onToggle: (open: boolean) => void;
   tabs: Record<string, boolean>;
   onTab: (tabId: string, open: boolean) => void;
@@ -74,13 +79,14 @@ function WorkspaceSection({ branch, href, session, currentPaneId, open, onToggle
           <ChevronRight aria-hidden size={14} />
         </button>}
       </div>
-      {fold && open && (
-        <div id={bodyId} className="nav-ws-body">
+      {fold && <Fold value={open} animate={animate}>
+        {() => <div id={bodyId} className="nav-ws-body">
           {branch.tabs.map((tab) => <TabRows key={tab.tabId} tab={tab} folds={tabFolds(tab.panes.length, branch.tabs.length)} session={session}
-            currentPaneId={currentPaneId} open={tabs[tab.tabId] ?? tabStartsOpen(tab.panes, currentPaneId)} onToggle={(next) => onTab(tab.tabId, next)} />)}
+            currentPaneId={currentPaneId} open={tabs[tab.tabId] ?? tabStartsOpen(tab.panes, currentPaneId)} animate={tab.tabId in tabs}
+            onToggle={(next) => onTab(tab.tabId, next)} />)}
           {branch.tabs.length === 0 && <p className="nav-empty">No panes yet</p>}
-        </div>
-      )}
+        </div>}
+      </Fold>}
     </section>
   );
 }
@@ -99,12 +105,13 @@ function workspaceStatus(counts: AgentCounts): AgentStatus | undefined {
  * row of its own, its chevron in the fold column, saying its most urgent agent and how many panes it
  * holds; its panes sit one level in.
  */
-function TabRows({ tab, folds, session, currentPaneId, open, onToggle }: {
+function TabRows({ tab, folds, session, currentPaneId, open, animate, onToggle }: {
   tab: TabBranch;
   folds: boolean;
   session?: string;
   currentPaneId?: string;
   open: boolean;
+  animate: boolean;
   onToggle: (open: boolean) => void;
 }) {
   const bodyId = useId();
@@ -126,14 +133,14 @@ function TabRows({ tab, folds, session, currentPaneId, open, onToggle }: {
         <span className="nav-count">{count}</span>
       </>} />
     </button>
-    {open && (
-      <div id={bodyId} role="group" aria-label={tab.label}>
+    <Fold value={open} animate={animate}>
+      {() => <div id={bodyId} role="group" aria-label={tab.label}>
         {tab.panes.map((pane) => (
           <PaneRow key={pane.paneId} nested pane={pane} title={displayName(pane)} session={session}
             current={pane.paneId === currentPaneId} />
         ))}
-      </div>
-    )}
+      </div>}
+    </Fold>
   </>;
 }
 

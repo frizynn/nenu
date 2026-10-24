@@ -37,7 +37,7 @@
 /* One fill at a time: while the list shows Needs you or a search, that is the sidebar's place, not Home. */
 .workbench-navigation:not([data-list="browse"]) > .nav-top > .nav-row[aria-current="page"]:not(:hover) { background: none; }
 /* The workspace holding the open chat, while folded; open, the chat's own row carries the mark. */
-.nav-ws:not(:has(> .nav-ws-body)) .nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
+.nav-ws:not(:has(.nav-ws-body)) .nav-row[aria-current="true"] { background: var(--workbench-row-hover); }
 .nav-row:disabled { cursor: default; opacity: 0.5; background: none; }
 .nav-row-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-search { cursor: text; background: var(--workbench-row-hover); }
