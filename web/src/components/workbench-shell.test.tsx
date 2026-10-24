@@ -129,7 +129,7 @@ it("draws New as a tab with its own label, like its neighbours", () => {
 // desk and 23 px in the phone's tab bar.
 it("draws New as a pen and Settings as sliders in the sidebar, the rail and the drawer, sized for each", async () => {
   const glyph = (el: HTMLElement) => el.querySelector("svg.icon")!;
-  const phoneMedia = desktop();
+  const restoreMedia = desktop();
   const { sidebar, user, unmount } = setup();
   expect(glyph(sidebar.getByRole("button", { name: "New chat" }))).toHaveClass("icon-square-pen");
   expect(glyph(sidebar.getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
@@ -140,7 +140,7 @@ it("draws New as a pen and Settings as sliders in the sidebar, the rail and the 
   expect(glyph(within(rail).getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
   for (const button of rail.querySelectorAll(".workbench-icon-button")) expect(button.querySelector("svg")).toHaveAttribute("width", "16");
   unmount();
-  phoneMedia();
+  restoreMedia();
   const phone = setup(data, "/pane/w%3A1%3Ap2?s=work");
   await phone.user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
@@ -165,9 +165,9 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
 
-// A phone hides the desk's sidebar and rail, so it does not mount them; the drawer and Search sheet are its own.
-it("mounts the sidebar and its rail only on a desk, and a return to the desk does not search again", async () => {
-  let wide = true;
+// A phone hides the desk's sidebar and rail, so it never mounts them; the drawer and Search sheet are its own.
+it("mounts the sidebar and its rail only once on a desk, and keeps them across the breakpoint", async () => {
+  let wide = false;
   const listeners = new Set<() => void>();
   const matchMedia = window.matchMedia;
   window.matchMedia = (query) => ({
@@ -178,23 +178,21 @@ it("mounts the sidebar and its rail only on a desk, and a return to the desk doe
   onTestFinished(() => { window.matchMedia = matchMedia; });
   const resize = (next: boolean) => act(() => { wide = next; listeners.forEach((listener) => listener()); });
   const sidebar = () => screen.queryByRole("complementary", { name: "Workspace sidebar" });
+  localStorage.setItem("nenu:sidebar-collapsed:v1", "1");
   const { user } = setup();
-  await user.keyboard("{Meta>}k{/Meta}");
-  expect(within(sidebar()!).getByRole("searchbox")).toHaveFocus();
-
-  resize(false);
   expect(sidebar()).not.toBeInTheDocument();
-  expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
-  resize(true);
-  expect(within(sidebar()!).queryByRole("searchbox")).not.toBeInTheDocument();
-
-  await user.click(within(sidebar()!).getByRole("button", { name: "Collapse sidebar" }));
-  resize(false);
   expect(screen.queryByRole("navigation", { name: "Collapsed sidebar" })).not.toBeInTheDocument();
   await user.keyboard("{Meta>}k{/Meta}");
   expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
+  await user.keyboard("{Escape}");
+
   resize(true);
-  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+  await user.keyboard("{Meta>}k{/Meta}");
+  await user.type(within(sidebar()!).getByRole("searchbox"), "missing");
+  resize(false);
+  resize(true);
+  expect(within(sidebar()!).getByRole("searchbox")).toHaveValue("missing");
 });
 
 // A workspace of two tabs: an agent in tab "1", a shell in "vpn" the operator had open last.

@@ -4,7 +4,7 @@ import { onTestFinished, vi } from "vitest";
 import { App } from "./App";
 
 // One default in the facade: every stroked icon draws at 1.5, and only an icon that means to
-// differ (Send's arrow) names its own weight. On a desk, where the sidebar's navigation is mounted.
+// differ (Send's arrow) names its own weight. The test runs at desk width, where the sidebar mounts.
 it("draws the navigation's icons at stroke 1.5", async () => {
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(min-width: 1024px)", media: query, addEventListener: () => {}, removeEventListener: () => {} }));
   onTestFinished(() => { vi.unstubAllGlobals(); });

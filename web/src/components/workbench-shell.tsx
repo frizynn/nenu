@@ -26,6 +26,7 @@ function isShortcut(event: KeyboardEvent): boolean {
 
 /** The breakpoint where workbench.css shows the sidebar instead of the tab bar. */
 const DESKTOP = "(min-width: 1024px)";
+const isDesktop = () => typeof window.matchMedia === "function" && window.matchMedia(DESKTOP).matches;
 
 const COLLAPSED_KEY = "nenu:sidebar-collapsed:v1";
 const WIDTH_KEY = "nenu:sidebar-width:v1";
@@ -93,11 +94,12 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     toggled.current = true;
     setCollapsed(next);
   };
-  // Below the desk the sidebar and its rail are hidden, so they are not mounted: their rows would
-  // re-render on every snapshot for nothing. A request the sidebar has seen goes with it, or its
-  // next mount would open Search again.
+  // Below the desk the sidebar and its rail are hidden, so a phone never mounts them: their rows would
+  // re-render on every snapshot for nothing. Once mounted they stay, keeping their state when a window
+  // crosses the breakpoint and back.
   const desk = useMediaQuery(DESKTOP);
-  if (!desk && request) setRequest(undefined);
+  const [deskSeen, setDeskSeen] = useState(desk);
+  if (desk && !deskSeen) setDeskSeen(true);
   const location = useLocation();
   // A new route closes the drawer synchronously, including browser Back/Forward.
   const [drawerLocation, setDrawerLocation] = useState(location.key);
@@ -108,7 +110,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   }
 
   function search() {
-    if (desk) {
+    if (isDesktop()) {
       setCollapsed(false);
       setRequest((last) => ({ target: "search", seq: (last?.seq ?? 0) + 1 }));
     } else setSearchSheet(true);
@@ -140,7 +142,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
 
   return (
     <div className="workbench-shell" data-sidebar-collapsed={collapsed}>
-      {desk && <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
+      {deskSeen && <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
         <div className="workbench-brand-row">
           <Link to={homePath(data.session)} className="workbench-brand">
             <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" />
@@ -155,7 +157,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
           limit={() => Math.floor(window.innerWidth * 0.4)} />
       </aside>}
 
-      {desk && collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
+      {deskSeen && collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
         onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} />}
 
       <div className="workbench-main">
