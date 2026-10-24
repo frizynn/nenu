@@ -169,3 +169,18 @@ test("Claude keeps a long tool running only within its live owning runtime", asy
   await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStop" }, f.dir);
   expect((await reader.list(parent, startedAt)).agents[0]?.status).toBe("completed");
 });
+
+test("the subagent list takes its owner's start from the live session file", async () => {
+  const f = await fixture();
+  await recordSubagentEvent({ session_id: parent, agent_id: "child", hook_event_name: "SubagentStart" }, f.dir);
+  const pane: AgentView = { paneId: "w1:p1", workspaceLabel: "QA", workspaceNumber: 1, focused: false, workspaceId: "w1", tabId: "w1:t1", agent: "claude", status: "idle", cwd: f.project, agentSession: { kind: "id", value: parent } };
+  const runtime = (pid: number, startedAt: number) => ({ list: async () => [{ pid, sessionId: parent, cwd: f.project, startedAt }] });
+  // A start after the hook means a resumed process: the old child is no longer known to run.
+  const resumed = new Subagents({ claude: [f.root], codex: [] }, f.dir, undefined, runtime(process.pid, Date.now() + 300_000));
+  const live = new Subagents({ claude: [f.root], codex: [] }, f.dir, undefined, runtime(process.pid, Date.now() - 60_000));
+  const exited = new Subagents({ claude: [f.root], codex: [] }, f.dir, undefined, runtime(999999999, Date.now() + 300_000));
+  const status = async (service: Subagents) => { const list = await service.list(pane); return list.available ? list.agents[0]?.status : undefined; };
+  expect(await status(resumed)).toBe("unknown");
+  expect(await status(live)).toBe("running");
+  expect(await status(exited)).toBe("running");
+});
