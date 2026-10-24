@@ -1320,6 +1320,19 @@ describe("Composer — password prompt", () => {
     expect(calls).toEqual([]);
   });
 
+  it("draws no slash-command pill under a masked password", async () => {
+    const user = userEvent.setup();
+    serveSudo([]);
+    renderComposerWithStatus({ text: SUDO });
+    const box = screen.getByPlaceholderText(/type a reply/i);
+    await user.type(box, "hunter /Admin1");
+    expect(document.querySelectorAll(".draft-chip-layer .slash-command")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("status", { name: "Password prompt" });
+    expect(box).toHaveClass("composer-input-secret");
+    expect(document.querySelector(".draft-chip-layer .slash-command")).toBeNull();
+  });
+
   it("masks what was typed while the prompt is recognised, and shows it again once dismissed", async () => {
     const user = userEvent.setup();
     serveSudo([]);
@@ -3130,5 +3143,18 @@ describe("Composer — placeholder", () => {
     renderComposer({ disconnected: true });
     expect(screen.getByRole("button", { name: "Message actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+});
+
+describe("Composer — slash commands", () => {
+  it("tints a /name in an agent's draft, and nothing in a shell's, where /tmp is a path", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    await user.type(screen.getByRole("textbox"), "use /skill on /tmp/x");
+    expect([...document.querySelectorAll(".draft-chip-layer .slash-command")].map((el) => el.textContent)).toEqual(["/skill"]);
+    cleanup();
+    renderComposer({ agent: null, isShell: true });
+    await user.type(screen.getByRole("textbox"), "cd /tmp");
+    expect(document.querySelector(".draft-chip-layer .slash-command")).toBeNull();
   });
 });

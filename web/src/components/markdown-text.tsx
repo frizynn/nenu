@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdList, type MdSpan } from "@/lib/markdown";
+import { markSlashCommands } from "@/lib/slash-command";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -31,25 +32,36 @@ const FindContext = createContext({ query: "", current: false });
 export const FIND_HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
 export const FIND_CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
 
-/** Literal text with find hits marked. Still text nodes — `<mark>` is structure, never parsed markup. */
-function Hit({ text }: { text: string }) {
+/**
+ * Literal text with find hits marked, and the slash commands the operator typed in their tint. Still
+ * text nodes — `<mark>` is structure, never parsed markup. A hit is found over the whole text, so one
+ * that crosses a command's edge is cut there and drawn as two marks side by side, the pill whole.
+ */
+function Hit({ text, commands = [] }: { text: string; commands?: readonly { start: number; end: number }[] }) {
   const { query, current } = useContext(FindContext);
-  if (query.trim() === "") return <>{text}</>;
-  const pieces = splitHighlight(text, query);
-  if (pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
-  return (
-    <>
-      {pieces.map((piece, i) =>
-        piece.hit ? (
-          <mark key={i} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>
-            {piece.text}
-          </mark>
-        ) : (
-          <span key={i}>{piece.text}</span>
-        ),
-      )}
-    </>
-  );
+  const pieces = query.trim() === "" ? [{ text, hit: false }] : splitHighlight(text, query);
+  if (!commands.length && pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
+  type Range = readonly [number, number];
+  const hits: Range[] = [];
+  let at = 0;
+  for (const piece of pieces) {
+    if (piece.hit) hits.push([at, at + piece.text.length]);
+    at += piece.text.length;
+  }
+  const within = (ranges: readonly Range[], from: number, to: number) => ranges.some(([start, end]) => start <= from && to <= end);
+  const ranges = commands.map((c): Range => [c.start, c.end]);
+  // Pieces between these cuts: a command's pill is one span, and only the marks inside it split.
+  const between = (cuts: number[], from: number, to: number) => {
+    const inside = [...new Set([from, to, ...cuts.filter((cut) => from < cut && cut < to)])].sort((a, b) => a - b);
+    return inside.slice(0, -1).map((start, i): Range => [start, inside[i + 1]!]);
+  };
+  return <>{between(ranges.flat(), 0, text.length).map(([from, to]) => (
+    <span key={from} className={within(ranges, from, to) ? "slash-command" : undefined}>
+      {between(hits.flat(), from, to).map(([start, end]) => within(hits, start, end)
+        ? <mark key={start} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>{text.slice(start, end)}</mark>
+        : text.slice(start, end))}
+    </span>
+  ))}</>;
 }
 
 const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone [overflow-wrap:anywhere]";
@@ -119,7 +131,7 @@ function Span({ span }: { span: MdSpan }) {
       );
     }
     default:
-      return <Hit text={span.text} />;
+      return <Hit text={span.text} commands={span.commands} />;
   }
 }
 
@@ -328,6 +340,7 @@ export const MarkdownText = memo(function MarkdownText({
   className,
   query = "",
   current = false,
+  commands = false,
 }: {
   text: string;
   className?: string;
@@ -335,8 +348,10 @@ export const MarkdownText = memo(function MarkdownText({
   query?: string;
   /** This text is find's current match: its hits take a solid fill the other matches don't. */
   current?: boolean;
+  /** The operator's own words: their slash commands draw in the command tint. */
+  commands?: boolean;
 }) {
-  const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const blocks = useMemo(() => commands && text.includes("/") ? markSlashCommands(parseMarkdown(text)) : parseMarkdown(text), [text, commands]);
   const find = useMemo(() => ({ query, current }), [query, current]);
   return (
     <FindContext.Provider value={find}>
