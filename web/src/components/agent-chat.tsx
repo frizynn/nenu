@@ -39,6 +39,7 @@ import { AnsiOutput } from "@/components/ansi-output";
 import { AgentsFooter } from "@/components/agents-footer";
 import { MIRROR_SPACE, MIRROR_INVERT, styleFor } from "@/components/mirror-space";
 import { cn } from "@/lib/utils";
+import { EnterScope, useEnter } from "@/lib/enter";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { adapterFor, readsConversation } from "@/lib/harness";
@@ -408,9 +409,11 @@ export const AgentChat = memo(function AgentChat({
   const { answer } = interactions;
   const refreshConversation = conversation.refresh;
   // The question is the thread's newest line, so it lives inside the conversation's scroller: a swipe
-  // over it scrolls the thread, and following lands on its first line (`data-follow-stop`).
-  const threadFooter = useMemo(() => !showCard ? undefined : (
-    <div data-follow-stop className="chat-follow-stop mt-5">
+  // over it scrolls the thread, and following lands on its first line (`data-follow-stop`). Its scope is
+  // drawn with the first read of the pane's dialogs, so one there on opening is simply there and one
+  // that arrives while the thread is read eases in (ADR 0118).
+  const threadFooter = useMemo(() => interactions.loaded && <EnterScope>{showCard && (
+    <ThreadQuestion>
       <QuestionCard key={interaction?.signature ?? "receipt"} interaction={cardCovers ? interaction : undefined} receipt={receipt}
         readOnly={cardReadOnly} lockReason={lock} refused={refused} onOpen={() => setRawTerminal(true)}
         onKeys={openKeys}
@@ -423,8 +426,8 @@ export const AgentChat = memo(function AgentChat({
           }
           return outcome;
         }} />
-    </div>
-  ), [showCard, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, openKeys, answer, revalidate, refreshConversation]);
+    </ThreadQuestion>
+  )}</EnterScope>, [interactions.loaded, showCard, interaction, cardCovers, receipt, cardReadOnly, lock, refused, setRawTerminal, openKeys, answer, revalidate, refreshConversation]);
   // The mirror's poll may relax only while neither the mirror, a dialog drawn from it, nor the desk's
   // Terminal tab is on screen (lib/live-events.ts). Leaving the pane restores the default.
   const terminalTab = sessionPanel?.terminal ?? null;
@@ -805,9 +808,10 @@ export const AgentChat = memo(function AgentChat({
   ) : null;
   // The footer only holds the block's slot, so a poll that redraws the block leaves it (and the
   // memoised transcript around it) alone; the block itself arrives through InlineDialog.
-  const conversationFooterWithDialog = useMemo(() => !dialogInline ? threadFooter : <>
+  // One shape either way, so the question's scope stays drawn when the block comes or goes.
+  const conversationFooterWithDialog = useMemo(() => <>
     {threadFooter}
-    <div data-follow-stop className="chat-follow-stop mt-5"><InlineDialogSlot /></div>
+    {dialogInline && <div data-follow-stop className="chat-follow-stop mt-5"><InlineDialogSlot /></div>}
   </>, [dialogInline, threadFooter]);
   const dialogInThread = (showCard && cardCovers) || dialogInline;
 
@@ -1346,6 +1350,16 @@ export const AgentChat = memo(function AgentChat({
     </div>
   );
 });
+
+/**
+ * The question at the thread's end. Following measures the stop, so only what is inside it moves as it
+ * eases in. Only its arrival moves: the receipt that answers it, and a next question that replaces
+ * either, take its place without moving.
+ */
+function ThreadQuestion({ children }: { children: ReactNode }) {
+  const enter = useEnter();
+  return <div data-follow-stop className="chat-follow-stop mt-5"><div className={enter}>{children}</div></div>;
+}
 
 /** The dialog block drawn in the card's place, handed to the conversation's footer slot. */
 const InlineDialog = createContext<ReactNode>(null);

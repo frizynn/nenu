@@ -2,6 +2,7 @@ import { useState } from "react";
 import { File as FileIcon, FileArchive, FileCode, FileImage, FileText, Pending, RotateCw, X, type IconComponent } from "@/components/ui/icon";
 
 import type { Attachment } from "@/hooks/use-composer-attachments";
+import { EnterScope, useEnter } from "@/lib/enter";
 import { cn } from "@/lib/utils";
 
 const ARCHIVE = /^(?:zip|gz|tgz|tar|bz2|xz|7z|rar|zst)$/;
@@ -31,7 +32,8 @@ function formatSize(bytes: number): string {
  * The draft's files, inside the box above the text. A picture is a thumbnail with its number, "#N", the
  * one its chip in the text carries, and a round remove control at its corner; any other file is a 26px
  * tile with its icon, name, kind and size. Each remove control reaches 44px on a touch screen through
- * the shared .hit-area. One row; it scrolls sideways when it overflows.
+ * the shared .hit-area. One row; it scrolls sideways when it overflows. A file attached to a draft
+ * already drawn eases in; the box takes its height at once.
  */
 export function AttachmentChips({
   items,
@@ -44,9 +46,8 @@ export function AttachmentChips({
   onRetry: (id: string) => void;
   disabled?: boolean;
 }) {
-  if (!items.length) return null;
   let pictures = 0;
-  return (
+  return <EnterScope>{items.length > 0 && (
     <ul aria-label="Attached files" className="composer-attachments flex gap-2.5 overflow-x-auto pr-2.5 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((item) => item.image ? (
         <PictureTile key={item.id} item={item} number={++pictures} onRemove={() => onRemove(item.id)} onRetry={() => onRetry(item.id)} disabled={disabled} />
@@ -61,12 +62,13 @@ export function AttachmentChips({
         />
       ))}
     </ul>
-  );
+  )}</EnterScope>;
 }
 
 /** A picture: its thumbnail, its number at the bottom left, remove at the top right. */
 function PictureTile({ item, number, onRemove, onRetry, disabled }: { item: Attachment; number: number; onRemove: () => void; onRetry: () => void; disabled: boolean }) {
   const [broken, setBroken] = useState(false);
+  const enter = useEnter();
   const failed = item.status === "error";
   const label = `Image #${number}`;
   const frame = (
@@ -90,7 +92,7 @@ function PictureTile({ item, number, onRemove, onRetry, disabled }: { item: Atta
     </span>
   );
   return (
-    <li className="relative shrink-0" title={failed ? item.error : undefined}>
+    <li className={cn("relative shrink-0", enter)} title={failed ? item.error : undefined}>
       {failed ? (
         <button type="button" className="block rounded-lg" onClick={onRetry} disabled={disabled} aria-label={`Retry ${label}${item.error ? `: ${item.error}` : ""}`}>
           {frame}
@@ -130,6 +132,7 @@ function AttachmentChip({
   disabled: boolean;
 }) {
   const [broken, setBroken] = useState(false);
+  const enter = useEnter();
   const failed = item.status === "error";
   const ext = item.name ? extension(item.name) : null;
   const Icon = fileIcon(item, ext);
@@ -165,6 +168,7 @@ function AttachmentChip({
       className={cn(
         "flex h-10 shrink-0 items-center gap-1 rounded-lg border bg-background pl-2 pr-1",
         failed ? "border-destructive/50" : "border-border/70",
+        enter,
       )}
       title={failed ? item.error : undefined}
     >
