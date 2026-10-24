@@ -1568,7 +1568,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </button>
               {/* Right after the + in the document, so Shift+Tab from the first row is the + again. It
                   is fixed to the viewport, so where it sits here changes nothing on screen. */}
-              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+              <WorkbenchPopover open={menuOpen} onDismiss={(reason) => closeMenu(reason !== "outside")} anchorRef={menuAnchorRef} label="Message actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1">
                 {/* A row that needs the keyboard (Type) focuses the draft itself; the rest leave focus
                     on the + they were opened from. */}
                 <div ref={menuRowsRef}><ActionGroups groups={menuGroups} onRun={(run) => { closeMenu(true); run(); }} /></div>

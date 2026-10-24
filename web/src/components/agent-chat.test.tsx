@@ -22,6 +22,9 @@ import { clearStatus } from "@/lib/status";
 import { useMirrorShown } from "@/lib/live-events";
 import { dismissModelPicker } from "@/lib/dismiss-model-picker";
 vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
+// jsdom has no visualViewport, so the phone keyboard is up only where a case says so.
+const keyboard = vi.hoisted(() => ({ open: false }));
+vi.mock("@/hooks/use-keyboard", async (original) => ({ ...await original<typeof import("@/hooks/use-keyboard")>(), useKeyboardOpen: () => keyboard.open }));
 import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
@@ -1092,28 +1095,90 @@ it("says the terminal is on its way, not that it printed nothing, while the pane
   expect(screen.queryByText("(no recent output)")).toBeNull();
 });
 
-// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11).
-describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", () => {
+// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11). The
+// open chip now carries a chevron for its actions, so the ⋯ menu offers only what no strip on screen does.
+describe("AgentChat — the ⋯ menu renames and closes the pane only where no strip does", () => {
   const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
   const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
+  const other = { ...fixtureAgents[1]!, workspaceId: agent.workspaceId, tabId: agent.tabId, paneLabel: "Second Claude" };
+  // A phone with its keyboard up: the strips step aside under this query (strips.css).
+  const original = window.matchMedia;
+  const typingOnPhone = () => {
+    keyboard.open = true;
+    window.matchMedia = ((query: string) => ({ matches: query === "(max-width: 1023px) and (pointer: coarse)", media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+  };
+  afterEach(() => { keyboard.open = false; window.matchMedia = original; });
+  const menuRows = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    const menu = screen.getByRole("dialog", { name: "Conversation actions" });
+    const rows = within(menu).getAllByRole("button").map((row) => row.textContent);
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    return rows;
+  };
 
-  it("opens the pane's and the tab's actions from the menu", async () => {
+  it("opens a lone pane's actions from the menu, and its tab's from the tab's own chip", async () => {
     const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs });
+    expect(await menuRows(user)).toEqual(expect.arrayContaining(["Display", "Rename or close pane…"]));
+    expect(await menuRows(user)).not.toContain("Rename or close tab…");
     await openMenuItem(user, "Rename or close pane…");
     const paneSheet = screen.getByRole("dialog", { name: "Working Claude" });
     expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
     expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
     await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: /^review/ }));
+    expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
+  it("leaves a pane that shares its tab to the pane strip's chip", async () => {
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    await user.click(screen.getByRole("button", { name: /^Working Claude/ }));
+    expect(within(screen.getByRole("dialog", { name: "Working Claude" })).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
+  });
+
+  it("offers both while a phone keyboard hides the strips", async () => {
+    typingOnPhone();
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    expect(await menuRows(user)).toEqual(expect.arrayContaining(["Rename or close pane…", "Rename or close tab…"]));
     await openMenuItem(user, "Rename or close tab…");
     expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
   });
 
+  it("keeps them to the strips on a screen whose keyboard leaves the strips up", async () => {
+    keyboard.open = true;
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
+  });
+
+  it("keeps them to the strips on a phone with its keyboard down", async () => {
+    typingOnPhone();
+    keyboard.open = false;
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
+  });
+
   it("offers neither on a device that cannot write", async () => {
+    typingOnPhone();
+    const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
-    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
   });
 });
 

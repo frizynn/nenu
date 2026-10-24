@@ -157,7 +157,7 @@ export function QueuedMessage({
         onDismiss={() => setOpen(false)}
         anchorRef={trigger}
         label="Queued message"
-        className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1.5"
+        className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1"
       >
         <ActionGroups
           groups={[{ label: "Queued message", actions: menu }]}
