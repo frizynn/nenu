@@ -4,6 +4,10 @@
 // Every read here runs in the background: a snapshot read gets the cached list at once and, when it
 // is stale, starts one refresh. A missing or hanging `gh` costs a logged line and a timeout, never a
 // blocked request, and a failed repo keeps the list it last read.
+//
+// A refresh asks GitHub once: every repo whose remotes name a github.com repo gets, in one GraphQL
+// request, the search `gh pr list --author @me` itself sends. A repo whose remotes gh alone can name
+// (another host, an ssh alias, no remote) still runs `gh pr list` from its folder.
 import { basename, dirname } from "node:path";
 
 import { servicePath } from "./claude-sessions.ts";
@@ -22,6 +26,11 @@ const GH_TIMEOUT_MS = 15_000;
 const GIT_TIMEOUT_MS = 3_000;
 const CONCURRENCY = 4;
 const PR_FIELDS = "number,title,url,headRefName,baseRefName,isDraft,reviewDecision,statusCheckRollup,additions,deletions,updatedAt";
+/** PR_FIELDS in GraphQL, with the check contexts `gh` flattens into `statusCheckRollup`. */
+const SEARCH_FIELDS = "number title url headRefName baseRefName isDraft reviewDecision additions deletions updatedAt "
+  + "commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{...on StatusContext{state} ...on CheckRun{status conclusion}}}}}}}";
+/** gh's order among remotes: upstream, then github, then origin, then the rest by name. */
+const REMOTE_RANK = new Map([["upstream", 3], ["github", 2], ["origin", 1]]);
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)$/;
 
 /** Where a pane's folder sits: its repo (keyed by the shared git dir, so worktrees join their repo) and branch. */
@@ -82,27 +91,110 @@ export function summarizeChecks(rollup: unknown): PullRequestView["checks"] {
 export function parsePullRequests(stdout: string): RepoPr[] {
   const value: unknown = JSON.parse(stdout);
   if (!Array.isArray(value)) throw new Error("gh pr list did not return a list");
-  return value.flatMap((raw): RepoPr[] => {
-    const row = record(raw);
-    const url = typeof row.url === "string" ? row.url : "";
-    const match = PR_URL_RE.exec(url);
-    if (!match || typeof row.number !== "number" || typeof row.title !== "string" || typeof row.headRefName !== "string") return [];
-    const review = REVIEWS[String(row.reviewDecision)];
-    const checks = summarizeChecks(row.statusCheckRollup);
-    const updatedAt = typeof row.updatedAt === "string" ? Date.parse(row.updatedAt) : NaN;
-    return [{
-      repo: match[1]!,
-      number: row.number,
-      title: row.title,
-      url,
-      branch: row.headRefName,
-      ...(typeof row.baseRefName === "string" ? { base: row.baseRefName } : {}),
-      draft: row.isDraft === true,
-      ...(review ? { review } : {}),
-      ...(checks ? { checks } : {}),
-      ...(typeof row.additions === "number" && typeof row.deletions === "number" ? { diff: { additions: row.additions, deletions: row.deletions } } : {}),
-      ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
-    }];
+  return value.flatMap(parseRow);
+}
+
+function parseRow(raw: unknown): RepoPr[] {
+  const row = record(raw);
+  const url = typeof row.url === "string" ? row.url : "";
+  const match = PR_URL_RE.exec(url);
+  if (!match || typeof row.number !== "number" || typeof row.title !== "string" || typeof row.headRefName !== "string") return [];
+  const review = REVIEWS[String(row.reviewDecision)];
+  const checks = summarizeChecks(row.statusCheckRollup);
+  const updatedAt = typeof row.updatedAt === "string" ? Date.parse(row.updatedAt) : NaN;
+  return [{
+    repo: match[1]!,
+    number: row.number,
+    title: row.title,
+    url,
+    branch: row.headRefName,
+    ...(typeof row.baseRefName === "string" ? { base: row.baseRefName } : {}),
+    draft: row.isDraft === true,
+    ...(review ? { review } : {}),
+    ...(checks ? { checks } : {}),
+    ...(typeof row.additions === "number" && typeof row.deletions === "number" ? { diff: { additions: row.additions, deletions: row.deletions } } : {}),
+    ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
+  }];
+}
+
+/**
+ * The repo a remote URL names on github.com, as gh reads it: `git@host:o/n` is ssh, a subdomain of
+ * github.com is github.com, and the path is exactly `owner/name`. Any other host or shape is undefined.
+ */
+export function githubRepo(url: string): string | undefined {
+  const scp = url.includes("://") ? undefined : /^([^@]+@)?([^:]+):(\/?.+)$/.exec(url);
+  let host: string;
+  let parts: string[];
+  try {
+    const parsed = new URL(scp ? `ssh://${scp[1] ?? ""}${scp[2]}/${scp[3]!.replace(/^\//, "")}` : url);
+    host = parsed.hostname.toLowerCase();
+    parts = decodeURIComponent(parsed.pathname).replace(/^\/+|\/+$/g, "").split("/");
+  } catch {
+    return undefined;
+  }
+  if (host !== "github.com" && !host.endsWith(".github.com")) return undefined;
+  const [owner, name] = [parts[0], parts[1]?.replace(/\.git$/, "")];
+  return parts.length === 2 && owner && name ? `${owner}/${name}` : undefined;
+}
+
+/**
+ * The repo `gh pr list` reads in a checkout, from `git config --get-regexp ^remote\.`: the remote
+ * `gh repo set-default` marked, else the first by gh's order. Undefined whenever a remote names no
+ * github.com repo, since gh may know that host or alias and only gh can answer for it.
+ */
+export function remoteRepo(config: string): string | undefined {
+  const remotes = new Map<string, { url?: string; pushurl?: string; resolved?: string }>();
+  for (const line of config.split("\n")) {
+    const match = /^remote\.(.+)\.(url|pushurl|gh-resolved) (.*)$/.exec(line.trim());
+    if (!match) continue;
+    const remote = remotes.get(match[1]!) ?? {};
+    const key = match[2] === "gh-resolved" ? "resolved" : match[2] as "url" | "pushurl";
+    remote[key] ??= match[3]!;
+    remotes.set(match[1]!, remote);
+  }
+  const named = [...remotes].map(([name, remote]) => ({
+    name,
+    repo: (remote.url ? githubRepo(remote.url) : undefined) ?? (remote.pushurl ? githubRepo(remote.pushurl) : undefined),
+    resolved: remote.resolved,
+  }));
+  if (named.length === 0 || named.some((remote) => !remote.repo)) return undefined;
+  const rank = (name: string) => REMOTE_RANK.get(name.toLowerCase()) ?? 0;
+  named.sort((a, b) => rank(b.name) - rank(a.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const remote of named) {
+    if (remote.resolved === "base") return remote.repo;
+    if (remote.resolved && /^[^/\s]+\/[^/\s]+$/.test(remote.resolved)) return remote.resolved;
+  }
+  return named[0]!.repo;
+}
+
+/** One GraphQL request holding, per repo `q<i>`, the search `gh pr list --author @me --limit 50` sends. */
+export function searchArgv(repos: readonly string[]): string[] {
+  const vars = repos.map((_, i) => `$q${i}:String!`).join(",");
+  const blocks = repos.map((_, i) => `r${i}:search(query:$q${i},type:ISSUE_ADVANCED,first:50){nodes{...pr}}`).join(" ");
+  return ["gh", "api", "graphql", "-f", `query=fragment pr on PullRequest{${SEARCH_FIELDS}} query(${vars}){${blocks}}`,
+    ...repos.flatMap((repo, i) => ["-f", `q${i}=author:@me repo:${repo} state:open type:pr`])];
+}
+
+/**
+ * That request's answer, one entry per repo in order: its rows, shaped as `gh pr list --json` prints
+ * them, or why it has none. GraphQL answers what it can and names the rest in `errors`.
+ */
+export function parseSearch(stdout: string, count: number): Array<RepoPr[] | string> {
+  const answer = record(JSON.parse(stdout));
+  const data = record(answer.data);
+  const errors = Array.isArray(answer.errors) ? answer.errors.map(record) : [];
+  return Array.from({ length: count }, (_, i) => {
+    const nodes = record(data[`r${i}`]).nodes;
+    if (Array.isArray(nodes)) {
+      return nodes.flatMap((node) => {
+        const pr = record(node);
+        const commits = record(pr.commits).nodes;
+        const commit = record(record(Array.isArray(commits) ? commits[0] : undefined).commit);
+        return parseRow({ ...pr, statusCheckRollup: record(record(commit.statusCheckRollup).contexts).nodes });
+      });
+    }
+    const error = errors.find((candidate) => Array.isArray(candidate.path) && candidate.path[0] === `r${i}`) ?? errors[0];
+    return typeof error?.message === "string" ? error.message : "GitHub gave no answer";
   });
 }
 
@@ -153,7 +245,7 @@ export function defaultCommandRun(): CommandRun {
 }
 
 /** A command that fails, throws or outlives its budget all read as a failure with a reason. */
-async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: number): Promise<{ ok: true; stdout: string } | { ok: false; reason: string }> {
+async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: number): Promise<{ ok: true; stdout: string } | { ok: false; reason: string; stdout?: string }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
     // The runner kills on its own timer; this one guards a runner that never settles.
@@ -163,7 +255,7 @@ async function attempt(run: CommandRun, argv: string[], cwd: string, timeoutMs: 
     const result = await Promise.race([run(argv, { cwd, timeoutMs }), timeout]);
     if (result.code === 0) return { ok: true, stdout: result.stdout };
     const reason = result.code === 124 ? "timed out" : result.stderr.trim().split("\n")[0] || `exit ${result.code}`;
-    return { ok: false, reason };
+    return { ok: false, reason, stdout: result.stdout };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : String(error) };
   } finally {
@@ -252,33 +344,60 @@ export class PullRequestRegistry {
     });
     this.cwds = cwds;
 
-    // One `gh` per repo, run from the first worktree seen; pane order is the herd's triage order.
+    // Each repo is asked from the first worktree seen; pane order is the herd's triage order.
     const where = new Map<string, string>();
     for (const info of cwds.values()) if (info && !where.has(info.repo)) where.set(info.repo, info.toplevel);
     const targets = [...where].slice(0, MAX_REPOS);
 
-    const repos = new Map<string, RepoPr[]>();
+    const named = new Map<string, string>();
     await pool(targets, CONCURRENCY, async ([repo, cwd]) => {
-      const result = await attempt(this.run, ["gh", "pr", "list", "--state", "open", "--author", "@me", "--limit", "50", "--json", PR_FIELDS], cwd, this.timeouts.gh);
-      let prs: RepoPr[] | undefined;
-      let reason = result.ok ? "" : result.reason;
-      if (result.ok) {
+      const remotes = await attempt(this.run, ["git", "config", "--get-regexp", "^remote\\."], cwd, this.timeouts.git);
+      const name = remotes.ok ? remoteRepo(remotes.stdout) : undefined;
+      if (name) named.set(repo, name);
+    });
+
+    const outcomes = new Map<string, RepoPr[] | string>();
+    // Two clones of one GitHub repo share a search.
+    const names = [...new Set(named.values())];
+    await Promise.all([
+      (async () => {
+        if (names.length === 0) return;
+        const cwd = targets.find(([repo]) => named.has(repo))![1];
+        const result = await attempt(this.run, searchArgv(names), cwd, this.timeouts.gh);
+        let answers: Array<RepoPr[] | string> = [];
+        let reason = result.ok ? "" : result.reason;
         try {
-          prs = parsePullRequests(result.stdout);
+          // A partial answer exits 1 with its JSON on stdout: what it holds still counts.
+          answers = parseSearch(result.stdout ?? "", names.length);
         } catch (error) {
-          reason = error instanceof Error ? error.message : String(error);
+          reason ||= error instanceof Error ? error.message : String(error);
         }
-      }
-      if (prs) {
+        for (const [repo, name] of named) outcomes.set(repo, answers[names.indexOf(name)] ?? reason);
+      })(),
+      pool(targets.filter(([repo]) => !named.has(repo)), CONCURRENCY, async ([repo, cwd]) => {
+        const result = await attempt(this.run, ["gh", "pr", "list", "--state", "open", "--author", "@me", "--limit", "50", "--json", PR_FIELDS], cwd, this.timeouts.gh);
+        if (!result.ok) return void outcomes.set(repo, result.reason);
+        try {
+          outcomes.set(repo, parsePullRequests(result.stdout));
+        } catch (error) {
+          outcomes.set(repo, error instanceof Error ? error.message : String(error));
+        }
+      }),
+    ]);
+
+    const repos = new Map<string, RepoPr[]>();
+    for (const [repo] of targets) {
+      const outcome = outcomes.get(repo)!;
+      if (typeof outcome !== "string") {
         this.failures.delete(repo);
-        repos.set(repo, prs);
-        return;
+        repos.set(repo, outcome);
+        continue;
       }
-      if (this.failures.get(repo) !== reason) this.log(`${basename(repo)}: ${reason}`);
-      this.failures.set(repo, reason);
+      if (this.failures.get(repo) !== outcome) this.log(`${basename(repo)}: ${outcome}`);
+      this.failures.set(repo, outcome);
       const last = this.repos.get(repo);
       if (last) repos.set(repo, last);
-    });
+    }
     this.repos = repos;
 
     if (JSON.stringify([...this.repos, ...this.cwds]) !== before) {
