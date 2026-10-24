@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Pending } from "@/components/ui/icon";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // The cover shown while the idle lock is engaged. It sits ABOVE a still-mounted router (see App), so
 // resuming returns you to the exact screen, draft and scroll position you left — nothing is unmounted
@@ -19,6 +20,10 @@ import { Button } from "@/components/ui/button";
 // be any app that happened to be open. The mark is the STATIC app icon, never <DogGallop/>: that
 // sprite's rest frame is a full-stretch mid-stride pose that reads as "frozen mid-run", and this
 // screen is the app's most literal rest state.
+//
+// It fades in as a panel does, once, and leaves at once: Resume returns to the screen without a wait.
+// Resume unmounts it for a render before the catch-up beat mounts it again (use-polling), so only the
+// pause itself fades; the catch-up cover is simply there.
 //
 // No lock iconography and no "for safety" — the pause guards nothing (.adr/0007). Saying otherwise
 // would promise a gate that a page reload has always walked straight through.
@@ -47,7 +52,8 @@ export function IdleLock({ onUnlock, catchingUp = false }: IdleLockProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Nenu paused"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 px-6 backdrop-blur-[3px]"
+      className={cn("fixed inset-0 z-50 flex items-center justify-center bg-background/40 px-6 backdrop-blur-[3px]",
+        !catchingUp && "animate-in fade-in duration-180 ease-out motion-reduce:duration-120")}
     >
       {/* One fixed width for both states, so the panel does not resize when Resume is pressed. */}
       <div className="flex w-80 max-w-full flex-col items-center rounded-2xl border border-border bg-popover px-6 pb-6 pt-8 text-center text-popover-foreground shadow-(--shadow-float)">

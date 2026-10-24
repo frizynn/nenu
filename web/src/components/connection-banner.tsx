@@ -3,6 +3,7 @@ import { useRevalidate } from "@/hooks/use-router";
 import { Pending, LogIn, RefreshCw, RotateCw, TriangleAlert, WifiOff } from "@/components/ui/icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Fold } from "@/components/fold";
 import { cn } from "@/lib/utils";
 import { PROXY_AUTH_PATH } from "@/lib/sw-routes";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
@@ -32,12 +33,23 @@ interface ConnectionBannerProps {
 export const RECOVERY_QUIET_MS = 5_000;
 
 export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: ConnectionBannerProps) {
-  if (authError) return <AuthErrorBanner lastSeenAt={lastSeenAt} />;
-  return <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />;
+  // Kept in the shared store, so the card and the composer defer to what is on screen.
+  const outage = useOutageNoticeShown();
+  // One row for both notices, so a refusal that takes an outage's place changes it where it stands.
+  return (
+    <>
+      {!authError && <OutageWatch bridge={bridge} error={error} />}
+      <Fold value={authError ? "refused" : outage && "outage"}>{(notice) => notice === "refused"
+        ? <AuthErrorBanner lastSeenAt={lastSeenAt} />
+        : <OutageBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />}</Fold>
+    </>
+  );
 }
 
 // A neutral row in the flow, never over content: up to two lines so the fact the operator needs (what
-// is down, and since when) is never cut, and every control 44px on touch.
+// is down, and since when) is never cut, and every control 44px on touch. Each one folds in and out
+// (Fold), so the screen under it slides rather than jumps; a transform would move the composer too,
+// which the layout leaves where it is.
 export const BANNER = "flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-muted py-1 pl-4 pr-2";
 
 // A refusal is not an outage, so it gets its own surface ahead of the connection state machine: no
@@ -74,13 +86,10 @@ function AuthErrorBanner({ lastSeenAt }: { lastSeenAt?: number }) {
   );
 }
 
-function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBannerProps, "authError">) {
+/** When a sustained outage shows its notice and when recovery has been quiet long enough to drop it. */
+function OutageWatch({ bridge, error }: Pick<ConnectionBannerProps, "bridge" | "error">) {
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
-  // Kept in the shared store, so the card and the composer defer to what is on screen.
-  const visible = useOutageNoticeShown();
-  const [retrying, setRetrying] = useState(false);
-  const revalidate = useRevalidate();
 
   useEffect(() => {
     if (lost) { setOutageNoticeShown(true); return; }
@@ -90,10 +99,15 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
     const timer = setTimeout(() => setOutageNoticeShown(false), RECOVERY_QUIET_MS);
     return () => clearTimeout(timer);
   }, [lost, connecting]);
-  // A notice that leaves the screen (a refusal takes its place, the layout unmounts) shows nothing.
+  // Unmounted (a refusal takes over, the layout goes), the watch takes its notice down with it.
   useEffect(() => () => setOutageNoticeShown(false), []);
+  return null;
+}
 
-  if (!visible) return null;
+function OutageBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBannerProps, "authError">) {
+  const connecting = isConnecting({ bridge, error });
+  const [retrying, setRetrying] = useState(false);
+  const revalidate = useRevalidate();
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
   // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
   // notice waits out the quiet interval saying only what is still true, never "Connected".
