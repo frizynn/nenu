@@ -1101,7 +1101,14 @@ describe("AgentChat — the ⋯ menu renames and closes the pane only where no s
   const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
   const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
   const other = { ...fixtureAgents[1]!, workspaceId: agent.workspaceId, tabId: agent.tabId, paneLabel: "Second Claude" };
-  afterEach(() => { keyboard.open = false; });
+  // A phone with its keyboard up: the strips step aside under this query (strips.css).
+  const original = window.matchMedia;
+  const typingOnPhone = () => {
+    keyboard.open = true;
+    window.matchMedia = ((query: string) => ({ matches: query === "(max-width: 1023px) and (pointer: coarse)", media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+  };
+  afterEach(() => { keyboard.open = false; window.matchMedia = original; });
   const menuRows = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     const menu = screen.getByRole("dialog", { name: "Conversation actions" });
@@ -1135,7 +1142,7 @@ describe("AgentChat — the ⋯ menu renames and closes the pane only where no s
   });
 
   it("offers both while a phone keyboard hides the strips", async () => {
-    keyboard.open = true;
+    typingOnPhone();
     const user = userEvent.setup();
     renderChat({ agent, agents: [agent, other], tabs });
     expect(await menuRows(user)).toEqual(expect.arrayContaining(["Rename or close pane…", "Rename or close tab…"]));
@@ -1143,8 +1150,18 @@ describe("AgentChat — the ⋯ menu renames and closes the pane only where no s
     expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
   });
 
-  it("offers neither on a device that cannot write", async () => {
+  it("keeps them to the strips on a screen whose keyboard leaves the strips up", async () => {
     keyboard.open = true;
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
+  });
+
+  it("offers neither on a device that cannot write", async () => {
+    typingOnPhone();
     const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
     const rows = await menuRows(user);

@@ -250,7 +250,7 @@ export default function FilePreview({ paneId, session, items, start = 0, path, p
               onClick={() => { setCopied(false); setMenu(!menu); }}><Ellipsis className="size-5" aria-hidden="true" /></button>
             <button type="button" aria-label="Close document" onClick={close} className="file-preview-action preview-close"><X className="size-5" aria-hidden="true" /></button>
           </div>
-          <WorkbenchPopover open={menu} onDismiss={() => setMenu(false)} anchorRef={more} label="More actions" className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
+          <WorkbenchPopover open={menu} onDismiss={() => setMenu(false)} anchorRef={more} label="More actions" className="w-56 [&>div:first-child]:hidden [&>div:last-child]:p-1">
             <ActionGroups onRun={(action) => action()} groups={[{ label: "More actions", actions: [
               ...(newTab ? [{ id: "tab", label: "Open in new tab", icon: ExternalLink, run: () => { setMenu(false); window.open(newTab, "_blank", "noopener"); } }] : []),
               { id: "reload", label: "Reload", icon: RefreshCw, run: () => { setMenu(false); setAttempt((value) => value + 1); } },
