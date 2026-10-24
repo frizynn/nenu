@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 // Bound one request when an IME or paste commits a large string at once. The remainder stays queued
 // behind it, preserving order without handing the bridge an unbounded JSON array.
@@ -34,8 +34,13 @@ export function useOrderedKeySender(
   const pumpRef = useRef<() => void>(() => {});
   const [busy, setBusy] = useState(false);
 
-  sendRef.current = send;
-  failureRef.current = onFailure;
+  // Taken at commit, not during render: a render for another pane may never commit, or commit after a
+  // write finishes and pumps, and the keys still queued belong to the pane on screen until the
+  // caller's reset (a layout effect too, in the same commit) drops them.
+  useLayoutEffect(() => {
+    sendRef.current = send;
+    failureRef.current = onFailure;
+  });
 
   function moveOn() {
     generation.current += 1;

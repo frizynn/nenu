@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent as ReactClipboardEvent,
@@ -283,8 +283,10 @@ export function useDirectTyping({
   }, []);
 
   // Direct input never crosses a pane boundary. Reset also invalidates keys accumulated behind an
-  // in-flight call; the call already on the wire captured the old pane and cannot be recalled.
-  useEffect(() => {
+  // in-flight call; the call already on the wire captured the old pane and cannot be recalled. A layout
+  // effect, in the same commit that hands the sender the new pane's sendKeys, so a call finishing in
+  // between can never pump the old pane's keys into the new one.
+  useLayoutEffect(() => {
     resetMode();
     // The new pane's field is not the one that disarm was about — neither the blur it scheduled nor
     // the notice it owes. Dropping the debt matters because a pane can change WHILE hidden: a push

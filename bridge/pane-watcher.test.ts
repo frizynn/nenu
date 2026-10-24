@@ -73,7 +73,7 @@ describe("PaneWatcher", () => {
     abort.abort();
   });
 
-  it("reads a typed pane once per typed gap, however fast the writes come", async () => {
+  it("reads a typed pane about once per typed gap while writes keep coming", async () => {
     const { live } = recorder();
     const pane = screen();
     const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 400, typedReadMs: 1, typedGapMs: 25 });
@@ -92,6 +92,23 @@ describe("PaneWatcher", () => {
     expect(reads).toBeGreaterThanOrEqual(2);
     expect(reads).toBeLessThanOrEqual(Math.ceil((Date.now() - started) / 25) + 2);
     expect(reads).toBeLessThan(25);
+    abort.abort();
+  });
+
+  it("keeps reading while writes come faster than its first read: a held key never freezes the mirror", async () => {
+    const { live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 50, quietMaxMs: 1_000, typedReadMs: 30, settledMs: 300, typedGapMs: 100 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(5);
+    const before = pane.reads.length;
+    // Key repeat: a write every 10 ms for 400 ms, each sooner than the 30 ms read it asks for.
+    for (let i = 0; i < 40; i++) {
+      watcher.wrote("s", "p");
+      await Bun.sleep(10);
+    }
+    expect(pane.reads.length - before).toBeGreaterThanOrEqual(3);
     abort.abort();
   });
 

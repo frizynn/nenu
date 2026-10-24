@@ -53,11 +53,15 @@ interface Watch {
   timer?: ReturnType<typeof setTimeout>;
   /** When the last read with a write behind it started (epoch ms): the typed gap runs from there. */
   typedReadAt: number;
-  /** When a page last wrote to the pane (epoch ms). */
+  /** Writes so far, and how many of them the last read started after: more means some are unread. */
+  writes: number;
+  readWrites: number;
+  /** When the first unread write and the last write came (epoch ms). */
+  unreadSince: number;
   writeAt: number;
   /** A read is on its way; it schedules the next one when it ends. */
   reading: boolean;
-  /** Until when the pane's changes go out on the typed gap (epoch ms). */
+  /** Until when the pane counts as typed into: its changes go out at once (epoch ms). */
   typedUntil: number;
   stopped: boolean;
 }
@@ -102,7 +106,7 @@ export class PaneWatcher {
       const key = `${session}\u0000${paneId}`;
       let watch = this.watches.get(key);
       if (!watch) {
-        watch = { session, paneId, herdr, clients: 0, quiet: 0, typedReadAt: 0, writeAt: 0, reading: false, typedUntil: 0, stopped: false };
+        watch = { session, paneId, herdr, clients: 0, quiet: 0, typedReadAt: 0, writes: 0, readWrites: 0, unreadSince: 0, writeAt: 0, reading: false, typedUntil: 0, stopped: false };
         this.watches.set(key, watch);
         void this.read(watch);
       }
@@ -122,27 +126,29 @@ export class PaneWatcher {
   }
 
   /**
-   * A page just wrote to this pane: read it soon, and let its changes out on the typed gap for a
-   * moment. Only a watched pane is read; nobody is looking at the others' screens.
+   * A page just wrote to this pane: read it soon, and let its changes out at once for a moment. Only a
+   * watched pane is read; nobody is looking at the others' screens.
    */
   wrote(session: string, paneId: string): void {
     const watch = this.watches.get(`${session}\u0000${paneId}`);
     if (!watch) return;
-    watch.writeAt = Date.now();
-    watch.typedUntil = watch.writeAt + this.typedForMs;
+    const now = Date.now();
+    if (watch.writes === watch.readWrites) watch.unreadSince = now;
+    watch.writes++;
+    watch.writeAt = now;
+    watch.typedUntil = now + this.typedForMs;
     // A read in flight schedules the next one itself.
     if (!watch.reading) this.schedule(watch, this.afterWrite(watch));
   }
 
   /**
-   * The wait for the read after a write: soon after it following a pause, else once the burst settles
-   * or one typed gap after the last read for a write, whichever comes first.
+   * The wait for the read after unread writes: once the burst settles, but no later than one typed gap
+   * after the last read for a write, nor sooner than a moment after the first unread write. Later
+   * writes can bring it forward, never push it past that deadline.
    */
   private afterWrite(watch: Watch): number {
-    const now = Date.now();
-    const gap = watch.typedReadAt + this.typedGapMs - now;
-    if (gap <= this.typedReadMs) return this.typedReadMs;
-    return Math.max(this.typedReadMs, Math.min(gap, watch.writeAt + this.settledMs - now));
+    const deadline = Math.max(watch.typedReadAt + this.typedGapMs, watch.unreadSince + this.typedReadMs);
+    return Math.max(0, Math.min(deadline, watch.writeAt + this.settledMs) - Date.now());
   }
 
   /** Read again in `delay`, in place of any read already pending. */
@@ -163,14 +169,14 @@ export class PaneWatcher {
   private async read(watch: Watch): Promise<void> {
     let failed = false;
     watch.reading = true;
-    const now = Date.now();
-    if (watch.writeAt > watch.typedReadAt) watch.typedReadAt = now;
+    if (watch.writes > watch.readWrites) watch.typedReadAt = Date.now();
+    watch.readWrites = watch.writes;
     try {
       const { text } = await watch.herdr.readPane(watch.paneId, "visible", VISIBLE_LINES, "ansi");
       const hash = Bun.hash(text).toString(16);
       // The first read only sets the baseline: the page that asked has just read the pane itself.
       if (!watch.stopped && watch.hash !== undefined && hash !== watch.hash) {
-        // While typed into, the reads above set the pace.
+        // While typed into, the reads set the pace.
         const typed = Date.now() < watch.typedUntil;
         this.throttle.publish({ session: watch.session, topic: "pane", paneId: watch.paneId }, typed ? 0 : undefined);
       }
@@ -182,7 +188,7 @@ export class PaneWatcher {
     watch.reading = false;
     // Writes since the last typed read: the next one. Typing paused: one look per gap for a late echo.
     const next = failed ? this.retryMs
-      : watch.writeAt > watch.typedReadAt ? this.afterWrite(watch)
+      : watch.writes > watch.readWrites ? this.afterWrite(watch)
       : Date.now() < watch.typedUntil ? this.typedGapMs
       : quietDelay(watch.quiet, this.readEveryMs, this.quietMaxMs);
     this.schedule(watch, next);

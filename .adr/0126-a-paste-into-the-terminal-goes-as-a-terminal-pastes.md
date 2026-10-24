@@ -45,8 +45,9 @@ picked picture did nothing. Measured 2026-10-24 on Herdr 0.9.5 and Claude Code a
    uploads directory. A save that fails stops the mode as a failed batch does. A file saved after the
    mode ended, or for a pane no longer on screen, is not pasted.
 3. **A write to a watched pane sets when it is read next**: 30 ms after a write that follows a pause,
-   300 ms after the last write of a burst, and once per 700 ms through continuous typing; for 1.5 s after
-   the last write each change goes out at once instead of once a second. The composer then stops its
+   300 ms after the last write of a burst, and at least once per 700 ms through continuous typing, which
+   can bring that read forward but never push it back; for 1.5 s after the last write the pane is read
+   every 700 ms and each change goes out at once instead of once a second. The composer then stops its
    own refresh after a key while the stream is up and the mirror is on screen (it re-read the herd and
    the pane at every burst); without the stream, its refresh is a throttle that fires during a burst,
    never a debounce that waits for the burst to end.
