@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { __resetConnectionHealth, isOutageNoticeShown, markLive, CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { linkPhrase } from "@/lib/connection";
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { ConnectionBanner, RECOVERY_QUIET_MS } from "./connection-banner";
 
 type Props = Parameters<typeof ConnectionBanner>[0];
@@ -58,6 +59,37 @@ it("keeps the notice stable until successful reads remain stable, without a Conn
   act(() => vi.advanceTimersByTime(RECOVERY_QUIET_MS));
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   expect(screen.queryByText("Connected", { exact: true })).not.toBeInTheDocument();
+  h.close();
+});
+
+// The notice moves the whole screen, so it folds in and out rather than appearing in one frame; on its
+// way out it is out of reach, and gone once the fold has shut.
+it("folds the notice in and out, unreachable while it leaves", () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  const fold = screen.getByRole("status").closest(".fold")!;
+  expect(fold).toHaveAttribute("data-phase", "opening");
+  act(() => { markLive(); h.update({ error: false }); });
+  act(() => vi.advanceTimersByTime(RECOVERY_QUIET_MS));
+  expect(fold).toHaveAttribute("data-phase", "shutting");
+  expect(fold).toHaveAttribute("inert");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  act(() => vi.advanceTimersByTime(MOTION_CONTROL_MS));
+  expect(fold).not.toBeInTheDocument();
+  h.close();
+});
+
+it("turns an outage notice into a refusal where it stands, without folding", () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  const fold = screen.getByRole("status").closest(".fold")!;
+  act(() => vi.advanceTimersByTime(MOTION_CONTROL_MS * 2));
+  expect(fold).toHaveAttribute("data-phase", "open");
+  act(() => h.update({ error: false, authError: true }));
+  expect(screen.getByRole("alert").closest(".fold")).toBe(fold);
+  expect(fold).toHaveAttribute("data-phase", "open");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(isOutageNoticeShown()).toBe(false);
   h.close();
 });
 
