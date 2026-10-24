@@ -1160,6 +1160,17 @@ describe("AgentChat — the ⋯ menu renames and closes the pane only where no s
     expect(rows).not.toContain("Rename or close tab…");
   });
 
+  it("keeps them to the strips on a phone with its keyboard down", async () => {
+    typingOnPhone();
+    keyboard.open = false;
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
+  });
+
   it("offers neither on a device that cannot write", async () => {
     typingOnPhone();
     const user = userEvent.setup();
