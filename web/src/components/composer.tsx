@@ -198,6 +198,7 @@ interface ComposerProps {
 // the header's ⋯ menu (onControlsChange). The model and the session's background work sit in the
 // quiet row beneath the box, which steps aside while a phone keyboard is up.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
+const DOCK_TITLE: Record<Exclude<ComposerDrawer, "cmd" | null>, string> = { usage: "Context and usage", keys: "Keys", quick: "Quick replies", display: "Display" };
 
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
 // our own in-flight reply (still on the "❯" line before the bridge's pending Enter lands), NOT a
@@ -555,6 +556,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [previewLatched, setPreviewLatched] = useState(false);
   // Composer sheets are mutually exclusive — at most one open (Keys / Quick / Agent / Display).
   const [drawer, setDrawer] = useState<ComposerDrawer>(null);
+  // Which open of a dock this is, so a dock reopened while its last copy still folds shut mounts fresh.
+  const [drawerOpens, setDrawerOpens] = useState(0);
   // Keys staged in the (unmounted-on-close) NavTray, pushed up so leaving the Keys dock can guard a
   // composed sequence. See requestDrawer.
   const [queuedKeys, setQueuedKeys] = useState(0);
@@ -575,6 +578,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function requestDrawer(next: ComposerDrawer) {
     if (drawer === "keys" && next !== "keys" && !releaseKeys()) return;
     discardConfirm.reset();
+    if (next !== null && next !== drawer) setDrawerOpens((n) => n + 1);
     setDrawer(next);
   }
   /** Whether the tray may go with its staged queue: the first try with keys staged asks for a second. */
@@ -1400,46 +1404,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         <input ref={fileRef} type="file" multiple hidden onChange={onPickFiles} />
         {/* Keys / Quick / Display / Usage dock — one in-flow site above the input, so the panel
             grows over the conversation, not the draft. Whichever of the mutually exclusive drawers is
-            active renders here via the shared ComposerDock chrome. Keys mounts the NavTray (unmounts on
-            close, so tab/queue reset each open). Commands stays a covering BottomSheet below (it's a
+            active renders here via the shared ComposerDock chrome, folding open and shut; a switch from
+            one dock to another swaps the content in place. Keys mounts the NavTray, keyed by the open
+            it belongs to, so tab and queue reset on each open even when it reopens while the last one
+            is still folding shut (ADR 0005). Commands stays a covering BottomSheet below (it's a
             palette, not a pad). */}
-        {drawer === "usage" && usageControls && (
-          <ComposerDock title="Context and usage" onClose={closeDrawer}>
-            <div className="px-3 pb-3">{usageControls}</div>
+        <Fold value={drawer === "cmd" || (drawer === "usage" && !usageControls) ? null : drawer}>{(dock) => (
+          <ComposerDock key={drawerOpens} title={DOCK_TITLE[dock]} onClose={closeDrawer}>
+            {dock === "usage" ? <div className="px-3 pb-3">{usageControls}</div>
+              : dock === "keys" ? <NavTray
+                onSend={pressKeys}
+                presets={keyPresets}
+                onQueueChange={setQueuedKeys}
+                disabled={locked}
+              />
+              : dock === "quick" ? <QuickActionsContent
+                onSend={(t) => send(t, false)}
+                onClose={closeDrawer}
+                agent={agent}
+                isShell={isShell}
+                disabled={locked || sending}
+              />
+              : <DisplayPrefsContent
+                surface={nativeWorkbench ? "chat" : "terminal"}
+                prefs={prefs}
+                setWrap={setWrap}
+                stepFontSize={stepFontSize}
+                setTapToFocus={setTapToFocus}
+              />}
           </ComposerDock>
-        )}
-        {drawer === "keys" && (
-          <ComposerDock title="Keys" onClose={closeDrawer}>
-            <NavTray
-              onSend={pressKeys}
-              presets={keyPresets}
-              onQueueChange={setQueuedKeys}
-              disabled={locked}
-            />
-          </ComposerDock>
-        )}
-        {drawer === "quick" && (
-          <ComposerDock title="Quick replies" onClose={closeDrawer}>
-            <QuickActionsContent
-              onSend={(t) => send(t, false)}
-              onClose={closeDrawer}
-              agent={agent}
-              isShell={isShell}
-              disabled={locked || sending}
-            />
-          </ComposerDock>
-        )}
-        {drawer === "display" && (
-          <ComposerDock title="Display" onClose={closeDrawer}>
-            <DisplayPrefsContent
-              surface={nativeWorkbench ? "chat" : "terminal"}
-              prefs={prefs}
-              setWrap={setWrap}
-              stepFontSize={stepFontSize}
-              setTapToFocus={setTapToFocus}
-            />
-          </ComposerDock>
-        )}
+        )}</Fold>
         {/* The text in the agent's own box, shown once it holds still, with what to do about it in one
             tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0114). A Send while it
             is there waits on that tap instead of sweeping it or queueing behind it. */}
