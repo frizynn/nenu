@@ -45,7 +45,7 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
     <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1">
       <ActionGroups groups={groups} onRun={run} named={false} />
       {recovery && <details className="mt-1 border-t border-border/60 pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-body lg:min-h-8 lg:text-footnote">Change connected conversation</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-subhead lg:min-h-8 lg:text-footnote">Change connected conversation</summary>
         {recovery}
       </details>}
       {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 py-1.5 font-mono text-footnote text-muted-foreground" title={folder}>{folder}</p>}

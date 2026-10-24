@@ -22,6 +22,9 @@ import { clearStatus } from "@/lib/status";
 import { useMirrorShown } from "@/lib/live-events";
 import { dismissModelPicker } from "@/lib/dismiss-model-picker";
 vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
+// jsdom has no visualViewport, so the phone keyboard is up only where a case says so.
+const keyboard = vi.hoisted(() => ({ open: false }));
+vi.mock("@/hooks/use-keyboard", async (original) => ({ ...await original<typeof import("@/hooks/use-keyboard")>(), useKeyboardOpen: () => keyboard.open }));
 import { submitPromptOption } from "@/lib/prompt-action";
 import { submitWizardKeys } from "@/lib/wizard-action";
 import { fixtureAgents } from "@/test/handlers";
@@ -1097,38 +1100,57 @@ it("says the terminal is on its way, not that it printed nothing, while the pane
 describe("AgentChat — the ⋯ menu renames and closes the pane only where no strip does", () => {
   const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
   const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
+  const other = { ...fixtureAgents[1]!, workspaceId: agent.workspaceId, tabId: agent.tabId, paneLabel: "Second Claude" };
+  afterEach(() => { keyboard.open = false; });
+  const menuRows = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    const menu = screen.getByRole("dialog", { name: "Conversation actions" });
+    const rows = within(menu).getAllByRole("button").map((row) => row.textContent);
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    return rows;
+  };
 
   it("opens a lone pane's actions from the menu, and its tab's from the tab's own chip", async () => {
     const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs });
+    expect(await menuRows(user)).toEqual(expect.arrayContaining(["Display", "Rename or close pane…"]));
+    expect(await menuRows(user)).not.toContain("Rename or close tab…");
     await openMenuItem(user, "Rename or close pane…");
     const paneSheet = screen.getByRole("dialog", { name: "Working Claude" });
     expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
     expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
     await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
-    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("button", { name: /^review/ }));
     expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
   });
 
   it("leaves a pane that shares its tab to the pane strip's chip", async () => {
     const user = userEvent.setup();
-    const other = { ...fixtureAgents[1]!, workspaceId: agent.workspaceId, tabId: agent.tabId, paneLabel: "Second Claude" };
     renderChat({ agent, agents: [agent, other], tabs });
-    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
     await user.click(screen.getByRole("button", { name: /^Working Claude/ }));
     expect(within(screen.getByRole("dialog", { name: "Working Claude" })).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
   });
 
+  it("offers both while a phone keyboard hides the strips", async () => {
+    keyboard.open = true;
+    const user = userEvent.setup();
+    renderChat({ agent, agents: [agent, other], tabs });
+    expect(await menuRows(user)).toEqual(expect.arrayContaining(["Rename or close pane…", "Rename or close tab…"]));
+    await openMenuItem(user, "Rename or close tab…");
+    expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
   it("offers neither on a device that cannot write", async () => {
+    keyboard.open = true;
+    const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs, device: { enforced: true, device: "spare-phone", authorized: false } });
-    await userEvent.click(screen.getByRole("button", { name: "Conversation actions" }));
-    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+    const rows = await menuRows(user);
+    expect(rows).toContain("Display");
+    expect(rows).not.toContain("Rename or close pane…");
+    expect(rows).not.toContain("Rename or close tab…");
   });
 });
 

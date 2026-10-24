@@ -16,7 +16,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from "react-dom";
 import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
+import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
 import { agentName } from "@/hooks/use-message-queue";
@@ -65,6 +65,7 @@ import { useOperatorCommands } from "@/lib/operator-config";
 import { TabStrip } from "@/components/tab-strip";
 import { PaneStrip } from "@/components/pane-strip";
 import { PaneActionsSheet } from "@/components/pane-actions-sheet";
+import { TabActionsSheet } from "@/components/tab-actions-sheet";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { resting, StateMark, StatusDot } from "@/components/status-badge";
 import { submitPromptFeedback, submitPromptOption } from "@/lib/prompt-action";
@@ -81,7 +82,7 @@ import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
 import { historyPath } from "@/lib/nav";
-import { paneInTab } from "@/lib/spaces";
+import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
 import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
 import type {
@@ -877,15 +878,19 @@ export function AgentChat({
     ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: SquareTerminal, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
     ...composerControls.filter((control) => control.group === "View"),
   ];
-  // Renaming and closing the pane: a tap on the open chip of a strip opens its sheet, so the menu offers
-  // only what no strip on screen does. The tab strip is always there; the pane strip only from two panes.
-  const [paneSheet, setPaneSheet] = useState<"pane" | null>(null);
+  // Renaming and closing the pane and its tab: a tap on a strip's open chip opens the same sheet, so the
+  // menu offers only what no strip on screen does. The tab strip is always there and the pane strip from
+  // two panes, except while a phone keyboard is up, which hides both (strips.css).
+  const [paneSheet, setPaneSheet] = useState<"pane" | "tab" | null>(null);
+  const tab = agent && tabs.find((t) => t.tabId === agent.tabId);
+  const tabTitle = tab ? tabName(tab.label, tabs.filter((t) => t.workspaceId === tab.workspaceId).indexOf(tab) + 1) : "";
   const tabPanes = agent ? [...agents, ...shellPanes]
     .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
     .sort((a, b) => a.paneId.localeCompare(b.paneId)) : [];
-  const paneActions: ConversationAction[] = agent && !readOnly && tabPanes.length < 2
-    ? [{ id: "pane", label: "Rename or close pane…", icon: AppWindow, run: () => setPaneSheet("pane") }]
-    : [];
+  const paneActions: ConversationAction[] = agent && !readOnly ? [
+    ...(tabPanes.length < 2 || keyboardOpen ? [{ id: "pane", label: "Rename or close pane…", icon: AppWindow, run: () => setPaneSheet("pane") }] : []),
+    ...(tab && keyboardOpen ? [{ id: "tab", label: "Rename or close tab…", icon: PanelTop, run: () => setPaneSheet("tab") }] : []),
+  ] : [];
 
   // Background work: workflows and commands (Claude's activity reader) and subagents, as one list
   // behind the chip in the composer row.
@@ -951,7 +956,7 @@ export function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
-    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Pane", actions: paneActions }]}
+    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;
@@ -1330,8 +1335,10 @@ export function AgentChat({
         terminalTab.mirror,
       )}
 
-      {/* Closing the open pane moves the route to the pane beside it (DetailRoute). */}
+      {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
       {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}
+        session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
+      {tab && <TabActionsSheet open={paneSheet === "tab"} onClose={() => setPaneSheet(null)} tab={tab} name={tabTitle}
         session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
 
     </div>
