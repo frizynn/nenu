@@ -74,8 +74,8 @@ describe("inline code", () => {
 
 describe("file links", () => {
   it("opens a bare file:// URL an agent writes in prose, by the path it names", () => {
-    // The coordinator's message as it sits in the journal: the URL alone on its line, no Markdown.
-    const path = "/Users/demo/.herdr-projects/acme/library/t-0093/wholesale-orders-20261013.html";
+    // An agent's message as it sits in the journal: the URL alone on its line, no Markdown.
+    const path = "/Users/demo/reports/acme/wholesale-orders-20261013.html";
     const openFile = vi.fn();
     render(
       <FilePreviewContext.Provider value={openFile}>

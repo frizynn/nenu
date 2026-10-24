@@ -1,8 +1,8 @@
-import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdList, type MdSpan } from "@/lib/markdown";
 import { splitHighlight } from "@/lib/transcript-search";
-import { FileKnownContext, FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
+import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
 import { tableHtml, tableMarkdown } from "@/lib/table-copy";
 import { cn } from "@/lib/utils";
@@ -67,21 +67,11 @@ const spanText = (spans: MdSpan[]): string => spans.map((span) => "spans" in spa
 // Inside a link's label, another link (a bare pull request URL used as the label) draws as its words.
 const InLinkContext = createContext(false);
 
-/**
- * A view's own tokens in prose: given one run of plain text from a paragraph, heading or list item
- * (never code, never a link's label), the elements to draw it with, built from that text and never
- * from markup. A STATUS.md uses it for its state chips and thread ids. Without it, text is text; a
- * view that sets it has no find to highlight.
- */
-export const TextTokensContext = createContext<((text: string) => ReactNode) | null>(null);
-
 // Emphasis and links hold child spans (agents nest them — ``**`sha`**`` is routine), so this recurses
 // through <Spans>. `code` is the leaf.
 function Span({ span }: { span: MdSpan }) {
   const openFile = useContext(FilePreviewContext);
-  const known = useContext(FileKnownContext);
   const inLink = useContext(InLinkContext);
-  const tokens = useContext(TextTokensContext);
   switch (span.kind) {
     case "image":
       return <InlineImage path={span.path} alt={span.alt} />;
@@ -102,8 +92,7 @@ function Span({ span }: { span: MdSpan }) {
         </em>
       );
     case "code": {
-      const found = openFile ? localFilePath(span.text) : null;
-      const path = found && (!known || known(found)) ? found : null;
+      const path = openFile ? localFilePath(span.text) : null;
       const code = <code className={cn(INLINE_CODE, path && "text-primary underline underline-offset-2")}><Hit text={span.text} /></code>;
       // A file's link is an inline box whatever its length.
       if (path) return <FileLink path={path} className={cn(WHOLE, "text-left")}>{code}</FileLink>;
@@ -130,7 +119,7 @@ function Span({ span }: { span: MdSpan }) {
       );
     }
     default:
-      return tokens && !inLink ? tokens(span.text) : <Hit text={span.text} />;
+      return <Hit text={span.text} />;
   }
 }
 

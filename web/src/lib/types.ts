@@ -536,8 +536,7 @@ export interface BridgeConfig {
 export interface NotifyPrefs {
   /** Push when any agent becomes blocked (waiting on your input). Default on. */
   blocked: boolean;
-  /** Push when an agent finishes a turn a person started (from Nenu, or typed into a loose agent or a
-   *  coordinator); never the organization's own traffic. Default on. */
+  /** Push when an agent finishes a turn a person started (from Nenu, or typed into the agent). Default on. */
   replies: boolean;
   /** Push when an agent another agent started finishes a turn that agent typed. Default off. */
   launched: boolean;

@@ -2,7 +2,7 @@ id = "herdr.nenu"
 name = "Nenu"
 version = "1.46.0"
 min_herdr_version = "0.7.0"
-description = "Self-hosted phone and web workbench for Herdr agents and Herdr Organizations projects, over Tailscale"
+description = "Self-hosted phone and web workbench for Herdr agents, over Tailscale"
 platforms = ["linux", "macos"]
 
 # This plugin is a thin launcher. The actual bridge runs as a systemd --user service so it

@@ -35,7 +35,7 @@ interface LiveConversationProps {
   query?: string;
   currentMatch?: number;
   onMatchCount?: (count: number) => void;
-  /** Rendered after the newest turn, inside the scroller (a coordinator's thread cards, the question card). */
+  /** Rendered after the newest turn, inside the scroller (the question card). */
   footer?: ReactNode;
   /** A question waits at the tail: the way back to it says so. */
   waiting?: boolean;

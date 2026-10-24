@@ -34,9 +34,6 @@ export interface HeaderBack {
   /** The parent is shown in place (a subagent's Main): its name sits beside the chevron, and the back
    *  stays on a desk, where the sidebar cannot reach it. */
   inPlace?: boolean;
-  /** Stays on a desk with the parent's name beside it: inside a project, where the way up is a level of
-   *  the project's own tree (coordinator → project → Projects, ADR 0115). */
-  desk?: boolean;
 }
 
 interface AppHeaderProps {
@@ -98,11 +95,9 @@ export function AppHeader({
   const mark = !back && home;
   const icon = <ChevronLeft aria-hidden className="size-6 shrink-0" strokeWidth={2.25} />;
   const parent = back?.to ?? homePath(session);
-  // Inside a project the way up is a level of its tree, which the desk's flat sidebar cannot climb.
-  const unlisted = Boolean(back?.desk);
-  const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : unlisted ? "lg:pr-2" : "lg:hidden");
-  // A desk draws no line under a bar with nothing in its middle (Home, a project before its heading
-  // scrolls away): an empty band under a rule reads as a missing title. A phone keeps its line.
+  const backClass = cn(BACK_CONTROL, back?.inPlace ? "pr-2" : "lg:hidden");
+  // A desk draws no line under a bar with nothing in its middle (Home): an empty band under a rule
+  // reads as a missing title. A phone keeps its line.
   const titled = (title !== undefined && !home && !titleHidden) || Boolean(children) || Boolean(override);
   return (
     <header className={cn("workbench-app-header sticky top-0 z-20 flex shrink-0 items-center border-b border-border/60 bg-muted", !titled && "lg:border-b-transparent")}>
@@ -124,7 +119,7 @@ export function AppHeader({
           ) : (
             // A tap goes back to where you came from (useGoBack).
             <StepLink to={parent} go={goBack} aria-label={`Back to ${back?.label ?? "Home"}`} className={backClass}>
-              {icon}{unlisted && <span className="hidden max-w-48 truncate text-body lg:inline">{back?.label}</span>}
+              {icon}
             </StepLink>
           )}
           {/* Center region: the title, the route's own content, or on Home an empty flex-1 spacer that

@@ -49,7 +49,7 @@ describe("chat file references", () => {
   });
 
   it("reads a bare file:// URL in prose as the absolute path it names", () => {
-    const target = "/Users/demo/.herdr-projects/acme/library/t-0093/wholesale-orders-20261013.html";
+    const target = "/Users/demo/reports/acme/wholesale-orders-20261013.html";
     expect(filePathsInText(`Ya está abierto desde las 17:50:\nfile://${target}\n\nQué tiene:`)).toEqual([target]);
   });
 

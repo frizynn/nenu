@@ -5,7 +5,7 @@ import { matchRoutes, useLocation, useNavigate, type DataRouter, type RouterNavi
  * How a page change moves, the way a phone's navigation does: a deeper page slides in from the right
  * over the one it leaves (push), the back control slides the page out to the right (pop), and any other
  * change (the tab bar's Home, a sibling pane, a pick in the sidebar) cross-fades in place. Every pane
- * sits at one route depth, so a move between a coordinator and its threads names its motion (armMotion).
+ * sits at one route depth, so a move between two panes names its motion (armMotion).
  * Reduced motion, and a desk, where the sidebar must stay put beside the page, turn every change into
  * the cross-fade. index.css draws each one.
  */
@@ -78,7 +78,7 @@ function fromOf(state: unknown): string | undefined {
   return typeof from === "string" ? from : undefined;
 }
 
-/** One screen, whatever it shows inside (a coordinator's tab, a docked thread): its path and session. */
+/** One screen, whatever it shows inside: its path and session. */
 function sameScreen(a: string, b: string): boolean {
   const [x, y] = [new URL(a, "http://nenu.invalid"), new URL(b, "http://nenu.invalid")];
   return x.pathname === y.pathname && x.searchParams.get("s") === y.searchParams.get("s");

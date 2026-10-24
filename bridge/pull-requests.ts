@@ -1,6 +1,5 @@
-// The person's open pull requests in the repos their agents work in, read from GitHub with `gh`.
-// Organizations records PRs only for its own threads; most agent work happens outside it, so Home's
-// "Ready to review" would otherwise miss the PRs agents open on their own.
+// The person's open pull requests in the repos their agents work in, read from GitHub with `gh`, so
+// Home's "Ready to review" shows the PRs agents open on their own.
 //
 // Every read here runs in the background: a snapshot read gets the cached list at once and, when it
 // is stale, starts one refresh. A missing or hanging `gh` costs a logged line and a timeout, never a
