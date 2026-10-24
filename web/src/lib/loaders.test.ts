@@ -164,6 +164,10 @@ describe("rootLoader — pull requests", () => {
     const third = await rootLoader({ request: new Request("http://localhost/") });
     expect(third.pullRequests?.map((p) => p.number)).toEqual([1, 2]);
     expect(bridge.reads).toEqual([null, '"v1"']);
+    // A row that says what it said keeps its object, and the moved list then holds as the first did.
+    expect(third.pullRequests?.[0]).toBe(first.pullRequests?.[0]);
+    const fourth = await rootLoader({ request: new Request("http://localhost/") });
+    expect(fourth.pullRequests).toBe(third.pullRequests);
   });
 
   it("keeps the list without flagging the herd when its read fails, and asks again", async () => {

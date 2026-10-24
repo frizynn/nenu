@@ -1,4 +1,4 @@
-import { cn } from "./utils";
+import { cn, keepItems } from "./utils";
 
 // The type scale (index.css) names its steps text-body, text-footnote and so on. tailwind-merge
 // reads an unknown text-* as a colour, so without being told it dropped the size beside any text
@@ -17,5 +17,24 @@ describe("cn", () => {
 
   it("still lets a later colour replace an earlier one", () => {
     expect(cn("text-body text-foreground", "text-muted-foreground")).toBe("text-body text-muted-foreground");
+  });
+});
+
+describe("keepItems", () => {
+  it("keeps every item that says the same, and the whole list when all do", () => {
+    const prev = [{ id: 1, s: "a" }, { id: 2, s: "b" }];
+    const same = keepItems(prev, [{ id: 1, s: "a" }, { id: 2, s: "b" }]);
+    expect(same).toBe(prev);
+    const next = keepItems(prev, [{ id: 1, s: "a" }, { id: 2, s: "c" }]);
+    expect(next).not.toBe(prev);
+    expect(next[0]).toBe(prev[0]);
+    expect(next[1]).toEqual({ id: 2, s: "c" });
+  });
+
+  it("hands back a new list when one grew or shrank", () => {
+    const prev = [{ id: 1 }];
+    expect(keepItems(prev, [{ id: 1 }, { id: 2 }])[0]).toBe(prev[0]);
+    expect(keepItems(prev, [])).toEqual([]);
+    expect(keepItems(undefined, prev)).toBe(prev);
   });
 });

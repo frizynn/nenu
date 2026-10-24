@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useRevalidator } from "react-router";
+import { useRevalidate } from "@/hooks/use-router";
 import { PermissionPicker, Segmented } from "@/components/new-agent-sheet";
 import { Button } from "@/components/ui/button";
 import { ChevronDown } from "@/components/ui/icon";
@@ -28,7 +28,7 @@ export function StartAgent({ paneId, session, disabled, ready }: { paneId: strin
   const [permissions, setPermissions] = useState(() => ({ claude: loadPermission("claude"), codex: loadPermission("codex") }));
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
   const level = PERMISSIONS[agent].find((p) => p.id === permissions[agent]);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function StartAgent({ paneId, session, disabled, ready }: { paneId: strin
     } finally {
       pending.current = false;
       setStarting(false);
-      void revalidator.revalidate();
+      void revalidate();
     }
   }
   return <section ref={root} className="border-t border-border/40 px-3 py-1.5" aria-label="Start a conversation">

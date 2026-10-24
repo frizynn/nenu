@@ -32,6 +32,7 @@ import {
 import { detectNoEchoPrompt } from "@/lib/no-echo";
 import { needsFetch } from "@/lib/revalidation";
 import { SESSION_PARAM, normalizeSession } from "@/lib/session";
+import { keepItems } from "@/lib/utils";
 import type {
   AgentView,
   BridgeStatus,
@@ -280,7 +281,7 @@ async function loadHome(session: string | undefined, request: Request | undefine
   try {
     const snap = await fetchSnapshot(session, request?.signal);
     const previous = lastHomeData.get(session ?? "");
-    const pullRequests = await readPullRequests(session, snap, previous, request);
+    const pullRequests = shownPullRequests(session, await readPullRequests(session, snap, previous, request));
     if (pullRequests !== previous?.pullRequests) saveLastPullRequests(session, pullRequests);
     // A 304 hands back the snapshot already on screen; the same herd object then keeps every view's
     // memoised work. The write-through below still runs, so its date stays the last confirmed read.
@@ -289,7 +290,7 @@ async function loadHome(session: string | undefined, request: Request | undefine
     // Write-through: the same body, dated, in a store that outlives this page (lib/last-seen.ts).
     saveLastSnapshot(session, snap);
     rememberAuthError(session, false);
-    return unchanged ? previous : toHomeData(snap, pullRequests, session, false);
+    return unchanged ? previous : keepUnchangedRows(previous, toHomeData(snap, pullRequests, session, false));
   } catch (e) {
     if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));
@@ -312,6 +313,32 @@ async function readPullRequests(
     if (isSuperseded(request)) throw e;
     return previous?.pullRequests ?? loadLastPullRequests(session) ?? [];
   }
+}
+
+// What each session's page shows of the list it read last: while the read hands back the same list (its
+// version held), the same rows; when the list moved, the rows that say what they said keep their objects.
+const lastPullRequests = new Map<string, { read: PullRequestView[]; shown: PullRequestView[] }>();
+
+function shownPullRequests(session: string | undefined, read: PullRequestView[]): PullRequestView[] {
+  const last = lastPullRequests.get(session ?? "");
+  if (last?.read === read) return last.shown;
+  const shown = keepItems(last?.shown, read);
+  lastPullRequests.set(session ?? "", { read, shown });
+  return shown;
+}
+
+// A changed snapshot rarely changes every row: the rows that say what they said keep their objects,
+// so memoised rows (the desk's chats, the open chat) skip the redraw.
+function keepUnchangedRows(previous: HomeData | undefined, next: HomeData): HomeData {
+  if (!previous) return next;
+  return {
+    ...next,
+    agents: keepItems(previous.agents, next.agents),
+    shellPanes: keepItems(previous.shellPanes, next.shellPanes),
+    workspaces: keepItems(previous.workspaces, next.workspaces),
+    tabs: keepItems(previous.tabs, next.tabs),
+    sessions: keepItems(previous.sessions, next.sessions),
+  };
 }
 
 // Pane ids are per-session, so every per-pane cache is keyed by (session, paneId) — a NUL joiner

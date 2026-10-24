@@ -5,7 +5,7 @@ import { MessageQueueStrip } from "./message-queue-strip";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
-import { useRevalidator } from "react-router";
+import { useRevalidate } from "@/hooks/use-router";
 import { ArrowUp, Check, CircleAlert, Clock, Gauge, Keyboard, Pending, Paperclip, Plus, Settings2, Slash, TextCursorInput, Zap, type IconComponent } from "@/components/ui/icon";
 
 import type { DisplayPrefs } from "@/hooks/use-display-prefs";
@@ -282,7 +282,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   { paneId, session, dropZoneRef, agent, isShell, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, limit, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
   ref,
 ) {
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
   // Every write affordance is off when the pane is gone OR this device is read-only.
   const locked = gone || readOnly || disconnected;
   // Nothing can be written here at all (as opposed to a draft waiting out an outage): the box keeps
@@ -1191,7 +1191,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // before: presses 2..n only ever schedule the one trailing refetch.
   function scheduleKeyRevalidate() {
     if (keyRevalidateTimer.current === null) {
-      revalidator.revalidate(); // leading edge
+      revalidate(); // leading edge
       // Cooldown only — it fires nothing itself; a press landing before it expires replaces it with
       // the trailing refetch below.
       keyRevalidateTimer.current = setTimeout(() => {
@@ -1202,7 +1202,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     clearTimeout(keyRevalidateTimer.current);
     keyRevalidateTimer.current = setTimeout(() => {
       keyRevalidateTimer.current = null;
-      revalidator.revalidate(); // trailing edge — one refetch for the whole burst
+      revalidate(); // trailing edge — one refetch for the whole burst
     }, KEY_REVALIDATE_MS);
   }
 
