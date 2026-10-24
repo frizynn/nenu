@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { MOTION_CONTROL_MS } from "@/lib/motion";
 import { checkForUpdate } from "@/lib/pwa";
 import { useUpdateNotice } from "@/lib/self-update";
 import { UpdateBanner } from "./update-banner";
@@ -35,4 +36,19 @@ it("keeps the page and offers another try when the update cannot finish", async 
   await act(async () => finish(false));
   expect(screen.getByRole("status")).toHaveTextContent("Couldn't finish updating.");
   expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+});
+
+it("is simply there when the app draws with it, and folds out when the update applies", () => {
+  vi.useFakeTimers();
+  vi.mocked(useUpdateNotice).mockReturnValue(true);
+  const { rerender } = render(<UpdateBanner />);
+  const fold = screen.getByRole("status").closest(".fold")!;
+  expect(fold).toHaveAttribute("data-phase", "open");
+  vi.mocked(useUpdateNotice).mockReturnValue(false);
+  rerender(<UpdateBanner />);
+  expect(fold).toHaveAttribute("data-phase", "shutting");
+  expect(fold).toHaveAttribute("inert");
+  act(() => vi.advanceTimersByTime(MOTION_CONTROL_MS));
+  expect(fold).not.toBeInTheDocument();
+  vi.useRealTimers();
 });
