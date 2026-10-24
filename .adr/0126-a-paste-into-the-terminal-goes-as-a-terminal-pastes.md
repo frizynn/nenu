@@ -35,29 +35,39 @@ picked picture did nothing. Measured 2026-10-24 on Herdr 0.9.5 and Claude Code a
    keys everywhere.
 2. **A pasted, picked or dropped file is saved the way the composer attaches one and its path pasted
    in its place.** The upload starts at once (a file past 25 MB is refused before it starts); the keys
-   typed meanwhile wait behind it, and a pane change frees the line. For a picture on a CLI that
+   typed meanwhile wait behind it, and a pane change frees the line from an upload (never from a write
+   already on its way: the bridge would refuse a second write to that pane). For a picture on a CLI that
    attaches pasted paths (`pastesImagePaths`), the bridge (`paste-file`) counts the box's tokens, pastes
    the path, and waits until the box shows one more `[Image #N]`, or the path kept as text, before it
-   answers, so the next keys land after the token; it answers within 15 s, inside the phone's 20 s for
-   a write, and pastes nothing into a box it cannot read. Any other file gets its path alone, as a
+   answers, so the next keys land after the token; it stops waiting after 15 s, so it answers inside
+   the phone's 20 s for a write, and pastes nothing into a box it cannot read. Any other file gets its path alone, as a
    paste where the CLI reads one and as text elsewhere. The route takes only a path straight under an
    uploads directory. A save that fails stops the mode as a failed batch does. A file saved after the
    mode ended, or for a pane no longer on screen, is not pasted.
-3. **A write to a watched pane puts it on a typed cadence for 1.5 s**: read 30 ms after the write and
-   every 30 ms, its changes out every 200 ms instead of every second. The composer then stops its own
-   refresh after a key while the stream is up and the mirror is on screen; without the stream, its
-   refresh is a throttle that fires during a burst, never a debounce that waits for the burst to end.
+3. **A write to a watched pane sets when it is read next**: 30 ms after a write that follows a pause,
+   300 ms after the last write of a burst, and once per 700 ms through continuous typing; for 1.5 s after
+   the last write each change goes out at once instead of once a second. The composer then stops its
+   own refresh after a key while the stream is up and the mirror is on screen (it re-read the herd and
+   the pane at every burst); without the stream, its refresh is a throttle that fires during a burst,
+   never a debounce that waits for the burst to end.
 
 ## Consequences
 
-- Measured after, same bench, medians of the runs: key to mirror 87 to 98 ms (p50) and 197 to 246 ms
-  (p95), where it was 443 and 903 ms. The cost is mirror reads while typing: about 45 per 114-key
-  paragraph where there were 15 (each a small pane read, 1.2 KB on this bench with uncompressed
-  headers). At a 120 ms gap the mirror took 61 ms but 61 reads; 200 ms is the balance. Reads stop
-  1.5 s after the last key.
-- The bridge pays for it locally: about 33 Herdr reads a second for a watched pane during the 1.5 s
-  after a write, against 5 on the fast cadence, each about 0.23 ms; bridge CPU for a paragraph went from
-  about 110 to 150 ms on this host.
+- Measured against base on this host, five interleaved runs each with both bridges kept off the herd's
+  journals (the PR description has every run): key to mirror, continuous typing, p50 333 ms and p95
+  717 ms where they were 469 and 984; bursts of a word then a pause, p50 153 ms where it was 369, p95
+  about level (563 against 523). Mirror reads per paragraph stay level (16 against 15) and bursts take
+  14 where they took 33. Browser and bridge CPU came out at or under base at the median in every
+  typing case. Under `strace`, the bridge made 560 Herdr calls for three paragraphs where base made 675.
+- The gaps are the trade, and they were measured: reading every 30 ms after a write with events every
+  200 ms brought the mirror to 61 ms but four times base's reads and about 17% more bridge CPU, and a
+  120 ms settle fired between ordinary phone keystrokes. Lower the 700 ms only with a measurement that
+  keeps the reads at base.
+- A shell paste's first characters show about 150 ms later than when the phone re-read the pane itself
+  (the read now waits for the bridge's), though the whole line shows sooner.
+- Stopping at 15 s gives up on a starved Claude that reads a picture for longer (ADR 0117): the mode
+  ends, the keys behind the picture are dropped, and its token may still arrive later. A send waits
+  55 s; typing into the terminal cannot hold the line that long.
 - Writes per key are unchanged: one request per key at human speed, fewer over a slow link (in-flight
   backpressure batches them). A paste to Claude or Codex is one request whatever its length.
 - Pasting into a shell still turns each line break into Enter, as before. Making a shell's paste

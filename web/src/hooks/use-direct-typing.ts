@@ -378,11 +378,14 @@ export function useDirectTyping({
   function pasteFiles(files: Iterable<File>) {
     for (const file of files) {
       const saved = saveFile(file);
-      sender.enqueue([async (current) => {
-        const path = await saved;
+      sender.enqueue([async (current, moved) => {
+        // A pane change gives the line up at once, so the next pane's keys never wait on this upload.
+        const path = await Promise.race([saved, moved.then(() => null)]);
+        if (!current()) {
+          setStatus("The file was not pasted: you left that pane before it was saved.", "info");
+          return true;
+        }
         if (path === null) return false;
-        // Another pane is on screen now: its line has moved on, and this file was never meant for it.
-        if (!current()) return true;
         if (!activeRef.current) {
           setStatus("The file was not pasted: typing into the terminal stopped first.", "info");
           return true;

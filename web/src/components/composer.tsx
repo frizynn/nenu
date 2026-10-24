@@ -633,8 +633,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
   // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
   const adapter = adapterFor(agent ?? undefined);
+  const paneKey = `${session ?? ""}\0${paneId}`;
+  const paneKeyRef = useRef(paneKey);
+  paneKeyRef.current = paneKey;
   const direct = useDirectTyping({
-    paneKey: `${session ?? ""}\0${paneId}`,
+    paneKey,
     inputRef,
     // A terminal view on screen makes the box that terminal (ADR 0114).
     auto: terminalView || sessionPanel?.terminal != null,
@@ -1240,19 +1243,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     return terminalWrite(() => api.sendKeys(paneId, k, session));
   }
 
-  /** One write straight to the terminal (keys, or a paste while typing into it): the verdict, errors to the status channel. */
+  /**
+   * One write straight to the terminal (keys, or a paste while typing into it): the verdict, errors
+   * to the status channel, unless the answer comes for a pane no longer on screen.
+   */
   async function terminalWrite(call: () => Promise<ActionResponse>): Promise<boolean> {
     if (locked) return false;
+    const target = paneKey;
+    const report = (error: string) => {
+      if (paneKeyRef.current === target) setStatus(error, "error");
+    };
     try {
       const res = await call();
       if (!res.ok) {
-        setStatus(res.error ?? "The terminal didn't take it", "error");
+        report(res.error ?? "The terminal didn't take it");
         return false;
       }
       scheduleKeyRevalidate();
       return true;
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e), "error");
+      report(e instanceof Error ? e.message : String(e));
       return false;
     }
   }

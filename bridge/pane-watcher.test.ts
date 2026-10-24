@@ -53,27 +53,67 @@ describe("PaneWatcher", () => {
     abort.abort();
   });
 
-  it("after a write, reads the pane at once and lets its changes out on the short gap for a moment", async () => {
+  it("after a write, reads a quiet pane at once and lets its changes out on the short gap for a moment", async () => {
     const { events, live } = recorder();
     const pane = screen();
-    const watcher = new PaneWatcher(live, { readEveryMs: 400, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 5, typedGapMs: 10, typedForMs: 80 });
+    const watcher = new PaneWatcher(live, { readEveryMs: 20, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 5, typedGapMs: 10, typedForMs: 200 });
     const abort = new AbortController();
     watcher.watch("s", pane.herdr, ["p"], abort.signal);
-    await Bun.sleep(10);
+    // Quiet: backed off to reads at 0, 20, 60, 140 ms, the next not before 300 ms.
+    await Bun.sleep(150);
     pane.set("b");
     watcher.wrote("s", "p");
-    await Bun.sleep(30);
+    await Bun.sleep(25);
     expect(events.length).toBe(1);
     pane.set("c");
     watcher.wrote("s", "p");
-    await Bun.sleep(30);
+    await Bun.sleep(50);
     // Inside the one-second gap, the typed gap let the second change out.
     expect(events.length).toBe(2);
-    await Bun.sleep(100);
-    const reads = pane.reads.length;
+    abort.abort();
+  });
+
+  it("reads a typed pane once per typed gap, however fast the writes come", async () => {
+    const { live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 5, quietMaxMs: 400, typedReadMs: 1, typedGapMs: 25 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(5);
+    const before = pane.reads.length;
+    const started = Date.now();
+    for (let i = 0; i < 50; i++) {
+      watcher.wrote("s", "p");
+      await Bun.sleep(2);
+    }
+    // One read per 25 ms gap, plus the one a write pulls and the timer's slack, where the 5 ms fast
+    // cadence alone would read about once per write.
+    const reads = pane.reads.length - before;
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(reads).toBeLessThanOrEqual(Math.ceil((Date.now() - started) / 25) + 2);
+    expect(reads).toBeLessThan(25);
+    abort.abort();
+  });
+
+  it("reads a burst of writes once it settles, not a typed gap later", async () => {
+    const { events, live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 20, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 1, settledMs: 20, typedGapMs: 400 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
     await Bun.sleep(150);
-    // Past the typed moment the pane is back on its slow cadence: one read at most in 150 ms.
-    expect(pane.reads.length - reads).toBeLessThanOrEqual(2);
+    pane.set("w");
+    watcher.wrote("s", "p");
+    await Bun.sleep(10);
+    expect(events.length).toBe(1);
+    for (const next of ["wo", "wor", "word"]) {
+      pane.set(next);
+      watcher.wrote("s", "p");
+      await Bun.sleep(5);
+    }
+    // The burst's last key shows about 20 ms after it, inside both the 400 ms gap and the one-second one.
+    await Bun.sleep(40);
+    expect(events.length).toBe(2);
     abort.abort();
   });
 

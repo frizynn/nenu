@@ -105,25 +105,40 @@ describe("useOrderedKeySender", () => {
     await waitFor(() => expect(result.current.busy).toBe(false));
   });
 
-  it("tells a write still waiting on its upload that a reset moved on, and a failed one stops the line", async () => {
+  it("tells a write still waiting on its upload that a reset moved on, so the next pane's keys go at once", async () => {
     const upload = deferred<void>();
     const seen: boolean[] = [];
     const send = vi.fn<(keys: string[]) => Promise<boolean>>().mockResolvedValue(true);
-    const onFailure = vi.fn();
-    const { result } = renderHook(() => useOrderedKeySender(send, onFailure));
+    const { result } = renderHook(() => useOrderedKeySender(send, vi.fn()));
 
-    act(() => result.current.enqueue([async (current) => {
-      await upload.promise;
+    act(() => result.current.enqueue([async (current, moved) => {
+      await Promise.race([upload.promise, moved]);
       seen.push(current());
       return true;
     }]));
     act(() => result.current.reset());
-    // The new pane's keys don't wait behind the old pane's upload.
     act(() => result.current.enqueue(["n"]));
     await waitFor(() => expect(send).toHaveBeenCalledWith(["n"]));
-    upload.resolve();
-    await waitFor(() => expect(seen).toEqual([false]));
-    send.mockClear();
+    expect(seen).toEqual([false]);
+  });
+
+  it("keeps the line held by a write on its way across a reset: the bridge would refuse a second one", async () => {
+    const paste = deferred<boolean>();
+    const send = vi.fn<(keys: string[]) => Promise<boolean>>().mockResolvedValue(true);
+    const { result } = renderHook(() => useOrderedKeySender(send, vi.fn()));
+
+    act(() => result.current.enqueue([() => paste.promise]));
+    act(() => result.current.reset());
+    act(() => result.current.enqueue(["n"]));
+    expect(send).not.toHaveBeenCalled();
+    paste.resolve(true);
+    await waitFor(() => expect(send).toHaveBeenCalledWith(["n"]));
+  });
+
+  it("stops the line on a failed write", async () => {
+    const send = vi.fn<(keys: string[]) => Promise<boolean>>().mockResolvedValue(true);
+    const onFailure = vi.fn();
+    const { result } = renderHook(() => useOrderedKeySender(send, onFailure));
 
     act(() => result.current.enqueue([async () => false, "x"]));
     await waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
