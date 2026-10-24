@@ -65,7 +65,13 @@ type KindRow = { key: string; label: string; hint: string; icon: IconComponent |
  * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk,
  * where the list of kinds stays in view and only the folder picker steps back.
  */
-export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset; onClose: () => void }) {
+export default function NewDialog({ preset = {}, open = true, onClose, onExited }: {
+  preset?: NewPreset;
+  /** Closed, the sheet slides away showing its last step, and `onExited` follows once it is gone. */
+  open?: boolean;
+  onClose: () => void;
+  onExited?: () => void;
+}) {
   const data = useRouteLoaderData(ROOT_ROUTE_ID) as HomeData | undefined;
   const params = useParams();
   const workspaces = data?.workspaces ?? [];
@@ -80,7 +86,7 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
   const desk = useMediaQuery(DESKTOP);
   const heading = useRef<HTMLHeadingElement>(null);
   const body = useRef<HTMLElement>(null);
-  useHoldReload("new-dialog", true);
+  useHoldReload("new-dialog", open);
 
   const readOnly = isReadOnly(data?.device);
   const workspace = workspaces.find((w) => w.workspaceId === workspaceId);
@@ -113,8 +119,9 @@ export default function NewDialog({ preset = {}, onClose }: { preset?: NewPreset
 
   return (
     <BottomSheet
-      open
+      open={open}
       onClose={onClose}
+      onExited={onExited}
       title={title}
       onBack={back}
       headingRef={heading}

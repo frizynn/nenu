@@ -182,6 +182,22 @@ it("opens from New on the list, and closes from its header", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it("slides away showing its last step when closed, then is gone", async () => {
+  let end!: () => void;
+  const finished = new Promise<void>((resolve) => { end = resolve; });
+  Object.defineProperty(Element.prototype, "getAnimations", { configurable: true, value: () => [{ animationName: "exit", finished }] });
+  onTestFinished(() => { delete (Element.prototype as { getAnimations?: unknown }).getAnimations; openNewAgent(null); });
+  setup({ host: true });
+  act(() => openNewAgent({ kind: "workspace" }));
+  expect(await screen.findByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+  act(() => openNewAgent(null));
+  // Out of reach while it leaves, still the step that was on screen.
+  expect(screen.getByRole("dialog", { name: "New workspace", hidden: true })).toHaveAttribute("inert");
+  end();
+  await act(async () => { await finished; });
+  expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
+});
+
 it("starts over when New is asked for again over an open flow", async () => {
   setup({ host: true });
   onTestFinished(() => { openNewAgent(null); openNewDialog(false); });

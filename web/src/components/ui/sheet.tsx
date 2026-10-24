@@ -97,9 +97,11 @@ interface BottomSheetProps {
   headingRef?: React.Ref<HTMLHeadingElement>;
   /** Its shape from 1024 px; below that it is always the bottom sheet. */
   desktop?: keyof typeof DESKTOP;
+  /** Once closed and gone, its exit over: for an owner that stays mounted only to let it leave. */
+  onExited?: () => void;
 }
 
-export function BottomSheet({ open, onClose, title, onBack, children, className, bodyClassName, headingRef, desktop = "panel" }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, onBack, children, className, bodyClassName, headingRef, desktop = "panel", onExited }: BottomSheetProps) {
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef({ startY: 0, atTop: false, engaged: false, dy: 0 });
@@ -109,6 +111,13 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
   const { mounted, closing, content } = usePresence(open, { title, onBack, children }, viewportRef);
   const header = step ?? { title: content.title, back: content.onBack };
   useDialogFocus(open, panelRef);
+  const exited = React.useRef(onExited);
+  React.useLayoutEffect(() => {
+    exited.current = onExited;
+  });
+  React.useEffect(() => {
+    if (!mounted) exited.current?.();
+  }, [mounted]);
 
   // Backdrop dismiss requires press AND release on the backdrop itself (the Radix
   // outside-pointerdown rule) — NOT just whatever the browser happens to synthesize a `click` on. A
@@ -236,11 +245,11 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
           "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl outline-none border-t border-border bg-background shadow-2xl duration-180 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
           "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)]",
-          // A released drag closes from where the finger left it: the exit runs from the panel's
-          // own transform to fully below the screen.
+          // It rises from below the screen and leaves the way it came; a released drag closes from
+          // where the finger left it, from the panel's own transform to fully below the screen.
           closing
             ? "animate-out slide-out-to-bottom fill-mode-forwards lg:fade-out lg:zoom-out-98 lg:slide-out-to-bottom-0"
-            : "animate-in slide-in-from-bottom-4 lg:fade-in lg:zoom-in-98 lg:slide-in-from-bottom-0",
+            : "animate-in slide-in-from-bottom lg:fade-in lg:zoom-in-98 lg:slide-in-from-bottom-0",
           DESKTOP[desktop].panel,
           className,
         )}
@@ -411,8 +420,9 @@ export function SideSheet({
         }}
         className={cn(
           "side-sheet-panel relative z-10 flex h-full w-[86%] max-w-sm flex-col outline-none border-r border-border bg-background shadow-2xl duration-180 ease-out motion-reduce:animate-none",
-          // A released swipe closes from where the finger left it, out past the left edge.
-          closing ? "animate-out slide-out-to-left fill-mode-forwards" : "animate-in slide-in-from-left-4",
+          // It slides in from past the left edge and leaves the way it came; a released swipe closes
+          // from where the finger left it.
+          closing ? "animate-out slide-out-to-left fill-mode-forwards" : "animate-in slide-in-from-left",
           className,
         )}
       >
