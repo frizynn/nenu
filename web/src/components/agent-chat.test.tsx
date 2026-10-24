@@ -1092,12 +1092,13 @@ it("says the terminal is on its way, not that it printed nothing, while the pane
   expect(screen.queryByText("(no recent output)")).toBeNull();
 });
 
-// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11).
-describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", () => {
+// Renaming and closing used to hide behind a long-press or a second tap on the open chip (NAV-11). The
+// open chip now carries a chevron for its actions, so the ⋯ menu offers only what no strip on screen does.
+describe("AgentChat — the ⋯ menu renames and closes the pane only where no strip does", () => {
   const agent = { ...fixtureAgents[0]!, paneLabel: "Working Claude" };
   const tabs = [{ tabId: "w1:t1", workspaceId: "w1", number: 1, label: "review", focused: false, paneCount: 1 }];
 
-  it("opens the pane's and the tab's actions from the menu", async () => {
+  it("opens a lone pane's actions from the menu, and its tab's from the tab's own chip", async () => {
     const user = userEvent.setup();
     renderChat({ agent, agents: [agent], tabs });
     await openMenuItem(user, "Rename or close pane…");
@@ -1105,8 +1106,22 @@ describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", (
     expect(within(paneSheet).getByRole("button", { name: /Rename/ })).toBeInTheDocument();
     expect(within(paneSheet).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
     await user.click(within(paneSheet).getByRole("button", { name: "Close" }));
-    await openMenuItem(user, "Rename or close tab…");
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Rename or close tab…" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    await user.click(screen.getByRole("button", { name: /^review/ }));
     expect(within(screen.getByRole("dialog", { name: "review" })).getByRole("button", { name: /Close tab/ })).toBeInTheDocument();
+  });
+
+  it("leaves a pane that shares its tab to the pane strip's chip", async () => {
+    const user = userEvent.setup();
+    const other = { ...fixtureAgents[1]!, workspaceId: agent.workspaceId, tabId: agent.tabId, paneLabel: "Second Claude" };
+    renderChat({ agent, agents: [agent, other], tabs });
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    expect(screen.queryByRole("button", { name: "Rename or close pane…" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    await user.click(screen.getByRole("button", { name: /^Working Claude/ }));
+    expect(within(screen.getByRole("dialog", { name: "Working Claude" })).getByRole("button", { name: /Close pane/ })).toBeInTheDocument();
   });
 
   it("offers neither on a device that cannot write", async () => {

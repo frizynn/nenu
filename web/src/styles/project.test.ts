@@ -19,3 +19,16 @@ describe("the session panel's tabs", () => {
     expect(px(tab.height) - 2 * px(reach.inset)).toBe(44);
   });
 });
+
+describe("Home's segmented lists", () => {
+  // A phone drew the track 52px tall to give each segment a finger; the reach does that now.
+  it("stay 36px to the eye on a phone and still reach 44px", () => {
+    const px = (value: string | undefined) => Number(/^(-?[\d.]+)px/.exec(value ?? "")?.[1] ?? Number.NaN);
+    const track = declarations(css, ".project-segmented", [LAYER]);
+    const coarse = declarations(css, ".project-segmented", [LAYER, "@media (pointer: coarse)"]);
+    const reach = declarations(css, ".project-segment::after", [LAYER, "@media (pointer: coarse)"]);
+    expect(coarse.height).toBeUndefined();
+    expect(px(track.height)).toBe(36);
+    expect(px(track.height) - 2 * px(track.padding) - 2 * px(reach.inset)).toBe(44);
+  });
+});
