@@ -161,10 +161,18 @@ export function subscribeHealth(cb: () => void): () => void {
  * Reactive read of the shared ESCALATION anchor — re-renders a consumer whenever markLive/markWake/
  * latchLost fires. Returns effectiveAnchor(), so it already honours the sticky latch (drops the wake
  * grace once escalated); consumers derive `lost` from this single value and cannot disagree.
+ *
+ * Only while `watching`: every live read moves the anchor, and a consumer whose data is live reads
+ * nothing from it, so it reads a constant instead of re-rendering a whole chat on each read.
  */
-export function useConnectionHealth(): number {
-  return useSyncExternalStore(subscribeHealth, effectiveAnchor, effectiveAnchor);
+export function useConnectionHealth(watching: boolean): number {
+  const read = watching ? effectiveAnchor : unwatched;
+  return useSyncExternalStore(subscribeHealth, read, read);
 }
+
+// Never compared with the clock: useNotLiveFor measures the anchor only while connecting, and reads it
+// afresh the render that starts.
+const unwatched = () => 0;
 
 // A phone backgrounds Nenu (screen off, app switch) far more than it truly disconnects; timers
 // freeze while it's away. On return, grant a fresh grace window rather than escalating on the stale,

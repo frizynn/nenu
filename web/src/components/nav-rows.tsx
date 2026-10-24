@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigation } from "react-router";
+import { Link } from "react-router";
 import { Pending, Terminal } from "@/components/ui/icon";
 
+import { useRouterState } from "@/hooks/use-router";
 import { StateMark, StatusDot } from "@/components/status-badge";
 import { displayName, displayPlace, type DisplayPlace } from "@/lib/display-name";
 import { timeAgoShort } from "@/lib/format";
@@ -53,8 +54,9 @@ const OPENING_DELAY_MS = 120;
 
 /** Whether the route `to` names has been loading for longer than {@link OPENING_DELAY_MS}. */
 function useOpening(to: string): boolean {
-  const navigation = useNavigation();
-  const opening = navigation.state === "loading" && navigation.location.pathname === to.split("?")[0];
+  // Only this row's answer: a list of rows each reading the navigation redrew all of them twice per poll.
+  const path = to.split("?")[0];
+  const opening = useRouterState((state) => state.navigation.state === "loading" && state.navigation.location.pathname === path);
   const [late, setLate] = useState(false);
   useEffect(() => {
     if (!opening) return;

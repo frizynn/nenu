@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronDown } from "@/components/ui/icon";
 
 import { OpeningMark, PaneMark } from "@/components/nav-rows";
 import { AGENT_STATE, StateMark } from "@/components/status-badge";
+import { useDayTurn } from "@/hooks/use-day-turn";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { deskChats, type DeskChat } from "@/lib/desk-nav";
 import type { HomeData } from "@/lib/loaders";
@@ -91,13 +92,15 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
 /**
  * A chat: its state as a small still glyph, its one name, and a quiet +1 when it finished or asked for
  * you since you last opened it (the desk's answer to an agent finishing elsewhere, instead of a toast).
+ * Drawn again only when its pane changed: the bar re-renders on every revalidation, its rows need not.
  */
-function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
+const ChatRow = memo(function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
   const { pane } = chat;
   const to = panePath(chat.paneId, session);
   const word = STATUS_LABEL[pane.status];
   // The usage limit outranks the agent's state: it is held until a time, whatever it was doing.
   const limit = usageLimitOf(pane);
+  useDayTurn(limit !== undefined);
   // Only what is alive reads in full ink: a chat that waits, works, or finished unseen.
   const live = limit !== undefined || AGENT_STATE[pane.status] !== "idle" || chat.unread;
   return (
@@ -113,4 +116,5 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
       {chat.unread && !current && <span className="sr-only">, new</span>}
     </Link>
   );
-}
+}, (a, b) => a.chat.pane === b.chat.pane && a.chat.title === b.chat.title && a.chat.unread === b.chat.unread
+  && a.session === b.session && a.current === b.current);

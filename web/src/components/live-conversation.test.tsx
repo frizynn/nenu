@@ -12,7 +12,7 @@ import { addLocalSend, localSendScope, updateLocalSend } from "@/lib/local-sends
 import { ConnectConversation } from "./connect-conversation";
 
 vi.mock("@/lib/api", () => ({ fetchHistory: vi.fn() }));
-vi.mock("react-router", async (original) => ({ ...await original<typeof import("react-router")>(), useRevalidator: () => ({ revalidate: async () => {}, state: "idle" }) }));
+vi.mock("@/hooks/use-router", () => ({ useRevalidate: () => async () => {} }));
 vi.mock("@/components/transcript-view", async (original) => {
   const actual = await original<typeof import("./transcript-view")>();
   return { ...actual, TranscriptView: vi.fn(actual.TranscriptView) };
