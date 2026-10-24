@@ -48,6 +48,9 @@ function png(width: number, height: number, [r, g, b]: [number, number, number],
 
 const RED = png(240, 160, [220, 30, 30], [60, 100]);
 const BLUE = png(240, 160, [30, 60, 220], [20, 40]);
+/** A draft as it reads: a chip's joiners (U+2060) take no room. */
+const visible = (draft: string) => draft.replace(/\u2060/g, "");
+
 const WORDS = ["first the red one ", " then the blue one ", " and that is all"] as const;
 
 export async function inlineImagesBench(bridge: TestBridge, browser: Browser, outDir: string, before: boolean): Promise<{ checks: Check[]; shots: string[]; sent: Record<string, unknown> }> {
@@ -124,7 +127,7 @@ export async function inlineImagesBench(bridge: TestBridge, browser: Browser, ou
     await shoot("composer");
     const draft = await box.inputValue();
     sent[`draft-${name}`] = draft;
-    check(`${name}: the draft holds a chip where each picture went`, /^first the red one .*Image #1.* then the blue one .*Image #2.* and that is all$/s.test(draft), JSON.stringify(draft));
+    check(`${name}: the draft holds a chip where each picture went`, /^first the red one .*Image\s#1.* then the blue one .*Image\s#2.* and that is all$/s.test(visible(draft)), JSON.stringify(draft));
     const thumbs = await page.getByRole("list", { name: "Attached files" }).getByRole("listitem").allTextContents();
     check(`${name}: the thumbnails are numbered as their chips`, thumbs.length === 2 && thumbs[0]!.includes("#1") && thumbs[1]!.includes("#2"), JSON.stringify(thumbs));
 
@@ -152,7 +155,7 @@ export async function inlineImagesBench(bridge: TestBridge, browser: Browser, ou
       await page.waitForTimeout(200);
       const after = await box.inputValue();
       const left = await page.getByRole("list", { name: "Attached files" }).getByRole("listitem").allTextContents();
-      check(`${name}: removing a thumbnail removes its chip and renumbers`, !after.includes("#2") && /x\s+y .*Image #1/.test(after) && left.length === 1 && left[0]!.includes("#1"), JSON.stringify({ after, left }));
+      check(`${name}: removing a thumbnail removes its chip and renumbers`, !after.includes("#2") && /x\s+y .*Image\s#1/.test(visible(after)) && left.length === 1 && left[0]!.includes("#1"), JSON.stringify({ after, left }));
       await shoot("removed");
       await clearDraft(page);
     }
