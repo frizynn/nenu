@@ -500,7 +500,7 @@ export class AgentStates {
   }
 }
 
-async function readSmall(path: string): Promise<string | null> {
+export async function readSmall(path: string): Promise<string | null> {
   try {
     const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -540,8 +540,8 @@ export async function processOpenFiles(pids: number[]): Promise<string[]> {
 
 /**
  * Whether `pid` started when `procStart` says: Linux's start ticks straight from `/proc` (no spawn;
- * `Bun.file` because `/proc` files report size 0), else `ps -o lstart=` read in this process's own
- * time zone. Null when the start cannot be read.
+ * `Bun.file` because `/proc` files report size 0), else {@link processStart}. Null when the start
+ * cannot be read.
  */
 export async function sameProcess(pid: number, procStart: string): Promise<boolean | null> {
   if (procStartTicks(procStart)) {
@@ -549,11 +549,17 @@ export async function sameProcess(pid: number, procStart: string): Promise<boole
     const ticks = statStartTicks(await Bun.file(`/proc/${pid}/stat`).text());
     return ticks === null ? null : ticks === procStart.trim();
   }
+  const started = await processStart(pid);
+  return started === null ? null : sameProcStart(procStart, started);
+}
+
+/** When a pid started, from `ps -o lstart=` read in this process's own time zone. */
+export async function processStart(pid: number): Promise<number | null> {
   const child = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore", stdin: "ignore", env: { ...process.env, LC_ALL: "C" } });
   const timer = setTimeout(() => child.kill(), 2_000);
   try {
     const out = (await new Response(child.stdout).text()).trim().replace(/\s+/g, " ");
     const at = Date.parse(out);
-    return (await child.exited) === 0 && Number.isFinite(at) ? sameProcStart(procStart, at) : null;
+    return (await child.exited) === 0 && Number.isFinite(at) ? at : null;
   } finally { clearTimeout(timer); }
 }
