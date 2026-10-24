@@ -7,26 +7,25 @@ import { AutoDeny, QuestionCard, useLockLine, type LockReason } from "@/componen
 import { StatusDot } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { InteractionsState, Receipt } from "@/hooks/use-interactions";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import type { NeedsYouItem } from "@/lib/home-stats";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { panePath } from "@/lib/nav";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { oneTapAnswers } from "@/lib/one-tap-answers";
-import { ASK } from "@/lib/org-tree";
-import type { AgentView, AnswerOutcome, Interaction, InteractionOption, ProjectView } from "@/lib/types";
+import type { AgentView, AnswerOutcome, Interaction, InteractionOption } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Who is asking and where it lives, by the names every other view gives the same pane. */
-function asker(agent: AgentView | undefined, projects: readonly ProjectView[] | undefined, paneId: string): { name: string; where?: string } {
+function asker(agent: AgentView | undefined, paneId: string): { name: string; where?: string } {
   if (!agent) return { name: paneId };
-  return { name: displayName(agent, projects), where: displayPlace(agent, projects).place };
+  return { name: displayName(agent), where: displayPlace(agent).place };
 }
 
 const WAITING = "waiting in the terminal";
 
 /**
- * The button a row opens its thread with (Answer, Reply): solid on a phone, outlined on a desk, where a
- * solid one is the brightest thing on the page and the page's one primary belongs to the composer.
+ * The button a row opens its thread with (Answer): solid on a phone, outlined on a desk, where a solid
+ * one is the brightest thing on the page and the page's one primary belongs to the composer.
  */
 function useOpenButton(): string {
   return buttonVariants({ size: "sm", variant: useMediaQuery("(min-width: 1024px)") ? "outline" : "default" });
@@ -35,13 +34,12 @@ function useOpenButton(): string {
 /**
  * Home's "Needs you": one row per pane, oldest first, so the lists under it stay in the first screen.
  * A detected dialog says what it asks and, on a desk, takes its one-tap answers in place; anything
- * else opens the thread, where the whole card is. A blocked pane with no dialog the bridge could read,
- * and a thread waiting for your reply, are rows into their thread. Answers just sent stay as
+ * else opens the thread, where the whole card is. A blocked pane with no dialog the bridge could read
+ * is a row into its thread. Answers just sent stay as
  * receipts until the pane's next dialog.
  */
-export function NeedsYouList({ agents, projects, session, items, receipts, interactions, lockReason, opening }: {
+export function NeedsYouList({ agents, session, items, receipts, interactions, lockReason, opening }: {
   agents: readonly AgentView[];
-  projects?: readonly ProjectView[];
   session?: string;
   items: readonly NeedsYouItem<Interaction>[];
   receipts: readonly Receipt[];
@@ -52,28 +50,23 @@ export function NeedsYouList({ agents, projects, session, items, receipts, inter
   opening: string | null;
 }) {
   const lockLine = useLockLine(lockReason);
-  const openButton = useOpenButton();
   const byPane = new Map(agents.map((agent) => [agent.paneId, agent]));
   if (!items.length && !receipts.length) return null;
 
   return (
     <section aria-label="Needs you" className="flex flex-col gap-2">
-      {items.map(({ paneId, interaction, reply }) => {
-        const who = asker(byPane.get(paneId), projects, paneId);
+      {items.map(({ paneId, interaction }) => {
+        const who = asker(byPane.get(paneId), paneId);
         const to = panePath(paneId, session);
         const busy = isOpening(opening, to);
         if (interaction) {
           return <AskRow key={`${paneId}:${interaction.signature}`} interaction={interaction} who={who} to={to} opening={busy} lockLine={lockLine}
             readOnly={lockReason === "read-only"} refused={interactions.refusalFor(interaction)} onAnswer={(option) => interactions.answer(interaction, option)} />;
         }
-        if (reply) {
-          return <Row key={paneId} who={who} to={to} opening={busy} line={ASK.reply.label}
-            actions={<Link to={to} className={openButton}>{ASK.reply.action}</Link>} />;
-        }
         return <Row key={paneId} who={who} to={to} opening={busy} line={WAITING} actions={<ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />} />;
       })}
       {receipts.map((receipt) => (
-        <QuestionCard key={`receipt:${receipt.paneId}`} compact receipt={receipt} title={asker(byPane.get(receipt.paneId), projects, receipt.paneId).name} onAnswer={() => Promise.resolve({ ok: true })} />
+        <QuestionCard key={`receipt:${receipt.paneId}`} compact receipt={receipt} title={asker(byPane.get(receipt.paneId), receipt.paneId).name} onAnswer={() => Promise.resolve({ ok: true })} />
       ))}
     </section>
   );

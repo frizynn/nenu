@@ -176,7 +176,7 @@ it("a Stop the bridge answers after the pane went idle does not leave 'Stoppingâ
 // What asks nothing of you is not a chip (ADR 0108): opened from the â‹¯ menu, its panel floats over the
 // thread from the box's top edge.
 it("never draws a tucked chip, and opens its panel without one", () => {
-  const tucked = { id: "working" as const, label: "Done", title: "Finished work", count: 2, content: <p>bun run build</p>, tucked: true };
+  const tucked = { id: "working" as const, label: "Finished work", count: 2, content: <p>bun run build</p>, tucked: true };
   const { rerender } = setup({ working: false, chips: { chips: [tucked], open: null, onOpenChange: vi.fn() } });
   expect(screen.queryByRole("group", { name: "Status" })).not.toBeInTheDocument();
   rerender({ chips: { chips: [tucked], open: "working", onOpenChange: vi.fn() } });

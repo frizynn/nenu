@@ -36,45 +36,9 @@ export function workspacePath(workspaceId: string, herd: Herd, session?: string)
   return entry ? panePath(entry.paneId, session) : `/space/${encodeURIComponent(workspaceId)}${sessionSearch(session)}`;
 }
 
-export function projectPath(slug: string, session?: string): string {
-  return `/project/${encodeURIComponent(slug)}${sessionSearch(session)}`;
-}
-
-/** A project's finished work, its History (ADR 0106), searched for `search` when given. */
-export function projectHistoryPath(slug: string, session?: string, search?: string): string {
-  const query = new URLSearchParams({ work: "finished" });
-  if (search) query.set("q", search);
-  if (session) query.set(SESSION_PARAM, session);
-  return `/project/${encodeURIComponent(slug)}?${query}`;
-}
-
-/** One node of a project's organization: its detail, for a node that runs in no live pane. */
-export function nodePath(slug: string, nodeId: string, session?: string): string {
-  return `/project/${encodeURIComponent(slug)}/node/${encodeURIComponent(nodeId)}${sessionSearch(session)}`;
-}
-
 /** The dashboard path, carrying the current session so "go home" doesn't drop you back to primary. */
 export function homePath(session?: string): string {
   return `/${sessionSearch(session)}`;
-}
-
-/** Every project as a card, the desk's way into them (ADR 0102). */
-export function projectsPath(session?: string): string {
-  return `/projects${sessionSearch(session)}`;
-}
-
-/** The routines route: every project's routines, read only. */
-export function routinesPath(session?: string): string {
-  return `/routines${sessionSearch(session)}`;
-}
-
-/**
- * Your asks: what you asked every coordinator, and where each one stands; with `project`, that
- * project's alone, which a desk opens on the project's Waiting on you and a phone answers in place.
- */
-export function asksPath(session?: string, project?: string): string {
-  const search = sessionSearch(session);
-  return `/asks${search}${project ? `${search ? "&" : "?"}project=${encodeURIComponent(project)}` : ""}`;
 }
 
 /** The settings route, carrying the current session like the other path helpers. */

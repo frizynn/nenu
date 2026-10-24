@@ -17,7 +17,7 @@ const DOT: Record<MachineState, string> = {
   "no-nenu": "border-[1.5px] border-status-idle/60", disabled: "border-[1.5px] border-status-idle/60", off: "border-[1.5px] border-status-idle/60",
 };
 
-const chatsOf = (machine: MachineView) => (machine.herd ? recentChats([...machine.herd.agents, ...machine.herd.shellPanes], undefined, new Set()) : []);
+const chatsOf = (machine: MachineView) => (machine.herd ? recentChats([...machine.herd.agents, ...machine.herd.shellPanes], new Set()) : []);
 
 export default function OtherMachines({ data, place }: { data: HomeData; place: "nav" | "home" }) {
   const machines = otherMachines(data);

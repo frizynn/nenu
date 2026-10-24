@@ -6,8 +6,7 @@ import type { AgentStatus } from "./types.ts";
 
 // Which agent lifecycle events are worth a push. A companion to Snooze (the do-not-disturb deadline):
 // where Snooze mutes everything for a while, this decides which *kinds* of alert ever fire: an agent
-// waiting on you, and a finish that answers a person. Turns the organization runs by itself and
-// subagent results stay quiet (ADR 0072). Bridge-wide (not per-device), like Snooze, because a push fans out to
+// waiting on you, and a finish that answers a person. Subagent results stay quiet (ADR 0072). Bridge-wide (not per-device), like Snooze, because a push fans out to
 // every subscribed device. Persisted to the state dir so a preference survives the `systemctl restart`
 // that backend changes require. Missing file / missing keys fall back to defaults.
 
@@ -16,8 +15,7 @@ export interface NotifyPrefs {
   /** Push when any agent becomes blocked (waiting on your input). Default on. */
   blocked: boolean;
   /** Push when an agent finishes a turn a person started: a message you sent from Nenu, or one typed
-   *  into a loose agent or a coordinator. Never a turn Herdr Organizations' own nudge started, nor a
-   *  thread's turn its coordinator started. Default on. */
+   *  into the agent. Default on. */
   replies: boolean;
   /** Push when an agent another agent started (`herdr agent start <name>`) finishes a turn that agent
    *  typed. Default off: the agent that launched it is the one waiting. A message you sent it from
@@ -83,12 +81,10 @@ export class NotifyPrefsStore {
   }
 
   /** Whether this alert, once the bridge knows who it is and what started its turn, should push. */
-  wants(alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested" | "launched">): boolean {
+  wants(alert: Pick<AlertDetail, "status" | "startedBy" | "requested" | "launched">): boolean {
     if (alert.status === "blocked") return this.prefs.blocked;
     if (alert.startedBy === "subagent") return this.prefs.subagents;
     if (alert.requested) return this.prefs.replies;
-    // Organizations' nudges are its own traffic, and a thread's typed turns come from its coordinator.
-    if (alert.startedBy === "organizations" || alert.kind === "thread") return false;
     // An agent another agent started: that agent typed this turn, and it is the one waiting.
     if (alert.launched) return this.prefs.launched;
     return this.prefs.replies;

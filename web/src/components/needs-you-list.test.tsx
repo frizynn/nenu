@@ -172,12 +172,3 @@ describe("a dialog's row", () => {
   });
 });
 
-it("offers a thread waiting for your reply as a row with Reply", async () => {
-  const element = <NeedsYouList agents={[{ ...blocked, status: "idle" }]} session="work" items={[{ paneId: blocked.paneId, reply: true }]} receipts={[]} interactions={interactions} lockReason={undefined} opening={null} />;
-  const router = createMemoryRouter([{ path: "/", element }, { path: "/pane/:paneId", element: <p>Pane opened</p> }]);
-  render(<RouterProvider router={router} />);
-  const row = within(screen.getByRole("region", { name: /^Needs you/ }));
-  expect(row.getByText("Waiting for your reply")).toBeInTheDocument();
-  await userEvent.click(row.getByRole("link", { name: "Reply" }));
-  expect(router.state.location.pathname).toBe("/pane/w5%3Aa2");
-});

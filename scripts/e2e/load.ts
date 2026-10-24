@@ -4,14 +4,11 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
-import type { OrgSeed } from "./scenario.ts";
 
-// What loading draws, on a phone and a desk, with the reads slowed to what a real host takes: a
-// project page while its coordinator's STATUS.md arrives (layout shift on the way in and on the way
-// back), a chat opened again after a few seconds (frames that show the skeleton, frames to its text;
-// then on a slow link, where it must say it is updating),
-// and a direct load (which boot screens follow each other before the page). Chrome, for the
-// Layout Instability API.
+// What loading draws, on a phone and a desk, with the reads slowed to what a real host takes: a chat
+// opened again after a few seconds (frames that show the skeleton, frames to its text; then on a slow
+// link, where it must say it is updating), and a direct load (which boot screens follow each other
+// before the page). Chrome, for the Layout Instability API.
 //
 //   bun scripts/e2e/load.ts [--port 8799] [--out DIR] [--delay 400]
 
@@ -26,40 +23,7 @@ const port = Number(values.port);
 const delay = Number(values.delay);
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `load-${Date.now()}`);
 const CAPTURE_EPOCH = Date.parse("2026-10-16T14:00:00Z");
-const PROJECT = "/project/acme";
-
-const STATUS = `# Status
-Objective: lanzar el checkout nuevo de Acme antes del viernes
-
-## Asked
-- [needs-decision] ¿Lista o tarjetas para el stock en el teléfono? : t-0011 dejó las dos opciones
-- [working] Que el pago con QR funcione en prueba : falta la clave del proveedor
-- [done] Cupones de descuento en el carrito : aprobado y en verde
-
-## Decisions
-- 2026-10-14 El checkout sale en partes, un PR por parte`;
-
-function seed(_herd: unknown, now: number, projects: string): OrgSeed {
-  const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
-  const node = (id: string, title: string, group: string, minutes: number) => ({
-    id, title, parent_id: "root", role: "worker", status: group === "resolved" ? "resolved" : "open", group, group_label: group, note: "", branch: "",
-    workspace_id: "", tab_id: "", pane_id: "", cwd: "", updated: ago(minutes), report_unacked: false, auto_fix_ci: false, auto_merge: false, pr: null,
-  });
-  return {
-    profiles: ["claude"],
-    projects: [{
-      slug: "acme", name: "Acme Shop", goal: "Coordinar iniciativas de Acme", status: "active",
-      status_file: { path: join(projects, "acme", "STATUS.md"), text: STATUS, updated: ago(4) },
-      threads: [
-        node("t-0011", "Panel de stock a 390 px", "waiting-on-you", 12),
-        node("t-0012", "Pago con QR", "idle", 40),
-        node("t-0013", "Landing a 390 px", "working", 1),
-        node("t-0014", "Cupones de descuento", "ready-for-review", 25),
-        node("t-0015", "Login con email", "resolved", 600),
-      ],
-    }],
-  };
-}
+const CHAT = "/pane/w1%3Aidle";
 
 // Recorded from the first script on every page: layout shifts, and per frame which loading screen
 // is up (the HTML splash, React's boot splash, the chat skeleton) and whether the chat's text is.
@@ -100,24 +64,14 @@ const read = (page: Page) => page.evaluate(() => {
   const w = window as unknown as { __shifts: Probe["shifts"]; __frames: Probe["frames"] };
   return { shifts: w.__shifts, frames: w.__frames, now: Math.round(performance.now()) };
 }, null) as Promise<Probe & { now: number }>;
-const cls = (shifts: Probe["shifts"], from: number) => Number(shifts.filter((s) => s.t >= from).reduce((sum, s) => sum + s.v, 0).toFixed(4));
 
 async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
   const failures: string[] = [];
-  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: seed });
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
   let browser: Browser | null = null;
   try {
-    const projects = join(bridge.dir, "projects");
-    await mkdir(join(projects, "acme"), { recursive: true });
-    await writeFile(join(projects, "acme", "STATUS.md"), STATUS);
-    const deadline = Date.now() + 15_000;
-    while ((await (await fetch(`${bridge.url}/api/org/summary?project=acme`)).json() as { threads: unknown }).threads === null) {
-      if (Date.now() > deadline) throw new Error("the overview was never read");
-      await Bun.sleep(200);
-    }
-
     browser = await launchChrome();
     const open = async (device: Record<string, unknown>, slow: { snapshot?: number; history?: number } = {}) => {
       const context = await browser!.newContext({ ...device, timezoneId: "UTC", locale: "en-US" }) as Awaited<ReturnType<Browser["newContext"]>> & {
@@ -125,11 +79,10 @@ async function main(): Promise<void> {
         route(url: string, handler: (route: { request(): { method(): string; url(): string }; continue(): Promise<void> }) => Promise<void>): Promise<void>;
       };
       await context.addInitScript(PROBE);
-      // The reads a real host is slow at: Organizations' summary and the journal. The snapshot only on a cold boot.
+      // The read a real host is slow at: the journal. The snapshot only on a cold boot.
       await context.route("**/api/**", async (route) => {
         const { pathname } = new URL(route.request().url());
-        const wait = /\/history$/.test(pathname) ? slow.history ?? delay : pathname.startsWith("/api/org/summary") ? delay
-          : pathname === "/api/snapshot" ? slow.snapshot ?? 0 : 0;
+        const wait = /\/history$/.test(pathname) ? slow.history ?? delay : pathname === "/api/snapshot" ? slow.snapshot ?? 0 : 0;
         if (wait) await Bun.sleep(wait);
         await route.continue().catch(() => {});
       });
@@ -144,41 +97,18 @@ async function main(): Promise<void> {
     const tapLink = (page: Page, href: string) => page.evaluate((target: string) => {
       const link = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]")).find((a) => a.getAttribute("href") === target && a.offsetParent !== null);
       if (link) return link.click();
-      // No row links there (a phone's Home opens a project from a button): the same in-app navigation.
+      // No row link on screen: the same in-app navigation.
       history.pushState({ idx: (history.state?.idx ?? 0) + 1 }, "", target);
       dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     }, href);
 
     const results: Record<string, unknown> = {};
     for (const [name, device] of [["phone", PHONE], ["desk", DESKTOP]] as const) {
-      // A project: in from Home, out to a chat, back.
-      {
-        const { page, context } = await open(device);
-        await page.goto(bridge.url + "/");
-        await page.waitForTimeout(1500);
-        let mark = (await read(page)).now;
-        await tapLink(page, PROJECT);
-        await page.getByRole("heading", { name: "Acme Shop" }).first().waitFor({ timeout: 10_000 });
-        await page.waitForTimeout(delay + 1500);
-        const enter = cls((await read(page)).shifts, mark);
-        await shoot(page, `project-${name}`);
-        await page.evaluate(() => history.back(), null);
-        await page.waitForTimeout(1200);
-        mark = (await read(page)).now;
-        await page.evaluate(() => history.forward(), null);
-        await page.waitForTimeout(delay + 1500);
-        const probe = await read(page);
-        const back = cls(probe.shifts, mark);
-        results[`project-${name}`] = { enter, back, sources: probe.shifts.map((s) => s.src).flat() };
-        if (enter > 0.01) failures.push(`project-${name}: CLS ${enter} on the way in`);
-        if (back > 0.01) failures.push(`project-${name}: CLS ${back} on the way back`);
-        await context.close();
-      }
       // A chat: opened, left for Home, opened again.
       {
         const slow: { history?: number } = {};
         const { page, context } = await open(device, slow);
-        const chat = "/pane/w1%3Aidle";
+        const chat = CHAT;
         await page.goto(bridge.url + "/");
         await page.waitForTimeout(1500);
         await tapLink(page, chat);
@@ -219,12 +149,12 @@ async function main(): Promise<void> {
       // A direct load, the snapshot slowed so each boot screen is seen.
       {
         const { page, context } = await open(device, { snapshot: 1500 });
-        void page.goto(bridge.url + PROJECT, { waitUntil: "domcontentloaded" }).catch(() => {});
+        void page.goto(bridge.url + CHAT, { waitUntil: "domcontentloaded" }).catch(() => {});
         await page.waitForTimeout(150);
         await shoot(page, `boot-early-${name}`);
         await page.waitForTimeout(900);
         await shoot(page, `boot-late-${name}`);
-        await page.getByRole("heading", { name: "Acme Shop" }).first().waitFor({ timeout: 10_000 });
+        await page.getByText("Looking at the idle pane now.").first().waitFor({ timeout: 10_000 });
         await page.waitForTimeout(300);
         const frames = (await read(page)).frames.filter((f, i, all) => f.screen !== all[i - 1]?.screen);
         // Each screen in turn and how long it stayed up.

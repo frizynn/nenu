@@ -1,6 +1,6 @@
 # 0103. A conversation that ended its turn waits on nobody
 
-- **Status:** Accepted (2026-10-20). Amends point 1 of [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md).
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-20). Amends point 1 of [ADR 0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md).
 - **Trail:** `web/src/lib/org-tree.ts` (`nodeState`, `atRest`) · `bridge/projects.ts` (`conversation`) ·
   Organizations `src/thread.rs` (`group`, row 4) · `docs/json.md` (`keep_open`)
 

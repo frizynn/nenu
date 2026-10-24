@@ -21,7 +21,7 @@ const turns = (count: number): TranscriptEntry[] => Array.from({ length: count }
 }));
 
 function setup(paneId: string, history: Partial<HistoryData>, agents: AgentView[] = [], snapshot: Partial<HomeData> = {}) {
-  const root: HomeData = { bridge: "connected", agents, shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined,
+  const root: HomeData = { bridge: "connected", agents, shellPanes: [], workspaces: [], tabs: [], device: undefined,
     sessions: [], session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false, ...snapshot };
   const data: HistoryData = { paneId, session: undefined, entries: [], hasMore: false, total: 0, fileTruncated: false, ...history };
   const router = createMemoryRouter([{

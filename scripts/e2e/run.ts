@@ -1,11 +1,11 @@
 import { writeFileSync } from "node:fs";
-import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
-import { browsersCache, DESKTOP, launchEngine, launchWebkit, openPhoneView, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
+import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
 import { commandsBench } from "./commands.ts";
 import { filesBench } from "./files.ts";
@@ -15,16 +15,12 @@ import { sendAlwaysBench } from "./send-always.ts";
 import { liveJournalBench } from "./live-journal.ts";
 import { usageLimitBench } from "./usage-limit.ts";
 import { takeOverBench } from "./take-over.ts";
-import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsYouSeed, orgTreeSeed, projectChatSeed, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { appendJournal, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJournal, writeJournal, writeLongJournal } from "./scenario.ts";
 
 // The e2e bench. Every command starts its own test bridge on a FakeHerdr (bridge.ts), so nothing
 // here can reach the live service or a real terminal.
 //
 //   bun scripts/e2e/run.ts smoke    [--port 8797] [--out DIR]   Home screenshots, phone + desktop
-//   bun scripts/e2e/run.ts project  [--port 8797] [--out DIR]   A project page, then create and start nodes
-//   bun scripts/e2e/run.ts org      [--port 8797] [--out DIR]   Every view of a project's organization
-//   bun scripts/e2e/run.ts threads  [--port 8797] [--out DIR] [--seconds 60]  A coordinator's chat: tabs, panel, DOM and React renders
-//   bun scripts/e2e/run.ts needs-you [--port 8797] [--out DIR]  Two threads that need you: a dialog, and an agent waiting for a reply
 //   bun scripts/e2e/run.ts tabs     [--port 8797] [--out DIR]   Close an open pane's tab, then where it lands
 //   bun scripts/e2e/run.ts workspace [--port 8797] [--out DIR]  Open each workspace from every way in, then where it lands
 //   bun scripts/e2e/run.ts workspace-rows [--port 8797] [--out DIR]  A workspace's row in every list, phone and desk: folds, where a row that opens directly lands
@@ -39,18 +35,12 @@ import { appendJournal, demoOrg, deskOrg, diffOrg, growDiffRepo, homeOrg, needsY
 //   bun scripts/e2e/run.ts inspector [--before] [--port 8797] [--out DIR]  A session's Inspector on a desk: tabs, fold, Overview, requests per tab
 //   bun scripts/e2e/run.ts terminal [--before] [--port 8797] [--out DIR]  The desk's Terminal tab, the + menu, watch reads
 //   bun scripts/e2e/run.ts motion   [--before] [--port 8797] [--out DIR] [--seconds 60]  Page transitions frame by frame, tap to content, transitions while quiet
-//   bun scripts/e2e/run.ts back     [--port 8797] [--out DIR]   Into a project's threads and back, two projects: history length, motion, Back from Home
-//   bun scripts/e2e/run.ts surface  [--port 8797] [--out DIR] [--seconds 60]  Surfaces and project marks on every screen, idle CPU, memory and DOM
-//   bun scripts/e2e/run.ts sidebar  [--port 8797] [--out DIR] [--seconds 60]  The desk's bar, Routines, Needs you, an agent finishing elsewhere; idle CPU
 //   bun scripts/e2e/run.ts idle     [--port 8797] [--out DIR] [--seconds 60]  Only sidebar's idle cost, to alternate two builds of web/dist
-//   bun scripts/e2e/run.ts chips    [--before] [--port 8797] [--out DIR] [--seconds 60]  The row above the composer: each chip's panel, phone and desk, idle CPU
 //   bun scripts/e2e/run.ts chip-line [--port 8797] [--out DIR]  The chips under the box and Stop in it: seven moments, phone and desk, nothing above the box
-//   bun scripts/e2e/run.ts composer [--port 8797] [--out DIR]   Around the box: every chip's panel, a long branch, another machine, finished work; fails if a panel moves anything or the row under the box spills
 //   bun scripts/e2e/run.ts chat     [--port 8797] [--out DIR] [--seconds 60]  A finished conversation, folded and open; a long one's DOM, idle CPU and memory
 //   bun scripts/e2e/run.ts scroll   [--port 8797] [--out DIR]   A long chat read on a phone: what moves the line being read with no touch
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
-//   bun scripts/e2e/run.ts at-rest  [--port 8797] [--out DIR]   A conversation that ended its turn on Home: never Needs you, beside a real dialog
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
 //   bun scripts/e2e/run.ts paste-image [--port 8797] [--out DIR]  Pictures pasted and picked between words, keyboard down and up: the draft spans the box
 //   bun scripts/e2e/run.ts live-journal [--journal LOG] [--port 8797] [--out DIR]  A chat on a 1, 10 and 40 MB log, phone and desk: ms from an append to its line on screen
@@ -112,8 +102,8 @@ const perMinute = (o: Record<string, number>, ms: number) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round((v * 60_000 / ms) * 10) / 10]));
 const pct = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 
-async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number, org?: (herd: DemoHerd, now: number) => OrgSeed, repo?: (dir: string) => void): Promise<T> {
-  const bridge = await startTestBridge({ port, fake: true, epoch, org, repo });
+async function withBench<T>(fn: (bridge: TestBridge, browser: Browser) => Promise<T>, epoch?: number, repo?: (dir: string) => void): Promise<T> {
+  const bridge = await startTestBridge({ port, fake: true, epoch, repo });
   let browser: Browser | null = null;
   try {
     browser = await launchWebkit();
@@ -155,310 +145,9 @@ async function smoke(): Promise<void> {
       shots.push(path);
       await context.close();
     }
-    // The temp registry is empty; a project here means the operator's real one leaked in.
-    const { projects } = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ projects?: unknown[] }>);
-    return { shots, projects: projects?.length ?? 0, herdrCalls: bridge.fake!.counts(), unexpectedWrites: bridge.fake!.writes() };
+    return { shots, herdrCalls: bridge.fake!.counts(), unexpectedWrites: bridge.fake!.writes() };
   }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "smoke.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length || result.projects) process.exit(1);
-}
-
-/**
- * The project page of a project whose coordinator is not running, on a phone and a desk; then the
- * person creates a coordinator under the project root, a thread under that coordinator, and starts
- * the project coordinator. Organizations is fake-org.ts, so the run reports the exact argv Nenu ran.
- */
-async function project(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const result = await withBench(async (bridge, browser) => {
-    const shots: string[] = [];
-    const shoot = async (page: Page, name: string) => {
-      const path = join(outDir, `${name}.png`);
-      await page.screenshot({ path, animations: "disabled" });
-      shots.push(path);
-    };
-    const openProject = async (device: typeof PHONE | typeof DESKTOP) => {
-      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      await page.clock.install({ time: bridge.now() });
-      await page.goto(bridge.url + "/project/acme");
-      await page.locator('main >> text="Panel depósito"').waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(1500);
-      return { page, close: () => context.close() };
-    };
-    const calledWith = async (verb: string) => {
-      for (let i = 0; i < 100; i++) {
-        if ((await bridge.orgCalls()).some((argv) => argv[0] === verb)) return;
-        await sleep(100);
-      }
-      throw new Error(`Organizations was never asked to ${verb}`);
-    };
-
-    // Both pages first, so neither capture shows what the flows below create.
-    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
-      const { page, close } = await openProject(device);
-      await shoot(page, `project-${name}`);
-      await close();
-    }
-    let flowError: string | null = null;
-    for (const [name, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
-      const { page, close } = await openProject(device);
-      try {
-        if (name === "desktop") {
-          await page.getByRole("button", { name: "New coordinator" }).click({ timeout: 5000 });
-          await page.getByLabel("Title", { exact: true }).fill("Pagos y facturación");
-          await page.getByLabel("Task", { exact: true }).fill("Coordinate the billing work: invoices, receipts and the payment provider.");
-          await shoot(page, "new-coordinator-desktop");
-          await page.getByRole("button", { name: "Create coordinator" }).click();
-          await page.locator('main >> text="Pagos y facturación"').waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(500);
-          await shoot(page, "project-created-desktop");
-          await page.getByRole("button", { name: "Start coordinator" }).click();
-          await page.getByRole("dialog", { name: "Start the coordinator" }).getByRole("button", { name: "Start" }).click({ timeout: 5000 });
-          await calledWith("open");
-        } else {
-          await page.getByRole("button", { name: "New thread" }).click({ timeout: 5000 });
-          await page.getByLabel("Title", { exact: true }).fill("Ajustar checkout");
-          // A select's accessible name carries its chosen option, so its label is matched loosely.
-          await page.getByLabel("Parent").selectOption("t-0010");
-          await page.getByLabel("Task", { exact: true }).fill("Make the checkout fit a 390 px screen.");
-          await shoot(page, "new-thread-phone");
-          await page.getByRole("button", { name: "Create thread" }).click();
-          await page.locator('main >> text="Ajustar checkout"').waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(500);
-          await shoot(page, "project-created-phone");
-        }
-      } catch (error) {
-        flowError ??= `${name}: ${(error as Error).message.split("\n")[0]}`;
-        await shoot(page, `failed-${name}`);
-      }
-      await close();
-    }
-    return { shots, flowError, orgCalls: await bridge.orgCalls(), unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, demoOrg);
-  await writeFile(join(outDir, "project.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.flowError || result.unexpectedWrites.length) process.exit(1);
-}
-
-/**
- * Every place Nenu draws a project's organization, on a project shaped like a long-running one
- * (scenario.ts `orgTreeSeed`): the project page with its coordinator stopped, then with it running
- * the desk's side panel and the sidebar, and the phone's Threads tab. Each with History closed, then
- * open.
- */
-async function org(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: string[] = [];
-  const shoot = async (page: Page, name: string) => {
-    const path = join(outDir, `${name}.png`);
-    await page.screenshot({ path, animations: "disabled" });
-    shots.push(path);
-  };
-  const TALL_PHONE = { ...PHONE, viewport: { width: 390, height: 1800 } };
-  const open = async (browser: Browser, bridge: TestBridge, device: typeof PHONE | typeof TALL_PHONE | typeof DESKTOP, path: string, ready: string) => {
-    const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
-    const page = await context.newPage();
-    await page.clock.install({ time: bridge.now() });
-    await page.goto(bridge.url + path);
-    await page.locator(ready).first().waitFor({ timeout: 15_000 });
-    await page.waitForTimeout(1500);
-    return { page, close: () => context.close() };
-  };
-  const history = (scope: Locator) => scope.getByText(/^(History|Resolved)\b/).first();
-
-  await withBench(async (bridge, browser) => {
-    for (const [name, device] of [["phone", TALL_PHONE], ["desktop", DESKTOP]] as const) {
-      const { page, close } = await open(browser, bridge, device, "/project/acme", 'main >> text="Panel depósito"');
-      await shoot(page, `page-${name}`);
-      await history(page.locator("main")).click({ timeout: 5000 });
-      await page.waitForTimeout(300);
-      await shoot(page, `page-history-${name}`);
-      if (name === "desktop") {
-        await history(page.locator('nav[aria-label="Projects and chats"]')).click({ timeout: 5000 });
-        await page.waitForTimeout(300);
-        await shoot(page, "sidebar-history-desktop");
-      }
-      await close();
-    }
-  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
-
-  let flowError: string | null = null;
-  let orgCalls: string[][] = [];
-  await withBench(async (bridge, browser) => {
-    const coordinator = `/pane/${encodeURIComponent(bridge.herd!.codex)}`;
-    const calledWith = async (...argv: string[]) => {
-      for (let i = 0; i < 100; i++) {
-        if ((await bridge.orgCalls()).some((call) => argv.every((arg, index) => call[index] === arg))) return;
-        await sleep(100);
-      }
-      throw new Error(`Organizations was never asked to ${argv.join(" ")}`);
-    };
-    {
-      const { page, close } = await open(browser, bridge, DESKTOP, coordinator, 'aside[aria-label="Project"] >> text="Panel depósito"');
-      const panel = page.locator('aside[aria-label="Project"]');
-      await shoot(page, "panel-desktop");
-      await history(panel).click({ timeout: 5000 });
-      await page.waitForTimeout(300);
-      await shoot(page, "panel-history-desktop");
-      // Each node's actions: a coordinator with open work refuses to close, a thread closes, the coordinator is replaced.
-      try {
-        await panel.getByRole("button", { name: "Close Rediseño mobile" }).click({ timeout: 5000 });
-        await page.getByRole("dialog", { name: "Close its work first" }).waitFor({ timeout: 5000 });
-        await shoot(page, "close-refused-desktop");
-        await page.getByRole("button", { name: "OK" }).click();
-        await panel.getByRole("button", { name: "Close Hotfix login" }).click({ timeout: 5000 });
-        await page.getByRole("dialog", { name: "Close this thread?" }).getByRole("button", { name: "Close thread" }).click({ timeout: 5000 });
-        await calledWith("node", "resolve", "acme", "t-0108", "--close-view");
-        await panel.getByRole("button", { name: "Replace coordinator" }).click({ timeout: 5000 });
-        const dialog = page.getByRole("dialog", { name: "Replace the coordinator?" });
-        await dialog.getByRole("radio", { name: "Claude Code" }).click({ timeout: 5000 });
-        await shoot(page, "replace-desktop");
-        await dialog.getByRole("button", { name: "Replace" }).click();
-        await calledWith("coordinator", "replace", "acme", "--harness=claude");
-        await page.waitForTimeout(500);
-        await shoot(page, "after-actions-desktop");
-      } catch (error) {
-        flowError ??= `desktop: ${(error as Error).message.split("\n")[0]}`;
-        await shoot(page, "failed-desktop");
-      }
-      await close();
-    }
-    {
-      const { page, close } = await open(browser, bridge, TALL_PHONE, coordinator, 'role=tab[name=/Threads/]');
-      await page.getByRole("tab", { name: /Threads/ }).click();
-      await page.locator('.project-overlay >> text="Panel depósito"').first().waitFor({ timeout: 5000 });
-      await page.waitForTimeout(300);
-      await shoot(page, "threads-phone");
-      await history(page.locator(".project-overlay")).click({ timeout: 5000 });
-      await page.waitForTimeout(300);
-      await shoot(page, "threads-history-phone");
-      // A resolved node opens its detail inside Nenu, not its coordinator's chat.
-      try {
-        await page.locator(".project-overlay").getByRole("button", { name: /^Mergear PRs restantes Coordinator/ }).click({ timeout: 5000 });
-        await page.locator('main >> text="Coordinator under"').first().waitFor({ timeout: 5000 });
-        await page.waitForTimeout(300);
-        await shoot(page, "node-detail-phone");
-      } catch (error) {
-        flowError ??= `phone: ${(error as Error).message.split("\n")[0]}`;
-        await shoot(page, "failed-phone");
-      }
-      await close();
-    }
-    orgCalls = await bridge.orgCalls();
-  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
-
-  const writes = orgCalls.filter((argv) => argv[0] !== "overview" && argv[1] !== "list");
-  const result = { shots, flowError, orgWrites: writes };
-  await writeFile(join(outDir, "org.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (flowError) process.exit(1);
-}
-
-/**
- * Counts React commits and the components each one rendered, through the hook React DevTools uses
- * (a production build calls it too). A component counts when it mounted or performed work; a
- * subtree React bailed out of keeps its old children and is not walked.
- */
-function countRenders(): void {
-  const stats = { commits: 0, renders: 0 };
-  const components = new Set([0, 1, 11, 14, 15]); // function, class, forwardRef, memo, simple memo
-  type Fiber = { tag: number; flags: number; alternate: Fiber | null; child: Fiber | null; sibling: Fiber | null };
-  const walk = (first: Fiber | null) => {
-    for (let fiber = first; fiber; fiber = fiber.sibling) {
-      const before = fiber.alternate;
-      if (components.has(fiber.tag) && (before === null || (fiber.flags & 1) !== 0)) stats.renders++;
-      if (fiber.child && before?.child !== fiber.child) walk(fiber.child);
-    }
-  };
-  Object.assign(window, {
-    __nenuRenders: stats,
-    __REACT_DEVTOOLS_GLOBAL_HOOK__: {
-      supportsFiber: true, renderers: new Map(), inject: () => 1, checkDCE: () => {}, setStrictMode: () => {},
-      onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {},
-      onCommitFiberRoot: (_id: number, root: { current: Fiber }) => { stats.commits++; walk(root.current.child); },
-    },
-  });
-}
-
-/**
- * A project coordinator's chat (scenario.ts `projectChatSeed`): the phone's Chat, Threads and PRs
- * tabs at 390x844 and the desk at 1440x900 beside the project panel and without it, captured on the
- * pinned clock. Then the phone's Chat tab measured on the real clock, twice: DOM elements, and the
- * React commits and component renders over `--seconds` of polling.
- */
-async function threads(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: string[] = [];
-  const windowMs = Number(values.seconds) * 1000;
-  const result = await withBench(async (bridge, browser) => {
-    const coordinator = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
-    const open = async (device: typeof PHONE | typeof DESKTOP, opts: { pinned: boolean; counted?: boolean }) => {
-      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      if (opts.counted) await page.addInitScript(countRenders, null);
-      if (opts.pinned) await page.clock.install({ time: bridge.now() });
-      const requests: string[] = [];
-      page.on("request", (req) => requests.push(req.url()));
-      await page.goto(bridge.url + coordinator);
-      await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(2000);
-      return { page, requests, close: () => context.close() };
-    };
-    const shoot = async (page: Page, name: string) => {
-      const path = join(outDir, `${name}.png`);
-      await page.screenshot({ path, animations: "disabled" });
-      shots.push(path);
-    };
-    const cards = (page: Page) => page.locator('section[aria-label="Threads"] article').count();
-
-    const seen: Record<string, unknown> = {};
-    {
-      const { page, close } = await open(PHONE, { pinned: true });
-      seen.phoneChatCards = await cards(page);
-      await shoot(page, "phone-chat");
-      for (const tab of ["Threads", "PRs"] as const) {
-        await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
-        await page.locator(".project-overlay").waitFor({ timeout: 5000 });
-        await page.waitForTimeout(300);
-        seen[`phone${tab}Rows`] = await page.locator(".project-overlay .task-main").count();
-        await shoot(page, `phone-${tab.toLowerCase()}`);
-      }
-      await close();
-    }
-    {
-      const { page, close } = await open(DESKTOP, { pinned: true });
-      seen.desktopPanelCards = await cards(page);
-      await shoot(page, "desktop-panel");
-      await page.getByRole("button", { name: "Hide session panel" }).click();
-      await page.waitForTimeout(500);
-      seen.desktopNoPanelCards = await cards(page);
-      await shoot(page, "desktop-no-panel");
-      await close();
-    }
-
-    const runs = [];
-    for (let run = 1; run <= 2; run++) {
-      const { page, requests, close } = await open(PHONE, { pinned: false, counted: true });
-      const dom = await page.evaluate(() => ({
-        document: document.getElementsByTagName("*").length,
-        thread: document.querySelector(".chat-thread")?.getElementsByTagName("*").length ?? 0,
-      }), null);
-      const from = requests.length;
-      await page.evaluate(() => Object.assign((window as unknown as { __nenuRenders: object }).__nenuRenders, { commits: 0, renders: 0 }), null);
-      await page.waitForTimeout(windowMs);
-      const react = await page.evaluate(() => ({ ...(window as unknown as { __nenuRenders: { commits: number; renders: number } }).__nenuRenders }), null);
-      const byRoute = tally(requests.slice(from));
-      const polls = byRoute.snapshot ?? 0;
-      runs.push({ run, cards: await cards(page), dom, seconds: windowMs / 1000, ...react, byRoute,
-        rendersPerCommit: react.commits ? Math.round(react.renders / react.commits) : 0,
-        rendersPerSnapshot: polls ? Math.round(react.renders / polls) : null });
-      await close();
-    }
-    return { shots, seen, runs, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => projectChatSeed(herd, now));
-  await writeFile(join(outDir, "threads.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
   if (result.unexpectedWrites.length) process.exit(1);
 }
@@ -729,7 +418,7 @@ async function workspaceRows(): Promise<void> {
         ["home", homeList, home],
       ],
       desktop: [
-        ["search", (page) => page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^Search/ }).click(), tree('aside[aria-label="Workspace sidebar"]')],
+        ["search", (page) => page.getByRole("navigation", { name: "Workspaces and chats" }).getByRole("button", { name: /^Search/ }).click(), tree('aside[aria-label="Workspace sidebar"]')],
         ["home", homeList, home],
       ],
     };
@@ -847,9 +536,8 @@ async function addOps(bridge: TestBridge): Promise<void> {
 
 /**
  * Every page at the widths a desk shows it (1280, 1440 and 1920, the sidebar open and folded), on a
- * tablet and on a phone, with the header's height and where its title and the content column sit (layout.json): Home, a
- * project, a node, Settings, a workspace and a workspace pane's chat, then a coordinator's chat
- * beside the project panel.
+ * tablet and on a phone, with the header's height and where its title and the content column sit (layout.json): Home,
+ * Settings, a workspace and a workspace pane's chat.
  */
 async function layout(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -894,16 +582,11 @@ async function layout(): Promise<void> {
     await addOps(bridge);
     await capture(bridge, browser, [
       ["home", "/", "h1"],
-      ["project", "/project/acme", 'main >> text="Panel depósito"'],
-      ["node", "/project/acme/node/t-0101", 'main >> text="Migración de stock"'],
       ["settings", "/settings", "text=Push notifications"],
       ["workspace", "/space/w4", `main:has-text("ops"), ${tabBar}`],
       ["chat", "/pane/w4%3Aagent", tabBar],
     ]);
-  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now));
-  await withBench(async (bridge, browser) => {
-    await capture(bridge, browser, [["coordinator", `/pane/${encodeURIComponent(bridge.herd!.codex)}`, 'aside[aria-label="Project"]:has-text("Panel depósito"), header button[aria-label^="Conversation actions"]']]);
-  }, CAPTURE_EPOCH, (herd, now) => orgTreeSeed(herd, now, { coordinator: true }));
+  }, CAPTURE_EPOCH);
   await writeFile(join(outDir, "layout.json"), JSON.stringify(measures, null, 2));
   console.log(`[e2e] ${Object.keys(measures).length} captures in ${outDir}`);
 }
@@ -1397,165 +1080,6 @@ async function compare(a: string, b: string): Promise<void> {
 }
 
 /**
- * A pull request's diff (scenario.ts `seedDiffRepo`): the working pane is a thread on PR #1342 whose
- * folder is the PR's worktree. Its size in the PR bar (phone) and in the PRs tab (desk) opens the
- * viewer, dark and light; then a commit past every limit (`growDiffRepo`) shows the cuts announced.
- * With `--before` it only captures the bar and the tab, for a build that has no viewer.
- */
-/**
- * Why a thread needs you (scenario.ts `needsYouSeed`): one on a dialog, one that finished and said it
- * waits for your reply. The phone's Threads tab and Browse sheet, the desk's cards beside the sidebar,
- * then a tap on the waiting thread, which should land on its last message.
- */
-async function needsYou(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const result = await withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const ask = "The new copy is ready. Your call: ship it now, or wait for the design review first?";
-    await writeJournal(herd.journals.get(herd.idle)!, [["user", "Rewrite the checkout copy"], ["assistant", "Rewriting the checkout copy."], ["assistant", ask]], bridge.now());
-    bridge.fake!.appendLines(herd.idle, "", `● ${ask}`, "", "❯ ");
-    const shots: string[] = [];
-    const seen: Record<string, unknown> = {};
-    const shoot = async (page: Page, name: string) => {
-      const path = join(outDir, `${name}.png`);
-      await page.screenshot({ path, animations: "disabled" });
-      shots.push(path);
-    };
-    const open = async (device: typeof PHONE | typeof DESKTOP) => {
-      const context = await browser.newContext({ ...device, timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      await page.clock.install({ time: bridge.now() });
-      await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
-      await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(1500);
-      return { page, close: () => context.close() };
-    };
-    const text = (locator: Locator) => locator.innerText().then((t) => t.replace(/\s+/g, " ").trim());
-    {
-      const { page, close } = await open(PHONE);
-      await openPhoneView(page, "Threads");
-      await page.locator(".project-overlay").waitFor({ timeout: 5000 });
-      await page.waitForTimeout(300);
-      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneRow ${title}`] = await text(page.locator(".project-overlay .task-main", { hasText: title }).first());
-      await shoot(page, "phone-threads");
-      await page.locator(".project-overlay .task-main", { hasText: "Checkout copy" }).first().click();
-      await page.getByText(ask).last().waitFor({ timeout: 10_000 });
-      await page.waitForTimeout(800);
-      seen.phoneTapLandsOn = decodeURIComponent(new URL(page.url()).pathname);
-      seen.phoneLastMessageInView = await page.getByText(ask).last().isVisible();
-      await shoot(page, "phone-tap-waiting");
-      await close();
-    }
-    {
-      // The tab bar's Search holds the project tree under its box until something is typed.
-      const { page, close } = await open(PHONE);
-      await page.goto(`${bridge.url}/`);
-      await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
-      const project = page.locator('[role=dialog] button[aria-label="Demo shop tasks"]');
-      if (await project.count() && !(await page.locator('[role=dialog] .nav-tree-row', { hasText: "Checkout copy" }).count())) await project.click();
-      await page.waitForTimeout(600);
-      for (const title of ["Checkout copy", "Payments panel"]) seen[`phoneSearch ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
-      await shoot(page, "phone-search");
-      await close();
-    }
-    {
-      const { page, close } = await open(DESKTOP);
-      const hide = page.getByRole("button", { name: "Hide project panel" });
-      if (await hide.count()) await hide.click();
-      await page.waitForTimeout(500);
-      for (const title of ["Checkout copy", "Payments panel"]) {
-        seen[`deskCard ${title}`] = await text(page.locator('section[aria-label="Threads"] article', { hasText: title }).first()).catch(() => "(no card)");
-        seen[`deskSidebar ${title}`] = await text(page.locator(".nav-tree-row", { hasText: title }).first()).catch(() => "(not shown)");
-      }
-      await shoot(page, "desktop-cards");
-      await close();
-    }
-    return { shots, seen, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => needsYouSeed(herd, now));
-  await writeFile(join(outDir, "needs-you.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
-}
-
-async function diffs(before: boolean): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: string[] = [];
-  const requests: string[] = [];
-  const prs = join(outDir, "gh-prs.json");
-  process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
-  const result = await withBench(async (bridge, browser) => {
-    const open = async (device: typeof PHONE | typeof DESKTOP, path: string, ready: string, colorScheme: "dark" | "light" = "dark") => {
-      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      page.on("request", (request) => { if (request.url().includes("/diff")) requests.push(new URL(request.url()).pathname + new URL(request.url()).search); });
-      await page.clock.install({ time: bridge.now() });
-      await page.goto(bridge.url + path);
-      await page.locator(ready).first().waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(1200);
-      return { page, close: () => context.close() };
-    };
-    const shoot = async (page: Page, name: string) => {
-      const path = join(outDir, `${name}.png`);
-      await page.screenshot({ path, animations: "disabled" });
-      shots.push(path);
-    };
-    const viewer = async (page: Page, name: string, file?: string, from: Page | Locator = page) => {
-      await from.getByRole("button", { name: /^View changes/ }).first().click();
-      const dialog = page.getByRole("dialog", { name: "PR #1342 changes" });
-      await dialog.getByText(/^\d+ files?$/).waitFor({ timeout: 15_000 });
-      if (file) await dialog.getByRole("button", { name: new RegExp(file) }).click();
-      await page.waitForTimeout(400);
-      await shoot(page, name);
-      return dialog;
-    };
-    const chat = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
-    const bar = 'text="#1342"';
-
-    for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
-      const { page, close } = await open(device, chat, bar);
-      await shoot(page, `bar-${name}`);
-      if (!before) await viewer(page, `viewer-${name}`, "app/checkout\\.tsx");
-      await close();
-    }
-    {
-      const { page, close } = await open(DESKTOP, chat, bar);
-      await page.getByRole("tab", { name: "PRs" }).click();
-      await page.waitForTimeout(400);
-      await shoot(page, "prs-tab-desktop");
-      if (!before) await viewer(page, "viewer-from-prs-tab-desktop", "app/cart\\.ts", page.getByRole("tabpanel", { name: "PRs" }));
-      await close();
-    }
-    if (!before) {
-      const { page, close } = await open(PHONE, chat, bar, "light");
-      await viewer(page, "viewer-phone-light", "app/checkout\\.tsx");
-      await close();
-      growDiffRepo(bridge.dir);
-      for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
-        const { page, close } = await open(device, chat, bar);
-        const dialog = await viewer(page, `truncated-${name}`);
-        // Down to where the 1 MB cut fell: the first file past it keeps only its counts.
-        await dialog.getByText("Past the size limit").first().waitFor();
-        await page.evaluate(() => Array.from(document.querySelectorAll("span")).find((span) => span.textContent?.endsWith("Past the size limit"))?.closest("li")?.previousElementSibling?.scrollIntoView({ block: "start" }), null);
-        await page.waitForTimeout(300);
-        await shoot(page, `truncated-cut-${name}`);
-        await close();
-      }
-    }
-    return { shots, diffRequests: requests, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => diffOrg(herd, now, size), (dir) => {
-    size = seedDiffRepo(dir);
-    writeFileSync(prs, JSON.stringify([{
-      number: 1342, title: "Landing a 390 px", url: "https://github.com/acme/shop/pull/1342", headRefName: "e2e-demo", baseRefName: "main",
-      isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [], ...size, updatedAt: new Date(CAPTURE_EPOCH).toISOString(),
-    }]));
-  });
-  await writeFile(join(outDir, "diffs.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
-}
-
-/**
  * The Artifacts list of a working Claude: a page published on claude.ai, a designboard and a report
  * the agent linked, one image it showed from its folder and two it named from a folder beyond it.
  * Every tab is captured on a phone (dark and light) and a desk; `thumbnails` lists what each image
@@ -1654,7 +1178,7 @@ async function files(): Promise<void> {
 }
 
 /**
- * Home over a neutral project (homeOrg) and two pull requests from GitHub, one on the working pane's
+ * Home over two pull requests from GitHub, one on the working pane's
  * branch and one on a branch no pane is on: phone and desk, dark and light, then each list the
  * Recents / Workspaces control offers (when the build has it), then a phone's requests on Home over
  * `--seconds`, after a 5 s warm-up. Last, Claude's PermissionRequest hook reaches the bridge as an
@@ -1672,30 +1196,27 @@ function ghPr(number: number, title: string, at: string, extra: { review?: strin
 }
 
 /**
- * Home as a busy operator sees it: a project, four workspaces with several tabs each, a dozen pull
- * requests in every state, first with nothing waiting on you, then with a dialog and a thread waiting
- * for your reply. Captures, each list, the requests a phone on Home makes per minute, and a dialog
+ * Home as a busy operator sees it: four workspaces with several tabs each, a dozen pull requests in
+ * every state, first with nothing waiting on you, then with a dialog. Captures, each list, the requests a phone on Home makes per minute, and a dialog
  * answered from Home.
  */
 async function home(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const prs = join(outDir, "gh-prs.json");
   process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
   const windowMs = Number(values.seconds) * 1000;
   const result = await withBench(async (bridge, browser) => {
     const shots: string[] = [];
     const fake = bridge.fake!;
     const herd = bridge.herd!;
-    // More workspaces, each with several tabs: "docs" runs two agents and, in the project's folder, the
-    // thread that will wait for a reply.
+    // More workspaces, each with several tabs: "docs" runs three agents.
     fake.addWorkspace("w3", "docs").addTab("w3:t1", "outline").addTab("w3:t2", "examples").addTab("w3:t3", "copy")
       .addPane({ paneId: "w3:outline", workspaceId: "w3", tabId: "w3:t1", agent: "claude", label: "Docs outline", cwd: "/tmp" })
       .addPane({ paneId: "w3:examples", workspaceId: "w3", tabId: "w3:t2", agent: "codex", label: "API examples", cwd: "/tmp" })
       .addPane({ paneId: "w3:copy", workspaceId: "w3", tabId: "w3:t3", agent: "claude", label: "Checkout copy", cwd: bridge.dir });
     fake.setStatus("w3:outline", "working");
     await addOps(bridge);
-    // Nothing needs you first: the dialog is off and no thread waits for a reply.
+    // Nothing needs you first: the dialog is off.
     fake.setDialog(herd.blocked, null);
     const stopJournal = tickJournal(herd.journals.get(herd.working)!, bridge.now);
     try {
@@ -1723,18 +1244,12 @@ async function home(): Promise<void> {
         await shoot(page, `home-${name}-calm`);
         await close();
       }
-      // Then a dialog on the blocked pane, and the docs thread says it waits for your reply.
+      // Then a dialog on the blocked pane.
       fake.setDialog(herd.blocked, herd.dialog);
-      const orgFile = join(bridge.dir, "org.json");
-      const seed = JSON.parse(await Bun.file(orgFile).text()) as OrgSeed;
-      seed.projects[0]!.threads = seed.projects[0]!.threads.map((thread) => thread.id === "t-0015" ? { ...thread, activity: "Waiting for you", percent: 85 } : thread);
-      await writeFile(orgFile, JSON.stringify(seed, null, 2));
-      const manifest = join(bridge.dir, "projects", seed.projects[0]!.slug, "PROJECT.md");
-      await utimes(manifest, new Date(), new Date(Date.now() + 1000));
       for (let i = 0; ; i++) {
-        const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ status: string }>; projects?: Array<{ threads: Array<{ id: string; selfWaiting?: true }> }> }>);
-        if (snap.projects?.[0]?.threads.some((t) => t.id === "t-0015" && t.selfWaiting) && snap.agents.some((a) => a.status === "blocked")) break;
-        if (i > 300) throw new Error("the reply thread never read as waiting");
+        const snap = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ agents: Array<{ status: string }> }>);
+        if (snap.agents.some((a) => a.status === "blocked")) break;
+        if (i > 300) throw new Error("the blocked pane never read as blocked");
         await sleep(100);
       }
       for (const [name, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
@@ -1766,7 +1281,7 @@ async function home(): Promise<void> {
               await page.getByRole("tab", { name: "Recents" }).click();
             }
             if (name === "phone") {
-              // Search before anything is typed: the project tree, the sessions and the host under its box.
+              // Search before anything is typed: the workspaces, the sessions and the host under its box.
               await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
               await page.waitForTimeout(600);
               await shoot(page, "home-phone-search");
@@ -1821,14 +1336,8 @@ async function home(): Promise<void> {
     } finally {
       stopJournal();
     }
-  }, CAPTURE_EPOCH, (herd, now) => {
-    const seed = homeOrg(herd, now, size);
-    const project = seed.projects[0]!;
-    const sibling = project.threads.find((thread) => thread.id === "t-0014")!;
-    project.threads.push({ ...sibling, id: "t-0015", title: "Checkout copy", group: "waiting-on-you", group_label: "waiting-on-you", workspace_id: "w3", tab_id: "w3:t3", pane_id: "w3:copy", activity: "" });
-    return seed;
-  }, (dir) => {
-    size = seedDiffRepo(dir);
+  }, CAPTURE_EPOCH, (dir) => {
+    const size = seedDiffRepo(dir);
     const at = new Date(CAPTURE_EPOCH).toISOString();
     const failing = ["SUCCESS", "FAILURE", "SUCCESS"];
     const pending = ["SUCCESS", "PENDING", "PENDING"];
@@ -1860,16 +1369,14 @@ function benchRepo(dir: string): void {
 }
 
 /**
- * A session on a desk with its Inspector (homeOrg, PR #42 on the working pane's branch): phone and
- * desk captures, then, when the build has one, each tab, the folded panel, the project behind ⋯, a
- * session switch, light, and the shell pane, which has no PR. `requests` lists what each step asked
+ * A session on a desk with its Inspector (PR #42 on the working pane's branch): phone and desk
+ * captures, then, when the build has one, each tab, the folded panel, a session switch, light, and the shell pane, which has no PR. `requests` lists what each step asked
  * the bridge beyond the snapshot and the chat's own reads, so a tab that loads unseen shows up.
  */
 async function inspector(before: boolean): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const prs = join(outDir, "gh-prs.json");
   process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
   const steps: Record<string, string[]> = {};
   const result = await withBench(async (bridge, browser) => {
     const shots: string[] = [];
@@ -1914,14 +1421,12 @@ async function inspector(before: boolean): Promise<void> {
     if (!before) {
       const { page, close } = await open(DESKTOP, herd.working);
       steps["desktop-changes-open"] = log;
-      // A project's session opens its panel on Overview (ADR 0101); Changes is the next tab.
       await panel(page).getByRole("tab", { name: /Changes/ }).click();
       await panel(page).getByRole("button", { name: /app\/checkout\.tsx/ }).click();
       await step("desktop-changes", page);
       await step("desktop-uncommitted", page, () => panel(page).getByRole("radio", { name: "Uncommitted" }).click());
       await step("desktop-files", page, () => panel(page).getByRole("tab", { name: /Files/ }).click());
       await step("desktop-artifacts", page, () => panel(page).getByRole("radio", { name: "Artifacts" }).click());
-      await step("desktop-overview", page, () => panel(page).getByRole("tab", { name: /^Overview/ }).click());
       await step("desktop-closed", page, () => page.keyboard.press("Meta+Alt+KeyB"));
       await step("desktop-reopened", page, () => page.getByRole("button", { name: "Show session panel" }).click());
       await step("desktop-switched", page, () => page.goto(bridge.url + `/pane/${encodeURIComponent(herd.blocked)}`));
@@ -1934,15 +1439,15 @@ async function inspector(before: boolean): Promise<void> {
       }
     }
     return { shots, requests: steps, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => {
-    size = seedDiffRepo(dir);
+  }, CAPTURE_EPOCH, (dir) => {
+    const size = seedDiffRepo(dir);
     benchRepo(dir);
     writeFileSync(prs, JSON.stringify([
       { number: 42, title: "Checkout flow", url: "https://github.com/acme/shop/pull/42", headRefName: "e2e-demo", baseRefName: "main",
         isDraft: false, reviewDecision: "REVIEW_REQUIRED", statusCheckRollup: [], ...size, updatedAt: new Date(CAPTURE_EPOCH).toISOString() },
     ]));
   });
-  // A pane with no pull request: GitHub lists none, and the shell is in no project.
+  // A pane with no pull request: GitHub lists none.
   writeFileSync(prs, "[]");
   const bare = before ? undefined : await withBench(async (bridge, browser) => {
     const context = await browser.newContext({ ...DESKTOP, colorScheme: "dark", timezoneId: "UTC", locale: "en-US" });
@@ -1955,7 +1460,7 @@ async function inspector(before: boolean): Promise<void> {
     await page.screenshot({ path, animations: "disabled" });
     await context.close();
     return { shots: [path], unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => homeOrg(herd, now, size), (dir) => { seedDiffRepo(dir); benchRepo(dir); });
+  }, CAPTURE_EPOCH, (dir) => { seedDiffRepo(dir); benchRepo(dir); });
   if (bare) Object.assign(result, { shots: [...result.shots, ...bare.shots], unexpectedWrites: [...result.unexpectedWrites, ...bare.unexpectedWrites] });
   await writeFile(join(outDir, "inspector.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
@@ -2315,131 +1820,6 @@ async function motion(before: boolean): Promise<void> {
 }
 
 /**
- * The way back through a project (useGoUp in web/src/lib/motion.ts), phone and desk, three walks: a
- * coordinator under a project that organizes them (demoOrg: project → coordinator → its thread, a
- * sibling, reloads), a project that opens on its own coordinator's chat (projectChatSeed: a thread at its
- * root), and the own coordinator of a project that organizes coordinators (orgTreeSeed: a thread at its root). Each walk taps the
- * app's back until there is none, reaches Home the way a person would (the back, or the desk's bar), and
- * then takes the browser's Back once. Logs path, `history.length` and motion per step, with a capture each.
- */
-async function back(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: string[] = [];
-  type Walk = { coordinator?: { pane: string; title: string }; thread: { pane: string; title: string }; sibling?: string };
-  const walk = async (org: (herd: DemoHerd, now: number) => OrgSeed, name: string, route: (herd: DemoHerd) => Walk) => withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const way = route(herd);
-    const paneHref = (id: string) => `/pane/${encodeURIComponent(id)}`;
-    const run = async (device: typeof PHONE | typeof DESKTOP, kind: string) => {
-      const context = await browser.newContext({ ...device, reducedMotion: "no-preference", timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      // The motion each navigation asked for, read where lib/motion.ts sets it, before the transition starts.
-      await page.addInitScript(() => {
-        const w = window as unknown as { __moves: string[] };
-        w.__moves = [];
-        const native = Document.prototype.startViewTransition;
-        if (!native) return;
-        Document.prototype.startViewTransition = function (this: Document, arg?: ViewTransitionUpdateCallback | StartViewTransitionOptions) {
-          w.__moves.push(document.documentElement.dataset.motion ?? "?");
-          return native.call(this, arg as ViewTransitionUpdateCallback);
-        };
-      }, null);
-      const steps: Array<{ step: string; path: string; len: number; moves: string[]; tab?: string | null; back?: string | null }> = [];
-      const log = async (step: string) => {
-        await page.waitForTimeout(900);
-        const state = await page.evaluate(() => {
-          const w = window as unknown as { __moves?: string[] };
-          const moves = w.__moves ?? [];
-          w.__moves = [];
-          const tab = document.querySelector('[role="tablist"][aria-label="Project"] [aria-selected="true"]')?.textContent ?? null;
-          const back = Array.from(document.querySelectorAll('header [aria-label^="Back to"]')).find((el) => (el as HTMLElement).offsetParent !== null)?.getAttribute("aria-label") ?? null;
-          return { path: location.pathname + location.search, len: history.length, moves, tab, back };
-        }, null);
-        steps.push({ step, ...state });
-        const path = join(outDir, `${name}-${kind}-${String(steps.length).padStart(2, "0")}-${step}.png`);
-        await page.screenshot({ path, animations: "disabled" });
-        shots.push(path);
-      };
-      const visibleBack = () => page.locator('header [aria-label^="Back to"] >> visible=true').first();
-      // A row by its title where a person would tap it: a phone chat's Threads view, else the page or the desk's bar.
-      const open = async (title: string) => {
-        if (device === PHONE && await page.locator('header button[aria-label^="Conversation actions"]').first().isVisible()) {
-          await openPhoneView(page, "Threads");
-          await log("threads-tab");
-          await page.locator(".project-overlay").getByText(title).first().click({ timeout: 5000 });
-        } else {
-          const inMain = page.locator(`main >> text="${title}" >> visible=true`).first();
-          await (await inMain.isVisible() ? inMain : page.locator(`aside >> text="${title}" >> visible=true`).first()).click({ timeout: 5000 });
-        }
-      };
-      await page.goto(bridge.url + "/");
-      await page.locator('a[href="/project/acme"]').first().waitFor({ state: "attached", timeout: 15_000 });
-      await log("home");
-      const entry = steps[0]!.len;
-      // A phone reaches a project through the navigation the mark opens; a desk's bar lists it.
-      if (device === PHONE) await page.getByRole("button", { name: "Open navigation" }).first().click({ timeout: 5000 });
-      // The navigation's own row: Home's Projects tab links the same project.
-      await page.locator('nav[aria-label="Projects and chats"] a[href="/project/acme"] >> visible=true').first().click({ timeout: 5000 });
-      await page.waitForFunction(() => /^\/(project\/acme|pane\/)/.test(location.pathname), null, { timeout: 10_000 });
-      await log("project");
-      if (way.coordinator) {
-        // A tap on a coordinator's row enters its chat, a desk's and a phone's alike (ADR 0115).
-        if (device === DESKTOP) await page.getByRole("button", { name: `Open ${way.coordinator.title}`, exact: true }).click({ timeout: 5000 });
-        else await open(way.coordinator.title);
-        await page.waitForURL(`**${paneHref(way.coordinator.pane)}*`, { timeout: 10_000 });
-        await log("coordinator");
-        if (device === PHONE) {
-          await openPhoneView(page, "Threads");
-          await page.reload();
-          await page.locator('[role="tablist"][aria-label="Project"]').waitFor({ timeout: 10_000 });
-          await log("threads-reload");
-        }
-      }
-      await open(way.thread.title);
-      await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
-      await log("thread");
-      if (device === PHONE && way.sibling) {
-        await open("Panel depósito");
-        await page.waitForURL(`**${paneHref(way.sibling)}*`, { timeout: 10_000 });
-        await log("sibling");
-        await open(way.thread.title);
-        await page.waitForURL(`**${paneHref(way.thread.pane)}*`, { timeout: 10_000 });
-        await log("sibling-back");
-        await page.reload();
-        await page.locator("header").first().waitFor({ timeout: 10_000 });
-        await log("thread-reload");
-      }
-      for (let i = 1; i <= 4 && await visibleBack().isVisible(); i++) {
-        await visibleBack().click({ timeout: 5000 });
-        await log(`app-back-${i}`);
-      }
-      // A desk's back steps aside where the bar lists the parent: Home is the bar's.
-      if (steps.at(-1)!.path !== "/") {
-        await page.locator('aside a[href="/"] >> visible=true').first().click({ timeout: 5000 });
-        await page.waitForFunction(() => location.pathname === "/", null, { timeout: 10_000 });
-        await log("bar-home");
-      }
-      const home = steps.at(-1)!;
-      await page.evaluate(() => history.back(), null);
-      await page.waitForTimeout(1200);
-      const systemBackFromHome = page.url().replace(bridge.url, "");
-      await context.close();
-      return { entry, lenAtHome: home.len, entriesAdded: home.len - entry, systemBackFromHome, steps };
-    };
-    return { phone: await run(PHONE, "phone"), desk: await run(DESKTOP, "desk"), unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, org);
-  const result = {
-    organizer: await walk(demoOrg, "organizer", (herd) => ({
-      coordinator: { pane: herd.idle, title: "Rediseño mobile" }, thread: { pane: herd.working, title: "Landing a 390 px" }, sibling: herd.blocked })),
-    rootThread: await walk(projectChatSeed, "root", (herd) => ({ thread: { pane: herd.blocked, title: "Panel depósito" } })),
-    organizerRoot: await walk((herd, now) => orgTreeSeed(herd, now, { coordinator: true }), "organizer-root", (herd) => ({
-      coordinator: { pane: herd.codex, title: "Project coordinator" }, thread: { pane: herd.blocked, title: "Panel depósito" } })),
-  };
-  await writeFile(join(outDir, "back.json"), JSON.stringify({ ...result, shots }, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-}
-
-/**
  * The conversation's scroll on a phone while nobody touches it. A long session whose turn keeps running
  * (a call every 1.5 s, its result half a step later), read at the tail, read 1800 px up, typed into,
  * with the keyboard open and closed, paging older messages, through a sheet, and back from Home. In the
@@ -2666,105 +2046,6 @@ async function webkitProcesses(): Promise<Map<number, { rssKb: number; cpuMs: nu
 }
 
 /**
- * The surfaces every screen sits on, with five projects so each draws its own mark: Home, a session
- * (the desk's session panel beside it), a project, Settings and Search, on a phone and a desk, dark
- * and light, plus the phone's navigation drawer and the desk's collapsed rail. Then, on the real clock, one fresh WebKit per view
- * left alone for `--seconds`: its processes' CPU and resident memory, and the page's DOM elements.
- */
-async function surface(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const prs = join(outDir, "gh-prs.json");
-  process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
-  const windowMs = Number(values.seconds) * 1000;
-  const result = await withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const shots: string[] = [];
-    const chat = `/pane/${encodeURIComponent(herd.working)}`;
-    const pages: Array<[string, string, string]> = [
-      ["home", "/", '[role="tab"]:has-text("Recents")'],
-      ["chat", chat, "textarea"],
-      ["project", "/project/acme-shop", 'main >> text="Checkout flow"'],
-      ["settings", "/settings", "text=Push notifications"],
-    ];
-    for (const [deviceName, device] of [["phone", PHONE], ["desktop", DESKTOP]] as const) {
-      for (const scheme of ["dark", "light"] as const) {
-        const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
-        const page = await context.newPage();
-        await page.clock.install({ time: bridge.now() });
-        const shoot = async (name: string) => {
-          const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
-          await page.screenshot({ path, animations: "disabled" });
-          shots.push(path);
-        };
-        for (const [name, path, ready] of pages) {
-          await page.goto(bridge.url + path);
-          await page.locator(ready).first().waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(1500);
-          await shoot(name);
-        }
-        await page.goto(bridge.url + "/");
-        await page.locator(pages[0]![2]).first().waitFor({ timeout: 15_000 });
-        if (deviceName === "desktop") {
-          // The bar under a resting pointer, which shows what it keeps out of sight until then (a row's shortcut).
-          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^New chat/ }).hover();
-          await page.waitForTimeout(300);
-          await shoot("sidebar-hover");
-          await page.mouse.move(720, 450);
-        }
-        if (deviceName === "phone") {
-          await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
-        } else {
-          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^Search/ }).click();
-        }
-        await page.getByRole("searchbox").first().fill("a");
-        await page.waitForTimeout(600);
-        await shoot("search");
-        if (deviceName === "desktop") {
-          // The collapsed rail, where a project is a tile among the loose workspaces.
-          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
-          await page.goto(bridge.url + "/");
-          await page.getByRole("navigation", { name: "Collapsed sidebar" }).waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(600);
-          await shoot("rail");
-        }
-        if (deviceName === "phone") {
-          await page.keyboard.press("Escape");
-          // A chat in no project: its title opens the drawer (a project's chat leads back to its project instead).
-          await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
-          await page.locator("[data-chat-title]").first().click();
-          await page.waitForTimeout(600);
-          await shoot("drawer");
-        }
-        await context.close();
-      }
-    }
-
-    const idle = await idleCost(bridge, [["home", "/", pages[0]![2]], ["chat", chat, "textarea"]], windowMs);
-    return { shots, idle, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => {
-    const seed = homeOrg(herd, now, size);
-    // Acme Shop picked its mark in Organizations, red included; the neighbours picked none, so theirs is the slug's.
-    Object.assign(seed.projects[0]!, { icon: "flag", tone: "red" });
-    const neighbour = (slug: string, name: string, goal: string) => ({ slug, name, goal, status: "active" as const, icon: "", tone: "", threads: [] });
-    seed.projects.push(
-      neighbour("docs-site", "Docs site", "Guides and the API reference"),
-      neighbour("mobile-app", "Mobile app", "The iOS and Android clients"),
-      neighbour("billing-api", "Billing API", "Invoices, plans and webhooks"),
-      neighbour("data-pipeline", "Data pipeline", "Nightly exports and the warehouse"),
-    );
-    return seed;
-  }, (dir) => {
-    size = seedDiffRepo(dir);
-    benchRepo(dir);
-    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
-  });
-  await writeFile(join(outDir, "surface.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
-}
-
-/**
  * Idle cost: a WebKit of its own per view, so its processes are only this page's, left alone for
  * `windowMs` twice: its processes' CPU and resident memory, and the page's DOM elements.
  */
@@ -2800,117 +2081,15 @@ async function idleCost(bridge: TestBridge, views: ReadonlyArray<readonly [strin
   return idle;
 }
 
-/**
- * The desk's bar drawn as Cursor's, a project's Routines tab and Home's Needs you, on a desk and a phone in
- * light and dark; then, with a chat open on the desk, another agent finishing, which shows what the
- * app raises for it. Then the idle cost of Home and a chat (`--seconds`, 0 skips it). With `--before`
- * it skips Routines, which origin/main does not have.
- */
-async function sidebar(before: boolean): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const prs = join(outDir, "gh-prs.json");
-  process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
-  const windowMs = Number(values.seconds) * 1000;
-  const result = await withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const fake = bridge.fake!;
-    const shots: string[] = [];
-    const seen: Record<string, unknown> = {};
-    const chat = `/pane/${encodeURIComponent(herd.working)}`;
-    const home: readonly [string, string, string] = ["home", "/", '[role="tab"]:has-text("Recents")'];
-    for (const [deviceName, device] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
-      for (const scheme of ["light", "dark"] as const) {
-        const context = await browser.newContext({ ...device, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
-        const page = await context.newPage();
-        await page.clock.install({ time: bridge.now() });
-        const shoot = async (name: string) => {
-          const path = join(outDir, `${name}-${deviceName}-${scheme}.png`);
-          await page.screenshot({ path, animations: "disabled" });
-          shots.push(path);
-        };
-        const visit = async (path: string, ready: string) => {
-          await page.goto(bridge.url + path);
-          await page.locator(ready).first().waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(1200);
-        };
-        await visit(home[1], home[2]);
-        await shoot("home");
-        await visit(chat, "textarea");
-        await shoot("chat");
-        // Nothing may move at rest: a running animation here costs CPU for as long as the page is open.
-        seen[`animationsAtRest-${deviceName}-${scheme}`] = await page.evaluate(() => document.getAnimations().length, null);
-        if (deviceName === "desktop") {
-          if (!before) {
-            // A desk reads routines on each project's Routines tab (ADR 0102).
-            await visit("/project/acme-shop?tab=routines", 'main >> text="nightly-dependency-check"');
-            await shoot("routines");
-          }
-          await visit(chat, "textarea");
-          await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^Search/ }).click();
-          await page.waitForTimeout(400);
-          await shoot("search-browse");
-          await page.keyboard.press("Escape");
-          // The collapsed rail, then the bar open again for what follows.
-          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "1"), null);
-          await visit(chat, "textarea");
-          await shoot("rail");
-          await page.evaluate(() => localStorage.setItem("nenu:sidebar-collapsed:v1", "0"), null);
-          await visit(chat, "textarea");
-          if (scheme === "light") {
-            // Another agent finishes while this chat is open: a toast, or a mark on its row in the bar.
-            fake.setStatus(herd.idle, "working");
-            await page.waitForTimeout(2500);
-            fake.setStatus(herd.idle, "done");
-            const toast = page.locator("[data-notification-viewport] [role=status], [data-notification-viewport] [role=alert]");
-            const mark = page.locator(".nav-desk [data-unread]");
-            await page.locator("[data-notification-viewport] [role=status], [data-notification-viewport] [role=alert], .nav-desk [data-unread]").first()
-              .waitFor({ timeout: 12_000 }).catch(() => undefined);
-            await page.waitForTimeout(300);
-            seen.finishedToast = await toast.count();
-            seen.finishedToastText = seen.finishedToast ? await toast.first().innerText() : null;
-            seen.finishedToastCloseButton = seen.finishedToast ? await toast.first().getByRole("button", { name: /Dismiss/ }).count() : null;
-            seen.finishedMark = await mark.count();
-            await shoot("finished");
-            fake.setStatus(herd.idle, "idle");
-          }
-        } else {
-          // A chat owns the phone's bottom edge, so Search is the tab bar's on Home.
-          await visit(home[1], home[2]);
-          await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
-          await page.waitForTimeout(600);
-          await shoot("search");
-          await page.keyboard.press("Escape");
-          await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.codex)}`);
-          await page.locator("[data-chat-title]").first().click();
-          await page.waitForTimeout(600);
-          await shoot("drawer");
-        }
-        await context.close();
-      }
-    }
-    const idle = windowMs > 0 ? await idleCost(bridge, [home, ["chat", chat, "textarea"]], windowMs) : [];
-    return { shots, seen, idle, orgCalls: await bridge.orgCalls(), unexpectedWrites: fake.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => deskOrg(herd, now, size), (dir) => {
-    size = seedDiffRepo(dir);
-    benchRepo(dir);
-    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
-  });
-  await writeFile(join(outDir, "sidebar.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
-}
-
-/** Only `sidebar`'s idle cost (Home and a chat, a desk at rest), with no captures: run it once per build to compare two. */
+/** The idle cost of Home and a chat, a desk at rest, with no captures: run it once per build to compare two. */
 async function idle(): Promise<void> {
   await mkdir(outDir, { recursive: true });
-  let size = { additions: 0, deletions: 0 };
   const result = await withBench(async (bridge) => {
     const chat = `/pane/${encodeURIComponent(bridge.herd!.working)}`;
     const views = [["home", "/", '[role="tab"]:has-text("Recents")'], ["chat", chat, "textarea"]] as const;
     return { idle: await idleCost(bridge, views, Number(values.seconds) * 1000), unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => deskOrg(herd, now, size), (dir) => {
-    size = seedDiffRepo(dir);
+  }, CAPTURE_EPOCH, (dir) => {
+    seedDiffRepo(dir);
     benchRepo(dir);
   });
   await writeFile(join(outDir, "idle.json"), JSON.stringify(result, null, 2));
@@ -2919,348 +2098,11 @@ async function idle(): Promise<void> {
 
 const command = positionals[0];
 /**
- * The row above a project chat's composer (homeOrg): the worker "Checkout flow" (PR #42 on the working
- * pane, with background work) and its coordinator, on a phone and a desk, dark and light. Each chip's
- * panel is opened and captured; `--before` captures the PR bar, its CI popover and the Background
- * chip instead. Then, on the real clock, one fresh WebKit on the worker's desk view left alone for
- * `--seconds`: CPU, resident memory and DOM elements, twice.
- */
-async function chips(before: boolean): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const prs = join(outDir, "gh-prs.json");
-  process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
-  const windowMs = Number(values.seconds) * 1000;
-  const fixture = JSON.parse(await Bun.file(join(import.meta.dir, "../../web/src/components/activity/activity.fixture.json")).text());
-  const result = await withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const now = bridge.now();
-    const iso = (ago: number) => new Date(now - ago).toISOString();
-    const list = { ...fixture.list, workflows: [], artifacts: [], tasks: [
-      { id: "b0001", kind: "bash", title: "bun test --watch", status: "running", at: now - 8_000, hasOutput: true },
-      { id: "b0002", kind: "bash", title: "bun run build", status: "completed", exitCode: 0, at: now - 900_000, hasOutput: true },
-    ] };
-    const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
-      { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
-      { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
-    ] };
-    const mock = async (page: Page) => {
-      await page.route("**/api/pane/*/activity*", (route) => {
-        const url = new URL(route.request().url());
-        if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "412 pass", truncated: false, updatedAt: now } });
-        return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? list : { ...list, tasks: [] } });
-      });
-      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? subagents : { ...subagents, agents: [] } }));
-    };
-    const shots: string[] = [];
-    const found: Record<string, boolean> = {};
-    const views: Array<[string, typeof PHONE | typeof DESKTOP, string, "dark" | "light"]> = [
-      ["worker-desk-dark", DESKTOP, herd.working, "dark"], ["worker-desk-light", DESKTOP, herd.working, "light"],
-      ["worker-phone-dark", PHONE, herd.working, "dark"], ["worker-phone-light", PHONE, herd.working, "light"],
-      ["coordinator-desk-dark", DESKTOP, herd.idle, "dark"], ["coordinator-phone-dark", PHONE, herd.idle, "dark"],
-    ];
-    for (const [name, device, paneId, colorScheme] of views) {
-      bridge.fake!.setStatus(herd.working, "working");
-      const context = await browser.newContext({ ...device, colorScheme, timezoneId: "UTC", locale: "en-US" });
-      const page = await context.newPage();
-      await page.clock.install({ time: now });
-      await mock(page);
-      await page.goto(`${bridge.url}/pane/${encodeURIComponent(paneId)}`);
-      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(1800);
-      const shoot = async (step: string) => {
-        const path = join(outDir, `${name}-${step}.png`);
-        await page.screenshot({ path, animations: "disabled" });
-        shots.push(path);
-      };
-      const tap = async (locator: Locator, key: string) => {
-        found[`${name}:${key}`] = await locator.waitFor({ timeout: 2500 }).then(() => true, () => false);
-        if (found[`${name}:${key}`]) await locator.click();
-        await page.waitForTimeout(500);
-        return found[`${name}:${key}`];
-      };
-      await shoot("rest");
-      if (before) {
-        if (await tap(page.getByRole("button", { name: /^CI.*checks$/ }).first(), "ci")) { await shoot("ci"); await page.keyboard.press("Escape"); }
-        if (await tap(page.getByRole("button", { name: /^Processes/ }).first(), "background")) { await shoot("background"); await page.keyboard.press("Escape"); }
-      } else {
-        const row = page.getByRole("group", { name: "Status" });
-        for (const chip of ["Needs you", "Working", "Background", "PRs"]) {
-          if (!await tap(row.getByRole("button", { name: new RegExp(`^${chip}`) }).first(), chip)) continue;
-          await shoot(chip.toLowerCase().replace(" ", "-"));
-          if (chip === "PRs" && name.startsWith("worker-phone")) {
-            // The PR bar's diff, from the PRs panel now: its size opens the PR's changes.
-            if (await tap(page.getByRole("button", { name: /^View changes/ }).first(), "prs:diff")) {
-              // The diff's sheet is the last dialog: the chip's panel it opened from is still open under it.
-              const viewer = page.getByRole("dialog").last();
-              found[`${name}:prs:diff-open`] = await viewer.waitFor({ timeout: 5000 }).then(() => true, () => false);
-              await page.waitForTimeout(800);
-              await shoot("prs-diff");
-              await viewer.getByRole("button", { name: "Close" }).first().click();
-              await page.waitForTimeout(400);
-            }
-          }
-          await tap(page.getByRole("button", { name: "Close", exact: true }).first(), `${chip}:close`);
-        }
-        // Routines ask nothing of you: a row of the ⋯ menu opens their panel (ADR 0108).
-        if (await tap(page.getByRole("button", { name: "Conversation actions" }), "menu") && await tap(page.getByRole("button", { name: /^Routines/ }), "Routines")) {
-          await shoot("routines");
-          await tap(page.getByRole("button", { name: "Close", exact: true }).first(), "Routines:close");
-        }
-      }
-      await context.close();
-    }
-
-    // Idle cost: a WebKit of its own, so its processes are only this page's.
-    const idle = [];
-    for (let run = 1; run <= 2; run++) {
-      const known = new Set((await webkitProcesses()).keys());
-      const own = await launchWebkit();
-      try {
-        const context = await own.newContext({ ...DESKTOP, timezoneId: "UTC", locale: "en-US" });
-        const page = await context.newPage();
-        await mock(page);
-        await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
-        await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
-        await page.waitForTimeout(10_000);
-        const mine = (procs: Map<number, { rssKb: number; cpuMs: number }>) => [...procs].filter(([pid]) => !known.has(pid));
-        const start = new Map(mine(await webkitProcesses()));
-        await page.waitForTimeout(windowMs);
-        const end = mine(await webkitProcesses());
-        const cpuMs = end.reduce((acc, [pid, p]) => acc + p.cpuMs - (start.get(pid)?.cpuMs ?? 0), 0);
-        const dom = await page.evaluate(() => document.getElementsByTagName("*").length, null);
-        const running = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running").length, null);
-        idle.push({ run, seconds: windowMs / 1000, cpuMs, cpuPercent: Math.round((cpuMs / windowMs) * 1000) / 10,
-          rssMb: Math.round(end.reduce((acc, [, p]) => acc + p.rssKb, 0) / 1024), dom, runningAnimations: running });
-        await context.close();
-      } finally {
-        await own.close();
-      }
-    }
-    return { shots, found, idle, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => {
-    const seed = homeOrg(herd, now, size);
-    const hour = 3_600_000;
-    // As `routine list --json` prints them; an Organizations without the document lists none.
-    seed.projects[0]!.routines = [
-      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
-      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
-        last_run: new Date(now - 20 * hour).toISOString(), next_run: new Date(now + 4 * hour).toISOString() },
-    ];
-    return seed;
-  }, (dir) => {
-    size = seedDiffRepo(dir);
-    benchRepo(dir);
-    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
-  });
-  await writeFile(join(outDir, "chips.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (result.unexpectedWrites.length) process.exit(1);
-}
-
-/**
- * Around the box on a 390px phone and a 1440px desk: a worker with a sibling that needs you, one that
- * works, two resolved, its routines and PRs, background work running and finished, a long branch and
- * another machine. Each chip opens and closes; the box's top and the thread's scroll are read before,
- * open and after, and none may move.
- */
-async function composerAround(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const prs = join(outDir, "gh-prs.json");
-  process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
-  const branch = "fix/meli-contracargos-reintentos-webhook";
-  const result = await withBench(async (bridge, browser) => {
-    const herd = bridge.herd!;
-    const now = bridge.now();
-    const iso = (ago: number) => new Date(now - ago).toISOString();
-    const activity = { sessionKey: "bench", available: true, workflows: [], artifacts: [], tasks: [
-      { id: "b0001", kind: "bash", title: "bun test --watch", status: "running", at: now - 8_000, hasOutput: true },
-      { id: "b0002", kind: "bash", title: "bun run build", status: "completed", exitCode: 0, at: now - 900_000, hasOutput: true },
-      { id: "b0003", kind: "bash", title: "bun run lint", status: "failed", exitCode: 1, at: now - 1_500_000, hasOutput: true },
-    ] };
-    const subagents = { available: true, sessionKey: "bench", truncated: false, agents: [
-      { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
-    ] };
-    const shots: string[] = [];
-    const seen: Record<string, unknown> = {};
-    const moved: string[] = [];
-    // A conversation long enough to scroll, so a panel that took the thread's height would show.
-    await writeChatJournal(herd.journals.get(herd.working)!, now, 4, "running");
-    for (const [deviceName, device] of [["390", PHONE], ["1440", DESKTOP]] as const) {
-      bridge.fake!.setStatus(herd.working, process.env.NENU_E2E_IDLE ? "idle" : "working");
-      const context = await browser.newContext({ ...device, colorScheme: "dark", timezoneId: "UTC", locale: "en-US", ...(process.env.NENU_E2E_LATE_CHIPS ? { reducedMotion: "no-preference" } : {}) });
-      const page = await context.newPage();
-      await page.clock.install({ time: now });
-      await page.route("**/api/pane/*/activity*", async (route) => {
-        const url = new URL(route.request().url());
-        if (url.searchParams.has("task")) return route.fulfill({ json: { sessionKey: "bench", id: url.searchParams.get("task"), text: "412 pass", truncated: false, updatedAt: now } });
-        const late = process.env.NENU_E2E_LATE_CHIPS ? { ...activity, tasks: process.env.NENU_E2E_NO_CHIPS ? [] : activity.tasks.filter((t) => t.status !== "running") } : activity;
-        // A real session log takes a while to read: the chips land after the box has drawn.
-        if (process.env.NENU_E2E_LATE_CHIPS) await sleep(1200);
-        return route.fulfill({ json: route.request().url().includes(encodeURIComponent(herd.working)) ? late : { ...activity, tasks: [] } });
-      });
-      await page.route("**/api/pane/*/subagents*", (route) => route.fulfill({ json: process.env.NENU_E2E_LATE_CHIPS ? { ...subagents, agents: [] } : subagents }));
-      // Another machine on screen, as Herdr names it when it saves more than one.
-      await page.route("**/api/snapshot*", async (route) => {
-        const json = await (await fetch(route.request().url())).json() as { session?: string; machines?: unknown };
-        json.machines = [{ session: json.session, label: "build-box-remote", state: "online" }, { session: "@laptop", label: "laptop", state: "online" }];
-        await route.fulfill({ json });
-      });
-      // What the agent reports in a real session: its model, effort and context.
-      await reportModel(page);
-      // Layout shifts while the chat opens (Chromium reports them; WebKit has no such entry).
-      await page.addInitScript(() => {
-        const log: Array<{ value: number; sources: string[] }> = [];
-        (window as unknown as { __shifts: typeof log }).__shifts = log;
-        try {
-          new PerformanceObserver((list) => {
-            for (const entry of list.getEntries() as unknown as Array<{ value: number; sources?: Array<{ node?: Node }> }>) {
-              log.push({ value: entry.value, sources: (entry.sources ?? []).map((s) => (s.node instanceof Element ? `${s.node.tagName.toLowerCase()}.${s.node.className}`.slice(0, 60) : "")) });
-            }
-          }).observe({ type: "layout-shift", buffered: true });
-        } catch { /* no layout-shift entries in this engine */ }
-      }, null);
-      await page.goto(`${bridge.url}/pane/${encodeURIComponent(herd.working)}`);
-      await page.getByRole("textbox").first().waitFor({ timeout: 15_000 });
-      await page.waitForTimeout(2000);
-      seen[`${deviceName}:open-shifts`] = await page.evaluate(() => {
-        const log = (window as unknown as { __shifts?: Array<{ value: number; sources: string[] }> }).__shifts ?? [];
-        const from = (name: string) => log.filter((s) => s.sources.some((src) => src.includes(name))).length;
-        return { count: log.length, fold: from("div.fold"), composer: from("workbench-composer"), total: log.reduce((a, s) => a + s.value, 0) };
-      }, null);
-      // A quiet chat is read only for how it opens.
-      if (process.env.NENU_E2E_LATE_CHIPS) {
-        seen[`${deviceName}:chips`] = await page.getByRole("group", { name: "Status" }).getByRole("button").evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label") ?? ""));
-        await page.screenshot({ path: join(outDir, `${deviceName}-quiet.png`), animations: "disabled" });
-        await context.close();
-        continue;
-      }
-      const shoot = async (step: string) => {
-        const path = join(outDir, `${deviceName}-${step}.png`);
-        await page.screenshot({ path, animations: "disabled" });
-        shots.push(path);
-      };
-      const read = () => page.evaluate(() => {
-        const box = document.querySelector(".composer-box")?.getBoundingClientRect();
-        const thread = document.querySelector<HTMLElement>(".chat-thread");
-        const scroller = thread && [thread, ...Array.from(thread.querySelectorAll<HTMLElement>("*"))].find((el) => /auto|scroll/.test(getComputedStyle(el).overflowY));
-        const meta = document.querySelector<HTMLElement>(".composer-meta");
-        const cut = meta ? Array.from(meta.querySelectorAll<HTMLElement>("*")).filter((el) => el.children.length === 0 && el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent) : [];
-        return {
-          boxTop: box ? Math.round(box.top) : null,
-          threadBottom: thread ? Math.round(thread.getBoundingClientRect().bottom) : null,
-          scrollTop: scroller ? Math.round(scroller.scrollTop) : null,
-          meta: meta ? { text: meta.innerText.replace(/\s+/g, " "), width: meta.scrollWidth, clientWidth: meta.clientWidth, cut } : null,
-          sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          focus: document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName ?? null,
-        };
-      }, null);
-      await shoot("closed");
-      const rest = await read();
-      seen[`${deviceName}:closed`] = rest;
-      const row = page.getByRole("group", { name: "Status" });
-      const labels = await row.getByRole("button").evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label") ?? ""));
-      seen[`${deviceName}:chips`] = labels;
-      for (const label of labels) {
-        const chip = row.getByRole("button", { name: label, exact: true });
-        await chip.click();
-        await page.waitForTimeout(500);
-        const slug = label.split(",")[0]!.toLowerCase().replace(/\s+/g, "-");
-        await shoot(`open-${slug}`);
-        const open = await read();
-        seen[`${deviceName}:open-${slug}`] = open;
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(400);
-        const after = await read();
-        seen[`${deviceName}:after-${slug}`] = after;
-        for (const [when, m] of [["open", open], ["after", after]] as const) {
-          if (m.boxTop !== rest.boxTop || m.scrollTop !== rest.scrollTop || m.threadBottom !== rest.threadBottom) moved.push(`${deviceName}:${when}-${slug}`);
-        }
-      }
-      // Routines ask nothing of you: the ⋯ menu opens their panel, and it moves nothing either.
-      await page.getByRole("button", { name: "Conversation actions" }).click();
-      await page.waitForTimeout(400);
-      await page.getByRole("button", { name: /^Routines/ }).click();
-      await page.waitForTimeout(500);
-      await shoot("open-routines");
-      const routinesOpen = await read();
-      seen[`${deviceName}:open-routines`] = routinesOpen;
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(400);
-      const routinesAfter = await read();
-      seen[`${deviceName}:after-routines`] = routinesAfter;
-      for (const [when, m] of [["open", routinesOpen], ["after", routinesAfter]] as const) {
-        if (m.boxTop !== rest.boxTop || m.scrollTop !== rest.scrollTop || m.threadBottom !== rest.threadBottom) moved.push(`${deviceName}:${when}-routines`);
-      }
-      // What ended stays one tap away, folded and quiet under what still works.
-      await row.getByRole("button", { name: /^Working/ }).click();
-      await page.waitForTimeout(400);
-      await page.getByRole("dialog", { name: "Working" }).getByRole("button", { name: /^Done/ }).click();
-      await page.waitForTimeout(300);
-      await shoot("open-working-done");
-      // A press on the thread closes the panel and moves nothing.
-      await page.mouse.click(8, 110);
-      await page.waitForTimeout(400);
-      await shoot("outside");
-      seen[`${deviceName}:outside`] = { ...(await read()), open: await page.locator("#composer-chip-panel").count() };
-      if (deviceName === "390") {
-        // A phone's Back closes the panel and stays on the chat.
-        const url = page.url();
-        await row.getByRole("button", { name: /^Needs you/ }).waitFor({ timeout: 3000 }).catch(() => {});
-        await row.getByRole("button", { name: /^Needs you/ }).click();
-        await page.waitForTimeout(400);
-        await page.goBack();
-        await page.waitForTimeout(600);
-        seen["390:back"] = { ...(await read()), open: await page.locator("#composer-chip-panel").count(), sameUrl: page.url() === url };
-        // Where it runs, whole, one tap from the row under the box.
-        await page.getByRole("button", { name: /^Where this runs/ }).click();
-        await page.waitForTimeout(400);
-        await shoot("place");
-        await page.keyboard.press("Escape");
-      }
-      await context.close();
-    }
-    return { shots, seen, moved, unexpectedWrites: bridge.fake!.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => {
-    const seed = homeOrg(herd, now, size);
-    const project = seed.projects[0]!;
-    const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
-    const sibling = (id: string, title: string, group: string, minutes: number) => ({ ...project.threads[3]!, id, title, group, group_label: group,
-      status: group === "resolved" ? "resolved" : "open", workspace_id: "", tab_id: "", pane_id: "", branch: "", pr: null, updated: ago(minutes) });
-    project.threads[3] = { ...project.threads[3]!, branch };
-    project.threads.push(sibling("t-0015", "Shipping rates", "working", 2), sibling("t-0016", "Old cart page", "resolved", 300), sibling("t-0017", "Coupon field", "resolved", 900));
-    // $NENU_E2E_LATE_CHIPS: nothing around the chat but what its own reads bring after it mounts
-    // (finished commands and routines), as in a quiet chat; its chips arrive a moment late.
-    if (process.env.NENU_E2E_LATE_CHIPS) project.threads = project.threads.filter((t) => t.id === "t-0012" || t.id === "t-0010").map((t) => ({ ...t, pr: null }));
-    const hour = 3_600_000;
-    project.routines = process.env.NENU_E2E_NO_CHIPS ? [] : [
-      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
-      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
-        last_run: new Date(now - 20 * hour).toISOString(), next_run: new Date(now + 4 * hour).toISOString() },
-    ];
-    return seed;
-  }, (dir) => {
-    size = seedDiffRepo(dir);
-    benchRepo(dir);
-    writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
-  });
-  // The row under the box holds the model, the chips and the place within its width: nothing spills past it.
-  const spilled = Object.entries(result.seen).filter(([, m]) => {
-    const meta = (m as { meta?: { width: number; clientWidth: number } | null })?.meta;
-    return meta && meta.width > meta.clientWidth + 1;
-  }).map(([key]) => key);
-  await writeFile(join(outDir, "composer.json"), JSON.stringify({ ...result, spilled }, null, 2));
-  console.log(JSON.stringify({ moved: result.moved, spilled, seen: result.seen }, null, 2));
-  if (result.unexpectedWrites.length || result.moved.length || spilled.length) process.exit(1);
-}
-
-/**
  * The chips under the box and Stop in it (ADR 0108), on a phone and a desk, dark and light, beside a
  * model as a session reports it: a working chat with one background command (Background 1 and Stop),
  * the same with none (Stop alone), a chat at rest with a command still running (chips alone), finished
  * work only while working and at rest (no chip: it is a row of the ⋯ menu, opened from there),
- * homeOrg's worker with everything around it (Needs you, Background, PRs and Stop: the fullest row)
+ * the working pane with everything around it (Needs you, Background and Stop: the fullest row)
  * and the terminal view. Each capture measures what sits between the thread and the box's top edge,
  * and whether any control in the row under the box touches another; the phone's first moment is also
  * read with the keyboard up.
@@ -3269,7 +2111,6 @@ async function chipLine(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const prs = join(outDir, "gh-prs.json");
   process.env.NENU_E2E_GH_PRS = prs;
-  let size = { additions: 0, deletions: 0 };
   const result = await withBench(async (bridge, browser) => {
     const herd = bridge.herd!;
     const fake = bridge.fake!;
@@ -3287,7 +2128,7 @@ async function chipLine(): Promise<void> {
       { id: "a0000000000000001", parentId: "", name: "reviewer", task: "Review the cart diff", status: "waiting", updatedAt: iso(120_000) },
       { id: "a0000000000000002", parentId: "", name: "explorer", task: "Read the carrier API", status: "running", updatedAt: iso(20_000) },
     ] };
-    // Panes outside the project, so only their own session's work makes chips.
+    // Panes of their own, so only their own session's work makes chips.
     fake.addTab("w1:t3", "line");
     const moments = [
       { name: "chips-stop", paneId: "w1:line", status: "working", activity: background },
@@ -3392,16 +2233,8 @@ async function chipLine(): Promise<void> {
       if (key.endsWith("-finished-panel") && (value as { box?: number }).box !== (seen[key.replace(/-finished-panel$/, "")] as Seen)?.boxTop) failed.push(key);
     }
     return { shots, seen, failed, unexpectedWrites: fake.writes() };
-  }, CAPTURE_EPOCH, (herd, now) => {
-    const seed = homeOrg(herd, now, size);
-    seed.projects[0]!.routines = [
-      { name: "pr-followup", trigger: "pr", schedule: "", events: ["checks-failed", "review"], enabled: true, last_run: "", next_run: "" },
-      { name: "nightly-deps", trigger: "schedule", schedule: "daily 03:00", events: [], enabled: true,
-        last_run: new Date(now - 20 * 3_600_000).toISOString(), next_run: new Date(now + 4 * 3_600_000).toISOString() },
-    ];
-    return seed;
-  }, (dir) => {
-    size = seedDiffRepo(dir);
+  }, CAPTURE_EPOCH, (dir) => {
+    const size = seedDiffRepo(dir);
     benchRepo(dir);
     writeFileSync(prs, JSON.stringify([ghPr(42, "Checkout flow", new Date(CAPTURE_EPOCH).toISOString(), { branch: "e2e-demo", checks: [], ...size })]));
   });
@@ -3787,18 +2620,18 @@ async function touchDrag(engine: "webkit" | "chromium", context: Context, page: 
 }
 
 /**
- * The box stays put on a phone: a project coordinator's long chat at 390x844 in WebKit and Chromium,
+ * The box stays put on a phone: a long chat at 390x844 in WebKit and Chromium,
  * dark and light, with the keyboard closed and open (the viewport cut to 390x470, as the keyboard
  * leaves it). Each lists what a finger can scroll (only the thread may), the root's overscroll, and
  * where the box and the header sit before and after a drag that starts on the box and one on the
- * header: a wheel in WebKit, a touch scroll gesture in Chromium. Then the Threads tab's scrollers.
+ * header: a wheel in WebKit, a touch scroll gesture in Chromium.
  */
 async function pin(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const shots: string[] = [];
   const seen: Record<string, unknown> = {};
   const failures: string[] = [];
-  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => projectChatSeed(herd, now) });
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
   try {
     const herd = bridge.herd!;
     await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
@@ -3810,7 +2643,7 @@ async function pin(): Promise<void> {
           const page = await context.newPage();
           await page.clock.install({ time: bridge.now() });
           await page.goto(bridge.url + `/pane/${encodeURIComponent(herd.working)}`);
-          await page.getByPlaceholder("Ask the coordinator…").waitFor({ timeout: 15_000 });
+          await page.getByPlaceholder("Type a reply…").waitFor({ timeout: 15_000 });
           await page.waitForTimeout(2000);
           const shoot = async (name: string) => {
             const path = join(outDir, `pin-${name}-${engine}-${scheme}.png`);
@@ -3854,18 +2687,11 @@ async function pin(): Promise<void> {
           seen[`${engine}-${scheme}-root-overscroll`] = overscroll;
           if (overscroll !== "none") failures.push(`${engine} ${scheme}: the root's overscroll is ${overscroll}`);
           await probe("closed");
-          await page.getByPlaceholder("Ask the coordinator…").click();
+          await page.getByPlaceholder("Type a reply…").click();
           await page.setViewportSize({ width: 390, height: 470 });
           await page.waitForTimeout(600);
           await probe("keyboard");
           await page.setViewportSize(PHONE.viewport);
-          await page.getByRole("tab", { name: /^Threads/ }).click();
-          await page.locator(".project-overlay").waitFor({ timeout: 5000 });
-          await page.waitForTimeout(400);
-          const threads = await scrollers();
-          seen[`${engine}-${scheme}-threads`] = threads;
-          if (threads.length > 1) failures.push(`${engine} ${scheme} threads: scrollers ${JSON.stringify(threads)}`);
-          await shoot("threads");
           await context.close();
         }
       } finally {
@@ -3882,11 +2708,10 @@ async function pin(): Promise<void> {
 }
 
 /**
- * Every phone screen scrolls one box and nothing else: Home, Projects, a project with its History open,
- * a coordinator node, Your asks, Settings, a chat, a coordinator's Threads, a chat's History, and two
- * sheets over a page, in WebKit and Chromium, twice: in Safari, whose bars leave the page no inset, and
+ * Every phone screen scrolls one box and nothing else: Home, Settings, a chat, a chat's History, and
+ * a sheet over a page, in WebKit and Chromium, twice: in Safari, whose bars leave the page no inset, and
  * as the home-screen app, 47px over and 34px under (env() is 0 headless, so the bundle's CSS says them).
- * The herd and the organization are seeded taller than a phone on every screen. Each screen: the root
+ * The herd is seeded taller than a phone on every screen. Each screen: the root
  * opts out of vertical overscroll (a drag past an end rubber-bands the whole app in Safari otherwise),
  * exactly one box scrolls vertically, a drag from the header, the middle and the bottom moves only that
  * box (never the header, the tab bar, the composer or the window) and moves it at least once, and the
@@ -3898,20 +2723,8 @@ async function phoneScroll(): Promise<void> {
   const shots: string[] = [];
   const seen: Record<string, unknown> = {};
   const failures: string[] = [];
-  // orgTreeSeed with thirty more open threads, half of them under Migración de stock, so a project and
-  // a node are taller than a phone; eight more projects for Projects, a dozen asks for Your asks, and
-  // three more workspaces for Home, two of their sessions asking.
-  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
-    const seed = orgTreeSeed(herd, now, { coordinator: true });
-    for (const thread of seed.projects[0]!.threads) {
-      const n = Number(/^Tarea cerrada (\d+)$/.exec(String(thread.title))?.[1]);
-      if (n <= 30) Object.assign(thread, { status: "open", group: "idle", group_label: "idle", title: `Tarea abierta ${n}`, parent_id: n <= 15 ? "root" : "t-0101" });
-    }
-    for (let n = 1; n <= 8; n++) seed.projects.push({ slug: `side-${n}`, name: `Proyecto ${n}`, goal: "Un proyecto más para la lista", status: "active", threads: [] });
-    seed.asks = Array.from({ length: 12 }, (_, i) => ({ project: "acme", coordinator: { id: "root", title: "" }, line: 5 + i, state: i % 2 ? "working" : "needs-decision",
-      text: `Pregunta ${i + 1} sobre el checkout`, answer: "", links: [], confirmed: "", mismatch: "" }));
-    return seed;
-  } });
+  // Three more workspaces for Home, two of their sessions asking.
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
   try {
     const herd = bridge.herd!;
     await addDocs(bridge);
@@ -3923,18 +2736,12 @@ async function phoneScroll(): Promise<void> {
     await writeChatJournal(herd.journals.get(herd.working)!, bridge.now(), 6, "finished");
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
-      // Recents, the tall list: Projects, which Home opens on, folds the quiet projects and fits a phone.
+      // Recents, the tall list.
       { name: "home", path: "/", open: (page) => page.getByRole("tab", { name: "Recents" }).click() },
-      { name: "projects", path: "/projects" },
-      { name: "project", path: "/project/acme", open: (page) => page.getByText(/^History/).first().click() },
-      { name: "node", path: "/project/acme/node/t-0101" },
-      { name: "asks", path: "/asks" },
       { name: "settings", path: "/settings" },
       { name: "chat", path: chat },
-      { name: "threads", path: `/pane/${encodeURIComponent(herd.codex)}`, open: (page) => page.getByRole("tab", { name: /^Threads/ }).click() },
       { name: "history", path: `${chat}/history` },
       { name: "search-sheet", path: "/", sheet: true, open: (page) => page.locator(".bottom-tab-bar").getByRole("button", { name: "Search" }).click() },
-      { name: "row-sheet", path: "/project/acme", sheet: true, open: (page) => page.getByRole("button", { name: "Panel depósito actions" }).click() },
     ];
     for (const engine of ["webkit", "chromium"] as const) {
       const browser = await launchEngine(engine);
@@ -4057,85 +2864,6 @@ async function phoneScroll(): Promise<void> {
   if (failures.length) process.exit(1);
 }
 
-/**
- * A conversation that ended its turn is no ask: Home on a phone, WebKit and Chromium, dark and light,
- * with its Workspaces list, beside a thread stopped on a real dialog. The conversation (`keep_open`)
- * said `Waiting for you`, as it does before every answer, so Organizations groups it Waiting on you;
- * only the dialog may count in the headline, Needs you, the Home tab's badge and a workspace's state.
- */
-async function atRestBench(): Promise<void> {
-  await mkdir(outDir, { recursive: true });
-  const shots: string[] = [];
-  const seen: Record<string, unknown> = {};
-  const failures: string[] = [];
-  const talk = { paneId: "w3:talk", workspaceId: "w3", tabId: "w3:t1", session: "77777777-7777-4777-8777-777777777777" };
-  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH, org: (herd, now) => {
-    const seed = needsYouSeed(herd, now);
-    const ago = new Date(now - 60_000).toISOString();
-    seed.projects[0]!.threads = [
-      { id: "t-0360", title: "Charla de mejoras", parent_id: "root", role: "worker", status: "open", group: "waiting-on-you", group_label: "Waiting on you",
-        note: "done", branch: "", workspace_id: talk.workspaceId, tab_id: talk.tabId, pane_id: talk.paneId, cwd: "", updated: ago, report_unacked: true,
-        auto_fix_ci: false, auto_merge: false, pr: null, activity: "Waiting for you", percent: null, keep_open: true },
-      ...seed.projects[0]!.threads.filter((thread) => thread.id === "t-0002"),
-    ];
-    return seed;
-  } });
-  try {
-    const herd = bridge.herd!;
-    bridge.fake!.addWorkspace(talk.workspaceId, "Charla de mejoras").addTab(talk.tabId, "charla");
-    await writeJournal(join(dirname(herd.journals.get(herd.idle)!), `${talk.session}.jsonl`), [["user", "¿Qué mejoramos hoy?"], ["assistant", "Dos cosas: el composer en el celular y la charla que figura como pedido."]], bridge.now());
-    bridge.fake!.addPane({ paneId: talk.paneId, workspaceId: talk.workspaceId, tabId: talk.tabId, agent: "claude", label: "Charla de mejoras", sessionId: talk.session,
-      cwd: bridge.dir, status: "done", lines: ["● Dos cosas: el composer en el celular y la charla que figura como pedido.", "", "❯ "] });
-    for (let tries = 0; !(await (await fetch(bridge.url + "/api/snapshot")).text()).includes(talk.paneId); tries++) {
-      if (tries > 60) throw new Error("the bridge never listed the conversation's pane");
-      await sleep(500);
-    }
-    for (const engine of ["webkit", "chromium"] as const) {
-      const browser = await launchEngine(engine);
-      try {
-        for (const scheme of ["dark", "light"] as const) {
-          const context = await browser.newContext({ ...PHONE, colorScheme: scheme, timezoneId: "UTC", locale: "en-US" });
-          const page = await context.newPage();
-          await page.addInitScript(() => { localStorage.setItem("nenu:home-list:v2", "workspaces"); }, null);
-          await page.clock.install({ time: bridge.now() });
-          await page.goto(bridge.url + "/");
-          await page.locator("h1.text-large-title").waitFor({ timeout: 15_000 });
-          await page.waitForTimeout(2500);
-          const read = await page.evaluate(() => {
-            const text = (el: Element | null | undefined) => (el as HTMLElement | null)?.innerText.replace(/\s+/g, " ").trim() ?? null;
-            const needs = document.querySelector('section[aria-label="Needs you"]');
-            const row = Array.from(document.querySelectorAll("li")).find((li) => /Charla de mejoras/.test(li.textContent ?? "") && !needs?.contains(li));
-            return {
-              headline: text(document.querySelector("h1.text-large-title")),
-              needsYou: needs ? Array.from(needs.querySelectorAll("a")).map(text) : [],
-              badge: text(document.querySelector(".bottom-tab-badge")),
-              talkRow: text(row),
-            };
-          }, null);
-          seen[`${engine}-${scheme}`] = read;
-          const fail = (what: string) => failures.push(`${engine} ${scheme}: ${what}`);
-          if (read.headline !== "1 needs you") fail(`headline ${read.headline}`);
-          if (read.needsYou.some((row) => /Charla/.test(row ?? ""))) fail(`Needs you lists the conversation: ${JSON.stringify(read.needsYou)}`);
-          if (read.badge !== "1") fail(`the Home tab's badge says ${read.badge}`);
-          if (!read.talkRow || /Needs you|Waiting for your reply/.test(read.talkRow)) fail(`the conversation's workspace reads ${read.talkRow}`);
-          const path = join(outDir, `at-rest-home-${engine}-${scheme}.png`);
-          await page.screenshot({ path, animations: "disabled" });
-          shots.push(path);
-          await context.close();
-        }
-      } finally {
-        await browser.close();
-      }
-    }
-  } finally {
-    await bridge.stop();
-  }
-  const result = { shots, seen, failures };
-  await writeFile(join(outDir, "at-rest.json"), JSON.stringify(result, null, 2));
-  console.log(JSON.stringify(result, null, 2));
-  if (failures.length) process.exit(1);
-}
-
 /** Two pictures between a message's words, phone and desk: the composer, what the terminal got, the conversation. */
 async function inlineImages(before: boolean): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -4206,10 +2934,6 @@ async function sendAlways(): Promise<void> {
 }
 
 if (command === "smoke") await smoke();
-else if (command === "project") await project();
-else if (command === "org") await org();
-else if (command === "threads") await threads();
-else if (command === "needs-you") await needsYou();
 else if (command === "tabs") await tabs();
 else if (command === "workspace") await workspace();
 else if (command === "workspace-rows") await workspaceRows();
@@ -4218,25 +2942,18 @@ else if (command === "stop") await stop();
 else if (command === "processes") await processes();
 else if (command === "stop-state") await stopState();
 else if (command === "baseline") await baseline();
-else if (command === "diffs") await diffs(values.before === true);
 else if (command === "artifacts") await artifacts();
 else if (command === "files") await files();
 else if (command === "home") await home();
 else if (command === "inspector") await inspector(values.before === true);
 else if (command === "terminal") await terminal(values.before === true);
 else if (command === "motion") await motion(values.before === true);
-else if (command === "back") await back();
-else if (command === "surface") await surface();
-else if (command === "sidebar") await sidebar(values.before === true);
 else if (command === "idle") await idle();
-else if (command === "chips") await chips(values.before === true);
 else if (command === "chip-line") await chipLine();
-else if (command === "composer") await composerAround();
 else if (command === "chat") await chat();
 else if (command === "scroll") await scrollProbe();
 else if (command === "reading") await reading();
 else if (command === "pin") await pin();
-else if (command === "at-rest") await atRestBench();
 else if (command === "inline-images") await inlineImages(values.before === true);
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
@@ -4247,6 +2964,6 @@ else if (command === "send-always") await sendAlways();
 else if (command === "usage-limit") await usageLimit();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|project|org|threads|needs-you|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|diffs|artifacts|files|home|inspector|terminal|motion|back|surface|sidebar|chips|idle|chat|scroll|reading|pin|at-rest|inline-images|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|artifacts|files|home|inspector|terminal|motion|idle|chip-line|chat|scroll|reading|pin|inline-images|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

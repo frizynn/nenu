@@ -92,9 +92,9 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0058](./0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md) | The bridge watches the panes a browser is looking at (amends 0054) | Accepted |
 | [0059](./0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md) | Agent images, SVG and HTML assets render without widening file access (amends 0021, 0025) | Accepted; amended by 0063 |
 | [0060](./0060-codex-panes-stay-off-the-daemon.md) | Codex panes stay off the daemon (launching Codex daemon-backed was rejected) | Rejected |
-| [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Accepted |
+| [0061](./0061-nenu-reads-organizations-through-its-json-contract.md) | Nenu reads Organizations through its `--json` contract | Superseded by 0123 |
 | [0063](./0063-a-refused-file-opens-only-through-a-confirmed-single-use-link.md) | A refused file opens only through a confirmed, single-use link (amends 0021, 0059) | Accepted |
-| [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Accepted; amended by 0080, 0089, 0092, 0102, 0103 |
+| [0064](./0064-the-organization-is-drawn-as-organizations-draws-it.md) | A project's organization is drawn the way Herdr Organizations draws it | Superseded by 0123 |
 | [0065](./0065-a-workspace-opens-on-its-pane.md) | A workspace opens on its pane, not on a page | Accepted |
 | [0066](./0066-stop-presses-the-clis-interrupt-key-once.md) | Stop presses the CLI's interrupt key once, and only on a running turn (Ctrl+C and recalling the queue first were rejected) | Accepted; "running turn" amended by 0067 |
 | [0067](./0067-the-clis-own-state-decides-the-screen-is-the-fallback.md) | The CLI's own state decides whether a turn runs; the screen is the fallback (hooks as the authority were rejected) | Accepted; extended to sends by 0117 |
@@ -104,25 +104,26 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0079](./0079-on-a-desk-the-keyboard-is-the-keys.md) | On a desk, the keyboard is the keys: the Terminal tab has no Keys tray (amends 0077) | Accepted; amended by 0114 |
 | [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md) | On a desk, the project is the session panel's first tab (supersedes 0075 point 2) | Superseded by 0101 |
 | [0082](./0082-a-codex-with-no-turn-has-nothing-to-link.md) | A Codex with no turn has nothing to link; one holding its rollout is that conversation (narrows 0022, adds to 0028) | Accepted |
-| [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Accepted; amended by 0115 and 0119 |
-| [0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) | On a desk, projects and coordinators are pages with tabs; asks and routines live on them (amends 0064, 0080, 0090, 0091, 0092 on a desk) | Accepted; amended by 0106 |
-| [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Accepted |
+| [0101](./0101-a-threads-panel-opens-on-its-overview.md) | A thread's panel opens on its Overview; the project's views leave it (supersedes 0081) | Superseded by 0123 |
+| [0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) | On a desk, projects and coordinators are pages with tabs; asks and routines live on them (amends 0064, 0080, 0090, 0091, 0092 on a desk) | Superseded by 0123 |
+| [0103](./0103-a-conversation-that-ended-its-turn-waits-on-nobody.md) | A conversation that ended its turn waits on nobody (amends 0064) | Superseded by 0123 |
 | [0104](./0104-a-picture-travels-where-it-sits-in-the-message.md) | A picture travels where it sits in the message (amends 0074 for pictures) | Accepted; amended by 0112 and 0117 |
-| [0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md) | On a desk, finished work is a History by day, and a routine is edited where it is read (amends 0102) | Accepted |
-| [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Accepted |
-| [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted |
-| [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Accepted; point 2 amended by 0115 |
-| [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Accepted; point 3 amended by 0115 |
+| [0106](./0106-finished-work-is-history-and-a-routine-is-edited-in-place.md) | On a desk, finished work is a History by day, and a routine is edited where it is read (amends 0102) | Superseded by 0123 |
+| [0107](./0107-home-lists-the-projects-as-rows.md) | Home lists the projects as rows, each with what it holds (amends 0080's period names) | Superseded by 0123 |
+| [0108](./0108-the-line-above-the-box-holds-only-live-work.md) | The line above the box holds only live work, and Stop sits in the box | Accepted; amended by 0123 |
+| [0109](./0109-a-coordinators-page-shows-live-work.md) | A coordinator's page shows its live work; what finished is one line away (supersedes 0089's Summary) | Superseded by 0123 |
+| [0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md) | Projects is Home's first tab, and a phone enters a coordinator on its page | Superseded by 0123 |
 | [0112](./0112-a-send-that-stops-leaves-the-box-as-it-found-it.md) | A send that stops leaves the agent's box as it found it; Take over moves the draft (amends 0104) | Accepted; amended by 0114 |
 | [0113](./0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md) | A state is a still glyph, coloured only when it asks for you | Accepted; decision 3 superseded by 0118 |
 | [0114](./0114-a-send-from-nenu-never-gets-stuck.md) | A send from Nenu never gets stuck, and the Terminal view is the terminal (amends 0056, 0077, 0079, 0112) | Accepted |
-| [0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Accepted; amended by 0119 and 0121 |
+| [0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) | A tap on a coordinator enters its chat; its threads fold down where it is listed (amends 0092, 0101, 0109, 0110) | Superseded by 0123 |
 | [0116](./0116-a-turn-reads-as-t3-code-draws-its-work.md) | A turn reads as T3 Code draws its work, the same on a phone and a desk (reverses the desk's step table) | Accepted; amended by 0118 |
 | [0117](./0117-enter-follows-the-text-and-claudes-log-is-the-witness.md) | Enter follows the text, and Claude's log is the witness; waits end on the event (amends 0048, 0067, 0076, 0104) | Accepted |
 | [0118](./0118-work-in-progress-looks-alive.md) | Work in progress looks alive, where it happens, and one message is on screen once (amends 0111, 0113, 0116) | Accepted |
-| [0119](./0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md) | A chat panel's sections fold, and the operator arranges them; a coordinator's Threads lists its whole subtree (amends 0101, 0115) | Accepted |
+| [0119](./0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md) | A chat panel's sections fold, and the operator arranges them; a coordinator's Threads lists its whole subtree (amends 0101, 0115) | Superseded by 0123 |
 | [0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md) | A Claude at its usage limit reads so, and its messages wait in Nenu; Continue now resumes it (amends 0067, 0108, 0113, 0114) | Accepted |
-| [0121](./0121-a-phones-project-views-are-rows-of-the-menu.md) | A phone's project views are rows of the ⋯, and what waits on you is counted on it (amends 0115) | Accepted |
+| [0121](./0121-a-phones-project-views-are-rows-of-the-menu.md) | A phone's project views are rows of the ⋯, and what waits on you is counted on it (amends 0115) | Superseded by 0123 |
+| [0123](./0123-nenu-draws-herdr-alone.md) | Nenu draws Herdr alone; Herdr Organizations left the app (supersedes 0061, 0064, 0088–0093, 0096, 0099, 0101–0103, 0105–0107, 0109, 0110, 0115, 0119, 0121, 0122) | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

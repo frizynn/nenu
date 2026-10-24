@@ -1,5 +1,4 @@
 import type { SubagentsResponse, SubagentHistoryResponse } from "./types";
-import type { PrAsk } from "./types";
 import type { TakenBack } from "./local-sends";
 // Thin REST client for the bridge. Everything is same-origin, so credentials/headers are
 // minimal. Each call throws on a non-2xx so callers (route loaders / action handlers) surface errors.
@@ -10,8 +9,6 @@ import { observeServerBuild, SERVER_BUILD_HEADER } from "./server-build";
 import type {
   ActionResponse,
   AnswerOutcome,
-  AsksList,
-  CoordinatorAgent,
   AnswerRequest,
   BridgeConfig,
   CreateResponse,
@@ -20,7 +17,6 @@ import type {
   InterruptResponse,
   MachineView,
   NativeQueueState,
-  NodeRole,
   NotifyPrefs,
   DiffScope,
   PaneDiff,
@@ -28,18 +24,9 @@ import type {
   PaneSkillsResponse,
   PaneReadResponse,
   QueueWaitReason,
-  RoutineEdit,
-  RoutineList,
   SendOutcome,
   SendRequest,
   SnapshotResponse,
-  TemplateView,
-  OrgProjectDetail,
-  OrgTask,
-  StatusFile,
-  ThreadReport,
-  ThreadSummary,
-  TokenUsage,
   UpdateInfo,
   UploadResponse,
   UsageResponse,
@@ -100,6 +87,21 @@ export function isDefiniteRefusal(error: unknown): boolean {
   return error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408;
 }
 
+/** What a failed request says to a person: the bridge's `error` when it answered with one, else the transport's own words. */
+export function errorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Request failed.";
+  const start = error.message.indexOf("{");
+  if (start >= 0) {
+    try {
+      const body: unknown = JSON.parse(error.message.slice(start));
+      if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "string") return body.error;
+    } catch {
+      // Keep the transport's original message when its response was not JSON.
+    }
+  }
+  return error.message;
+}
+
 // Every request gets a deadline so a black-holed connection (phone sleep/wake, a Tailscale route
 // that goes dark) can't leave a fetch pending forever — which would zombify the app: the poller
 // gates on `revalidator.state === "idle"` and never fires again, and route navigations wait on a
@@ -115,16 +117,6 @@ const MUTATION_TIMEOUT_MS = 20_000;
 //     (bridge/guarded-send.ts PICTURES_BY_MS), then at most three 15 s waits on any path; under
 //     Bun's 120 s idle timeout.
 const SEND_TIMEOUT_MS = 110_000;
-const ORG_LIST_TIMEOUT_MS = 15_000;
-const ORG_MUTATION_TIMEOUT_MS = 35_000;
-//   - A merge waits on GitHub; the bridge gives `thread merge` 90 s and holds the request up to
-//     its 120 s idle timeout, so the client outlasts the CLI.
-const ORG_MERGE_TIMEOUT_MS = 100_000;
-/** Past the bridge's own 150 s wait for the summary agent. */
-const ORG_EXPLAIN_TIMEOUT_MS = 160_000;
-//   - Starting a coordinator waits for its shell and agent (the bridge gives `open` 60 s), then for
-//     the projects re-read, which can queue behind one already running (up to 10 s each).
-const ORG_OPEN_TIMEOUT_MS = 90_000;
 //   - Uploads carry a whole file over the phone's uplink — the most generous budget.
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -757,201 +749,6 @@ export function createTab(
   });
 }
 
-/** What the start form offers for a project: its templates and the profiles a node can run. */
-export function fetchOrgStartOptions(
-  project: string,
-  session?: string,
-): Promise<{ ok: true; templates: TemplateView[]; profiles: string[] }> {
-  return req(withSession(`/api/org/start-options?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** A project's routines, read once when something shows them; never polled. */
-export function fetchOrgRoutines(project: string, session?: string): Promise<{ ok: true } & RoutineList> {
-  return req(withSession(`/api/org/routines?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** Organizations' `routine toggle`: turns one routine on or off, and answers the routines as they then read. */
-export function toggleOrgRoutine(input: { project: string; name: string; on: boolean }, session?: string): Promise<{ ok: true; routines: RoutineList }> {
-  return req(withSession("/api/org/routine/toggle", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** Organizations' `routine set`: changes the fields given of one routine, and answers the routines as they then read. */
-export function setOrgRoutine(input: { project: string; name: string } & RoutineEdit, session?: string): Promise<{ ok: true; routines: RoutineList }> {
-  return req(withSession("/api/org/routine/set", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** The coordinator's task list; `tasks` is null when this Organizations has no `task list`. */
-export function fetchOrgTasks(project: string, signal?: AbortSignal): Promise<{ ok: true; tasks: OrgTask[] | null }> {
-  return req(`/api/org/tasks?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** `project status`'s states. Mirrors OrgStatusState in bridge/org-cli.ts. */
-export type OrgStatusState = "waiting" | "working" | "review" | "landing" | "idle" | "todo" | "done";
-
-/** A project's work in one document (`project status --json`), as Notes draws it. Mirrors OrgStatus in bridge/org-cli.ts. */
-export interface OrgStatus {
-  /** One per TASKS.md task in file order, then one per open thread no task names; `owner` is null for a thread. */
-  items: Array<{ kind: "task" | "thread"; id: string; title: string; state: OrgStatusState; owner: OrgTask["owner"] | null; thread: string }>;
-  /** `line` is 0 and `task` empty for the handoff. */
-  problems: Array<{ rule: string; line: number; task: string; thread: string; detail: string }>;
-}
-
-/** The project's status for Notes; `status` is null when this Organizations has no `project status`. */
-export function fetchOrgStatus(project: string, signal?: AbortSignal): Promise<{ ok: true; status: OrgStatus | null }> {
-  return req(`/api/org/status?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** What the project's threads receive; null when this Organizations has none. */
-export function fetchOrgContext(project: string, signal?: AbortSignal): Promise<{ ok: true; detail: OrgProjectDetail | null }> {
-  return req(`/api/org/context?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/**
- * What each thread's report says and shows, and the project coordinator's STATUS.md; `threads` is
- * null while Organizations is read from its files. A bridge before STATUS.md sends no `status`.
- */
-export function fetchOrgSummary(project: string, signal?: AbortSignal): Promise<{
-  ok: true; threads: ThreadSummary[] | null; status?: StatusFile | null; usage?: TokenUsage | null; coordinator?: CoordinatorAgent | null;
-}> {
-  return req(`/api/org/summary?project=${encodeURIComponent(project)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** Every coordinator's asks and open decisions, as the bridge last read them; `asks` is null when Organizations cannot list them. */
-export function fetchOrgAsks(signal?: AbortSignal): Promise<{ ok: true } & AsksList> {
-  return req("/api/org/asks", { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** A thread's report, read from the project's records folder when a question's context opens; 404 without one. */
-export function fetchOrgReport(project: string, thread: string, signal?: AbortSignal): Promise<{ ok: true; report: ThreadReport }> {
-  return req(`/api/org/report?project=${encodeURIComponent(project)}&thread=${encodeURIComponent(thread)}`, { signal }, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** A picture, HTML page or PDF in the project's library; anything else answers 404. */
-export function orgLibraryUrl(project: string, path: string): string {
-  return `/api/org/library?project=${encodeURIComponent(project)}&path=${encodeURIComponent(path)}`;
-}
-
-/** Start a worker or coordinator; a template carries its own role and profile. */
-export function startOrgNode(
-  input: { project: string; title: string; parent: string; task: string; role: NodeRole; profile?: string; template?: string },
-  session?: string,
-): Promise<{ ok: true; node: { id: string } }> {
-  return req(withSession("/api/org/node/start", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** A harness, model, effort and the profile they start from, as a coordinator was or will be launched. */
-export interface CoordinatorLaunch { profile: string; harness: string; model: string; reasoningEffort: string }
-
-/**
- * What a project's coordinator can start on (Organizations' `profile list --project --json`): the
- * harnesses it may run, each with its effort levels and default model; the allowed profiles; the
- * project's default; the last launch. `available` is false on an Organizations that predates the
- * document: it offers profile names only, and takes no harness, model or effort.
- */
-export interface CoordinatorChoices {
-  available: boolean;
-  defaultProfile: string;
-  last: CoordinatorLaunch | null;
-  harnesses: Array<{ harness: string; profile: string; defaultModel: string; efforts: string[] }>;
-  profiles: Array<{ name: string; harness: string; model: string; reasoningEffort: string; description: string; builtin: boolean }>;
-}
-
-/** What the coordinator starts on: a profile or a harness, then a model and an effort. Unset is the project's default. */
-export interface CoordinatorChoice { profile?: string; harness?: string; model?: string; effort?: string }
-
-/** Read when the window that starts or replaces the coordinator opens; never polled. */
-export function fetchCoordinatorChoices(project: string, session?: string): Promise<{ ok: true } & CoordinatorChoices> {
-  return req(withSession(`/api/org/coordinator-options?project=${encodeURIComponent(project)}`, session), undefined, undefined, ORG_LIST_TIMEOUT_MS);
-}
-
-/** Start the project's coordinator (Organizations' `open`); it focuses one that already runs. */
-export function openOrgProject(input: { project: string } & CoordinatorChoice, session?: string): Promise<{ ok: true; message: string }> {
-  return req(withSession("/api/org/project/open", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_OPEN_TIMEOUT_MS);
-}
-
-/** Stop the project's coordinator and start a new one on `profile` (Organizations' `coordinator replace`). */
-export function replaceOrgCoordinator(input: { project: string } & CoordinatorChoice, session?: string): Promise<{ ok: true; message: string }> {
-  return req(withSession("/api/org/coordinator/replace", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_OPEN_TIMEOUT_MS);
-}
-
-export function resolveOrgNode(
-  input: { project: string; id: string },
-  session?: string,
-): Promise<{ ok: true }> {
-  return req(withSession("/api/org/node/resolve", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** Organizations' `asks answer`: the person's answer to the ask on `line` of a coordinator's STATUS.md. */
-export function answerOrgAsk(
-  input: { project: string; coordinator: string; line: number; text: string },
-  session?: string,
-): Promise<{ ok: true; answered: { project: string; coordinator: string; line: number; answeredAt: string } }> {
-  return req(withSession("/api/org/asks/answer", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** Organizations' `node move`: the node, with everything under it, hangs under `parent` (`root` or a coordinator). */
-export function moveOrgNode(
-  input: { project: string; id: string; parent: string },
-  session?: string,
-): Promise<{ ok: true; moved: { id: string; parent: string } }> {
-  return req(withSession("/api/org/node/move", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** A coordinator's glyph and colour, kept by Nenu (ADR 0122); neither name clears the pick. Answers what was kept. */
-export function setCoordinatorMark(input: { project: string; id: string; icon?: string; tone?: string }, session?: string): Promise<{ ok: true; mark: { icon?: string; tone?: string } | null }> {
-  return req(withSession("/api/org/node/mark", session), { method: "POST", body: JSON.stringify(input) }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-export function createOrgProject(
-  input: { name: string; goal?: string; repo?: string },
-  session?: string,
-): Promise<{ ok: true; project: { slug: string; name: string } }> {
-  return req(withSession("/api/org/project/create", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
-/** Merge a thread's PR through Organizations, which refuses unless checks pass and it is approved. */
-export function mergeOrgThread(
-  input: { project: string; id: string; method?: "squash" | "merge" | "rebase" },
-  session?: string,
-): Promise<{ ok: true; merged: { id: string; pr: string } }> {
-  return req(withSession("/api/org/thread/merge", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MERGE_TIMEOUT_MS);
-}
-
-/** Toggle a thread's PR automation; an omitted flag stays as it is. */
-export function setOrgThreadFlags(
-  input: { project: string; id: string; autoFixCi?: boolean; autoMerge?: boolean },
-  session?: string,
-): Promise<{ ok: true; flags: { id: string; autoFixCi: boolean; autoMerge: boolean } }> {
-  return req(withSession("/api/org/thread/set", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MUTATION_TIMEOUT_MS);
-}
-
 /** `permission` is a choice from the bridge's table (lib/spawn's PERMISSIONS); omitted = the CLI's default. */
 export function startAgent(paneId: string, agent: "codex" | "claude", session?: string, permission?: string): Promise<ActionResponse> {
   return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/start`, session), {
@@ -1138,40 +935,4 @@ export function fetchPaneDiff(paneId: string, pr: number, session?: string, sign
 /** What the pane's session changed, `scope` deep, with or without a pull request (bridge/pane-diff.ts `sessionDiff`). */
 export function fetchSessionDiff(paneId: string, scope: DiffScope, session?: string, signal?: AbortSignal): Promise<PaneDiff> {
   return doReq(withSession(`/api/pane/${encodeURIComponent(paneId)}/diff?scope=${scope}`, session), { signal });
-}
-
-/**
- * Ask a thread's agent about its PR; Organizations writes the message. `sent: false`: it had been
- * asked already. Like a merge, it reads the PR from GitHub first, so it gets a merge's time.
- */
-export function askOrgThreadPr(
-  input: { project: string; id: string; action: PrAsk },
-  session?: string,
-): Promise<{ ok: true; asked: { id: string; action: string; pr: string; sent: boolean; reason: string } }> {
-  return req(withSession("/api/org/thread/pr-action", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MERGE_TIMEOUT_MS);
-}
-
-/** Ask Organizations' summary agent for the thread's report in plain words; `force` asks again for the same report. */
-export function explainOrgThread(
-  input: { project: string; id: string; force?: boolean },
-  session?: string,
-): Promise<{ ok: true; explained: { id: string; text: string } }> {
-  return req(withSession("/api/org/thread/explain", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_EXPLAIN_TIMEOUT_MS);
-}
-
-/** Open the PR of a thread that pushed its branch without one, through GitHub like a merge. */
-export function createOrgThreadPr(
-  input: { project: string; id: string },
-  session?: string,
-): Promise<{ ok: true; created: { id: string; pr: string } }> {
-  return req(withSession("/api/org/thread/pr-create", session), {
-    method: "POST",
-    body: JSON.stringify(input),
-  }, undefined, ORG_MERGE_TIMEOUT_MS);
 }

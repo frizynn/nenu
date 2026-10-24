@@ -279,7 +279,7 @@ it("offers no way to write to a subagent from a read-only device", async () => {
 });
 
 it("tells a Codex sub-agent's reader the same, in Codex's words", async () => {
-  render(<SubagentConversation paneId="parent" harness="codex" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} onMain={() => {}} onWrite={() => {}} />);
+  render(<SubagentConversation paneId="parent" harness="codex" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} onWrite={() => {}} />);
   await screen.findByText("Child result");
   expect(screen.getByRole("button", { name: "Write to reviewer through Main" })).toBeInTheDocument();
   expect(screen.getByText(/Nenu does not write to a Codex sub-agent directly yet/)).toBeVisible();
@@ -300,7 +300,7 @@ it("discards a child's cached transcript when access is revoked", async () => {
   let denied = false;
   server.use(http.get(/\/api\/pane\/[^/]+\/subagent-history$/, () => denied ? new HttpResponse(null, { status: 403 })
     : HttpResponse.json({ sessionKey: "parent-key", agent: reviewer, entries: [{ uuid: "c", ts: "", role: "assistant", parts: [{ kind: "text", text: "Private child" }] }], truncated: false })));
-  render(<SubagentConversation paneId="parent" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} onMain={() => {}} />);
+  render(<SubagentConversation paneId="parent" selection={{ parentKey: "parent-key", agent: { ...reviewer, status: "running" } }} />);
   await screen.findByText("Private child");
   denied = true;
   act(() => { window.dispatchEvent(new Event("online")); });

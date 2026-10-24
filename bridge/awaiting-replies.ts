@@ -1,5 +1,5 @@
-// What Nenu sent an agent and has not heard back about. A thread's typed turns usually come from its
-// coordinator, so only this tells the bridge that a thread's next finish answers the operator. Kept
+// What Nenu sent an agent and has not heard back about. An agent another agent launched types its own
+// turns, so only this tells the bridge that such an agent's next finish answers the operator. Kept
 // in memory: a bridge restart forgets a pending reply, which costs at most one missed notification.
 
 export class AwaitingReplies {

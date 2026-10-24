@@ -1,18 +1,4 @@
-import { asksPath, homePath, panePath, projectPath } from "./nav";
-
-describe("projectPath", () => {
-  test("encodes the slug and keeps session scope", () => {
-    expect(projectPath("my project", "team a")).toBe("/project/my%20project?s=team%20a");
-  });
-});
-
-describe("asksPath", () => {
-  test("narrows to one project beside the session it carries", () => {
-    expect(asksPath()).toBe("/asks");
-    expect(asksPath(undefined, "my shop")).toBe("/asks?project=my%20shop");
-    expect(asksPath("team a", "shop")).toBe("/asks?s=team%20a&project=shop");
-  });
-});
+import { homePath, panePath } from "./nav";
 
 describe("panePath", () => {
   it("URL-encodes the colon in a pane id", () => {

@@ -26,17 +26,12 @@ revision 2287 for 1.60.0), or `$PLAYWRIGHT_BROWSERS_PATH`. Root
 | `bun scripts/e2e/run.ts smoke` | Home screenshots in WebKit at 390x844 (iPhone, @3x) and at 1440x900 |
 | `bun scripts/e2e/run.ts stop` | Stop on the working Claude, phone and desk: captures, Escapes sent, a queued message held |
 | `bun scripts/e2e/run.ts baseline [--seconds 60] [--sends 5]` | Measures the baselines below |
-| `bun scripts/e2e/run.ts inspector [--before]` | A desk session's panel: each tab, folded, Overview, a session switch, light, a pane with no PR, and the reads each step made |
-| `bun scripts/e2e/thread-panel.ts` | A thread's session panel on a desk: a worker with a pull request and a diff, its coordinator and a thread that needs you, each on Overview in dark (the worker in light too); then Changes and Files, 1024 wide (the narrowest desk), and a phone, where the panel is not drawn |
-| `bun scripts/e2e/run.ts surface [--seconds 60]` | Home, a session, a project, Settings, Search, the drawer and the collapsed rail with five projects, phone and desk, dark and light; then idle CPU, resident memory and DOM elements of one fresh WebKit per view (give it a private `PLAYWRIGHT_BROWSERS_PATH` so another bench's WebKit stays out of the count) |
-| `bun scripts/e2e/run.ts chat [--seconds 60]` | A finished Claude conversation (tool calls, `turn_duration`, pull request links) on phone and desk, dark and light, folded and open; a third turn while it runs and once it ends; then a long one's DOM elements, idle CPU and memory in a WebKit of its own (private `PLAYWRIGHT_BROWSERS_PATH`, as for `surface`) |
+| `bun scripts/e2e/run.ts inspector [--before]` | A desk session's panel: each tab, folded, a session switch, light, a pane with no PR, and the reads each step made |
+| `bun scripts/e2e/run.ts chat [--seconds 60]` | A finished Claude conversation (tool calls, `turn_duration`, pull request links) on phone and desk, dark and light, folded and open; a third turn while it runs and once it ends; then a long one's DOM elements, idle CPU and memory in a WebKit of its own (give it a private `PLAYWRIGHT_BROWSERS_PATH` so another bench's WebKit stays out of the count) |
 | `bun scripts/e2e/run.ts scroll` | A long chat on a phone whose turn keeps running, read at the tail, up the thread, typed into, with the keyboard open and closed, paging older messages, through a sheet and back from Home: every write to the list's scroll position with its stack, and each move of the line being read that the reader's own drag does not explain |
-| `bun scripts/e2e/diff-comments.ts [--before]` | Comments on a diff's lines, phone and desk, dark and light: the "+" on hover, the box, the line marked, the chips over the thread's composer, the diff of another thread opening its chat, and the one message the FakeHerdr received |
+| `bun scripts/e2e/diff-comments.ts [--before]` | Comments on a diff's lines from a desk's Changes tab, dark and light: the "+" on hover, the box, the line marked, the chips over the chat's composer, and the one message the FakeHerdr received |
 | `bun scripts/e2e/start-agent.ts [--before] [--seconds 60]` | A shell's start block, phone and desk, dark and light: at the prompt folded and unfolded, a tap on the terminal folding it, a long command that takes the terminal (the block leaves and the mirror keeps its tail), back at the prompt; Claude Code started on Ask and Codex on Auto with the argv the FakeHerdr received, and a start that times out. The block's height and the terminal's visible height at each step, then the Herdr calls one phone makes for the open shell while idle. `--before` takes the shell views only |
 | `bun scripts/e2e/keyboard.ts [--runs 3] [--label NAME]` | The chat's draft tapped on a phone with the keyboard rising as Safari on iOS does it: a stand-in `visualViewport`, the page scrolled as WebKit reveals a focus without `preventScroll`, the viewport's events only once the keyboard is up. Per frame, where the header and the composer stand on screen, then after it settles and once it closes, for an empty draft and a four-line one; the focus, the caret and the layout are WebKit's own, the keyboard and the scroll are the model's. Captures the region above the keyboard, and the desk's chat to compare across builds |
-| `bun scripts/e2e/coordinator-start.ts --org-bin <herdr-organizations> [--harness claude\|codex] [--runs 3] [--choose "Claude Code:sonnet:low"] [--light]` | Start coordinator against the `--herdr` server and that real Organizations over the bench's empty registry, with a real agent signed in by links into the operator's credentials (below). Each run makes a fresh project, taps Start and the window's Start, and records in the page when it showed "Starting", what each snapshot said about the coordinator and when the chat opened; outside it, when Organizations recorded the pane and when Herdr saw the agent. `--choose` fills the window and reports the agent's own argv. `--fake` instead captures the window and a refused Start against fake-org.ts, phone and desk, dark and light |
-| `bun scripts/e2e/coordinators.ts [--port 8863] [--out DIR]` | A project that organizes coordinators (ADR 0092), Google Chrome headless at 390 and 1440: + lists the projects, a project its coordinators with New coordinator, a pick opens that chat and a new coordinator opens its own; the project page folded and open on a card; Move. Organizations is `fake-org.ts`, so the run checks the exact `node start` and `node move` argv |
-| `bun scripts/e2e/asks-answer.ts [--before] [--port 8863] [--out DIR]` | Your asks and a coordinator's card against a registry shaped like a real one (ADR 0093), Google Chrome headless at 390 and 1440: a placeholder line gone from the list and the count, links as chips, the selectors narrowing it, and Answer through fake-org's `asks answer` with the exact argv. `--before` only captures |
 | `bun scripts/e2e/run.ts compare A.png B.png` | Share of differing pixels between two captures |
 
 Output goes outside the repo: `--out DIR`, else `$NENU_E2E_OUT/<stamp>`, else
@@ -67,12 +62,11 @@ journals, `bridge.log`).
 - The child bridge inherits no `COLLIE_*` or `HERDR_*` variable. `HERDR_PLUGIN_STATE_DIR` alone
   would point it at the live service's state. State, config and every journal root
   (Claude, Codex, pi, OpenCode, Grok) go to a temp dir, and multi-session is off.
-- `HOME` is a temp dir too, and so are `HERDR_PROJECTS_ROOT` (an empty project registry),
-  `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `GROK_HOME` and the `XDG_*` dirs. The
-  bridge therefore never lists the operator's projects or skills, and the Codex pane answers "Codex
-  server is unavailable" instead of dialing the live Codex app-server. `bridge.test.ts` checks both.
-- The CLIs the bridge runs are stubs placed first on `PATH`. `herdr-organizations` answers "no
-  templates" and `claude agents` fails, so Claude session discovery never sees real processes.
+- `HOME` is a temp dir too, and so are `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`,
+  `GROK_HOME` and the `XDG_*` dirs. The bridge therefore never lists the operator's skills, and the
+  Codex pane answers "Codex server is unavailable" instead of dialing the live Codex app-server.
+  `bridge.test.ts` checks it.
+- The CLIs the bridge runs are stubs placed first on `PATH`. `claude agents` fails, so Claude session discovery never sees real processes.
   `gh` never reaches GitHub: it prints the JSON file named by `NENU_E2E_GH_PRS` (the output of
   `gh pr list --json …`), or fails. With that variable set the demo panes' folder is a fresh git
   repo on branch `e2e-demo`, so Home's "Ready to review" shows those pull requests.
@@ -80,7 +74,7 @@ journals, `bridge.log`).
   the browser run in the bench's own process.
 - The FakeHerdr counts calls by method and keeps a log of every call for the whole run (resetting
   the counters leaves it alone). `smoke` and `baseline` print `unexpectedWrites`. `smoke` exits 1 on
-  any write or on any project in the snapshot. `baseline` allows only the writes it drives itself:
+  any write. `baseline` allows only the writes it drives itself:
   `send_text` and `send_keys` on the idle pane, `send_keys` on the blocked one.
 
 ## A real agent in the disposable Herdr

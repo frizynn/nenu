@@ -7,7 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HomeData } from "@/lib/loaders";
-import type { AgentView, ProjectView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 import { declarations } from "@/test/css-rules";
 import { WorkbenchSidebar, type SidebarRequest } from "./workbench-sidebar";
 
@@ -17,7 +17,7 @@ function pane(paneId: string, paneLabel: string, lastActiveAt = 0): AgentView {
 
 beforeEach(() => localStorage.clear());
 
-describe("the sidebar's workspaces, with no projects", () => {
+describe("the sidebar's workspaces", () => {
   const herd = {
     agents: [
       { ...pane("d1", "", 50), paneLabel: undefined, workspaceId: "w2", workspaceLabel: "Design", tabId: "t-coord", terminalTitle: "Landing vs Max", status: "done" },
@@ -35,7 +35,7 @@ describe("the sidebar's workspaces, with no projects", () => {
       { tabId: "t-coord", workspaceId: "w2", number: 1, label: "coordinator", focused: false, paneCount: 1 },
       { tabId: "t-panels", workspaceId: "w2", number: 2, label: "panels", focused: false, paneCount: 2 },
     ],
-    projects: [], sessions: [], session: undefined,
+    sessions: [], session: undefined,
   } as unknown as HomeData;
 
   let router: ReturnType<typeof createMemoryRouter>;
@@ -84,12 +84,12 @@ describe("the sidebar's workspaces, with no projects", () => {
     expect(screen.getByRole("button", { name: "Design panes" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Design panes" }));
     expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: false }, tabs: {} });
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ workspaces: { w2: false }, tabs: {} });
     // A tab's fold is remembered beside its workspace's.
     await user.click(screen.getByRole("button", { name: "Design panes" }));
     await user.click(screen.getByRole("button", { name: /^panels,/ }));
     expect(screen.queryByText("Panel prod")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ expanded: {}, workspaces: { w2: true }, tabs: { "t-panels": false } });
+    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!)).toEqual({ workspaces: { w2: true }, tabs: { "t-panels": false } });
   });
 
   it("opens a workspace of one tab from its row, split or not, with nothing to unfold, on a desk and a phone", async () => {
@@ -277,19 +277,6 @@ describe("the sidebar's workspaces, with no projects", () => {
 });
 
 describe("the sidebar", () => {
-  const thread = (id: string, title: string, parentId: string, extra: Partial<ProjectView["threads"][number]> = {}): ProjectView["threads"][number] =>
-    ({ id, title, parentId, role: "worker", status: "open", ...extra });
-  const acme: ProjectView = {
-    slug: "acme", name: "Acme", status: "active", workspaceIds: ["w1"],
-    coordinator: { paneId: "c", agent: "codex", liveStatus: "working" },
-    threads: [
-      thread("t1", "rediseño mobile", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle" }),
-      thread("t2", "panel depo", "t1", { paneId: "depo", liveStatus: "blocked" }),
-      thread("t3", "panel merca", "t1", { paneId: "merca", liveStatus: "idle", group: "ready-for-review" }),
-      thread("t4", "landing", "root"),
-      thread("t5", "old", "t1", { status: "resolved" }),
-    ],
-  };
   const at = (paneId: string, workspaceId: string, status: AgentView["status"] = "idle"): AgentView =>
     ({ ...pane(paneId, paneId), workspaceId, workspaceLabel: workspaceId, tabId: `${workspaceId}:t`, status });
   const herd = {
@@ -303,7 +290,7 @@ describe("the sidebar", () => {
       { tabId: "w1:t", workspaceId: "w1", number: 1, label: "main", focused: true, paneCount: 5 },
       { tabId: "w2:t", workspaceId: "w2", number: 1, label: "main", focused: true, paneCount: 1 },
     ],
-    projects: [acme], sessions: [], session: undefined, bridge: "connected", error: false,
+    sessions: [], session: undefined, bridge: "connected", error: false,
   } as unknown as HomeData;
 
   function open(path = "/", source: HomeData = herd) {
@@ -314,119 +301,6 @@ describe("the sidebar", () => {
     render(<RouterProvider router={router} />);
     return userEvent.setup();
   }
-  async function openTree(path = "/", source: HomeData = herd) {
-    const user = open(path, source);
-    await user.click(screen.getByRole("button", { name: /^Search/ }));
-    return user;
-  }
-
-  it("nests threads under their coordinator and marks what needs you and what is ready for review", async () => {
-    await openTree("/pane/depo");
-    const project = screen.getByRole("region", { name: "Acme" });
-    const lead = within(project).getByRole("group", { name: "rediseño mobile" });
-    expect(within(lead).getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/pane/lead");
-    expect(within(lead).getByRole("link", { name: /^panel depo/ })).toHaveAccessibleName("panel depo, needs you");
-    expect(within(lead).getByRole("link", { name: /^panel depo/ })).toHaveAttribute("aria-current", "page");
-    expect(within(lead).getByRole("link", { name: "panel merca, ready for review" })).toHaveTextContent("review");
-    // A root worker sits beside the coordinator thread, and the resolved one folds into History.
-    expect(within(project).getByRole("link", { name: /^landing/ }).closest("[role=group]")).toBeNull();
-    expect(within(project).getByRole("button", { name: /^History/ })).toHaveAttribute("aria-expanded", "false");
-    expect(within(project).queryByText("old")).not.toBeInTheDocument();
-    // A pane in the project's workspace that runs no thread still has a row.
-    expect(within(project).getByRole("link", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
-  });
-
-  it("marks a thread whose pull request merged as merged, in green, never as asking for you", async () => {
-    const merged = { ...acme, threads: [...acme.threads, thread("t9", "copy fix", "t1", { group: "ready-for-review", pr: { state: "merged", number: 9 } })] };
-    await openTree("/", { ...herd, projects: [merged] } as unknown as HomeData);
-    const row = within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: "copy fix, merged, closes on its own" });
-    const word = row.querySelector(".nav-row-word");
-    expect(word).toHaveTextContent("merged");
-    expect(word).toHaveClass("text-status-done");
-  });
-
-  it("marks the project's coordinator with the project's own mark (ADR 0122)", async () => {
-    await openTree();
-    const section = within(screen.getByRole("region", { name: "Acme" }));
-    const glyph = section.getByRole("link", { name: /^Acme/ }).querySelector("svg[data-glyph]")!.getAttribute("data-glyph");
-    expect(section.getByRole("link", { name: /^Coordinator/ }).querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", glyph);
-  });
-
-  it("marks each project with its own glyph, never its initial, in the tree, the drawer and Search", async () => {
-    const docs: ProjectView = { slug: "docs-site", name: "Docs", status: "active", threads: [] };
-    const source = { ...herd, projects: [acme, docs] } as unknown as HomeData;
-    const glyphs = () => [...document.querySelectorAll(".nav-project svg[data-glyph]")].map((svg) => svg.getAttribute("data-glyph"));
-    const user = await openTree("/", source);
-    expect(glyphs()).toEqual(["bolt", "spark"]);
-    expect(document.querySelector(".nav-avatar")).toBeNull();
-    expect(screen.getByRole("link", { name: /^Docs/ })).toHaveTextContent(/^Docs$/);
-    await user.keyboard("docs");
-    const hit = within(screen.getByRole("group", { name: "Projects" })).getByRole("option", { name: /^Docs/ });
-    expect(hit.querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", "spark");
-  });
-
-  it("marks the drawer's projects with the same glyphs", () => {
-    const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={herd} variant="drawer" /> }]);
-    render(<RouterProvider router={router} />);
-    expect([...document.querySelectorAll(".nav-project svg[data-glyph]")].map((svg) => svg.getAttribute("data-glyph"))).toEqual(["bolt"]);
-    expect(document.querySelector(".nav-avatar")).toBeNull();
-  });
-
-  it("draws the mark a project picked in Organizations, red included, in the tree, Search and the drawer", async () => {
-    const picked = { ...herd, projects: [{ ...acme, icon: "flag", tone: "red" }] } as unknown as HomeData;
-    const mark = (svg: Element | null) => [svg?.getAttribute("data-glyph"), (svg as SVGElement | null)?.style.color];
-    const user = await openTree("/", picked);
-    expect(mark(document.querySelector(".nav-project svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
-    await user.keyboard("acme");
-    const hit = within(screen.getByRole("group", { name: "Projects" })).getByRole("option", { name: /, project$/ });
-    expect(mark(hit.querySelector("svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
-    cleanupRender();
-    render(<RouterProvider router={createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={picked} variant="drawer" /> }])} />);
-    expect(mark(document.querySelector(".nav-project svg[data-glyph]"))).toEqual(["flag", "var(--glyph-red)"]);
-  });
-
-  it("lists only the workspaces no project holds, and folds a coordinator's threads", async () => {
-    const user = await openTree();
-    const workspaces = screen.getByRole("region", { name: "Workspaces" });
-    expect(within(workspaces).getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["globex"]);
-    // globex holds one pane, so its name opens that pane rather than a page of one.
-    expect(within(workspaces).getByRole("link", { name: /^globex/ })).toHaveAttribute("href", "/pane/loose");
-    await user.click(screen.getByRole("button", { name: "rediseño mobile threads" }));
-    expect(screen.queryByText("panel depo")).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("collie:sidebar:v1")!).expanded).toEqual({ "acme/t1": false });
-  });
-
-  it("finds a project's nodes under Projects and any other pane under Chats", async () => {
-    const user = open();
-    await user.click(screen.getByRole("button", { name: "Search" }));
-    await user.keyboard("panel");
-    const projects = screen.getByRole("group", { name: "Projects" });
-    expect(within(projects).getAllByRole("option").map((option) => option.getAttribute("href"))).toEqual(["/pane/depo", "/pane/merca"]);
-    await user.clear(screen.getByRole("searchbox"));
-    await user.keyboard("stray");
-    const chats = screen.getByRole("group", { name: "Chats" });
-    expect(within(chats).getByRole("option", { name: /^stray/ })).toHaveAttribute("href", "/pane/stray");
-    expect(screen.queryByRole("group", { name: "Projects" })).toBeNull();
-  });
-
-  it("says a thread that stopped to wait for your reply needs a reply, not a dialog", async () => {
-    const project = herd.projects![0]!;
-    const waiting = { ...project, threads: project.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "idle" as const, group: "waiting-on-you", selfWaiting: true as const } : item) };
-    await openTree("/", { ...herd, projects: [waiting] });
-    const head = screen.getByRole("link", { name: /^rediseño mobile/ });
-    expect(head).toHaveAccessibleName("rediseño mobile, needs reply");
-    expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs reply");
-    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
-  });
-
-  it("shows a coordinator thread's own state beside its threads' dots", async () => {
-    const blocked = { ...acme, threads: acme.threads.map((item) => item.id === "t1" ? { ...item, liveStatus: "blocked" as const } : item) };
-    await openTree("/", { ...herd, projects: [blocked] });
-    const head = screen.getByRole("link", { name: /^rediseño mobile/ });
-    expect(head).toHaveAccessibleName("rediseño mobile, needs you");
-    expect(head.querySelector(".nav-row-word")).toHaveTextContent("needs you");
-    expect(head.querySelector(".nav-row-word")).toHaveClass("text-status-blocked");
-  });
 
   it("counts what needs you on Home, and keeps no Needs you list of its own", () => {
     open();
@@ -444,45 +318,8 @@ describe("the sidebar", () => {
     await user.type(screen.getByRole("searchbox"), "panel");
     scrollTo(40);
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("region", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Chats" })).toBeInTheDocument();
     expect(scroller.scrollTop).toBe(300);
-  });
-
-  it("lists open work most urgent first with coordinators ahead, and History as a closed grey tree of node details", async () => {
-    const org: ProjectView = { ...acme, threads: [
-      thread("t1", "landing", "root"),
-      thread("t2", "panel depo", "root", { paneId: "depo", liveStatus: "blocked" }),
-      thread("t3", "rediseño", "root", { role: "coordinator", paneId: "lead", liveStatus: "idle" }),
-      thread("t4", "merca", "t3", { paneId: "merca", liveStatus: "idle", group: "ready-for-review" }),
-      thread("t9", "old plan", "root", { role: "coordinator", status: "resolved", updated: "2026-09-01T00:00:00Z" }),
-      thread("t10", "old step", "t9", { status: "resolved", updated: "2026-09-01T01:00:00Z" }),
-      thread("t11", "new fix", "root", { status: "resolved", updated: "2026-10-01T00:00:00Z" }),
-      thread("t12", "newer plan", "root", { role: "coordinator", status: "resolved", updated: "2026-10-02T00:00:00Z" }),
-    ] };
-    const user = await openTree("/", { ...herd, projects: [org] });
-    const project = within(screen.getByRole("region", { name: "Acme" }));
-    const names = () => project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
-    expect(names()).toEqual(["Acme", "Coordinator", "rediseño", "merca", "panel depo", "landing", "stray"]);
-    // A node with no live pane opens its own detail, not the project.
-    expect(project.getByRole("link", { name: /^landing/ })).toHaveAttribute("href", "/project/acme/node/t1");
-
-    const history = project.getByRole("button", { name: /^History/ });
-    expect(history).toHaveAttribute("aria-expanded", "false");
-    expect(project.queryByText("new fix")).not.toBeInTheDocument();
-    await user.click(history);
-    expect(names().slice(7)).toEqual(["newer plan", "old plan", "new fix"]);
-    expect(project.getByRole("link", { name: /^new fix/ })).toHaveAttribute("href", "/project/acme/node/t11");
-    await user.click(project.getByRole("button", { name: "old plan threads" }));
-    expect(names().slice(7)).toEqual(["newer plan", "old plan", "old step", "new fix"]);
-  });
-
-  it("calls the coordinator what every other view calls it, in the drawer's Needs you", () => {
-    const asking = { ...acme, coordinator: { ...acme.coordinator!, liveStatus: "blocked" as const } };
-    const source = { ...herd, agents: herd.agents.map((agent) => agent.paneId === "c" ? { ...agent, status: "blocked" as const, tabLabel: "lead" } : agent), projects: [asking] };
-    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
-    render(<RouterProvider router={router} />);
-    const list = screen.getByRole("region", { name: "Needs you" });
-    expect(within(list).getAllByRole("link").map((link) => link.querySelector(".nav-pane-title")?.textContent)).toEqual(["Acme coordinator", "panel depo"]);
   });
 
   it("names a chat in the drawer's Recent as the chat names itself, with its workspace and tab under it", () => {
@@ -490,57 +327,8 @@ describe("the sidebar", () => {
     const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={source} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
     render(<RouterProvider router={router} />);
     const recent = within(screen.getByRole("region", { name: "Recent" }));
-    const coordinator = recent.getByRole("link", { name: /^Acme coordinator/ });
-    expect(coordinator.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
-  });
-
-  it("leads a phone's drawer with what waits on you, then the projects, each opening on its coordinators' chats and the work that moves", async () => {
-    // A thread whose last group says working, in no pane: its dot says working, so no "not running" beside it.
-    const busy = { ...acme, threads: [...acme.threads, thread("t6", "cart", "root", { group: "working" })] };
-    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={{ ...herd, projects: [busy] }} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
-    render(<RouterProvider router={router} />);
-    const scroll = document.querySelector(".nav-scroll")!;
-    expect([...scroll.querySelectorAll(":scope > section")].map((section) => section.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces", "Recent"]);
-    const project = within(screen.getByRole("region", { name: "Acme" }));
-    // No count of open tasks beside the name: what moves is inside.
-    expect(screen.getByRole("region", { name: "Acme" }).querySelector(".nav-project .nav-count")).toBeNull();
-    await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
-    // A coordinator that runs is entered at its chat, as on the project page (ADR 0115): no › to a page.
-    expect(project.getByRole("link", { name: /^Coordinator/ })).toHaveAttribute("href", "/pane/c");
-    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/pane/lead");
-    expect(project.getByRole("link", { name: /^rediseño mobile/ }).lastElementChild?.tagName.toLowerCase()).not.toBe("svg");
-    expect(project.getByRole("link", { name: /^cart/ })).not.toHaveTextContent("not running");
-    expect(project.getByRole("link", { name: /^panel depo/ })).toHaveAttribute("href", "/pane/depo");
-    expect(project.getByRole("link", { name: /^panel merca/ })).toBeInTheDocument();
-    // An open thread that runs nowhere, a pane outside every thread and History stay on the project's page.
-    expect(project.queryByRole("link", { name: /^landing/ })).not.toBeInTheDocument();
-    expect(project.queryByRole("link", { name: /^stray/ })).not.toBeInTheDocument();
-    expect(project.queryByRole("button", { name: /^History/ })).not.toBeInTheDocument();
-  });
-
-  it("opens a coordinator whose pane closed on its page, never on a chat that is gone", async () => {
-    // Organizations keeps the pane id after the pane closed.
-    const closed = { ...acme, threads: acme.threads.map((node) => node.id === "t1" ? { ...node, paneId: "gone" } : node) };
-    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <WorkbenchSidebar data={{ ...herd, projects: [closed] }} variant="drawer" /> }], { initialEntries: ["/pane/loose"] });
-    render(<RouterProvider router={router} />);
-    const project = within(screen.getByRole("region", { name: "Acme" }));
-    await userEvent.setup().click(project.getByRole("button", { name: "Acme tasks" }));
-    expect(project.getByRole("link", { name: /^rediseño mobile/ })).toHaveAttribute("href", "/project/acme/node/t1");
-  });
-
-  it("opens History on its five newest nodes and leaves the rest to the project page", async () => {
-    const done = (n: number, day: number, extra: Partial<ProjectView["threads"][number]> = {}) =>
-      thread(`h${n}`, `done ${n}`, "root", { status: "resolved", updated: `2026-10-0${day}T00:00:00Z`, ...extra });
-    const org: ProjectView = { ...acme, threads: [
-      done(1, 1), done(2, 2), done(3, 3, { role: "coordinator" }), done(4, 4), done(5, 5), done(6, 6), done(7, 7), done(8, 8, { parentId: "h3" }),
-    ] };
-    const user = await openTree("/", { ...herd, projects: [org] });
-    const project = within(screen.getByRole("region", { name: "Acme" }));
-    await user.click(project.getByRole("button", { name: /^History/ }));
-    // The five that moved last, still drawn coordinators first; the rest is one tap away.
-    const names = project.getAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent).filter((name) => name?.startsWith("done"));
-    expect(names).toEqual(["done 3", "done 7", "done 6", "done 5", "done 4"]);
-    expect(project.getByRole("link", { name: "Show all 8 in project" })).toHaveAttribute("href", "/project/acme");
+    const chat = recent.getByRole("link", { name: /^cw1 · lead/ });
+    expect(chat.querySelector(".nav-pane-detail")).toHaveTextContent("w1 · lead");
   });
 
   it("marks Home as the page on screen only on Home", () => {
@@ -571,7 +359,7 @@ describe("the sidebar", () => {
   });
 
   it("orients an empty herd: where agents come from, and on a phone a way to start one", async () => {
-    const empty = { ...herd, agents: [], workspaces: [], tabs: [], projects: [] } as unknown as HomeData;
+    const empty = { ...herd, agents: [], workspaces: [], tabs: [] } as unknown as HomeData;
     const onNewChat = vi.fn();
     const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={empty} variant="sheet" onNewChat={onNewChat} /> }]);
     render(<RouterProvider router={router} />);
@@ -583,7 +371,7 @@ describe("the sidebar", () => {
   });
 
   it("keeps an empty desk sidebar to one quiet line, since Home beside it leads the start", () => {
-    const empty = { ...herd, agents: [], workspaces: [], tabs: [], projects: [] } as unknown as HomeData;
+    const empty = { ...herd, agents: [], workspaces: [], tabs: [] } as unknown as HomeData;
     const router = createMemoryRouter([{ path: "/", element: <WorkbenchSidebar data={empty} onNewChat={vi.fn()} /> }]);
     render(<RouterProvider router={router} />);
     expect(screen.getByText("No agents yet.")).toHaveClass("nav-empty");
@@ -635,27 +423,14 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const thread = (id: string, title: string, extra: Partial<ProjectView["threads"][number]> = {}): ProjectView["threads"][number] =>
-    ({ id, title, parentId: "root", role: "worker", status: "open", ...extra });
-  const acme: ProjectView = {
-    slug: "acme", name: "Acme", status: "active", workspaceIds: ["w1"],
-    coordinator: { paneId: "coord", agent: "claude", liveStatus: "idle" },
-    threads: [
-      thread("t-1", "Checkout flow", { paneId: "flow", liveStatus: "working", updated: new Date(now - 2 * MIN).toISOString() }),
-      thread("t-2", "Payments webhook", { paneId: "hook", liveStatus: "blocked", updated: new Date(now - 4 * MIN).toISOString() }),
-      thread("t-3", "Cart badge", { group: "ready-for-review", updated: new Date(now - 3 * DAY).toISOString(),
-        pr: { url: "https://github.com/acme/shop/pull/41", number: 41, state: "open", review: "approved" } }),
-      thread("t-4", "Search index", { status: "resolved", updated: new Date(now - MIN).toISOString() }),
-    ],
-  };
-  const project = (slug: string, name: string): ProjectView => ({ slug, name, status: "active", threads: [] });
   const at = (paneId: string, workspaceId: string, extra: Partial<AgentView> = {}): AgentView =>
     ({ ...pane(paneId, paneId), workspaceId, workspaceLabel: workspaceId, tabId: `${workspaceId}:t`, ...extra });
   const herd = {
     agents: [
-      at("coord", "w1", { lastActiveAt: now - MIN }), at("flow", "w1", { status: "working", lastActiveAt: now - MIN }),
-      at("hook", "w1", { status: "blocked", lastActiveAt: now - 4 * MIN }), at("Docs pass", "w2", { lastActiveAt: now - 12 * DAY }),
-      at("Old spike", "w2", { lastActiveAt: now - 60 * DAY }),
+      at("flow", "w1", { paneLabel: "Checkout flow", status: "working", lastActiveAt: now - MIN }),
+      at("hook", "w1", { paneLabel: "Payments webhook", status: "blocked", lastActiveAt: now - 4 * MIN }),
+      at("badge", "w1", { paneLabel: "Cart badge", lastActiveAt: now - 3 * DAY }),
+      at("Docs pass", "w2", { lastActiveAt: now - 12 * DAY }), at("Old spike", "w2", { lastActiveAt: now - 60 * DAY }),
     ],
     shellPanes: [at("zsh", "w2")],
     workspaces: [
@@ -666,14 +441,13 @@ describe("the desk sidebar, drawn as Cursor's", () => {
       { tabId: "w1:t", workspaceId: "w1", number: 1, label: "main", focused: true, paneCount: 3 },
       { tabId: "w2:t", workspaceId: "w2", number: 1, label: "main", focused: true, paneCount: 3 },
     ],
-    projects: [acme], sessions: [], session: undefined, bridge: "connected", error: false,
+    sessions: [], session: undefined, bridge: "connected", error: false,
   } as unknown as HomeData;
 
   function open(path = "/", source: HomeData = herd, onNewChat?: () => void) {
     const router = createMemoryRouter([
       { path: "/", element: <WorkbenchSidebar data={source} onNewChat={onNewChat} /> },
       { path: "/pane/:paneId", element: <WorkbenchSidebar data={source} onNewChat={onNewChat} /> },
-      { path: "/project/:projectSlug/node/:nodeId", element: <WorkbenchSidebar data={source} onNewChat={onNewChat} /> },
     ], { initialEntries: [path] });
     render(<RouterProvider router={router} />);
     return userEvent.setup({ advanceTimers: () => undefined });
@@ -681,43 +455,10 @@ describe("the desk sidebar, drawn as Cursor's", () => {
   const section = (name: string) => within(screen.getByRole("region", { name }));
   const rowNames = (name: string) => section(name).queryAllByRole("link").map((link) => link.querySelector(".nav-row-text")?.textContent);
 
-  it("leads with New chat, Search, Home and Projects, and leaves Routines and Your asks to each project", () => {
+  it("leads with New chat, Search and Home", () => {
     open("/", herd, vi.fn());
     const top = [...document.querySelectorAll(".nav-top > .nav-row")].map((row) => row.querySelector(".nav-row-text")?.textContent);
-    expect(top).toEqual(["New chat", "Search", "Home", "Projects"]);
-    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
-    expect(screen.queryByRole("link", { name: /^Routines|^Your asks/ })).toBeNull();
-  });
-
-  it("lists projects flat, each one row to its project with its glyph, its state and when it last moved", () => {
-    open();
-    expect(rowNames("Projects")).toEqual(["Acme"]);
-    const row = section("Projects").getByRole("link", { name: /^Acme/ });
-    expect(row).toHaveAttribute("href", "/project/acme");
-    expect(row.querySelector("svg[data-glyph]")).toBeInTheDocument();
-    expect(row).toHaveAccessibleName("Acme, needs you, 1m ago");
-    expect(row.querySelector(".nav-row-meta")).toHaveTextContent("1m");
-    // No tree under it: its threads are chats, its coordinator is the project's own row.
-    expect(section("Projects").queryByText("Checkout flow")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Acme tasks" })).toBeNull();
-  });
-
-  it("draws a project's row with the mark it picked in Organizations", () => {
-    open("/", { ...herd, projects: [{ ...acme, icon: "flag", tone: "red" }] } as unknown as HomeData);
-    const glyph = section("Projects").getByRole("link", { name: /^Acme/ }).querySelector<SVGElement>("svg[data-glyph]")!;
-    expect(glyph).toHaveAttribute("data-glyph", "flag");
-    expect(glyph.style.color).toBe("var(--glyph-red)");
-  });
-
-  it("shows five projects and folds the rest behind a count, keeping the one on screen in view", async () => {
-    const many = [acme, ...["b", "c", "d", "e", "f", "g"].map((slug) => project(slug, slug.toUpperCase()))];
-    const user = open("/", { ...herd, projects: many });
-    expect(rowNames("Projects")).toEqual(["Acme", "B", "C", "D", "E"]);
-    // Folded rows stay mounted to animate, out of the tab order and the accessibility tree.
-    expect(document.querySelectorAll("[inert] a.nav-row")).toHaveLength(2);
-    await user.click(section("Projects").getByRole("button", { name: "Show 2 more" }));
-    expect(rowNames("Projects")).toEqual(["Acme", "B", "C", "D", "E", "F", "G"]);
-    expect(section("Projects").getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+    expect(top).toEqual(["New chat", "Search", "Home"]);
   });
 
   it("groups the chats by their last real activity, under periods named for what they hold", () => {
@@ -728,43 +469,14 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(rowNames("Previous 7 days")).toEqual(["Cart badge"]);
     expect(rowNames("Previous 30 days")).toEqual(["Docs pass"]);
     expect(rowNames("Older")).toEqual(["Old spike"]);
-    // A resolved thread, the project's coordinator and a bare shell are not chats.
-    expect(within(groups).queryByText("Search index")).toBeNull();
-    expect(within(groups).queryByText("coord")).toBeNull();
+    // A bare shell is no chat.
     expect(within(groups).queryByText("zsh")).toBeNull();
   });
 
-  it("marks the chat on screen, opens a thread that runs nowhere on its node page, and shows a pull request's glyph", () => {
+  it("marks the chat on screen and says its state", () => {
     open("/pane/hook");
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAttribute("aria-current", "page");
     expect(section("Today").getByRole("link", { name: /^Payments webhook/ })).toHaveAccessibleName("Payments webhook, needs you");
-    const badge = section("Previous 7 days").getByRole("link", { name: /^Cart badge/ });
-    expect(badge).toHaveAttribute("href", "/project/acme/node/t-3");
-    expect(badge).toHaveAccessibleName("Cart badge, ready for review, pull request #41, approved");
-    expect(badge.querySelector(".nav-row-end")).toHaveAttribute("data-pr", "approved");
-    expect(badge.querySelector(".nav-row-end svg")).toBeInTheDocument();
-  });
-
-  it("draws a pull request's glyph for what it asks: a draft first, then failing checks or asked changes in red", () => {
-    const pr = (number: number, extra: object) => ({ url: `https://github.com/acme/shop/pull/${number}`, number, state: "open" as const, ...extra });
-    const updated = new Date(now - 10 * MIN).toISOString();
-    const prs = { ...acme, threads: [...acme.threads,
-      thread("t-5", "Draft work", { updated, pr: pr(50, { state: "draft", checks: { passed: 0, failed: 2, pending: 0 } }) }),
-      thread("t-6", "Red checks", { updated, pr: pr(51, { review: "approved", checks: { passed: 3, failed: 1, pending: 0 } }) }),
-      thread("t-7", "Asked changes", { updated, pr: pr(52, { review: "changes_requested" }) }),
-      thread("t-8", "Waiting review", { updated, pr: pr(53, { review: "review_required" }) }),
-    ] };
-    open("/", { ...herd, projects: [prs] } as unknown as HomeData);
-    const end = (name: string) => section("Today").getByRole("link", { name: new RegExp(`^${name}`) });
-    expect(end("Draft work")).toHaveAccessibleName(/pull request #50, draft$/);
-    expect(end("Draft work").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
-    expect(end("Draft work").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request-draft");
-    expect(end("Red checks").querySelector(".nav-row-end svg")).toHaveClass("icon-git-pull-request");
-    expect(end("Red checks")).toHaveAccessibleName(/pull request #51, checks failing$/);
-    expect(end("Red checks").querySelector(".nav-row-end")).toHaveAttribute("data-pr", "failing");
-    expect(end("Asked changes")).toHaveAccessibleName(/pull request #52, changes requested$/);
-    expect(end("Waiting review")).toHaveAccessibleName(/pull request #53$/);
-    expect(end("Waiting review").querySelector(".nav-row-end")).not.toHaveAttribute("data-pr");
   });
 
   it("keeps the workspace tree out of the bar until Search opens, then browses it under the box", async () => {
@@ -772,23 +484,13 @@ describe("the desk sidebar, drawn as Cursor's", () => {
     expect(screen.queryByRole("region", { name: "Workspaces" })).toBeNull();
     await user.click(screen.getByRole("button", { name: /^Search/ }));
     expect(screen.getByRole("searchbox")).toHaveFocus();
-    expect(screen.getByRole("region", { name: "Workspaces" })).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Acme" })).getByRole("link", { name: /^Checkout flow/ })).toBeInTheDocument();
     // A fold in the tree keeps it up; Escape brings the bar back.
-    await user.click(screen.getByRole("button", { name: "Acme tasks" }));
+    await user.click(screen.getByRole("heading", { name: "Workspaces" }));
     expect(screen.getByRole("region", { name: "Workspaces" })).toBeInTheDocument();
+    await user.click(screen.getByRole("searchbox"));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("region", { name: "Workspaces" })).toBeNull();
     expect(screen.getByRole("region", { name: "Chats" })).toBeInTheDocument();
-  });
-
-  it("starts a project from the Projects heading when this device can create", async () => {
-    const onNewChat = vi.fn();
-    open("/", herd, onNewChat);
-    expect(section("Projects").getByRole("button", { name: "New project" })).toBeEnabled();
-    cleanupRender();
-    open("/", herd);
-    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
   });
 
   it("says what needs you on Home as a quiet count beside a small dot, never a red pill", () => {

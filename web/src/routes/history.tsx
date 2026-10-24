@@ -72,7 +72,7 @@ export function HistoryRoute() {
     root.shellPanes.find((p) => p.paneId === paneId);
   // The name every other view gives this pane. A pane missing from the snapshot has none, and its
   // raw id means nothing to a reader, so the header then just says History.
-  const name = pane ? displayName(pane, root.projects) : undefined;
+  const name = pane ? displayName(pane) : undefined;
   // Only a healthy snapshot can say the pane is gone, the guard DetailRoute closes a pane on. A failed
   // read or a disconnected Herdr leaves a live pane out too, and is said in the connection banner's words.
   const problem = linkProblemOf(root);

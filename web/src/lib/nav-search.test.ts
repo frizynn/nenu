@@ -1,22 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { matchRange, navSearch, type SearchHit } from "./nav-search";
-import type { AgentView, ProjectView } from "./types";
+import type { AgentView } from "./types";
 
 function pane(paneId: string, extra: Partial<AgentView> = {}): AgentView {
   return { paneId, workspaceId: "w", workspaceLabel: "w", workspaceNumber: 1, tabId: "t", agent: "claude", status: "idle", cwd: "/", focused: false, ...extra };
 }
-
-const project: ProjectView = {
-  slug: "hub", name: "Hub", status: "active",
-  coordinator: { paneId: "c", agent: "claude", liveStatus: "working" },
-  threads: [
-    { id: "T1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "a", liveStatus: "working" },
-    { id: "T2", title: "Review", parentId: "root", role: "worker", status: "open", paneId: "b", liveStatus: "blocked" },
-    { id: "T3", title: "Queued", parentId: "root", role: "worker", status: "starting" },
-    { id: "T0", title: "Old", parentId: "root", role: "worker", status: "resolved", paneId: "z", liveStatus: "working" },
-  ],
-};
 
 describe("navigation search", () => {
   const names = (hits: SearchHit[]) => hits.map((hit) => hit.title);
@@ -29,11 +18,9 @@ describe("navigation search", () => {
       pane("ask", { paneLabel: "Blocked Claude", lastActiveAt: 20, status: "blocked" }),
       pane("cx", { paneLabel: "Codex", agent: "codex", lastActiveAt: 40 }),
       pane("note", { paneLabel: "Notes", workspaceLabel: "claws", lastActiveAt: 50 }),
-      pane("c", { lastActiveAt: 5 }),
       pane("b", { paneLabel: "raw review", lastActiveAt: 5 }),
     ],
     shellPanes: [pane("sh", { kind: "shell", paneLabel: "dev server", agent: "" })],
-    projects: [project],
   };
 
   it("lists the agents whose name matches, newest first, ahead of those matching only by where they live", () => {
@@ -42,24 +29,16 @@ describe("navigation search", () => {
     expect(work).toMatchObject({ kind: "pane", key: "pane:work", place: { place: "w", tab: null } });
   });
 
-  it("files a project, its coordinator and its threads under Projects, never again under Chats", () => {
-    expect(groups("hub")).toEqual([["Projects", ["Hub", "Hub coordinator"], 0]]);
-    expect(groups("review")).toEqual([["Projects", ["Review"], 0]]);
-    const review = navSearch(herd, "review")[0]!.hits[0]!;
-    expect(review).toMatchObject({ kind: "node", state: "needs", place: { place: "Hub", tab: null } });
-  });
-
-  it("finds shells and resolved threads too, open work first", () => {
+  it("finds shells too", () => {
     expect(groups("serv")).toEqual([["Chats", ["dev server"], 0]]);
-    expect(groups("o")[0]).toEqual(["Projects", ["Hub coordinator", "Old"], 0]);
   });
 
   it("caps each group and says how many more there are", () => {
-    const many = { agents: Array.from({ length: 11 }, (_, i) => pane(`a${i}`, { paneLabel: `Agent ${i}` })), shellPanes: [], projects: [] };
+    const many = { agents: Array.from({ length: 11 }, (_, i) => pane(`a${i}`, { paneLabel: `Agent ${i}` })), shellPanes: [] };
     expect(groups("agent", many, 8)).toEqual([["Chats", ["Agent 0", "Agent 1", "Agent 2", "Agent 3", "Agent 4", "Agent 5", "Agent 6", "Agent 7"], 3]]);
   });
 
-  it("finds a workspace by its name, between Projects and Chats", () => {
+  it("finds a workspace by its name, ahead of Chats", () => {
     const ws = (workspaceId: string, number: number, label: string) => ({ workspaceId, number, label, focused: false, activeTabId: "", tabCount: 2, paneCount: 1 });
     const source = { ...herd, workspaces: [ws("w9", 9, "claws"), ws("w2", 2, "api")] };
     expect(groups("claw", source)).toEqual([["Workspaces", ["claws"], 0], ["Chats", ["Notes"], 0]]);
@@ -73,7 +52,7 @@ describe("navigation search", () => {
         pane("cx", { paneLabel: "Codex", agent: "codex", lastActiveAt: 40 }),
         pane("cl", { paneLabel: "Claude", agent: "claude", lastActiveAt: 50 }),
       ],
-      shellPanes: [], projects: [],
+      shellPanes: [],
     };
     expect(groups("codex", source)).toEqual([["Chats", ["Codex", "Fix login"], 0]]);
     expect(groups("shop-api", source)).toEqual([["Chats", ["Fix login"], 0]]);
@@ -83,11 +62,9 @@ describe("navigation search", () => {
   });
 
   it("leads with the group holding the best match, so the first row picked is the closest name", () => {
-    const source = {
-      agents: [pane("c", { cwd: "/srv/billing", lastActiveAt: 90 }), pane("bill", { paneLabel: "Billing fix", lastActiveAt: 10 })],
-      shellPanes: [], projects: [project],
-    };
-    expect(groups("billing", source)).toEqual([["Chats", ["Billing fix"], 0], ["Projects", ["Hub coordinator"], 0]]);
+    const workspaces = [{ workspaceId: "w5", number: 5, label: "old-billing", focused: false, activeTabId: "", tabCount: 2, paneCount: 0 }];
+    const source = { agents: [pane("bill", { paneLabel: "Billing fix", lastActiveAt: 10 })], shellPanes: [], workspaces };
+    expect(groups("billing", source)).toEqual([["Chats", ["Billing fix"], 0], ["Workspaces", ["old-billing"], 0]]);
   });
 
   it("finds nothing without a query", () => {

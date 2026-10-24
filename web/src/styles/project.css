@@ -1,27 +1,16 @@
-/* Project frame: chat, then the task panel on wide screens; a header toggle below that. */
+/* A chat's frame (routes/detail.tsx): the chat, then the session panel on a desk; Home's segmented
+   lists; the panel's tabs and quiet actions; a desk's underlined tabs. */
 @layer components {
 .project-frame { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.project-overlay { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px calc(env(safe-area-inset-bottom) + 24px); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
-/* A segmented control below a desk's panel width (Home's lists, a phone's open project view): a 36px
-   control in the band a strip would take, on the strips' chrome. On a coarse pointer its target spans
-   the whole band, 44px. The open one takes the neutral selection fill the chips use. */
-.project-segmented-band { flex-shrink: 0; padding: 4px calc(var(--page-gutter) - 4px); background: var(--chrome); }
 /* As wide as the chat column under it (48rem), not the whole pane of a narrow desk. */
 .project-segmented { display: grid; grid-auto-columns: 1fr; grid-auto-flow: column; max-width: 48rem; height: 36px; margin-inline: auto; padding: 4px; border-radius: var(--radius-lg); background: var(--muted); }
 /* A finger's target: each segment 44 px tall where the pointer is coarse. */
 @media (pointer: coarse) { .project-segmented { height: 52px; } }
-/* A phone's open view (ADR 0121): the same control at 32px in a 44px band, which each segment's touch
-   reach (8px above and below its 28px) fills, so the header above never takes a finger meant for it. */
-.project-segmented-band-compact { padding-block: 6px; }
-.project-segmented-compact { height: 32px; padding: 2px; }
 .project-segment { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 .project-segment[aria-selected="true"] { background: var(--workbench-row-selected); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
 @media (hover: hover) { .project-segment[aria-selected="false"]:hover { color: var(--foreground); } }
-.project-segment-count { color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
-.project-segment[aria-selected="true"] .project-segment-count { color: var(--muted-foreground); }
-.project-segment-count[data-waiting] { color: var(--status-blocked); font-weight: 600; }
 @media (pointer: coarse) { .project-segment::after { content: ""; position: absolute; inset: -8px 0; } }
-/* The project panel's named tabs. 32px to the eye in a 52px row; a touch tablet wide enough for the
+/* The session panel's named tabs. 32px to the eye in a 52px row; a touch tablet wide enough for the
    panel reaches 44px through the band above and below. */
 .panel-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
 .panel-tab:is([aria-selected="true"], [aria-pressed="true"]) { background: var(--workbench-row-selected); color: var(--foreground); }
@@ -31,243 +20,26 @@
 .quiet-action[aria-expanded="true"] { background: var(--workbench-row-hover); color: var(--foreground); }
 /* Hover only where a pointer hovers: a tap leaves :hover stuck on a touch screen until the next tap. */
 @media (hover: hover) { .quiet-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
-
-.task-list { display: flex; flex-direction: column; gap: 1px; }
-/* The threads a coordinator runs, hung under its row on a guide line aligned with its dot. */
-.task-branch { margin-left: 11px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
-.task-row { position: relative; display: flex; align-items: flex-start; border-radius: var(--radius-md); }
-@media (hover: hover) { .task-row:hover { background: var(--workbench-row-hover); } }
-/* A key on the row lights it as a pointer would, so the actions it reveals sit on a fill too. */
-.task-row:has(:focus-visible) { background: var(--workbench-row-hover); }
-[aria-current="true"] > .task-row { background: var(--workbench-row-selected); }
-.task-main { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; padding: 7px 8px; text-align: left; border-radius: var(--radius-md); }
-/* A desk's row actions: words laid over the row's age while the pointer rests on the row or a key is
-   on it, on the row's own fill so the age underneath never shows through. Only those two states light
-   the row, so only they show the words: focus a dialog hands back after a click leaves them hidden.
-   node-row draws them only where a fine pointer hovers; anywhere else the row keeps a ⋯. */
-.task-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; padding-left: 4px; border-radius: var(--radius-md); background: inherit; opacity: 0; transition: opacity var(--motion-control) var(--motion-ease); }
-@media (hover: hover) { .task-row:hover .task-actions { opacity: 1; } }
-.task-row:has(:focus-visible) .task-actions { opacity: 1; }
-/* The fill is translucent, so the age the words cover steps aside while they show. */
-@media (hover: hover) { .task-row:has(> .task-actions):hover .task-age { visibility: hidden; } }
-.task-row:has(> .task-actions):has(:focus-visible) .task-age { visibility: hidden; }
-/* An open coordinator on the project page folds and has actions: the words stop short of its chevron. */
-.task-row:has(> .task-fold) .task-actions { right: 40px; }
-.task-action { height: 28px; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; cursor: pointer; transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease); }
-@media (hover: hover) { .task-action:hover { color: var(--foreground); background: var(--workbench-row-selected); } }
-/* The ⋯ of a screen that cannot hover, always there: there is no hover to find it by. */
-.task-more { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-md); color: var(--muted-foreground); -webkit-tap-highlight-color: transparent; }
-.task-more:active { background: var(--workbench-row-selected); }
-.task-fold { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; margin: 4px 4px 0 0; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
-@media (hover: hover) { .task-fold:hover { color: var(--foreground); background: var(--workbench-row-selected); } }
-/* History: everything resolved, in grey, behind one row that opens and closes in place. */
-.task-history-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; margin: 4px 0; padding: 0 10px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); text-align: left; cursor: pointer; }
-@media (hover: hover) { .task-history-toggle:hover { background: var(--workbench-row-hover); } }
-/* A page of History fades up as it arrives, never all at once. */
-@keyframes task-row-in { from { opacity: 0; transform: translateY(4px); } }
-.task-history > li { animation: task-row-in var(--motion-panel) var(--motion-ease) both; }
-/* The next page of History, its words lined up with the rows' titles. */
-.task-history-more { margin-top: 0; padding-left: 26px; }
-.task-fold > svg, .task-history-toggle > svg { transition: transform var(--motion-control) var(--motion-ease); }
-.task-fold[aria-expanded="true"] > svg, .task-history-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
 }
 
-@keyframes task-row-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .task-history > li { animation: task-row-fade var(--motion-control) var(--motion-ease) both; }
-  .task-fold > svg, .task-history-toggle > svg, .task-actions, .task-action, .project-segment, .panel-tab { transition: none; }
+  .project-segment, .panel-tab { transition: none; }
 }
 
 /* Touch: every target reaches 44px. */
 @media (max-width: 1023px), (pointer: coarse) {
-  .quiet-action, .task-main { min-height: 44px; }
-  .task-fold { width: 44px; height: 44px; margin: 0; }
-  .task-row:has(> .task-fold) .task-actions { right: 48px; }
-  .task-history-toggle { min-height: 44px; }
+  .quiet-action { min-height: 44px; }
 }
 
-/* A desk's right column (components/session-inspector): the session panel, or a thread docked in its
-   place at the same width, so docking moves nothing. Its width is the operator's, but the chat beside
-   it keeps 22rem. While it opens or folds its width moves and its content keeps the width it ends at,
-   cut at the column's edge (slidePanel). A docked thread fades in where the panel was. */
+/* A desk's right column (components/session-inspector): the session panel. Its width is the
+   operator's, but the chat beside it keeps 22rem. While it opens or folds its width moves and its
+   content keeps the width it ends at, cut at the column's edge (slidePanel). */
 .session-panel { position: relative; display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-width: calc(100% - 22rem); border-left: 1px solid var(--border); }
 .session-panel[data-sliding] { overflow: clip; }
 .session-panel[data-sliding] > :not(.resize-handle) { min-width: var(--slide-width); }
-.session-panel[data-docked] { animation: column-in var(--motion-control) var(--motion-ease); }
-@keyframes column-in { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .session-panel[data-docked] { animation: none; } }
 
-/* A group's name over its rows in a panel's list (threads-panel). */
-.panel-group-heading { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; padding: 0 8px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
-
-/* The session panel's Overview (components/thread-overview): cards, one question each. A row names
-   its value on the left and gives it on the right; a link in a row reads as text until hovered. */
-.overview-card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
-.overview-card-head { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); font-weight: 500; }
-.overview-body { display: flex; flex-direction: column; gap: 2px; padding: 0 14px 12px; }
-.overview-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
-.overview-link { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border-radius: var(--radius-sm); cursor: pointer; }
-.overview-note { padding: 4px 0; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
-.overview-more { cursor: pointer; text-align: left; }
-.overview-file { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
-.overview-meter { display: inline-flex; width: 44px; height: 5px; overflow: hidden; border-radius: 9999px; background: var(--muted); }
-.overview-meter > span { display: block; height: 100%; background: var(--primary); }
-.overview-threads { display: flex; flex-direction: column; padding: 0 0 6px; }
-/* A panel section (components/panel-sections): its head folds it, its chevron turning with the fold. */
-.panel-section-toggle { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; align-self: stretch; margin: -8px 0 -8px -14px; padding: 8px 0 8px 14px; border-start-start-radius: var(--radius-lg); text-align: left; cursor: pointer; }
-.panel-section-toggle:disabled { cursor: default; }
-.panel-section-toggle:last-child { margin-right: -14px; padding-right: 14px; border-start-end-radius: var(--radius-lg); }
-.panel-section-chevron { flex-shrink: 0; margin-left: auto; color: var(--muted-foreground); }
-.panel-section-meta { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--muted-foreground); font-weight: 400; white-space: nowrap; text-overflow: ellipsis; }
-.panel-section-tool { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: var(--radius-md); color: var(--muted-foreground); cursor: pointer; }
-.panel-section-tool:disabled { opacity: 0.35; cursor: default; }
-.panel-section-show { padding: 0 8px; font-weight: 400; }
-.overview-card[data-hidden] > .overview-card-head > .panel-section-toggle { opacity: 0.5; }
-/* A coordinator's open work: a row per node, its state, its name and what it is doing; each coordinator under it a group. */
-.overview-work { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 6px 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
-.overview-work[data-coordinator] { font-weight: 500; }
-.overview-group + .overview-group { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--border); }
-[aria-current="true"] > .overview-work { background: var(--workbench-row-selected); }
-/* What a coordinator's page held, in its Status section: its card and STATUS.md without a second frame. */
-.overview-status { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 12px; }
-.overview-status section:is([aria-label="Coordinator card"], [aria-label="Status"]) { margin: 0; padding: 0; border: 0; background: none; }
-.overview-thread { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 0 14px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); cursor: pointer; }
-[aria-current="true"] > .overview-thread { background: var(--workbench-row-selected); }
-@media (hover: hover) {
-  .overview-thread:hover, .overview-work:hover, .panel-section-toggle:not(:disabled):hover, .panel-section-tool:not(:disabled):hover { background: var(--workbench-row-hover); }
-  .overview-link:hover, .overview-file:hover, .overview-more:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-}
-
-/* The project page's tree (ADR 0092): a heading over its coordinators and over the threads at its top level, and what an open coordinator holds. */
-.task-fold-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; padding-bottom: 8px; }
-.task-fold-body > section[aria-label="Coordinator card"] { margin-bottom: 0; }
-
-/* A desk's project and coordinator pages (ADR 0102): underlined tabs, and a card per coordinator. */
-.desk-tabs { display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
 .desk-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; color: var(--muted-foreground); font-size: var(--text-subhead); cursor: pointer; transition: color var(--motion-control) var(--motion-ease); }
 .desk-tab[aria-selected="true"] { color: var(--foreground); font-weight: 500; }
 .desk-tab[aria-selected="true"]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 2px; background: var(--foreground); }
 @media (hover: hover) { .desk-tab[aria-selected="false"]:hover { color: var(--foreground); } }
-.desk-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
-.desk-tab-count[data-waiting] { background: color-mix(in srgb, var(--status-blocked) 16%, transparent); color: var(--status-blocked); }
-/* A page's header actions (DeskAction): one button for all of them, on one quiet fill. */
-.desk-head-action { padding-inline: 14px; gap: 8px; }
-.desk-head-action-quiet { background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--foreground); }
-@media (hover: hover) { .desk-head-action-quiet:hover { background: color-mix(in srgb, var(--foreground) 12%, transparent); } }
-.desk-card { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); overflow: hidden; }
-.desk-card + .desk-card { margin-top: 12px; }
-.desk-card-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 12px; }
-.desk-card-head:has(+ *) { border-bottom: 1px solid var(--border); }
-.desk-card-mark { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--muted); color: var(--muted-foreground); }
-.desk-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-md); color: var(--muted-foreground); }
-@media (hover: hover) { .desk-icon-button:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
-/* A row's +: on a desk's hover or a key's focus; a phone starts a thread from inside the chat. */
-.desk-card-add { opacity: 0; transition: opacity var(--motion-control) var(--motion-ease); }
-.desk-card-add:focus-visible { opacity: 1; }
-@media (hover: hover) { .desk-card-head:hover .desk-card-add { opacity: 1; } }
-@media (hover: none), (pointer: coarse) { .desk-card-add { display: none; } }
-/* A project's coordinators as one list (ADR 0122): a row each, its own mark, a coordinator under another one step in. */
-.coord-list { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); overflow: hidden; }
-.coord-item + .coord-item { border-top: 1px solid var(--border); }
-.coord-head { --step: 16px; display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 8px 12px 8px calc(4px + var(--depth, 0) * var(--step)); }
-@media (hover: hover) { .coord-head:has(.coord-open:hover) { background: var(--workbench-row-hover); } }
-@media (hover: hover) { .coord-head:hover .desk-card-add { opacity: 1; } }
-.coord-fold { width: 28px; flex-shrink: 0; margin-right: -6px; }
-.coord-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 16px; align-self: stretch; margin-block: -8px; padding-block: 8px; text-align: left; }
-/* A long name takes two lines on a phone, one on a desk. */
-.coord-name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--text-subhead); font-weight: 500; overflow-wrap: anywhere; }
-.coord-line { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; color: var(--muted-foreground); font-size: var(--text-footnote); }
-.coord-line-desk, .coord-counts { display: none; }
-.coord-when { min-width: 28px; flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; text-align: right; }
-.coord-threads { border-top: 1px solid var(--border); background: color-mix(in srgb, var(--muted) 35%, transparent); }
-.coord-threads .desk-row { padding-left: calc(54px + var(--depth, 0) * 16px); }
-/* On a desk what is live reads down the list as three columns: waits on you, to review, working. */
-@media (min-width: 640px) {
-  .coord-head { --step: 28px; padding-left: calc(8px + var(--depth, 0) * var(--step)); }
-  .coord-threads .desk-row { padding-left: calc(58px + var(--depth, 0) * 28px); }
-  .coord-name { -webkit-line-clamp: 1; overflow-wrap: normal; white-space: nowrap; text-overflow: ellipsis; display: block; }
-  .coord-line { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .coord-line-desk { display: block; color: var(--subtle-foreground); font-size: var(--text-footnote); }
-  .coord-counts { display: grid; flex-shrink: 0; grid-template-columns: repeat(3, 44px); }
-  .coord-count { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: var(--text-footnote); font-variant-numeric: tabular-nums; }
-  .coord-count[data-state="needs"] { color: var(--foreground); font-weight: 500; }
-}
-/* A coordinator's mark: its glyph on a wash of its own hue. */
-.mark-tile { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--radius-md); background: color-mix(in srgb, var(--mark) 14%, transparent); }
-.mark-tile-button { position: relative; transition: box-shadow var(--motion-control) var(--motion-ease); }
-.mark-tile-button::after { content: ""; position: absolute; inset: -6px; }
-@media (hover: hover) { .mark-tile-button:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--mark) 55%, transparent); } }
-.mark-tile-button:focus-visible, .mark-tile-button[aria-expanded="true"] { box-shadow: 0 0 0 1.5px var(--mark); outline: none; }
-.mark-picker { display: flex; flex-direction: column; gap: 14px; padding: 0 16px 8px; }
-@media (min-width: 1024px) { .mark-picker { padding: 0; } }
-/* Six to a row in a desk's popover, eight across a phone's sheet: three or four rows, every glyph at once. */
-.mark-picker-glyphs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
-.mark-picker-glyph { display: flex; height: 40px; align-items: center; justify-content: center; border-radius: var(--radius-md); }
-@media (pointer: coarse) { .mark-picker-glyph { height: 44px; } }
-@media (hover: hover) { .mark-picker-glyph:hover { background: var(--workbench-row-hover); } }
-/* Another coordinator's glyph: still a tap away, quieter, so two rows are not told apart by colour alone. */
-.mark-picker-glyph[data-used] { opacity: 0.35; }
-.mark-picker-glyph[aria-checked="true"] { opacity: 1; }
-.mark-picker-glyph[aria-checked="true"] { background: color-mix(in srgb, var(--mark) 16%, transparent); box-shadow: inset 0 0 0 1.5px var(--mark); }
-.mark-picker-hues { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
-.mark-picker-hue { position: relative; width: 26px; height: 26px; border-radius: 9999px; background: var(--mark); }
-.mark-picker-hue::after { content: ""; position: absolute; inset: -6px; }
-.mark-picker-hue[aria-checked="true"] { box-shadow: 0 0 0 2px var(--popover, var(--card)), 0 0 0 3.5px var(--mark); }
-.desk-row { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 40px; padding: 8px 16px 8px 22px; text-align: left; font-size: var(--text-subhead); }
-.desk-row + .desk-row { border-top: 1px solid var(--border); }
-@media (hover: hover) { .desk-row:hover { background: var(--workbench-row-hover); } }
-.desk-row-end { flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-.desk-chip { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--radius-sm); background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-/* A desk's fold: the chevron turns and what it opens fades down into place, as the tree's History does. */
-.desk-fold { transition: transform var(--motion-control) var(--motion-ease); }
-@keyframes desk-reveal { from { opacity: 0; transform: translateY(-4px); } }
-.desk-reveal { animation: desk-reveal var(--motion-panel) var(--motion-ease) both; }
-/* Work's line over its cards, and History's: what is open or the way back on the left, History's search on the right. */
-/* History after the live work: reachable, out of the first look (ADR 0109). */
-.desk-history-link { margin-top: 20px; margin-left: -8px; }
-.desk-toolbar { display: flex; align-items: center; gap: 12px; min-height: 32px; margin-bottom: 12px; padding-left: 4px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
-.desk-search { display: flex; align-items: center; gap: 8px; width: min(320px, 100%); height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: var(--muted-foreground); }
-.desk-search:focus-within { border-color: var(--ring); }
-.desk-search input { min-width: 0; flex: 1; background: transparent; color: var(--foreground); font-size: var(--text-footnote); outline: none; }
-.desk-history-day + .desk-history-day { margin-top: 20px; }
-.desk-history-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px 8px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
-.desk-history-label > span { color: var(--subtle-foreground); font-weight: 400; }
-.desk-row-by { margin-left: 8px; color: var(--subtle-foreground); font-size: var(--text-footnote); }
-@media (prefers-reduced-motion: reduce) {
-  .desk-fold { transition: none; }
-  .desk-reveal { animation: task-row-fade var(--motion-control) var(--motion-ease) both; }
-}
-/* What waits on you (ask-list.tsx): each a question apart from the next, its kind in the one red above what it asks. */
-.ask-waiting { padding-block: 14px; }
-.ask-waiting + .ask-waiting { border-top: 1px solid var(--border); }
-.ask-kind { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin-bottom: 2px; color: var(--status-blocked); font-size: var(--text-caption); font-weight: 600; letter-spacing: 0.01em; }
-.ask-kind[data-answered] { color: var(--status-done); }
-.ask-kind-owner { color: var(--muted-foreground); font-weight: 400; letter-spacing: 0; }
-/* Routines (desk-routines.tsx): a row says when, to whom and what; its detail slides in beside the list, which never moves. */
-.routine-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; transition: background-color var(--motion-control) var(--motion-ease), border-color var(--motion-control) var(--motion-ease); }
-.routine-row[data-chosen] { border-color: color-mix(in srgb, var(--foreground) 22%, transparent); background: var(--workbench-row-selected); }
-@media (hover: hover) { .routine-row:not([data-chosen]):hover { background: var(--workbench-row-hover); } }
-.desk-card.routine-row + .routine-row { margin-top: 0; }
-.routine-off { padding: 0 6px; border-radius: var(--radius-sm); background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
-@keyframes routine-in { from { opacity: 0; transform: translateX(8px); } }
-.routine-detail { animation: routine-in var(--motion-panel) var(--motion-ease) both; }
-.routine-state { padding: 1px 8px; border-radius: 9999px; background: var(--muted); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: 500; }
-.routine-state-on { background: color-mix(in srgb, var(--status-done) 16%, transparent); color: var(--status-done); }
-.routine-label { color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 500; }
-.routine-event { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); transition: background-color var(--motion-control) var(--motion-ease), color var(--motion-control) var(--motion-ease), border-color var(--motion-control) var(--motion-ease); }
-.routine-event[aria-checked="true"] { border-color: color-mix(in srgb, var(--foreground) 35%, transparent); background: var(--workbench-row-selected); color: var(--foreground); }
-@media (prefers-reduced-motion: reduce) {
-  .routine-detail { animation: task-row-fade var(--motion-control) var(--motion-ease) both; }
-  .routine-row, .routine-event { transition: none; }
-}
-/* A desk project's Context tab: the files every thread receives and the project's links. */
-.desk-context-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 12px; font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
-@media (hover: hover) { button.desk-context-row:hover { background: var(--workbench-row-hover); } }
-/* Each file a card of its own: its header, then its Markdown drawn under a rule, scrolling inside past a screenful. */
-.desk-context-files { display: flex; flex-direction: column; gap: 8px; }
-.desk-context-file { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
-.desk-context-file > .desk-context-row { min-height: 44px; padding: 8px 14px; font-size: var(--text-subhead); line-height: var(--text-subhead--line-height); }
-/* The text hangs from the file's name: the row's padding, chevron, icon and their gaps (14 + 14 + 10 + 14 + 10). */
-.desk-context-body { max-height: min(60vh, 560px); overflow: auto; padding: 14px 20px 18px 38px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
-.desk-context-chip { display: inline-flex; padding: 3px 10px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted-foreground); font-size: var(--text-footnote); line-height: var(--text-footnote--line-height); }
 @media (prefers-reduced-motion: reduce) { .desk-tab { transition: none; } }

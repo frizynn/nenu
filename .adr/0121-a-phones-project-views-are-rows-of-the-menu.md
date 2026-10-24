@@ -1,6 +1,6 @@
 # 0121. A phone's project views are rows of the ⋯, and what waits on you is counted on it
 
-- **Status:** Accepted (2026-10-22). Requested by the operator, who chose where the views go (the ⋯)
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-22). Requested by the operator, who chose where the views go (the ⋯)
   and delegated the rest. Amends [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) point 3
   (a phone's Status as a fourth tab beside Chat, Threads and PRs) and its consequence on the phone's tab
   bar. 0115's other points hold.

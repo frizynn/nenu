@@ -865,33 +865,15 @@ describe("StateEngine — pane capability fields", () => {
     expect(engine.current().agents[0]!.readableLines).toBeUndefined();
   });
 
-  test("copies only the allowlisted tokens, and omits the field when none is left", async () => {
-    const { herdr, engine, poll } = makeEngine();
-    const p1 = pane("w1:p1", "w1", "idle", "claude");
-    p1.tokens = {
-      project: "nenu", thread: "rd-f2", role: "worker", "tree-order": "3", org_project: "nenu", hp_group: "~!0001",
-      secret_plugin_key: "nope", org_heartbeat: "1791590653", rank: 5, review: "x".repeat(201),
-    };
-    const p2 = pane("w1:p2", "w1", "idle", "codex");
-    p2.tokens = { other_plugin: "x" };
-    herdr.panes = [p1, p2, pane("w1:p3", "w1", "idle", null)];
-    await poll();
-    const byId = (id: string) => [...engine.current().agents, ...engine.current().shellPanes].find((a) => a.paneId === id)!;
-    expect(byId("w1:p1").tokens).toEqual({
-      project: "nenu", thread: "rd-f2", role: "worker", "tree-order": "3", org_project: "nenu", hp_group: "~!0001",
-    });
-    expect("tokens" in byId("w1:p2")).toBe(false);
-    expect("tokens" in byId("w1:p3")).toBe(false);
-  });
-
-  test("tokens Herdr returns in another order serialise the same (live-observed: order varies per read)", async () => {
+  test("never copies a pane's tokens, so a plugin refreshing them changes nothing", async () => {
     const { herdr, engine, poll } = makeEngine();
     const p = pane("w1:p1", "w1", "idle", "claude");
-    p.tokens = { thread: "rd-f2", project: "nenu", org_heartbeat: "1", hp_group: "~!0001", role: "worker" };
+    p.tokens = { project: "nenu", heartbeat: "1" };
     herdr.panes = [p];
     await poll();
     const first = JSON.stringify(engine.current().agents);
-    herdr.panes = [{ ...p, tokens: { role: "worker", org_heartbeat: "2", hp_group: "~!0001", project: "nenu", thread: "rd-f2" } }];
+    expect("tokens" in engine.current().agents[0]!).toBe(false);
+    herdr.panes = [{ ...p, tokens: { heartbeat: "2", project: "nenu" } }];
     await poll();
     expect(JSON.stringify(engine.current().agents)).toBe(first);
   });

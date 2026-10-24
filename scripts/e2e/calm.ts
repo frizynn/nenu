@@ -5,11 +5,11 @@ import { parseArgs } from "node:util";
 import type { FakeHerdr } from "../../bridge/test-support/fake-herdr.ts";
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
-import { homeOrg, seedDemoHerd } from "./scenario.ts";
+import { seedDemoHerd } from "./scenario.ts";
 
 // What moves under a finger while a busy herd works, on the e2e bench with Google Chrome headless:
-// a fleet of agents finishing one after another. On a phone, a tap on a thread's ‹ and on a sibling
-// chip while they finish, whether they land at the first try; Escape on the Search sheet; Home left
+// a fleet of agents finishing one after another. On a phone, a tap on a chat's ‹ while they finish,
+// whether it lands at the first try; Escape on the Search sheet; Home left
 // alone, counting the rows that move and the layout shifts. On a desk, the sidebar left alone, and the
 // row a click opened, whether it stays under the pointer. Last, on each, an agent off screen starts
 // asking for you: how long until it is on screen. Run it once per build to compare two.
@@ -131,7 +131,7 @@ const toastShown = (page: Page) => page.locator("[data-notification-viewport] [r
 async function run(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const bridge = await startTestBridge({
-    port, fake: true, org: (herd, now) => homeOrg(herd, now, { additions: 64, deletions: 12 }),
+    port, fake: true,
     seed: async (fake, ctx) => {
       const herd = await seedDemoHerd(fake, ctx);
       fake.addWorkspace("w3", "fleet").addTab("w3:t1", "agents");
@@ -154,11 +154,9 @@ async function run(): Promise<void> {
     const chat = `/pane/${encodeURIComponent(herd.working)}`;
     let stop = churn(fake);
     try {
-      // A thread in a project: its ‹ goes up, and its views switch beside it (sibling chips before 1.23.0,
-      // Chat · Threads · PRs under the header since, the ⋯'s rows since 1.45.0, its toast-prone corner).
+      // A chat's ‹, in its toast-prone corner.
       const taps: Array<Record<string, unknown>> = [];
-      const views = 'header button[aria-label^="Conversation actions"]';
-      for (const [name, selector] of [["back", 'header a[aria-label^="Back to"]'], ["chip", views]] as const) {
+      for (const [name, selector] of [["back", 'header [aria-label^="Back to"]']] as const) {
         await page.goto(bridge.url + chat);
         await page.locator("textarea").first().waitFor({ timeout: 15_000 });
         // Wait for the fleet to be finishing, so a phone that raises a toast has one up.
@@ -166,10 +164,7 @@ async function run(): Promise<void> {
         const toasts = await toastShown(page);
         if (name === "back") await shoot(page, "phone-chat-while-agents-finish");
         const hit = await tap(page, selector);
-        // The ⋯ opens its menu; the view is its Threads row.
-        if (selector === views && hit !== "notification") { await page.waitForTimeout(400); await tap(page, '[role="dialog"][aria-label="Conversation actions"] button:has-text("Threads")'); }
         await page.waitForTimeout(1200);
-        // A tab of the thread's band switches in place, and since 1.23.0 it says so in the query.
         const landed = new URL(page.url()).pathname + new URL(page.url()).search;
         taps.push({ name, toastUp: toasts > 0, touched: hit, landed, firstTry: landed !== chat && hit !== "notification" });
       }
@@ -187,7 +182,7 @@ async function run(): Promise<void> {
 
       await page.goto(bridge.url + "/");
       await page.locator('[role="tab"]:has-text("Recents")').first().waitFor({ timeout: 15_000 });
-      // Home opens on Projects (ADR 0110); the sessions this measures are Recents'.
+      // The sessions this measures are Recents'.
       await page.getByRole("tab", { name: "Recents" }).first().click();
       await page.waitForTimeout(1500);
       out.phoneHomeQuiet = await quiet(page, '#home-list a[href^="/pane/"]', quietMs);

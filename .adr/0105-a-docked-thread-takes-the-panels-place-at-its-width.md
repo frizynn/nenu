@@ -1,6 +1,6 @@
 # 0105. A docked thread takes the panel's place at its width; nothing folds to make room
 
-- **Status:** Accepted (2026-10-20). Reverses the fold to the rail of commit `57d594e3`.
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-20). Reverses the fold to the rail of commit `57d594e3`.
 - **Trail:** `web/src/components/split-view.tsx` (`DockedThread`) · `web/src/components/session-inspector.tsx`
   (`ColumnEdge`, `slidePanel`) · `web/src/components/ui/resize-handle.tsx` · `web/src/components/workbench-shell.tsx` ·
   `scripts/e2e/panels.ts`

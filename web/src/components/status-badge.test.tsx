@@ -8,18 +8,18 @@ describe("StateMark", () => {
   // Each state by its shape, so a list reads in grey too: the 1.38 dots told needs, working and
   // review apart only by colour (marcas-alternativas-gris.png).
   it("draws a different glyph for every state that is alive", () => {
-    const glyphs = (["needs", "review", "working", "merging", "resolved", "limit"] as const).map((state) => mark(state).getAttribute("class")!.match(/icon-[a-z-]+/)?.[0]);
-    expect(glyphs).toEqual(["icon-circle-alert", "icon-circle-check", "icon-circle-dashed", "icon-git-merge", "icon-check", "icon-hourglass"]);
+    const glyphs = (["needs", "review", "working", "limit"] as const).map((state) => mark(state).getAttribute("class")!.match(/icon-[a-z-]+/)?.[0]);
+    expect(glyphs).toEqual(["icon-circle-alert", "icon-circle-check", "icon-circle-dashed", "icon-hourglass"]);
   });
 
   it("colours only what asks something of you", () => {
     expect(mark("needs")).toHaveClass("text-status-blocked");
     expect(mark("review")).toHaveClass("text-primary");
     // A usage limit resumes by itself at its reset: it asks nothing of you (ADR 0120).
-    for (const state of ["working", "merging", "closing", "resolved", "limit"] as const) expect(mark(state)).toHaveClass("text-muted-foreground");
+    for (const state of ["working", "limit"] as const) expect(mark(state)).toHaveClass("text-muted-foreground");
   });
 
-  it("draws nothing for a resting node, keeping its box so names stay in line", () => {
+  it("draws nothing for a resting agent, keeping its box so names stay in line", () => {
     const idle = mark("idle");
     expect(idle.tagName).toBe("SPAN");
     expect(idle.childNodes).toHaveLength(0);

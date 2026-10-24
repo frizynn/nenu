@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PaneStrip } from "./pane-strip";
-import type { AgentView, ProjectView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 
 function pane(
   paneId: string,
@@ -95,40 +95,18 @@ describe("PaneStrip", () => {
     ]);
   });
 
-  it("calls a project's thread by its title, as the rest of Nenu does", () => {
-    const projects: ProjectView[] = [{
-      slug: "acme", name: "Acme", status: "active",
-      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
-    }];
-    render(
-      <PaneStrip
-        panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
-        projects={projects}
-        currentPaneId="w1:p2"
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /Panel depósito/ })).toBeInTheDocument();
-    expect(screen.queryByText("Blocked Claude")).toBeNull();
-  });
-
   it("names the actions sheet as its pill does", () => {
-    const projects: ProjectView[] = [{
-      slug: "acme", name: "Acme", status: "active",
-      threads: [{ id: "T1", title: "Panel depósito", parentId: "root", role: "worker", status: "open", paneId: "w1:p1", liveStatus: "blocked" }],
-    }];
     render(
       <PaneStrip
         panes={[pane("w1:p1", "claude", "agent", { paneLabel: "Blocked Claude" }), pane("w1:p2", "codex")]}
-        projects={projects}
         currentPaneId="w1:p2"
         onSelect={vi.fn()}
         onRenamed={vi.fn()}
         onClosed={vi.fn()}
       />,
     );
-    fireEvent.contextMenu(screen.getByRole("button", { name: /Panel depósito/ }));
-    expect(screen.getByRole("dialog", { name: "Panel depósito" })).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Blocked Claude/ }));
+    expect(screen.getByRole("dialog", { name: "Blocked Claude" })).toBeInTheDocument();
   });
 
   // A destructive confirmation that says only "Payments adapter" doesn't say which of the two closes.

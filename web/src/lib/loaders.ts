@@ -37,7 +37,6 @@ import type {
   MachineView,
   PaneHistoryResponse,
   PaneReadResponse,
-  ProjectView,
   PullRequestView,
   SessionSummary,
   SnapshotResponse,
@@ -90,7 +89,6 @@ export interface HomeData {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  projects?: ProjectView[];
   /** Open pull requests from GitHub in the repos agents work in. */
   pullRequests?: PullRequestView[];
   /** The bridge's session registry (primary-first); empty on a single-session / older bridge. */
@@ -195,7 +193,6 @@ function toHomeData(
     shellPanes: snap.shellPanes ?? [],
     workspaces: snap.workspaces ?? [],
     tabs: snap.tabs ?? [],
-    projects: snap.projects ?? [],
     pullRequests: snap.pullRequests ?? [],
     sessions: snap.sessions ?? [],
     session,
@@ -235,7 +232,6 @@ function staleHome(session: string | undefined): HomeData {
     shellPanes: [],
     workspaces: [],
     tabs: [],
-    projects: [],
     sessions: [],
     session,
     snoozedUntil: null,

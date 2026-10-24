@@ -5,7 +5,6 @@ import { ChatsCircle, Wifi } from "@/components/ui/icon";
 import { ColumnPage } from "@/components/column-page";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MachinesSlot } from "@/components/machines-slot";
-import { HomeProjects } from "@/components/home-projects";
 import { HomeHeading, HomeSessions, HomeStarters, RunningWorkCard, useOpeningPath } from "@/components/home-panels";
 import { openNewDialog } from "@/components/new-agent-sheet";
 import { NeedsYouList } from "@/components/needs-you-list";
@@ -22,11 +21,9 @@ import { cn } from "@/lib/utils";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
-// (answered in place), then one list under tabs: Projects first, each with what waits on you there,
-// what works, what is ready to review and when it last moved, the quiet ones folded last; every session
-// as Recents or by Workspace, each row carrying its pull request; every pull request (ready to merge
-// first) as PRs. Then the workflows still running. Starting something is New's; writing to a
-// coordinator is its own chat's. Figures come from the snapshot, the bridge's
+// (answered in place), then one list under tabs: every session as Recents or by Workspace, each row
+// carrying its pull request; every pull request (ready to merge first) as PRs. Then the workflows still
+// running. Starting something is New's. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //
 // When the link fails, the connection banner (root.tsx) is the one place that names the problem and
@@ -59,12 +56,12 @@ export function HomeRoute() {
   const receipts = interactions.receipts.filter((receipt) => byPane.has(receipt.paneId));
   // A pane just answered may still read blocked until the next snapshot: its receipt is its row meanwhile.
   const answered = new Set(receipts.map((receipt) => receipt.paneId));
-  const needs = needsYouItems(data.agents, interactions.interactions, data.projects).filter((item) => item.interaction || !answered.has(item.paneId));
+  const needs = needsYouItems(data.agents, interactions.interactions).filter((item) => item.interaction || !answered.has(item.paneId));
   // "Nothing needs you" only from a live herd whose dialogs were read; anything older cannot vouch for it.
   const calm = live && interactions.loaded && !interactions.stale && data.agents.length > 0 && !needs.length && !receipts.length;
-  const reviews = reviewQueue(data.projects, data.pullRequests);
+  const reviews = reviewQueue(data.pullRequests);
   // A pane Needs you holds (asking, or just answered) stays out of Recents.
-  const recent = recentChats(panes, data.projects, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
+  const recent = recentChats(panes, new Set([...needs, ...receipts].map((item) => item.paneId)), reviews);
   const running = runningWorkflows(activity);
   const counts = { needs: needs.length, review: reviews.length, working: data.agents.filter((a) => a.status === "working").length };
   const { title, detail } = homeHeadline(counts, data.agents.length, calm);
@@ -83,12 +80,11 @@ export function HomeRoute() {
       {live && !data.agents.length && <HomeStarters disabled={!navigation?.onNewChat} onFolder={() => openNewAgent({ kind: "workspace" })} onMore={() => openNewDialog()} />}
       {/* The herd as last seen: greyed so nothing reads live, text kept at full contrast. */}
       <div className={cn("flex flex-col gap-6 lg:gap-7", stale && "text-muted-foreground grayscale")}>
-        <NeedsYouList agents={data.agents} projects={data.projects} session={data.session} items={needs} receipts={receipts}
+        <NeedsYouList agents={data.agents} session={data.session} items={needs} receipts={receipts}
           interactions={interactions} lockReason={lock} opening={opening} />
-        <HomeSessions recent={recent} workspaces={workspaceChats(data, data.projects, reviews)} reviews={reviews}
-          projectRows={<HomeProjects projects={data.projects ?? []} agents={data.agents} session={data.session} now={now} />}
+        <HomeSessions recent={recent} workspaces={workspaceChats(data, reviews)} reviews={reviews}
           pullRequests={(entries) => <PullRequestList entries={entries} session={data.session} opening={opening} />}
-          projects={data.projects ?? []} session={data.session} now={now} opening={opening} />
+          session={data.session} now={now} opening={opening} />
         <MachinesSlot data={data} place="home" />
         {running.length > 0 && (
           <section aria-labelledby="home-running" className="flex flex-col gap-2.5">

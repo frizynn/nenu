@@ -1,6 +1,6 @@
 # 0119. A chat panel's sections fold, and the operator arranges them; a coordinator's Threads lists its whole subtree
 
-- **Status:** Accepted (2026-10-21). Requested by the operator, who delegated the design. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-21). Requested by the operator, who delegated the design. Amends
   [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md) (what a coordinator's page held, drawn
   inside its chat as a column of cards) and [ADR 0101](./0101-a-threads-panel-opens-on-its-overview.md)
   (the Overview's cards in a fixed order, a coordinator's Threads card listing its direct threads).

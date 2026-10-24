@@ -17,11 +17,8 @@ import { TranscriptStore } from "./journal/store.ts";
 import { createOperatorCommands } from "./operator-commands.ts";
 import { createOperatorKeys } from "./operator-keys.ts";
 import { createOperatorQuickReplies } from "./operator-quick-replies.ts";
-import { defaultOrgRun } from "./org-cli.ts";
 import { PaneWatcher } from "./pane-watcher.ts";
 import { PaneWrites } from "./pane-writes.ts";
-import { CoordinatorMarks } from "./coordinator-marks.ts";
-import { ProjectRegistry } from "./projects.ts";
 import { PullRequestRegistry } from "./pull-requests.ts";
 import { freshAgentView, QueueService } from "./queue-service.ts";
 import { isLoopbackPeer } from "./routes/access.ts";
@@ -38,7 +35,7 @@ import { WebAssetArchive } from "./web-assets.ts";
 // The bridge's composition root: build the process-wide services once, then hand every request to
 // the route table (bridge/routes/index.ts). Routes, gates and handlers live under bridge/routes/.
 
-// Seconds a request may stay silent before Bun closes it; above the slowest org CLI budget (90 s).
+// Seconds a request may stay silent before Bun closes it; above a send's longest wait (the client gives it 110 s).
 export const SERVER_IDLE_TIMEOUT_S = 120;
 
 // Hard cap the runtime enforces on ANY request body (Bun.serve maxRequestBodySize). Bigger than the
@@ -134,9 +131,7 @@ export function startServer(opts: ServerDeps) {
     conversations,
     input,
     queue,
-    projects: new ProjectRegistry({ live, marks: new CoordinatorMarks(join(cfg.stateDir, "coordinator-marks.json")) }),
     pullRequests: new PullRequestRegistry({ live }),
-    orgRun: defaultOrgRun(),
     hasJournal: (agent) => adapterFor(journals ?? {}, agent) !== undefined,
     interactions: new Interactions(live, { waiting: (session, paneId) => agentStates.get(session, paneId)?.waiting !== undefined }),
     paneWatcher: new PaneWatcher(live),
@@ -149,18 +144,15 @@ export function startServer(opts: ServerDeps) {
   };
   // Cards follow herd and screen changes, so Home and the chat hear `interaction` without polling.
   services.interactions.follow(registry, live, (rt) => interactionHints(services, rt));
-  // An agent alert names who it is from the session's projects, and a finished turn reads the pane's
+  // An agent alert names who it is from the pane's labels, and a finished turn reads the pane's
   // journal for what started it and what it answered (alert-detail.ts).
   opts.alerts.use(async (session, agent, status) => {
-    const rt = registry.get(session);
-    const snap = rt?.engine.current();
-    const projects = rt && snap ? services.projects.list(rt.name, rt.isPrimary, [...snap.agents, ...snap.shellPanes]) : [];
     const adapter = status === "done" && agent.agentSession && journals ? adapterFor(journals, agent.agent) : undefined;
     const page = adapter && transcripts && agent.agentSession
       ? await transcripts.page(adapter, agent.agentSession, { limit: ALERT_JOURNAL_ENTRIES }).catch(() => null)
       : null;
     const requested = status === "done" && services.awaiting.take(session, agent.paneId);
-    return describeAlert(agent, status, projects, page?.entries ?? null, requested);
+    return describeAlert(agent, status, page?.entries ?? null, requested);
   });
   // An agent alert carries the pane's dialog. The alert usually fires before anything read the
   // pane, so the lookup reads it first.
@@ -177,9 +169,8 @@ export function startServer(opts: ServerDeps) {
     // Runtime cap on any request body — a chunked/lying client is cut off here even if its
     // Content-Length is absent or false. The upload handler still does its own precise check.
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-    // Bun's 10 s default would cut `thread merge` (90 s), project create (30 s) and thread set
-    // (15 s) while the CLI keeps running, so the phone reports a failure that actually happened.
-    // The SSE route still opts out per request with server.timeout(req, 0).
+    // Bun's 10 s default would cut a send still waiting on the agent's log, so the phone would report
+    // a failure for a message that actually went. The SSE route still opts out per request with server.timeout(req, 0).
     idleTimeout: SERVER_IDLE_TIMEOUT_S,
 
     fetch(req): Response | Promise<Response> {

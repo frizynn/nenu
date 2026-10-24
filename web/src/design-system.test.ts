@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 import { META_COLOR } from "./hooks/use-theme";
-import { HUE_NAMES } from "./lib/project-glyph";
 import { TYPE_SCALE } from "./lib/utils";
 import { cssRules, declarations } from "./test/css-rules";
 
@@ -122,8 +121,8 @@ describe("surfaces", () => {
     fill.forEach((bg, i) => expect(contrast(label[i]!, bg), `primary-foreground ${i ? "dark" : "light"}`).toBeGreaterThanOrEqual(4.5));
   });
 
-  it("draws every project hue at 3:1 on every ground a project's glyph sits on", () => {
-    for (const hue of HUE_NAMES) {
+  it("draws every mark hue at 3:1 on every ground a glyph sits on", () => {
+    for (const hue of ["orange", "amber", "green", "teal", "violet", "pink"]) {
       const tone = themedColor(`glyph-${hue}`);
       for (const ground of GROUNDS) {
         themed(ground).forEach((bg, i) => expect(contrast(tone[i]!, bg), `${hue} on ${ground} ${i ? "dark" : "light"}`).toBeGreaterThanOrEqual(3));

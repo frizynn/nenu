@@ -17,8 +17,8 @@ import type { AgentStatus, AgentView, Interaction } from "./types.ts";
 //   • Never silent — every push shows a notification. iOS revokes a web-push subscription after a few
 //     pushes that show nothing, so nothing is retracted by push: the app closes what you handled when
 //     it opens, and nothing is sent while Nenu is open on a screen (the sink's mute gate). ADR 0072.
-//   • Name — each alert says who it is to the operator (a project's thread or coordinator, else the
-//     pane's own label), what started its turn, and the first line of what it answered
+//   • Name — each alert says who it is to the operator (the pane's own label, else its workspace),
+//     what started its turn, and the first line of what it answered
 //     (alert-detail.ts). A turn a subagent's result started answers to its own switch.
 //
 // Pure and clock-injected so `bun test` drives it without real timers: the bridge passes
@@ -138,7 +138,7 @@ export class AlertDescriber {
  */
 export interface NoticeDecision {
   paneId: string;
-  alert: Pick<AlertDetail, "status" | "kind" | "startedBy" | "requested" | "launched">;
+  alert: Pick<AlertDetail, "status" | "startedBy" | "requested" | "launched">;
   outcome: NoticeOutcome | "rule" | "told";
 }
 
@@ -153,7 +153,7 @@ const OUTCOME_WORDS: Record<NoticeDecision["outcome"], string> = {
 /** One journal line per decision, naming no person's words: the pane, what the turn was and what happened. */
 export function decisionLine(session: string, d: NoticeDecision): string {
   const a = d.alert;
-  const turn = [a.kind, `started by ${a.startedBy}`, a.requested && "asked from Nenu", a.launched && "launched by an agent"].filter(Boolean).join(", ");
+  const turn = [`started by ${a.startedBy}`, a.requested && "asked from Nenu", a.launched && "launched by an agent"].filter(Boolean).join(", ");
   return `notify ${session}/${d.paneId} ${a.status} (${turn}): ${OUTCOME_WORDS[d.outcome]}`;
 }
 

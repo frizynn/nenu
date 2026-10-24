@@ -1,6 +1,6 @@
 # 0101. A thread's panel opens on its Overview; the project's views leave it
 
-- **Status:** Accepted (2026-10-20). Supersedes [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md)
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-20). Supersedes [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md)
   and the Artifacts tab of [0075](./0075-a-desk-session-opens-with-its-own-panel.md) point 1. Amended for a
   coordinator's own pane by [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md): its Overview also
   holds what its page did (Waiting on you, New thread, its History line, Routines, Status, Move and Close).

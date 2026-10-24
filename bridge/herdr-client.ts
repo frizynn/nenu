@@ -69,12 +69,6 @@ interface WirePane {
    */
   revision: number;
   /**
-   * Key/value tags a plugin reported on the pane with a TTL (protocol 22, at most 32). Herdr
-   * Organizations writes `project`, `thread`, `role`… here and refreshes them every few seconds,
-   * so a missing token means "unknown", never "removed".
-   */
-  tokens?: Record<string, string> | null;
-  /**
    * The agent's OWN session identity, as the agent reported it to Herdr (herdr ≥ 0.7.2). For Claude
    * this is `{kind:"id", value:"<uuid>"}` — the uuid naming its on-disk session log, which is how
    * Nenu serves real conversation history for a pane whose terminal keeps no scrollback (see

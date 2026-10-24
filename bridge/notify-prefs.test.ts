@@ -35,15 +35,11 @@ describe("coerceNotifyPrefs", () => {
 });
 
 describe("NotifyPrefsStore.wants", () => {
-  const done = { status: "done" as const, kind: "agent" as const, startedBy: "person" as const, requested: false, launched: false, name: "x", where: "y" };
-  test("a finished turn notifies only when it answers a person, never the organization's own traffic", async () => {
+  const done = { status: "done" as const, startedBy: "person" as const, requested: false, launched: false, name: "x", where: "y" };
+  test("a finished turn notifies when it answers a person, and a subagent's only when switched on", async () => {
     const store = new NotifyPrefsStore(await tempCfg());
     expect(store.wants(done)).toBe(true);
-    expect(store.wants({ ...done, kind: "coordinator" })).toBe(true);
-    expect(store.wants({ ...done, kind: "coordinator", startedBy: "organizations" })).toBe(false);
-    // A thread's typed turns come from its coordinator, unless you sent it something from Nenu.
-    expect(store.wants({ ...done, kind: "thread" })).toBe(false);
-    expect(store.wants({ ...done, kind: "thread", requested: true })).toBe(true);
+    expect(store.wants({ ...done, requested: true })).toBe(true);
     expect(store.wants({ ...done, startedBy: "subagent" })).toBe(false);
     await store.set({ subagents: true, replies: false });
     expect(store.wants({ ...done, startedBy: "subagent" })).toBe(true);

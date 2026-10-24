@@ -5,15 +5,13 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { Chip, ChipStrip } from "@/components/ui/chip";
 import { PaneActionsSheet } from "@/components/pane-actions-sheet";
 import { displayName } from "@/lib/display-name";
-import type { AgentView, ProjectView } from "@/lib/types";
+import type { AgentView } from "@/lib/types";
 
 interface PaneStripProps {
   /** The panes that share the current tab (agents + shells), in stable order. */
   panes: AgentView[];
   currentPaneId: string;
   onSelect: (paneId: string) => void;
-  /** So a project's thread pill reads its thread title, as every other view names it. */
-  projects?: readonly ProjectView[];
   /** Session scope for the long-press pane actions (rename/close); undefined = primary. */
   session?: string;
   /** Drop the long-press write actions when the device isn't authorised. */
@@ -34,7 +32,6 @@ export function PaneStrip({
   panes,
   currentPaneId,
   onSelect,
-  projects,
   session,
   readOnly,
   onRenamed,
@@ -47,7 +44,7 @@ export function PaneStrip({
   const actionsEnabled = !!onRenamed && !!onClosed;
 
   if (panes.length < 2) return null;
-  const names = chipNames(panes, projects);
+  const names = chipNames(panes);
 
   return (
     <>
@@ -90,8 +87,8 @@ export function PaneStrip({
 }
 
 /** Each pane's one name, numbered only where two panes in the tab share it ("Codex · 1", "Codex · 2"). */
-function chipNames(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined) {
-  const named = panes.map((p) => [p.paneId, displayName(p, projects)] as const);
+function chipNames(panes: readonly AgentView[]) {
+  const named = panes.map((p) => [p.paneId, displayName(p)] as const);
   const count = new Map<string, number>();
   for (const [, name] of named) count.set(name, (count.get(name) ?? 0) + 1);
   const seen = new Map<string, number>();

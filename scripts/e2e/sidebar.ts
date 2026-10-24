@@ -4,14 +4,14 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser } from "./browser.ts";
 import { startTestBridge } from "./bridge.ts";
-import { deskOrg, type OrgSeed } from "./scenario.ts";
+import { seedDemoHerd } from "./scenario.ts";
 
 // The desk's bar at every width the grip allows, and the phone's drawer: no list scrolls sideways, every
 // row ends inside the bar, a long name ends in an ellipsis, a resting chat reads muted until the pointer
 // rests on it, and the chats' "N updates" sits at the bar's
 // own edge. A chat with a name wider than the bar stands in for the one that pushed the list sideways
-// (21/10: the projects read "M" and "r Org" and "8 updates" floated past the rows). Captures each width
-// and the drawer in dark and light, with Home and a project's page at the default width. Exits 1 on any failure.
+// (21/10: the rows read "M" and "r Org" and "8 updates" floated past the rows). Captures each width
+// and the drawer in dark and light, with Home at the default width. Exits 1 on any failure.
 //
 //   bun scripts/e2e/sidebar.ts [--port 8877] [--out DIR] [--tag before|after]
 
@@ -22,12 +22,7 @@ const EPOCH = Date.parse("2026-10-21T15:00:00Z");
 const LONG = "Fisgón: la IA se apaga y prende sola en la charla de prueba cuando el cliente vuelve a la conversación";
 const WIDTHS = [220, 272, 420];
 
-function seed(herd: Parameters<typeof deskOrg>[0], now: number): OrgSeed {
-  const org = deskOrg(herd, now, { additions: 12, deletions: 3 });
-  const thread = org.projects[0]!.threads.find((t) => t.id === "t-0014")!;
-  org.projects[0]!.threads.push({ ...thread, id: "t-0090", title: LONG, pane_id: "", workspace_id: "", tab_id: "", updated: new Date(now - 90_000).toISOString() });
-  return org;
-}
+
 
 /** What breaks the bar's edge: a list wider than its scroller, a row past it, a long name without its ellipsis. */
 function measure(desk: boolean) {
@@ -56,7 +51,15 @@ async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const failures: string[] = [];
   const shots: string[] = [];
-  const bridge = await startTestBridge({ port, fake: true, epoch: EPOCH, org: seed });
+  const bridge = await startTestBridge({
+    port, fake: true, epoch: EPOCH,
+    seed: async (fake, ctx) => {
+      const herd = await seedDemoHerd(fake, ctx);
+      fake.addWorkspace("w9", "fisgon").addTab("w9:t1", "charla");
+      fake.addPane({ paneId: "w9:p1", workspaceId: "w9", tabId: "w9:t1", agent: "claude", label: LONG, cwd: ctx.cwd, lines: ["❯ Demo task", "", "● On it."] });
+      return herd;
+    },
+  });
   let browser: Browser | null = null;
   try {
     browser = await launchChrome();
@@ -94,12 +97,6 @@ async function main(): Promise<void> {
           const full = `${values.tag}-desk-full-${scheme}.png`;
           await page.screenshot({ path: join(outDir, full), animations: "disabled" });
           shots.push(full);
-          await page.goto(bridge.url + "/project/acme-shop");
-          await page.locator("main >> visible=true").first().waitFor({ timeout: 30_000 });
-          await page.waitForTimeout(600);
-          const project = `${values.tag}-desk-project-${scheme}.png`;
-          await page.screenshot({ path: join(outDir, project), animations: "disabled" });
-          shots.push(project);
         }
         await context.close();
       }

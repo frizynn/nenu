@@ -53,8 +53,8 @@ export function ResizeHandle({ label, edge, width, range, limit, onChange, class
     state.moved ||= next !== state.width;
     state.column.style.width = `${next}px`;
   };
-  // The capture ends on a release, a cancel, or the column leaving mid-drag (a fold, a docked thread
-  // gone): each ends the drag, so the page never keeps the drag's cursor and its selection off.
+  // The capture ends on a release, a cancel, or the column leaving mid-drag (a fold): each ends the
+  // drag, so the page never keeps the drag's cursor and its selection off.
   const endDrag = () => {
     const state = drag.current;
     if (!state) return;

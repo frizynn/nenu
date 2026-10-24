@@ -5,8 +5,6 @@ import { useCallback, useState } from "react";
 // the other's choice.
 
 export interface SidebarPrefs {
-  /** Explicit expand/collapse per project slug; a project nobody touched starts expanded. */
-  expanded: Record<string, boolean>;
   /** Explicit expand/collapse per workspace id; an untouched one follows `defaultOpen`. */
   workspaces: Record<string, boolean>;
   /** Explicit expand/collapse per id of a tab that folds its panes; an untouched one follows `tabStartsOpen`. */
@@ -17,7 +15,7 @@ const STORAGE_KEY = "collie:sidebar:v1";
 
 export function coerceSidebarPrefs(raw: unknown): SidebarPrefs {
   const p = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-  return { expanded: folds(p.expanded), workspaces: folds(p.workspaces), tabs: folds(p.tabs) };
+  return { workspaces: folds(p.workspaces), tabs: folds(p.tabs) };
 }
 
 function folds(raw: unknown): Record<string, boolean> {
@@ -53,14 +51,11 @@ export function useSidebarPrefs({ persist = true } = {}) {
     setPrefs(next);
   }, [persist]);
 
-  const setExpanded = useCallback((slug: string, open: boolean) =>
-    update((latest) => ({ ...latest, expanded: { ...latest.expanded, [slug]: open } })), [update]);
-
   const setWorkspaceOpen = useCallback((workspaceId: string, open: boolean) =>
     update((latest) => ({ ...latest, workspaces: { ...latest.workspaces, [workspaceId]: open } })), [update]);
 
   const setTabOpen = useCallback((tabId: string, open: boolean) =>
     update((latest) => ({ ...latest, tabs: { ...latest.tabs, [tabId]: open } })), [update]);
 
-  return { prefs, setExpanded, setWorkspaceOpen, setTabOpen };
+  return { prefs, setWorkspaceOpen, setTabOpen };
 }

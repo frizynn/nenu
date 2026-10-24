@@ -123,7 +123,7 @@ const openDrawer = async (page: Page) => {
 };
 const openSearch = (query: string) => async (page: Page) => {
   if (await isPhone(page)) await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search" }).click();
-  else await page.getByRole("navigation", { name: "Projects and chats" }).getByRole("button", { name: /^Search/ }).click();
+  else await page.getByRole("navigation", { name: "Workspaces and chats" }).getByRole("button", { name: /^Search/ }).click();
   await page.waitForTimeout(300);
   await page.keyboard.type(query);
 };

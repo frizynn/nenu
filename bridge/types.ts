@@ -2,7 +2,6 @@
 // (which live only in herdr-client.ts). The rest of the app talks in these terms.
 
 import type { AgentSessionRef, SessionTelemetry, TranscriptEntry } from "./journal/types.ts";
-import type { StatusFile, TokenUsage } from "./org-types.ts";
 
 // Re-exported so the wire surface has ONE import site: a consumer of PaneHistoryResponse gets the
 // entry shape from here too, without reaching into an adapter module.
@@ -82,12 +81,6 @@ export interface AgentView {
    * `done` agent IS the "finished while you weren't looking" state — there is no stored seen flag.
    */
   lastSeenAt?: number;
-  /**
-   * Herdr's pane tokens (`pane.list` `tokens`, protocol 22+): short key/value tags a harness or
-   * plugin sets on the pane. Only an allowlisted subset is copied here (F2 owns the list); absent on
-   * older Herdr servers and when no allowed token is set.
-   */
-  tokens?: Record<string, string>;
   /**
    * Herdr's `agent.list` `state_change_seq`: bumps on every status transition, so two equal values
    * mean no transition happened between two reads — even one that started and finished between
@@ -177,51 +170,6 @@ export interface TabView {
 
 export type BridgeStatus = "connected" | "disconnected";
 
-export interface TemplateView {
-  name: string;
-  scope: "global" | "project";
-  description: string;
-  role: "worker" | "coordinator";
-  canSpawn: boolean;
-  harness: string;
-  model: string;
-  reasoningEffort: string;
-  rulesChars: number;
-  memoryChars: number;
-  updated: string;
-}
-
-/** A project's routine as `routine list --json` reports it, without its command. */
-export interface RoutineView {
-  name: string;
-  trigger: "schedule" | "pr";
-  /** Who gets it: `root`, `owner`, `node:<id or title>` or `new`; empty from an Organizations that predates the field. */
-  to: string;
-  /** For `new`: the node the thread starts under. */
-  parent: string;
-  /** What it asks, as written in its file. */
-  prompt: string;
-  /** As written, such as `daily 09:00`; empty for a `pr` routine. */
-  schedule: string;
-  /** The pull request events a `pr` routine fires on; empty for a scheduled one. */
-  events: string[];
-  enabled: boolean;
-  /** RFC 3339, or empty: before the first run, and always for `pr`. */
-  lastRun: string;
-  /** RFC 3339, or empty for `pr` and for a disabled routine. */
-  nextRun: string;
-}
-
-/** `available` is false when this Organizations has no `routine list --json`, so the list says nothing. */
-export interface RoutineList {
-  available: boolean;
-  /** This Organizations edits a routine (`routine set`). */
-  editable: boolean;
-  routines: RoutineView[];
-  /** Routine files that do not parse. */
-  broken: number;
-}
-
 /**
  * One entry in the snapshot's `sessions` list — a herdr session this bridge fronts. Additive: a
  * single-session deployment reports exactly one (the primary), so nothing about the UI changes.
@@ -238,103 +186,6 @@ export interface SessionSummary {
   /** Agent panes currently working / blocked (0 when unreachable). */
   working: number;
   blocked: number;
-}
-
-export interface ProjectThreadView {
-  id: string;
-  title: string;
-  parentId: string;
-  role: "worker" | "coordinator";
-  status: "starting" | "open" | "failed" | "resolved";
-  template?: string;
-  updated?: string;
-  paneId?: string;
-  agent?: string;
-  liveStatus?: AgentStatus;
-  /** Organizations' `last_group` for the thread (e.g. "ready", "needs-review"); absent when unset. */
-  group?: string;
-  /** The agent itself reported it is waiting for you (its `Waiting for you` activity); absent otherwise. */
-  selfWaiting?: true;
-  /** A conversation with a person (Organizations' `keep_open`): its ended turn waits on nobody. */
-  conversation?: true;
-  branch?: string;
-  /** The thread's pull request. Numbers appear only when Organizations reported them (never guessed). */
-  pr?: ThreadPullRequest;
-  /** 1 for a direct child of the project, computed from `parentId`. */
-  depth?: number;
-  /** A report the person has not acknowledged yet. */
-  reportUnacked?: boolean;
-  groupLabel?: string;
-  /** Organizations' bracketed note: live agent state, `pane closed`, `failed: …`. `--json` only. */
-  note?: string;
-  /** The PR automation flags. Present only when Organizations has PR actions. */
-  autoFixCi?: boolean;
-  autoMerge?: boolean;
-  /** The first action Organizations names for its PR, or `create-pr` without one. Absent from an Organizations that names none. */
-  prAction?: PrAction;
-  /** Organizations has another parent for it (`node move`): its `actions` lists `move`. Absent otherwise. */
-  movable?: true;
-  /** The `Status:` line of the agent's last report. Absent without one, and from an Organizations that predates it. */
-  verdict?: ThreadVerdict;
-  /** When a coordinator's STATUS.md last changed; its text is read on demand (`/api/org/summary`). Absent without one. */
-  statusUpdated?: string;
-  /** Changes when Organizations' reading of its tokens does; the numbers come with the summaries. Absent without one. */
-  usageStamp?: string;
-}
-
-/** What an agent's report says of its work, from the fixed `Status:` line Organizations reads. */
-export type ThreadVerdict = "done" | "needs-decision" | "blocked" | "failed";
-/** A summary agent's answer: its text, or why it failed; `current` is false once the report changed. */
-export interface PlainSummary { text: string; current: boolean; error?: string }
-
-export const THREAD_VERDICTS: readonly ThreadVerdict[] = ["done", "needs-decision", "blocked", "failed"];
-
-/** A picture the agent left in the project's library, with what it shows. */
-export interface ThreadCapture { path: string; caption: string }
-/** A document the agent left in the project's library. */
-export interface ThreadDeliverable { path: string; kind: "html" | "pdf" }
-
-/**
- * What a thread's report says in plain words and shows, read on demand (`/api/org/summary`), never
- * with the snapshot. Listed only for a thread that has at least one of them. The summary is the
- * agent's own text: data, drawn as text.
- */
-export interface ThreadSummary {
-  id: string;
-  summary?: string;
-  /** The report in plain words, from Organizations' summary agent (`thread explain`). Model-written: drawn as text. */
-  plain?: PlainSummary;
-  /** Organizations would write one on request: its `actions` list `explain`. */
-  explainable?: true;
-  captures: ThreadCapture[];
-  deliverables: ThreadDeliverable[];
-  /** A coordinator's STATUS.md, and the agent's token use as Organizations last read it. */
-  status?: StatusFile;
-  usage?: TokenUsage;
-}
-
-/** What `thread pr-action` asks a thread's agent to do, most pressing first as Organizations orders them. */
-export const PR_ASKS = ["resolve-conflicts", "fix-ci", "address-comments"] as const;
-export type PrAsk = typeof PR_ASKS[number];
-/**
- * What a client may ask about a thread's pull request: a request to its agent, `merge` (`thread
- * merge`), or `create-pr`, which opens the PR of a thread that pushed its branch without one.
- */
-export type PrAction = PrAsk | "merge" | "create-pr";
-
-export interface ThreadPullRequest {
-  url?: string;
-  number?: number;
-  state: "open" | "draft" | "merged" | "closed";
-  review?: "approved" | "changes_requested" | "review_required" | "commented";
-  /** CI check counts, present only when the `--json` contract carries them. */
-  checks?: { passed: number; failed: number; pending: number; failing?: string[] };
-  /** Diff size, present only when the `--json` contract carries it. */
-  diff?: { additions: number; deletions: number };
-  /** Why `thread merge` would refuse, as of the ticker's last read; `null` when it would merge. `--json` only. */
-  mergeBlocker?: string | null;
-  commentCount?: number;
-  mergeable?: string;
 }
 
 /**
@@ -357,36 +208,6 @@ export interface PullRequestView {
   /** Epoch ms. */
   updatedAt?: number;
   paneIds: string[];
-}
-
-export interface ProjectView {
-  slug: string;
-  name: string;
-  goal?: string;
-  status: "active" | "paused";
-  /** The glyph and colour names the project picked in Organizations; absent when it picked none. */
-  icon?: string;
-  tone?: string;
-  /** The glyph and colour names the operator picked for its coordinators in Nenu, by node id (ADR 0122); absent when none was. */
-  marks?: Record<string, { icon?: string; tone?: string }>;
-  coordinator?: { paneId: string; agent: string; liveStatus: AgentStatus };
-  threads: ProjectThreadView[];
-  /** `json` when this came from `overview --json`; `files` is the fallback, which carries no numbers. */
-  source?: "json" | "files";
-  /** Organizations can merge and toggle auto-fix/auto-merge (its `thread merge`/`thread set`). */
-  prActions?: boolean;
-  /** Organizations can start coordinators and nest nodes; false when only upstream herdr-projects is installed. */
-  nodeActions?: boolean;
-  /** Organizations can hang a node under another parent (`node move`); absent or false hides Move. */
-  nodeMoves?: boolean;
-  /** Workspaces holding a live pane bound to this project, in this session. */
-  workspaceIds?: string[];
-  /** When the project coordinator's STATUS.md last changed; absent without one. */
-  statusUpdated?: string;
-  /** How many of its coordinators' asks and decisions wait on the person; absent when Organizations cannot list asks. */
-  waitingAsks?: number;
-  /** The project coordinator's token reading stamp, as a thread's `usageStamp`. */
-  usageStamp?: string;
 }
 
 /**
@@ -417,8 +238,6 @@ export interface SnapshotResponse {
   /** All spaces (workspaces) and their tabs, for the space/tab navigator. */
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  /** Registered Herdr Projects belonging to this session. Absent on older bridges. */
-  projects?: ProjectView[];
   /** Open pull requests from GitHub in the repos agents work in. Absent on older bridges. */
   pullRequests?: PullRequestView[];
   /**
@@ -697,10 +516,10 @@ export interface PaneSkillsResponse {
 // ── Live invalidations ─────────────────────────────────────────────────────────
 
 /**
- * What an invalidation names. `interaction` is a pane's detected dialog; `org` is the Organizations
- * projects/threads view. The stream carries only these names, never state (ADR 0054).
+ * What an invalidation names. `interaction` is a pane's detected dialog. The stream carries only
+ * these names, never state (ADR 0054).
  */
-export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "org" | "activity" | "usage";
+export type LiveTopic = "snapshot" | "pane" | "queue" | "journal" | "interaction" | "activity" | "usage";
 
 export interface LiveEvent {
   session: string;
