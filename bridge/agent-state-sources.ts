@@ -24,7 +24,7 @@ export interface ClaudeSessionFile {
   /** Epoch ms of the last status change: the start of the current busy spell. */
   statusUpdatedAt: number;
   version?: string;
-  /** `ps -o lstart` of the owning process, to tell a reused pid from the session's own. */
+  /** When the owning process started, to tell a reused pid from the session's own: see {@link sameProcStart}. */
   procStart?: string;
 }
 
@@ -52,14 +52,32 @@ export function decodeClaudeSession(text: string, pid: number): ClaudeSessionFil
   };
 }
 
+/** How a process's start was read: `/proc/<pid>/stat` start ticks on Linux, epoch ms from `ps` elsewhere. */
+export type ProcStart = { ticks: string } | { ms: number };
+
 /**
- * Whether a session file's `procStart` names the process that started at `startedMs`. Claude 2.1.296
- * writes it in `ps -o lstart` form in UTC (measured: "Sun Oct 11 12:56:04 2026" for a process `ps`
- * shows at 14:56:04 local), so both readings are tried; one second of slack covers the rounding.
+ * Claude on Linux writes `procStart` as the process's start in clock ticks since boot, field 22 of
+ * `/proc/<pid>/stat` (measured 2.1.308–2.1.310: "73776502"); on macOS in `ps -o lstart` form.
  */
-export function sameProcStart(procStart: string, startedMs: number): boolean {
+export const procStartTicks = (procStart: string) => /^\d+$/.test(procStart.trim());
+
+/**
+ * Whether a session file's `procStart` names the process whose start was read as `started`. Ticks
+ * compare exactly. The `ps -o lstart` form is in UTC (Claude 2.1.296 measured: "Sun Oct 11 12:56:04
+ * 2026" for a process `ps` shows at 14:56:04 local), so both readings are tried; one second of slack
+ * covers the rounding.
+ */
+export function sameProcStart(procStart: string, started: ProcStart): boolean {
+  if ("ticks" in started) return procStart.trim() === started.ticks;
   const text = procStart.trim().replace(/\s+/g, " ");
-  return [Date.parse(`${text} UTC`), Date.parse(text)].some((at) => Number.isFinite(at) && Math.abs(at - startedMs) <= 1_500);
+  return [Date.parse(`${text} UTC`), Date.parse(text)].some((at) => Number.isFinite(at) && Math.abs(at - started.ms) <= 1_500);
+}
+
+/** Field 22 (start ticks) of a `/proc/<pid>/stat` line. Field 2, the command name, may hold spaces and
+ *  parentheses, so fields are counted after its last `)`. */
+export function statStartTicks(stat: string): string | null {
+  const ticks = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/)[19];
+  return ticks !== undefined && /^\d+$/.test(ticks) ? ticks : null;
 }
 
 /** Each Claude profile's sessions folder, next to the projects folder the journal reads. */

@@ -12,8 +12,11 @@ import {
   decodeClaudeSession,
   foregroundPids,
   newestRollout,
+  procStartTicks,
   sameProcStart,
+  statStartTicks,
   type ClaudeSessionFile,
+  type ProcStart,
 } from "./agent-state-sources.ts";
 import type { HerdrClient } from "./herdr-client.ts";
 import { containedRealpathIn } from "./journal/files.ts";
@@ -31,10 +34,12 @@ import type { AgentView, LivePublisher, TurnState } from "./types.ts";
 /** A Claude transcript or Codex rollout read on first sight: enough tail to hold the current turn. */
 const TAIL_BYTES = 4 * 1024 * 1024;
 /**
- * A Claude at rest, first seen: enough tail to hold the row that ended its last turn, which is all the
- * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB.
+ * A Claude at rest, first seen: enough tail to hold its last reply or usage-limit row, which is all the
+ * usage limit needs (ADR 0120). Measured on 14 resting transcripts: that row sat 3–269 KB from the end
+ * (median 4 KB). Every resting pane is read at once on first sight, and the read's resident cost
+ * scales with this (9 panes: 42 MB at 1 MB, 23 MB at 512 KB).
  */
-const IDLE_TAIL_BYTES = 1024 * 1024;
+const IDLE_TAIL_BYTES = 512 * 1024;
 /** The longest wait before a Claude held by its usage limit is looked at again. */
 const LIMIT_RECHECK_MS = 3_600_000;
 /** A session file is a few hundred bytes; anything bigger is not one. */
@@ -62,8 +67,8 @@ export interface AgentStatesOptions {
   /** The contained rollout path of a Herdr-reported Codex session, when open files name none. */
   codexTranscript?(ref: AgentSessionRef): Promise<string | null>;
   openFiles?(pids: number[]): Promise<string[]>;
-  /** Epoch ms the process started, or null when unknown. */
-  procStart?(pid: number): Promise<number | null>;
+  /** When the process started, read in the form its session file's `procStart` uses; null when unknown. */
+  procStart?(pid: number, procStart: string): Promise<ProcStart | null>;
   watch?: WatchFn;
   now?(): number;
 }
@@ -117,7 +122,9 @@ export class AgentStates {
   private readonly sessionDirs: string[];
   private readonly watchFn: WatchFn;
   private readonly openFiles: (pids: number[]) => Promise<string[]>;
-  private readonly procStart: (pid: number) => Promise<number | null>;
+  private readonly procStart: (pid: number, procStart: string) => Promise<ProcStart | null>;
+  /** Process starts already read, per pid while a pane shows it: off Linux each read spawns `ps`. */
+  private readonly starts = new Map<number, { procStart: string; started: Promise<ProcStart | null> }>();
   private readonly now: () => number;
 
   constructor(private readonly opts: AgentStatesOptions) {
@@ -251,6 +258,7 @@ export class AgentStates {
     for (const pid of entry.pids) if (this.pids.get(pid) === entry.key) this.pids.delete(pid);
     entry.pids = pids;
     for (const pid of pids) this.pids.set(pid, entry.key);
+    for (const pid of this.starts.keys()) if (!this.pids.has(pid)) this.starts.delete(pid);
     for (const dir of this.sessionDirs) this.watchDir(dir);
     // Still in the pane's foreground, so still the process whose start was checked when it mapped.
     const mapped = entry.file?.pid;
@@ -273,12 +281,21 @@ export class AgentStates {
     }
     if (verify && file.procStart) {
       // A file left by a crashed Claude names a pid the system may have handed to someone else.
-      const started = await this.procStart(pid).catch(() => null);
+      const started = await this.startOf(pid, file.procStart);
       if (started !== null && !sameProcStart(file.procStart, started)) return false;
     }
     entry.sessionDir = dir;
     await this.applyClaude(entry, file);
     return true;
+  }
+
+  private startOf(pid: number, procStart: string): Promise<ProcStart | null> {
+    let known = this.starts.get(pid);
+    if (known?.procStart !== procStart) {
+      known = { procStart, started: this.procStart(pid, procStart).catch(() => null) };
+      this.starts.set(pid, known);
+    }
+    return known.started;
   }
 
   private async applyClaude(entry: Entry, file: ClaudeSessionFile | undefined): Promise<void> {
@@ -474,7 +491,7 @@ export class AgentStates {
     clearTimeout(entry.limitTimer);
     this.closeTail(entry.transcript);
     this.closeTail(entry.rollout);
-    for (const pid of entry.pids) if (this.pids.get(pid) === entry.key) this.pids.delete(pid);
+    for (const pid of entry.pids) if (this.pids.get(pid) === entry.key) { this.pids.delete(pid); this.starts.delete(pid); }
     this.entries.delete(entry.key);
     if (entry.state) {
       this.opts.live.publish({ session: entry.session, topic: "snapshot" });
@@ -524,13 +541,22 @@ export async function processOpenFiles(pids: number[]): Promise<string[]> {
   } finally { clearTimeout(timer); }
 }
 
-/** When a pid started, from `ps -o lstart=` read in this process's own time zone. */
-async function processStart(pid: number): Promise<number | null> {
+/**
+ * When a pid started, in the form `procStart` uses: Linux's start ticks straight from `/proc` (no
+ * spawn; `Bun.file` because `/proc` files report size 0), else `ps -o lstart=` read in this process's
+ * own time zone.
+ */
+export async function processStart(pid: number, procStart: string): Promise<ProcStart | null> {
+  if (procStartTicks(procStart)) {
+    if (process.platform !== "linux") return null;
+    const ticks = statStartTicks(await Bun.file(`/proc/${pid}/stat`).text());
+    return ticks === null ? null : { ticks };
+  }
   const child = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore", stdin: "ignore", env: { ...process.env, LC_ALL: "C" } });
   const timer = setTimeout(() => child.kill(), 2_000);
   try {
     const out = (await new Response(child.stdout).text()).trim().replace(/\s+/g, " ");
-    const at = Date.parse(out);
-    return (await child.exited) === 0 && Number.isFinite(at) ? at : null;
+    const ms = Date.parse(out);
+    return (await child.exited) === 0 && Number.isFinite(ms) ? { ms } : null;
   } finally { clearTimeout(timer); }
 }

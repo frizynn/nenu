@@ -12,7 +12,9 @@ import {
   decodeClaudeSession,
   foregroundPids,
   newestRollout,
+  procStartTicks,
   sameProcStart,
+  statStartTicks,
 } from "./agent-state-sources.ts";
 
 // Real files from a disposable Herdr 0.9.3 session on 2026-10-11 (Claude Code 2.1.296 with a custom
@@ -46,10 +48,30 @@ describe("Claude session file", () => {
 
   test("procStart is UTC in ps form; a local reading also matches, another start does not", () => {
     const utc = Date.parse("Sun Oct 11 12:59:42 2026 UTC");
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", utc)).toBe(true);
-    expect(sameProcStart("Sun Oct  11 12:59:42 2026", utc + 900)).toBe(true);
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", Date.parse("Sun Oct 11 12:59:42 2026"))).toBe(true);
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", utc + 60_000)).toBe(false);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: utc })).toBe(true);
+    expect(sameProcStart("Sun Oct  11 12:59:42 2026", { ms: utc + 900 })).toBe(true);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: Date.parse("Sun Oct 11 12:59:42 2026") })).toBe(true);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: utc + 60_000 })).toBe(false);
+    expect(procStartTicks("Sun Oct 11 12:59:42 2026")).toBe(false);
+  });
+
+  test("on Linux procStart is the start ticks /proc/<pid>/stat holds in field 22", () => {
+    // A real pair from one Claude 2.1.310 process on Linux (cwd, name and bridge id replaced).
+    const file = fixture("claude-2.1.310-session-linux.json");
+    const row = JSON.parse(file);
+    const decoded = decodeClaudeSession(file, row.pid);
+    expect(decoded).toMatchObject({ status: "shell", version: "2.1.310", procStart: "73776502" });
+    expect(procStartTicks(decoded!.procStart!)).toBe(true);
+    const ticks = statStartTicks(fixture("claude-2.1.310-proc-stat.txt"));
+    expect(ticks).toBe("73776502");
+    expect(sameProcStart(decoded!.procStart!, { ticks: ticks! })).toBe(true);
+    expect(sameProcStart(decoded!.procStart!, { ticks: "73776503" })).toBe(false);
+  });
+
+  test("a command name with spaces and parentheses does not shift the stat fields", () => {
+    const fields = Array.from({ length: 50 }, (_, i) => String(i + 3)).join(" ");
+    expect(statStartTicks(`7 (a) b (c)) ${fields}`)).toBe("22");
+    expect(statStartTicks("7 (claude) S 1 2")).toBeNull();
   });
 
   test("each profile's sessions folder sits next to its projects folder", () => {

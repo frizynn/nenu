@@ -3,7 +3,8 @@ import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AgentStates, type WatchFn } from "./agent-state.ts";
+import { statStartTicks } from "./agent-state-sources.ts";
+import { AgentStates, processStart, type WatchFn } from "./agent-state.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
 // The service over real files in a temp dir, with the watcher and the process lookups injected so a
@@ -56,7 +57,7 @@ function states(w: ReturnType<typeof watches>, extra: Partial<ConstructorParamet
     codexRoots: [codexRoot],
     live: { publish: (event) => void events.push(event) },
     claudeTranscript: async (id) => (id === SESSION_ID ? transcript : null),
-    procStart: async () => Date.parse("Sun Oct 11 12:59:42 2026 UTC"),
+    procStart: async () => ({ ms: Date.parse("Sun Oct 11 12:59:42 2026 UTC") }),
     openFiles: async () => [],
     watch: w.watch,
     ...extra,
@@ -112,11 +113,70 @@ describe("Claude panes", () => {
 
   test("a file left by another process with the same pid is not trusted", async () => {
     const w = watches();
-    const { service } = states(w, { procStart: async () => Date.parse("Sun Oct 11 09:00:00 2026 UTC") });
+    const { service } = states(w, { procStart: async () => ({ ms: Date.parse("Sun Oct 11 09:00:00 2026 UTC") }) });
     await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0));
     service.sync("s", herdr([PID]), [pane("claude")]);
     await settle();
     expect(service.get("s", "w1:p1")).toBeUndefined();
+  });
+
+  test("a Linux session file maps by its start ticks, and another process's ticks do not", async () => {
+    const w = watches();
+    const reads: [number, string][] = [];
+    let ticks = "73776502";
+    const { service } = states(w, { procStart: async (pid, procStart) => { reads.push([pid, procStart]); return { ticks }; } });
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0, { procStart: "73776502" }));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+    expect(reads).toEqual([[PID, "73776502"]]);
+
+    // A file left by a crashed Claude whose pid now belongs to another process stays unmapped.
+    service.sync("s", herdr([]), []);
+    ticks = "80000000";
+    reads.length = 0;
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+    expect(reads).toEqual([[PID, "73776502"]]);
+    service.close();
+  });
+
+  test("a pid's start is read once while a pane shows it, and again once it left", async () => {
+    const w = watches();
+    let reads = 0;
+    let now = T0;
+    const { service } = states(w, { now: () => now, procStart: async () => (reads++, { ticks: "1" }) });
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0, { procStart: "73776502" }));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    // Unmapped panes are retried; the pid did not change, so its start is not read again.
+    for (let i = 0; i < 3; i++) {
+      now += 20_000;
+      service.sync("s", herdr([PID]), [pane("claude")]);
+      await settle();
+    }
+    expect(service.get("s", "w1:p1")).toBeUndefined();
+    expect(reads).toBe(1);
+    // The pid leaves the pane's foreground: a process that later shows under it is read afresh.
+    now += 20_000;
+    service.sync("s", herdr([]), [pane("claude")]);
+    await settle();
+    now += 20_000;
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await settle();
+    expect(reads).toBe(2);
+    service.close();
+  });
+
+  test.skipIf(process.platform !== "linux")("on Linux a tick-form start is read from /proc without a spawn", async () => {
+    const spawn = spyOn(Bun, "spawn");
+    try {
+      const ticks = statStartTicks(await Bun.file(`/proc/${process.pid}/stat`).text());
+      expect(ticks).not.toBeNull();
+      expect(await processStart(process.pid, "1")).toEqual({ ticks: ticks! });
+      expect(spawn).not.toHaveBeenCalled();
+    } finally { spawn.mockRestore(); }
   });
 
   test("fresh() reads the file even when no watch event came", async () => {
