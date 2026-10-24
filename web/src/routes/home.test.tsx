@@ -311,15 +311,28 @@ describe("Recents and Workspaces", () => {
 
     let { user, main, panel } = await open();
     expect(names(panel)).toEqual(["Nenu", "hub", "ops"]);
-    const order = main.getByRole("combobox", { name: "Order" });
-    expect(within(order).getAllByRole("option").map((option) => option.textContent)).toEqual(["Herdr order", "Name", "Custom", "Reorder…"]);
-    await user.selectOptions(order, "name");
+    const choose = async (label: string) => {
+      await user.click(main.getByRole("button", { name: /^Order: / }));
+      await user.click(main.getByRole("menuitemradio", { name: label }));
+    };
+    // The button names the order on screen; its menu holds only orders, Custom once one was dragged.
+    expect(main.getByRole("button", { name: "Order: Herdr order" })).toHaveAttribute("aria-haspopup", "menu");
+    await user.click(main.getByRole("button", { name: "Order: Herdr order" }));
+    expect(main.getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["Herdr order", "Name"]);
+    expect(main.getByRole("menuitemradio", { name: "Herdr order" })).toHaveAttribute("aria-checked", "true");
+    expect(main.getByRole("menuitemradio", { name: "Herdr order" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(main.getByRole("menuitemradio", { name: "Name" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(main.queryByRole("menu")).toBeNull();
     expect(names(panel)).toEqual(["hub", "Nenu", "ops"]);
+    expect(main.getByRole("button", { name: "Order: Name" })).toHaveFocus();
 
     // Reorder starts from the order on screen; a row is its handle and opens nothing until Done.
-    await user.selectOptions(order, "arrange");
+    await user.click(main.getByRole("button", { name: "Reorder workspaces" }));
     expect(handles(panel)).toEqual(["Move hub", "Move Nenu", "Move ops"]);
     expect(main.getByRole("button", { name: "Done" })).toHaveFocus();
+    expect(main.queryByRole("button", { name: /^Order: / })).toBeNull();
     expect(panel.queryAllByRole("link")).toHaveLength(0);
     panel.getByRole("button", { name: "Move ops" }).focus();
     await user.keyboard("{ArrowUp}");
@@ -328,51 +341,59 @@ describe("Recents and Workspaces", () => {
     // The handle takes its focus back on the next frame; let it, before the keys go to Done.
     await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
     expect(panel.getByRole("button", { name: "Move ops" })).toHaveFocus();
-    // Done from a key hands the focus back to Order.
+    // A move made it Custom; Done hands the focus back to Reorder.
     main.getByRole("button", { name: "Done" }).focus();
     await user.keyboard("{Enter}");
     expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
-    expect(main.getByRole("combobox", { name: "Order" })).toHaveValue("custom");
-    expect(main.getByRole("combobox", { name: "Order" })).toHaveFocus();
+    expect(main.getByRole("button", { name: "Order: Custom" })).toBeInTheDocument();
+    expect(main.getByRole("button", { name: "Reorder workspaces" })).toHaveFocus();
 
     // A reload keeps it, and Herdr's order is one choice away, the custom one kept for later.
     cleanup();
     ({ user, main, panel } = await open());
     expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
-    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "herdr");
+    await choose("Herdr order");
     expect(names(panel)).toEqual(["Nenu", "hub", "ops"]);
-    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "custom");
+    await choose("Custom");
     expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
+  });
+
+  it("leaves the order as it was when Reorder ends without a move", async () => {
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    await user.click(main.getByRole("button", { name: "Reorder workspaces" }));
+    await user.click(main.getByRole("button", { name: "Done" }));
+    expect(main.getByRole("button", { name: "Order: Herdr order" })).toBeInTheDocument();
+    await user.click(main.getByRole("button", { name: "Order: Herdr order" }));
+    expect(main.queryByRole("menuitemradio", { name: "Custom" })).toBeNull();
+  });
+
+  it("closes the order menu on Escape or a press outside", async () => {
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    const button = main.getByRole("button", { name: "Order: Herdr order" });
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    expect(main.queryByRole("menu")).toBeNull();
+    expect(button).toHaveFocus();
+    await user.click(button);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    expect(main.queryByRole("menu")).toBeNull();
+    expect(button).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps Done while reordering though the workspaces drop to one", async () => {
     const { user, main, update } = await setup(recentData);
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "arrange");
+    await user.click(main.getByRole("button", { name: "Reorder workspaces" }));
     await update({ ...recentData, workspaces: recentData.workspaces.slice(0, 1), agents: recentData.agents.filter((agent) => agent.workspaceId === recentData.workspaces[0]!.workspaceId) });
     main.getByRole("button", { name: "Done" }).focus();
     await user.keyboard("{Enter}");
     expect(main.queryByRole("button", { name: /^Move / })).toBeNull();
-    // One workspace has no order to choose: the focus goes back to its tab.
-    expect(main.queryByRole("combobox", { name: "Order" })).toBeNull();
+    // One workspace has nothing to order: the focus goes back to its tab.
+    expect(main.queryByRole("button", { name: /^Order: / })).toBeNull();
     expect(main.getByRole("tab", { name: "Workspaces" })).toHaveFocus();
-  });
-
-  it("leaves the focus alone when Done is tapped, so a phone's tap never opens the Order picker", async () => {
-    const { user, main } = await setup(recentData);
-    await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "arrange");
-    // Entering Reorder focused Done, as it stays on a phone between taps.
-    expect(main.getByRole("button", { name: "Done" })).toHaveFocus();
-    await user.click(main.getByRole("button", { name: "Done" }));
-    expect(main.getByRole("combobox", { name: "Order" })).not.toHaveFocus();
-  });
-
-  it("clips the Order picker to its control, which WebKit lays out as wide as its longest option", async () => {
-    // jsdom draws nothing: `bun scripts/e2e/run.ts phone-scroll` measures the page that scrolled sideways.
-    const { user, main } = await setup(recentData);
-    await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    expect(main.getByRole("combobox", { name: "Order" }).parentElement).toHaveClass("overflow-clip");
   });
 
   describe("a tab of several panes", () => {
