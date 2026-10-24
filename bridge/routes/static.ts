@@ -128,7 +128,7 @@ export async function serveStatic(req: Request, pathname: string, assets: WebAss
  * answers 304; changed, it goes gzipped when it is text. The ETag is weak because both encodings share
  * it. Pure + exported for tests.
  */
-export function revalidatedFile(req: Request, ext: string, bytes: Uint8Array, base: Record<string, string>): Response {
+export function revalidatedFile(req: Request, ext: string, bytes: Uint8Array<ArrayBuffer>, base: Record<string, string>): Response {
   const headers = { ...base, etag: `W/${computeEtag(bytes)}` };
   if (notModified(req.headers.get("if-none-match"), headers.etag)) return new Response(null, { status: 304, headers });
   if (!COMPRESSIBLE.has(ext) || bytes.length < GZIP_MIN_BYTES) return new Response(bytes, { headers });
