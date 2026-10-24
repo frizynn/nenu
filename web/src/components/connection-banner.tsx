@@ -99,7 +99,7 @@ function OutageWatch({ bridge, error }: Pick<ConnectionBannerProps, "bridge" | "
     const timer = setTimeout(() => setOutageNoticeShown(false), RECOVERY_QUIET_MS);
     return () => clearTimeout(timer);
   }, [lost, connecting]);
-  // A notice that leaves the screen (a refusal takes its place, the layout unmounts) shows nothing.
+  // Unmounted (a refusal takes over, the layout goes), the watch takes its notice down with it.
   useEffect(() => () => setOutageNoticeShown(false), []);
   return null;
 }
