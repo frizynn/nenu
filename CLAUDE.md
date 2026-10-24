@@ -145,9 +145,8 @@ the unit name; the Herdr action runs from anywhere.
   the journal events. On a healthy stream the router poll (snapshot + pane), the busy transcript,
   the queue and the dialogs all relax to a 10 s safety net
   ([ADR 0058](./.adr/0058-the-bridge-watches-the-panes-a-browser-is-looking-at.md)).
-- Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/project/:projectSlug`,
-  `/project/:projectSlug/node/:nodeId`, `/settings`, `/pane/:paneId`, `/pane/:paneId/history` and
-  `/pane/:paneId/file?path=`, a file's own viewer page.
+- Routes (`web/src/router.tsx`): `/`, `/space/:spaceId`, `/settings`, `/settings/usage`,
+  `/pane/:paneId`, `/pane/:paneId/history` and `/pane/:paneId/file?path=`, a file's own viewer page.
   The router instance is module-scoped so it keeps its location.
 - **A workspace has no page.** Every way in opens the pane `workspaceEntry` picks; its tabs and panes
   are the strips above that chat, and `/space/:spaceId` only resolves old links and an empty workspace
@@ -155,93 +154,25 @@ the unit name; the Herdr action runs from anywhere.
 - **A desk's session opens with its own panel** (`web/src/components/session-inspector.tsx`): Changes,
   Files (its folder, and Artifacts where it has a conversation) and Terminal for that pane from 1024 px,
   each read only while on screen, folded with ⌘⌥B
-  ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)). A project pane's panel opens on
-  **Overview** (`thread-overview.tsx`): this thread, its changes and its coordinator's open threads as
-  cards (a coordinator's own also what its page held, ADR 0115); model and context come from the chat's own reading, and the project's own views are not in the panel
-  ([ADR 0101](./.adr/0101-a-threads-panel-opens-on-its-overview.md)). Every section of the panel and of a phone's
-  Status view folds under its head (`panel-sections.tsx`), Arrange moves and hides them per device with a Reset, no
-  tabs inside Overview, and a coordinator's Threads lists its whole subtree first, by coordinator;
-  `bun scripts/e2e/overview-sections.ts` must pass ([ADR 0119](./.adr/0119-a-chat-panels-sections-fold-and-the-operator-arranges-them.md)).
-  A thread docked beside its coordinator
-  takes the panel's place at the panel's width and nothing folds to make room; every desk column edge is one
-  `ResizeHandle` (`bun scripts/e2e/panels.ts` must show docking beside the open panel move 0 px)
-  ([ADR 0105](./.adr/0105-a-docked-thread-takes-the-panels-place-at-its-width.md)).
-- **A project's organization is one tree** (`web/src/lib/org-tree.ts`), drawn by every view the way
-  Herdr Organizations' popup draws it: open work only, a grey History, a tap opens the node inside
-  Nenu. Don't group nodes by state ([ADR 0064](./.adr/0064-the-organization-is-drawn-as-organizations-draws-it.md)).
-  A tap anywhere on a coordinator's row enters its chat, and its address redirects there; only one with
-  no live pane keeps a page. Its threads fold down under its row, folded until asked, + on a desk's hover
-  only, no ›; what its page held is in the chat, the desk's panel Overview and a phone's Status view
-  (`coordinator-sections.tsx`), and the back climbs coordinator → project → Projects on a desk too;
-  `bun scripts/e2e/coordinator-chat.ts` must reach a running one in 2 taps from Home
-  ([ADR 0115](./.adr/0115-a-tap-on-a-coordinator-enters-its-chat.md)). On a phone a project chat draws no
-  views under its title: Chat, Threads, PRs and Status are the ⋯'s first rows, what waits on you is a red
-  count on the ⋯, and only an open view draws them, as a 32 px switch; `coordinator-chat.ts` also measures
-  that ([ADR 0121](./.adr/0121-a-phones-project-views-are-rows-of-the-menu.md)). Never its threads' report cards
-  (the Summary of ADR 0089 is gone): live work, what finished one line to History; its Waiting on you
-  holds only what waits on you, an Asked line outside the format reads as a request (`unmarked`), and an
-  opened STATUS.md is whole; `bun scripts/e2e/coordinator-page.ts` must pass
-  ([ADR 0109](./.adr/0109-a-coordinators-page-shows-live-work.md)).
-  A conversation (`keep_open`) that ended its turn reads idle, never Needs you; only a dialog, a failed
-  start or a lost pane make it ask ([ADR 0103](./.adr/0103-a-conversation-that-ended-its-turn-waits-on-nobody.md)).
-  A report reads in plain words once Organizations' summary agent wrote them for it, the agent's words a
-  tap away, and "In plain words" asks for them where `actions` lists `explain`; Nenu never calls a model
-  itself ([ADR 0099](./.adr/0099-a-report-in-plain-words-comes-from-organizations.md)).
-  A coordinator's STATUS.md (`status_file`) heads its page and the project page (one that organizes
-  coordinators: only while it says something, ADR 0092; on a desk, its chat's Status and never the
-  project page, ADR 0102, ADR 0115), drawn as written through
-  `MarkdownText`, its text read with the summaries and only its stamp in the snapshot
-  ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)).
-  **Your asks** (`/asks`, `web/src/lib/asks.ts`) and a coordinator's card (`coordinator-card.tsx`, the root's
-  at `node/root`) draw only Organizations' fields: `asks --json` read beside the overview, grouped by its
-  own rank, never parsed out of STATUS.md; an ask's text stays out of the snapshot and out of anything sent
-  to an agent ([ADR 0091](./.adr/0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)).
-  One component (`ask-list.tsx`) draws both, narrowed by project and coordinator, links as chips; a line that
-  is only a parenthesis is a placeholder, and Answer writes the person's words through `asks answer`, only
-  where its `--help` exits 0 ([ADR 0093](./.adr/0093-asks-are-answered-and-narrowed-where-they-are-read.md)).
-  A question folds the rows about the same thread or task, opens its thread's report in place
-  (`/api/org/report`, by thread id, never a path) and says what keeps it from closing; only ids reach
-  the coordinator ([ADR 0096](./.adr/0096-a-question-carries-its-context.md)).
-- **On a desk a project is a page with tabs** (ADR 0102, `desk-project.tsx`, `lib/project-work.ts`; a
-  coordinator only where it has no chat, `desk-coordinator.tsx`): Work as a row per open coordinator
-  with its threads, Waiting on you by coordinator, Routines with whom each reaches and a `routine toggle` switch, Context;
-  never a redirect to a chat. On a desk `/asks` and `/routines` land there; a phone is unchanged. Finished
-  work is History (`?work=finished`), by day with a search, without coordinators that ran no thread; a
-  waiting ask reads kind, what, recommendation, Answer; a routine is edited in place through `routine set`
-  where its `--help` exits 0 ([ADR 0106](./.adr/0106-finished-work-is-history-and-a-routine-is-edited-in-place.md)).
-- **A project organizes its coordinators** (ADR 0092): one with an open coordinator under it is their
-  page, the same rows on a phone and a desk (`ProjectWork`), each entering its chat (ADR 0115), the
-  project's own last and otherwise a small Start beside New; it never redirects to that chat. "+" goes
-  project → coordinator → chat, and Move shows only where `node move --help` exits 0 and the node's
-  `actions` list `move`
-  ([ADR 0092](./.adr/0092-a-project-organizes-its-coordinators.md)).
-- **A coordinator has its own mark** (`lib/coordinator-mark.ts`, `mark-picker.tsx`): hashed from the slug and
-  its node id, no two open ones in a project alike, drawn wherever it is named; the Work list is one list
-  of rows with it. The operator's pick is kept by the bridge (`coordinator-marks.json`, `marks` in the
-  snapshot), never in the browser; `bun scripts/e2e/coordinator-marks.ts` must pass
-  ([ADR 0122](./.adr/0122-a-coordinator-has-its-own-mark-kept-by-nenu.md)).
+  ([ADR 0075](./.adr/0075-a-desk-session-opens-with-its-own-panel.md)); every desk column edge is one
+  `ResizeHandle`.
+- **Nenu draws Herdr alone** ([ADR 0123](./.adr/0123-nenu-draws-herdr-alone.md)): no projects,
+  coordinators, threads, asks or routines. The bridge never runs `herdr-organizations` or reads
+  `~/.herdr-projects`, and copies no pane token; an organizer drawn again comes through a new ADR
+  that reads its published contract.
 - **The desk's sidebar lists, it draws no tree** (`web/src/components/desk-nav.tsx`): New chat, Search,
-  Home, Projects (ADR 0102), projects as flat rows and chats by when they last moved; the tree is Search's.
-  Without a project, the bar, its heading and the rail say Projects nowhere (ADR 0110). An
-  agent finishing elsewhere is a +1 on its row there, never a toast on a desk
-  ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
+  Home and chats by when they last moved; the workspace tree is Search's. An agent finishing elsewhere
+  is a +1 on its row there, never a toast on a desk ([ADR 0080](./.adr/0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md)); on a phone it
   is New on its Home row, and only an agent that asks raises a toast
   ([ADR 0094](./.adr/0094-a-finished-agent-is-a-mark-on-its-row-on-a-phone-too.md)). The bar's chats and
   Home's Recents keep their order while on screen (`hooks/use-held-time.ts`). The bar's chats sit
   only under periods that hold one on screen, and More folds them with motion, mounted.
-- **Home lists the projects as rows** (`web/src/components/home-projects.tsx`): what waits on you, what
-  works, what is ready to review and when each last moved, from `projectPulse`; never cards or chips,
-  which read worse in a measured test ([ADR 0107](./.adr/0107-home-lists-the-projects-as-rows.md)). They
-  are Home's first tab, before Recents, Workspaces and PRs, and absent with no project
-  (`bun scripts/e2e/no-projects.ts` must pass): live projects first, the quiet ones folded at its end,
-  and a row always opens its project. On a phone a coordinator opens its chat (its page where it has
-  none, ADR 0115), from the project and the drawer, and the drawer lists Projects after Needs you without
-  History or counts; `bun scripts/e2e/phone-nav.ts` must reach every coordinator within 2 taps of Home
-  ([ADR 0110](./.adr/0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)).
+- **Home lists Recents, Workspaces and PRs** (`web/src/components/home-panels.tsx`), Recents first; PRs
+  only while GitHub lists one.
 - **Nothing sits between a chat's thread and its box** (`composer-chips.tsx`): the live chips (Needs you,
-  Working, PRs) are in the row under the box beside the model, finished work and routines are rows of
-  the ⋯ menu, and `bun scripts/e2e/run.ts chip-line` must pass; only a usage limit's line sits above
-  the box while it holds (ADR 0120). Stop sits in the box beside Send, never
+  Background) are in the row under the box beside the model, finished work is a row of the ⋯ menu,
+  and `bun scripts/e2e/run.ts chip-line` must pass; only a usage limit's line sits above the box while
+  it holds (ADR 0120). Stop sits in the box beside Send, never
   in its slot, so a draft never swaps it under the thumb
   ([ADR 0108](./.adr/0108-the-line-above-the-box-holds-only-live-work.md)).
 - **A turn's work reads the same on a phone and a desk** (`work-log-tools.tsx`, `fold.tsx`): "Worked for"
@@ -259,8 +190,8 @@ the unit name; the Herdr action runs from anywhere.
   (`hover:bg-hover`); one status mark (ADR 0113); a desk's page tabs underlined. `calm-motion.test` and
   `design-system.test` hold them, and `bun scripts/e2e/tour.ts` captures every screen in both themes
   with what each draws ([ADR 0111](./.adr/0111-one-set-of-motion-hover-and-mark-tokens.md)).
-- **A state is a glyph, by shape first** (`StateMark` in `status-badge.tsx`; `NodeDot` and
-  `StatusDot` draw it): a red alert waits on you, a blue check is to review, a grey dashed circle works,
+- **A state is a glyph, by shape first** (`StateMark` in `status-badge.tsx`; `StatusDot` draws it): a
+  red alert waits on you, a blue check is a finished turn to look at, a grey dashed circle works,
   nothing at rest. Colour only for what asks for you, only the working circle moves (ADR 0118), and a
   resting chat in the desk's bar reads in the muted ink; `bun scripts/e2e/sidebar.ts` must pass
   ([ADR 0113](./.adr/0113-a-state-is-a-still-glyph-coloured-only-when-it-asks-for-you.md)).
@@ -275,11 +206,9 @@ the unit name; the Herdr action runs from anywhere.
 - **The back control steps back, it never pushes its parent** (`web/src/lib/motion.ts`): each entry
   remembers the page it came from. The header's ‹ is `navigate(-1)` to that screen, whatever it was,
   with its filter (in the URL) and its scroll (`PageBody`) kept; only a screen nothing in the app opened
-  replaces itself with its parent (`useGoBack`). A move up to a named node is `navigate(-1)` when that node
-  is the entry before and a replace otherwise (`useGoUp`); a sibling replaces, a coordinator's thread
-  pushes, and a phone's tab is `?view=`, replaced. `bun scripts/e2e/run.ts back` must end three backs at
-  the entry length + 3 (a coordinator's row enters its chat, no page between, ADR 0115) and `bun scripts/e2e/origin.ts` must land 12 of 12
-  ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
+  replaces itself with its parent (`useGoBack`). A move up to a named page (a History's or a file page's
+  way out) is `navigate(-1)` when that page is the entry before and a replace otherwise (`useGoUp`), and
+  a sibling pane replaces ([ADR 0095](./.adr/0095-the-back-control-steps-back-through-the-history.md),
   [ADR 0097](./.adr/0097-the-back-control-returns-to-the-screen-you-came-from.md)).
 - A pending refresh is loading, not a disconnection. `usePollBusy` owns loading feedback; only
   failed/timed-out snapshot reads, a missing initial snapshot, or Herdr reporting disconnected
@@ -456,14 +385,6 @@ Settings → Usage (`bridge/usage/`) reads the same Claude and Codex logs for to
 default. It scans in its own short-lived process at background priority, never in the bridge, on a
 timer or under a file watch, keeps tokens and prices them at read time, and never reads a credential
 or calls a usage endpoint ([ADR 0085](./.adr/0085-usage-is-scanned-in-its-own-process-from-the-agents-logs.md)).
-
-A project's library (`bridge/org-library.ts`, `GET /api/org/library`) serves pictures, HTML and PDFs
-whose real path is inside `<records>/library`, itself a folder and not a link; anything else is 404.
-`<records>` is Organizations' records folder, read from each thread's `library`, else the project's
-folder; a thread's report comes from it by id, under the same rules (ADR 0096). Bytes go through the
-preview's readers and HTML through its sandbox. The summaries and their paths come from
-`/api/org/summary` on demand, never the snapshot. Don't widen it to other folders of a project
-([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).
 
 The new-chat folder picker (`bridge/home-dirs.ts`) lists folder names only, contained under the
 bridge user's home after realpath resolution, skipping private and (unless asked) dot-directories, and

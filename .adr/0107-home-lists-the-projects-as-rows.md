@@ -1,6 +1,6 @@
 # 0107. Home lists the projects as rows, each with what it holds
 
-- **Status:** Accepted (2026-10-20). Requested by the operator. Reverses the earlier Home that left
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-20). Requested by the operator. Reverses the earlier Home that left
   projects to the sidebar (Search on a phone), which no ADR recorded. Amends
   [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md) point 1's period
   names: the bar's chats sit under Today, Yesterday, Previous 7 days, Previous 30 days and Older, and

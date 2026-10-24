@@ -1,6 +1,6 @@
 # 0061. Nenu reads Organizations through its `--json` contract
 
-- **Status:** Accepted (2026-10-10), shipped in 0.54.0. It depends on the `--json` contract landing in
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-10), shipped in 0.54.0. It depends on the `--json` contract landing in
   Organizations (package O1); until then the file fallback below is the only reader.
 - **Trail:** `bridge/projects.ts` · `bridge/org-cli.ts` · `bridge/routes/org.ts` ·
   Organizations `docs/json.md`

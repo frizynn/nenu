@@ -1,6 +1,6 @@
 # 0090. A coordinator's STATUS.md is drawn as written, at the top of its page
 
-- **Status:** Accepted (2026-10-16). Amended by [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md):
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-16). Amended by [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md):
   under a coordinator's card the file starts closed. Amended by [ADR 0092](./0092-a-project-organizes-its-coordinators.md):
   on a project that organizes coordinators, the project coordinator's file heads the page only while it
   says something. Point 2 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md):

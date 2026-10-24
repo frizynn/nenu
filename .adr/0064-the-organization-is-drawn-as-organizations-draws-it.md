@@ -1,6 +1,6 @@
 # 0064. A project's organization is drawn the way Herdr Organizations draws it
 
-- **Status:** Accepted (2026-10-11). Amended by [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-11). Amended by [ADR 0080](./0080-the-desks-bar-lists-projects-and-chats-the-tree-is-searchs.md):
   the desk's sidebar no longer draws the tree; its Search does. Amended by
   [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md): a coordinator's Summary tab
   groups its work by outcome, beside the tree. Amended by

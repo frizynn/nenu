@@ -1,6 +1,6 @@
 # 0075. A desk's session opens with its own panel; the project's sits behind ⋯
 
-- **Status:** Accepted (2026-10-14). The operator chose this layout (desk A) over a panel of
+- **Status:** Amended by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24), which removed projects, coordinators and threads. Accepted (2026-10-14). The operator chose this layout (desk A) over a panel of
   surfaces opened on demand (desk B). Point 2 superseded by
   [0081](./0081-on-a-desk-the-project-is-the-panels-first-tab.md); its Artifacts tab became a view of Files
   in [0101](./0101-a-threads-panel-opens-on-its-overview.md).

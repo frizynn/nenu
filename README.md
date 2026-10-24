@@ -15,9 +15,7 @@
 
 Nenu is a self-hosted workbench for [Herdr](https://herdr.dev), the terminal multiplexer for coding
 agents. It shows every agent you run in Herdr (Claude Code, Codex, Pi, OpenCode, Grok) as a chat you
-can read, answer and steer from your phone or browser, and it shows the projects you run with
-[Herdr Organizations](https://github.com/frizynn/herdr-organizations): a coordinator, its threads and
-their pull requests.
+can read, answer and steer from your phone or browser, with the pull requests open on their branches.
 
 The terminal stays the source of truth. Nenu reads each agent's own session log and screen, and every
 action it takes is a keystroke into the same pane you would use at your desk. It runs on your machine
@@ -36,42 +34,20 @@ and no hosted relay.
 | --- | --- |
 | Conversations | Each agent as a chat: its answers, compact thinking and tool calls, files and photos it touched, subagents it started, context and account usage. Start Claude Code or Codex in any folder, recover a session's history, stop a running turn. |
 | Answering | Approve or deny permission prompts, pick menu options, reply, queue messages, type special keys or straight into the terminal, attach images. Every send is verified against the screen. |
-| Projects | With Herdr Organizations installed: each project's coordinator chat, its thread tree, open pull requests with their state, starting threads and coordinators, merging a PR once checks and review allow it. |
+| Workspaces | Herdr's workspaces, tabs and panes as Home's lists and the sidebar's tree, each opening on its pane, with the open pull requests from GitHub on each session's branch. |
 | Rendering | Markdown, tables with Copy, LaTeX math, images, PDFs and sandboxed offline HTML previews. A `file://` path in an answer opens the file. |
 | Phone | An installable PWA built for one hand: native navigation, a folder picker for new agents, a composer that leaves room for the keyboard. |
-| Notifications | Optional Web Push that says who finished, what it answered and where, with one switch per kind: needs input, agents, threads, coordinators, subagent results and app updates. |
+| Notifications | Optional Web Push that says who finished, what it answered and where, with one switch per kind: needs input, replies to you, agents another agent started, subagent results and app updates. |
 | Access | Loopback bind behind `tailscale serve` or a conforming reverse proxy, identity and per-device gates, strict CSP. |
 
 Nenu preserves Herdr and the underlying agent CLIs. It does not replace their runtime, permissions,
 or model authentication.
-
-## Projects with Herdr Organizations
-
-[Herdr Organizations](https://github.com/frizynn/herdr-organizations) runs a project as a coordinator
-conversation that delegates to parallel worker threads, with shared memory and an overview of what
-needs you. Nenu is its phone and web front end:
-
-- Every registered project gets a page with the coordinator's chat and **Threads** and **PRs** tabs.
-  The thread tree is drawn the way Organizations' own popup draws it.
-- The PRs tab lists the open pull requests of open threads, each with its state in words (checks
-  running or failing, needs review, approved, ready to merge). Pull requests of resolved threads fold
-  into History.
-- From the phone you can start a thread or a coordinator (from a template when the project has them),
-  replace a coordinator, close a node, merge a pull request (Organizations refuses unless its checks
-  pass and it is approved) and toggle auto-fix and auto-merge.
-
-Nenu only asks Organizations to do these things through its CLI and reads its `--json` contract:
-`overview`, and `routine list` for Routines and a project chat's Routines chip, which an older
-Organizations may lack. Projects, threads and memory live in Organizations. Without it installed, Nenu works as
-before on plain Herdr workspaces. `COLLIE_HERDR_ORGANIZATIONS_BIN` points at the binary when it is
-not on the service `PATH`, and `HERDR_PROJECTS_ROOT` overrides the project registry folder.
 
 ## Requirements
 
 - [Bun](https://bun.sh)
 - [Herdr](https://herdr.dev) 0.7.0 or newer
 - [Tailscale](https://tailscale.com) for the recommended private-network setup
-- [Herdr Organizations](https://github.com/frizynn/herdr-organizations), optional, for projects
 - Linux or macOS as the host; Windows support is experimental
 
 ## Install

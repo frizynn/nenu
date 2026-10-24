@@ -1,6 +1,6 @@
 # 0115. A tap on a coordinator enters its chat; its threads fold down where it is listed
 
-- **Status:** Accepted (2026-10-21). Requested by the operator, who delegated the redesign. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-21). Requested by the operator, who delegated the redesign. Amends
   [ADR 0109](./0109-a-coordinators-page-shows-live-work.md) point 2 (a tap on a coordinator's card
   opened its page), [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md)
   point 3 (a phone entered a coordinator on its page) and [ADR 0092](./0092-a-project-organizes-its-coordinators.md)

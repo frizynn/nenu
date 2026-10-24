@@ -1,6 +1,6 @@
 # 0097. The back control returns to the screen you came from
 
-- **Status:** Accepted (2026-10-18). Amends [ADR 0095](./0095-the-back-control-steps-back-through-the-history.md), point 2.
+- **Status:** Amended by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24), which removed projects, coordinators and threads. Accepted (2026-10-18). Amends [ADR 0095](./0095-the-back-control-steps-back-through-the-history.md), point 2.
 - **Trail:** `web/src/lib/motion.ts` (`useGoBack`, `useGoUp`) · `web/src/components/app-header.tsx` (`StepLink`) ·
   `web/src/components/column-page.tsx` (`useKeptScroll`) · `scripts/e2e/origin.ts`
 

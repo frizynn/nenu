@@ -1,6 +1,6 @@
 # 0109. A coordinator's page shows its live work; what finished is one line away
 
-- **Status:** Accepted (2026-10-21). Requested by the operator. Supersedes
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-21). Requested by the operator. Supersedes
   [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md)'s Summary view (a node's own
   report at the head of its page stays). Amends [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md)
   (the coordinator card on a project page) and [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)

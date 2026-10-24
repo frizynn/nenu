@@ -1,6 +1,6 @@
 # 0072. A push always shows, says only what answers a person, and comes once until you look
 
-- **Status:** Accepted (2026-10-14). Lands with 1.1.0. Amends [ADR 0070](./0070-each-agent-gets-its-own-notification.md):
+- **Status:** Amended by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24), which removed projects, coordinators and threads. Accepted (2026-10-14). Lands with 1.1.0. Amends [ADR 0070](./0070-each-agent-gets-its-own-notification.md):
   each agent still gets its own notification, but a resolved one is no longer retracted by push.
 - **Trail:** `bridge/notifications.ts` · `bridge/notify-prefs.ts` · `bridge/alert-detail.ts`
   (`turnOutcome`) · `bridge/awaiting-replies.ts` · `bridge/live-events.ts` (`watching`) ·
