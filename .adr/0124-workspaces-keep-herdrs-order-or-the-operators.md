@@ -1,8 +1,10 @@
 # 0124. Workspaces keep Herdr's order, or the operator's, never their agents' activity
 
 - **Status:** Accepted (2026-10-24). Requested by the operator; where the choice is kept was delegated.
+  Amended the same day: the sort and the drag are two controls above the list, not one menu beside the
+  tabs ("es raro que lo de reorder esté dentro del selector").
 - **Trail:** `web/src/lib/workspace-order.ts` · `web/src/lib/workspace-tree.ts` (`workspaceTree`) ·
-  `web/src/components/home-panels.tsx` (`HomeSessions`) · `web/src/components/workspace-tree.tsx` ·
+  `web/src/components/home-panels.tsx` (`HomeSessions`) · `web/src/components/workspace-order-menu.tsx` · `web/src/components/workspace-tree.tsx` ·
   `web/src/components/ui/list-reorder.ts` · `scripts/e2e/workspace-order.ts`
 
 ## Context
@@ -26,9 +28,10 @@ drag". They read Nenu mostly on a phone.
 
 1. **A list of workspaces is in Herdr's order** (`number`, which `workspace.move` renumbers), never
    ranked by what its agents did or by which one is open. Recents is where activity orders sessions.
-2. **The operator may choose Name, or Custom**, from Home's Workspaces (an Order control beside its
-   tabs). Reorder makes each row a handle to drag, by finger or mouse, starting from the order on
-   screen; Arrow keys on a handle move it one place. A workspace opened since a custom order was set
+2. **The operator may choose Name, or Custom**, from Home's Workspaces: an Order menu above the list
+   names the order on screen and holds only orders. Reorder, beside it, makes each row a handle to
+   drag, by finger or mouse, starting from the order on screen, until Done; Arrow keys on a handle
+   move it one place. A move makes the order Custom, which the menu lists once there is one. A workspace opened since a custom order was set
    goes at its end, in Herdr's order; a closed one drops out. The drawer follows the same choice.
 3. **The choice is kept on this device**, in `localStorage`, like the rest of a device's view. It
    never writes Herdr: a drag here is not `workspace.move`.

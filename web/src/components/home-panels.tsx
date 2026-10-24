@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
-import { ArrowUpDown, ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
+import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
 import { AgentBar, StateDot } from "@/components/activity/activity-parts";
 import { AgentIcon } from "@/components/agent-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { PaneMark } from "@/components/nav-rows";
 import { useListReorder, type ListReorder } from "@/components/ui/list-reorder";
+import { WorkspaceOrderMenu } from "@/components/workspace-order-menu";
 import { useHeldTime } from "@/hooks/use-held-time";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { agentElapsed, allAgents, workflowElapsed, type ActivityWorkflow } from "@/lib/activity";
@@ -15,7 +16,8 @@ import { workspaceSessions, type RecentChat, type ReviewEntry, type TabChats, ty
 import { panePath } from "@/lib/nav";
 import { STATUS_LABEL, type AgentStatus, type AgentView } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ORDER_LABEL, orderWorkspaces, useWorkspaceOrder, type WorkspaceOrderMode } from "@/lib/workspace-order";
+import { MOTION_PANEL_MS } from "@/lib/motion";
+import { orderWorkspaces, useWorkspaceOrder } from "@/lib/workspace-order";
 import { tabFolds, tabStartsOpen } from "@/lib/workspace-tree";
 
 /** How long a tap's navigation may run before its row says it is opening, so a fast read never flashes. */
@@ -190,6 +192,11 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
   return states.find((state) => state.word === word) ?? { word: "Empty" };
 }
 
+// Entering Reorder, its handles and controls fade in at a panel's pace (180 ms); on Done, the times and
+// controls they replaced fade back at a control's (120 ms).
+const ARRIVE_FADE = "duration-180 ease-out animate-in fade-in";
+const RETURN_FADE = "duration-120 ease-out animate-in fade-in";
+
 /** What a row that folds rows stands for: its mark, what it counts, and how far in its rows sit. */
 const FOLDS = {
   // A tab's rows sit 12px further in on a phone, and take those 12px back from their gaps (SessionRow).
@@ -201,9 +208,9 @@ const FOLDS = {
  * A row that folds the rows under it, a Herdr workspace or a tab of several panes: its name, how it
  * is, how many it holds and when the latest moved. A tap unfolds its rows in place, or opens `to`
  * when there is nothing to unfold. While its list is reordered it opens nothing and its end is the
- * handle that drags it.
+ * handle that drags it, which fades in from the end; `settling`, just after, its time fades back.
  */
-function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, reorder, children }: {
+function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false, reorder, settling = false, children }: {
   kind: keyof typeof FOLDS;
   id: string;
   name: string;
@@ -214,6 +221,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
   to?: string;
   busy?: boolean;
   reorder?: ListReorder;
+  settling?: boolean;
   children: ReactNode;
 }) {
   const { icon: Icon, one, many, rows } = FOLDS[kind];
@@ -232,10 +240,11 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
     </span>
     {reorder
       ? <button type="button" aria-label={`Move ${name}`} {...reorder.handle(id)}
-        className="col-start-3 row-span-2 row-start-1 -my-2 -mr-1 flex size-11 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing sm:-mr-2.5">
+        className={cn("col-start-3 row-span-2 row-start-1 -my-2 -mr-1 flex size-11 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing sm:-mr-2.5",
+          ARRIVE_FADE, "slide-in-from-right-2 motion-reduce:slide-in-from-right-0")}>
         <GripVertical aria-hidden className="size-4" />
       </button>
-      : <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
+      : <span className={cn("col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground", settling && RETURN_FADE)}>
         {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
         {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
       </span>}
@@ -263,7 +272,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
  * panes is a row of its own that folds them (lib/workspace-tree.ts). A workspace of one tab or one
  * session has nothing to unfold: the tap opens its `entry` pane.
  */
-function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row, reorder }: {
+function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, opening, row, reorder, settling }: {
   group: WorkspaceChats;
   now: number;
   open: boolean;
@@ -274,11 +283,12 @@ function WorkspaceRow({ group, now, open, onToggle, tabOpen, onTab, session, ope
   opening: string | null;
   row: (chat: RecentChat, inTab: boolean) => ReactNode;
   reorder?: ListReorder;
+  settling?: boolean;
 }) {
   const to = group.entry && panePath(group.entry, session);
   return (
     <FoldRow kind="workspace" id={group.workspaceId} name={group.name} chats={workspaceSessions(group)} now={now} open={open} onToggle={onToggle}
-      to={to} busy={!!to && isOpening(opening, to)} reorder={reorder}>
+      to={to} busy={!!to && isOpening(opening, to)} reorder={reorder} settling={settling}>
       {group.tabs.map((tab) => tabFolds(tab.chats.length, group.tabs.length)
         ? <FoldRow key={tab.tabId} kind="tab" id={tab.tabId} name={tab.label} chats={tab.chats} now={now} open={tabOpen(tab)} onToggle={() => onTab(tab)}>
           {tab.chats.map((chat) => row(chat, true))}
@@ -320,18 +330,24 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   const { order, set: setOrder } = useWorkspaceOrder();
   // Reordering: each workspace row is its handle, and opens nothing until Done.
   const [arranging, setArranging] = useState(false);
+  // Just after Done, while each row's time fades back in place of its handle.
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!settling) return;
+    const timer = setTimeout(() => setSettling(false), MOTION_PANEL_MS);
+    return () => clearTimeout(timer);
+  }, [settling]);
   const reorderList = useRef<HTMLUListElement>(null);
-  // Entering Reorder, or leaving it with a key on Done, swaps the control under the focus: the focus
-  // follows to its stand-in, the tab when one workspace leaves no Order to choose. Only from a key: a
-  // tap must not focus the Order select, which on iOS opens its picker.
-  const orderControl = useRef<HTMLSelectElement>(null);
+  // Reorder and Done take each other's place, so the focus follows to the one that appears, or to the
+  // tab when one workspace leaves nothing to reorder.
+  const reorderControl = useRef<HTMLButtonElement>(null);
   const doneControl = useRef<HTMLButtonElement>(null);
-  const focusNext = useRef<"done" | "order" | null>(null);
+  const focusNext = useRef<"done" | "reorder" | null>(null);
   useEffect(() => {
     const next = focusNext.current;
     focusNext.current = null;
-    if (next === "done") doneControl.current?.focus();
-    else if (next === "order") (orderControl.current ?? document.getElementById("home-list-workspaces"))?.focus();
+    if (next === "done") doneControl.current?.focus({ preventScroll: true });
+    else if (next === "reorder") (reorderControl.current ?? document.getElementById("home-list-workspaces"))?.focus({ preventScroll: true });
   }, [arranging]);
   // What an arrow key on a handle did, for a screen reader.
   const [moveSaid, setMoveSaid] = useState("");
@@ -343,23 +359,25 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
   const shownIds = ordered.map(workspaceId);
   const reorder = useListReorder({
     list: reorderList, keys: shownIds, enabled: arranging && list === "workspaces",
+    // A drag is a custom order, whichever order it started from.
     onMove: (shown, key) => {
       setOrder({ mode: "custom", custom: shown });
       const name = ordered.find((group) => group.workspaceId === key)?.name;
       if (name) setMoveSaid(`${name}, ${shown.indexOf(key) + 1} of ${shown.length}`);
     },
   });
-  // Reorder starts from the order on screen, and so does Custom the first time.
-  const chooseOrder = (value: WorkspaceOrderMode | "arrange") => {
-    if (value === "arrange" || (value === "custom" && order.custom.length === 0)) {
-      setOrder({ mode: "custom", custom: shownIds });
-      setMoveSaid("");
-      focusNext.current = "done";
-      setArranging(true);
-    } else {
-      setOrder({ ...order, mode: value });
-    }
+  const startArranging = () => {
+    setMoveSaid("");
+    focusNext.current = "done";
+    setSettling(false);
+    setArranging(true);
   };
+  const stopArranging = () => {
+    focusNext.current = "reorder";
+    setSettling(true);
+    setArranging(false);
+  };
+  const ordering = list === "workspaces" && (arranging || workspaces.length > 1);
   if (!everyRecent.length && !workspaces.length && !reviews.length) return null;
   const tabOpen = (tab: TabChats) => tabsOpen[tab.tabId] ?? tabStartsOpen(tab.chats.map((chat) => chat.agent));
   const row = (chat: RecentChat, group?: string, inTab?: boolean) => <SessionRow key={chat.agent.paneId} chat={chat} session={session} now={now} opening={opening} group={group} inTab={inTab} />;
@@ -381,22 +399,20 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
             !updates && "invisible", "ml-auto")}>
           {Math.max(updates, 1)} {updates <= 1 ? "update" : "updates"}
         </button>
-        {/* On a phone the control's 44px reach spills 4px past the 36px tabs instead of growing their row. */}
-        {list === "workspaces" && (arranging || workspaces.length > 1) && (arranging
-          ? <button ref={doneControl} type="button" onClick={(event) => { if (event.detail === 0) focusNext.current = "order"; setArranging(false); }} className={cn("quiet-action font-medium text-foreground max-lg:-my-1", desk && "-mr-2")}>Done</button>
-          // Clipped: WebKit lays a select's text out as wide as its longest option whatever the select's
-          // width, and that overflow let a phone's page scroll sideways.
-          : <label className={cn("quiet-action relative shrink-0 overflow-clip focus-within:ring-2 focus-within:ring-ring max-lg:-my-1 max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
-            <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
-            <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>
-            <select ref={orderControl} aria-label="Order" value={order.mode} onChange={(event) => chooseOrder(event.target.value as WorkspaceOrderMode | "arrange")}
-              className="absolute inset-0 cursor-pointer opacity-0">
-              {(Object.keys(ORDER_LABEL) as WorkspaceOrderMode[]).map((mode) => <option key={mode} value={mode}>{ORDER_LABEL[mode]}</option>)}
-              <option value="arrange">Reorder…</option>
-            </select>
-          </label>)}
       </div>
       <p role="status" className="sr-only">{arranging ? moveSaid : ""}</p>
+      {/* How the workspaces are sorted, and Reorder, which drags them: above their list, never in the tabs' row. */}
+      {ordering && (
+        <div className="-mb-1 flex min-h-11 items-center justify-between gap-2 px-1 sm:min-h-9 sm:px-0">
+          {arranging
+            ? <p className={cn("text-footnote text-muted-foreground", ARRIVE_FADE)}>Drag a handle to move a workspace</p>
+            : <WorkspaceOrderMenu order={order} onChoose={(mode) => setOrder({ ...order, mode })} className={cn("-ml-2", settling && RETURN_FADE)} />}
+          {arranging
+            ? <button ref={doneControl} type="button" onClick={stopArranging} className={cn("quiet-action -mr-2 font-medium text-foreground", ARRIVE_FADE)}>Done</button>
+            : <button ref={reorderControl} type="button" aria-label="Reorder workspaces" onClick={startArranging}
+              className={cn("quiet-action -mr-2", settling && RETURN_FADE)}>Reorder</button>}
+        </div>
+      )}
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
         {list === "prs"
           ? pullRequests(reviews)
@@ -406,7 +422,7 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">Every session is in Needs you.</p>
           : <ul ref={reorderList} aria-label={arranging ? "Workspaces, drag a handle or press its arrow keys to move one" : undefined}
             className="relative flex flex-col max-sm:divide-y max-sm:divide-border">
-            {ordered.map((group) => <WorkspaceRow reorder={arranging ? reorder : undefined} key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
+            {ordered.map((group) => <WorkspaceRow reorder={arranging ? reorder : undefined} settling={settling} key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}
               tabOpen={tabOpen} onTab={(tab) => setTabsOpen((prev) => ({ ...prev, [tab.tabId]: !tabOpen(tab) }))}
               row={(chat, inTab) => row(chat, group.name, inTab)} />)}
