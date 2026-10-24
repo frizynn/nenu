@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronDown } from "@/components/ui/icon";
 
@@ -91,8 +91,9 @@ function DeskChats({ data, now }: { data: HomeData; now: number }) {
 /**
  * A chat: its state as a small still glyph, its one name, and a quiet +1 when it finished or asked for
  * you since you last opened it (the desk's answer to an agent finishing elsewhere, instead of a toast).
+ * Drawn again only when its pane changed: the bar re-renders on every revalidation, its rows need not.
  */
-function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
+const ChatRow = memo(function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string; current: boolean }) {
   const { pane } = chat;
   const to = panePath(chat.paneId, session);
   const word = STATUS_LABEL[pane.status];
@@ -113,4 +114,6 @@ function ChatRow({ chat, session, current }: { chat: DeskChat; session?: string;
       {chat.unread && !current && <span className="sr-only">, new</span>}
     </Link>
   );
-}
+  // Same pane, same row; a held limit is still redrawn, as its reset drops the weekday when the day turns.
+}, (a, b) => a.chat.pane === b.chat.pane && a.chat.title === b.chat.title && a.chat.unread === b.chat.unread
+  && a.session === b.session && a.current === b.current && !usageLimitOf(b.chat.pane));

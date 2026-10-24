@@ -21,3 +21,10 @@ export function cn(...inputs: ClassValue[]): string {
 export function keepUnchanged<T>(prev: T | null | undefined, next: T): T {
   return prev != null && JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 }
+
+/** `next` with every item that says what the same place in `prev` says kept as that item, and `prev` itself when all are. */
+export function keepItems<T>(prev: readonly T[] | undefined, next: T[]): T[] {
+  if (!prev) return next;
+  const kept = next.map((item, index) => keepUnchanged(prev[index], item));
+  return kept.length === prev.length && kept.every((item, index) => item === prev[index]) ? prev as T[] : kept;
+}
