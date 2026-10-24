@@ -39,38 +39,62 @@ async function sessionsDir(files: Record<string, string>) {
   return dir;
 }
 
-test("session files list live sessions whose process start matches, as `claude agents` does", async () => {
-  const dir = await sessionsDir({
-    [`${process.pid}.json`]: sessionFile(process.pid, SESSION),
-    "999999999.json": sessionFile(999999999, BACKGROUND),
-    "1.json": sessionFile(process.pid, BACKGROUND),
-    "notes.json": sessionFile(process.pid, BACKGROUND),
-    [`${process.pid}.key`]: "secret",
-  });
-  const checked: string[] = [];
-  const files = new ClaudeSessionFiles([dir, join(dir, "missing")], async (pid, procStart) => { checked.push(`${pid}:${procStart}`); return true; });
-  expect(await files.list()).toEqual([{ pid: process.pid, sessionId: SESSION, cwd: "/w", startedAt: 1792838220862 }]);
-  expect(checked).toEqual([`${process.pid}:74264174`]);
-  expect(await new ClaudeSessionFiles([dir], async () => false).list()).toEqual([]);
+const starts = (ticks: string | null, lstart: number | null = null) => {
+  const calls = { ticks: 0, lstart: 0 };
+  return { calls, ticks: async () => { calls.ticks++; return ticks; }, lstart: async () => { calls.lstart++; return lstart; } };
+};
+const linux = process.platform === "linux";
+
+test("session files list live sessions, oldest first, as `claude agents` does", async () => {
+  const child = Bun.spawn(["sleep", "30"]);
+  try {
+    const dir = await sessionsDir({
+      [`${child.pid}.json`]: sessionFile(child.pid, BACKGROUND, { startedAt: 1792838220000, procStart: undefined }),
+      [`${process.pid}.json`]: sessionFile(process.pid, SESSION, { procStart: undefined }),
+      "999999999.json": sessionFile(999999999, "22222222-2222-4333-8444-555555555555"),
+      "1.json": sessionFile(process.pid, "33333333-2222-4333-8444-555555555555"),
+      "notes.json": sessionFile(process.pid, "44444444-2222-4333-8444-555555555555"),
+      [`${process.pid}.key`]: sessionFile(process.pid, "55555555-2222-4333-8444-555555555555"),
+    });
+    const files = new ClaudeSessionFiles([dir, join(dir, "missing")], 0, starts(null));
+    expect(await files.list()).toEqual([
+      { pid: child.pid, sessionId: BACKGROUND, cwd: "/w", startedAt: 1792838220000 },
+      { pid: process.pid, sessionId: SESSION, cwd: "/w", startedAt: 1792838220862 },
+    ]);
+  } finally { child.kill(); }
 });
 
-test("a file without procStart is kept on liveness alone, and a process start is checked once", async () => {
-  const dir = await sessionsDir({ [`${process.pid}.json`]: sessionFile(process.pid, SESSION, { procStart: undefined }) });
-  let checks = 0;
-  const files = new ClaudeSessionFiles([dir], async () => { checks++; return true; });
-  expect((await files.list()).map((s) => s.sessionId)).toEqual([SESSION]);
-  expect(checks).toBe(0);
-  await writeFile(join(dir, `${process.pid}.json`), sessionFile(process.pid, SESSION));
-  const again = new ClaudeSessionFiles([dir], async () => { checks++; return true; });
-  await again.list();
-  (again as unknown as { cache: null }).cache = null;
-  await again.list();
-  expect(checks).toBe(1);
+test.if(linux)("on Linux the /proc start is read every time, so a pid taken by another process drops at once", async () => {
+  const dir = await sessionsDir({ [`${process.pid}.json`]: sessionFile(process.pid, SESSION) });
+  const proc = starts("74264174");
+  const files = new ClaudeSessionFiles([dir], 0, proc);
+  expect(await files.list()).toHaveLength(1);
+  await files.list();
+  expect(proc.calls).toEqual({ ticks: 2, lstart: 0 });
+  expect(await new ClaudeSessionFiles([dir], 0, starts("1")).list()).toEqual([]);
+  expect(await new ClaudeSessionFiles([dir], 0, starts(null)).list()).toHaveLength(1);
 });
 
-test.if(process.platform === "linux")("on Linux, procStart is the /proc start tick of the process", async () => {
-  const stat = await Bun.file(`/proc/${process.pid}/stat`).text();
-  const ticks = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
+test("an lstart procStart is checked by ps once, and a failed read is never cached", async () => {
+  const dir = await sessionsDir({ [`${process.pid}.json`]: sessionFile(process.pid, SESSION, { procStart: "Sun Oct 11 12:56:04 2026" }) });
+  const failing = starts(null, null);
+  const unknown = new ClaudeSessionFiles([dir], 0, failing);
+  expect(await unknown.list()).toHaveLength(1);
+  await unknown.list();
+  expect(failing.calls.lstart).toBe(2);
+  const ps = starts(null, Date.parse("Sun Oct 11 12:56:04 2026 UTC"));
+  const files = new ClaudeSessionFiles([dir], 0, ps);
+  expect(await files.list()).toHaveLength(1);
+  await files.list();
+  expect(ps.calls.lstart).toBe(1);
+  expect(await new ClaudeSessionFiles([dir], 0, starts(null, 0)).list()).toEqual([]);
+  await writeFile(join(dir, `${process.pid}.json`), sessionFile(process.pid, SESSION, { procStart: undefined }));
+  expect(await new ClaudeSessionFiles([dir], 0, starts(null, 0)).list()).toHaveLength(1);
+});
+
+test.if(linux)("the default reader takes field 22 of /proc/<pid>/stat", async () => {
+  // Bun's own command name has no spaces, so a plain split counts the fields independently.
+  const ticks = (await Bun.file(`/proc/${process.pid}/stat`).text()).split(" ")[21]!;
   const dir = await sessionsDir({ [`${process.pid}.json`]: sessionFile(process.pid, SESSION, { procStart: ticks }) });
   expect((await new ClaudeSessionFiles([dir]).list()).map((s) => s.sessionId)).toEqual([SESSION]);
   await writeFile(join(dir, `${process.pid}.json`), sessionFile(process.pid, SESSION, { procStart: String(Number(ticks) + 1) }));

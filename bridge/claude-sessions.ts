@@ -15,8 +15,8 @@ export function findClaudeExecutable(path = process.env.PATH, home = homedir()):
 }
 
 /**
- * One row of `claude agents --json`. Interactive sessions carry a `pid` and no `id`; background ones
- * carry the `claude attach` `id` and no `pid`. A row needs one of the two to be matchable.
+ * One row of `claude agents --json` or one session file. Interactive sessions carry a `pid` and no `id`;
+ * background ones carry the `claude attach` `id` and no `pid`. A row needs one of the two to be matchable.
  */
 export interface ClaudeSession { id?: string; sessionId: string; pid?: number; cwd: string; startedAt?: number }
 
@@ -81,31 +81,36 @@ export class ClaudeSessions {
   }
 }
 
-/** `procStart` of a live process: `/proc/<pid>/stat` start ticks on Linux, `ps -o lstart` text elsewhere. */
-async function startMatches(pid: number, procStart: string): Promise<boolean> {
-  if (/^\d+$/.test(procStart) && process.platform === "linux") {
+/** How a process's start is read: `/proc/<pid>/stat` start ticks (Linux), `ps -o lstart` epoch ms (elsewhere). */
+export interface ProcessStarts {
+  ticks(pid: number): Promise<string | null>;
+  lstart(pid: number): Promise<number | null>;
+}
+
+const processStarts: ProcessStarts = {
+  async ticks(pid) {
     // /proc files report size 0, so they are read whole; field 22 follows the parenthesised command.
     const stat = await Bun.file(`/proc/${pid}/stat`).text().catch(() => null);
-    return stat === null || stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] === procStart;
-  }
-  const started = await processStart(pid).catch(() => null);
-  return started === null || sameProcStart(procStart, started);
-}
+    return stat?.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+  },
+  lstart: (pid) => processStart(pid).catch(() => null),
+};
 
 /**
  * The interactive sessions Claude itself records in each profile's `sessions/<pid>.json`, kept as
- * `claude agents` keeps them: the pid is alive and, when the file names it, started when the file says.
+ * `claude agents` keeps them: the pid is alive and, when the file names it, started when the file says;
+ * oldest first, as `claude agents` lists them.
  */
 export class ClaudeSessionFiles {
   private cache: { expires: number; value: Promise<ClaudeSession[]> } | null = null;
-  /** A process's start never changes, so each pid's verdict is reused while its file stays. */
-  private verified = new Map<string, Promise<boolean>>();
-  constructor(private readonly dirs: readonly string[], private readonly matches = startMatches) {}
+  /** `ps` costs a spawn, so its definite verdicts are reused while the file stays; /proc is read every time. */
+  private verified = new Map<string, boolean>();
+  constructor(private readonly dirs: readonly string[], private readonly ttl = 5_000, private readonly starts = processStarts) {}
 
   list(): Promise<ClaudeSession[]> {
     if (this.cache && this.cache.expires > Date.now()) return this.cache.value;
     const value = this.read();
-    this.cache = { expires: Date.now() + 5_000, value };
+    this.cache = { expires: Date.now() + this.ttl, value };
     return value;
   }
 
@@ -114,26 +119,39 @@ export class ClaudeSessionFiles {
     const sessions: ClaudeSession[] = [];
     for (const dir of this.dirs) {
       for (const name of await readdir(dir).catch(() => [])) {
-        const match = /^(\d+)\.json$/.exec(name);
-        const text = match ? await readSmall(join(dir, name)) : null;
-        if (!text) continue;
+        const pid = Number(/^(\d+)\.json$/.exec(name)?.[1] ?? NaN);
+        if (!Number.isSafeInteger(pid)) continue;
+        try { process.kill(pid, 0); } catch { continue; }
+        const text = await readSmall(join(dir, name));
         let raw: unknown;
-        try { raw = JSON.parse(text); } catch { continue; }
+        try { raw = JSON.parse(text ?? ""); } catch { continue; }
         const row = record(raw);
         const [session] = decodeClaudeSessions([row]);
-        if (!session || session.pid !== Number(match![1])) continue;
-        try { process.kill(session.pid, 0); } catch { continue; }
-        const key = `${session.pid}:${typeof row.procStart === "string" ? row.procStart : ""}`;
-        seen.add(key);
+        if (session?.pid !== pid) continue;
         if (typeof row.procStart === "string") {
-          let verdict = this.verified.get(key);
-          if (!verdict) this.verified.set(key, verdict = this.matches(session.pid, row.procStart).catch(() => true));
-          if (!(await verdict)) continue;
+          const key = `${pid}:${row.procStart}`;
+          seen.add(key);
+          if ((await this.startMatches(key, pid, row.procStart)) === false) continue;
         }
         sessions.push(session);
       }
     }
     for (const key of this.verified.keys()) if (!seen.has(key)) this.verified.delete(key);
-    return sessions;
+    return sessions.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+  }
+
+  /** Null when the start cannot be read: the session is kept, as it would be without `procStart`. */
+  private async startMatches(key: string, pid: number, procStart: string): Promise<boolean | null> {
+    if (/^\d+$/.test(procStart) && process.platform === "linux") {
+      const ticks = await this.starts.ticks(pid);
+      return ticks === null ? null : ticks === procStart;
+    }
+    const known = this.verified.get(key);
+    if (known !== undefined) return known;
+    const started = await this.starts.lstart(pid);
+    if (started === null) return null;
+    const verdict = sameProcStart(procStart, started);
+    this.verified.set(key, verdict);
+    return verdict;
   }
 }
