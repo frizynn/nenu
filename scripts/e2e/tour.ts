@@ -5,10 +5,9 @@ import { parseArgs } from "node:util";
 
 import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
-import { deskOrg, seedDiffRepo, writeChatJournal, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { seedDiffRepo, writeChatJournal } from "./scenario.ts";
 
-// Every screen, as one app: Home's tabs, a project's tabs and its History, a coordinator's page, a chat
-// with each tab of its panel, the phone's drawer and sheets, Settings, in dark and light at 1440x900 and
+// Every screen, as one app: Home's tabs, a chat with each tab of its panel, the phone's drawer and sheets, Settings, in dark and light at 1440x900 and
 // 390x844, captured with Google Chrome headless. Beside the captures, `styles.json` holds what each
 // screen draws: every control's height and radius, every text's size and weight, every status colour,
 // icon size and stroke and transition, counted, so a pass over the design compares numbers, not looks.
@@ -21,42 +20,6 @@ const { values } = parseArgs({ options: {
 const port = Number(values.port);
 const outDir = values.out ?? join(process.env.NENU_E2E_OUT ?? join(userCacheDir(), "nenu-e2e"), `tour-${Date.now()}`);
 const CAPTURE_EPOCH = Date.parse("2026-10-10T14:00:00Z");
-
-const STATUS = `# Status
-Objective: the new checkout, in parts
-## Asked
-- [working] Checkout flow : thread working (t-0012)
-- [needs-decision] Coupons in the cart or at payment : two options with captures, I recommend the cart
-- [done] Cart badge : merged (t-0013)
-## Decisions
-- 2026-10-09 The checkout ships in parts, one PR per part`;
-
-const MEMORY = `# Memory
-
-- [Releases](memory/releases.md): how a release is cut and tagged
-- See [the architecture](ARCHITECTURE.md) before touching the bridge.`;
-
-function seed(herd: DemoHerd, now: number, size: { additions: number; deletions: number }): OrgSeed {
-  const org = deskOrg(herd, now, size);
-  const ago = (hours: number) => new Date(now - hours * 3_600_000).toISOString();
-  const acme = org.projects[0]! as OrgSeed["projects"][number] & { detail?: Record<string, unknown> };
-  acme.status_file = { path: "/srv/projects/acme-shop/STATUS.md", text: STATUS, updated: ago(0.3) };
-  acme.detail = {
-    instructions: "# Instructions\n\n- Every change is a thread with its own worktree.\n- Read [DEPLOYMENT.md](DEPLOYMENT.md) before a release.\n- Screenshots before and after for anything visual.\n\nA second paragraph, long enough to wrap across the panel so the line height shows: what each thread receives, where it works and who reviews it before it merges.",
-    memory: MEMORY,
-    memory_files: [{ name: "releases.md", text: "# Releases\n\nA tag `vX.Y.Z` on main cuts the release." }],
-    repos: [{ path: "/home/dev/src/acme-shop", machine: "" }, { path: "/home/dev/src/acme-admin", machine: "build-box" }],
-    coordinator_profile: "claude", thread_profile: "claude", max_parallel_threads: 4,
-  };
-  org.answers = true;
-  org.asks = [
-    { project: "acme-shop", coordinator: { id: "t-0010", title: "Checkout redesign" }, line: 4, state: "needs-decision", text: "Coupons in the cart or at payment",
-      answer: "two options with captures, I recommend the cart", links: [], actions: ["answer"], confirmed: "", mismatch: "" },
-    { project: "acme-shop", coordinator: { id: "t-0010", title: "Checkout redesign" }, line: 3, state: "working", text: "Checkout flow", answer: "thread working (t-0012)",
-      links: [], actions: ["answer"], confirmed: "", mismatch: "" },
-  ];
-  return org;
-}
 
 /** What a screen draws, counted by value: controls, text, status colours, icons, motion. */
 async function styles(page: Page) {
@@ -148,27 +111,11 @@ async function tour(bridge: TestBridge, browser: Browser, device: "desk" | "phon
   const tab = (name: string | RegExp) => page.getByRole("tab", { name }).first().click({ timeout: 5000 });
   const escape = () => page.keyboard.press("Escape");
 
-  await run("home-projects", () => visit("/", "main"));
-  for (const name of ["Recents", "Workspaces", "PRs"]) await run(`home-${name.toLowerCase()}`, () => tab(name));
+  await run("home-recents", () => visit("/", "main"));
+  for (const name of ["Workspaces", "PRs"]) await run(`home-${name.toLowerCase()}`, () => tab(name));
   if (device === "phone") {
     await run("drawer", async () => { await visit("/", "main"); await page.getByRole("button", { name: "Open navigation" }).first().click(); });
     await escape();
-  }
-  await run("project-work", () => visit("/project/acme-shop", "main"));
-  if (device === "desk") {
-    await run("project-waiting", () => tab(/^Waiting on you/));
-    await run("project-routines", () => tab(/^Routines/));
-    await run("project-context", async () => {
-      await tab("Context");
-      await page.getByRole("button", { name: /MEMORY\.md/ }).click({ timeout: 8000 });
-      await page.getByRole("button", { name: /PROJECT\.md/ }).click({ timeout: 8000 });
-    });
-    await run("project-history", () => visit("/project/acme-shop?work=finished", "main"));
-  }
-  await run("coordinator", () => visit("/project/acme-shop/node/t-0010", "main"));
-  if (device === "desk") {
-    await run("coordinator-waiting", () => tab(/^Waiting on you/));
-    await run("coordinator-status", () => tab("Status"));
   }
   const chat = `/pane/${encodeURIComponent(herd.working)}`;
   await run("chat", async () => { await visit(chat, "main"); await page.locator("textarea >> visible=true").first().waitFor({ timeout: 30_000 }); });
@@ -181,7 +128,6 @@ async function tour(bridge: TestBridge, browser: Browser, device: "desk" | "phon
     await run("panel-files", () => panel.getByRole("tab", { name: /Files/ }).click({ timeout: 5000 }));
     await run("panel-artifacts", () => panel.getByRole("radio", { name: "Artifacts" }).click({ timeout: 5000 }));
     await run("panel-terminal", () => panel.getByRole("tab", { name: /Terminal/ }).click({ timeout: 5000 }));
-    await run("panel-overview", () => panel.getByRole("tab", { name: /^Overview/ }).click({ timeout: 5000 }));
     await run("palette", () => page.keyboard.press("ControlOrMeta+k"));
     await escape();
   }
@@ -198,12 +144,10 @@ async function tour(bridge: TestBridge, browser: Browser, device: "desk" | "phon
 await mkdir(outDir, { recursive: true });
 const prs = join(outDir, "gh-prs.json");
 process.env.NENU_E2E_GH_PRS = prs;
-let size = { additions: 0, deletions: 0 };
 const bridge = await startTestBridge({
   port, fake: true, epoch: CAPTURE_EPOCH,
-  org: (herd, now) => seed(herd, now, size),
   repo: (dir) => {
-    size = seedDiffRepo(dir);
+    const size = seedDiffRepo(dir);
     writeFileSync(join(dir, ".git/info/exclude"), "/*\n!/app/\n!/docs/\n");
     writeFileSync(prs, JSON.stringify([
       { number: 42, title: "Checkout flow", url: "https://github.com/acme/shop/pull/42", headRefName: "e2e-demo", baseRefName: "main",

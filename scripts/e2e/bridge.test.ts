@@ -39,12 +39,10 @@ describe("test bridge guards", () => {
     await expect(startTestBridge({ port: 8797 })).rejects.toThrow("--fake, --herdr or --socket");
   });
 
-  test("sees no real projects, Codex daemon or clock", async () => {
+  test("sees no real Codex daemon or clock", async () => {
     const epoch = Date.parse("2026-10-10T14:00:00Z");
     const bridge = await startTestBridge({ port: 8796, fake: true, epoch });
     try {
-      const snapshot = await fetch(`${bridge.url}/api/snapshot`).then((r) => r.json() as Promise<{ projects: unknown[] }>);
-      expect(snapshot.projects).toEqual([]);
       const codex = await fetch(`${bridge.url}/api/pane/${encodeURIComponent(bridge.herd!.codex)}/conversations`);
       expect(await codex.text()).toContain("Codex server is unavailable");
       expect(Math.abs(bridge.now() - epoch)).toBeLessThan(60_000);
