@@ -18,6 +18,15 @@ const QUIET_MAX_MS = 1_000;
 const RETRY_MS = 2_000;
 /** At most one `pane` event a second per pane; the phone re-reads the mirror on each. */
 const PUBLISH_GAP_MS = 1_000;
+/**
+ * A page that just wrote to a pane (a key, a reply, a paste) is waiting to see it land, so for a
+ * moment after each write the pane is read at {@link TYPED_READ_MS} and its changes go out at most
+ * every {@link TYPED_GAP_MS}: typing shows in the mirror in about a tenth of a second instead of
+ * waiting out the one-second gap, and stops costing extra reads {@link TYPED_FOR_MS} after the last key.
+ */
+const TYPED_READ_MS = 30;
+const TYPED_GAP_MS = 200;
+const TYPED_FOR_MS = 1_500;
 /** One page shows one pane; a few more covers a split view without letting a client ask for the herd. */
 export const MAX_WATCHED_PER_CLIENT = 4;
 // `visible` is the rendered viewport whatever the count (HERDR_API.md), so this only has to cover it.
@@ -39,6 +48,9 @@ interface Watch {
   /** Consecutive reads that found the screen unchanged. */
   quiet: number;
   timer?: ReturnType<typeof setTimeout>;
+  reading: boolean;
+  /** Until when a write from a page keeps the pane on the typed cadence (epoch ms). */
+  typedUntil: number;
   stopped: boolean;
 }
 
@@ -47,6 +59,9 @@ export interface PaneWatcherOptions {
   quietMaxMs?: number;
   retryMs?: number;
   publishGapMs?: number;
+  typedReadMs?: number;
+  typedGapMs?: number;
+  typedForMs?: number;
 }
 
 export class PaneWatcher {
@@ -55,11 +70,17 @@ export class PaneWatcher {
   private readonly readEveryMs: number;
   private readonly quietMaxMs: number;
   private readonly retryMs: number;
+  private readonly typedReadMs: number;
+  private readonly typedGapMs: number;
+  private readonly typedForMs: number;
 
   constructor(readonly live: LivePublisher, options: PaneWatcherOptions = {}) {
     this.readEveryMs = options.readEveryMs ?? READ_EVERY_MS;
     this.quietMaxMs = options.quietMaxMs ?? QUIET_MAX_MS;
     this.retryMs = options.retryMs ?? RETRY_MS;
+    this.typedReadMs = options.typedReadMs ?? TYPED_READ_MS;
+    this.typedGapMs = options.typedGapMs ?? TYPED_GAP_MS;
+    this.typedForMs = options.typedForMs ?? TYPED_FOR_MS;
     this.throttle = new LiveThrottle(live, options.publishGapMs ?? PUBLISH_GAP_MS);
   }
 
@@ -70,7 +91,7 @@ export class PaneWatcher {
       const key = `${session}\u0000${paneId}`;
       let watch = this.watches.get(key);
       if (!watch) {
-        watch = { session, paneId, herdr, clients: 0, quiet: 0, stopped: false };
+        watch = { session, paneId, herdr, clients: 0, quiet: 0, reading: false, typedUntil: 0, stopped: false };
         this.watches.set(key, watch);
         void this.read(watch);
       }
@@ -89,6 +110,21 @@ export class PaneWatcher {
     }, { once: true });
   }
 
+  /**
+   * A page just wrote to this pane: read it soon and keep it on the typed cadence for a moment. Only a
+   * watched pane is read; nobody is looking at the others' screens.
+   */
+  wrote(session: string, paneId: string): void {
+    const watch = this.watches.get(`${session}\u0000${paneId}`);
+    if (!watch) return;
+    watch.typedUntil = Date.now() + this.typedForMs;
+    watch.quiet = 0;
+    // A read in flight schedules the next one itself, on the typed cadence now.
+    if (watch.reading) return;
+    clearTimeout(watch.timer);
+    watch.timer = setTimeout(() => void this.read(watch), this.typedReadMs);
+  }
+
   /** Panes currently read, for tests and diagnostics. */
   get watching(): string[] {
     return [...this.watches.values()].map((watch) => watch.paneId);
@@ -96,19 +132,22 @@ export class PaneWatcher {
 
   private async read(watch: Watch): Promise<void> {
     let failed = false;
+    watch.reading = true;
     try {
       const { text } = await watch.herdr.readPane(watch.paneId, "visible", VISIBLE_LINES, "ansi");
       const hash = Bun.hash(text).toString(16);
       // The first read only sets the baseline: the page that asked has just read the pane itself.
       if (!watch.stopped && watch.hash !== undefined && hash !== watch.hash) {
-        this.throttle.publish({ session: watch.session, topic: "pane", paneId: watch.paneId });
+        const typed = Date.now() < watch.typedUntil;
+        this.throttle.publish({ session: watch.session, topic: "pane", paneId: watch.paneId }, typed ? this.typedGapMs : undefined);
       }
       watch.quiet = hash === watch.hash ? watch.quiet + 1 : 0;
       watch.hash = hash;
     } catch {
       failed = true;
     }
-    const next = failed ? this.retryMs : quietDelay(watch.quiet, this.readEveryMs, this.quietMaxMs);
+    watch.reading = false;
+    const next = failed ? this.retryMs : Date.now() < watch.typedUntil ? this.typedReadMs : quietDelay(watch.quiet, this.readEveryMs, this.quietMaxMs);
     if (!watch.stopped) watch.timer = setTimeout(() => void this.read(watch), next);
   }
 }

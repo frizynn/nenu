@@ -53,6 +53,38 @@ describe("PaneWatcher", () => {
     abort.abort();
   });
 
+  it("after a write, reads the pane at once and lets its changes out on the short gap for a moment", async () => {
+    const { events, live } = recorder();
+    const pane = screen();
+    const watcher = new PaneWatcher(live, { readEveryMs: 400, quietMaxMs: 400, publishGapMs: 1_000, typedReadMs: 5, typedGapMs: 10, typedForMs: 80 });
+    const abort = new AbortController();
+    watcher.watch("s", pane.herdr, ["p"], abort.signal);
+    await Bun.sleep(10);
+    pane.set("b");
+    watcher.wrote("s", "p");
+    await Bun.sleep(30);
+    expect(events.length).toBe(1);
+    pane.set("c");
+    watcher.wrote("s", "p");
+    await Bun.sleep(30);
+    // Inside the one-second gap, the typed gap let the second change out.
+    expect(events.length).toBe(2);
+    await Bun.sleep(100);
+    const reads = pane.reads.length;
+    await Bun.sleep(150);
+    // Past the typed moment the pane is back on its slow cadence: one read at most in 150 ms.
+    expect(pane.reads.length - reads).toBeLessThanOrEqual(2);
+    abort.abort();
+  });
+
+  it("ignores a write to a pane nobody watches", () => {
+    const { events, live } = recorder();
+    const watcher = new PaneWatcher(live);
+    watcher.wrote("s", "p");
+    expect(watcher.watching).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
   it("a change resets the wait to the fast cadence; quiet reads double it up to the cap", () => {
     expect([0, 1, 2, 3, 4, 10].map((quiet) => quietDelay(quiet, 200, 1_000))).toEqual([200, 400, 800, 1_000, 1_000, 1_000]);
     expect(quietDelay(3, 200, 0)).toBe(200);
