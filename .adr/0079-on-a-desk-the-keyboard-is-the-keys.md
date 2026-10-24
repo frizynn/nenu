@@ -3,7 +3,8 @@
 - **Status:** Accepted (2026-10-15). Amends 0077: the Terminal tab keeps the mirror and the switch,
   and Keys stay on the phone.
 - **Amended by:** [ADR 0114](./0114-a-send-from-nenu-never-gets-stuck.md): the Terminal tab, and the
-  chat's Terminal view, arm the keyboard while they are on screen.
+  chat's Terminal view, arm the keyboard while they are on screen. [ADR 0126](./0126-a-paste-into-the-terminal-goes-as-a-terminal-pastes.md):
+  a paste to Claude or Codex goes as one bracketed paste, and a file as its saved path.
 - **Trail:** `web/src/hooks/use-direct-typing.ts` · `web/src/components/composer.tsx` ·
   `web/src/components/session-inspector.tsx` · `scripts/e2e/run.ts terminal`
 
