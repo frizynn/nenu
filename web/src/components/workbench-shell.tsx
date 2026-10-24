@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { PanelLeft, Search, SquarePen } from "@/components/ui/icon";
 
@@ -76,8 +76,11 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
   const [drawer, setDrawer] = useState(false);
   const [drawerSearch, setDrawerSearch] = useState(0);
   const [request, setRequest] = useState<SidebarRequest>();
-  const closeDrawer = () => { setDrawer(false); setDrawerSearch(0); };
-  const newChat = canCreate(data) ? () => { setSearchSheet(false); closeDrawer(); openNewDialog(); } : undefined;
+  const closeDrawer = useCallback(() => { setDrawer(false); setDrawerSearch(0); }, []);
+  // Stable, as is the navigation context below, so a revalidation leaves the chats that read it alone.
+  const creatable = canCreate(data);
+  const newChat = useMemo(() => creatable ? () => { setSearchSheet(false); closeDrawer(); openNewDialog(); } : undefined, [creatable, closeDrawer]);
+  const navigation = useMemo(() => ({ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat }), [drawer, newChat]);
   const attention = needsYouCount(data);
   const sidebarId = useId();
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -154,7 +157,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
         onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} />}
 
       <div className="workbench-main">
-        <WorkbenchNavigationContext value={{ open: drawer, onOpen: () => setDrawer(true), onNewChat: newChat }}>
+        <WorkbenchNavigationContext value={navigation}>
           {children}
         </WorkbenchNavigationContext>
         {tabBar && <BottomTabBar active={active} homeTo={homePath(data.session)} attention={attention} onNew={newChat} onSearch={() => setSearchSheet(true)} />}

@@ -6,7 +6,7 @@ import { connectConversation, fetchConversations } from "@/lib/api";
 import { ConnectConversation, RecoveryLeads } from "./connect-conversation";
 
 vi.mock("@/lib/api", () => ({ fetchConversations: vi.fn(), connectConversation: vi.fn() }));
-vi.mock("react-router", async (original) => ({ ...await original<typeof import("react-router")>(), useRevalidator: () => ({ revalidate: async () => {}, state: "idle" }) }));
+vi.mock("@/hooks/use-router", () => ({ useRevalidate: () => async () => {} }));
 beforeEach(() => {
   vi.mocked(fetchConversations).mockReset();
   vi.mocked(connectConversation).mockReset().mockResolvedValue({ ok: true });

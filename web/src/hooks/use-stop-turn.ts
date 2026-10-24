@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useRevalidator } from "react-router";
+import { useRevalidate } from "@/hooks/use-router";
 
 import { agentName } from "@/hooks/use-message-queue";
 import { usePendingConfirm } from "@/hooks/use-pending-confirm";
@@ -39,7 +39,7 @@ export function useStopTurn({ paneId, session, agent, interruptible, working, lo
   working: boolean;
   locked: boolean;
 }): StopTurn {
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
   const confirm = usePendingConfirm(8_000);
   const [phase, setPhase] = useState<Phase>("idle");
   const workingRef = useRef(working);
@@ -73,7 +73,7 @@ export function useStopTurn({ paneId, session, agent, interruptible, working, lo
       if (!workingRef.current || result.queued === "sends") setPhase("idle");
       const note = stoppedNote(agentName(agent), result);
       if (note) setStatus(note, "info");
-      revalidator.revalidate();
+      revalidate();
     } catch (error) {
       setPhase(before);
       setStatus(error instanceof Error ? error.message : String(error), "error");

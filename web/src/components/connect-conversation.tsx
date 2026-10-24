@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useRevalidator } from "react-router";
+import { useRevalidate } from "@/hooks/use-router";
 import { ChevronDown } from "@/components/ui/icon";
 import { connectConversation, fetchConversations } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
   const leads = useContext(RecoveryLeads);
   const regionId = useId();
   const listId = useId();
@@ -52,7 +52,7 @@ export function ConnectConversation({ paneId, session, disabled, onConnected }: 
     try {
       const result = await connectConversation(paneId, id.trim(), session);
       if (!result.ok) throw new Error(result.error);
-      await revalidator.revalidate();
+      await revalidate();
       onConnected();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not connect conversation."); }
     finally { inFlight.current = false; setBusy(null); }

@@ -52,7 +52,8 @@ export function FilePreviewProvider({ paneId, session, panes, children }: { pane
   } : null, [paneId, session, openItems]);
   const visible = selection?.paneId === paneId && selection?.session === session ? selection : null;
   const href = useMemo(() => paneId ? (path: string) => filePagePath(paneId, path, session) : null, [paneId, session]);
-  return <FileMediaContext.Provider value={paneId ? (path) => paneFileUrl(paneId, path, session) : null}><FilePreviewContext.Provider value={paneId ? open : null}><FileHrefContext.Provider value={href}><MediaViewerContext.Provider value={viewer}>
+  const media = useMemo(() => paneId ? (path: string) => paneFileUrl(paneId, path, session) : null, [paneId, session]);
+  return <FileMediaContext.Provider value={media}><FilePreviewContext.Provider value={paneId ? open : null}><FileHrefContext.Provider value={href}><MediaViewerContext.Provider value={viewer}>
     {children}
     {visible && <PreviewBoundary key={visible.seq} onClose={close}><Suspense fallback={<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background px-4 py-3 text-footnote">Opening document…</div>}>
       <FilePreview key={`${paneId}:${session}`} paneId={visible.paneId} session={session} items={visible.items} start={visible.start} panes={panes} onClose={close} />

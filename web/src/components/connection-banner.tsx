@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useRevalidator } from "react-router";
+import { useRevalidate } from "@/hooks/use-router";
 import { Pending, LogIn, RefreshCw, RotateCw, TriangleAlert, WifiOff } from "@/components/ui/icon";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -80,7 +80,7 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   // Kept in the shared store, so the card and the composer defer to what is on screen.
   const visible = useOutageNoticeShown();
   const [retrying, setRetrying] = useState(false);
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
 
   useEffect(() => {
     if (lost) { setOutageNoticeShown(true); return; }
@@ -101,7 +101,7 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   const headline = problem ? `${linkPhrase(problem, bridge === undefined ? window.location.host : undefined)}.` : "Connection is unstable.";
   async function retry() {
     setRetrying(true);
-    try { await revalidator.revalidate(); } finally { setRetrying(false); }
+    try { await revalidate(); } finally { setRetrying(false); }
   }
   return (
     <div role="status" aria-live="polite" className={BANNER}>
