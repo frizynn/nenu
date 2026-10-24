@@ -15,6 +15,7 @@ import {
   WriteLedger,
   guardedSend,
   settleAfterType,
+  pasteFile,
   settleDraft,
   takeBackQueue,
   triggerFor,
@@ -1432,5 +1433,39 @@ describe("takeBackQueue", () => {
     const codex = new Term();
     codex.agent = "codex";
     expect(await takeBackQueue(deps(codex))).toEqual({ ok: false, error: expect.stringMatching(/can't take messages back/) });
+  });
+});
+
+describe("pasteFile", () => {
+  const deps = (term: Term) => ({ herdr: term, paneId: "w1:p1", readLines: 200, sleep: noSleep });
+  const UP = "/home/you/.local/state/nenu/uploads";
+  const picture = `${UP}/w1_p1-mv8g-0a1b2c3d.png`;
+
+  test("pastes a picture's path alone and answers once the box shows one more token than it held", async () => {
+    const term = new Term();
+    term.draft = "look [Image #1] here ";
+    term.pictures = 1;
+    term.pictureReads = 2;
+    expect(await pasteFile(deps(term), picture)).toEqual({ ok: true });
+    expect(term.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([`\x1b[200~${picture}\x1b[201~`]);
+    expect(term.draft).toBe("look [Image #1] here [Image #2]");
+    expect(term.calls.some((c) => c.method === "pane.send_keys")).toBe(false);
+  });
+
+  test("a picture whose token never shows is an error the keys behind it stop on, with the path delivered", async () => {
+    const term = new Term();
+    term.pictureReads = -1;
+    expect(await pasteFile(deps(term), picture)).toEqual({ ok: false, error: expect.stringContaining("didn't show"), textDelivered: true });
+  });
+
+  test("another file's path is one paste with no wait; a pane whose CLI takes no paste gets the path as text", async () => {
+    const term = new Term();
+    const notes = `${UP}/w1_p1-mv8g-0a1b2c3d-notes.txt`;
+    expect(await pasteFile(deps(term), notes)).toEqual({ ok: true });
+    expect(term.calls.filter((c) => c.method === "pane.read")).toEqual([]);
+    const shell = new Term();
+    shell.agent = null;
+    expect(await pasteFile(deps(shell), picture)).toEqual({ ok: true });
+    expect(shell.calls.filter((c) => c.method === "pane.send_text").map((c) => c.arg)).toEqual([picture]);
   });
 });

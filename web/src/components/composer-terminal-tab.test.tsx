@@ -237,3 +237,102 @@ describe("Composer on a desk — the session panel's Terminal tab", () => {
     expect(Object.keys(localStorage).join(" ")).not.toMatch(/type|direct|armed/i);
   });
 });
+
+// Pasting while the box is the terminal: what a terminal does with a paste, with the keys around it
+// kept in order.
+describe("Composer — pasting while typing into the terminal", () => {
+  /** Every terminal write in the order the bridge got it: keys, replies and pasted files. */
+  function recordWrites() {
+    const writes: string[] = [];
+    let uploads = 0;
+    server.use(
+      http.post(/\/api\/pane\/[^/]+\/keys$/, async ({ request }) => {
+        writes.push(`keys ${((await request.json()) as { keys: string[] }).keys.join(" ")}`);
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/reply$/, async ({ request }) => {
+        const body = (await request.json()) as { text: string; submit: boolean; paste?: boolean };
+        writes.push(`reply ${JSON.stringify(body)}`);
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/upload$/, async () => {
+        uploads++;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return HttpResponse.json({ ok: true, path: `/st/uploads/w1_p1-mv8g-0a1b2c3d.png` });
+      }),
+      http.post(/\/api\/pane\/[^/]+\/paste-file$/, async ({ request }) => {
+        writes.push(`paste-file ${((await request.json()) as { path: string }).path}`);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    return { writes, uploads: () => uploads };
+  }
+
+  const textPaste = (text: string) => ({ clipboardData: { items: [{ kind: "string", type: "text/plain", getAsFile: () => null }], getData: () => text } });
+  const imagePaste = () => {
+    const file = new File(["x"], "shot.png", { type: "image/png" });
+    return { clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }], getData: () => "" } };
+  };
+
+  it("pastes text into Claude as one bracketed paste with no Enter, so a line break never submits", async () => {
+    const { writes } = recordWrites();
+    renderDesk();
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    await waitFor(() => expect(armed()).toBe(true));
+    fireEvent.change(field, { target: { value: "a" } });
+    expect(fireEvent.paste(field, textPaste("first line\nsecond line"))).toBe(false);
+    fireEvent.change(field, { target: { value: "b" } });
+    await waitFor(() => expect(writes).toEqual([
+      "keys a",
+      `reply ${JSON.stringify({ text: "first line\nsecond line", submit: false, paste: true })}`,
+      "keys b",
+    ]));
+  });
+
+  it("leaves a paste to a shell to the browser: it reaches the pane as keys, as before", async () => {
+    const { writes } = recordWrites();
+    renderDesk({ agent: null, isShell: true });
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    await waitFor(() => expect(armed()).toBe(true));
+    expect(fireEvent.paste(field, textPaste("ls"))).toBe(true);
+    fireEvent.change(field, { target: { value: "ls" } });
+    await waitFor(() => expect(writes).toEqual(["keys l s"]));
+  });
+
+  it("uploads a pasted picture and pastes its path in its place; keys typed meanwhile wait behind it", async () => {
+    const { writes, uploads } = recordWrites();
+    renderDesk();
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    await waitFor(() => expect(armed()).toBe(true));
+    fireEvent.change(field, { target: { value: "a" } });
+    await waitFor(() => expect(writes).toEqual(["keys a"]));
+    expect(fireEvent.paste(field, imagePaste())).toBe(false);
+    fireEvent.change(field, { target: { value: "b" } });
+    await waitFor(() => expect(writes).toEqual(["keys a", "paste-file /st/uploads/w1_p1-mv8g-0a1b2c3d.png", "keys b"]));
+    expect(uploads()).toBe(1);
+    // No chip: the picture went to the terminal, not into the chat's draft.
+    expect(screen.queryByRole("button", { name: "Remove Image #1" })).not.toBeInTheDocument();
+  });
+
+  it("sends a file picked from the + menu to the terminal while armed", async () => {
+    const { writes } = recordWrites();
+    const view = renderDesk();
+    await waitFor(() => expect(armed()).toBe(true));
+    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [new File(["x"], "shot.png", { type: "image/png" })] } });
+    await waitFor(() => expect(writes).toEqual(["paste-file /st/uploads/w1_p1-mv8g-0a1b2c3d.png"]));
+  });
+
+  it("stops typing into the terminal when a picture can't be saved, and says why; the keys behind it are dropped", async () => {
+    const { writes } = recordWrites();
+    server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: false, error: "File too large (max 25 MB)." })));
+    renderDesk();
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    await waitFor(() => expect(armed()).toBe(true));
+    fireEvent.paste(field, imagePaste());
+    fireEvent.change(field, { target: { value: "b" } });
+    await waitFor(() => expect(armed()).toBe(false));
+    expect(screen.getByTestId("status")).toHaveTextContent("File too large");
+    expect(writes).toEqual([]);
+  });
+});

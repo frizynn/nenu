@@ -83,4 +83,46 @@ describe("useOrderedKeySender", () => {
     await waitFor(() => expect(result.current.busy).toBe(false));
     expect(send).toHaveBeenCalledTimes(1);
   });
+  it("sends a paste as its own write in line: keys before it first, keys after it wait for its answer", async () => {
+    const paste = deferred<boolean>();
+    const order: string[] = [];
+    const send = vi.fn(async (keys: string[]) => {
+      order.push(keys.join(""));
+      return true;
+    });
+    const { result } = renderHook(() => useOrderedKeySender(send, vi.fn()));
+
+    act(() => result.current.enqueue(["a", "b", async () => {
+      order.push("paste");
+      return paste.promise;
+    }, "c"]));
+    await waitFor(() => expect(order).toEqual(["ab", "paste"]));
+    act(() => result.current.enqueue(["d"]));
+    expect(send).toHaveBeenCalledTimes(1);
+
+    paste.resolve(true);
+    await waitFor(() => expect(order).toEqual(["ab", "paste", "cd"]));
+    await waitFor(() => expect(result.current.busy).toBe(false));
+  });
+
+  it("tells a write still waiting on its upload that a reset moved on, and a failed one stops the line", async () => {
+    const upload = deferred<void>();
+    const seen: boolean[] = [];
+    const send = vi.fn<(keys: string[]) => Promise<boolean>>().mockResolvedValue(true);
+    const onFailure = vi.fn();
+    const { result } = renderHook(() => useOrderedKeySender(send, onFailure));
+
+    act(() => result.current.enqueue([async (current) => {
+      await upload.promise;
+      seen.push(current());
+      return true;
+    }]));
+    act(() => result.current.reset());
+    upload.resolve();
+    await waitFor(() => expect(seen).toEqual([false]));
+
+    act(() => result.current.enqueue([async () => false, "x"]));
+    await waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
+    expect(send).not.toHaveBeenCalled();
+  });
 });

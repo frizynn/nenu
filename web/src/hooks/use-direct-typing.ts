@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   ChangeEvent,
+  ClipboardEvent as ReactClipboardEvent,
   CompositionEvent as ReactCompositionEvent,
   KeyboardEvent as ReactKeyboardEvent,
   RefObject,
@@ -38,7 +39,7 @@ function keyForInputType(inputType: string): string | null {
  * held with it (`alt+Left`), and Ctrl with a printable key is that chord (`ctrl+c`). Shift rides only
  * on keys a phone keyboard has no Shift for (`shift+Tab`): its auto-capital must not turn Return into
  * another key. Command stays the browser's (copy, paste, close the tab), and so does Ctrl+V where it
- * is the paste: the pasted text reaches the pane through the change path. Option alone with a
+ * is the paste: the paste event takes it from there (`onPaste`, ADR 0126). Option alone with a
  * printable key types a character on a Mac, so it stays text as well.
  */
 function keyForKeyDown(event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string | undefined {
@@ -73,6 +74,16 @@ interface DirectTypingOptions {
    *  where a keyboard nobody asked for would cover the mirror. */
   autoFocus: boolean;
   sendKeys: (keys: string[]) => Promise<boolean>;
+  /**
+   * A text paste as ONE bracketed paste, for a CLI known to take one (Claude, Codex): a paste of
+   * several lines then stays in its box instead of every line break pressing Enter. Null elsewhere: a
+   * pane that never asked for bracketed paste would print the markers, so it gets the text as keys.
+   */
+  pasteText: ((text: string) => Promise<boolean>) | null;
+  /** Save a pasted or picked file the way the composer attaches one; its path, or null once it said why not. */
+  saveFile: (file: File) => Promise<string | null>;
+  /** Paste a saved file's path into the pane (bridge `paste-file`). */
+  pastePath: (path: string) => Promise<boolean>;
   onActivate: () => void;
   focusInput: () => void;
 }
@@ -120,6 +131,9 @@ export function useDirectTyping({
   auto,
   autoFocus,
   sendKeys,
+  pasteText,
+  saveFile,
+  pastePath,
   onActivate,
   focusInput,
 }: DirectTypingOptions) {
@@ -355,6 +369,41 @@ export function useDirectTyping({
     setValue("");
   }
 
+  /**
+   * Files pasted, picked or dropped while armed reach the pane as a terminal takes them: each saved
+   * as an attachment is, then its path pasted in its place in the line of keys. Uploads start at once;
+   * the keys typed meanwhile wait behind the paste, so a picture sits where it was pasted. A path saved
+   * after the mode ended, or for a pane no longer on screen, is not pasted.
+   */
+  function pasteFiles(files: Iterable<File>) {
+    for (const file of files) {
+      const saved = saveFile(file);
+      sender.enqueue([async (current) => {
+        const path = await saved;
+        if (path === null) return false;
+        if (!current() || !activeRef.current) {
+          setStatus("The file was not pasted: typing into the terminal stopped first.", "info");
+          return true;
+        }
+        return pastePath(path);
+      }]);
+    }
+  }
+
+  function onPaste(event: ReactClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.items, (item) => (item.kind === "file" ? item.getAsFile() : null)).filter((file) => file !== null);
+    if (files.length > 0) {
+      event.preventDefault();
+      pasteFiles(files);
+      return;
+    }
+    const text = event.clipboardData.getData("text/plain");
+    // An escape inside a paste would end it early and type the rest as keys; that text goes as keys.
+    if (pasteText === null || text === "" || /[\x1b\x9b]/.test(text)) return;
+    event.preventDefault();
+    sender.enqueue([() => pasteText(text)]);
+  }
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     const key = keyForKeyDown(event);
     if (key === undefined) return;
@@ -372,5 +421,7 @@ export function useDirectTyping({
     onCompositionStart,
     onCompositionEnd,
     onKeyDown,
+    onPaste,
+    pasteFiles,
   };
 }

@@ -692,6 +692,14 @@ export function sendKeys(
   );
 }
 
+/** Paste a file Nenu saved (`uploadImage`) into the pane while typing into it: its path, as the terminal takes a paste. */
+export function pasteFile(paneId: string, path: string, session?: string): Promise<ActionResponse> {
+  return req<ActionResponse>(withSession(`/api/pane/${encodeURIComponent(paneId)}/paste-file`, session), {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
 /**
  * Act on the agent's input box while it still holds `draft`: take it over into the composer (ADR
  * 0112), discard it, or send it with Enter (ADR 0114).

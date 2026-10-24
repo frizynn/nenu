@@ -37,12 +37,15 @@ import { clearDraft, fitsDraftStore, loadDraft, saveDraft } from "@/lib/drafts";
 import { useHoldReload } from "@/lib/reload-guard";
 import { isSelfEcho, normalizeDraft, STABLE_MIN_AGE_MS } from "@/hooks/use-terminal-draft";
 import { adapterFor } from "@/lib/harness";
+import { downscaleImage } from "@/lib/image-downscale";
+import { useLiveHealthy, useMirrorShown } from "@/lib/live-events";
+import { narrowRevalidation } from "@/lib/revalidation";
 import { holdsCliToken } from "@/lib/harness/inline-images";
 import { replyOutcomeFrom, retryKeepsRequestId, type ReplyOutcome } from "@/lib/guarded-reply";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
-import type { DeliveryMode } from "@/lib/types";
+import type { ActionResponse, DeliveryMode } from "@/lib/types";
 import type { LockReason } from "@/components/question-card";
 import type { SessionPanelLink } from "@/components/session-inspector";
 import { TerminalDraftPreview } from "@/components/terminal-draft-preview";
@@ -626,6 +629,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const pictureChips = useDraftChips(inputRef);
   const fileRef = useRef<HTMLInputElement>(null);
   const coarse = useMediaQuery("(pointer: coarse)");
+  // The pane's harness adapter, resolved HERE (this is where the agent is known) so the neutral
+  // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
+  // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
+  const adapter = adapterFor(agent ?? undefined);
   const direct = useDirectTyping({
     paneKey: `${session ?? ""}\0${paneId}`,
     inputRef,
@@ -640,6 +647,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // banner has decided the connection counts as lost yet.
     suspended: locked,
     sendKeys: pressKeys,
+    // The CLIs that attach a pasted path are the ones known to read a bracketed paste (ADR 0104).
+    pasteText: adapter?.pastesImagePaths ? (text) => terminalWrite(() => api.sendReply(paneId, text, false, session, undefined, undefined, true)) : null,
+    saveFile: saveTerminalFile,
+    pastePath: (path) => terminalWrite(() => api.pasteFile(paneId, path, session)),
     onActivate: () => {
       sendConfirm.reset();
       forceConfirm.reset();
@@ -656,11 +667,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Trailing-edge debounce for post-keypress revalidation: a burst of raw key sends (arrow-key
   // spam) coalesces into a single pane refetch instead of one per press.
   const keyRevalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyRevalidateQueued = useRef(false);
+  // Read when a write is answered, after the render that sent it.
+  const streamUp = useLiveHealthy();
+  const mirrorOnScreen = useMirrorShown();
+  const liveHealthy = useRef(streamUp);
+  liveHealthy.current = streamUp;
+  const mirrorShown = useRef(mirrorOnScreen);
+  mirrorShown.current = mirrorOnScreen;
 
-  // The pane's harness adapter, resolved HERE (this is where the agent is known) so the neutral
-  // draft helpers below stay harness-free: they take the capability, never the grammar. Undefined for
-  // any agent without an adapter, which is exactly the "no idea" case those helpers already handle.
-  const adapter = adapterFor(agent ?? undefined);
   const stop = useStopTurn({ paneId, session, agent, interruptible: !!adapter?.interrupt && !gone && !readOnly, working, locked });
   // Guard against a false stranded-draft: if the detected draft is what we JUST sent, it's our own
   // reply still echoing on the "❯" line before the bridge's pending Enter — suppress both the preview
@@ -1189,36 +1204,47 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const forcingSend = forceConfirm.pending === "force";
 
   // Coalesce revalidations from a burst of key presses, LEADING edge first: the first press in a
-  // burst refetches immediately, and only presses that arrive inside the window collapse into one
-  // trailing refetch. It used to be trailing-only, which meant a lone press — the common case — sat
-  // out the full window before its fetch even *started*, and if that fetch then beat the TUI's
-  // repaint you waited a whole 1.5s poll to see anything. Arrow-key spam still coalesces exactly as
-  // before: presses 2..n only ever schedule the one trailing refetch.
+  // burst refetches immediately, and presses inside the window fold into one refetch at its end, then
+  // the window starts again. It used to be trailing-only, which meant a lone press — the common case —
+  // sat out the full window before its fetch even *started*; and a burst used to push its trailing
+  // refetch back on every press, so while you kept typing the mirror waited for the poll.
+  //
+  // Not at all while the bridge watches this pane's mirror for an open stream: it reads the pane just
+  // after each write and names it when it changed (pane-watcher.ts), which is sooner and cheaper than a
+  // read from here that may beat the repaint. With the stream up and the mirror off screen, only the
+  // pane is re-read; the stream announces the herd.
   function scheduleKeyRevalidate() {
-    if (keyRevalidateTimer.current === null) {
-      revalidate(); // leading edge
-      // Cooldown only — it fires nothing itself; a press landing before it expires replaces it with
-      // the trailing refetch below.
-      keyRevalidateTimer.current = setTimeout(() => {
-        keyRevalidateTimer.current = null;
-      }, KEY_REVALIDATE_MS);
+    if (liveHealthy.current && mirrorShown.current) return;
+    if (keyRevalidateTimer.current !== null) {
+      keyRevalidateQueued.current = true;
       return;
     }
-    clearTimeout(keyRevalidateTimer.current);
-    keyRevalidateTimer.current = setTimeout(() => {
-      keyRevalidateTimer.current = null;
-      revalidate(); // trailing edge — one refetch for the whole burst
-    }, KEY_REVALIDATE_MS);
+    const refetch = () => {
+      if (liveHealthy.current) narrowRevalidation("pane");
+      revalidate();
+      keyRevalidateTimer.current = setTimeout(() => {
+        keyRevalidateTimer.current = null;
+        if (!keyRevalidateQueued.current) return;
+        keyRevalidateQueued.current = false;
+        refetch();
+      }, KEY_REVALIDATE_MS);
+    };
+    refetch();
   }
 
   // Raw key send (nav tray). Resolves the bridge's verdict so the pressed button can echo it — the
   // mirror is still the source of truth for what the key DID, but it can be ~2s behind, and this
   // path used to be silent on success, so a press looked like it went nowhere. Errors still go to
   // the status channel; the echo just falls back to idle.
-  async function pressKeys(k: string[]): Promise<boolean> {
+  function pressKeys(k: string[]): Promise<boolean> {
+    return terminalWrite(() => api.sendKeys(paneId, k, session));
+  }
+
+  /** One write straight to the terminal (keys, or a paste while typing into it): the verdict, errors to the status channel. */
+  async function terminalWrite(call: () => Promise<ActionResponse>): Promise<boolean> {
     if (locked) return false;
     try {
-      const res = await api.sendKeys(paneId, k, session);
+      const res = await call();
       if (!res.ok) {
         setStatus(res.error ?? "Key send failed", "error");
         return false;
@@ -1229,6 +1255,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       setStatus(e instanceof Error ? e.message : String(e), "error");
       return false;
     }
+  }
+
+  /** A file pasted or picked while typing into the terminal, saved the way an attachment is; its path. */
+  async function saveTerminalFile(file: File): Promise<string | null> {
+    try {
+      const res = await api.uploadImage(paneId, await downscaleImage(file), session);
+      if (res.ok) return res.path;
+      setStatus(res.error, "error");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e), "error");
+    }
+    return null;
   }
 
   // Insert "/cmd " into the composer (arg-taking commands) and focus it. Appends to any draft already
@@ -1243,7 +1281,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // Each one uploads straight away; a picture is also a chip in the text where the cursor was, which
   // is where its path goes when the message is sent (ADR 0104). Other files go after the prose.
   function attachFiles(files: Iterable<File>) {
-    if (locked || direct.active) return;
+    if (locked) return;
+    // Typing into the terminal, a file goes there as its path, as a terminal takes a dropped file.
+    if (direct.active) return direct.pasteFiles(files);
     setFailure(null); // the draft changed, so the refusal no longer describes it
     const before = pictures(attachments.current()).length;
     const result = attachments.add(files);
@@ -1324,7 +1364,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // While the agent works, Send goes now, as the terminal's Enter; this is the other mode (ADR 0114).
     ...(working && busyChoice && hasDraft && !direct.active ? [{ id: "later", group: "Send", label: "Send after this turn", icon: Clock,
       disabled: locked || sending || attachments.uploading, run: () => sendDraft({ mode: "afterTurn" }) } as const] : []),
-    { id: "attach", group: "Attach", label: "Files and photos", icon: Paperclip, disabled: locked || direct.active, run: () => controlActions.current.attach() },
+    { id: "attach", group: "Attach", label: "Files and photos", icon: Paperclip, disabled: locked, run: () => controlActions.current.attach() },
     { id: "quick", group: "Replies", label: "Quick replies", icon: Zap, ...dockControl("quick", locked) },
     ...(commands.length > 0 ? [{ id: "commands", group: "Replies", label: "Commands", icon: Slash, disabled: locked, on: drawer === "cmd", run: () => controlActions.current.toggleDock("cmd") } as const] : []),
     { id: "keys", group: "Terminal", label: "Keys", icon: Keyboard, ...dockControl("keys", locked) },
@@ -1372,7 +1412,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   // Files dragged over the chat (or, without one, over the composer) attach as if picked.
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const dropOver = useFileDrop(dropZoneRef ?? surfaceRef, !(locked || direct.active), attachFiles);
+  const dropOver = useFileDrop(dropZoneRef ?? surfaceRef, !locked, attachFiles);
   // On iOS, tapping the draft opens the keyboard without scrolling the page (the surface holds focus
   // for the moment between the touch and the tap).
   useFocusInPlace(inputRef, surfaceRef);
@@ -1612,7 +1652,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       }
                     }
               }
-              onPaste={onPasteFiles}
+              onPaste={direct.active ? direct.onPaste : onPasteFiles}
               placeholder={
                 gone
                   ? "Pane is gone"

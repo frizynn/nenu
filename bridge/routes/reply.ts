@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import type { AuditLog } from "../audit.ts";
 import type { Config } from "../config.ts";
 import type { HerdrClient, PaneRead } from "../herdr-client.ts";
@@ -9,7 +11,7 @@ import {
 import { reportUnsentReply, sendReportDetail } from "../send-report.ts";
 import type { ActionResponse, InterruptResponse, SendOutcome, SendRequest, TurnState } from "../types.ts";
 import { claudeLogReader } from "../delivery-check.ts";
-import { guardedSend, settleDraft, settleAfterType, takeBackQueue, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
+import { guardedSend, pasteFile, settleDraft, settleAfterType, takeBackQueue, triggerFor, WriteLedger, type GuardedSendDeps, type GuardedSendResult, type SendTrace } from "../guarded-send.ts";
 import { adapterFor as journalFor } from "../journal/registry.ts";
 import type { PaneWrites } from "../pane-writes.ts";
 import { InterruptLedger, interruptTurn } from "../interrupt.ts";
@@ -20,6 +22,8 @@ import { parseAnsi } from "../../web/src/lib/ansi.ts";
 import { splitLines } from "../../web/src/lib/blocks.ts";
 import { draftCarriesSend } from "../../web/src/lib/guarded-reply.ts";
 import { adapterFor } from "../../web/src/lib/harness/index.ts";
+import { isUploadPath } from "../../web/src/lib/upload-path.ts";
+import { uploadDirs } from "../uploads.ts";
 import type { PaneAction, PaneRouteRequest, Services } from "./context.ts";
 import { json, jsonError, secure, text } from "./http.ts";
 import { MAX_READ_LINES } from "./pane.ts";
@@ -30,11 +34,14 @@ const MAX_CLEAR_DRAFT_CHARS = 64 * 1024;
 const PROMPT_BINDING_BLANK_LINE_HEADROOM = 6;
 
 // Terminal writes are serialised per pane with queue delivery (PaneWrites): a saved message being
-// typed must not interleave with a direct reply, key or interrupt.
+// typed must not interleave with a direct reply, key or interrupt. A page watching the pane sees what
+// the write did on the watcher's typed cadence.
 function exclusive(write: (ctx: Services, r: PaneRouteRequest) => Promise<Response>): PaneAction["handle"] {
   return async (ctx, r) => {
     const result = await ctx.input.run(r.rt.name, r.paneId, () => write(ctx, r));
-    return result.busy ? jsonError("A saved message is being delivered. Wait before using terminal controls.", 409, null) : result.value;
+    if (result.busy) return jsonError("A saved message is being delivered. Wait before using terminal controls.", 409, null);
+    ctx.paneWatcher.wrote(r.rt.name, r.paneId);
+    return result.value;
   };
 }
 
@@ -68,6 +75,12 @@ export const replyPaneActions: Record<string, PaneAction> = {
     level: "write",
     marksSeen: true,
     handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => keysPane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
+  },
+  // A file attached while typing into the terminal: its saved path, pasted as the terminal would.
+  "paste-file": {
+    level: "write",
+    marksSeen: true,
+    handle: exclusive(({ cfg, audit }, { req, rt, paneId, device }) => pasteFilePane(rt.herdr, cfg, paneId, req, audit, device, rt.name)),
   },
   // A draft in the agent's box, settled from the phone (ADR 0112, ADR 0114): taken over, discarded or
   // sent, only while the box still holds the text the phone showed.
@@ -481,6 +494,33 @@ export async function clearDraftPane(
   const outcome = await settleDraft({ herdr, paneId, readLines: cfg.readLines }, body.draft, action, cfg.submitKeys);
   // The draft's length, not its words: the box may hold what was never meant to be sent.
   audit.record({ action: action === "send" ? "draft.send" : "draft.clear", paneId, session, device, detail: { chars: body.draft.length, action, done: outcome.ok } });
+  return json(outcome satisfies ActionResponse, req.headers.get("accept-encoding"));
+}
+
+/**
+ * POST `{ path }`: paste one file Nenu saved (bridge/uploads.ts) into the pane while the operator types
+ * into it (guarded-send.ts pasteFile). Only a path straight under an uploads directory: the route pastes
+ * Nenu's own uploads, not text of the client's choosing.
+ */
+export async function pasteFilePane(
+  herdr: HerdrClient,
+  cfg: Config,
+  paneId: string,
+  req: Request,
+  audit: AuditLog,
+  device: string | null,
+  session: string,
+): Promise<Response> {
+  let body: { path?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return text("bad body", 400);
+  }
+  const path = body.path;
+  if (typeof path !== "string" || !isUploadPath(path) || !uploadDirs(cfg.stateDir).includes(dirname(path))) return text("bad path", 400);
+  const outcome = await pasteFile({ herdr, paneId, readLines: cfg.readLines }, path);
+  audit.record({ action: "paste-file", paneId, session, device, detail: { path, done: outcome.ok } });
   return json(outcome satisfies ActionResponse, req.headers.get("accept-encoding"));
 }
 

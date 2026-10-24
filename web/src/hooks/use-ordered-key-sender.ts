@@ -4,15 +4,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // behind it, preserving order without handing the bridge an unbounded JSON array.
 const MAX_BATCH = 64;
 
+/**
+ * A write that takes its turn among the keys: a paste, or a file's path once it is saved. `current`
+ * turns false once the queue is reset (a pane change): a write still waiting on an upload then sends
+ * nothing, since its pane is no longer the one on screen.
+ */
+export type OrderedWrite = (current: () => boolean) => Promise<boolean>;
+
 // Serialize bursts of keys through Herdr's one-shot RPC. Ordering is guaranteed inside one
 // `send_keys` array, but not across concurrent connections, so one batch stays in flight while any
 // later input accumulates into the next batch. This is transport backpressure, not a typing delay:
 // the first key leaves immediately and a slow round trip merely makes the following batch larger.
+// A paste is one write of its own in the same line: keys typed after it wait for its answer.
 export function useOrderedKeySender(
   send: (keys: string[]) => Promise<boolean>,
   onFailure: () => void,
 ) {
-  const pending = useRef<string[]>([]);
+  const pending = useRef<Array<string | OrderedWrite>>([]);
   const inFlight = useRef(false);
   const generation = useRef(0);
   const mounted = useRef(true);
@@ -27,7 +35,17 @@ export function useOrderedKeySender(
   const pump = useCallback(() => {
     if (inFlight.current || pending.current.length === 0) return;
 
-    const batch = pending.current.splice(0, MAX_BATCH);
+    const head = pending.current[0]!;
+    let write: () => Promise<boolean>;
+    if (typeof head === "function") {
+      pending.current.shift();
+      const writeGeneration = generation.current;
+      write = () => head(() => writeGeneration === generation.current);
+    } else {
+      const end = pending.current.findIndex((item, i) => i >= MAX_BATCH || typeof item === "function");
+      const batch = pending.current.splice(0, end === -1 ? MAX_BATCH : end) as string[];
+      write = () => sendRef.current(batch);
+    }
     const batchGeneration = generation.current;
     inFlight.current = true;
 
@@ -35,7 +53,7 @@ export function useOrderedKeySender(
       try {
         let ok = false;
         try {
-          ok = await sendRef.current(batch);
+          ok = await write();
         } catch {
           // A thrown transport failure has the same stop-now semantics as a false verdict.
         }
@@ -59,7 +77,7 @@ export function useOrderedKeySender(
   }, []);
   pumpRef.current = pump;
 
-  const enqueue = useCallback((keys: string[]) => {
+  const enqueue = useCallback((keys: Array<string | OrderedWrite>) => {
     if (keys.length === 0) return;
     pending.current.push(...keys);
     if (mounted.current) setBusy(true);

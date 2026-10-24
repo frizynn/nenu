@@ -19,6 +19,7 @@ import { adapterFor, type HarnessAdapter } from "../web/src/lib/harness/index.ts
 import { draftIsPartOfSend, hasPlacedPictures, holdsCliToken, imageTokens, pathShows, sendPieces, strip } from "../web/src/lib/harness/inline-images.ts";
 import { defaultSleep, type Sleep } from "../web/src/lib/harness/poll.ts";
 import { detectNoEchoPrompt } from "../web/src/lib/no-echo.ts";
+import { isPicturePath } from "../web/src/lib/upload-path.ts";
 import { deliveryVerdict, hasWords, type LogLook, type LogReader } from "./delivery-check.ts";
 import type { EventPoker } from "./event-poker.ts";
 import { herdrErrorCode, type HerdrClient } from "./herdr-client.ts";
@@ -797,6 +798,45 @@ export async function settleDraft(
     }
   }
   return { ok: false, error: "Enter went in, but the agent's box still shows the text." };
+}
+
+/**
+ * Paste one file Nenu saved into the pane while the operator types into it, as a terminal paste would
+ * hand it over: a CLI that attaches a pasted path (`pastesImagePaths`) gets the path as a bracketed
+ * paste of its own, and any other pane gets it typed as text, as it reads any path. Claude draws a
+ * picture's `[Image #N]` a beat after the paste and keys sent on its heels land before it (measured
+ * `xy[Image #6]`), so for a picture this waits until the box shows one more token than it held, or
+ * the path kept as text (ADR 0104); the keys typed after it wait for this answer. The caller holds the
+ * pane's write lock.
+ */
+export async function pasteFile(
+  deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep" | "now">,
+  path: string,
+): Promise<{ ok: true } | { ok: false; error: string; textDelivered: boolean }> {
+  let adapter: HarnessAdapter | undefined;
+  try {
+    adapter = adapterFor((await deps.herdr.getPane(deps.paneId)).agent ?? undefined);
+  } catch (err) {
+    return { ok: false, error: `herdr pane.get failed: ${message(err)}`, textDelivered: false };
+  }
+  const attaches = adapter?.pastesImagePaths === true;
+  const send = new Send({ ...deps, submitKeys: [] }, { text: path, requestId: "paste-file" }, adapter);
+  let before = 0;
+  if (attaches && isPicturePath(path)) {
+    try {
+      before = imageTokens((await send.read()).draft);
+    } catch (err) {
+      return { ok: false, error: `herdr read failed: ${message(err)}`, textDelivered: false };
+    }
+  }
+  try {
+    await deps.herdr.sendPaneText(deps.paneId, attaches ? `\x1b[200~${path}\x1b[201~` : path);
+  } catch (err) {
+    return { ok: false, error: `herdr send_text failed: ${message(err)}`, textDelivered: false };
+  }
+  if (!attaches || !isPicturePath(path)) return { ok: true };
+  const drawn = await pictureDrawn(send, adapter!, before + 1, path);
+  return drawn === null ? { ok: false, error: "The picture didn't show in the agent's box. Check Terminal before typing on.", textDelivered: true } : { ok: true };
 }
 
 /**
