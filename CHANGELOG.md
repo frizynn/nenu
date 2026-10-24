@@ -8,6 +8,21 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-24
+
+### Removed
+
+- Herdr Organizations support: projects, coordinators, threads, asks, routines, reports, library and coordinator marks, their `/api/org/*` routes and the `/projects`, `/project/…`, `/asks` and `/routines` pages; `COLLIE_HERDR_ORGANIZATIONS_BIN` and `HERDR_PROJECTS_ROOT` no longer have effect (5f2006b3, d159440d, b6f22ead).
+
+### Changed
+
+- Home lists Recents, Workspaces and PRs; the sidebar, drawer and Search list workspaces and chats; New starts a tab, a workspace or a quick question (d159440d).
+- Workspaces keep Herdr's order instead of moving the one whose agent changed state last (d6be52cd).
+
+### Added
+
+- Workspaces can be ordered by name or dragged into an order of your own, kept on the device (d6be52cd, 6bb5709c, 75af3eaa, 54198f25).
+
 ## [1.46.0] - 2026-10-22
 
 ### Added
