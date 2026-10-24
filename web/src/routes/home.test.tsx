@@ -368,6 +368,13 @@ describe("Recents and Workspaces", () => {
     expect(main.getByRole("combobox", { name: "Order" })).not.toHaveFocus();
   });
 
+  it("clips the Order picker to its control, which WebKit lays out as wide as its longest option", async () => {
+    // jsdom draws nothing: `bun scripts/e2e/run.ts phone-scroll` measures the page that scrolled sideways.
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    expect(main.getByRole("combobox", { name: "Order" }).parentElement).toHaveClass("overflow-clip");
+  });
+
   describe("a tab of several panes", () => {
     const member = (paneId: string, tabId: string, paneLabel: string, status: AgentView["status"], minutes: number): AgentView =>
       ({ ...data.agents[0]!, paneId, workspaceId: "w3", workspaceLabel: "crew", tabId, tabLabel: tabId.slice(2), agent: "claude", paneLabel, status, lastActiveAt: now - minutes * 60_000 });
