@@ -1,0 +1,25 @@
+{
+ "pid": 2341045,
+ "sessionId": "9af88e52-2af9-499b-8533-023b4f542e9f",
+ "cwd": "/tmp/nts/work",
+ "startedAt": 1792833343497,
+ "procStart": "73776502",
+ "version": "2.1.310",
+ "peerProtocol": 1,
+ "peerFeatures": [
+  "notify_idle",
+  "reply_across_default_dirs",
+  "artifact_yield"
+ ],
+ "kind": "interactive",
+ "entrypoint": "cli",
+ "pidDomain": "linux:f1471139797447ceab7e7703f185ec56:pid:[4026531836]",
+ "messagingSocketPath": "/tmp/cc-socks/2341045.sock",
+ "name": "work-1",
+ "nameSource": "derived",
+ "nameSince": 1792833343497,
+ "status": "shell",
+ "updatedAt": 1792838251487,
+ "statusUpdatedAt": 1792838251487,
+ "bridgeSessionId": "session_redacted"
+}

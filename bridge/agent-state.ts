@@ -12,7 +12,9 @@ import {
   decodeClaudeSession,
   foregroundPids,
   newestRollout,
+  procStartTicks,
   sameProcStart,
+  statStartTicks,
   type ClaudeSessionFile,
 } from "./agent-state-sources.ts";
 import type { HerdrClient } from "./herdr-client.ts";
@@ -31,9 +33,14 @@ import type { AgentView, LivePublisher, TurnState } from "./types.ts";
 /** A Claude transcript or Codex rollout read on first sight: enough tail to hold the current turn. */
 const TAIL_BYTES = 4 * 1024 * 1024;
 /**
- * A Claude at rest, first seen: enough tail to hold the row that ended its last turn, which is all the
- * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB.
+ * A Claude at rest, first seen: enough tail to hold its last reply and any usage-limit row after it,
+ * which is all the usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured
+ * 2.9 MB. The first look is short and the long one runs only when it found no reply: on 14 resting
+ * transcripts the last reply sat 3–269 KB from the end (median 4 KB), and every resting pane is read at
+ * once on first sight, at a resident cost that scales with the read (14 panes measured: 66 MB at 1 MB,
+ * 7 MB at 64 KB).
  */
+const IDLE_PEEK_BYTES = 64 * 1024;
 const IDLE_TAIL_BYTES = 1024 * 1024;
 /** The longest wait before a Claude held by its usage limit is looked at again. */
 const LIMIT_RECHECK_MS = 3_600_000;
@@ -62,8 +69,8 @@ export interface AgentStatesOptions {
   /** The contained rollout path of a Herdr-reported Codex session, when open files name none. */
   codexTranscript?(ref: AgentSessionRef): Promise<string | null>;
   openFiles?(pids: number[]): Promise<string[]>;
-  /** Epoch ms the process started, or null when unknown. */
-  procStart?(pid: number): Promise<number | null>;
+  /** Whether `pid` is the process a session file's `procStart` names; null when that cannot be read. */
+  sameProcess?(pid: number, procStart: string): Promise<boolean | null>;
   watch?: WatchFn;
   now?(): number;
 }
@@ -117,14 +124,14 @@ export class AgentStates {
   private readonly sessionDirs: string[];
   private readonly watchFn: WatchFn;
   private readonly openFiles: (pids: number[]) => Promise<string[]>;
-  private readonly procStart: (pid: number) => Promise<number | null>;
+  private readonly sameProcess: (pid: number, procStart: string) => Promise<boolean | null>;
   private readonly now: () => number;
 
   constructor(private readonly opts: AgentStatesOptions) {
     this.sessionDirs = claudeSessionDirs(opts.claudeRoots);
     this.watchFn = opts.watch ?? ((path, onChange) => fsWatch(path, { persistent: false }, (event, filename) => onChange(event, filename ? String(filename) : null)));
     this.openFiles = opts.openFiles ?? processOpenFiles;
-    this.procStart = opts.procStart ?? processStart;
+    this.sameProcess = opts.sameProcess ?? sameProcess;
     this.now = opts.now ?? Date.now;
   }
 
@@ -273,8 +280,7 @@ export class AgentStates {
     }
     if (verify && file.procStart) {
       // A file left by a crashed Claude names a pid the system may have handed to someone else.
-      const started = await this.procStart(pid).catch(() => null);
-      if (started !== null && !sameProcStart(file.procStart, started)) return false;
+      if ((await this.sameProcess(pid, file.procStart).catch(() => null)) === false) return false;
     }
     entry.sessionDir = dir;
     await this.applyClaude(entry, file);
@@ -308,8 +314,16 @@ export class AgentStates {
       const path = await this.opts.claudeTranscript(sessionId).catch(() => null);
       // A busy spell that began meanwhile followed the transcript itself, watched: that tail stays.
       if (!path || entry.dropped || entry.file?.sessionId !== sessionId || entry.transcript) return;
-      entry.transcript = { path, sessionId, scan: new ClaudeTurnScan() };
-      await this.readTail(entry.transcript, IDLE_TAIL_BYTES);
+      for (const bytes of [IDLE_PEEK_BYTES, IDLE_TAIL_BYTES]) {
+        const transcript: NonNullable<Entry["transcript"]> = { path, sessionId, scan: new ClaudeTurnScan() };
+        entry.transcript = transcript;
+        await this.readTail(transcript, bytes);
+        // Done once the reply was found or the whole file read, or once the session moved on: a busy
+        // spell that began meanwhile follows this tail now.
+        const found = transcript.scan.lastReply > -Infinity || (transcript.tail?.offset ?? Infinity) <= bytes;
+        const moved = entry.dropped || (entry as Entry).transcript !== transcript || entry.file?.sessionId !== sessionId || entry.file?.status === "busy";
+        if (found || moved) return;
+      }
       return;
     }
     await this.readTail(entry.transcript);
@@ -486,7 +500,7 @@ export class AgentStates {
   }
 }
 
-async function readSmall(path: string): Promise<string | null> {
+export async function readSmall(path: string): Promise<string | null> {
   try {
     const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -524,8 +538,23 @@ export async function processOpenFiles(pids: number[]): Promise<string[]> {
   } finally { clearTimeout(timer); }
 }
 
+/**
+ * Whether `pid` started when `procStart` says: Linux's start ticks straight from `/proc` (no spawn;
+ * `Bun.file` because `/proc` files report size 0), else {@link processStart}. Null when the start
+ * cannot be read.
+ */
+export async function sameProcess(pid: number, procStart: string): Promise<boolean | null> {
+  if (procStartTicks(procStart)) {
+    if (process.platform !== "linux") return null;
+    const ticks = statStartTicks(await Bun.file(`/proc/${pid}/stat`).text());
+    return ticks === null ? null : ticks === procStart.trim();
+  }
+  const started = await processStart(pid);
+  return started === null ? null : sameProcStart(procStart, started);
+}
+
 /** When a pid started, from `ps -o lstart=` read in this process's own time zone. */
-async function processStart(pid: number): Promise<number | null> {
+export async function processStart(pid: number): Promise<number | null> {
   const child = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore", stdin: "ignore", env: { ...process.env, LC_ALL: "C" } });
   const timer = setTimeout(() => child.kill(), 2_000);
   try {
