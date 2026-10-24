@@ -103,7 +103,10 @@ const processStarts: ProcessStarts = {
  */
 export class ClaudeSessionFiles {
   private cache: { expires: number; value: Promise<ClaudeSession[]> } | null = null;
-  /** `ps` costs a spawn, so its definite verdicts are reused while the file stays; /proc is read every time. */
+  /**
+   * `ps` costs a spawn, so its definite verdicts are reused while the file stays and its pid lives: a pid
+   * reused between two lists keeps a stale verdict there. /proc is cheap and read every time.
+   */
   private verified = new Map<string, boolean>();
   constructor(private readonly dirs: readonly string[], private readonly ttl = 5_000, private readonly starts = processStarts) {}
 
@@ -123,8 +126,9 @@ export class ClaudeSessionFiles {
         if (!Number.isSafeInteger(pid)) continue;
         try { process.kill(pid, 0); } catch { continue; }
         const text = await readSmall(join(dir, name));
+        if (!text) continue;
         let raw: unknown;
-        try { raw = JSON.parse(text ?? ""); } catch { continue; }
+        try { raw = JSON.parse(text); } catch { continue; }
         const row = record(raw);
         const [session] = decodeClaudeSessions([row]);
         if (session?.pid !== pid) continue;
