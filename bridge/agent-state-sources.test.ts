@@ -48,10 +48,10 @@ describe("Claude session file", () => {
 
   test("procStart is UTC in ps form; a local reading also matches, another start does not", () => {
     const utc = Date.parse("Sun Oct 11 12:59:42 2026 UTC");
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: utc })).toBe(true);
-    expect(sameProcStart("Sun Oct  11 12:59:42 2026", { ms: utc + 900 })).toBe(true);
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: Date.parse("Sun Oct 11 12:59:42 2026") })).toBe(true);
-    expect(sameProcStart("Sun Oct 11 12:59:42 2026", { ms: utc + 60_000 })).toBe(false);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", utc)).toBe(true);
+    expect(sameProcStart("Sun Oct  11 12:59:42 2026", utc + 900)).toBe(true);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", Date.parse("Sun Oct 11 12:59:42 2026"))).toBe(true);
+    expect(sameProcStart("Sun Oct 11 12:59:42 2026", utc + 60_000)).toBe(false);
     expect(procStartTicks("Sun Oct 11 12:59:42 2026")).toBe(false);
   });
 
@@ -62,10 +62,7 @@ describe("Claude session file", () => {
     const decoded = decodeClaudeSession(file, row.pid);
     expect(decoded).toMatchObject({ status: "shell", version: "2.1.310", procStart: "73776502" });
     expect(procStartTicks(decoded!.procStart!)).toBe(true);
-    const ticks = statStartTicks(fixture("claude-2.1.310-proc-stat.txt"));
-    expect(ticks).toBe("73776502");
-    expect(sameProcStart(decoded!.procStart!, { ticks: ticks! })).toBe(true);
-    expect(sameProcStart(decoded!.procStart!, { ticks: "73776503" })).toBe(false);
+    expect(statStartTicks(fixture("claude-2.1.310-proc-stat.txt"))).toBe(decoded!.procStart!);
   });
 
   test("a command name with spaces and parentheses does not shift the stat fields", () => {

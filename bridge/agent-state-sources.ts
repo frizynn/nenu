@@ -52,25 +52,20 @@ export function decodeClaudeSession(text: string, pid: number): ClaudeSessionFil
   };
 }
 
-/** How a process's start was read: `/proc/<pid>/stat` start ticks on Linux, epoch ms from `ps` elsewhere. */
-export type ProcStart = { ticks: string } | { ms: number };
-
 /**
  * Claude on Linux writes `procStart` as the process's start in clock ticks since boot, field 22 of
- * `/proc/<pid>/stat` (measured 2.1.308–2.1.310: "73776502"); on macOS in `ps -o lstart` form.
+ * `/proc/<pid>/stat` (measured 2.1.308–2.1.310, fixture from 2.1.310: "73776502"); on macOS in `ps -o lstart` form.
  */
 export const procStartTicks = (procStart: string) => /^\d+$/.test(procStart.trim());
 
 /**
- * Whether a session file's `procStart` names the process whose start was read as `started`. Ticks
- * compare exactly. The `ps -o lstart` form is in UTC (Claude 2.1.296 measured: "Sun Oct 11 12:56:04
- * 2026" for a process `ps` shows at 14:56:04 local), so both readings are tried; one second of slack
- * covers the rounding.
+ * Whether a `procStart` in `ps -o lstart` form names the process that started at `startedMs`. Claude
+ * 2.1.296 writes it in UTC (measured: "Sun Oct 11 12:56:04 2026" for a process `ps` shows at 14:56:04
+ * local), so both readings are tried; one second of slack covers the rounding.
  */
-export function sameProcStart(procStart: string, started: ProcStart): boolean {
-  if ("ticks" in started) return procStart.trim() === started.ticks;
+export function sameProcStart(procStart: string, startedMs: number): boolean {
   const text = procStart.trim().replace(/\s+/g, " ");
-  return [Date.parse(`${text} UTC`), Date.parse(text)].some((at) => Number.isFinite(at) && Math.abs(at - started.ms) <= 1_500);
+  return [Date.parse(`${text} UTC`), Date.parse(text)].some((at) => Number.isFinite(at) && Math.abs(at - startedMs) <= 1_500);
 }
 
 /** Field 22 (start ticks) of a `/proc/<pid>/stat` line. Field 2, the command name, may hold spaces and

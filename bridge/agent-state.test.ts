@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { statStartTicks } from "./agent-state-sources.ts";
-import { AgentStates, processStart, type WatchFn } from "./agent-state.ts";
+import { AgentStates, sameProcess, type WatchFn } from "./agent-state.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
 // The service over real files in a temp dir, with the watcher and the process lookups injected so a
@@ -57,7 +57,7 @@ function states(w: ReturnType<typeof watches>, extra: Partial<ConstructorParamet
     codexRoots: [codexRoot],
     live: { publish: (event) => void events.push(event) },
     claudeTranscript: async (id) => (id === SESSION_ID ? transcript : null),
-    procStart: async () => ({ ms: Date.parse("Sun Oct 11 12:59:42 2026 UTC") }),
+    sameProcess: async () => true,
     openFiles: async () => [],
     watch: w.watch,
     ...extra,
@@ -113,69 +113,43 @@ describe("Claude panes", () => {
 
   test("a file left by another process with the same pid is not trusted", async () => {
     const w = watches();
-    const { service } = states(w, { procStart: async () => ({ ms: Date.parse("Sun Oct 11 09:00:00 2026 UTC") }) });
+    const { service } = states(w, { sameProcess: async () => false });
     await writeFile(join(sessions, `${PID}.json`), sessionFile("busy", T0));
     service.sync("s", herdr([PID]), [pane("claude")]);
     await settle();
     expect(service.get("s", "w1:p1")).toBeUndefined();
   });
 
-  test("a Linux session file maps by its start ticks, and another process's ticks do not", async () => {
-    const w = watches();
-    const reads: [number, string][] = [];
-    let ticks = "73776502";
-    const { service } = states(w, { procStart: async (pid, procStart) => { reads.push([pid, procStart]); return { ticks }; } });
-    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0, { procStart: "73776502" }));
-    service.sync("s", herdr([PID]), [pane("claude")]);
-    await settle();
-    expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
-    expect(reads).toEqual([[PID, "73776502"]]);
-
-    // A file left by a crashed Claude whose pid now belongs to another process stays unmapped.
-    service.sync("s", herdr([]), []);
-    ticks = "80000000";
-    reads.length = 0;
-    service.sync("s", herdr([PID]), [pane("claude")]);
-    await settle();
-    expect(service.get("s", "w1:p1")).toBeUndefined();
-    expect(reads).toEqual([[PID, "73776502"]]);
-    service.close();
-  });
-
-  test("a pid's start is read once while a pane shows it, and again once it left", async () => {
-    const w = watches();
-    let reads = 0;
-    let now = T0;
-    const { service } = states(w, { now: () => now, procStart: async () => (reads++, { ticks: "1" }) });
-    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0, { procStart: "73776502" }));
-    service.sync("s", herdr([PID]), [pane("claude")]);
-    await settle();
-    // Unmapped panes are retried; the pid did not change, so its start is not read again.
-    for (let i = 0; i < 3; i++) {
-      now += 20_000;
-      service.sync("s", herdr([PID]), [pane("claude")]);
-      await settle();
-    }
-    expect(service.get("s", "w1:p1")).toBeUndefined();
-    expect(reads).toBe(1);
-    // The pid leaves the pane's foreground: a process that later shows under it is read afresh.
-    now += 20_000;
-    service.sync("s", herdr([]), [pane("claude")]);
-    await settle();
-    now += 20_000;
-    service.sync("s", herdr([PID]), [pane("claude")]);
-    await settle();
-    expect(reads).toBe(2);
-    service.close();
-  });
-
-  test.skipIf(process.platform !== "linux")("on Linux a tick-form start is read from /proc without a spawn", async () => {
+  test.skipIf(process.platform !== "linux")("on Linux a session file maps by the start ticks /proc holds, with no spawn", async () => {
+    const pid = process.pid;
+    const ticks = statStartTicks(await Bun.file(`/proc/${pid}/stat`).text());
+    expect(ticks).not.toBeNull();
     const spawn = spyOn(Bun, "spawn");
     try {
-      const ticks = statStartTicks(await Bun.file(`/proc/${process.pid}/stat`).text());
-      expect(ticks).not.toBeNull();
-      expect(await processStart(process.pid, "1")).toEqual({ ticks: ticks! });
+      const w = watches();
+      const { service } = states(w, { sameProcess: undefined });
+      await writeFile(join(sessions, `${pid}.json`), sessionFile("idle", T0, { pid, procStart: ticks }));
+      service.sync("s", herdr([pid]), [pane("claude")]);
+      await settle();
+      expect(service.get("s", "w1:p1")).toEqual({ running: false, source: "claude-session" });
+
+      // A file left by a crashed Claude whose pid now belongs to another process is not trusted.
+      const other = states(watches(), { sameProcess: undefined });
+      await writeFile(join(sessions, `${pid}.json`), sessionFile("idle", T0, { pid, procStart: String(Number(ticks) + 1) }));
+      other.service.sync("s", herdr([pid]), [pane("claude")]);
+      await settle();
+      expect(other.service.get("s", "w1:p1")).toBeUndefined();
       expect(spawn).not.toHaveBeenCalled();
+      service.close();
+      other.service.close();
+    } finally { spawn.mockRestore(); }
+  });
+
+  test("a start in ps form is checked with ps", async () => {
+    const spawn = spyOn(Bun, "spawn");
+    try {
+      expect(await sameProcess(process.pid, "Sun Oct 11 12:59:42 2026")).toBe(false);
+      expect(spawn).toHaveBeenCalledTimes(1);
     } finally { spawn.mockRestore(); }
   });
 
@@ -273,6 +247,19 @@ describe("Claude panes at their usage limit, timers and races", () => {
   const until = async (test: () => boolean) => { for (let i = 0; i < 100 && !test(); i++) await settle(); };
   const limitRow = (at: number, resetsAt: number) =>
     JSON.stringify({ type: "assistant", timestamp: iso(at), apiError: "usage_limit_reached", isApiErrorMessage: true, quotaLimits: { resetsAt: resetsAt / 1000 }, message: { model: "<synthetic>", content: [] } }) + "\n";
+
+  test("a limit row further back than the first short look is still found", async () => {
+    const w = watches();
+    const { service } = states(w, { now: () => T0 });
+    // A long row after the limit (a big paste typed into the terminal) pushes it past the first look.
+    const long = JSON.stringify({ type: "system", subtype: "informational", timestamp: iso(T0 - 500), content: "x".repeat(200 * 1024) }) + "\n";
+    await writeFile(transcript, limitRow(T0 - 1_000, T0 + 3_600_000) + long);
+    await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+    service.sync("s", herdr([PID]), [pane("claude")]);
+    await until(() => service.get("s", "w1:p1")?.limit !== undefined);
+    expect(service.get("s", "w1:p1")).toEqual({ running: false, limit: { resetsAt: T0 + 3_600_000 }, source: "claude-session" });
+    service.close();
+  });
 
   test("a reset weeks away arms a timer of an hour at most, never one past 2^31 ms", async () => {
     const w = watches();
