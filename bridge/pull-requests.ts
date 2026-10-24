@@ -27,9 +27,10 @@ const GIT_TIMEOUT_MS = 3_000;
 const CONCURRENCY = 4;
 /** GitHub sums the searches of one request against its ~10 s budget, so a slow repo fails only its batch. */
 const SEARCH_BATCH = 4;
-const PR_FIELDS = "number,title,url,headRefName,baseRefName,isDraft,reviewDecision,statusCheckRollup,additions,deletions,updatedAt";
+const SCALAR_FIELDS = ["number", "title", "url", "headRefName", "baseRefName", "isDraft", "reviewDecision", "additions", "deletions", "updatedAt"];
+const PR_FIELDS = [...SCALAR_FIELDS, "statusCheckRollup"].join(",");
 /** PR_FIELDS in GraphQL, with the check contexts `gh` flattens into `statusCheckRollup`. */
-const SEARCH_FIELDS = PR_FIELDS.replace(",statusCheckRollup", "").replaceAll(",", " ")
+const SEARCH_FIELDS = SCALAR_FIELDS.join(" ")
   + " commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{...on StatusContext{state} ...on CheckRun{status conclusion}}}}}}}";
 const SCP_RE = /^([^@]+@)?([^:]+):(\/?.+)$/;
 const REPO_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -162,8 +163,10 @@ export function remoteRepo(config: string): string | null | undefined {
     remotes.set(match[1]!, remote);
   }
   const named = [...remotes].map(([name, remote]) => {
-    const [fetch, push] = [remote.url, remote.pushurl].map((url) => url === undefined ? null : githubRepo(url));
-    return { name, repo: fetch || push || (fetch === null && push === null ? null : undefined), resolved: remote.resolved };
+    // gh reads the push URL only when the fetch URL gives it no repo at all.
+    const fetch = remote.url === undefined ? null : githubRepo(remote.url);
+    const repo = fetch !== null ? fetch : remote.pushurl === undefined ? null : githubRepo(remote.pushurl);
+    return { name, repo, resolved: remote.resolved };
   });
   if (named.length === 0 || named.some((remote) => remote.repo === undefined)) return undefined;
   const github = named.filter((remote): remote is typeof remote & { repo: string } => remote.repo !== null);
@@ -181,7 +184,8 @@ export function remoteRepo(config: string): string | null | undefined {
 export function searchArgv(repos: readonly string[]): string[] {
   const vars = repos.map((_, i) => `$q${i}:String!`).join(",");
   const blocks = repos.map((_, i) => `r${i}:search(query:$q${i},type:ISSUE_ADVANCED,first:50){nodes{...pr}}`).join(" ");
-  return ["gh", "api", "graphql", "-f", `query=fragment pr on PullRequest{${SEARCH_FIELDS}} query(${vars}){${blocks}}`,
+  // gh api would follow GH_HOST; only github.com repos get here.
+  return ["gh", "api", "--hostname", "github.com", "graphql", "-f", `query=fragment pr on PullRequest{${SEARCH_FIELDS}} query(${vars}){${blocks}}`,
     ...repos.flatMap((repo, i) => ["-f", `q${i}=author:@me repo:${repo} state:open type:pr`])];
 }
 
@@ -384,28 +388,29 @@ export class PullRequestRegistry {
     for (const info of cwds.values()) if (info && !where.has(info.repo)) where.set(info.repo, info.toplevel);
     const targets = [...where].slice(0, MAX_REPOS);
 
-    const named = new Map<string, string | null>();
+    const named = new Map<string, string>();
+    const outcomes = new Map<string, RepoPr[] | string>();
     await pool(targets, CONCURRENCY, async ([repo, cwd]) => {
       const remotes = await attempt(this.run, ["git", "config", "--get-regexp", "^remote\\."], cwd, this.timeouts.git);
       const name = remotes.ok ? remoteRepo(remotes.stdout) : undefined;
-      if (name !== undefined) named.set(repo, name);
+      if (name === null) outcomes.set(repo, NO_GITHUB_REMOTE);
+      else if (name) named.set(repo, name);
     });
 
-    const outcomes = new Map<string, RepoPr[] | string>();
     // Two clones of one GitHub repo share a search.
-    const names = [...new Set(named.values())].filter((name) => name !== null);
-    const batches = Array.from({ length: Math.ceil(names.length / SEARCH_BATCH) }, (_, i) => names.slice(i * SEARCH_BATCH, (i + 1) * SEARCH_BATCH));
+    const names = [...new Set(named.values())];
     const answers = new Map<string, RepoPr[] | string>();
-    const cwd = targets.find(([repo]) => named.get(repo))?.[1] ?? "";
-    await Promise.all([
-      pool(batches, CONCURRENCY, async (batch) => {
+    const cwd = targets.find(([repo]) => named.has(repo))?.[1] ?? "";
+    const jobs = [
+      ...Array.from({ length: Math.ceil(names.length / SEARCH_BATCH) }, (_, i) => names.slice(i * SEARCH_BATCH, (i + 1) * SEARCH_BATCH)).map((batch) => async () => {
         for (const [i, answer] of (await this.search(batch, cwd)).entries()) answers.set(batch[i]!, answer);
       }),
-      pool(targets.filter(([repo]) => !named.has(repo)), CONCURRENCY, async ([repo, cwd]) => {
+      ...targets.filter(([repo]) => !named.has(repo) && !outcomes.has(repo)).map(([repo, cwd]) => async () => {
         outcomes.set(repo, await this.listOne(cwd));
       }),
-    ]);
-    for (const [repo, name] of named) outcomes.set(repo, name === null ? NO_GITHUB_REMOTE : answers.get(name)!);
+    ];
+    await pool(jobs, CONCURRENCY, (job) => job());
+    for (const [repo, name] of named) outcomes.set(repo, answers.get(name)!);
 
     const repos = new Map<string, RepoPr[]>();
     for (const [repo] of targets) {

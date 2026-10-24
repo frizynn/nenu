@@ -20,8 +20,8 @@ const searchNode = (row: ReturnType<typeof ghRow>) => {
 
 /**
  * A fake git + gh. Folders map to (common dir, toplevel, branch, and the remotes `git config` prints);
- * `gh pr list` answers from `prs` by toplevel, and the GraphQL search from `prs` by `owner/name`, or
- * with `graphql`'s exit and stdout. Every call is recorded.
+ * `gh pr list` answers from `prs` by toplevel, and the GraphQL search from `prs` by `owner/name` (a
+ * "hang" there hangs the request), or with `graphql`. Every call is recorded.
  */
 function fakeRun(state: {
   folders: Record<string, [string, string, string, string?]>;
@@ -42,10 +42,12 @@ function fakeRun(state: {
       if (state.graphql === "throw") throw new Error("spawn gh ENOENT");
       if (state.graphql) return state.graphql;
       const data: Record<string, unknown> = {};
+      if (argv.some((arg) => state.prs[/ repo:(\S+) /.exec(arg)?.[1] ?? ""] === "hang")) return new Promise(() => {});
       for (const arg of argv) {
         const query = /^q(\d+)=author:@me repo:(\S+) state:open type:pr$/.exec(arg);
         const rows = query && state.prs[query[2]!];
-        if (query) data[`r${query[1]}`] = Array.isArray(rows) ? { nodes: rows.map((row) => searchNode(row as ReturnType<typeof ghRow>)) } : null;
+        // GitHub answers a repo it does not know with no rows, never an error.
+        if (query) data[`r${query[1]}`] = { nodes: Array.isArray(rows) ? rows.map((row) => searchNode(row as ReturnType<typeof ghRow>)) : [] };
       }
       return { code: 0, stdout: JSON.stringify({ data }), stderr: "" };
     }
@@ -122,6 +124,9 @@ describe("parsing", () => {
     // gh skips remotes on this machine, even origin; with nothing else there is no GitHub repo.
     expect(remoteRepo("remote.origin.url /home/me/shop\nremote.zz.url https://github.com/acme/shop\n")).toBe("acme/shop");
     expect(remoteRepo("remote.origin.url /home/me/shop\n")).toBeNull();
+    // The push URL counts only when the fetch URL names no repo: an alias still leaves it to gh.
+    expect(remoteRepo("remote.origin.url /home/me/shop\nremote.origin.pushurl https://github.com/acme/shop\n")).toBe("acme/shop");
+    expect(remoteRepo("remote.origin.url git@github-work:me/shop\nremote.origin.pushurl git@github.com:acme/shop\n")).toBeUndefined();
     // A remote gh alone can read, or none at all, leaves the repo to gh.
     expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.work.url git@github-work:acme/shop\n")).toBeUndefined();
     expect(remoteRepo("")).toBeUndefined();
@@ -129,9 +134,9 @@ describe("parsing", () => {
 
   test("reads the search answer per repo, as gh pr list would have printed it", () => {
     const argv = searchArgv(["acme/shop", "acme/api"]);
-    expect(argv.slice(0, 4)).toEqual(["gh", "api", "graphql", "-f"]);
-    expect(argv.slice(5)).toEqual(["-f", "q0=author:@me repo:acme/shop state:open type:pr", "-f", "q1=author:@me repo:acme/api state:open type:pr"]);
-    expect(argv[4]).toContain("r1:search(query:$q1,type:ISSUE_ADVANCED,first:50)");
+    expect(argv.slice(0, 6)).toEqual(["gh", "api", "--hostname", "github.com", "graphql", "-f"]);
+    expect(argv.slice(7)).toEqual(["-f", "q0=author:@me repo:acme/shop state:open type:pr", "-f", "q1=author:@me repo:acme/api state:open type:pr"]);
+    expect(argv[6]).toContain("r1:search(query:$q1,type:ISSUE_ADVANCED,first:50)");
     const row = ghRow(7, "feat/x", { reviewDecision: "APPROVED", statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" }, { __typename: "StatusContext", state: "PENDING" }] });
     const answers = parseSearch(JSON.stringify({
       data: { r0: { nodes: [searchNode(row), {}] }, r1: null },
@@ -271,7 +276,7 @@ describe("registry", () => {
     prs.list("main", panes);
     await prs.refresh();
     const gh = calls.filter((call) => call.argv[0] === "gh");
-    expect(gh.map((call) => call.argv.slice(1, 3))).toEqual([["api", "graphql"], ["pr", "list"]]);
+    expect(gh.map((call) => call.argv[1])).toEqual(["api", "pr"]);
     // The two clones of acme/shop share one search.
     expect(gh[0]!.argv.filter((arg) => /^q\d/.test(arg))).toEqual(["q0=author:@me repo:acme/shop state:open type:pr", "q1=author:@me repo:acme/api state:open type:pr"]);
     expect(gh[1]!.cwd).toBe("/r/local");
@@ -286,13 +291,20 @@ describe("registry", () => {
   test("asks GitHub four repos per request, so a slow repo fails only its own batch", async () => {
     const folders: Record<string, [string, string, string, string]> = {};
     for (let i = 0; i < 6; i++) folders[`/r/${i}`] = [`/r/${i}/.git`, `/r/${i}`, "main", `remote.origin.url https://github.com/acme/r${i}\n`];
-    const { run, calls } = fakeRun({ folders, prs: { "acme/r0": [ghRow(1, "a")], "acme/r5": [ghRow(2, "b")] } });
-    const { prs } = registry(run);
-    prs.list("main", Object.keys(folders).map((cwd, i) => pane(`p${i}`, cwd)));
+    const state: Parameters<typeof fakeRun>[0] = { folders, prs: { "acme/r0": [ghRow(1, "a")], "acme/r5": [ghRow(2, "b")] } };
+    const { run, calls } = fakeRun(state);
+    const { prs, logs } = registry(run, undefined, { gh: 50, git: 50 });
+    const panes = Object.keys(folders).map((cwd, i) => pane(`p${i}`, cwd));
+    prs.list("main", panes);
     await prs.refresh();
     const api = calls.filter((call) => call.argv[1] === "api");
     expect(api.map((call) => call.argv.filter((arg) => /^q\d/.test(arg)).length)).toEqual([4, 2]);
-    expect(prs.list("main", []).map((pr) => pr.number)).toEqual([1, 2]);
+    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([1, 2]);
+    // r4 hangs its batch: r5 beside it keeps its list, r0 in the other batch takes its new one.
+    state.prs = { "acme/r0": [ghRow(3, "c")], "acme/r4": "hang", "acme/r5": [] };
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.number)).toEqual([3, 2]);
+    expect(logs).toEqual(["4: timed out", "5: timed out"]);
   });
 
   test("a search that hangs or throws times out or fails like gh pr list did, keeping the last list", async () => {
