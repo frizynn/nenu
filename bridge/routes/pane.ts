@@ -30,8 +30,11 @@ export const panePaneActions: Record<string, PaneAction> = {
         const pane = await conversations.resolve(original, rt.herdr, rt.name).catch(() => undefined);
         const found = await claudeTelemetry.read(pane).catch(() => undefined);
         if (!found || pane?.agentSession?.kind !== "id") return found;
-        // Claude's status line often leaves the weekly window out; the account's last reading fills it.
-        return { ...found, telemetry: withWeekly(found.telemetry, usage.claudeWeekly(pane.agentSession.value)) };
+        // Claude's status line often leaves the weekly window out; the account's last reading fills it,
+        // and nothing about that reading may cost the session's own telemetry.
+        let weekly;
+        try { weekly = usage.claudeWeekly(pane.agentSession.value); } catch { weekly = undefined; }
+        return { ...found, telemetry: withWeekly(found.telemetry, weekly) };
       };
       // A shell's start block waits for its prompt: `agent.start` launches nowhere else.
       const shell = rt.engine.current().shellPanes.some(entry => entry.paneId === paneId);

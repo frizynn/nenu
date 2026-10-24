@@ -60,6 +60,18 @@ describe("Claude transcripts", () => {
     expect(t.sum("claude")).toEqual([1, 10, 50, 200, 100, 1000, 0]);
   });
 
+  test("each session's config dir is named from where its log sits, even a log already read", () => {
+    const t = setup();
+    writeFileSync(join(t.project, "s1.jsonl"), `${assistant({ id: "msg_1", req: "r", ts: "2026-01-10T12:00:00.000Z" })}\n`);
+    mkdirSync(join(t.project, "s1", "subagents"), { recursive: true });
+    writeFileSync(join(t.project, "s1", "subagents", "agent-x.jsonl"), "");
+    t.run();
+    const sessionDirs = new Map<string, string>();
+    scan({ roots: { claude: [{ configDir: t.claude }], codex: [] }, state: t.state, totals: t.totals, seen: t.seen,
+      book: new AccountBook([]), repoOf: (cwd) => repoOf(cwd, home), sessionDirs });
+    expect([...sessionDirs]).toEqual([["s1", t.claude]]);
+  });
+
   test("a nested object after usage does not hide the row (it did in the first prototype)", () => {
     const t = setup();
     const after = { context_management: { applied_edits: [{ type: "clear_tool_uses_20250919" }] }, diagnostics: null };

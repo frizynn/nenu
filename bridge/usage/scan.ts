@@ -203,6 +203,8 @@ export interface ScanInput {
   chunk?: number;
   /** Asked before each log; true ends the scan there. */
   stop?: () => boolean;
+  /** Filled with each Claude session's config dir, from where its log sits (its status-line reading's account). */
+  sessionDirs?: Map<string, string>;
 }
 
 /** The local calendar day of an epoch ms, YYYY-MM-DD. */
@@ -289,6 +291,7 @@ export function scan(input: ScanInput): ScanResult {
       // <project>/<session>.jsonl, or <project>/<session>/subagents/agent-<id>.jsonl
       const rel = path.slice(projects.length + 1).split("/");
       const session = rel.length === 2 ? basename(rel[1]!, ".jsonl") : rel[1];
+      if (rel.length === 2) input.sessionDirs?.set(session!, configDir);
       queue(path, path, "claude", configDir, session);
     }
   }

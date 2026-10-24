@@ -90,7 +90,9 @@ export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home
 
   // ── The scan ──
   const store = loadStore(stateDir, today, tz);
+  const sessionDirs = new Map<string, string>();
   const result = scan({
+    sessionDirs,
     roots: { claude: [...claudeDirs].map((configDir) => ({ configDir })), codex: [...codexHomes] },
     state: store.state, totals: store.totals, seen: store.seen, book,
     repoOf: (cwd) => repoOf(cwd, home),
@@ -101,7 +103,7 @@ export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home
 
   // ── Accounts and their limits ──
   const limits: AccountLimits[] = [...codexLimits(store.totals.codexLimits)];
-  const readings = claudeStatuslineReadings(stateDir, book, [...claudeDirs], now);
+  const readings = claudeStatuslineReadings(stateDir, book, [...claudeDirs], sessionDirs, now);
   limits.push(...readings.map((r) => r.reading));
   if (args.split) {
     const fromHats = read(join(hatsStateDir(env, home), "limits.json"));

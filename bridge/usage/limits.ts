@@ -31,11 +31,14 @@ export interface StatuslineReading { session: string; reading: AccountLimits }
 
 /**
  * Every Claude reading of the last 8 days, from `<stateDir>/claude-status/<session>.json`, with the
- * account its session billed then: the one every config dir names for that session at that time (a
- * session's own switch line names it whatever the dir). Config dirs that disagree cannot say which one
- * the session ran in, so its reading is unassigned rather than counted once for each.
+ * account its session billed then, as its tokens are counted: through the config dir its log sits in
+ * (`sessionDirs`, from the scan). A session with no log found is named only if every config dir names
+ * the same account for it (a session's own switch line does, whatever the dir); dirs that disagree
+ * leave its reading unassigned rather than counted once for each.
  */
-export function claudeStatuslineReadings(stateDir: string, book: AccountBook, configDirs: readonly string[], now: number): StatuslineReading[] {
+export function claudeStatuslineReadings(
+  stateDir: string, book: AccountBook, configDirs: readonly string[], sessionDirs: ReadonlyMap<string, string>, now: number,
+): StatuslineReading[] {
   const dir = join(stateDir, "claude-status");
   let names: string[];
   try { names = configDirs.length ? readdirSync(dir).filter((n) => n.endsWith(".json")) : []; } catch { return []; }
@@ -52,7 +55,8 @@ export function claudeStatuslineReadings(stateDir: string, book: AccountBook, co
     const decoded = decodeClaudeStatusline(stored.payload, observedAt);
     const limits = decoded?.telemetry.rateLimits;
     if (!decoded || !limits?.length) continue;
-    const named = new Set(configDirs.map((configDir) => book.claude(configDir, decoded.sessionId, observedAt)));
+    const own = sessionDirs.get(decoded.sessionId);
+    const named = new Set((own ? [own] : configDirs).map((configDir) => book.claude(configDir, decoded.sessionId, observedAt)));
     const account = typeof stored.account === "string" && /^claude:[0-9a-f]{16}$/.test(stored.account)
       ? stored.account
       : named.size === 1 ? [...named][0]! : UNASSIGNED.claude;
@@ -78,7 +82,7 @@ export function sessionAccounts(readings: readonly StatuslineReading[]): Record<
   return out;
 }
 
-export interface WeeklyReading { usedPercent: number; resetsAt?: number; observedAt: number }
+export interface WeeklyReading { usedPercent: number; resetsAt: number; observedAt: number }
 
 /**
  * The newest weekly window per Claude account, from whichever reading had one. Claude's status line
@@ -87,9 +91,10 @@ export interface WeeklyReading { usedPercent: number; resetsAt?: number; observe
 export function newestWeekly(all: readonly AccountLimits[]): Record<string, WeeklyReading> {
   const out: Record<string, WeeklyReading> = {};
   for (const l of all) {
-    const week = l.agent === "claude" && l.account !== UNASSIGNED.claude ? l.windows.find((w) => w.name === "seven_day") : undefined;
+    // A window with no reset cannot say whether it still holds, so an older one that can is kept.
+    const week = l.agent === "claude" && l.account !== UNASSIGNED.claude ? l.windows.find((w) => w.name === "seven_day" && w.resetsAt !== undefined) : undefined;
     if (!week || (out[l.account]?.observedAt ?? -1) >= l.observedAt) continue;
-    out[l.account] = { usedPercent: week.usedPercent, ...(week.resetsAt !== undefined ? { resetsAt: week.resetsAt } : {}), observedAt: l.observedAt };
+    out[l.account] = { usedPercent: week.usedPercent, resetsAt: week.resetsAt!, observedAt: l.observedAt };
   }
   return out;
 }

@@ -17,16 +17,18 @@ through the switch log (ADR 0085), and only at scan time. The first version of t
 weekly window of "the one Claude account signed in", which looks equivalent. It is not:
 
 - hats can switch a single session to another account;
-- a switch made after the last scan is not known until the next one (up to six hours on a finished turn);
+- a session that started before a switch keeps the reading of the account it billed, while "signed in
+  now" names the new one;
 - a second config dir with no account of its own lets the other dir's account pass as the only one.
 
 Each of these shows another account's number as if it were this session's.
 
 ## Decision
 
-1. **The scan names each session's account**, the way it attributes that session's tokens: through
-   the account every config dir names for the session at its newest reading. A session's own switch
-   line wins in every dir. Dirs that disagree leave the session unnamed.
+1. **The scan names each session's account**, the way it counts that session's tokens: through the
+   config dir its log sits in, at its newest reading, where a session's own switch line wins. A
+   session whose log was not found is named only when every config dir names the same account for it.
+   Otherwise it is left unnamed.
 2. **The scan keeps each account's newest weekly window from any reading** (status line, hats,
    claude-swap), not only from its newest reading, since that one usually lacks the window.
 3. **A pane read fills the gap only from those two**, and only when four things hold: tracking is on,
