@@ -316,14 +316,15 @@ async function readPullRequests(
 }
 
 // What each session's page shows of the list it read last: while the read hands back the same list (its
-// version held), the same rows; when the list moved, the rows that say what they said keep their objects.
-const lastPullRequests = new Map<string, { read: PullRequestView[]; shown: PullRequestView[] }>();
+// version held), the very same list, which the herd's identity and the write-through key on; when the
+// list moved, the rows that say what they said keep their objects.
+const shownPullRequestMemo = new Map<string, { read: PullRequestView[]; shown: PullRequestView[] }>();
 
 function shownPullRequests(session: string | undefined, read: PullRequestView[]): PullRequestView[] {
-  const last = lastPullRequests.get(session ?? "");
+  const last = shownPullRequestMemo.get(session ?? "");
   if (last?.read === read) return last.shown;
   const shown = keepItems(last?.shown, read);
-  lastPullRequests.set(session ?? "", { read, shown });
+  shownPullRequestMemo.set(session ?? "", { read, shown });
   return shown;
 }
 
