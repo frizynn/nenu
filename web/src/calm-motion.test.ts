@@ -54,6 +54,13 @@ it("keeps the script's motion constants equal to the stylesheet's tokens", async
   expect(root).toContain(`--motion-ease: ${motion.MOTION_EASE};`);
 });
 
+// A row that eased in holds no transform once it rests: one held after the end would make the row the
+// containing block of a fixed menu inside it (a queued message's ⋯), which then opens off screen.
+it("lets a row that eased in rest untransformed", () => {
+  const root = code(readFileSync(join(src, "index.css"), "utf8"));
+  expect(root).toMatch(/\.row-enter \{ animation: row-enter [^;]* backwards; \}/);
+});
+
 it("times a script's exit or arrival by the shared lengths", () => {
   // A timer that unmounts a layer once its CSS motion ends must last exactly as long as that motion;
   // a literal drifts the day the token moves (FOLD_OPEN_MS stayed 220 against a 180 fold). A

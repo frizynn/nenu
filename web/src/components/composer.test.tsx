@@ -2453,6 +2453,45 @@ describe("Composer — a composed key queue is guarded on the way out", () => {
   });
 });
 
+describe("Composer — a dock folds open and shut", () => {
+  it("keeps a closing dock out of reach while it folds shut, then drops it", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    await user.click(control("Keys"));
+    await user.click(screen.getByRole("button", { name: "Close Keys" }));
+    const folding = document.querySelector('.fold[data-phase="shutting"]');
+    expect(folding).toHaveAttribute("inert");
+    expect(folding?.querySelector('[aria-label="Close Keys"]')).not.toBeNull();
+    await waitFor(() => expect(document.querySelector(".fold")).toBeNull());
+  });
+
+  it("swaps one dock for another in place, without folding", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    await user.click(control("Keys"));
+    await user.click(control("Quick replies"));
+    expect(document.querySelectorAll(".fold")).toHaveLength(1);
+    expect(document.querySelector('.fold[data-phase="shutting"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Close Quick replies" })).toBeInTheDocument();
+  });
+
+  // ADR 0005: a queue discarded on close must not come back with a Keys reopened before the fold ends.
+  it("opens Keys empty when it reopens while its discarded queue still folds shut", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    await user.click(control("Keys"));
+    await user.click(screen.getByRole("button", { name: "Ctrl" }));
+    await user.click(screen.getByRole("button", { name: "Tab" }));
+    await user.click(screen.getByRole("button", { name: "Close Keys" })); // arm
+    await user.click(screen.getByRole("button", { name: "Close Keys" })); // discard
+    // Still folding shut, with the discarded queue in it; the reopen is synchronous, so it lands inside the fold.
+    expect(document.querySelector('.fold[data-phase="shutting"] [aria-label="Remove Ctrl Tab"]')).not.toBeNull();
+    fireEvent.click(control("Keys"));
+    expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Ctrl Tab" })).not.toBeInTheDocument();
+  });
+});
+
 describe("Composer — quick replies follow the pane kind", () => {
   it("an agent pane gets the agent set", async () => {
     const user = userEvent.setup();

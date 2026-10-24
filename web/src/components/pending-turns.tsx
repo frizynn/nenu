@@ -2,6 +2,7 @@ import { Pencil, RotateCcw, Send, SquareTerminal, Trash2, Zap, type IconComponen
 
 import { QueuedMessage, type QueuedAction, type QueuedTone } from "@/components/queued-message";
 import { queueRowStatus } from "@/hooks/use-message-queue";
+import { EnterScope, useEnter } from "@/lib/enter";
 import type { LocalSend, LocalSendActions } from "@/lib/local-sends";
 
 /** What a pending bubble says about itself, and which of its buttons make sense right now. */
@@ -43,34 +44,39 @@ const ACTION: Record<keyof LocalSendActions, { label: string; icon: IconComponen
 /**
  * The operator's own messages that the journal does not show yet, at the end of the conversation:
  * the same bubble as a sent message, set in a quieter ink, with one status line under it. A message
- * queued on another device is drawn by the same QueuedMessage in the queue strip.
+ * queued on another device is drawn by the same QueuedMessage in the queue strip. One sent while the
+ * thread is read eases in where it lands; the journal's turn later takes its place without moving.
  */
 export function PendingTurns({ sends, actions }: { sends: readonly LocalSend[]; actions?: LocalSendActions }) {
-  if (!sends.length) return null;
   return (
-    <div className="mt-3 space-y-3">
-      {sends.map((send) => {
-        const status = pendingStatus(send);
-        const ids = actions ? status.actions : [];
-        const offer = (id: keyof LocalSendActions): QueuedAction => ({
-          id,
-          label: id === "sendNow" && send.stranded ? "Send here" : ACTION[id].label,
-          icon: ACTION[id].icon,
-          run: () => actions?.[id](send),
-        });
-        return (
-          <div key={send.id} data-pending-send={send.state}>
-            <QueuedMessage
-              text={send.text}
-              tone={status.tone}
-              label={status.label}
-              menuLabel="Queued message actions"
-              menu={ids.filter((id) => !ACTION[id].remedy).map(offer)}
-              remedies={ids.filter((id) => ACTION[id].remedy).map(offer)}
-            />
-          </div>
-        );
-      })}
+    <EnterScope>
+      {sends.length > 0 && <div className="mt-3 space-y-3">
+        {sends.map((send) => <PendingTurn key={send.id} send={send} actions={actions} />)}
+      </div>}
+    </EnterScope>
+  );
+}
+
+function PendingTurn({ send, actions }: { send: LocalSend; actions?: LocalSendActions }) {
+  const enter = useEnter();
+  const status = pendingStatus(send);
+  const ids = actions ? status.actions : [];
+  const offer = (id: keyof LocalSendActions): QueuedAction => ({
+    id,
+    label: id === "sendNow" && send.stranded ? "Send here" : ACTION[id].label,
+    icon: ACTION[id].icon,
+    run: () => actions?.[id](send),
+  });
+  return (
+    <div data-pending-send={send.state} className={enter}>
+      <QueuedMessage
+        text={send.text}
+        tone={status.tone}
+        label={status.label}
+        menuLabel="Queued message actions"
+        menu={ids.filter((id) => !ACTION[id].remedy).map(offer)}
+        remedies={ids.filter((id) => ACTION[id].remedy).map(offer)}
+      />
     </div>
   );
 }

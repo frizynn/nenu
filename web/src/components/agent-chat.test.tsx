@@ -1,6 +1,6 @@
 import { useState, type ComponentProps } from "react";
 import { readFileSync } from "node:fs";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, RouterProvider, useLoaderData } from "react-router";
@@ -20,6 +20,7 @@ vi.mock("@/lib/wizard-action", () => ({
 import { server } from "@/test/setup";
 import { clearStatus } from "@/lib/status";
 import { useMirrorShown } from "@/lib/live-events";
+import { INTERACTIONS_POLL_MS } from "@/hooks/use-interactions";
 import { dismissModelPicker } from "@/lib/dismiss-model-picker";
 vi.mock("@/lib/dismiss-model-picker", () => ({ dismissModelPicker: vi.fn() }));
 // jsdom has no visualViewport, so the phone keyboard is up only where a case says so.
@@ -1491,6 +1492,38 @@ describe("AgentChat — bridge-detected dialog", () => {
     await user.click(within(card).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(posts).toEqual([{ signature: "sig-1", optionIndex: 0 }]));
     expect(await screen.findByText("Approved · mkfifo fixture-fifo")).toBeVisible();
+  });
+
+  // ADR 0118: what joins the thread while it is read eases in; what is there when it opens is simply there.
+  it("eases in a question that arrives while the chat is open, never one there when it opens", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const agent = { ...fixtureAgents[0]!, status: "blocked" as const, hasSession: true };
+      const ask = (signature: string, question: string) => ({
+        paneId: agent.paneId, agent: "claude", kind: "permission", family: "permission", question, signature, revision: 1, detectedAt: 0,
+        subject: { tool: "Bash", command: "mkfifo fixture-fifo" }, detailComplete: true,
+        options: [{ index: 0, label: "Yes", role: "primary" }, { index: 1, label: "No", role: "deny" }],
+      });
+      let shown = [ask("sig-1", "Do you want to proceed?")];
+      server.use(http.get("/api/interactions", () => HttpResponse.json({ interactions: shown })));
+      renderChat({ agent, agents: [agent], text: "pane output" });
+      const there = await screen.findByRole("region", { name: "Do you want to proceed?" });
+      expect(there.closest("[data-follow-stop]")!.firstElementChild).not.toHaveClass("row-enter");
+      cleanup();
+
+      shown = [];
+      renderChat({ agent, agents: [agent], text: "pane output" });
+      await screen.findByRole("region", { name: "Live conversation" });
+      shown = [ask("sig-2", "Do you want to make this edit?")];
+      act(() => vi.advanceTimersByTime(INTERACTIONS_POLL_MS.fallback + 100));
+      const arrived = await screen.findByRole("region", { name: "Do you want to make this edit?" });
+      const stop = arrived.closest("[data-follow-stop]")!;
+      // The stop itself never moves, so following measures where the question will rest.
+      expect(stop).not.toHaveClass("row-enter");
+      expect(stop.firstElementChild).toHaveClass("row-enter");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps saying why a tap did nothing when the question it hit is replaced by the next one", async () => {
