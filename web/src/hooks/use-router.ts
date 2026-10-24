@@ -1,12 +1,12 @@
 import { useCallback, useContext, useSyncExternalStore } from "react";
-import { UNSAFE_DataRouterContext, type NavigateOptions, type RouterState, type To } from "react-router";
+import { UNSAFE_DataRouterContext, type RouterState } from "react-router";
 
 // React Router's own hooks subscribe their caller to the router: useRevalidator to its whole state,
 // useNavigate to the route context, both rebuilt on every revalidation. A live event runs one (loading,
 // then idle), so a component that only ever calls revalidate() or navigates to a path redrew twice per
 // event, and with it everything under it. These read the router itself, whose context is stable, and
-// subscribe to nothing, or to the one value they select. Only usePolling and usePollBusy take the
-// revalidator's state whole.
+// subscribe to nothing, or to the one value they select. They matter where a component would otherwise
+// redraw for nothing; one that reads loader data redraws on every run anyway, and keeps React Router's.
 
 function useRouter() {
   const context = useContext(UNSAFE_DataRouterContext);
@@ -21,14 +21,12 @@ export function useRevalidate(): () => Promise<void> {
 }
 
 /**
- * navigate() for absolute paths and history steps, stable for the router's life, without re-rendering
- * on the route context. A relative path would resolve against the root: use useNavigate for those.
+ * navigate() to an absolute path, stable for the router's life, without re-rendering on the route
+ * context. It goes through router.navigate, which lib/motion.ts wraps, as useNavigate's does.
  */
-export function useNavigateTo(): (to: To | number, options?: NavigateOptions) => void {
+export function useNavigateTo(): (path: string) => void {
   const router = useRouter();
-  return useCallback((to: To | number, options?: NavigateOptions) => {
-    void (typeof to === "number" ? router.navigate(to) : router.navigate(to, options));
-  }, [router]);
+  return useCallback((path: string) => void router.navigate(path), [router]);
 }
 
 /**

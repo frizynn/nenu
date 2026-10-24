@@ -32,7 +32,8 @@ describe("useConnectionLost", () => {
     let renders = 0;
     renderHook(({ c }) => { renders++; return useConnectionLost(c); }, { initialProps: { c: false } });
     const before = renders;
-    act(() => { markLive(); markLive(); markWake(); });
+    // The clock moves first, so each stamp really changes the anchor.
+    act(() => { vi.advanceTimersByTime(1_000); markLive(); vi.advanceTimersByTime(1_000); markWake(); });
     expect(renders).toBe(before);
   });
 

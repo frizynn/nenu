@@ -25,6 +25,7 @@ import { openNewAgent, useSpawnState } from "@/lib/spawn";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useDayTurn } from "@/hooks/use-day-turn";
 import { useNavigateTo, useRevalidate } from "@/hooks/use-router";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
@@ -320,6 +321,8 @@ export const AgentChat = memo(function AgentChat({
   const unknownInteraction = wait?.kind === "interaction";
   const waitNotice = wait?.kind === "notice" ? wait.text : null;
   const limit = usageLimitOf(agent);
+  // Its line names the reset's weekday until that day comes, and this chat no longer redraws on every poll.
+  useDayTurn(limit !== undefined);
   const dialogPresent = liveBlocks.some(blockOwnsKeyboard) || unknownInteraction;
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
