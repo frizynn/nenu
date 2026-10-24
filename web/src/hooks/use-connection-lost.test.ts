@@ -27,6 +27,15 @@ describe("useConnectionLost", () => {
     expect(result.current).toBe(false);
   });
 
+  // Every live read stamps the store; a reader whose data is live has nothing to redraw for it.
+  it("does not re-render a healthy reader on each live read", () => {
+    let renders = 0;
+    renderHook(({ c }) => { renders++; return useConnectionLost(c); }, { initialProps: { c: false } });
+    const before = renders;
+    act(() => { markLive(); markLive(); markWake(); });
+    expect(renders).toBe(before);
+  });
+
   it("flips true only after the threshold of continuous disconnection", () => {
     const { result } = renderHook(({ c }) => useConnectionLost(c), {
       initialProps: { c: true },
