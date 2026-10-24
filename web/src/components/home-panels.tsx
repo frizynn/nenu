@@ -331,9 +331,9 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   // Reordering: each workspace row is its handle, and opens nothing until Done.
   const [arranging, setArranging] = useState(false);
   const reorderList = useRef<HTMLUListElement>(null);
-  // Entering Reorder, or leaving it from a focused Done, swaps the control under the focus: the focus
-  // follows to its stand-in, the tab when one workspace leaves no Order to choose. Only from a focused
-  // Done: a tap (iOS focuses no tapped button) or a tab must not open the Order picker.
+  // Entering Reorder, or leaving it with a key on Done, swaps the control under the focus: the focus
+  // follows to its stand-in, the tab when one workspace leaves no Order to choose. Only from a key: a
+  // tap must not focus the Order select, which on iOS opens its picker.
   const orderControl = useRef<HTMLSelectElement>(null);
   const doneControl = useRef<HTMLButtonElement>(null);
   const focusNext = useRef<"done" | "order" | null>(null);
@@ -414,7 +414,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           </label>
         )}
         {list === "workspaces" && (arranging || everyWorkspace.length > 1) && (arranging
-          ? <button ref={doneControl} type="button" onClick={(event) => { if (document.activeElement === event.currentTarget) focusNext.current = "order"; setArranging(false); }} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
+          ? <button ref={doneControl} type="button" onClick={(event) => { if (event.detail === 0) focusNext.current = "order"; setArranging(false); }} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
           : <label className={cn("quiet-action relative shrink-0 focus-within:ring-2 focus-within:ring-ring max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
             <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
             <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
 
 import { dropIndex, moveKey, shiftFor, type ReorderSlot } from "@/components/ui/strip-reorder";
@@ -136,9 +136,10 @@ export function useListReorder({ list, keys, enabled, onMove }: {
   }
 
   // A drag over rows that changed (a workspace closed, a filter left one out), or whose list stopped
-  // being reordered, ends where it is: the places it measured no longer match the screen.
+  // being reordered, ends where it is: the places it measured no longer match the screen. Before the
+  // browser hands over another event, so a release can't drop against the rows that went away.
   const keyText = keys.join("\n");
-  useEffect(() => {
+  useLayoutEffect(() => {
     const d = drag.current;
     if (d && (!enabled || keyText !== d.keys.join("\n"))) end.current(false);
   }, [enabled, keyText]);
