@@ -32,25 +32,32 @@ const FindContext = createContext({ query: "", current: false });
 export const FIND_HIT = "rounded-sm box-decoration-clone bg-amber-300/70 text-inherit dark:bg-amber-500/40";
 export const FIND_CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outline-amber-600 dark:bg-amber-400";
 
-/** Literal text with find hits marked. Still text nodes — `<mark>` is structure, never parsed markup. */
-function Hit({ text }: { text: string }) {
+/**
+ * Literal text with find hits marked, and the slash commands the operator typed in their tint. Still
+ * text nodes — `<mark>` is structure, never parsed markup. A hit is found over the whole text, so one
+ * that crosses a command's edge is cut there and drawn as two marks side by side.
+ */
+function Hit({ text, commands = [] }: { text: string; commands?: readonly { start: number; end: number }[] }) {
   const { query, current } = useContext(FindContext);
-  if (query.trim() === "") return <>{text}</>;
-  const pieces = splitHighlight(text, query);
-  if (pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
-  return (
-    <>
-      {pieces.map((piece, i) =>
-        piece.hit ? (
-          <mark key={i} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>
-            {piece.text}
-          </mark>
-        ) : (
-          <span key={i}>{piece.text}</span>
-        ),
-      )}
-    </>
-  );
+  const pieces = query.trim() === "" ? [{ text, hit: false }] : splitHighlight(text, query);
+  if (!commands.length && pieces.length === 1 && !pieces[0]!.hit) return <>{text}</>;
+  type Range = readonly [number, number];
+  const hits: Range[] = [];
+  let at = 0;
+  for (const piece of pieces) {
+    if (piece.hit) hits.push([at, at + piece.text.length]);
+    at += piece.text.length;
+  }
+  const within = (ranges: readonly Range[], from: number, to: number) => ranges.some(([start, end]) => start <= from && to <= end);
+  const ranges = commands.map((c): Range => [c.start, c.end]);
+  const cuts = [...new Set([0, text.length, ...hits.flat(), ...ranges.flat()])].sort((a, b) => a - b);
+  return <>{cuts.slice(0, -1).map((from, i) => {
+    const to = cuts[i + 1]!;
+    const words = within(hits, from, to)
+      ? <mark aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>{text.slice(from, to)}</mark>
+      : text.slice(from, to);
+    return <span key={from} className={within(ranges, from, to) ? "slash-command" : undefined}>{words}</span>;
+  })}</>;
 }
 
 const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone [overflow-wrap:anywhere]";
@@ -120,7 +127,7 @@ function Span({ span }: { span: MdSpan }) {
       );
     }
     default:
-      return span.command ? <span className="slash-command"><Hit text={span.text} /></span> : <Hit text={span.text} />;
+      return <Hit text={span.text} commands={span.commands} />;
   }
 }
 
@@ -333,14 +340,14 @@ export const MarkdownText = memo(function MarkdownText({
 }: {
   text: string;
   className?: string;
-  /** The operator's own words: their slash commands draw in the command tint. */
-  commands?: boolean;
   /** Active find query — occurrences render as marks. Empty disables highlighting entirely. */
   query?: string;
   /** This text is find's current match: its hits take a solid fill the other matches don't. */
   current?: boolean;
+  /** The operator's own words: their slash commands draw in the command tint. */
+  commands?: boolean;
 }) {
-  const blocks = useMemo(() => commands ? markSlashCommands(parseMarkdown(text)) : parseMarkdown(text), [text, commands]);
+  const blocks = useMemo(() => commands && text.includes("/") ? markSlashCommands(parseMarkdown(text)) : parseMarkdown(text), [text, commands]);
   const find = useMemo(() => ({ query, current }), [query, current]);
   return (
     <FindContext.Provider value={find}>

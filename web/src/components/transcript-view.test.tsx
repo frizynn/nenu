@@ -206,6 +206,15 @@ describe("TranscriptView", () => {
     expect(container.querySelector('[data-speaker="assistant"] .slash-command')).toBeNull();
   });
 
+  it("still marks a find match that runs across a command's edge", () => {
+    const { container } = render(
+      <TranscriptView query="skill que" entries={[turn({ parts: [{ kind: "text", text: "/skill que en el chat" }] })]} />,
+    );
+    const user = container.querySelector('[data-speaker="user"]')!;
+    expect([...user.querySelectorAll("mark")].map((el) => el.textContent).join("")).toBe("skill que");
+    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent).join("")).toBe("/skill");
+  });
+
   it("renders prose as formatted Markdown", () => {
     const { container } = render(
       <TranscriptView

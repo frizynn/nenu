@@ -94,7 +94,15 @@ export async function slashCommandBench(bridge: TestBridge, browser: Browser, en
         await page.evaluate((at: number) => document.querySelector("textarea")!.setSelectionRange(at, at), COMMAND.length);
         await page.keyboard.press("Backspace");
         const backspaced = await page.evaluate(measure, null);
-        await page.keyboard.insertText("l-check");
+        // A paste through the composer's own handler; a synthetic one inserts nothing by itself, so
+        // the browser's default is applied when the handler leaves it.
+        await page.evaluate((words: string) => {
+          const field = document.querySelector("textarea")!;
+          const data = new DataTransfer();
+          data.setData("text/plain", words);
+          const paste = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+          if (field.dispatchEvent(paste)) document.execCommand("insertText", false, words);
+        }, "l-check");
         const pasted = await page.evaluate(measure, null);
         checks.push({ name: `${engine} ${label}: Backspace and a paste edit the command, and its tint follows`,
           ok: backspaced.value === "/skil now" && backspaced.pills[0]?.text === "/skil" && pasted.value === "/skill-check now" && pasted.pills[0]?.text === "/skill-check",
@@ -102,11 +110,14 @@ export async function slashCommandBench(bridge: TestBridge, browser: Browser, en
         await box.fill(`${LEAD}${COMMAND}${TAIL}`);
       }
 
-      // Sent: the pane's log shows the message, and the thread draws it with the command tinted.
+      // Sent from the phone in the dark: the pane's log then shows it, and every later page draws it from
+      // that log with the command tinted.
       if (name === "phone" && scheme === "dark") {
         const before = bridge.fake!.submitted.length;
         await page.getByRole("button", { name: "Send", exact: true }).click();
-        for (let i = 0; i < 60 && !bridge.fake!.submitted.slice(before).some((s) => s.text.includes(COMMAND)); i++) await page.waitForTimeout(100);
+        const reached = () => bridge.fake!.submitted.slice(before).some((s) => s.text.includes(`${LEAD}${COMMAND}`));
+        for (let i = 0; i < 60 && !reached(); i++) await page.waitForTimeout(100);
+        checks.push({ name: `${engine} ${label}: Send typed the message into the pane`, ok: reached() });
         await appendFile(bridge.herd!.journals.get(pane)!, row(`${LEAD}${COMMAND}${TAIL}`, bridge.now()));
       }
       const bubble = page.locator('[data-speaker="user"]').filter({ hasText: `${LEAD}${COMMAND}` }).last();

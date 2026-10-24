@@ -1575,7 +1575,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               </WorkbenchPopover>
             </div>}
             <div className="composer-field">
-            {!direct.active && <DraftChipLayer text={input} field={inputRef} />}
+            {!direct.active && <DraftChipLayer text={input} field={inputRef} commands={noEcho === null && !isShell} />}
             <ChatInput
               ref={inputRef}
               value={direct.active ? direct.value : input}

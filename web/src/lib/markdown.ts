@@ -37,9 +37,10 @@ import { FILE_EXTENSIONS, FILE_LOCATION, FILE_NAMES, localFilePath } from "./fil
 export type MdSpan =
   /**
    * `files`: the local files these words name in passing, for the chat's file list; drawn as words.
-   * `command`: a slash command the operator typed (lib/slash-command.ts), drawn in its tint.
+   * `commands`: where the slash commands the operator typed sit in `text` (lib/slash-command.ts),
+   * drawn in their tint.
    */
-  | { kind: "text"; text: string; files?: string[]; command?: true }
+  | { kind: "text"; text: string; files?: string[]; commands?: { start: number; end: number }[] }
   | { kind: "code"; text: string }
   /** LaTeX, verbatim like code: `$…$` and `\(…\)` inline, `$$…$$` and `\[…\]` as display. */
   | { kind: "math"; text: string; display: boolean }

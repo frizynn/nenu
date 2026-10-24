@@ -19,13 +19,17 @@ const METRICS = [
   "whiteSpace", "overflowWrap", "wordBreak",
 ] as const;
 
-export function DraftChipLayer({ text, field }: { text: string; field: RefObject<HTMLTextAreaElement | null> }) {
+export function DraftChipLayer({ text, field, commands = true }: {
+  text: string;
+  field: RefObject<HTMLTextAreaElement | null>;
+  /** False where a `/name` is no command (a shell) or must not show at all (a masked password). */
+  commands?: boolean;
+}) {
   const layer = useRef<HTMLDivElement>(null);
-  const chips = draftChips(text);
+  // A chip holds no slash and no space, so a command never overlaps one.
   const marks = [
-    ...chips.map((chip) => ({ ...chip, command: false })),
-    ...slashCommands(text).map((command) => ({ ...command, command: true }))
-      .filter((command) => !chips.some((chip) => chip.start < command.end && command.start < chip.end)),
+    ...draftChips(text).map((chip) => ({ ...chip, command: false })),
+    ...(commands ? slashCommands(text) : []).map((command) => ({ ...command, command: true })),
   ].sort((a, b) => a.start - b.start);
 
   // Follow the textarea's metrics, size and scroll: on every change of the text (cheap: one style

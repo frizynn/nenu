@@ -7,9 +7,9 @@ import { imageChip } from "@/lib/message-images";
 // The layer under the draft paints a tinted pill behind each slash command, holding exactly the
 // textarea's characters (so it wraps where the textarea does), next to the pictures' chips.
 
-function Draft({ text }: { text: string }) {
+function Draft({ text, commands }: { text: string; commands?: boolean }) {
   const field = useRef<HTMLTextAreaElement>(null);
-  return <div><DraftChipLayer text={text} field={field} /><textarea ref={field} value={text} readOnly /></div>;
+  return <div><DraftChipLayer text={text} field={field} commands={commands} /><textarea ref={field} value={text} readOnly /></div>;
 }
 
 const layerOf = (container: HTMLElement) => container.querySelector(".draft-chip-layer");
@@ -35,4 +35,10 @@ it("draws a command and a picture's chip side by side", () => {
 it("draws nothing for a draft with no command and no picture", () => {
   const { container } = render(<Draft text="see https://x.dev/a and a/b or /tmp/x" />);
   expect(layerOf(container)).toBeNull();
+});
+
+it("tints no command when told not to (a shell, a masked password), and still draws a picture's chip", () => {
+  const { container } = render(<Draft text={`/skill ${imageChip(1)}`} commands={false} />);
+  expect(layerOf(container)!.querySelector(".slash-command")).toBeNull();
+  expect(layerOf(container)!.querySelectorAll(".draft-chip")).toHaveLength(1);
 });
