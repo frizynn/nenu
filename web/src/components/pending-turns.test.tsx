@@ -14,6 +14,11 @@ const queued: LocalSend = {
 };
 
 describe("PendingTurns", () => {
+  it("tints the slash commands of a message still on its way, as the thread does once it lands", () => {
+    const { container } = render(<PendingTurns sends={[{ ...queued, text: "/merge-pr 260 and a/b" }]} />);
+    expect([...container.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/merge-pr"]);
+  });
+
   it("marks a queued message with a Queued badge, Edit and Remove one tap away and Send now behind the ⋯", async () => {
     const user = userEvent.setup();
     const handlers = actions();

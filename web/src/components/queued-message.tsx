@@ -87,7 +87,7 @@ export function QueuedMessage({
         {editor ?? (
           <>
             <PlacedMessage pieces={pieces} images={pathImages(paths, media)}
-              words={(words, key) => <MarkdownText key={key} text={words} query="" />} />
+              words={(words, key) => <MarkdownText key={key} text={words} query="" commands />} />
           </>
         )}
       </div>

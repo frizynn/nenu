@@ -97,7 +97,7 @@ function NoteLine({ part, query, focused }: { part: TranscriptPart; query: strin
   return <ContextLine label={first} text={part.text} truncated={part.truncated} query={query} focused={focused} />;
 }
 
-function Part({ part, entryId, id = entryId, query, focused = false, active = false, waiting = false, compactMedia = false, uploads = true, delivers = true }: {
+function Part({ part, entryId, id = entryId, query, focused = false, active = false, waiting = false, compactMedia = false, uploads = true, delivers = true, commands = false }: {
   part: TranscriptPart;
   entryId: string;
   /** The step's own key in the timeline, when an entry holds several. */
@@ -112,6 +112,8 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
   uploads?: boolean;
   /** False for text that names files without handing them over: no cards, no thumbnails. */
   delivers?: boolean;
+  /** The operator's own words, whose slash commands draw tinted. */
+  commands?: boolean;
 }) {
   const media = useContext(FileMediaContext);
   // Inline journal images render as one strip per entry (EntryImages), not part by part.
@@ -128,6 +130,7 @@ function Part({ part, entryId, id = entryId, query, focused = false, active = fa
         text={compactMedia && media ? splitMessageImages(part.text).text : part.text}
         query={query}
         current={focused}
+        commands={commands}
       />
       {delivers && <ChatMedia text={part.text} compact={compactMedia} uploads={uploads} />}
       {part.truncated && <div className="text-xs text-muted-foreground">… truncated</div>}
@@ -163,14 +166,14 @@ function UserWords({ entry, query, focused, inline }: { entry: TranscriptEntry; 
   if (!placed || texts.some((part) => part.truncated)) {
     return <>
       {entry.parts.map((part, i) => part.kind === "context" ? null : (
-        <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} />
+        <Part key={i} part={part} entryId={entry.uuid} query={query} focused={focused} compactMedia uploads={!inline} commands />
       ))}
       <EntryImages entry={entry} />
     </>;
   }
   return <>
     <PlacedMessage pieces={placed.pieces} images={placed.images}
-      words={(words, key) => <MarkdownText key={key} text={words} query={query} current={focused} />} />
+      words={(words, key) => <MarkdownText key={key} text={words} query={query} current={focused} commands />} />
     {/* Whatever else the words name (a page, a picture beyond the folder), as any message offers it. */}
     <ChatMedia text={text} compact uploads={false} />
   </>;

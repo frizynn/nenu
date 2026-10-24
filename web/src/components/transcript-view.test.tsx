@@ -191,6 +191,37 @@ describe("TranscriptView", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
+  it("tints the slash commands in your message, never in the agent's words", () => {
+    const { container } = render(
+      <TranscriptView
+        entries={[
+          turn({ uuid: "u1", role: "user", parts: [{ kind: "text", text: "/merge-pr 260 then /afk, not /Users/fran or https://x.dev/a" }] }),
+          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "Ran /merge-pr for you." }] }),
+        ]}
+      />,
+    );
+    const user = container.querySelector('[data-speaker="user"]')!;
+    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/merge-pr", "/afk"]);
+    expect(user.textContent).toContain("/merge-pr 260 then /afk, not /Users/fran or https://x.dev/a");
+    expect(container.querySelector('[data-speaker="assistant"] .slash-command')).toBeNull();
+  });
+
+  it("still marks a find match that runs across a command's edge", () => {
+    const { container } = render(
+      <TranscriptView query="skill que" entries={[turn({ parts: [{ kind: "text", text: "/skill que en el chat" }] })]} />,
+    );
+    const user = container.querySelector('[data-speaker="user"]')!;
+    expect([...user.querySelectorAll("mark")].map((el) => el.textContent).join("")).toBe("skill que");
+    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/skill"]);
+  });
+
+  it("keeps a command's pill one piece when a find match falls inside it", () => {
+    const { container } = render(<TranscriptView query="ki" entries={[turn({ parts: [{ kind: "text", text: "/skill now" }] })]} />);
+    const pills = container.querySelectorAll('[data-speaker="user"] .slash-command');
+    expect([...pills].map((el) => el.textContent)).toEqual(["/skill"]);
+    expect(pills[0]!.querySelector("mark")?.textContent).toBe("ki");
+  });
+
   it("renders prose as formatted Markdown", () => {
     const { container } = render(
       <TranscriptView
