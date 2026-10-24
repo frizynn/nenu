@@ -191,6 +191,21 @@ describe("TranscriptView", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
+  it("tints the slash commands in your message, never in the agent's words", () => {
+    const { container } = render(
+      <TranscriptView
+        entries={[
+          turn({ uuid: "u1", role: "user", parts: [{ kind: "text", text: "/merge-pr 260 then /afk, not /Users/fran or https://x.dev/a" }] }),
+          turn({ uuid: "a1", role: "assistant", parts: [{ kind: "text", text: "Ran /merge-pr for you." }] }),
+        ]}
+      />,
+    );
+    const user = container.querySelector('[data-speaker="user"]')!;
+    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/merge-pr", "/afk"]);
+    expect(user.textContent).toContain("/merge-pr 260 then /afk, not /Users/fran or https://x.dev/a");
+    expect(container.querySelector('[data-speaker="assistant"] .slash-command')).toBeNull();
+  });
+
   it("renders prose as formatted Markdown", () => {
     const { container } = render(
       <TranscriptView

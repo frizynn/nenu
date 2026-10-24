@@ -62,7 +62,7 @@ export interface Page {
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   clock: { install(opts: { time: number }): Promise<void> };
   route(url: string, handler: (route: Route) => unknown): Promise<void>;
-  keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void> };
+  keyboard: { press(key: string): Promise<void>; type(text: string, opts?: { delay?: number }): Promise<void>; insertText(text: string): Promise<void> };
   touchscreen: { tap(x: number, y: number): Promise<void> };
   mouse: { move(x: number, y: number, opts?: { steps?: number }): Promise<void>; down(): Promise<void>; up(): Promise<void>; wheel(dx: number, dy: number): Promise<void>; click(x: number, y: number): Promise<void> };
   setViewportSize(size: { width: number; height: number }): Promise<void>;

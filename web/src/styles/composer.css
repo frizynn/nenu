@@ -23,6 +23,9 @@
 /* The pill takes no room of its own: side shadows pad it, and it stays shorter than a line so chips on
    two wrapped lines never touch. */
 .draft-chip { position: relative; border-radius: var(--radius-sm); background: var(--muted); box-shadow: -0.12em 0 0 var(--muted), 0.12em 0 0 var(--muted); }
+/* A slash command, in the draft (under its characters, as a chip) and in the sent message: the same
+   pill, padded by side shadows so it takes no room and wraps with the text it sits under. */
+.slash-command { border-radius: var(--radius-sm); background: var(--command-tint); box-shadow: -0.12em 0 0 var(--command-tint), 0.12em 0 0 var(--command-tint); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .draft-chip-icon { position: absolute; left: 0.05em; top: 50%; width: 1.05em; height: 1.05em; translate: 0 -50%; color: var(--muted-foreground); }
 /* The draft's files, inside the box above the text: a row of their own, starting where the text does
    (past the + column and the draft's own left padding). */

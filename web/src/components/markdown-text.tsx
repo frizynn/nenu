@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { parseMarkdown, pullRequestRef, type MdBlock, type MdList, type MdSpan } from "@/lib/markdown";
+import { markSlashCommands } from "@/lib/slash-command";
 import { splitHighlight } from "@/lib/transcript-search";
 import { FileMediaContext, FilePreviewContext } from "@/lib/file-preview-context";
 import { localFilePath } from "@/lib/file-links";
@@ -119,7 +120,7 @@ function Span({ span }: { span: MdSpan }) {
       );
     }
     default:
-      return <Hit text={span.text} />;
+      return span.command ? <span className="slash-command"><Hit text={span.text} /></span> : <Hit text={span.text} />;
   }
 }
 
@@ -328,15 +329,18 @@ export const MarkdownText = memo(function MarkdownText({
   className,
   query = "",
   current = false,
+  commands = false,
 }: {
   text: string;
   className?: string;
+  /** The operator's own words: their slash commands draw in the command tint. */
+  commands?: boolean;
   /** Active find query — occurrences render as marks. Empty disables highlighting entirely. */
   query?: string;
   /** This text is find's current match: its hits take a solid fill the other matches don't. */
   current?: boolean;
 }) {
-  const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const blocks = useMemo(() => commands ? markSlashCommands(parseMarkdown(text)) : parseMarkdown(text), [text, commands]);
   const find = useMemo(() => ({ query, current }), [query, current]);
   return (
     <FindContext.Provider value={find}>

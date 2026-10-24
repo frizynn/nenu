@@ -88,6 +88,9 @@
      the page, 5.8:1 on a popover); the label on its fill goes dark, as --destructive-foreground's does. */
   --primary: light-dark(oklch(0.488 0.217 264), oklch(0.7 0.15 262));
   --primary-foreground: light-dark(#fff, #161617);
+  /* A slash command the operator typed (lib/slash-command.ts): the link blue as a soft fill behind
+     the words, in the draft and in the sent message. Dark takes more of it to read as blue, not grey. */
+  --command-tint: light-dark(color-mix(in oklab, var(--primary) 18%, transparent), color-mix(in oklab, var(--primary) 28%, transparent));
   --secondary: light-dark(rgb(0 0 0 / 3%), rgb(255 255 255 / 4%));
   --secondary-foreground: var(--foreground);
   --muted: light-dark(rgb(0 0 0 / 4.5%), rgb(255 255 255 / 4%));

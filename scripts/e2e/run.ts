@@ -13,6 +13,7 @@ import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
 import { pasteImageBench } from "./paste-image.ts";
 import { sendAlwaysBench } from "./send-always.ts";
+import { slashCommandBench } from "./slash-command.ts";
 import { liveJournalBench } from "./live-journal.ts";
 import { usageLimitBench } from "./usage-limit.ts";
 import { takeOverBench } from "./take-over.ts";
@@ -44,6 +45,7 @@ import { appendJournal, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJou
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
 //   bun scripts/e2e/run.ts chip-wrap [--port 8797] [--out DIR]  A picture's chip walked across a line's end, phone and desk, WebKit and Chromium: one pill, icon inside
+//   bun scripts/e2e/run.ts slash-command [--port 8797] [--out DIR]  A typed /name tinted in the draft and the sent message, phone and desk, light and dark, WebKit and Chromium
 //   bun scripts/e2e/run.ts paste-image [--port 8797] [--out DIR]  Pictures pasted and picked between words, keyboard down and up: the draft spans the box
 //   bun scripts/e2e/run.ts live-journal [--journal LOG] [--port 8797] [--out DIR]  A chat on a 1, 10 and 40 MB log, phone and desk: ms from an append to its line on screen
 //   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
@@ -2907,6 +2909,32 @@ async function chipWrap(): Promise<void> {
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
+/** A slash command tinted in the draft and the sent message, under WebKit and Chromium. */
+async function slashCommand(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = { checks: [] as Array<{ name: string; ok: boolean; detail?: string }>, shots: [] as string[], seen: {} as Record<string, unknown> };
+  for (const engine of ["webkit", "chromium"] as const) {
+    // A bridge per engine: each sends the message once and finds it in a log of its own.
+    const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
+    try {
+      const browser = await launchEngine(engine);
+      try {
+        const one = await slashCommandBench(bridge, browser, engine, outDir);
+        result.checks.push(...one.checks);
+        result.shots.push(...one.shots);
+        Object.assign(result.seen, one.seen);
+      } finally {
+        await browser.close();
+      }
+    } finally {
+      await bridge.stop();
+    }
+  }
+  await writeFile(join(outDir, "slash-command.json"), JSON.stringify(result, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
 async function pasteImage(): Promise<void> {
   await mkdir(outDir, { recursive: true });
   const result = await withBench((bridge, browser) => pasteImageBench(bridge, browser, outDir), CAPTURE_EPOCH);
@@ -2989,6 +3017,7 @@ else if (command === "reading") await reading();
 else if (command === "pin") await pin();
 else if (command === "inline-images") await inlineImages(values.before === true);
 else if (command === "chip-wrap") await chipWrap();
+else if (command === "slash-command") await slashCommand();
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
@@ -2998,6 +3027,6 @@ else if (command === "send-always") await sendAlways();
 else if (command === "usage-limit") await usageLimit();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|artifacts|files|home|inspector|terminal|motion|idle|chip-line|chat|scroll|reading|pin|inline-images|chip-wrap|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|artifacts|files|home|inspector|terminal|motion|idle|chip-line|chat|scroll|reading|pin|inline-images|chip-wrap|slash-command|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }
