@@ -23,6 +23,7 @@ import type {
   PaneHistoryResponse,
   PaneSkillsResponse,
   PaneReadResponse,
+  PullRequestView,
   QueueWaitReason,
   SendOutcome,
   SendRequest,
@@ -372,6 +373,37 @@ export async function fetchSnapshot(
   // clock, or the "Herdr is down" escalation could never surface.
   if (snap.bridge !== "disconnected") markLive();
   return snap;
+}
+
+// The last pull request list per session with its ETag, under the snapshot cache's invariants.
+const pullRequestCache = new Map<string, { etag: string; list: PullRequestView[] }>();
+const NO_PULL_REQUESTS: PullRequestView[] = [];
+// The herd waits for this read when the list moved, so it gives up sooner than other reads; the list on
+// screen stays until the next try.
+const PULL_REQUESTS_TIMEOUT_MS = 4_000;
+
+/**
+ * The session's open pull requests at the version `etag` a snapshot named. The same list object comes
+ * back while the version holds, without a request; a snapshot with no version has none to show.
+ */
+export async function fetchPullRequests(
+  session: string | undefined,
+  etag: string | undefined,
+  signal?: AbortSignal,
+): Promise<PullRequestView[]> {
+  if (etag === undefined) return NO_PULL_REQUESTS;
+  const cached = pullRequestCache.get(session ?? "");
+  if (cached?.etag === etag) return cached.list;
+  const res = await apiFetch(withSession("/api/pull-requests", session), {
+    signal: withTimeout(signal, PULL_REQUESTS_TIMEOUT_MS),
+    headers: { [XHR_HEADER]: XHR_HEADER_VALUE, ...(cached ? { "if-none-match": cached.etag } : {}) },
+  });
+  if (res.status === 304 && cached) return cached.list;
+  if (!res.ok) throw await apiError(res);
+  const list = (await res.json()) as PullRequestView[];
+  const current = res.headers.get("etag");
+  if (current) pullRequestCache.set(session ?? "", { etag: current, list });
+  return list;
 }
 
 // Per-pane cache of the last ETag AND the body it belongs to, kept together on purpose. We send

@@ -9,7 +9,7 @@ import { BUILD_HEADER, withBuildHeader } from "./routes/http.ts";
 import { marksPaneSeen, SEEN_HEADER } from "./routes/index.ts";
 import { atShellPrompt, paneReadResponse } from "./routes/pane.ts";
 import { keysPane, replyPane, sendReplySteps, type ReplySender } from "./routes/reply.ts";
-import { cacheControlFor, isReservedAuthPath, resolveStaticPath, staticContentType } from "./routes/static.ts";
+import { cacheControlFor, isReservedAuthPath, resolveStaticPath, revalidatedFile, staticContentType } from "./routes/static.ts";
 import { normalizeTabLabel, tabInsertIndex } from "./routes/structure.ts";
 import { hasCodexInterruptCue } from "../web/src/lib/harness/codex/interrupt.ts";
 import { AuditLog } from "./audit.ts";
@@ -1114,6 +1114,51 @@ describe("cacheControlFor", () => {
     ]) {
       expect(cacheControlFor(rel)).toBe("no-cache");
     }
+  });
+});
+
+// An open tab checks sw.js once a minute; an unchanged one must cost a 304, not the whole script.
+describe("revalidatedFile", () => {
+  const script = new TextEncoder().encode(`self.addEventListener("fetch", () => {});\n`.repeat(40));
+  const ask = (headers: Record<string, string> = {}) => new Request("http://x/sw.js", { headers });
+
+  test("an unchanged file answers 304 with its ETag and no body", async () => {
+    const first = revalidatedFile(ask(), ".js", script, { "cache-control": "no-cache" });
+    const etag = first.headers.get("etag")!;
+    expect(etag).toMatch(/^W\/"[0-9a-f]+"$/);
+    const again = revalidatedFile(ask({ "if-none-match": etag }), ".js", script, { "cache-control": "no-cache" });
+    expect(again.status).toBe(304);
+    expect(again.headers.get("etag")).toBe(etag);
+    expect(again.headers.get("cache-control")).toBe("no-cache");
+    expect(again.headers.get("vary")).toBe("accept-encoding");
+    expect(await again.text()).toBe("");
+  });
+
+  test("a changed file answers in full", () => {
+    const etag = revalidatedFile(ask(), ".js", script, {}).headers.get("etag")!;
+    const changed = revalidatedFile(ask({ "if-none-match": etag }), ".js", new TextEncoder().encode("changed"), {});
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+  });
+
+  test("text goes gzipped to a client that takes it, under the same ETag", async () => {
+    const plain = revalidatedFile(ask(), ".js", script, {});
+    const zipped = revalidatedFile(ask({ "accept-encoding": "gzip, deflate" }), ".js", script, {});
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(plain.headers.get("vary")).toBe("accept-encoding");
+    expect(zipped.headers.get("content-encoding")).toBe("gzip");
+    expect(zipped.headers.get("etag")).toBe(plain.headers.get("etag"));
+    const body = new Uint8Array(await zipped.arrayBuffer());
+    expect(body.length).toBeLessThan(script.length);
+    expect(new TextDecoder().decode(Bun.gunzipSync(body))).toBe(new TextDecoder().decode(script));
+  });
+
+  test("images and tiny files go as they are", () => {
+    const png = revalidatedFile(ask({ "accept-encoding": "gzip" }), ".png", script, {});
+    expect(png.headers.get("content-encoding")).toBeNull();
+    expect(png.headers.get("vary")).toBeNull();
+    const tiny = revalidatedFile(ask({ "accept-encoding": "gzip" }), ".json", new TextEncoder().encode('{"id":"x"}'), {});
+    expect(tiny.headers.get("content-encoding")).toBeNull();
   });
 });
 

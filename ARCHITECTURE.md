@@ -167,7 +167,8 @@ app. Closing this needs the server-side blocking-message capture described above
   work across turns you haven't scrolled to. Rationale and the measured numbers are commented at the
   top of `web/src/routes/history.tsx`.
 - **The browser pulls state; it is only told what changed.** `useRevalidator` → `/api/snapshot`, plus
-  the pane, queue and transcript reads. A same-origin SSE stream (`/api/events`,
+  the pane, queue and transcript reads. The open pull requests are their own read
+  (`/api/pull-requests`), made only when the snapshot's `pullRequestsEtag` moves. A same-origin SSE stream (`/api/events`,
   `bridge/live-events.ts`) names a changed herd, pane, queue or transcript, and the page re-reads it
   through the same routes; polling relaxes to a fallback while the stream is open and keeps its old
   cadence while it is not. No state travels on the stream, which is what keeps the two recovery loops

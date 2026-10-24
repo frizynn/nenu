@@ -1,4 +1,5 @@
 import { extname, join, normalize, sep } from "node:path";
+import { computeEtag, GZIP_MIN_BYTES, notModified } from "../http-cache.ts";
 import type { WebAssetArchive } from "../web-assets.ts";
 import { BUILD_HEADER, buildId, CSP, secure, text, WEB_DIR } from "./http.ts";
 
@@ -14,6 +15,9 @@ const CONTENT_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
 };
+
+/** Text types worth gzipping; images and fonts are compressed already. */
+const COMPRESSIBLE = new Set([".html", ".js", ".mjs", ".css", ".json", ".webmanifest", ".svg"]);
 
 /**
  * Resolve a request pathname to an absolute path under `webDir`, or null if it escapes. Pure +
@@ -80,7 +84,7 @@ behind your own reverse proxy</em> in the README.</p>
   );
 }
 
-export async function serveStatic(pathname: string, assets: WebAssetArchive): Promise<Response> {
+export async function serveStatic(req: Request, pathname: string, assets: WebAssetArchive): Promise<Response> {
   // An archive failure must not take the current frontend offline.
   await assets.retain(WEB_DIR).catch(() => {});
   const resolved = resolveStaticPath(pathname);
@@ -114,7 +118,21 @@ export async function serveStatic(pathname: string, assets: WebAssetArchive): Pr
   };
   if (ext === ".html") headers["content-security-policy"] = CSP;
   if (rel === "sw.js") headers["service-worker-allowed"] = "/";
-  return secure(new Response(file, { headers }));
+  if (rel.startsWith("assets/")) return secure(new Response(file, { headers }));
+  return secure(revalidatedFile(req, ext, await file.bytes(), headers));
+}
+
+/**
+ * A mutable file, revalidated on every use (an open tab checks sw.js once a minute): unchanged, it
+ * answers 304; changed, it goes gzipped when it is text. The ETag is weak because both encodings share
+ * it. Pure + exported for tests.
+ */
+export function revalidatedFile(req: Request, ext: string, bytes: Uint8Array<ArrayBuffer>, base: Record<string, string>): Response {
+  const gzips = COMPRESSIBLE.has(ext) && bytes.length >= GZIP_MIN_BYTES;
+  const headers = { ...base, etag: `W/${computeEtag(bytes)}`, ...(gzips ? { vary: "accept-encoding" } : {}) };
+  if (notModified(req.headers.get("if-none-match"), headers.etag)) return new Response(null, { status: 304, headers });
+  if (!gzips || !req.headers.get("accept-encoding")?.includes("gzip")) return new Response(bytes, { headers });
+  return new Response(Bun.gzipSync(bytes), { headers: { ...headers, "content-encoding": "gzip" } });
 }
 
 /** Module workers need a JavaScript MIME under nosniff, including Vite's emitted .mjs assets. */

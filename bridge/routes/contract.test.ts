@@ -25,6 +25,7 @@ const pane = (action: string, method: string, level: Level): Case =>
 const CASES: Case[] = [
   { method: "GET", path: "/api/snapshot", level: "read", session: true },
   { method: "POST", path: "/api/snapshot", level: "read", session: true },
+  { method: "GET", path: "/api/pull-requests", level: "read", session: true },
   { method: "GET", path: "/api/events", level: "read", session: true },
   { method: "GET", path: "/api/dirs", level: "write", session: false },
   { method: "POST", path: "/api/tab", level: "write", session: true },

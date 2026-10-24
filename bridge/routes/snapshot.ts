@@ -14,20 +14,21 @@ export const snapshotRoutes: Route[] = [
     access: "read",
     session: true,
     async handle(ctx, { req, rt }) {
-      const { cfg, pullRequests, registry, machines } = ctx;
+      const { cfg, registry, machines } = ctx;
       const herd = herdOf(ctx, rt);
       const device = deviceAuth(req, cfg);
       machines.refresh();
       const others = machines.views(undefined, null);
       const view: Omit<SnapshotResponse, "ts"> = {
-        bridge: herd.wire.bridge,
+        bridge: herd.bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
         ...(device.enforced ? { device } : {}),
-        agents: herd.wire.agents,
-        shellPanes: herd.wire.shellPanes,
-        workspaces: herd.wire.workspaces,
-        tabs: herd.wire.tabs,
-        pullRequests: pullRequests.list(rt.name, [...herd.raw.agents, ...herd.raw.shellPanes]),
+        agents: herd.agents,
+        shellPanes: herd.shellPanes,
+        workspaces: herd.workspaces,
+        tabs: herd.tabs,
+        // Only the list's version: the list itself is most of the herd's bytes and changes far less often.
+        pullRequestsEtag: pullRequestBody(ctx, rt).etag,
         sessions: registry.list(),
         notifications: { snoozedUntil: ctx.snooze.until() },
         update: ctx.updateMonitor.status(),
@@ -37,7 +38,30 @@ export const snapshotRoutes: Route[] = [
       return respond(req, view);
     },
   },
+  {
+    method: "GET",
+    path: "/api/pull-requests",
+    access: "read",
+    session: true,
+    // Another machine's pull requests stay there (machineSnapshot).
+    machine: false,
+    handle(ctx, { req, rt }) {
+      const body = pullRequestBody(ctx, rt);
+      const etag = body.etag;
+      if (notModified(req.headers.get("if-none-match"), etag)) return secure(notModifiedResponse(etag));
+      return secure(body.response(req.headers.get("accept-encoding"), { etag }));
+    },
+  },
 ];
+
+/**
+ * The session's open pull requests with the panes on each branch; reading them asks for a refresh when
+ * stale. The snapshot's `pullRequestsEtag` and this route both come from here, so they always agree.
+ */
+function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime): JsonBody {
+  const { agents, shellPanes } = rt.engine.current();
+  return new JsonBody(pullRequests.list(rt.name, [...agents, ...shellPanes]));
+}
 
 /**
  * A session's herd as the snapshot shows it. The CLIs' own turn state (ADR 0067) and each pane's
@@ -45,7 +69,7 @@ export const snapshotRoutes: Route[] = [
  * engine stays a pure Herdr poller and the numbers are as fresh as the request. A dialog Herdr's
  * manifest does not name leaves the pane `unknown`; the bridge's card says it asks.
  */
-function herdOf({ activity, agentStates, hasJournal, interactions }: Services, rt: SessionRuntime) {
+function herdOf({ activity, agentStates, hasJournal, interactions }: Services, rt: SessionRuntime): MachineHerd {
   const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
   agentStates.sync(rt.name, rt.herdr, agents);
   const withActivity = (p: AgentView): AgentView => {
@@ -59,14 +83,13 @@ function herdOf({ activity, agentStates, hasJournal, interactions }: Services, r
   // an agent-reported filesystem path never reaches a browser (see toPaneWire). The flag is computed
   // against the registry, so a harness Herdr detects but Nenu has no journal for doesn't advertise a
   // History button that can only ever come back empty.
-  const wire: MachineHerd = {
+  return {
     bridge,
     agents: shown.agents.map((p) => toPaneWire(p, hasJournal)),
     shellPanes: shown.shellPanes.map((p) => toPaneWire(p, hasJournal)),
     workspaces,
     tabs,
   };
-  return { raw: { agents, shellPanes }, wire };
 }
 
 /**
@@ -85,7 +108,7 @@ async function respond(req: Request, view: Omit<SnapshotResponse, "ts">): Promis
 /**
  * The snapshot of another machine (`?session=@<label>`): its herd as its own Nenu answers it now, with
  * this bridge's device, update, sessions and notifications, and every machine's list but its own. Its
- * pull requests stay there. Its build and update are its
+ * pull requests stay there: no `pullRequestsEtag`, so the page reads none. Its build and update are its
  * own business, so this page never reloads or nags over the other machine's version.
  */
 export async function machineSnapshot(ctx: Services, req: Request, session: string): Promise<Response> {
@@ -105,11 +128,10 @@ export async function machineSnapshot(ctx: Services, req: Request, session: stri
     shellPanes: herd.shellPanes ?? [],
     workspaces: herd.workspaces ?? [],
     tabs: herd.tabs ?? [],
-    pullRequests: [],
     sessions: ctx.registry.list(),
     notifications: { snoozedUntil: ctx.snooze.until() },
     update: ctx.updateMonitor.status(),
-    machines: ctx.machines.views(session, primary ? herdOf(ctx, primary).wire : null),
+    machines: ctx.machines.views(session, primary ? herdOf(ctx, primary) : null),
   };
   return respond(req, view);
 }

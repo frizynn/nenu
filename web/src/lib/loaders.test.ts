@@ -132,6 +132,111 @@ describe("rootLoader", () => {
   });
 });
 
+describe("rootLoader — pull requests", () => {
+  const pr = (number: number) => ({ repo: "a/b", number, title: `PR ${number}`, url: `https://github.com/a/b/pull/${number}`, branch: `b${number}`, draft: false, paneIds: [] });
+
+  // The snapshot names the list's version; the list is read only when that version moves.
+  function serve(lists: Record<string, ReturnType<typeof pr>[]>) {
+    let version = Object.keys(lists)[0]!;
+    let ts = 0;
+    const reads: Array<string | null> = [];
+    server.use(
+      http.get("/api/snapshot", () => HttpResponse.json({ ...fixtureSnapshot, ts: ++ts, pullRequestsEtag: version })),
+      http.get("/api/pull-requests", ({ request }) => {
+        reads.push(request.headers.get("if-none-match"));
+        return HttpResponse.json(lists[version], { headers: { etag: version } });
+      }),
+    );
+    return { reads, move: (to: string) => { version = to; } };
+  }
+
+  it("reads the list once per version and keeps its identity while the herd moves", async () => {
+    const bridge = serve({ '"v1"': [pr(1)], '"v2"': [pr(1), pr(2)] });
+    const { rootLoader } = await import("./loaders");
+    const first = await rootLoader({ request: new Request("http://localhost/") });
+    const second = await rootLoader({ request: new Request("http://localhost/") });
+    expect(first.pullRequests?.map((p) => p.number)).toEqual([1]);
+    expect(second).not.toBe(first);
+    expect(second.pullRequests).toBe(first.pullRequests);
+    expect(bridge.reads).toEqual([null]);
+
+    bridge.move('"v2"');
+    const third = await rootLoader({ request: new Request("http://localhost/") });
+    expect(third.pullRequests?.map((p) => p.number)).toEqual([1, 2]);
+    expect(bridge.reads).toEqual([null, '"v1"']);
+    // A row that says what it said keeps its object, and the moved list then holds as the first did.
+    expect(third.pullRequests?.[0]).toBe(first.pullRequests?.[0]);
+    const fourth = await rootLoader({ request: new Request("http://localhost/") });
+    expect(fourth.pullRequests).toBe(third.pullRequests);
+  });
+
+  it("keeps the list without flagging the herd when its read fails, and asks again", async () => {
+    const bridge = serve({ '"v1"': [pr(1)], '"v2"': [pr(2)] });
+    const { rootLoader } = await import("./loaders");
+    const first = await rootLoader({ request: new Request("http://localhost/") });
+    bridge.move('"v2"');
+    server.use(http.get("/api/pull-requests", () => new HttpResponse(null, { status: 500 })));
+    const failed = await rootLoader({ request: new Request("http://localhost/") });
+    expect(failed.error).toBe(false);
+    expect(failed.pullRequests).toBe(first.pullRequests);
+    server.resetHandlers();
+    serve({ '"v2"': [pr(2)] });
+    const recovered = await rootLoader({ request: new Request("http://localhost/") });
+    expect(recovered.pullRequests?.map((p) => p.number)).toEqual([2]);
+  });
+
+  it("shows the last list on a cold stale render", async () => {
+    serve({ '"v1"': [pr(7)] });
+    const first = await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    expect(first.pullRequests?.map((p) => p.number)).toEqual([7]);
+    vi.resetModules();
+    failSnapshot();
+    const cold = await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    expect(cold.error).toBe(true);
+    expect(cold.pullRequests?.map((p) => p.number)).toEqual([7]);
+  });
+
+  it("hands back the same herd object when the snapshot answers 304", async () => {
+    let reads = 0;
+    server.use(
+      http.get("/api/snapshot", ({ request }) =>
+        request.headers.get("if-none-match") === '"h1"'
+          ? new HttpResponse(null, { status: 304, headers: { etag: '"h1"' } })
+          : HttpResponse.json({ ...fixtureSnapshot, pullRequestsEtag: '"v1"' }, { headers: { etag: '"h1"' } }),
+      ),
+      http.get("/api/pull-requests", () => { reads++; return HttpResponse.json([pr(1)], { headers: { etag: '"v1"' } }); }),
+    );
+    const { rootLoader } = await import("./loaders");
+    const first = await rootLoader({ request: new Request("http://localhost/") });
+    const second = await rootLoader({ request: new Request("http://localhost/") });
+    expect(second).toBe(first);
+    expect(reads).toBe(1);
+  });
+
+  it("takes the list inline from a bridge older than its own route", async () => {
+    server.use(http.get("/api/snapshot", () => HttpResponse.json({ ...fixtureSnapshot, pullRequests: [pr(3)] })));
+    const data = await (await import("./loaders")).rootLoader();
+    expect(data.pullRequests?.map((p) => p.number)).toEqual([3]);
+  });
+
+  it("falls back to the list inside a snapshot an older build stored", async () => {
+    server.use(http.get("/api/snapshot", () => HttpResponse.json({ ...fixtureSnapshot, pullRequests: [pr(9)] })));
+    await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    sessionStorage.removeItem("collie:last-pull-requests:");
+    vi.resetModules();
+    failSnapshot();
+    const cold = await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    expect(cold.error).toBe(true);
+    expect(cold.pullRequests?.map((p) => p.number)).toEqual([9]);
+  });
+
+  it("shows none for a snapshot that names no list (another machine)", async () => {
+    const { rootLoader } = await import("./loaders");
+    const data = await rootLoader();
+    expect(data.pullRequests).toEqual([]);
+  });
+});
+
 describe("paneLoader", () => {
   it("returns pane text on success", async () => {
     const { paneLoader } = await import("./loaders");

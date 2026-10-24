@@ -6,14 +6,14 @@
 
 // Only compress if serialised body is at least this many bytes; below this the
 // deflate overhead and header cost outweigh the savings.
-const GZIP_MIN_BYTES = 256;
+export const GZIP_MIN_BYTES = 256;
 
 /**
  * Compute a strong ETag for the given response body string.
  * Uses Bun.hash (Wyhash) — fast and deterministic within a process.
  * Returns a quoted ETag value as required by RFC 7232.
  */
-export function computeEtag(body: string): string {
+export function computeEtag(body: string | Uint8Array): string {
   // toString(16) works for both number and bigint, which covers all Bun.hash overloads.
   return `"${Bun.hash(body).toString(16)}"`;
 }
