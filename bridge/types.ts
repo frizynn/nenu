@@ -238,8 +238,11 @@ export interface SnapshotResponse {
   /** All spaces (workspaces) and their tabs, for the space/tab navigator. */
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  /** Open pull requests from GitHub in the repos agents work in. Absent on older bridges. */
-  pullRequests?: PullRequestView[];
+  /**
+   * The ETag `/api/pull-requests` answers for this session now: the page reads the list there only
+   * when this changes. Absent for another machine, whose pull requests stay there.
+   */
+  pullRequestsEtag?: string;
   /**
    * Every herdr session this bridge fronts (primary first, then alphabetical). Always present; a
    * single-session deployment lists just the primary, so the switcher UI can stay hidden.

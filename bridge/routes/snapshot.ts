@@ -14,7 +14,7 @@ export const snapshotRoutes: Route[] = [
     access: "read",
     session: true,
     async handle(ctx, { req, rt }) {
-      const { cfg, pullRequests, registry, machines } = ctx;
+      const { cfg, registry, machines } = ctx;
       const herd = herdOf(ctx, rt);
       const device = deviceAuth(req, cfg);
       machines.refresh();
@@ -27,7 +27,8 @@ export const snapshotRoutes: Route[] = [
         shellPanes: herd.wire.shellPanes,
         workspaces: herd.wire.workspaces,
         tabs: herd.wire.tabs,
-        pullRequests: pullRequests.list(rt.name, [...herd.raw.agents, ...herd.raw.shellPanes]),
+        // Only the list's version: the list itself is most of the herd's bytes and changes far less often.
+        pullRequestsEtag: pullRequestBody(ctx, rt, [...herd.raw.agents, ...herd.raw.shellPanes]).etag,
         sessions: registry.list(),
         notifications: { snoozedUntil: ctx.snooze.until() },
         update: ctx.updateMonitor.status(),
@@ -37,7 +38,27 @@ export const snapshotRoutes: Route[] = [
       return respond(req, view);
     },
   },
+  {
+    method: "GET",
+    path: "/api/pull-requests",
+    access: "read",
+    session: true,
+    // Another machine's pull requests stay there (machineSnapshot).
+    machine: false,
+    handle(ctx, { req, rt }) {
+      const { agents, shellPanes } = rt.engine.current();
+      const body = pullRequestBody(ctx, rt, [...agents, ...shellPanes]);
+      const etag = body.etag;
+      if (notModified(req.headers.get("if-none-match"), etag)) return secure(notModifiedResponse(etag));
+      return secure(body.response(req.headers.get("accept-encoding"), { etag }));
+    },
+  },
 ];
+
+/** The session's open pull requests with the panes on each branch; reading them asks for a refresh when stale. */
+function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime, panes: readonly AgentView[]): JsonBody {
+  return new JsonBody(pullRequests.list(rt.name, panes));
+}
 
 /**
  * A session's herd as the snapshot shows it. The CLIs' own turn state (ADR 0067) and each pane's
@@ -85,7 +106,7 @@ async function respond(req: Request, view: Omit<SnapshotResponse, "ts">): Promis
 /**
  * The snapshot of another machine (`?session=@<label>`): its herd as its own Nenu answers it now, with
  * this bridge's device, update, sessions and notifications, and every machine's list but its own. Its
- * pull requests stay there. Its build and update are its
+ * pull requests stay there: no `pullRequestsEtag`, so the page reads none. Its build and update are its
  * own business, so this page never reloads or nags over the other machine's version.
  */
 export async function machineSnapshot(ctx: Services, req: Request, session: string): Promise<Response> {
@@ -105,7 +126,6 @@ export async function machineSnapshot(ctx: Services, req: Request, session: stri
     shellPanes: herd.shellPanes ?? [],
     workspaces: herd.workspaces ?? [],
     tabs: herd.tabs ?? [],
-    pullRequests: [],
     sessions: ctx.registry.list(),
     notifications: { snoozedUntil: ctx.snooze.until() },
     update: ctx.updateMonitor.status(),

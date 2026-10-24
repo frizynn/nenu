@@ -25,9 +25,10 @@
 // Every entry carries the wall-clock of the fetch that produced it, because a stale render must be
 // able to say WHEN — "Disconnected — last seen 14:32" is honest, an undated old screen is not.
 
-import type { SnapshotResponse } from "@/lib/types";
+import type { PullRequestView, SnapshotResponse } from "@/lib/types";
 
 const SNAPSHOT_PREFIX = "collie:last-snapshot:";
+const PULL_REQUESTS_PREFIX = "collie:last-pull-requests:";
 const PANE_PREFIX = "collie:last-pane:";
 
 /**
@@ -194,6 +195,28 @@ export function saveLastSnapshot(
 /** The last snapshot this tab saw for a session, with the time it was fetched. */
 export function loadLastSnapshot(session: string | undefined): Cached<SnapshotResponse> | null {
   return decodeSnapshot(readRaw(snapshotKey(session)));
+}
+
+/**
+ * Write through the pull requests `/api/pull-requests` just returned. Their own entry, written only when
+ * they change, because they are most of a herd's bytes and change far less often than the snapshot.
+ */
+export function saveLastPullRequests(session: string | undefined, list: readonly PullRequestView[]): void {
+  write(`${PULL_REQUESTS_PREFIX}${session ?? ""}`, JSON.stringify(list));
+}
+
+/** The last pull requests this tab saw for a session; a stale render dates them by its snapshot. */
+export function loadLastPullRequests(session: string | undefined): PullRequestView[] | undefined {
+  const raw = readRaw(`${PULL_REQUESTS_PREFIX}${session ?? ""}`);
+  if (raw === null) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    // SAFETY: as decodeSnapshot's, the only writer is saveLastPullRequests with a body the live path
+    // hands the loaders unvalidated too.
+    return Array.isArray(parsed) ? parsed as PullRequestView[] : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Write through the mirror a successful `/api/pane/:id` just returned. */

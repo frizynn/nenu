@@ -270,8 +270,8 @@ export interface SnapshotResponse {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  /** Open pull requests from GitHub in the repos agents work in. Absent on older bridges. */
-  pullRequests?: PullRequestView[];
+  /** The ETag of this session's `/api/pull-requests`; absent for another machine, which shows none. */
+  pullRequestsEtag?: string;
   /** Notification quiet-hours: the active snooze deadline (epoch ms) or null. Absent on older bridges. */
   notifications?: { snoozedUntil: number | null };
   /** The bridge's session registry (primary-first). Absent on a single-session / older bridge. */

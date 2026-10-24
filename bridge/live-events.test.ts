@@ -164,6 +164,25 @@ describe("GET /api/snapshot", () => {
   });
 });
 
+describe("GET /api/pull-requests", () => {
+  it("is read apart from the snapshot, which names only its ETag", async () => {
+    const app = await structuralFixture();
+    try {
+      const snap = await app.snapshot() as { pullRequests?: unknown; pullRequestsEtag?: string };
+      expect(snap.pullRequests).toBeUndefined();
+      const first = await fetch(`${app.url}/api/pull-requests`);
+      expect(first.status).toBe(200);
+      expect(await first.json()).toEqual([]);
+      expect(first.headers.get("etag")).toBe(snap.pullRequestsEtag!);
+      const again = await fetch(`${app.url}/api/pull-requests`, { headers: { "if-none-match": snap.pullRequestsEtag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe("");
+    } finally {
+      await app.dispose();
+    }
+  });
+});
+
 describe("a client that stops reading", () => {
   it("is closed instead of buffered without bound", async () => {
     const hub = new LiveEvents();

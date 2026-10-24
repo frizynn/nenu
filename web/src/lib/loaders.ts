@@ -13,7 +13,7 @@
 // no flag, no race — and because a navigation aborts any in-flight revalidation, the nav is instant
 // even while a poll's doomed fetch is still hanging.
 
-import { fetchHistory, fetchPane, fetchSnapshot, isApiErrorStatus, warmConversation } from "@/lib/api";
+import { fetchHistory, fetchPane, fetchPullRequests, fetchSnapshot, isApiErrorStatus, warmConversation } from "@/lib/api";
 import { parseAnsi } from "@/lib/ansi";
 import { splitLines } from "@/lib/blocks";
 import { isLostLatched } from "@/lib/connection-health";
@@ -23,8 +23,10 @@ import { loadRawTerminal, paneDisplayScope } from "@/lib/raw-terminal";
 import {
   dropLastPaneText,
   loadLastPaneText,
+  loadLastPullRequests,
   loadLastSnapshot,
   saveLastPaneText,
+  saveLastPullRequests,
   saveLastSnapshot,
 } from "@/lib/last-seen";
 import { detectNoEchoPrompt } from "@/lib/no-echo";
@@ -89,7 +91,7 @@ export interface HomeData {
   shellPanes: AgentView[];
   workspaces: WorkspaceView[];
   tabs: TabView[];
-  /** Open pull requests from GitHub in the repos agents work in. */
+  /** Open pull requests from GitHub in the repos agents work in, read apart from the snapshot. */
   pullRequests?: PullRequestView[];
   /** The bridge's session registry (primary-first); empty on a single-session / older bridge. */
   sessions: SessionSummary[];
@@ -181,6 +183,7 @@ function isPaneUrl(url: string | undefined): boolean {
 
 function toHomeData(
   snap: SnapshotResponse,
+  pullRequests: PullRequestView[],
   session: string | undefined,
   error: boolean,
   lastSeenAt?: number,
@@ -193,7 +196,7 @@ function toHomeData(
     shellPanes: snap.shellPanes ?? [],
     workspaces: snap.workspaces ?? [],
     tabs: snap.tabs ?? [],
-    pullRequests: snap.pullRequests ?? [],
+    pullRequests,
     sessions: snap.sessions ?? [],
     session,
     snoozedUntil: snap.notifications?.snoozedUntil ?? null,
@@ -219,7 +222,8 @@ function staleHome(session: string | undefined): HomeData {
   const cached = lastSnapshot.get(session ?? "") ?? restored?.value;
   if (cached) {
     lastSnapshot.set(session ?? "", cached);
-    return toHomeData(cached, session, true, restored?.at);
+    const pullRequests = lastHomeData.get(session ?? "")?.pullRequests ?? loadLastPullRequests(session) ?? [];
+    return toHomeData(cached, pullRequests, session, true, restored?.at);
   }
   // Nothing cached at all — an outage on a tab that never saw a good snapshot. `error: true` is what
   // keeps this apart from a genuinely empty herd downstream: the empty state is only allowed to say
@@ -275,20 +279,38 @@ const lastHomeData = new Map<string, HomeData>();
 async function loadHome(session: string | undefined, request: Request | undefined): Promise<HomeData> {
   try {
     const snap = await fetchSnapshot(session, request?.signal);
+    const previous = lastHomeData.get(session ?? "");
+    const pullRequests = await readPullRequests(session, snap, previous, request);
+    if (pullRequests !== previous?.pullRequests) saveLastPullRequests(session, pullRequests);
     // A 304 hands back the snapshot already on screen; the same herd object then keeps every view's
     // memoised work. The write-through below still runs, so its date stays the last confirmed read.
-    const previous = lastHomeData.get(session ?? "");
-    const unchanged = snap === lastSnapshot.get(session ?? "") && previous && !previous.error;
+    const unchanged = snap === lastSnapshot.get(session ?? "") && previous && !previous.error && pullRequests === previous.pullRequests;
     lastSnapshot.set(session ?? "", snap);
     // Write-through: the same body, dated, in a store that outlives this page (lib/last-seen.ts).
     saveLastSnapshot(session, snap);
     rememberAuthError(session, false);
-    return unchanged ? previous : toHomeData(snap, session, false);
+    return unchanged ? previous : toHomeData(snap, pullRequests, session, false);
   } catch (e) {
     if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));
     // Keep the last good herd on screen, flagged so the ConnectionBanner can say "reconnecting…".
     return staleHome(session);
+  }
+}
+
+// The pull requests the snapshot names, the same list object while its version holds. A failed read
+// keeps the list on screen without flagging the herd, and the next run asks again.
+async function readPullRequests(
+  session: string | undefined,
+  snap: SnapshotResponse,
+  previous: HomeData | undefined,
+  request: Request | undefined,
+): Promise<PullRequestView[]> {
+  try {
+    return await fetchPullRequests(session, snap.pullRequestsEtag, request?.signal);
+  } catch (e) {
+    if (isSuperseded(request)) throw e;
+    return previous?.pullRequests ?? loadLastPullRequests(session) ?? [];
   }
 }
 
