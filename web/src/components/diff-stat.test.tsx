@@ -70,10 +70,10 @@ it("says how many files it lists when there are more", async () => {
 });
 
 it("says why there is no diff, and offers GitHub", async () => {
-  serve({ ok: false, reason: "head-missing", message: "This thread's folder is not on the pull request's branch." });
+  serve({ ok: false, reason: "head-missing", message: "This pane's folder is not on the pull request's branch." });
   render(<DiffStat diff={{ additions: 9340, deletions: 1452 }} paneId="w1:p1" pr={1352} url="https://github.com/a/b/pull/1352" />);
   await userEvent.click(screen.getByRole("button", { name: /View changes/ }));
-  expect(await screen.findByText("This thread's folder is not on the pull request's branch.")).toBeInTheDocument();
+  expect(await screen.findByText("This pane's folder is not on the pull request's branch.")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Open on GitHub/ })).toHaveAttribute("href", "https://github.com/a/b/pull/1352");
 });
 

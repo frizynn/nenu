@@ -124,8 +124,8 @@
   .composer-chip:not([data-chip="needs"]) .composer-chip-label { display: none; }
   .composer-meta:has(.composer-chip) .workbench-effort, .composer-meta:has(.composer-chip) .workbench-context-number { display: none; }
 }
-/* At a docked thread's narrowest the context's ring steps aside too (the thread's full view still
-   says it); the model's button stays, since the model panel opens on its own from it. */
+/* At a narrow phone's width the context's ring steps aside too (its panel still says it); the model's
+   button stays, since the model panel opens on its own from it. */
 @container composer (max-width: 299px) { .composer-meta:has(.composer-chip) .workbench-context { display: none; } }
 /* 44px of reach each way: at least 44px wide, and grown down into the home indicator's inset, never up
    into the box, as the row's other targets. */

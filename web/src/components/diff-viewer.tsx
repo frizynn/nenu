@@ -70,7 +70,7 @@ function sourceLine(diff: Extract<PaneDiff, { ok: true }>): ReactNode {
   const code = (text: string) => <code className="font-mono">{text}</code>;
   if (diff.source === "uncommitted") return <>What is not committed on {code(diff.head)} yet, against its last commit.</>;
   if (diff.source === "branch") return <>The pushed branch {code(diff.head)}, against {code(diff.base)}.</>;
-  return <>{diff.pr === undefined ? "This session's" : "This thread's"} worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
+  return <>{diff.pr === undefined ? "This session's" : "This pull request's"} worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
 }
 
 /** The pane a diff was read from, whose composer its line comments wait on. */
@@ -135,7 +135,7 @@ function CommentsElsewhere({ target, count, onLeave }: { target: CommentTarget; 
   return (
     <div className="mx-4 flex items-center gap-2 rounded-lg border border-border/70 py-1 pl-3 pr-1 text-[13px]">
       <ChatCircleText aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1">{count} {count === 1 ? "comment" : "comments"} for {pane ? displayName(pane) : "this thread"}</span>
+      <span className="min-w-0 flex-1">{count} {count === 1 ? "comment" : "comments"} for {pane ? displayName(pane) : "this chat"}</span>
       <button type="button" className="quiet-action" onClick={() => { onLeave?.(); navigate(panePath(target.paneId, target.session)); }}>Open chat</button>
     </div>
   );

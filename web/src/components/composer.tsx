@@ -120,8 +120,6 @@ interface ComposerProps {
   agent: string | undefined | null;
   /** True for a bare shell pane (tweaks the placeholder copy). */
   isShell: boolean;
-  /** Idle copy for an agent pane in place of "Type a reply…"; lock and shell states still win. */
-  placeholder?: string;
   /** A turn runs (lib/turn.ts): Stop shows, and Send offers "now" or "after this turn" where the CLI
    *  has both (ADR 0056). Background work alone is no turn, so Send goes directly. */
   working?: boolean;
@@ -281,7 +279,7 @@ function refusalNote({ tooLarge, overLimit }: AttachRefusal): string | null {
 }
 
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { paneId, session, dropZoneRef, agent, isShell, placeholder, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, limit, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
+  { paneId, session, dropZoneRef, agent, isShell, working = false, gone, readOnly, disconnected = false, lockReason, lockOnCard = false, herdrDown = false, modelControl, place, onEscape, chips = NO_CHIPS, usageControls, nativeWorkbench = false, prepareSend, onInputFocus, dialogPresent, limit, text, terminalDraft, rawTerminalDraft, prefs, setWrap, stepFontSize, setRawTerminal, setTapToFocus, onSent, onControlsChange, sessionPanel, terminalView = false },
   ref,
 ) {
   const revalidator = useRevalidator();
@@ -1637,7 +1635,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                         // A dialog owns the agent's keyboard: Send queues behind the answer, or refuses.
                         : dialogPresent
                           ? nativeWorkbench && queue.page?.available ? "Message for after you answer…" : "Answer the agent first…"
-                          : placeholder ?? "Type a reply…"
+                          : "Type a reply…"
               }
               autoCorrect={direct.active || noEcho ? "off" : undefined}
               spellCheck={direct.active || noEcho ? false : undefined}

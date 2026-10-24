@@ -19,8 +19,6 @@ export interface ChipView {
   label: string;
   /** Shown beside the label when above zero. */
   count: number;
-  /** The panel's name, when it says more than the label. */
-  title?: string;
   mark?: ReactNode;
   /** Asks nothing of you (finished work): off the line, its panel opened from the ⋯ menu. */
   tucked?: boolean;
@@ -121,7 +119,7 @@ export function ComposerChips({ chips, open, onOpenChange, detail, returnFocus }
     if (event.shiftKey && (active === first || active === panel.current)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
   };
-  const title = detail ? detail.title : shown && (shown.title ?? shown.label);
+  const title = detail ? detail.title : shown?.label;
   return (
     <div ref={line} className="composer-chips">
       {shown && (

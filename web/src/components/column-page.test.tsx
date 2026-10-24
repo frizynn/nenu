@@ -47,7 +47,7 @@ function renderPage(path: string, children = <h2>Acme Shop</h2>) {
 describe("ColumnPage — the large title", () => {
   it("shows the header title only once the page's heading has scrolled under the header", () => {
     const io = observeIntersections();
-    renderPage("/project/acme");
+    renderPage("/settings");
     // The page's own heading is watched inside the page's scroller.
     expect(io.watched.map(({ target }) => target.textContent)).toEqual(["Acme Shop"]);
     expect(io.watched[0]!.root).toBe(screen.getByRole("main"));
@@ -60,7 +60,7 @@ describe("ColumnPage — the large title", () => {
 
   it("goes by the latest of several crossings delivered at once", () => {
     const io = observeIntersections();
-    renderPage("/project/acme");
+    renderPage("/settings");
     // Flung down and back up while the page was busy: the heading ends in view, so the bar stays empty.
     io.scroll(false, true);
     expect(headerTitle()).toBeNull();
@@ -70,39 +70,39 @@ describe("ColumnPage — the large title", () => {
 
   it("keeps the header title when the page's heading names something else", () => {
     const io = observeIntersections();
-    // A node page titled by its project, over the node's own heading: the bar must not go empty.
-    renderPage("/project/acme/node/t-0102", <h2>Rediseño mobile</h2>);
+    // A page titled by its parent, over its own heading: the bar must not go empty.
+    renderPage("/settings/usage", <h2>Rediseño mobile</h2>);
     expect(io.watched).toEqual([]);
     expect(headerTitle()).toBeInTheDocument();
   });
 
   it("watches the heading that says the title, wherever it sits among the page's headings", () => {
     const io = observeIntersections();
-    renderPage("/project/acme", <><h1>Needs you</h1><h2>Acme Shop</h2></>);
+    renderPage("/settings", <><h1>Needs you</h1><h2>Acme Shop</h2></>);
     expect(io.watched.map(({ target }) => target.textContent)).toEqual(["Acme Shop"]);
     expect(headerTitle()).toBeNull();
   });
 
   it("keeps the header title when the page draws no heading", () => {
     observeIntersections();
-    renderPage("/project/acme", <p>Project not found in this Herdr session.</p>);
+    renderPage("/settings", <p>Nothing here yet.</p>);
     expect(headerTitle()).toBeInTheDocument();
   });
 
   it("keeps the header title where the browser cannot watch the heading", () => {
-    renderPage("/project/acme");
+    renderPage("/settings");
     expect(headerTitle()).toBeInTheDocument();
   });
 
   it("leads with a back to Home, or to the parent a page names", () => {
     observeIntersections();
-    const { unmount } = renderPage("/project/acme");
+    const { unmount } = renderPage("/settings");
     expect(screen.getByRole("link", { name: "Back to Home" })).toHaveAttribute("href", "/");
     unmount();
-    render(<MemoryRouter initialEntries={["/project/acme/node/t-1"]}>
-      <ColumnPage data={data} title="Acme Shop" back={{ to: "/project/acme", label: "Acme Shop" }}><h2>Rediseño</h2></ColumnPage>
+    render(<MemoryRouter initialEntries={["/settings/usage"]}>
+      <ColumnPage data={data} title="Acme Shop" back={{ to: "/settings", label: "Acme Shop" }}><h2>Rediseño</h2></ColumnPage>
     </MemoryRouter>);
-    expect(screen.getByRole("link", { name: "Back to Acme Shop" })).toHaveAttribute("href", "/project/acme");
+    expect(screen.getByRole("link", { name: "Back to Acme Shop" })).toHaveAttribute("href", "/settings");
   });
 });
 
@@ -115,11 +115,11 @@ describe("ColumnPage — the column", () => {
 });
 
 describe("the page's scroll", () => {
-  // Two pages that scroll in PageBody, as Your asks and a thread's page do: each route its own page.
+  // Two pages that scroll in PageBody: each route its own page.
   const page = (name: string) => <PageBody key={name}><p>{name}</p></PageBody>;
   const scroller = () => document.querySelector("main.page-body") as HTMLElement;
   async function open() {
-    const router = createMemoryRouter([{ path: "/asks", element: page("Asks") }, { path: "/node", element: page("Node") }], { initialEntries: ["/asks?project=acme"] });
+    const router = createMemoryRouter([{ path: "/asks", element: page("Asks") }, { path: "/node", element: page("Node") }], { initialEntries: ["/asks?q=acme"] });
     render(<RouterProvider router={router} />);
     await screen.findByText("Asks");
     return router;
@@ -139,7 +139,7 @@ describe("the page's scroll", () => {
     const router = await open();
     act(() => { scroller().scrollTop = 600; fireEvent.scroll(scroller()); });
     await act(() => router.navigate("/node"));
-    await act(() => router.navigate("/asks?project=acme"));
+    await act(() => router.navigate("/asks?q=acme"));
     await screen.findByText("Asks");
     expect(scroller().scrollTop).toBe(0);
   });

@@ -936,7 +936,7 @@ export function AgentChat({
   ];
   const openChip = (next: ChipId | null) => { setChip(next); if (!desktop) setProcessDetail(null); };
   const tuckedActions: ConversationAction[] = chips.flatMap((c) => c.tucked && c.icon ? [{ id: `chip-${c.id}`,
-    label: c.count > 0 ? `${c.title ?? c.label} · ${c.count}` : c.title ?? c.label, icon: c.icon, run: () => openChip(c.id) }] : []);
+    label: c.count > 0 ? `${c.label} · ${c.count}` : c.label, icon: c.icon, run: () => openChip(c.id) }] : []);
   const chipDetail = !desktop && processDetail && processDetailContent
     ? { title: detailTitle(processDetail, activity), content: <RunNamedAbove value>{processDetailContent}</RunNamedAbove>, onBack: () => setProcessDetail(null) }
     : null;

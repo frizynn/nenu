@@ -207,7 +207,7 @@ export function slidePanel(panel: HTMLElement, direction: "in" | "out"): Animati
 /** The chat keeps 22rem beside the right column (project.css `.session-panel`). */
 const CHAT_MIN = 352;
 
-/** The right column's left edge, the session panel's or a docked thread's: one width for both. */
+/** The right column's left edge: the session panel's. */
 export function ColumnEdge({ inspector, label }: { inspector: SessionInspectorState; label: string }) {
   return <ResizeHandle label={label} edge="start" width={inspector.width} range={PANEL_WIDTH} onChange={inspector.setWidth}
     limit={(column) => {

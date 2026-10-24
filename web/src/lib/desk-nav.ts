@@ -6,7 +6,6 @@ import { chatRecency } from "./recency";
 import type { AgentStatus, AgentView } from "./types";
 
 export interface DeskChat {
-  key: string;
   title: string;
   /** The live pane it opens. */
   paneId: string;
@@ -24,7 +23,7 @@ const unread = (pane: AgentView) =>
 /** Every agent pane, as a chat. */
 export function deskChats(data: { agents: readonly AgentView[] }): DeskChat[] {
   return data.agents.map((pane): DeskChat => ({
-    key: pane.paneId, title: displayName(pane), paneId: pane.paneId, pane, at: chatRecency(pane), unread: unread(pane),
+    title: displayName(pane), paneId: pane.paneId, pane, at: chatRecency(pane), unread: unread(pane),
   }));
 }
 
