@@ -8,6 +8,7 @@ import { clampTo, ResizeHandle, type WidthRange } from "@/components/ui/resize-h
 import { WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import { needsYouCount } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
@@ -93,6 +94,12 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
     toggled.current = true;
     setCollapsed(next);
   };
+  // Below the desk the sidebar and its rail are hidden, so a phone never mounts them: their rows would
+  // re-render on every snapshot for nothing. Once mounted they stay, keeping their state when a window
+  // crosses the breakpoint and back.
+  const desk = useMediaQuery(DESKTOP);
+  const [deskSeen, setDeskSeen] = useState(desk);
+  if (desk && !deskSeen) setDeskSeen(true);
   const location = useLocation();
   // A new route closes the drawer synchronously, including browser Back/Forward.
   const [drawerLocation, setDrawerLocation] = useState(location.key);
@@ -135,7 +142,7 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
 
   return (
     <div className="workbench-shell" data-sidebar-collapsed={collapsed}>
-      <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
+      {deskSeen && <aside id={sidebarId} className="workbench-sidebar" aria-label="Workspace sidebar" style={{ width: sidebarWidth }}>
         <div className="workbench-brand-row">
           <Link to={homePath(data.session)} className="workbench-brand">
             <img src="/nenu-mark.png" alt="" width="22" height="22" className="nenu-mark" />
@@ -148,9 +155,9 @@ export function WorkbenchShell({ data, children }: { data: HomeData; children: R
         <WorkbenchSidebar data={data} onNewChat={newChat} request={request} />
         <ResizeHandle label="Resize sidebar" edge="end" width={sidebarWidth} range={SIDEBAR_WIDTH} onChange={setSidebarWidth}
           limit={() => Math.floor(window.innerWidth * 0.4)} />
-      </aside>
+      </aside>}
 
-      {collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
+      {deskSeen && collapsed && <SidebarRail data={data} attention={attention} expandRef={expandButton} sidebarId={sidebarId}
         onExpand={() => toggle(false)} onNewChat={newChat} onSearch={search} />}
 
       <div className="workbench-main">
