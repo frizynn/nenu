@@ -384,7 +384,9 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
         {/* On a phone the control's 44px reach spills 4px past the 36px tabs instead of growing their row. */}
         {list === "workspaces" && (arranging || workspaces.length > 1) && (arranging
           ? <button ref={doneControl} type="button" onClick={(event) => { if (event.detail === 0) focusNext.current = "order"; setArranging(false); }} className={cn("quiet-action font-medium text-foreground max-lg:-my-1", desk && "-mr-2")}>Done</button>
-          : <label className={cn("quiet-action relative shrink-0 focus-within:ring-2 focus-within:ring-ring max-lg:-my-1 max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
+          // Clipped: WebKit lays a select's text out as wide as its longest option whatever the select's
+          // width, and that overflow let a phone's page scroll sideways.
+          : <label className={cn("quiet-action relative shrink-0 overflow-clip focus-within:ring-2 focus-within:ring-ring max-lg:-my-1 max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
             <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
             <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>
             <select ref={orderControl} aria-label="Order" value={order.mode} onChange={(event) => chooseOrder(event.target.value as WorkspaceOrderMode | "arrange")}
