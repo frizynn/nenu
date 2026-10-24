@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
-import { useLoaderData, useLocation, useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData } from "react-router";
 
 import { AgentChat } from "@/components/agent-chat";
+import { useRevalidate } from "@/hooks/use-router";
 import { InspectorToggle, panelLink, SessionInspector, sessionPr, useSessionInspector } from "@/components/session-inspector";
 import { ROOT_ROUTE_ID, type HomeData, type PaneData } from "@/lib/loaders";
 import { currentMachine } from "@/lib/machines";
@@ -28,7 +29,7 @@ export function DetailRoute() {
   const navigate = useNavigate();
   const goBack = useGoBack();
   const location = useLocation();
-  const { revalidate } = useRevalidator();
+  const revalidate = useRevalidate();
   // Kept here, above the frames, so a switch between sessions leaves the desk's panel as it was.
   const inspector = useSessionInspector();
 
@@ -77,13 +78,26 @@ export function DetailRoute() {
     navigate(next ? panePath(next.paneId, session) : homePath(session), { replace: true });
   }, [gone, last, next, root, navigate, session]);
 
-  const pr = sessionPr(root, paneId);
+  // Stable while the herd and the inspector are, so a revalidation that changed neither (a live event
+  // naming only the mirror, and the "loading" render of every run) leaves the memoised chat alone.
+  const pr = useMemo(() => sessionPr(root, paneId), [root.pullRequests, paneId]);
+  // The inspector is a new object each render; what the toggle and the panel link read of it is these
+  // fields, and its functions only reach refs and state setters, so an older closure does the same.
+  const { desk, open, terminal } = inspector;
+  const headerTrail = useMemo(() => desk && !open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined,
+    [desk, open, pr]);
+  const sessionPanel = useMemo(() => desk ? panelLink(inspector) : undefined, [desk, terminal]);
+  // Nothing above a chat but Home.
+  const onBack = useCallback(() => goBack(homePath(session)), [goBack, session]);
+  // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
+  // the browser's back leaves the chat instead of walking back through every pane visited.
+  const onSelect = useCallback((id: string) => navigate(panePath(id, session), { replace: true }), [navigate, session]);
   return (
     <div className="project-frame">
       <AgentChat
         key={paneId}
-        headerTrail={inspector.desk && !inspector.open ? <InspectorToggle inspector={inspector} pr={pr} /> : undefined}
-        sessionPanel={inspector.desk ? panelLink(inspector) : undefined}
+        headerTrail={headerTrail}
+        sessionPanel={sessionPanel}
         paneId={paneId}
         session={session}
         machine={currentMachine(root)?.label}
@@ -103,11 +117,8 @@ export function DetailRoute() {
         bridge={root.bridge}
         error={root.error}
         authError={root.authError || pane.authError}
-        // Nothing above a chat but Home.
-        onBack={() => goBack(homePath(session))}
-        // A tab or pane switch is a step sideways, not deeper: it replaces this chat in history, so
-        // the browser's back leaves the chat instead of walking back through every pane visited.
-        onSelect={(id) => navigate(panePath(id, session), { replace: true })}
+        onBack={onBack}
+        onSelect={onSelect}
       />
       {inspector.desk && inspector.open && <SessionInspector inspector={inspector} paneId={paneId} session={session}
         artifacts={root.agents.some((pane) => pane.paneId === paneId)} pr={pr} />}

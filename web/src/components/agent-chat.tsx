@@ -12,10 +12,9 @@ import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
 import { ComposerPlace, NEEDS_MARK, WORKING_MARK, type ChipId, type ChipView } from "@/components/composer-chips";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { useNavigate, useRevalidator } from "react-router";
 import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,8 @@ import { openNewAgent, useSpawnState } from "@/lib/spawn";
 import { useDisplayPrefs } from "@/hooks/use-display-prefs";
 import { useStableTerminalDraft } from "@/hooks/use-terminal-draft";
 import { useConnectionLost } from "@/hooks/use-connection-lost";
+import { useDayTurn } from "@/hooks/use-day-turn";
+import { useNavigateTo, useRevalidate } from "@/hooks/use-router";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
@@ -146,7 +147,10 @@ interface AgentChatProps {
 // back. The composer cluster — draft, send, keys, quick actions, slash-commands, image upload and
 // display prefs — lives in <Composer>; it reaches back here only to re-follow the tail after a send,
 // focus on a mirror tap, and hand over its view controls for the ⋯ menu.
-export function AgentChat({
+//
+// Memoised: DetailRoute re-renders on every router state change, and a run that changed neither the
+// herd nor the mirror (every run's "loading" render) hands it the same props, so the chat skips it.
+export const AgentChat = memo(function AgentChat({
   paneId,
   session,
   machine,
@@ -172,8 +176,8 @@ export function AgentChat({
   onSelect,
 }: AgentChatProps) {
   useHoldReload("open-agent-session", true, "view");
-  const revalidator = useRevalidator();
-  const navigate = useNavigate();
+  const revalidate = useRevalidate();
+  const navigate = useNavigateTo();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
   // the Nenu mark + pill; here we use it to dim the title's status dot, so it stops presenting the
   // last snapshot's status as current while we're reconnecting/lost, and restores instantly on recovery.
@@ -247,14 +251,9 @@ export function AgentChat({
   // matches). While following, the frozen pair IS the live pair by definition.
   const [following, setFollowing] = useState(true);
   const [shown, setShown] = useState({ text, revision });
-  useEffect(() => {
-    if (!following) return;
-    // Functional update that returns the previous object when nothing changed keeps React's
-    // Object.is bailout — no re-render per poll while the pane is quiet.
-    setShown((prev) =>
-      prev.text === text && prev.revision === revision ? prev : { text, revision },
-    );
-  }, [text, revision, following]);
+  // Adjusted while rendering, not in an effect: an effect drew every new read twice, once with the
+  // old text and again with the new. Unchanged text keeps the same object, so a quiet poll re-renders nothing.
+  if (following && (shown.text !== text || shown.revision !== revision)) setShown({ text, revision });
   const display = shown.text;
   const hasNew = !following && display !== text;
 
@@ -322,6 +321,8 @@ export function AgentChat({
   const unknownInteraction = wait?.kind === "interaction";
   const waitNotice = wait?.kind === "notice" ? wait.text : null;
   const limit = usageLimitOf(agent);
+  // Its line names the reset's weekday until that day comes, and this chat no longer redraws on every poll.
+  useDayTurn(limit !== undefined);
   const dialogPresent = liveBlocks.some(blockOwnsKeyboard) || unknownInteraction;
   const modelPresent = liveBlocks.some((block) => block.kind === "menu" && parseNativeModelMenu(block.menu, block.lines));
   const liveModelBlock = liveBlocks.find((block) => block.kind === "menu");
@@ -335,17 +336,17 @@ export function AgentChat({
   const localModel = useLocalModelApply({ paneId, session, agent: agent?.agent, requestedLines,
     writable: writableRef.current, modelPresent,
     openCommand: async () => await composerRef.current?.openModelPicker() ?? false,
-    onLoaded: () => { void modelSource.refresh(); revalidator.revalidate(); },
+    onLoaded: () => { void modelSource.refresh(); revalidate(); },
     onApplied: (pane) => {
       modelSource.observe(pane);
       setStatus("Model settings applied", "success");
-      revalidator.revalidate();
+      revalidate();
       panels.modelCompleted();
     },
     onReasoning: (pane) => {
       modelSource.observe(pane);
       setStatus("Choose reasoning, then apply the change", "info");
-      revalidator.revalidate();
+      revalidate();
     },
   });
   const panels = useWorkbenchPanels({
@@ -360,7 +361,7 @@ export function AgentChat({
       const result = await dismissModelPicker({ paneId, session, agent: agent?.agent, requestedLines,
         signal, canWrite: () => writableRef.current });
       if (result.ok) localModel.released();
-      if (!signal.aborted) revalidator.revalidate();
+      if (!signal.aborted) revalidate();
       return result;
     },
     onError: (message) => setStatus(message, "error"),
@@ -405,7 +406,6 @@ export function AgentChat({
     composerRef.current?.openDock("keys");
   }, [setRawTerminal]);
   const { answer } = interactions;
-  const { revalidate } = revalidator;
   const refreshConversation = conversation.refresh;
   // The question is the thread's newest line, so it lives inside the conversation's scroller: a swipe
   // over it scrolls the thread, and following lands on its first line (`data-follow-stop`).
@@ -528,7 +528,7 @@ export function AgentChat({
     setLoadingOlder(true);
     setFollowing(false); // stay put in history rather than snapping to the tail
     adoptTarget.current = growRequestedLines(paneId, session);
-    revalidator.revalidate();
+    revalidate();
   }
   // Adopt the enlarged buffer into the frozen display once the *grown* fetch lands — keyed on the
   // requested line count so a stale in-flight poll (still on the old window) can't adopt early.
@@ -567,7 +567,7 @@ export function AgentChat({
   // After a successful send, snap the mirror back to the live tail so the reply's result is visible.
   const onSent = () => {
     setFollowing(true);
-    revalidator.revalidate();
+    revalidate();
     listRef.current?.scrollToBottom();
   };
 
@@ -604,11 +604,11 @@ export function AgentChat({
       // The answered dialog leaving the screen is the receipt, so a sent answer raises no toast (T10).
       if (result.status === "sent") {
         setFollowing(true);
-        revalidator.revalidate();
+        revalidate();
         listRef.current?.scrollToBottom();
       } else if (result.status === "changed") {
         setStatus("Menu changed — refreshing", "warn");
-        revalidator.revalidate();
+        revalidate();
       } else {
         setStatus(result.error || "Send failed", "error");
       }
@@ -616,7 +616,7 @@ export function AgentChat({
       // what someone just thumb-typed. Option taps ignore it.
       return result.status === "sent";
     },
-    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidate],
   );
 
   // Tap a wizard control (an option digit, step navigation, or the review step's submit/cancel).
@@ -642,16 +642,16 @@ export function AgentChat({
       });
       if (result.status === "sent") {
         setFollowing(true);
-        revalidator.revalidate();
+        revalidate();
         listRef.current?.scrollToBottom();
       } else if (result.status === "changed") {
         setStatus("Wizard changed — refreshing", "warn");
-        revalidator.revalidate();
+        revalidate();
       } else {
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidate],
   );
 
   // Tap a preview-dialog control (point at an option, choose the pointed one, the note add/edit/remove,
@@ -684,20 +684,20 @@ export function AgentChat({
               : await submitPreviewKeys({ ...base, keys: action.keys });
       // Pointing only moves the pointer: nothing was answered. The tapped row stays busy until the
       // refreshed card shows its preview, so a second tap can't act on the read it replaced.
-      if (result.status === "sent" && action.kind === "point") await revalidator.revalidate();
+      if (result.status === "sent" && action.kind === "point") await revalidate();
       else if (result.status === "sent") {
         setFollowing(true);
-        revalidator.revalidate();
+        revalidate();
         listRef.current?.scrollToBottom();
       } else if (result.status === "changed") {
         setStatus("Dialog changed — refreshing", "warn");
-        revalidator.revalidate();
+        revalidate();
       } else {
         setStatus(result.error || "Send failed", "error");
-        revalidator.revalidate();
+        revalidate();
       }
     },
-    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidate],
   );
 
   // Tap a multi-select control (toggle a checkbox, Submit, the "Chat about this" escape, or the
@@ -722,16 +722,16 @@ export function AgentChat({
       });
       if (result.status === "sent") {
         setFollowing(true);
-        revalidator.revalidate();
+        revalidate();
         listRef.current?.scrollToBottom();
       } else if (result.status === "changed") {
         setStatus("Selection changed — refreshing", "warn");
-        revalidator.revalidate();
+        revalidate();
       } else {
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator],
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidate],
   );
 
   // Tap a generic-menu control (a footer-named key like Enter/s/Esc, or an arrow). Same guard-first
@@ -763,7 +763,7 @@ export function AgentChat({
           if (!modelSource.isCurrent()) return;
           if (!observed.ok) {
             setStatus(observed.error, "warn");
-            revalidator.revalidate();
+            revalidate();
             return;
           }
           modelSource.observe(observed.pane);
@@ -773,21 +773,21 @@ export function AgentChat({
             const confirmed = menu.actions.some((entry) => !entry.cancel && entry.keys.join() === action.keys.join());
             setStatus(confirmed ? "Model settings applied" : "Model settings closed", confirmed ? "success" : "info");
           } else setStatus(observed.menu.kind === "reasoning" ? "Choose reasoning, then apply the change" : "Selection updated — apply to save", "info");
-          revalidator.revalidate();
+          revalidate();
           return;
         }
         localModel.released();
         setFollowing(true);
-        revalidator.revalidate();
+        revalidate();
         listRef.current?.scrollToBottom();
       } else if (result.status === "changed") {
         setStatus("The screen changed — refreshing", "warn");
-        revalidator.revalidate();
+        revalidate();
       } else {
         setStatus(result.error || "Send failed", "error");
       }
     },
-    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidator, localModel.released,
+    [readOnly, refusedWrite, paneId, session, requestedLines, interactionRevision, agent?.agent, revalidate, localModel.released,
       liveModelBlock, modelPresent, modelSource.observe, modelSource.isCurrent, panels.modelCompleted],
   );
 
@@ -1064,11 +1064,11 @@ export function AgentChat({
             onNewTab={(workspaceId) => openNewAgent({ kind: "tab", workspaceId })}
             session={session}
             readOnly={readOnly}
-            onRenamed={() => revalidator.revalidate()}
+            onRenamed={() => revalidate()}
             // Closing the tab this pane lives in kills the pane too; the refreshed snapshot without it
             // is what moves you to the tab beside it (DetailRoute), the same as a close made in Herdr.
-            onClosed={() => revalidator.revalidate()}
-            onMoved={() => revalidator.revalidate()}
+            onClosed={() => revalidate()}
+            onMoved={() => revalidate()}
           />
         )}
 
@@ -1081,9 +1081,9 @@ export function AgentChat({
             onSelect={switchTo}
             session={session}
             readOnly={readOnly}
-            onRenamed={() => revalidator.revalidate()}
+            onRenamed={() => revalidate()}
             // As with a tab: closing the open pane lands on another one in its tab (DetailRoute).
-            onClosed={() => revalidator.revalidate()}
+            onClosed={() => revalidate()}
           />
         )}
 
@@ -1208,7 +1208,7 @@ export function AgentChat({
             reportedModel={telemetry?.model} reportedEffort={telemetry?.effort}
             disabled={readOnly || gone || connecting} closing={panels.closing}
             onDismiss={() => { void panels.changePanel(null); }} onLoad={localModel.load} onMenuAction={handleMenuAction}
-            onApply={localModel.apply} onApplyError={() => revalidator.revalidate()} />}
+            onApply={localModel.apply} onApplyError={() => revalidate()} />}
           {!subagent && showConversation && wait?.kind === "interaction" && (
             <TerminalWaitRow key={wait.hint} hint={wait.hint} agent={agent?.agent} onShow={() => setRawTerminal(true)}
               onKeys={openKeys} />
@@ -1339,13 +1339,13 @@ export function AgentChat({
 
       {/* Closing the open pane or its tab moves the route to the pane beside it (DetailRoute). */}
       {agent && <PaneActionsSheet open={paneSheet === "pane"} onClose={() => setPaneSheet(null)} pane={agent} name={title}
-        session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
+        session={session} readOnly={readOnly} onRenamed={() => revalidate()} onClosed={() => revalidate()} />}
       {tab && <TabActionsSheet open={paneSheet === "tab"} onClose={() => setPaneSheet(null)} tab={tab} name={tabTitle}
-        session={session} readOnly={readOnly} onRenamed={() => revalidator.revalidate()} onClosed={() => revalidator.revalidate()} />}
+        session={session} readOnly={readOnly} onRenamed={() => revalidate()} onClosed={() => revalidate()} />}
 
     </div>
   );
-}
+});
 
 /** The dialog block drawn in the card's place, handed to the conversation's footer slot. */
 const InlineDialog = createContext<ReactNode>(null);

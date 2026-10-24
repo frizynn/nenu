@@ -9,15 +9,23 @@ import type { AgentView, TabView } from "@/lib/types";
 import { DetailRoute } from "./detail";
 
 // Stub the heavy terminal view: this test is about DetailRoute's routing/freshPane logic, not the
-// composer. The stub reports which pane it was handed and whether an agent resolved for it.
-vi.mock("@/components/agent-chat", () => ({
-  AgentChat: ({ paneId, agent, text, onSelect }: { paneId: string; agent?: AgentView; text: string; onSelect: (id: string) => void }) => (
-    <div data-testid="chat" data-text={text}>
-      {`pane:${paneId}:${agent ? "live" : "gone"}`}
-      <button type="button" onClick={() => onSelect("w1:p2")}>switch</button>
-    </div>
-  ),
-}));
+// composer. The stub reports which pane it was handed and whether an agent resolved for it, and is
+// memoised as the real chat is, counting its renders.
+const chatRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/agent-chat", async () => {
+  const { memo } = await import("react");
+  return {
+    AgentChat: memo(({ paneId, agent, text, onSelect }: { paneId: string; agent?: AgentView; text: string; onSelect: (id: string) => void }) => {
+      chatRenders.count++;
+      return (
+        <div data-testid="chat" data-text={text}>
+          {`pane:${paneId}:${agent ? "live" : "gone"}`}
+          <button type="button" onClick={() => onSelect("w1:p2")}>switch</button>
+        </div>
+      );
+    }),
+  };
+});
 
 function agentView(paneId: string, kind: "agent" | "shell", tabId = "w1:t1"): AgentView {
   return {
@@ -141,6 +149,22 @@ describe("DetailRoute — freshPane bootstrap", () => {
 
     await screen.findByTestId("home");
     expect(router.state.location.pathname).toBe("/");
+  });
+});
+
+describe("DetailRoute — a revalidation that changed nothing", () => {
+  // Every run re-renders DetailRoute twice (loading, idle). The chat is memoised, so the props this
+  // route hands it must stay the same objects, or it redraws twice per live event.
+  it("hands the chat the same props, so it does not redraw", async () => {
+    const home = connected([agentView("w1:p1", "agent")]);
+    const router = makeRouter(panePath("w1:p1"), () => home);
+    render(<RouterProvider router={router} />);
+    await screen.findByTestId("chat");
+    const before = chatRenders.count;
+    await act(async () => {
+      await router.revalidate();
+    });
+    expect(chatRenders.count).toBe(before);
   });
 });
 

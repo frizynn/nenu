@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { matchRoutes, useLocation, useNavigate, type DataRouter, type RouterNavigateOptions, type To } from "react-router";
 
 /**
@@ -108,11 +108,12 @@ export function useGoUp(): (parent: string) => void {
 export function useGoBack(): (parent: string) => void {
   const navigate = useNavigate();
   const { state } = useLocation();
-  return (parent) => {
+  // Stable between navigations, so a chat handed it as onBack can skip a re-render.
+  return useCallback((parent) => {
     armMotion("pop");
     if (fromOf(state) !== undefined) void navigate(-1);
     else void navigate(parent, { replace: true });
-  };
+  }, [navigate, state]);
 }
 
 /** The very next navigation, started in this same task, moves this way: the back control's pop, a

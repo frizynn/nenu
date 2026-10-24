@@ -30,6 +30,7 @@ import {
 import { detectNoEchoPrompt } from "@/lib/no-echo";
 import { needsFetch } from "@/lib/revalidation";
 import { SESSION_PARAM, normalizeSession } from "@/lib/session";
+import { keepItems } from "@/lib/utils";
 import type {
   AgentView,
   BridgeStatus,
@@ -283,13 +284,28 @@ async function loadHome(session: string | undefined, request: Request | undefine
     // Write-through: the same body, dated, in a store that outlives this page (lib/last-seen.ts).
     saveLastSnapshot(session, snap);
     rememberAuthError(session, false);
-    return unchanged ? previous : toHomeData(snap, session, false);
+    return unchanged ? previous : keepUnchangedRows(previous, toHomeData(snap, session, false));
   } catch (e) {
     if (isSuperseded(request)) throw e; // superseded revalidation — let React Router drop it
     rememberAuthError(session, isAuthError(e));
     // Keep the last good herd on screen, flagged so the ConnectionBanner can say "reconnecting…".
     return staleHome(session);
   }
+}
+
+// A changed snapshot rarely changes every row: the rows that say what they said keep their objects,
+// so memoised rows (the desk's chats, the open chat) skip the redraw.
+function keepUnchangedRows(previous: HomeData | undefined, next: HomeData): HomeData {
+  if (!previous) return next;
+  return {
+    ...next,
+    agents: keepItems(previous.agents, next.agents),
+    shellPanes: keepItems(previous.shellPanes, next.shellPanes),
+    workspaces: keepItems(previous.workspaces, next.workspaces),
+    tabs: keepItems(previous.tabs, next.tabs),
+    pullRequests: keepItems(previous.pullRequests, next.pullRequests ?? []),
+    sessions: keepItems(previous.sessions, next.sessions),
+  };
 }
 
 // Pane ids are per-session, so every per-pane cache is keyed by (session, paneId) — a NUL joiner
