@@ -212,7 +212,14 @@ describe("TranscriptView", () => {
     );
     const user = container.querySelector('[data-speaker="user"]')!;
     expect([...user.querySelectorAll("mark")].map((el) => el.textContent).join("")).toBe("skill que");
-    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent).join("")).toBe("/skill");
+    expect([...user.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/skill"]);
+  });
+
+  it("keeps a command's pill one piece when a find match falls inside it", () => {
+    const { container } = render(<TranscriptView query="ki" entries={[turn({ parts: [{ kind: "text", text: "/skill now" }] })]} />);
+    const pills = container.querySelectorAll('[data-speaker="user"] .slash-command');
+    expect([...pills].map((el) => el.textContent)).toEqual(["/skill"]);
+    expect(pills[0]!.querySelector("mark")?.textContent).toBe("ki");
   });
 
   it("renders prose as formatted Markdown", () => {

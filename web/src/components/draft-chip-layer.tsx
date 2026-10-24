@@ -26,7 +26,7 @@ export function DraftChipLayer({ text, field, commands = true }: {
   commands?: boolean;
 }) {
   const layer = useRef<HTMLDivElement>(null);
-  // A chip holds no slash and no space, so a command never overlaps one.
+  // A chip holds no slash and starts with a blank cell that ends no command, so the two never overlap.
   const marks = [
     ...draftChips(text).map((chip) => ({ ...chip, command: false })),
     ...(commands ? slashCommands(text) : []).map((command) => ({ ...command, command: true })),

@@ -35,7 +35,7 @@ export const FIND_CURRENT_HIT = "bg-amber-400 text-black outline outline-1 outli
 /**
  * Literal text with find hits marked, and the slash commands the operator typed in their tint. Still
  * text nodes — `<mark>` is structure, never parsed markup. A hit is found over the whole text, so one
- * that crosses a command's edge is cut there and drawn as two marks side by side.
+ * that crosses a command's edge is cut there and drawn as two marks side by side, the pill whole.
  */
 function Hit({ text, commands = [] }: { text: string; commands?: readonly { start: number; end: number }[] }) {
   const { query, current } = useContext(FindContext);
@@ -50,14 +50,18 @@ function Hit({ text, commands = [] }: { text: string; commands?: readonly { star
   }
   const within = (ranges: readonly Range[], from: number, to: number) => ranges.some(([start, end]) => start <= from && to <= end);
   const ranges = commands.map((c): Range => [c.start, c.end]);
-  const cuts = [...new Set([0, text.length, ...hits.flat(), ...ranges.flat()])].sort((a, b) => a - b);
-  return <>{cuts.slice(0, -1).map((from, i) => {
-    const to = cuts[i + 1]!;
-    const words = within(hits, from, to)
-      ? <mark aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>{text.slice(from, to)}</mark>
-      : text.slice(from, to);
-    return <span key={from} className={within(ranges, from, to) ? "slash-command" : undefined}>{words}</span>;
-  })}</>;
+  // Pieces between these cuts: a command's pill is one span, and only the marks inside it split.
+  const between = (cuts: number[], from: number, to: number) => {
+    const inside = [...new Set([from, to, ...cuts.filter((cut) => from < cut && cut < to)])].sort((a, b) => a - b);
+    return inside.slice(0, -1).map((start, i): Range => [start, inside[i + 1]!]);
+  };
+  return <>{between(ranges.flat(), 0, text.length).map(([from, to]) => (
+    <span key={from} className={within(ranges, from, to) ? "slash-command" : undefined}>
+      {between(hits.flat(), from, to).map(([start, end]) => within(hits, start, end)
+        ? <mark key={start} aria-current={current || undefined} className={cn(FIND_HIT, current && FIND_CURRENT_HIT)}>{text.slice(start, end)}</mark>
+        : text.slice(start, end))}
+    </span>
+  ))}</>;
 }
 
 const INLINE_CODE = "rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.875em] box-decoration-clone [overflow-wrap:anywhere]";
