@@ -13,13 +13,9 @@ const MODES = Object.keys(ORDER_LABEL) as WorkspaceOrderMode[];
  * Reorder's, beside it, never a row of this menu. The menu grows from its button and fades back to
  * it (180 ms in, 120 ms out), and closes on a choice, Escape, a press outside or the focus leaving it.
  */
-export function WorkspaceOrderMenu({ order, onChoose, iconOnly = false, align = "end", className }: {
+export function WorkspaceOrderMenu({ order, onChoose, className }: {
   order: WorkspaceOrder;
   onChoose: (mode: WorkspaceOrderMode) => void;
-  /** Only the icon on the button; the menu still says which order is on screen. */
-  iconOnly?: boolean;
-  /** Which edge of the button the menu lines up with. */
-  align?: "start" | "end";
   className?: string;
 }) {
   const id = useId();
@@ -47,19 +43,21 @@ export function WorkspaceOrderMenu({ order, onChoose, iconOnly = false, align = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Back to the button before the closing layer goes inert, or Safari drops the focus on the page.
   const close = () => {
-    setOpen(false);
     trigger.current?.focus({ preventScroll: true });
+    setOpen(false);
   };
   const focusItem = (index: number) => items.current[(index + modes.length) % modes.length]?.focus({ preventScroll: true });
   const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Tab leaves from the button, so it lands on the control after it.
+    if (event.key === "Tab") return close();
     const index = items.current.findIndex((item) => item === document.activeElement);
     if (event.key === "ArrowDown") focusItem(index + 1);
     else if (event.key === "ArrowUp") focusItem(index - 1);
     else if (event.key === "Home") focusItem(0);
     else if (event.key === "End") focusItem(modes.length - 1);
     else if (event.key === "Escape") close();
-    else if (event.key === "Tab") setOpen(false);
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -68,19 +66,23 @@ export function WorkspaceOrderMenu({ order, onChoose, iconOnly = false, align = 
   return (
     <div className={cn("relative shrink-0", className)}>
       <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
-        aria-label={`Order: ${label}`} onClick={() => setOpen((was) => !was)}
+        aria-label={`Order: ${label}`} onClick={() => (open ? close() : setOpen(true))}
         onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}
-        className={cn("quiet-action", iconOnly && "min-w-11 justify-center")}>
+        className="quiet-action">
         <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
-        {!iconOnly && <><span className="whitespace-nowrap">{label}</span><ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" /></>}
+        <span className="whitespace-nowrap">{label}</span>
+        <ChevronDown aria-hidden className="-ml-0.5 size-3 shrink-0" />
       </button>
       {mounted && (
         <div ref={layer} id={id} role="menu" aria-label="Order" inert={closing} onKeyDown={onMenuKey}
-          className={cn("absolute top-full z-30 mt-1.5 w-48 rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg duration-180 ease-out",
-            align === "end" ? "right-0 origin-top-right" : "left-0 origin-top-left",
+          onBlur={(event) => {
+            const next = event.relatedTarget;
+            if (next instanceof Node && !layer.current?.contains(next) && !trigger.current?.contains(next)) setOpen(false);
+          }}
+          className={cn("absolute left-0 top-full z-30 mt-1.5 w-48 origin-top-left rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg ease-out",
             closing
               ? "animate-out fade-out zoom-out-95 fill-mode-forwards duration-120 motion-reduce:zoom-out-100"
-              : "animate-in fade-in zoom-in-95 motion-reduce:zoom-in-100")}>
+              : "animate-in fade-in zoom-in-95 duration-180 motion-reduce:zoom-in-100")}>
           {modes.map((mode, index) => (
             <button key={mode} ref={(node) => { items.current[index] = node; }} type="button" role="menuitemradio"
               aria-checked={mode === order.mode} tabIndex={index === checked ? 0 : -1}

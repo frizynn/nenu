@@ -10,7 +10,8 @@ import { seedDemoHerd } from "./scenario.ts";
 // last one's agent working so it moved last. At 390x844 with a finger:
 // the list is Herdr's order whatever moved last, the Order menu's Name sorts it, Reorder drags the third
 // row's handle past the fifth, a finger on a row's body still scrolls the page and moves no row, and a
-// reload keeps the order and Custom. At 1440x900 a mouse drags the first row to third. Captures every step.
+// reload keeps the order and Custom. At 1440x900 Tab leaves the open menu for Reorder and a mouse drags
+// the first row to third. Captures every step.
 // Exits 1 on any failure.
 //
 //   bun scripts/e2e/workspace-order.ts [--port 8871] [--out DIR]
@@ -126,6 +127,13 @@ async function main(): Promise<void> {
       const { context, page } = await open(DESKTOP);
       const herdr = await names(page);
       await shoot(page, "desk-1-herdr");
+      // A keyboard: Tab in the open menu shuts it and lands on Reorder.
+      await orderButton(page).click();
+      await page.waitForTimeout(250);
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(250);
+      check(await page.getByRole("menu").count() === 0, "Tab shuts the Order menu");
+      check(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"), null) === "Reorder workspaces", "and lands on Reorder");
       await page.getByRole("button", { name: "Reorder workspaces" }).click();
       await page.waitForTimeout(300);
       const handle = (await page.locator("[data-reorder-handle]").first().boundingBox())!;

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { createMemoryRouter, Outlet, RouterProvider, useRouteLoaderData } from "react-router";
@@ -381,6 +381,23 @@ describe("Recents and Workspaces", () => {
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
     expect(main.queryByRole("menu")).toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
+    // Its own button shuts it and keeps the focus, which Safari would otherwise drop on the page.
+    await user.click(button);
+    await user.click(button);
+    expect(main.queryByRole("menu")).toBeNull();
+    expect(button).toHaveFocus();
+  });
+
+  it("hands Tab in the order menu to its button, so it leaves for the control after it", async () => {
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    await user.click(main.getByRole("button", { name: "Order: Herdr order" }));
+    expect(main.getByRole("menuitemradio", { name: "Herdr order" })).toHaveFocus();
+    // The browser's Tab then leaves from the button (scripts/e2e/workspace-order.ts lands it on
+    // Reorder); jsdom only shows the hand-off.
+    fireEvent.keyDown(main.getByRole("menuitemradio", { name: "Herdr order" }), { key: "Tab" });
+    expect(main.queryByRole("menu")).toBeNull();
+    expect(main.getByRole("button", { name: "Order: Herdr order" })).toHaveFocus();
   });
 
   it("keeps Done while reordering though the workspaces drop to one", async () => {
