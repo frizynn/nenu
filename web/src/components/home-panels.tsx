@@ -331,6 +331,17 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   // Reordering: each workspace row is its handle, and opens nothing until Done.
   const [arranging, setArranging] = useState(false);
   const reorderList = useRef<HTMLUListElement>(null);
+  // Entering or leaving Reorder swaps the control under the focus: the focus follows to its stand-in.
+  const orderControl = useRef<HTMLSelectElement>(null);
+  const doneControl = useRef<HTMLButtonElement>(null);
+  const wasArranging = useRef(false);
+  useEffect(() => {
+    if (arranging === wasArranging.current) return;
+    wasArranging.current = arranging;
+    (arranging ? doneControl : orderControl).current?.focus();
+  }, [arranging]);
+  // What an arrow key on a handle did, for a screen reader.
+  const [moveSaid, setMoveSaid] = useState("");
   const project = projects.find((candidate) => candidate.slug === only);
   const inProject = (paneId: string) => !project || projectForPane([project], paneId) !== undefined;
   const kept = (chat: RecentChat) => inProject(chat.agent.paneId);
@@ -345,7 +356,14 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
   const workspaceName = (group: WorkspaceChats) => group.name;
   const ordered = orderWorkspaces(workspaces, workspaceId, workspaceName, order);
   const everyId = orderWorkspaces(everyWorkspace, workspaceId, workspaceName, order).map(workspaceId);
-  const reorder = useListReorder({ list: reorderList, keys: ordered.map(workspaceId), onMove: (shown) => setOrder({ mode: "custom", custom: placeOrder(everyId, shown) }) });
+  const reorder = useListReorder({
+    list: reorderList, keys: ordered.map(workspaceId), enabled: arranging && list === "workspaces",
+    onMove: (shown, key) => {
+      setOrder({ mode: "custom", custom: placeOrder(everyId, shown) });
+      const name = ordered.find((group) => group.workspaceId === key)?.name;
+      if (name) setMoveSaid(`${name}, ${shown.indexOf(key) + 1} of ${shown.length}`);
+    },
+  });
   // Reorder starts from the order on screen, and so does Custom the first time.
   const chooseOrder = (value: WorkspaceOrderMode | "arrange") => {
     if (value === "arrange" || (value === "custom" && order.custom.length === 0)) {
@@ -390,18 +408,19 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
             </select>
           </label>
         )}
-        {list === "workspaces" && everyWorkspace.length > 1 && (arranging
-          ? <button type="button" onClick={() => setArranging(false)} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
+        {list === "workspaces" && (arranging || everyWorkspace.length > 1) && (arranging
+          ? <button ref={doneControl} type="button" onClick={() => setArranging(false)} className={cn("quiet-action font-medium text-foreground", desk && "-mr-2")}>Done</button>
           : <label className={cn("quiet-action relative shrink-0 focus-within:ring-2 focus-within:ring-ring max-sm:min-w-11 max-sm:justify-center", desk && "-mr-2")}>
             <ArrowUpDown aria-hidden className="size-3.5 shrink-0" />
             <span className="max-sm:hidden">{ORDER_LABEL[order.mode]}</span>
-            <select aria-label="Order" value={order.mode} onChange={(event) => chooseOrder(event.target.value as WorkspaceOrderMode | "arrange")}
+            <select ref={orderControl} aria-label="Order" value={order.mode} onChange={(event) => chooseOrder(event.target.value as WorkspaceOrderMode | "arrange")}
               className="absolute inset-0 cursor-pointer opacity-0">
               {(Object.keys(ORDER_LABEL) as WorkspaceOrderMode[]).map((mode) => <option key={mode} value={mode}>{ORDER_LABEL[mode]}</option>)}
               <option value="arrange">Reorder…</option>
             </select>
           </label>)}
       </div>
+      <p role="status" className="sr-only">{arranging ? moveSaid : ""}</p>
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">
         {list === "projects"
           ? projectRows
@@ -413,7 +432,7 @@ export function HomeSessions({ recent: everyRecent, workspaces: everyWorkspace, 
           ? recent.length
             ? <FoldedList items={recent} rows={RECENT_ROWS}>{(chat) => row(chat)}</FoldedList>
             : <p className="px-1 py-3 text-footnote text-muted-foreground sm:px-2.5">{project ? `No other session in ${project.name}.` : "Every session is in Needs you."}</p>
-          : <ul ref={reorderList} aria-label={arranging ? "Workspaces, drag a handle to move one" : undefined}
+          : <ul ref={reorderList} aria-label={arranging ? "Workspaces, drag a handle or press its arrow keys to move one" : undefined}
             className="relative flex flex-col max-sm:divide-y max-sm:divide-border">
             {ordered.map((group) => <WorkspaceRow reorder={arranging ? reorder : undefined} key={group.workspaceId} group={group} now={now} session={session} opening={opening} open={opened.has(group.workspaceId)}
               onToggle={() => setOpened((prev) => { const next = new Set(prev); if (!next.delete(group.workspaceId)) next.add(group.workspaceId); return next; })}

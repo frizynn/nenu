@@ -335,13 +335,16 @@ describe("Recents and Workspaces", () => {
     // Reorder starts from the order on screen; a row is its handle and opens nothing until Done.
     await user.selectOptions(order, "arrange");
     expect(handles(panel)).toEqual(["Move hub", "Move Nenu", "Move ops"]);
+    expect(main.getByRole("button", { name: "Done" })).toHaveFocus();
     expect(panel.queryAllByRole("link")).toHaveLength(0);
     panel.getByRole("button", { name: "Move ops" }).focus();
     await user.keyboard("{ArrowUp}");
     expect(handles(panel)).toEqual(["Move hub", "Move ops", "Move Nenu"]);
+    expect(main.getByRole("status")).toHaveTextContent("ops, 2 of 3");
     await user.click(main.getByRole("button", { name: "Done" }));
     expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
     expect(main.getByRole("combobox", { name: "Order" })).toHaveValue("custom");
+    expect(main.getByRole("combobox", { name: "Order" })).toHaveFocus();
 
     // A reload keeps it, and Herdr's order is one choice away, the custom one kept for later.
     cleanup();
@@ -351,6 +354,17 @@ describe("Recents and Workspaces", () => {
     expect(names(panel)).toEqual(["Nenu", "hub", "ops"]);
     await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "custom");
     expect(names(panel)).toEqual(["hub", "ops", "Nenu"]);
+  });
+
+  it("keeps Done while reordering though the workspaces drop to one", async () => {
+    const { user, main, update } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    await user.selectOptions(main.getByRole("combobox", { name: "Order" }), "arrange");
+    await update({ ...recentData, workspaces: recentData.workspaces.slice(0, 1), agents: recentData.agents.filter((agent) => agent.workspaceId === recentData.workspaces[0]!.workspaceId) });
+    await user.click(main.getByRole("button", { name: "Done" }));
+    expect(main.queryByRole("button", { name: /^Move / })).toBeNull();
+    // One workspace has no order to choose.
+    expect(main.queryByRole("combobox", { name: "Order" })).toBeNull();
   });
 
   describe("a tab of several panes", () => {

@@ -84,10 +84,12 @@ export function orderWorkspaces<T>(items: readonly T[], idOf: (item: T) => strin
 
 /**
  * `every` id in the order shown, with the ones a narrowed list showed (`shown`, as they were dragged)
- * put back in the places they held: the workspaces a filter hid keep theirs.
+ * put back in the places they held: the workspaces a filter hid keep theirs. An id `every` no longer
+ * holds (a workspace that closed during the drag) is dropped.
  */
 export function placeOrder(every: readonly string[], shown: readonly string[]): string[] {
-  const moved = new Set(shown);
-  const next = [...shown];
+  const open = new Set(every);
+  const next = shown.filter((id) => open.has(id));
+  const moved = new Set(next);
   return every.map((id) => moved.has(id) ? next.shift()! : id);
 }

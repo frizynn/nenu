@@ -29,6 +29,10 @@ describe("placeOrder", () => {
     expect(placeOrder(["a", "b", "c", "d"], ["d", "b"])).toEqual(["a", "d", "c", "b"]);
     expect(placeOrder(["a", "b", "c"], ["c", "a", "b"])).toEqual(["c", "a", "b"]);
   });
+
+  it("drops a workspace that closed during the drag without losing a live one", () => {
+    expect(placeOrder(["a", "b", "c"], ["x", "c", "a", "b"])).toEqual(["c", "a", "b"]);
+  });
 });
 
 describe("useWorkspaceOrder", () => {
