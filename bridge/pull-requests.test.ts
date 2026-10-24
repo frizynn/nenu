@@ -26,7 +26,7 @@ const searchNode = (row: ReturnType<typeof ghRow>) => {
 function fakeRun(state: {
   folders: Record<string, [string, string, string, string?]>;
   prs: Record<string, unknown[] | { code: number; stderr: string } | "hang" | "throw">;
-  graphql?: { code: number; stdout: string; stderr: string };
+  graphql?: { code: number; stdout: string; stderr: string } | "hang" | "throw";
 }) {
   const calls: Array<{ argv: string[]; cwd: string }> = [];
   const run: CommandRun = async (argv, { cwd }) => {
@@ -38,6 +38,8 @@ function fakeRun(state: {
       return { code: 0, stdout: argv[1] === "branch" ? `${folder[2]}\n` : `${folder[0]}\n${folder[1]}\n`, stderr: "" };
     }
     if (argv[1] === "api") {
+      if (state.graphql === "hang") return new Promise(() => {});
+      if (state.graphql === "throw") throw new Error("spawn gh ENOENT");
       if (state.graphql) return state.graphql;
       const data: Record<string, unknown> = {};
       for (const arg of argv) {
@@ -97,12 +99,16 @@ describe("parsing", () => {
     expect(githubRepo("git@github.com:acme/shop.git")).toBe("acme/shop");
     expect(githubRepo("ssh://git@ssh.github.com:443/acme/shop")).toBe("acme/shop");
     expect(githubRepo("git+ssh://git@github.com/acme/shop")).toBe("acme/shop");
-    // An ssh alias, another host, a local path or a deeper path: only gh can say.
+    // A remote on this machine, which gh skips.
+    expect(githubRepo("/srv/git/shop.git")).toBeNull();
+    expect(githubRepo("../shop")).toBeNull();
+    expect(githubRepo("file:///srv/git/shop.git")).toBeNull();
+    // An ssh alias, another host, a deeper path or a name GitHub cannot have: only gh can say.
     expect(githubRepo("git@github-work:acme/shop.git")).toBeUndefined();
     expect(githubRepo("https://gitlab.com/acme/shop")).toBeUndefined();
-    expect(githubRepo("/srv/git/shop.git")).toBeUndefined();
     expect(githubRepo("https://github.com/acme/shop/tree")).toBeUndefined();
     expect(githubRepo("https://github.com/acme/%E0%A4%A")).toBeUndefined();
+    expect(githubRepo("https://github.com/acme/shop%20is:closed")).toBeUndefined();
   });
 
   test("picks the remote gh picks: the one set as default, else upstream, github, origin, then by name", () => {
@@ -113,6 +119,9 @@ describe("parsing", () => {
     expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.origin.gh-resolved base\nremote.upstream.url https://github.com/acme/shop\n")).toBe("me/shop");
     expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.origin.gh-resolved acme/other\n")).toBe("acme/other");
     expect(remoteRepo("remote.my.fork.pushurl https://github.com/me/fork\n")).toBe("me/fork");
+    // gh skips remotes on this machine, even origin; with nothing else there is no GitHub repo.
+    expect(remoteRepo("remote.origin.url /home/me/shop\nremote.zz.url https://github.com/acme/shop\n")).toBe("acme/shop");
+    expect(remoteRepo("remote.origin.url /home/me/shop\n")).toBeNull();
     // A remote gh alone can read, or none at all, leaves the repo to gh.
     expect(remoteRepo("remote.origin.url https://github.com/me/shop\nremote.work.url git@github-work:acme/shop\n")).toBeUndefined();
     expect(remoteRepo("")).toBeUndefined();
@@ -132,6 +141,8 @@ describe("parsing", () => {
     expect(answers[0]).toMatchObject([{ number: 7, review: "approved", checks: { passed: 1, failed: 0, pending: 1 } }]);
     expect(parseSearch(JSON.stringify({ data: { r0: { nodes: [searchNode(ghRow(8, "b"))] } } }), 1)[0]).toMatchObject([{ number: 8 }]);
     expect(parseSearch(JSON.stringify({ errors: [{ message: "Bad credentials" }] }), 2)).toEqual(["Bad credentials", "Bad credentials"]);
+    // A REST-style error body says nothing per repo; the caller keeps gh's own reason.
+    expect(parseSearch(JSON.stringify({ message: "Bad credentials" }), 1)).toEqual([undefined]);
     expect(() => parseSearch("", 1)).toThrow();
   });
 
@@ -251,11 +262,12 @@ describe("registry", () => {
         "/r/shop-clone": ["/r/shop-clone/.git", "/r/shop-clone", "main", remote("acme/shop")],
         "/r/api": ["/r/api/.git", "/r/api", "main", remote("acme/api")],
         "/r/local": ["/r/local/.git", "/r/local", "main"],
+        "/r/home": ["/r/home/.git", "/r/home", "main", "remote.origin.url /r/upstream-home\n"],
       },
       prs: { "acme/shop": [ghRow(1, "feat/a"), ghRow(2, "feat/z")], "acme/api": [], "/r/local": [ghRow(3, "main", { url: "https://github.com/acme/local/pull/3" })] },
     });
-    const { prs, events } = registry(run);
-    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p3", "/r/shop-clone"), pane("p4", "/r/api"), pane("p5", "/r/local")];
+    const { prs, events, logs } = registry(run);
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/h/worktrees/shop/a"), pane("p3", "/r/shop-clone"), pane("p4", "/r/api"), pane("p5", "/r/local"), pane("p6", "/r/home")];
     prs.list("main", panes);
     await prs.refresh();
     const gh = calls.filter((call) => call.argv[0] === "gh");
@@ -267,6 +279,42 @@ describe("registry", () => {
       ["acme/shop", 1, ["p2"]], ["acme/shop", 2, []], ["acme/shop", 1, []], ["acme/shop", 2, []], ["acme/local", 3, ["p5"]],
     ]);
     expect(events).toEqual([{ session: "main", topic: "snapshot" }]);
+    // A repo whose only remote is on this machine asks nobody: gh would fail there.
+    expect(logs).toEqual(["home: none of the git remotes point to GitHub"]);
+  });
+
+  test("asks GitHub four repos per request, so a slow repo fails only its own batch", async () => {
+    const folders: Record<string, [string, string, string, string]> = {};
+    for (let i = 0; i < 6; i++) folders[`/r/${i}`] = [`/r/${i}/.git`, `/r/${i}`, "main", `remote.origin.url https://github.com/acme/r${i}\n`];
+    const { run, calls } = fakeRun({ folders, prs: { "acme/r0": [ghRow(1, "a")], "acme/r5": [ghRow(2, "b")] } });
+    const { prs } = registry(run);
+    prs.list("main", Object.keys(folders).map((cwd, i) => pane(`p${i}`, cwd)));
+    await prs.refresh();
+    const api = calls.filter((call) => call.argv[1] === "api");
+    expect(api.map((call) => call.argv.filter((arg) => /^q\d/.test(arg)).length)).toEqual([4, 2]);
+    expect(prs.list("main", []).map((pr) => pr.number)).toEqual([1, 2]);
+  });
+
+  test("a search that hangs or throws times out or fails like gh pr list did, keeping the last list", async () => {
+    const state: Parameters<typeof fakeRun>[0] = {
+      folders: { "/r/shop": ["/r/shop/.git", "/r/shop", "feat/a", "remote.origin.url https://github.com/acme/shop\n"] },
+      prs: { "acme/shop": [ghRow(1, "feat/a")] },
+    };
+    const { run } = fakeRun(state);
+    const { prs, logs } = registry(run, undefined, { gh: 50, git: 50 });
+    prs.list("main", [pane("p1", "/r/shop")]);
+    await prs.refresh();
+    state.graphql = "hang";
+    const started = Date.now();
+    await prs.refresh();
+    expect(Date.now() - started).toBeLessThan(1_000);
+    state.graphql = "throw";
+    await prs.refresh();
+    // A 401 answers with a REST-style body: gh's stderr is the reason.
+    state.graphql = { code: 1, stdout: JSON.stringify({ message: "Bad credentials" }), stderr: "gh: Bad credentials (HTTP 401)" };
+    await prs.refresh();
+    expect(logs).toEqual(["shop: timed out", "shop: spawn gh ENOENT", "shop: gh: Bad credentials (HTTP 401)"]);
+    expect(prs.list("main", [pane("p1", "/r/shop")]).map((pr) => pr.number)).toEqual([1]);
   });
 
   test("a repo GitHub could not answer keeps its last list, and the others take theirs", async () => {
