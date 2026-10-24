@@ -1,10 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { decodeClaudeStatusline } from "../claude-telemetry.ts";
-import type { SessionTelemetry } from "../journal/types.ts";
-import type { AccountBook, Harness } from "./accounts.ts";
+import { UNASSIGNED, type AccountBook, type Harness } from "./accounts.ts";
 import type { CodexLimits } from "./scan.ts";
-import type { AccountsFile } from "./scan-main.ts";
 
 // Plan limits per account, from what is already on disk: Nenu's status-line snapshots (Claude), the
 // rollouts (Codex, collected by the scan), and, for accounts not in use, hats' `limits.json` or
@@ -28,12 +26,20 @@ const pct = (v: unknown) => { const n = num(v); return n !== undefined && n <= 1
 /** Snapshots read are those written in the last 8 days: older ones describe windows long reset. */
 const SNAPSHOT_MAX_AGE_MS = 8 * 86_400_000;
 
-/** The newest Claude reading per account, from `<stateDir>/claude-status/<session>.json`. */
-export function claudeStatuslineLimits(stateDir: string, book: AccountBook, configDir: string, now: number): AccountLimits[] {
+/** One status-line snapshot and the session that wrote it. */
+export interface StatuslineReading { session: string; reading: AccountLimits }
+
+/**
+ * Every Claude reading of the last 8 days, from `<stateDir>/claude-status/<session>.json`, with the
+ * account its session billed then: the one every config dir names for that session at that time (a
+ * session's own switch line names it whatever the dir). Config dirs that disagree cannot say which one
+ * the session ran in, so its reading is unassigned rather than counted once for each.
+ */
+export function claudeStatuslineReadings(stateDir: string, book: AccountBook, configDirs: readonly string[], now: number): StatuslineReading[] {
   const dir = join(stateDir, "claude-status");
   let names: string[];
-  try { names = readdirSync(dir).filter((n) => n.endsWith(".json")); } catch { return []; }
-  const best = new Map<string, AccountLimits>();
+  try { names = configDirs.length ? readdirSync(dir).filter((n) => n.endsWith(".json")) : []; } catch { return []; }
+  const out: StatuslineReading[] = [];
   for (const name of names) {
     const path = join(dir, name);
     let mtime: number;
@@ -46,17 +52,46 @@ export function claudeStatuslineLimits(stateDir: string, book: AccountBook, conf
     const decoded = decodeClaudeStatusline(stored.payload, observedAt);
     const limits = decoded?.telemetry.rateLimits;
     if (!decoded || !limits?.length) continue;
+    const named = new Set(configDirs.map((configDir) => book.claude(configDir, decoded.sessionId, observedAt)));
     const account = typeof stored.account === "string" && /^claude:[0-9a-f]{16}$/.test(stored.account)
       ? stored.account
-      : book.claude(configDir, decoded.sessionId, observedAt);
-    const prev = best.get(account);
-    if (prev && prev.observedAt >= observedAt) continue;
-    best.set(account, {
-      agent: "claude", account, observedAt, source: "statusline",
-      windows: limits.map((l) => ({ name: windowName(l.windowMinutes ?? 0), windowMinutes: l.windowMinutes ?? 0, usedPercent: l.usedPercent, ...(l.resetsAt !== undefined ? { resetsAt: l.resetsAt } : {}) })),
+      : named.size === 1 ? [...named][0]! : UNASSIGNED.claude;
+    out.push({
+      session: decoded.sessionId,
+      reading: {
+        agent: "claude", account, observedAt, source: "statusline",
+        windows: limits.map((l) => ({ name: windowName(l.windowMinutes ?? 0), windowMinutes: l.windowMinutes ?? 0, usedPercent: l.usedPercent, ...(l.resetsAt !== undefined ? { resetsAt: l.resetsAt } : {}) })),
+      },
     });
   }
-  return [...best.values()];
+  return out;
+}
+
+/** Each session's account, from its newest reading; a session no account can be named for is left out. */
+export function sessionAccounts(readings: readonly StatuslineReading[]): Record<string, string> {
+  const newest = new Map<string, AccountLimits>();
+  for (const { session, reading } of readings) {
+    if ((newest.get(session)?.observedAt ?? -1) < reading.observedAt) newest.set(session, reading);
+  }
+  const out: Record<string, string> = {};
+  for (const [session, reading] of newest) if (reading.account !== UNASSIGNED.claude) out[session] = reading.account;
+  return out;
+}
+
+export interface WeeklyReading { usedPercent: number; resetsAt?: number; observedAt: number }
+
+/**
+ * The newest weekly window per Claude account, from whichever reading had one. Claude's status line
+ * leaves the window out of many reports, so the newest reading of an account is often without it.
+ */
+export function newestWeekly(all: readonly AccountLimits[]): Record<string, WeeklyReading> {
+  const out: Record<string, WeeklyReading> = {};
+  for (const l of all) {
+    const week = l.agent === "claude" && l.account !== UNASSIGNED.claude ? l.windows.find((w) => w.name === "seven_day") : undefined;
+    if (!week || (out[l.account]?.observedAt ?? -1) >= l.observedAt) continue;
+    out[l.account] = { usedPercent: week.usedPercent, ...(week.resetsAt !== undefined ? { resetsAt: week.resetsAt } : {}), observedAt: l.observedAt };
+  }
+  return out;
 }
 
 export function codexLimits(byAccount: Record<string, CodexLimits>): AccountLimits[] {
@@ -117,21 +152,6 @@ export function claudeSwapLimits(text: string): AccountLimits[] {
     if (windows.length) out.push({ agent: "claude", account: `claude:swap-${slot}`, observedAt: fetched < 1e12 ? fetched * 1000 : fetched, source: "claude-swap", windows });
   }
   return out;
-}
-
-/**
- * The weekly window of the Claude account in use, from the last scan's accounts file, for a session
- * whose own status line left it out. Only when one Claude account is signed in (two config dirs on
- * different accounts cannot say which one a session bills) and the window it was read in has not
- * reset; never a guess.
- */
-export function accountWeekly(file: AccountsFile | undefined, now: number): NonNullable<SessionTelemetry["rateLimits"]>[number] | undefined {
-  const active = file?.accounts.filter((a) => a.agent === "claude" && a.active) ?? [];
-  if (active.length !== 1) return undefined;
-  const reading = file!.limits.find((l) => l.account === active[0]!.id);
-  const week = reading?.windows.find((w) => w.windowMinutes === 10080);
-  if (!reading || !week || week.resetsAt === undefined || week.resetsAt * 1000 <= now) return undefined;
-  return { name: "secondary", usedPercent: week.usedPercent, windowMinutes: 10080, resetsAt: week.resetsAt, observedAt: reading.observedAt };
 }
 
 /** The newest reading per account across sources. */

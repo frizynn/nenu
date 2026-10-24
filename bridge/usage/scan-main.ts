@@ -5,7 +5,10 @@ import {
   AccountBook, claudeIdentity, formatSwitchLine, hatsStateDir, parseClaudeSwapLog, parseSwitchLog,
   type Harness, type SwitchLine,
 } from "./accounts.ts";
-import { claudeStatuslineLimits, claudeSwapLimits, codexLimits, hatsLimits, newestPerAccount, type AccountLimits } from "./limits.ts";
+import {
+  claudeStatuslineReadings, claudeSwapLimits, codexLimits, hatsLimits, newestPerAccount, newestWeekly, sessionAccounts,
+  type AccountLimits, type WeeklyReading,
+} from "./limits.ts";
 import { repoOf } from "./repos.ts";
 import { loadStore, localDate, saveStore, scan, usageDir } from "./scan.ts";
 
@@ -29,7 +32,16 @@ export interface AccountView {
   activeUntil?: number;
 }
 
-export interface AccountsFile { v: 1; at: number; accounts: AccountView[]; limits: AccountLimits[] }
+export interface AccountsFile {
+  v: 1;
+  at: number;
+  accounts: AccountView[];
+  limits: AccountLimits[];
+  /** Claude session → the account its newest status-line reading billed (the context panel's weekly row). */
+  sessions?: Record<string, string>;
+  /** Claude account → its newest weekly window from any reading. */
+  weekly?: Record<string, WeeklyReading>;
+}
 
 const read = (path: string): string | undefined => { try { return readFileSync(path, "utf8"); } catch { return undefined; } };
 
@@ -89,7 +101,8 @@ export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home
 
   // ── Accounts and their limits ──
   const limits: AccountLimits[] = [...codexLimits(store.totals.codexLimits)];
-  for (const configDir of claudeDirs) limits.push(...claudeStatuslineLimits(stateDir, book, configDir, now));
+  const readings = claudeStatuslineReadings(stateDir, book, [...claudeDirs], now);
+  limits.push(...readings.map((r) => r.reading));
   if (args.split) {
     const fromHats = read(join(hatsStateDir(env, home), "limits.json"));
     if (fromHats) limits.push(...hatsLimits(fromHats));
@@ -131,7 +144,9 @@ export function runScan(stateDir: string, args: ScanArgs, now = Date.now(), home
   }
 
   saveStore(stateDir, store, now);
-  const file: AccountsFile = { v: 1, at: now, accounts: [...accounts.values()], limits: newest };
+  const file: AccountsFile = {
+    v: 1, at: now, accounts: [...accounts.values()], limits: newest, sessions: sessionAccounts(readings), weekly: newestWeekly(limits),
+  };
   const path = join(dir, "accounts.json");
   writeFileSync(`${path}.tmp`, JSON.stringify(file), { mode: 0o600 });
   renameSync(`${path}.tmp`, path);

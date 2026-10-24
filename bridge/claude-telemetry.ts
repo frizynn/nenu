@@ -5,7 +5,7 @@ import { computeEtag } from "./http-cache.ts";
 import { isSessionId } from "./journal/claude.ts";
 import { containedRealpath } from "./journal/files.ts";
 import { object, shortText, SubagentFiles } from "./subagent-files.ts";
-import type { SessionTelemetry } from "./journal/types.ts";
+import type { RateLimit, SessionTelemetry } from "./journal/types.ts";
 import type { AgentView } from "./types.ts";
 
 const count = (value: unknown): number | undefined =>
@@ -98,7 +98,7 @@ export function decodeClaudeStatusline(input: unknown, now = Date.now()) {
  */
 export function withWeekly(
   telemetry: SessionTelemetry,
-  weekly: NonNullable<SessionTelemetry["rateLimits"]>[number] | undefined,
+  weekly: RateLimit | undefined,
 ): SessionTelemetry {
   if (!weekly || telemetry.rateLimits?.some((limit) => limit.windowMinutes === 10080)) return telemetry;
   return { ...telemetry, rateLimits: [...(telemetry.rateLimits ?? []), weekly] };

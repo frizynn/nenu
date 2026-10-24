@@ -26,8 +26,12 @@ export const panePaneActions: Record<string, PaneAction> = {
     handle({ cfg, conversations, claudeTelemetry, usage }, { req, url, rt, paneId }) {
       const native = async () => {
         const original = cfg.transcript ? rt.engine.current().agents.find(entry => entry.paneId === paneId && entry.agent === "claude") : undefined;
-        return original ? conversations.resolve(original, rt.herdr, rt.name).then(pane => claudeTelemetry.read(pane))
-          .then(found => found && { ...found, telemetry: withWeekly(found.telemetry, usage.claudeWeekly()) }).catch(() => undefined) : undefined;
+        if (!original) return undefined;
+        const pane = await conversations.resolve(original, rt.herdr, rt.name).catch(() => undefined);
+        const found = await claudeTelemetry.read(pane).catch(() => undefined);
+        if (!found || pane?.agentSession?.kind !== "id") return found;
+        // Claude's status line often leaves the weekly window out; the account's last reading fills it.
+        return { ...found, telemetry: withWeekly(found.telemetry, usage.claudeWeekly(pane.agentSession.value)) };
       };
       // A shell's start block waits for its prompt: `agent.start` launches nowhere else.
       const shell = rt.engine.current().shellPanes.some(entry => entry.paneId === paneId);

@@ -181,18 +181,21 @@ export interface SessionTelemetry {
     scope: "session" | "last-message";
   };
   context?: { usedTokens?: number; windowTokens?: number; usedPercent?: number };
-  rateLimits?: Array<{
-    name: "primary" | "secondary";
-    usedPercent: number;
-    windowMinutes?: number;
-    /** Epoch seconds, as reported by the provider. */
-    resetsAt?: number;
-    /** Epoch ms of the account's own reading, when this window came from Settings → Usage's per-account
-     *  data because the session's report left it out; absent on what the session reported itself. */
-    observedAt?: number;
-  }>;
+  rateLimits?: RateLimit[];
   /** The parsed log was tail-capped; metadata from its missing head may be unavailable. */
   fileTruncated: boolean;
+}
+
+/** One plan window as an agent reported it (or, with `observedAt`, as its account last did). */
+export interface RateLimit {
+  name: "primary" | "secondary";
+  usedPercent: number;
+  windowMinutes?: number;
+  /** Epoch seconds, as reported by the provider. */
+  resetsAt?: number;
+  /** Epoch ms of the account's own reading, when this window came from Settings → Usage's per-account
+   *  data because the session's report left it out; absent on what the session reported itself. */
+  observedAt?: number;
 }
 
 /** What the history endpoint answers with, minus the pane id the route adds. */
