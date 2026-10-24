@@ -79,6 +79,20 @@ it("folds the notice in and out, unreachable while it leaves", () => {
   h.close();
 });
 
+it("turns an outage notice into a refusal where it stands, without folding", () => {
+  const h = renderBanner({ error: true });
+  act(() => vi.advanceTimersByTime(CONNECTION_LOST_MS));
+  const fold = screen.getByRole("status").closest(".fold")!;
+  act(() => vi.advanceTimersByTime(MOTION_CONTROL_MS * 2));
+  expect(fold).toHaveAttribute("data-phase", "open");
+  act(() => h.update({ error: false, authError: true }));
+  expect(screen.getByRole("alert").closest(".fold")).toBe(fold);
+  expect(fold).toHaveAttribute("data-phase", "open");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(isOutageNoticeShown()).toBe(false);
+  h.close();
+});
+
 // The card and the composer leave naming an outage to this notice while it is up, so what they read
 // is the notice on screen: a live pane read resets the escalation clock while Herdr is still down.
 it("tells the shared store exactly when it is on screen", () => {

@@ -33,10 +33,15 @@ interface ConnectionBannerProps {
 export const RECOVERY_QUIET_MS = 5_000;
 
 export function ConnectionBanner({ bridge, error, authError, lastSeenAt }: ConnectionBannerProps) {
+  // Kept in the shared store, so the card and the composer defer to what is on screen.
+  const outage = useOutageNoticeShown();
+  // One row for both notices, so a refusal that takes an outage's place changes it where it stands.
   return (
     <>
-      <Fold value={authError}>{() => <AuthErrorBanner lastSeenAt={lastSeenAt} />}</Fold>
-      {!authError && <ConnectionStateBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />}
+      {!authError && <OutageWatch bridge={bridge} error={error} />}
+      <Fold value={authError ? "refused" : outage && "outage"}>{(notice) => notice === "refused"
+        ? <AuthErrorBanner lastSeenAt={lastSeenAt} />
+        : <OutageBanner bridge={bridge} error={error} lastSeenAt={lastSeenAt} />}</Fold>
     </>
   );
 }
@@ -81,13 +86,10 @@ function AuthErrorBanner({ lastSeenAt }: { lastSeenAt?: number }) {
   );
 }
 
-function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBannerProps, "authError">) {
+/** When a sustained outage shows its notice and when recovery has been quiet long enough to drop it. */
+function OutageWatch({ bridge, error }: Pick<ConnectionBannerProps, "bridge" | "error">) {
   const connecting = isConnecting({ bridge, error });
   const lost = useConnectionLost(connecting);
-  // Kept in the shared store, so the card and the composer defer to what is on screen.
-  const visible = useOutageNoticeShown();
-  const [retrying, setRetrying] = useState(false);
-  const revalidate = useRevalidate();
 
   useEffect(() => {
     if (lost) { setOutageNoticeShown(true); return; }
@@ -99,7 +101,13 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
   }, [lost, connecting]);
   // A notice that leaves the screen (a refusal takes its place, the layout unmounts) shows nothing.
   useEffect(() => () => setOutageNoticeShown(false), []);
+  return null;
+}
 
+function OutageBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBannerProps, "authError">) {
+  const connecting = isConnecting({ bridge, error });
+  const [retrying, setRetrying] = useState(false);
+  const revalidate = useRevalidate();
   // Herdr down is the bridge answering; no snapshot at all means the bridge never has on this page,
   // so there is nothing cached to promise and the host is the useful fact. Once reads answer again the
   // notice waits out the quiet interval saying only what is still true, never "Connected".
@@ -110,19 +118,17 @@ function ConnectionStateBanner({ bridge, error, lastSeenAt }: Omit<ConnectionBan
     try { await revalidate(); } finally { setRetrying(false); }
   }
   return (
-    <Fold value={visible}>{() => (
-      <div role="status" aria-live="polite" className={BANNER}>
-        <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-        <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
-          <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
-          <LastSynced at={lastSeenAt} />
-        </p>
-        <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
-          {retrying ? <Pending aria-hidden="true" className="size-4" /> : <RotateCw aria-hidden="true" className="size-4" />}
-          Retry
-        </Button>
-      </div>
-    )}</Fold>
+    <div role="status" aria-live="polite" className={BANNER}>
+      <WifiOff aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      <p className="min-w-0 flex-1 text-footnote text-muted-foreground text-pretty">
+        <span className="font-medium text-foreground">{headline}</span>{connecting && " Retrying…"}
+        <LastSynced at={lastSeenAt} />
+      </p>
+      <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => void retry()} disabled={retrying} aria-busy={retrying || undefined}>
+        {retrying ? <Pending aria-hidden="true" className="size-4" /> : <RotateCw aria-hidden="true" className="size-4" />}
+        Retry
+      </Button>
+    </div>
   );
 }
 
