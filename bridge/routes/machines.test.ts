@@ -104,10 +104,9 @@ describe("a request for another machine", () => {
     expect(forwarded.at(-1)?.path).toBe("/api/files/open");
   });
 
-  test("settings, push and Organizations stay on this machine", async () => {
+  test("settings stay on this machine", async () => {
     const before = forwarded.length;
     await fetch(`${url}/api/config?session=%40build-box`, { headers: ME });
-    await fetch(`${url}/api/org/node/start?session=%40build-box`, { method: "POST", headers: { ...ME, origin: url, "x-device": "phone" } });
     expect(forwarded.length).toBe(before);
   });
 

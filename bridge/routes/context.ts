@@ -18,10 +18,8 @@ import type { AwaitingReplies } from "../awaiting-replies.ts";
 import type { createOperatorCommands } from "../operator-commands.ts";
 import type { createOperatorKeys } from "../operator-keys.ts";
 import type { createOperatorQuickReplies } from "../operator-quick-replies.ts";
-import type { OrgRun } from "../org-cli.ts";
 import type { PaneWatcher } from "../pane-watcher.ts";
 import type { PaneWrites } from "../pane-writes.ts";
-import type { ProjectRegistry } from "../projects.ts";
 import type { PullRequestRegistry } from "../pull-requests.ts";
 import type { Push } from "../push.ts";
 import type { QueueService } from "../queue-service.ts";
@@ -39,7 +37,7 @@ export interface ServerDeps {
   push: Push;
   snooze: Snooze;
   notifyPrefs: NotifyPrefsStore;
-  /** Names each push alert from the session's projects and the pane's journal (filled by startServer). */
+  /** Names each push alert from the pane and its journal (filled by startServer). */
   alerts: AlertDescriber;
   updateMonitor: UpdateMonitor;
   audit: AuditLog;
@@ -66,10 +64,8 @@ export interface Services extends ServerDeps {
   conversations: ConversationService;
   input: PaneWrites;
   queue: QueueService;
-  projects: ProjectRegistry;
   /** The person's open PRs in the repos agents work in, read with `gh` in the background. */
   pullRequests: PullRequestRegistry;
-  orgRun: OrgRun;
   /** Does this agent have a journal at all — the snapshot's History-affordance gate. */
   hasJournal: (agent: string) => boolean;
   interactions: Interactions;

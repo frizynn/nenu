@@ -146,9 +146,8 @@ describe("GET /api/snapshot", () => {
       const first = await fetch(`${app.url}/api/snapshot`);
       const etag = first.headers.get("etag");
       expect(etag).toMatch(/^"[0-9a-f]+"$/);
-      const body = await first.json() as { ts: number; looseWorkspaceIds: string[] };
+      const body = await first.json() as { ts: number };
       expect(typeof body.ts).toBe("number");
-      expect(Array.isArray(body.looseWorkspaceIds)).toBe(true);
       await Bun.sleep(5);
       const again = await fetch(`${app.url}/api/snapshot`, { headers: { "if-none-match": etag! } });
       expect(again.status).toBe(304);
