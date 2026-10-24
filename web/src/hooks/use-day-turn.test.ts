@@ -19,6 +19,12 @@ describe("useDayTurn", () => {
     expect(renders).toBe(2);
     act(() => vi.advanceTimersByTime(24 * 60 * 60 * 1000));
     expect(renders).toBe(3);
+    // Back from a sleep that froze the timer: the new day is read on return.
+    vi.setSystemTime(Date.now() + 26 * 60 * 60 * 1000);
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(renders).toBe(4);
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    expect(renders).toBe(4);
     rerender({ active: false });
     const before = renders;
     act(() => vi.advanceTimersByTime(48 * 60 * 60 * 1000));

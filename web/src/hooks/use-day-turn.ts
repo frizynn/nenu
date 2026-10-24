@@ -17,6 +17,17 @@ export function useDayTurn(active: boolean): void {
     if (!active) return;
     // A second past midnight, so the redraw reads the new day.
     const timer = setTimeout(turn, untilMidnight() + 1_000);
-    return () => clearTimeout(timer);
+    // Timers freeze while the device sleeps: a return checks the date itself.
+    const armed = new Date().toDateString();
+    const onReturn = () => {
+      if (document.visibilityState === "visible" && new Date().toDateString() !== armed) turn();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
   }, [active, day]);
 }
