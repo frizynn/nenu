@@ -32,7 +32,16 @@ function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const routes = ["/pane/:paneId", "/pane/:paneId/history", "*"].map((path) => ({ path, element }));
   const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
   const { unmount } = render(<RouterProvider router={router} />);
-  return { router, unmount, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
+  return { router, unmount, user: userEvent.setup(), get sidebar() { return within(screen.getByRole("complementary", { name: "Workspace sidebar" })); } };
+}
+
+/** A desk's media, 1024 px and wider, until the test ends or the returned restore runs. */
+function desktop() {
+  const matchMedia = window.matchMedia;
+  const restore = () => { window.matchMedia = matchMedia; };
+  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList;
+  onTestFinished(restore);
+  return restore;
 }
 
 it("uses one shared mobile header without the old brand or session row", () => {
@@ -46,6 +55,7 @@ it("uses one shared mobile header without the old brand or session row", () => {
 });
 
 it("keeps chat and settings links scoped to the active session", () => {
+  desktop();
   const { sidebar } = setup();
   expect(sidebar.getByRole("link", { name: /Improve interface/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(sidebar.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/?s=work");
@@ -53,6 +63,7 @@ it("keeps chat and settings links scoped to the active session", () => {
 });
 
 it("filters without disturbing a mounted composer draft", async () => {
+  desktop();
   const { sidebar, user } = setup();
   const draft = screen.getByRole("textbox", { name: "Draft" });
   await user.type(draft, " plus edits");
@@ -65,6 +76,7 @@ it("filters without disturbing a mounted composer draft", async () => {
 });
 
 it("disables New on a read-only device, in the sidebar and the tab bar", () => {
+  desktop();
   const { sidebar } = setup({ ...data, device: { enforced: true, device: "phone", authorized: false } });
   expect(sidebar.getByRole("button", { name: "New chat" })).toBeDisabled();
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "New" })).toBeDisabled();
@@ -117,9 +129,7 @@ it("draws New as a tab with its own label, like its neighbours", () => {
 // desk and 23 px in the phone's tab bar.
 it("draws New as a pen and Settings as sliders in the sidebar, the rail and the drawer, sized for each", async () => {
   const glyph = (el: HTMLElement) => el.querySelector("svg.icon")!;
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
-  onTestFinished(() => { window.matchMedia = matchMedia; });
+  const phoneMedia = desktop();
   const { sidebar, user, unmount } = setup();
   expect(glyph(sidebar.getByRole("button", { name: "New chat" }))).toHaveClass("icon-square-pen");
   expect(glyph(sidebar.getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
@@ -130,7 +140,7 @@ it("draws New as a pen and Settings as sliders in the sidebar, the rail and the 
   expect(glyph(within(rail).getByRole("link", { name: "Settings" }))).toHaveClass("icon-settings-2");
   for (const button of rail.querySelectorAll(".workbench-icon-button")) expect(button.querySelector("svg")).toHaveAttribute("width", "16");
   unmount();
-  window.matchMedia = matchMedia;
+  phoneMedia();
   const phone = setup(data, "/pane/w%3A1%3Ap2?s=work");
   await phone.user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
@@ -139,9 +149,7 @@ it("draws New as a pen and Settings as sliders in the sidebar, the rail and the 
 });
 
 it("searches with Cmd+K and reaches every action from the collapsed rail", async () => {
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
-  onTestFinished(() => { window.matchMedia = matchMedia; });
+  desktop();
   const { sidebar, user } = setup({ ...data, agents: [{ ...data.agents[0]!, status: "blocked" }] });
   await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
   const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
@@ -155,6 +163,38 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
   expect(sidebar.queryByRole("button", { name: /^Needs you/ })).not.toBeInTheDocument();
   await user.keyboard("{Meta>}k{/Meta}");
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
+});
+
+// A phone hides the desk's sidebar and rail, so it does not mount them; the drawer and Search sheet are its own.
+it("mounts the sidebar and its rail only on a desk, and a return to the desk does not search again", async () => {
+  let wide = true;
+  const listeners = new Set<() => void>();
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({
+    get matches() { return wide && query === "(min-width: 1024px)"; }, media: query,
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+  }) as unknown as MediaQueryList;
+  onTestFinished(() => { window.matchMedia = matchMedia; });
+  const resize = (next: boolean) => act(() => { wide = next; listeners.forEach((listener) => listener()); });
+  const sidebar = () => screen.queryByRole("complementary", { name: "Workspace sidebar" });
+  const { user } = setup();
+  await user.keyboard("{Meta>}k{/Meta}");
+  expect(within(sidebar()!).getByRole("searchbox")).toHaveFocus();
+
+  resize(false);
+  expect(sidebar()).not.toBeInTheDocument();
+  expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
+  resize(true);
+  expect(within(sidebar()!).queryByRole("searchbox")).not.toBeInTheDocument();
+
+  await user.click(within(sidebar()!).getByRole("button", { name: "Collapse sidebar" }));
+  resize(false);
+  expect(screen.queryByRole("navigation", { name: "Collapsed sidebar" })).not.toBeInTheDocument();
+  await user.keyboard("{Meta>}k{/Meta}");
+  expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
+  resize(true);
+  expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
 });
 
 // A workspace of two tabs: an agent in tab "1", a shell in "vpn" the operator had open last.
@@ -171,9 +211,7 @@ const ops: HomeData = {
 const opsPane = "/pane/w%3A2%3Avpn?s=work";
 
 it("opens a workspace on the same pane from the sidebar, search and the collapsed rail", async () => {
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
-  onTestFinished(() => { window.matchMedia = matchMedia; });
+  desktop();
   const { sidebar, user, router } = setup(ops);
   // The desk's workspace tree is Search's, under the box until something is typed.
   await user.click(sidebar.getByRole("button", { name: /^Search/ }));
@@ -199,6 +237,7 @@ it("opens a workspace on the same pane from the phone's Search, by its row befor
 });
 
 it("keeps desktop reopening outside the composer region and preserves the mounted draft", async () => {
+  desktop();
   const { sidebar, user } = setup();
   const draft = screen.getByRole("textbox", { name: "Draft" });
   const collapse = sidebar.getByRole("button", { name: "Collapse sidebar" });
@@ -215,6 +254,7 @@ it("keeps desktop reopening outside the composer region and preserves the mounte
 });
 
 it("remembers a collapsed sidebar across a reload", async () => {
+  desktop();
   const first = setup();
   await first.user.click(first.sidebar.getByRole("button", { name: "Collapse sidebar" }));
   first.router.dispose();
@@ -224,6 +264,7 @@ it("remembers a collapsed sidebar across a reload", async () => {
 });
 
 it("resizes the sidebar from its edge by keys and a double-click, and remembers the width", async () => {
+  desktop();
   const first = setup();
   const edge = screen.getByRole("separator", { name: "Resize sidebar" });
   expect(edge).toHaveAttribute("aria-valuenow", "272");
@@ -278,12 +319,6 @@ it("keeps the Search sheet on the tapped row, marked as opening, until its chat 
   await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument());
   expect(router.state.location.pathname).toBe("/pane/w%3A1%3Ap2");
 });
-
-function desktop() {
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query) => ({ matches: query === "(min-width: 1024px)", media: query }) as MediaQueryList;
-  onTestFinished(() => { window.matchMedia = matchMedia; });
-}
 
 function NewDialogProbe() {
   return useNewDialogOpen() ? <p>New dialog</p> : null;
