@@ -28,6 +28,8 @@ import { dispatch } from "./routes/index.ts";
 import { interactionHints } from "./routes/interactions.ts";
 import { claudeLog, replyPane } from "./routes/reply.ts";
 import { Subagents } from "./subagents.ts";
+import { ClaudeSessionFiles } from "./claude-sessions.ts";
+import { claudeSessionDirs } from "./agent-state-sources.ts";
 import type { ActionResponse } from "./types.ts";
 import { MAX_UPLOAD_BYTES } from "./uploads.ts";
 import { WebAssetArchive } from "./web-assets.ts";
@@ -56,7 +58,8 @@ export function startServer(opts: ServerDeps) {
   // journal/registry.ts, never here.
   const journals = cfg.transcript ? buildJournalRegistry(cfg.journalRoots) : null;
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
-  const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"));
+  const claudeSessionFiles = new ClaudeSessionFiles(claudeSessionDirs(cfg.journalRoots.claude));
+  const conversations = new ConversationService(undefined, undefined, join(cfg.stateDir, "conversation-bindings.json"), undefined, claudeSessionFiles);
   const input = new PaneWrites();
   // Each Claude and Codex pane's turn from the CLI's own files (ADR 0067): followed on every herd
   // change, attached to the snapshot, and read fresh by Stop.
@@ -127,7 +130,7 @@ export function startServer(opts: ServerDeps) {
     journals,
     transcripts,
     claudeTelemetry: new ClaudeTelemetry(cfg.stateDir),
-    subagents: new Subagents(cfg.journalRoots, cfg.stateDir),
+    subagents: new Subagents(cfg.journalRoots, cfg.stateDir, undefined, claudeSessionFiles),
     conversations,
     input,
     queue,

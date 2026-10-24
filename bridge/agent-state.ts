@@ -486,7 +486,7 @@ export class AgentStates {
   }
 }
 
-async function readSmall(path: string): Promise<string | null> {
+export async function readSmall(path: string): Promise<string | null> {
   try {
     const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -525,7 +525,7 @@ export async function processOpenFiles(pids: number[]): Promise<string[]> {
 }
 
 /** When a pid started, from `ps -o lstart=` read in this process's own time zone. */
-async function processStart(pid: number): Promise<number | null> {
+export async function processStart(pid: number): Promise<number | null> {
   const child = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore", stdin: "ignore", env: { ...process.env, LC_ALL: "C" } });
   const timer = setTimeout(() => child.kill(), 2_000);
   try {
