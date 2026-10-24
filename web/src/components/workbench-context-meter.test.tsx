@@ -48,3 +48,11 @@ it("shows only the context for a harness that reports no limits", async () => {
   expect(screen.getAllByRole("progressbar")).toHaveLength(1);
   expect(screen.queryByText(/limit/)).not.toBeInTheDocument();
 });
+
+it("draws no bar for a window that has reset since it was read", async () => {
+  render(<WorkbenchContextMeter reportedPercent={10} usedTokens={null} maxTokens={null}
+    rateLimits={[{ name: "primary", usedPercent: 80, windowMinutes: 300, resetsAt: Date.now() / 1000 - 60 }]} />);
+  await userEvent.click(screen.getByRole("button", { name: "Context window 10% used" }));
+  expect(screen.getByText("Window not started")).toBeInTheDocument();
+  expect(screen.queryByRole("progressbar", { name: "5-hour limit used" })).not.toBeInTheDocument();
+});

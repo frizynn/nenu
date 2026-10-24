@@ -31,16 +31,16 @@ export function contextSize(used: number | null | undefined, max: number | null 
 }
 
 /** One measured share, wherever usage is read: its name, the share and a detail, a thin bar under them
- *  (red past 90%, as the ring is). A share no one knows draws the detail alone over an empty bar. */
+ *  (red past 90%, as the ring is). A share no one knows draws the detail alone, with no bar. */
 export function MeterRow({ label, percent, detail, bar }: { label: string; percent?: number; detail?: string | null; bar: string }) {
   return <div>
     <div className="flex items-baseline justify-between gap-3">
       <span className="text-foreground">{label}</span>
       <span className="tabular-nums text-muted-foreground">{[percent !== undefined ? `${Math.round(percent)}%` : null, detail].filter(Boolean).join(" · ")}</span>
     </div>
-    <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={bar} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent ?? 0)}>
-      <div className="h-full rounded-full" style={{ width: `${percent ?? 0}%`, backgroundColor: (percent ?? 0) > 90 ? "var(--destructive)" : "var(--primary)" }} />
-    </div>
+    {percent !== undefined && <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={bar} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+      <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: percent > 90 ? "var(--destructive)" : "var(--primary)" }} />
+    </div>}
   </div>;
 }
 

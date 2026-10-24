@@ -32,6 +32,6 @@ it("drops the share of a window that has reset since, and any reset nobody named
 });
 
 it("names any other window by its length", () => {
-  expect([300, 10080, 2880, 120, 90].map(windowLength)).toEqual(["5-hour", "Weekly", "2-day", "2-hour", "90-minute"]);
+  expect([300, 10080, 2880, 120, 90, 0, 7.5].map(windowLength)).toEqual(["5-hour", "Weekly", "2-day", "2-hour", "90-minute", "Usage", "Usage"]);
   expect(limitRows([{ name: "primary", usedPercent: 5 }], now)[0]!.label).toBe("Usage limit");
 });

@@ -13,8 +13,9 @@ export interface LimitRow {
   detail?: string;
 }
 
-/** A plan window by its length: "5-hour", "Weekly", "2-day", "90-minute". */
+/** A plan window by its length: "5-hour", "Weekly", "2-day", "90-minute"; "Usage" when none was reported. */
 export function windowLength(minutes: number): string {
+  if (!Number.isInteger(minutes) || minutes <= 0) return "Usage";
   if (minutes === 10080) return "Weekly";
   if (minutes % 1440 === 0) return `${minutes / 1440}-day`;
   return minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
@@ -25,7 +26,7 @@ export function limitRows(limits: SessionTelemetry["rateLimits"], now = Date.now
   return [...(limits ?? [])]
     .sort((a, b) => (a.windowMinutes ?? Infinity) - (b.windowMinutes ?? Infinity))
     .map((limit: RateLimit) => {
-      const label = limit.windowMinutes ? `${windowLength(limit.windowMinutes)} limit` : "Usage limit";
+      const label = `${windowLength(limit.windowMinutes ?? 0)} limit`;
       const resets = limit.resetsAt === undefined ? undefined : limit.resetsAt * 1000;
       // The windows are the account's: a reading from before the reset says nothing about the new one.
       if (resets !== undefined && resets <= now) return { key: limit.name, label, detail: "Window not started" };
