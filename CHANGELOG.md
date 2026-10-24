@@ -8,6 +8,23 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-24
+
+### Added
+
+- The context ring's panel lists the 5-hour and weekly usage limits, with percent used and reset time (132269e0).
+- The panel's weekly limit falls back to the account's last reading from Settings > Usage, marked "Last read …" when not fresh (e9495e83).
+
+### Changed
+
+- The context ring's panel is smaller, and the "Context and usage" dock and Settings > Usage name limit windows the same way ("5-hour limit", "Weekly limit") (132269e0, 9450af8d).
+- Home's tabs sit 36px tall on a phone, and the chat's ⋯ menu is shorter, without rows a strip already opens (f87816d2, 2e18352a, f14a0a1f).
+
+### Fixed
+
+- A picture's chip in the composer stays whole at a line's end instead of splitting across two lines (74a98f00).
+- With several Claude config dirs, Settings > Usage attributes a status-line reading through its session's own dir instead of once per dir (fa65d01f, 607a91f3).
+
 ## [2.0.1] - 2026-10-24
 
 ### Fixed

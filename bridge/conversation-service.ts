@@ -3,7 +3,7 @@ import { computeEtag } from "./http-cache.ts";
 import { realpath } from "node:fs/promises";
 import { codexRpc, record, type CodexRpc } from "./codex-rpc.ts";
 import { CodexHistory } from "./codex-history.ts";
-import { ClaudeSessions, matchClaudeSession } from "./claude-sessions.ts";
+import { ClaudeSessions, matchClaudeSession, type ClaudeSessionFiles } from "./claude-sessions.ts";
 import { CodexSessions } from "./codex-sessions.ts";
 import { processOpenFiles } from "./agent-state.ts";
 import { isCodexSessionId } from "./journal/codex.ts";
@@ -37,7 +37,13 @@ export class ConversationService {
   private readonly bindings: ConversationBindings;
   private readonly codexSessions: CodexSessions;
   private readonly history: CodexHistory;
-  constructor(private readonly codex: Rpc = codexRpc(), private readonly claude = new ClaudeSessions(), stateFile?: string, openFiles = processOpenFiles) {
+  constructor(
+    private readonly codex: Rpc = codexRpc(),
+    private readonly claude: Pick<ClaudeSessions, "list"> = new ClaudeSessions(),
+    stateFile?: string,
+    openFiles = processOpenFiles,
+    private readonly claudeFiles: Pick<ClaudeSessionFiles, "list"> = { list: async () => [] },
+  ) {
     this.bindings = new ConversationBindings(stateFile);
     // An open Codex chat resolves its pane about 44 times a minute (measured); lsof costs 60 to 100 ms.
     // A process opens its rollout once, at its first turn, so five seconds of reuse only delays that.
@@ -71,10 +77,15 @@ export class ConversationService {
       if (connected) return known(connected);
       if (pane.agentSession) return { pane, notStarted: false };
       const explicit = explicitSession(info, pane.agent);
-      const id = explicit ?? (pane.agent === "claude" ? matchClaudeSession(info, await this.claude.list()) : null);
+      const id = explicit ?? (pane.agent === "claude" ? await this.matchClaude(info) : null);
       if (id) return known(id);
     } catch { /* Older installations still work through their SessionStart hook. */ }
     return { pane, notStarted };
+  }
+
+  /** A pid from Claude's own session files; `claude agents` only when none matches, for `claude attach`. */
+  private async matchClaude(info: unknown): Promise<string | null> {
+    return matchClaudeSession(info, await this.claudeFiles.list().catch(() => [])) ?? matchClaudeSession(info, await this.claude.list());
   }
 
   /** thread/list scans the rollout folder (about 0.2 to 3 s measured), so the picker reuses it briefly. */
