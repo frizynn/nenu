@@ -17,6 +17,8 @@ interface WorkbenchPopoverProps {
   phoneBack?: boolean;
   /** Below the desk, draw it as a bottom sheet (see PHONE_SHEET). */
   sheetBelowDesk?: boolean;
+  /** A glance of a few rows: the desk's smaller title and a 12px inset on every screen. */
+  dense?: boolean;
 }
 
 // Below the desk breakpoint a `sheetBelowDesk` popover is a bottom sheet rather than a card floating
@@ -36,7 +38,7 @@ const PHONE_SHEET = [
 ].join(" ");
 
 /** A controlled, nonmodal inspector. Opening it never takes the composer's focus or locks scroll. */
-export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false, sheetBelowDesk = false }: WorkbenchPopoverProps) {
+export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, className, phoneBack = false, sheetBelowDesk = false, dense = false }: WorkbenchPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
   const dismissRef = useRef(onDismiss);
@@ -137,8 +139,8 @@ export function WorkbenchPopover({ open, onDismiss, anchorRef, label, children, 
   if (!open) return null;
   return (
     <div ref={panelRef} role="dialog" aria-label={label} data-workbench-popover="" style={{ position: "fixed", left: position?.left, top: position?.top, bottom: position?.bottom }} className={cn("z-30 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl", sheetBelowDesk && PHONE_SHEET, className)}>
-      <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} />
-      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
+      <PanelHeader title={label} onClose={() => dismiss("close")} sheetBelowDesk={sheetBelowDesk} dense={dense} />
+      <div className={cn("max-h-[min(24rem,45dvh)] overflow-y-auto overscroll-contain", dense ? "p-3" : "p-4", sheetBelowDesk && "max-lg:px-0")} style={position ? { maxHeight: Math.max(48, position.height - 54) } : undefined}>{children}</div>
     </div>
   );
 }

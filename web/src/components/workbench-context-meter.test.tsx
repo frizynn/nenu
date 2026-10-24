@@ -31,14 +31,14 @@ it("says the percentage beside the composer row's ring, and draws nothing when n
 it("lists the context, then the 5-hour and weekly limits with when each resets", async () => {
   const resetsAt = Date.now() / 1000 + 3600;
   render(<WorkbenchContextMeter reportedPercent={23} usedTokens={229_000} maxTokens={1_000_000}
-    rateLimits={[{ name: "secondary", usedPercent: 99, windowMinutes: 10080, resetsAt }, { name: "primary", usedPercent: 51, windowMinutes: 300, resetsAt }]} />);
+    rateLimits={[{ name: "secondary", usedPercent: 90.4, windowMinutes: 10080, resetsAt }, { name: "primary", usedPercent: 51, windowMinutes: 300, resetsAt }]} />);
   await userEvent.click(screen.getByRole("button", { name: "Context window 23% used" }));
   const bars = screen.getAllByRole("progressbar");
   expect(bars.map((bar) => bar.getAttribute("aria-label"))).toEqual(["Context window usage", "5-hour limit used", "Weekly limit used"]);
-  expect(bars.map((bar) => bar.getAttribute("aria-valuenow"))).toEqual(["23", "51", "99"]);
+  expect(bars.map((bar) => bar.getAttribute("aria-valuenow"))).toEqual(["23", "51", "90"]);
   expect(screen.getByText("23% · 229k / 1m")).toBeInTheDocument();
   expect(screen.getByText(/^51% · resets /)).toBeInTheDocument();
-  // Nearly spent reads as the ring does past 90%.
+  // Nearly spent reads as the ring does past 90%, on the share reported rather than the one shown.
   expect(bars[2]!.firstElementChild).toHaveStyle({ backgroundColor: "var(--destructive)" });
 });
 

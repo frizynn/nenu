@@ -20,8 +20,8 @@ it("shows the context and both quota windows inline, with no intermediate Usage 
   expect(screen.getByRole("progressbar", { name: "Context window usage" })).toHaveAttribute("aria-valuenow", "13");
   expect(screen.getByText("5-hour limit")).toBeVisible();
   expect(screen.getByText("Weekly limit")).toBeVisible();
-  expect(screen.getByText("8% used")).toBeVisible();
-  expect(screen.getByText("19% used")).toBeVisible();
+  expect(screen.getByText("8%")).toBeVisible();
+  expect(screen.getByText("19%")).toBeVisible();
   expect(screen.getByRole("progressbar", { name: "5-hour limit used" })).toHaveAttribute("aria-valuenow", "8");
 });
 
