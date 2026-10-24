@@ -324,10 +324,19 @@ export function NewAgentHost() {
   const target = useNewAgentRequest();
   const request = useNewDialogRequest();
   const preset: NewPreset | null = request ?? target;
-  if (!preset) return null;
+  // The flow last asked for stays mounted, closed, until its sheet has slid away.
+  const [shown, setShown] = useState(preset);
+  if (preset && preset !== shown) setShown(preset);
+  if (!shown) return null;
   return (
     <Suspense fallback={null}>
-      <NewDialog key={openingOf(preset)} preset={preset} onClose={() => { openNewDialog(false); openNewAgent(null); }} />
+      <NewDialog
+        key={openingOf(shown)}
+        preset={shown}
+        open={preset !== null}
+        onClose={() => { openNewDialog(false); openNewAgent(null); }}
+        onExited={() => setShown(null)}
+      />
     </Suspense>
   );
 }

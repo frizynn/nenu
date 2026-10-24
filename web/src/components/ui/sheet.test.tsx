@@ -269,6 +269,23 @@ describe("closing animates out", () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it("tells its owner once it is gone, not while it is still leaving", async () => {
+    const finish = stubExitAnimation();
+    const onExited = vi.fn();
+    const { rerender } = render(<BottomSheet open onClose={vi.fn()} title="New" onExited={onExited}>body</BottomSheet>);
+    rerender(<BottomSheet open={false} onClose={vi.fn()} title="New" onExited={onExited}>body</BottomSheet>);
+    expect(onExited).not.toHaveBeenCalled();
+    await finish();
+    expect(onExited).toHaveBeenCalledTimes(1);
+  });
+
+  it("comes in from where it leaves to: the bottom sheet from below the screen, the drawer from past its edge", () => {
+    render(<BottomSheet open onClose={vi.fn()} title="Actions">body</BottomSheet>);
+    render(<SideSheet open onClose={vi.fn()} title="Navigation">rows</SideSheet>);
+    expect(document.querySelector(".sheet-bottom-panel")).toHaveClass("slide-in-from-bottom");
+    expect(document.querySelector(".side-sheet-panel")).toHaveClass("slide-in-from-left");
+  });
+
   it("slides the side drawer out the same way", async () => {
     const finish = stubExitAnimation();
     const { container, rerender } = render(<SideSheet open onClose={vi.fn()} title="Navigation">rows</SideSheet>);
