@@ -579,7 +579,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   function requestDrawer(next: ComposerDrawer) {
     if (drawer === "keys" && next !== "keys" && !releaseKeys()) return;
     discardConfirm.reset();
-    if (next !== null && next !== drawer) setDrawerOpens((n) => n + 1);
+    if (next !== null && next !== "cmd" && next !== drawer) setDrawerOpens((n) => n + 1);
     setDrawer(next);
   }
   /** Whether the tray may go with its staged queue: the first try with keys staged asks for a second. */
@@ -1378,7 +1378,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useFocusInPlace(inputRef, surfaceRef);
 
   // The dock on screen, with its title and body; none while Usage has nothing to show.
-  const openDock: DockId | null = drawer === "cmd" || (drawer === "usage" && !usageControls) ? null : drawer;
+  const shownDock: DockId | null = drawer === "cmd" || (drawer === "usage" && !usageControls) ? null : drawer;
   function dock(id: DockId): { title: string; body: ReactNode } {
     switch (id) {
       case "usage": return { title: "Context and usage", body: <div className="px-3 pb-3">{usageControls}</div> };
@@ -1428,7 +1428,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             it belongs to, so tab and queue reset on each open even when it reopens while the last one
             is still folding shut (ADR 0005). Commands stays a covering BottomSheet below (it's a
             palette, not a pad). */}
-        <Fold value={openDock}>{(id) => {
+        <Fold value={shownDock}>{(id) => {
           const { title, body } = dock(id);
           return <ComposerDock key={drawerOpens} title={title} onClose={closeDrawer}>{body}</ComposerDock>;
         }}</Fold>
