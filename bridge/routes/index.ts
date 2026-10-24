@@ -172,5 +172,5 @@ export async function dispatch(ctx: Services, req: Request, server: RequestTimeo
   if (isReservedAuthPath(pathname)) return reservedAuthPlaceholder();
 
   // ── Static PWA (with SPA fallback) ───────────────────────────────────
-  return serveStatic(pathname, ctx.assets);
+  return serveStatic(req, pathname, ctx.assets);
 }

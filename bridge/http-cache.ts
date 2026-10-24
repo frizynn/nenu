@@ -13,7 +13,7 @@ const GZIP_MIN_BYTES = 256;
  * Uses Bun.hash (Wyhash) — fast and deterministic within a process.
  * Returns a quoted ETag value as required by RFC 7232.
  */
-export function computeEtag(body: string): string {
+export function computeEtag(body: string | Uint8Array): string {
   // toString(16) works for both number and bigint, which covers all Bun.hash overloads.
   return `"${Bun.hash(body).toString(16)}"`;
 }
