@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { CLAUDE_HOOK_PATH, CLAUDE_HOOK_TOKEN_FILE, CLAUDE_HOOK_TOKEN_HEADER } from "../../bridge/claude-hooks.ts";
 import { browsersCache, DESKTOP, launchEngine, launchWebkit, PHONE, reportModel, userCacheDir, type Browser, type Context, type Locator, type Page } from "./browser.ts";
 import { startTestBridge, type TestBridge } from "./bridge.ts";
+import { chipWrapBench } from "./chip-wrap.ts";
 import { commandsBench } from "./commands.ts";
 import { filesBench } from "./files.ts";
 import { inlineImagesBench } from "./inline-images.ts";
@@ -42,12 +43,13 @@ import { appendJournal, seedDiffRepo, tickJournal, tickWorkingTurn, writeChatJou
 //   bun scripts/e2e/run.ts reading  [--port 8797] [--out DIR]   Tables, nested lists, the way back and the model picker, phone and desk
 //   bun scripts/e2e/run.ts pin      [--port 8797] [--out DIR]   The box stays put on a phone: drags, keyboard, scrollers; WebKit and Chromium
 //   bun scripts/e2e/run.ts inline-images [--before] [--port 8797] [--out DIR]  Two pictures between a message's words: composer, terminal, conversation
+//   bun scripts/e2e/run.ts chip-wrap [--port 8797] [--out DIR]  A picture's chip walked across a line's end, phone and desk, WebKit and Chromium: one pill, icon inside
 //   bun scripts/e2e/run.ts paste-image [--port 8797] [--out DIR]  Pictures pasted and picked between words, keyboard down and up: the draft spans the box
 //   bun scripts/e2e/run.ts live-journal [--journal LOG] [--port 8797] [--out DIR]  A chat on a 1, 10 and 40 MB log, phone and desk: ms from an append to its line on screen
 //   bun scripts/e2e/run.ts take-over [--port 8797] [--out DIR]  A draft left in Claude's box: Take over empties it, Type into terminal reaches the pane
 //   bun scripts/e2e/run.ts usage-limit [--port 8797] [--out DIR]  A Claude at its usage limit: the line, the bar, Send waits, Continue now, the message goes when the limit lifts
 //   bun scripts/e2e/run.ts send-always [--port 8797] [--out DIR]  A working Claude: queued rows in the thread with their pictures, Send asks nothing, text in its box never holds a send, the Terminal view types
-//   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, drags move nothing else, the end shows
+//   bun scripts/e2e/run.ts phone-scroll [--port 8797] [--out DIR]  Every phone screen and two sheets: one box scrolls, never sideways, drags move nothing else, the end shows
 //   bun scripts/e2e/run.ts commands [--before] [--port 8797] [--out DIR]  The command demo, desk and phone: each fold opened, a running turn, the rest landing
 //   bun scripts/e2e/run.ts compare A.png B.png                  share of differing pixels
 //
@@ -2708,15 +2710,16 @@ async function pin(): Promise<void> {
 }
 
 /**
- * Every phone screen scrolls one box and nothing else: Home, Settings, a chat, a chat's History, and
- * a sheet over a page, in WebKit and Chromium, twice: in Safari, whose bars leave the page no inset, and
- * as the home-screen app, 47px over and 34px under (env() is 0 headless, so the bundle's CSS says them).
- * The herd is seeded taller than a phone on every screen. Each screen: the root
+ * Every phone screen scrolls one box and nothing else: Home's Recents and Workspaces, Settings, a chat,
+ * a chat's History, and a sheet over a page, in WebKit and Chromium, twice: in Safari, whose bars leave
+ * the page no inset, and as the home-screen app, 47px over and 34px under (env() is 0 headless, so the
+ * bundle's CSS says them). The herd is seeded taller than a phone on every screen. Each screen: the root
  * opts out of vertical overscroll (a drag past an end rubber-bands the whole app in Safari otherwise),
- * exactly one box scrolls vertically, a drag from the header, the middle and the bottom moves only that
- * box (never the header, the tab bar, the composer or the window) and moves it at least once, and the
- * box's last row ends above whatever sits under it. On a sheet a drag over the panel or the backdrop
- * moves nothing behind it. WebKit's drags are touchDrag's stand-in, not the engine's touch scrolling.
+ * exactly one box scrolls vertically and neither it nor the window scrolls sideways, a drag from the
+ * header, the middle and the bottom moves only that box (never the header, the tab bar, the composer or
+ * the window) and moves it at least once, and the box's last row ends above whatever sits under it. On a
+ * sheet a drag over the panel or the backdrop moves nothing behind it. WebKit's drags are touchDrag's
+ * stand-in, not the engine's touch scrolling.
  */
 async function phoneScroll(): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -2742,6 +2745,8 @@ async function phoneScroll(): Promise<void> {
       { name: "chat", path: chat },
       { name: "history", path: `${chat}/history` },
       { name: "search-sheet", path: "/", sheet: true, open: (page) => page.locator(".bottom-tab-bar").getByRole("button", { name: "Search" }).click() },
+      // Workspaces, under its Order control. Last: Home remembers the list, and the sheet above opens over Recents.
+      { name: "workspaces", path: "/", open: (page) => page.getByRole("tab", { name: "Workspaces" }).click() },
     ];
     for (const engine of ["webkit", "chromium"] as const) {
       const browser = await launchEngine(engine);
@@ -2778,7 +2783,7 @@ async function phoneScroll(): Promise<void> {
               const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
               const scrollers = Array.from(document.querySelectorAll<HTMLElement>("body *"))
                 .filter((el) => el.tagName !== "TEXTAREA" && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
-                .map((el) => ({ name: name(el), box: el.dataset.e2eBox!, extra: el.scrollHeight - el.clientHeight, inSheet: !!dialog?.contains(el) }));
+                .map((el) => ({ name: name(el), box: el.dataset.e2eBox!, extra: el.scrollHeight - el.clientHeight, sideways: el.scrollWidth - el.clientWidth, inSheet: !!dialog?.contains(el) }));
               const offsets: Record<string, number> = {};
               for (const el of Array.from(document.querySelectorAll<HTMLElement>("html, body, body *"))) if (el.scrollTop && !dialog?.contains(el)) offsets[name(el)] = Math.round(el.scrollTop);
               const top = (selector: string) => {
@@ -2786,7 +2791,7 @@ async function phoneScroll(): Promise<void> {
                 return box && box.height ? Math.round(box.top) : null;
               };
               const panel = dialog?.querySelector(".sheet-bottom-panel")?.getBoundingClientRect();
-              return { scrollers, offsets, windowY: scrollY, overscroll: getComputedStyle(document.documentElement).overscrollBehaviorY,
+              return { scrollers, offsets, windowY: scrollY, windowSideways: document.documentElement.scrollWidth - document.documentElement.clientWidth, overscroll: getComputedStyle(document.documentElement).overscrollBehaviorY,
                 header: top(".workbench-app-header"), bar: top(".bottom-tab-bar"), composer: top(".workbench-composer"),
                 panel: panel ? { top: Math.round(panel.top), bottom: Math.round(panel.bottom) } : null };
             }, null);
@@ -2799,6 +2804,9 @@ async function phoneScroll(): Promise<void> {
             if (!screen.sheet && page_.length !== 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
             // A finger from each place, up then down. Only the screen's own box may move, and it must; a sheet moves nothing behind it.
             const own = !screen.sheet && page_.length === 1 ? page_[0]! : null;
+            // No box of the page nor the window is wider than the phone: a finger never drags the page sideways.
+            for (const box of page_) if (box.sideways > 1) failures.push(`${where}: ${box.name} scrolls ${box.sideways}px sideways`);
+            if (at.windowSideways > 1) failures.push(`${where}: the window scrolls ${at.windowSideways}px sideways`);
             let ownMoved = false;
             const bottom = at.bar ?? at.composer ?? 800;
             // A sheet is dragged in Chromium only: the WebKit stand-in walks the DOM, while an engine chains a
@@ -2870,6 +2878,31 @@ async function inlineImages(before: boolean): Promise<void> {
   const result = await withBench((bridge, browser) => inlineImagesBench(bridge, browser, outDir, before), CAPTURE_EPOCH);
   await writeFile(join(outDir, "inline-images.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result.sent, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
+}
+
+/** A picture's chip walked across a line's end, under WebKit and Chromium. */
+async function chipWrap(): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  const result = { checks: [] as Array<{ name: string; ok: boolean; detail?: string }>, shots: [] as string[], seen: {} as Record<string, unknown> };
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
+  try {
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        const one = await chipWrapBench(bridge, browser, engine, outDir);
+        result.checks.push(...one.checks);
+        result.shots.push(...one.shots);
+        Object.assign(result.seen, one.seen);
+      } finally {
+        await browser.close();
+      }
+    }
+  } finally {
+    await bridge.stop();
+  }
+  await writeFile(join(outDir, "chip-wrap.json"), JSON.stringify(result, null, 2));
   for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
   if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
@@ -2955,6 +2988,7 @@ else if (command === "scroll") await scrollProbe();
 else if (command === "reading") await reading();
 else if (command === "pin") await pin();
 else if (command === "inline-images") await inlineImages(values.before === true);
+else if (command === "chip-wrap") await chipWrap();
 else if (command === "paste-image") await pasteImage();
 else if (command === "phone-scroll") await phoneScroll();
 else if (command === "take-over") await takeOver();
@@ -2964,6 +2998,6 @@ else if (command === "send-always") await sendAlways();
 else if (command === "usage-limit") await usageLimit();
 else if (command === "compare" && positionals[2]) await compare(positionals[1]!, positionals[2]);
 else {
-  console.error("usage: bun scripts/e2e/run.ts smoke|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|artifacts|files|home|inspector|terminal|motion|idle|chip-line|chat|scroll|reading|pin|inline-images|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
+  console.error("usage: bun scripts/e2e/run.ts smoke|tabs|workspace|workspace-rows|layout|stop|processes|stop-state|baseline|artifacts|files|home|inspector|terminal|motion|idle|chip-line|chat|scroll|reading|pin|inline-images|chip-wrap|paste-image|phone-scroll|take-over|live-journal|commands|send-always|usage-limit [--before] [--port 8797] [--out DIR] | compare A.png B.png");
   process.exit(2);
 }

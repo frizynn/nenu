@@ -72,18 +72,23 @@ export function journalImages(entry: TranscriptEntry): TranscriptImagePart[] {
 // ── The draft ─────────────────────────────────────────────────────────────────────────────────────
 //
 // In the composer's text a picture is a chip: two blank Braille cells (the slot its icon is drawn in),
-// "Image #N" and a word joiner that ends it without taking room. None of them is a character anyone
-// types, a place a line breaks, or whitespace, so no trim() can take a piece of a chip at either end.
+// "Image #N", and word joiners that glue the pieces and end it without taking room. Nobody types a
+// cell or a joiner, no line breaks inside a chip, and no trim() can take a piece of one at either end.
+// The glue is measured, not decorative: Chromium and Safari break between a blank cell and "I", and
+// Safari's textarea at a no-break space, which split a chip at a line's end into an icon in an empty
+// pill and "#N" on the next line (2.0.0); "Image" and "#N" are set apart by a narrow no-break space
+// held by joiners on both sides. bun scripts/e2e/run.ts chip-wrap walks a chip across a line.
 // N counts the draft's pictures in the order they were attached, as the thumbnails above the text do.
 
-/** A chip's blank cell (its icon's slot is two) and its end: characters nobody types. */
+/** A chip's blank cell (its icon's slot is two) and its glue: characters nobody types. */
 const CELL = "\u2800";
-const END = "\u2060";
-const CHIP = new RegExp(`${CELL}${CELL}Image\u00a0#(\\d+)${END}`, "g");
+const JOIN = "\u2060";
+const GAP = `${JOIN}\u202f${JOIN}`;
+const CHIP = new RegExp(`${CELL}${JOIN}${CELL}${JOIN}Image${GAP}#(\\d+)${JOIN}`, "g");
 
 /** The chip for the draft's picture number `n` (from 1). */
 export function imageChip(n: number): string {
-  return `${CELL}${CELL}Image\u00a0#${n}${END}`;
+  return `${CELL}${JOIN}${CELL}${JOIN}Image${GAP}#${n}${JOIN}`;
 }
 
 export interface DraftChip { number: number; start: number; end: number }
@@ -172,7 +177,7 @@ export function dropStrayChips(text: string, count: number, caret: number): { te
   /** Words between chips, without a chip's own characters cut loose from one (a partial copy pasted). */
   const words = (from: number, to: number) => {
     for (let i = from; i < to; i++) {
-      if (text[i] === CELL || text[i] === END) {
+      if (text[i] === CELL || text[i] === JOIN) {
         if (caret > i) moved--;
       } else out += text[i];
     }
