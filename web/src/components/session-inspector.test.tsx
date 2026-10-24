@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -56,16 +56,15 @@ afterEach(() => {
   window.matchMedia = desk;
 });
 
-function Desk({ pr, overview, artifacts = true }: { pr?: SessionPr; overview?: React.ReactNode; artifacts?: boolean }) {
+function Desk({ pr, artifacts = true }: { pr?: SessionPr; artifacts?: boolean }) {
   const inspector = useSessionInspector();
   if (!inspector.desk) return <p>phone</p>;
   return <>
     {!inspector.open && <InspectorToggle inspector={inspector} pr={pr} />}
-    {inspector.open && <SessionInspector inspector={inspector} paneId="w1:p1" artifacts={artifacts} pr={pr} overview={overview} />}
+    {inspector.open && <SessionInspector inspector={inspector} paneId="w1:p1" artifacts={artifacts} pr={pr} />}
   </>;
 }
 const panel = () => screen.getByRole("complementary", { name: "Session panel" });
-const cleanupDesk = () => cleanup();
 
 it("reads only the tab on screen: Changes first, Files and its Artifacts when picked", async () => {
   render(<Desk />);
@@ -159,35 +158,11 @@ it("still opens and folds when the browser refuses storage", async () => {
   }
 });
 
-it("puts the overview first among the tabs when the pane belongs to a project", async () => {
-  render(<Desk overview={<p>Thread overview</p>} />);
-  // A first open lands on the overview; nothing else of the session is read until its tab is picked.
-  expect(await within(panel()).findByText("Thread overview")).toBeInTheDocument();
-  expect(seen).toEqual([]);
-  const tabs = within(within(panel()).getByRole("tablist", { name: "Session" })).getAllByRole("tab").map((tab) => tab.textContent);
-  expect(tabs).toEqual(["Overview", "Changes", "Files", "Terminal"]);
-
-  await userEvent.click(within(panel()).getByRole("tab", { name: "Changes" }));
-  expect(within(panel()).queryByText("Thread overview")).not.toBeInTheDocument();
-  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-});
-
-it("remembers Overview as the tab to open on, and falls back to Changes outside a project", async () => {
-  const { unmount } = render(<Desk overview={<p>Thread overview</p>} />);
-  await userEvent.click(within(panel()).getByRole("tab", { name: "Overview" }));
-  unmount();
-  render(<Desk overview={<p>Thread overview</p>} />);
-  expect(within(panel()).getByText("Thread overview")).toBeInTheDocument();
-  cleanupDesk();
-  render(<Desk />);
-  await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-  expect(within(panel()).getByRole("tab", { name: "Changes" })).toHaveAttribute("aria-selected", "true");
-});
-
-it("offers no Overview outside a project, and no Artifacts for a shell", async () => {
+it("offers Changes, Files and Terminal, and no Artifacts for a shell", async () => {
   render(<Desk artifacts={false} />);
   await within(panel()).findByRole("button", { name: /app\/cart\.ts/ });
-  expect(within(panel()).queryByRole("tab", { name: /^Overview/ })).not.toBeInTheDocument();
+  const tabs = within(within(panel()).getByRole("tablist", { name: "Session" })).getAllByRole("tab").map((tab) => tab.textContent);
+  expect(tabs).toEqual(["Changes", "Files", "Terminal"]);
   await userEvent.click(within(panel()).getByRole("tab", { name: /Files/ }));
   await within(panel()).findByText("app");
   expect(within(panel()).queryByRole("radio", { name: "Artifacts" })).not.toBeInTheDocument();

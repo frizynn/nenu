@@ -175,35 +175,6 @@ export const handlers = [
   }),
   http.get("/api/interactions", () => HttpResponse.json({ interactions: [] })),
   http.post(/\/api\/interactions\/[^/]+\/answer$/, () => HttpResponse.json({ ok: true })),
-  // What a project's coordinator can start on: Claude Code and Codex, the project's default Codex.
-  http.get("/api/org/coordinator-options", () => HttpResponse.json({
-    ok: true, available: true, defaultProfile: "codex", last: null,
-    harnesses: [
-      { harness: "claude", profile: "claude", defaultModel: "", efforts: ["low", "medium", "high", "xhigh", "max"] },
-      { harness: "codex", profile: "codex", defaultModel: "", efforts: ["low", "medium", "high", "xhigh"] },
-    ],
-    profiles: ["claude", "codex"].map((name) => ({ name, harness: name, model: "", reasoningEffort: "", description: "", builtin: true })),
-  })),
-  http.post("/api/org/project/create", async ({ request }) => {
-    const body = await request.json() as { name: string };
-    return HttpResponse.json({ ok: true, project: { slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: body.name } });
-  }),
-  http.post("/api/org/thread/merge", async ({ request }) => {
-    const body = await request.json() as { id: string };
-    return HttpResponse.json({ ok: true, merged: { id: body.id, pr: "https://github.com/acme/app/pull/7" } });
-  }),
-  http.post("/api/org/thread/set", async ({ request }) => {
-    const body = await request.json() as { id: string; autoFixCi?: boolean; autoMerge?: boolean };
-    return HttpResponse.json({ ok: true, flags: { id: body.id, autoFixCi: body.autoFixCi ?? false, autoMerge: body.autoMerge ?? false } });
-  }),
-  http.post("/api/org/thread/pr-action", async ({ request }) => {
-    const body = await request.json() as { id: string; action: string };
-    return HttpResponse.json({ ok: true, asked: { id: body.id, action: body.action, pr: "https://github.com/acme/app/pull/7", sent: true, reason: "" } });
-  }),
-  http.post("/api/org/thread/pr-create", async ({ request }) => {
-    const body = await request.json() as { id: string };
-    return HttpResponse.json({ ok: true, created: { id: body.id, pr: "https://github.com/acme/app/pull/8" } });
-  }),
   http.post(/\/api\/pane\/[^/]+\/keys$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/close$/, () => HttpResponse.json({ ok: true })),
   http.post(/\/api\/pane\/[^/]+\/rename$/, () => HttpResponse.json({ ok: true })),

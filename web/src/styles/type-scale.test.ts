@@ -3,7 +3,7 @@ import { join, relative, resolve } from "node:path";
 
 import { cssRules, declarations } from "@/test/css-rules";
 
-// Text sizes in the navigation, the shell's chrome, the composer, the project pages and the strips.
+// Text sizes in the navigation, the shell's chrome, the composer, the panels and the strips.
 // Their stylesheets and these components draw no fixed px size: it ignores the browser's text size,
 // and a half pixel is a step the scale doesn't have. The components that are fully on the scale also
 // draw none of Tailwind's stock sizes (text-sm is 14px, which the scale has no step for). The files
@@ -45,11 +45,10 @@ const ON_SCALE = [
   "components/agent-chat.tsx",
   "components/home-panels.tsx",
   "components/ui/button.tsx",
-  "components/project-context.tsx",
 ];
 const COMPONENTS = [...ON_SCALE, "components/chat-files-browser.tsx", "routes/not-found.tsx", "routes/history.tsx"];
 
-describe("text sizes and labels in the navigation, the shell, the composer, the project pages and the strips", () => {
+describe("text sizes and labels in the navigation, the shell, the composer, the panels and the strips", () => {
   it("takes every font size in their stylesheets from the scale", () => {
     const offenders = STYLESHEETS.flatMap((file) =>
       cssRules(read(file))

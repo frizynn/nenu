@@ -1,6 +1,6 @@
 # 0093. Asks are answered and narrowed where they are read
 
-- **Status:** Accepted (2026-10-17). Requested by the operator. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-17). Requested by the operator. Amends
   [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md) points 1, 3 and 5.
 - **Trail:** `bridge/org-asks.ts` (`placeholder`) · `bridge/org-cli.ts` (`answerAsk`, `offers`) · `bridge/projects.ts`
   (`has`) · `web/src/lib/asks.ts` (`askSections`, `linkChip`) · `web/src/components/ask-list.tsx` ·

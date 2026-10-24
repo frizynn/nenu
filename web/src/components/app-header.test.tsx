@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactElement } from "react";
@@ -125,8 +125,8 @@ describe("AppHeader — the phone's leading control", () => {
   });
 
   it("takes an explicit back with its destination and name", () => {
-    renderAt("/project/acme/node/t-1", <AppHeader bridge="connected" error={false} title="Rediseño" back={{ to: "/project/acme", label: "Acme" }} />);
-    expect(screen.getByRole("link", { name: "Back to Acme" })).toHaveAttribute("href", "/project/acme");
+    renderAt("/settings/usage", <AppHeader bridge="connected" error={false} title="Usage" back={{ to: "/settings", label: "Settings" }} />);
+    expect(screen.getByRole("link", { name: "Back to Settings" })).toHaveAttribute("href", "/settings");
   });
 
   it("keeps the mark on Home, opening navigation, and leaves the bar without a title", async () => {
@@ -163,17 +163,7 @@ describe("AppHeader — the phone's leading control", () => {
     expect(back).not.toHaveClass("lg:hidden");
   });
 
-  it("keeps a way up a project's tree on a desk, named, where the flat sidebar cannot climb", () => {
-    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "coord-arreglos", to: "/pane/c1", desk: true }}><span>AWA-476</span></AppHeader>);
-    const back = screen.getByRole("link", { name: "Back to coord-arreglos" });
-    expect(back).not.toHaveClass("lg:hidden");
-    expect(back).toHaveTextContent("coord-arreglos");
-  });
-
-  it("steps aside on a desk when the sidebar lists the parent, a project or Home, or the page has its own close", () => {
-    renderAt("/pane/t1", <AppHeader bridge="connected" error={false} back={{ label: "Acme", to: "/project/acme" }} />);
-    expect(screen.getByRole("link", { name: "Back to Acme" })).toHaveClass("lg:hidden");
-    cleanup();
+  it("steps aside on a desk when the sidebar lists the parent, or the page has its own close", () => {
     renderAt("/pane/t1/history", <AppHeader bridge="connected" error={false} back={{ label: "AWA-476", to: "/pane/t1" }} />);
     expect(screen.getByRole("link", { name: "Back to AWA-476" })).toHaveClass("lg:hidden");
   });
@@ -200,8 +190,8 @@ describe("AppHeader — the bar title", () => {
     };
     const bare = ["border-b", "lg:border-b-transparent"];
     expect(line("/", <AppHeader bridge="connected" error={false} title="Home" />)).toEqual(expect.arrayContaining(bare));
-    expect(line("/project/acme", <AppHeader bridge="connected" error={false} title="Acme" titleHidden />)).toEqual(expect.arrayContaining(bare));
-    for (const [path, header] of [["/project/acme", <AppHeader bridge="connected" error={false} title="Acme" />],
+    expect(line("/settings", <AppHeader bridge="connected" error={false} title="Settings" titleHidden />)).toEqual(expect.arrayContaining(bare));
+    for (const [path, header] of [["/settings", <AppHeader bridge="connected" error={false} title="Settings" />],
       ["/pane/p1", <AppHeader bridge="connected" error={false}><span>Working Claude</span></AppHeader>]] as const) {
       const classes = line(path, header);
       expect(classes, path).toContain("border-b");
@@ -211,10 +201,10 @@ describe("AppHeader — the bar title", () => {
 
   it("hides a title the page is showing as its own heading", () => {
     const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
-    const { rerender } = render(<MemoryRouter initialEntries={["/project/acme"]}><AppHeader bridge="connected" error={false} title="Acme" titleHidden /></MemoryRouter>);
-    expect(screen.queryByText("Acme", visible)).toBeNull();
-    rerender(<MemoryRouter initialEntries={["/project/acme"]}><AppHeader bridge="connected" error={false} title="Acme" /></MemoryRouter>);
-    expect(screen.getByText("Acme", visible)).toBeInTheDocument();
+    const { rerender } = render(<MemoryRouter initialEntries={["/settings"]}><AppHeader bridge="connected" error={false} title="Settings" titleHidden /></MemoryRouter>);
+    expect(screen.queryByText("Settings", visible)).toBeNull();
+    rerender(<MemoryRouter initialEntries={["/settings"]}><AppHeader bridge="connected" error={false} title="Settings" /></MemoryRouter>);
+    expect(screen.getByText("Settings", visible)).toBeInTheDocument();
   });
 });
 

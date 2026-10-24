@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 
-import { HERDR_ORDER, orderWorkspaces, placeOrder, useWorkspaceOrder, type WorkspaceOrder } from "./workspace-order";
+import { HERDR_ORDER, orderWorkspaces, useWorkspaceOrder, type WorkspaceOrder } from "./workspace-order";
 
 const herd = [{ id: "w1", name: "Nenu" }, { id: "w2", name: "awam" }, { id: "w3", name: "Terminal 10" }, { id: "w4", name: "Terminal 9" }];
 const ids = (order: WorkspaceOrder, items = herd) => orderWorkspaces(items, (w) => w.id, (w) => w.name, order).map((w) => w.id);
@@ -21,17 +21,6 @@ describe("orderWorkspaces", () => {
 
   it("keeps the custom order aside while another mode shows", () => {
     expect(ids({ mode: "herdr", custom: ["w4", "w3"] })).toEqual(["w1", "w2", "w3", "w4"]);
-  });
-});
-
-describe("placeOrder", () => {
-  it("puts a narrowed list's new order back in the places it held, the hidden ones untouched", () => {
-    expect(placeOrder(["a", "b", "c", "d"], ["d", "b"])).toEqual(["a", "d", "c", "b"]);
-    expect(placeOrder(["a", "b", "c"], ["c", "a", "b"])).toEqual(["c", "a", "b"]);
-  });
-
-  it("drops a workspace that closed during the drag without losing a live one", () => {
-    expect(placeOrder(["a", "b", "c"], ["x", "c", "a", "b"])).toEqual(["c", "a", "b"]);
   });
 });
 

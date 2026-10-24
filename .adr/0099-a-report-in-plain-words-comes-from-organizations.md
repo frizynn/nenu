@@ -1,6 +1,6 @@
 # 0099. A report in plain words comes from Organizations
 
-- **Status:** Accepted (2026-10-19). Extends [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md).
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-19). Extends [ADR 0089](./0089-a-coordinators-summary-groups-its-work-by-outcome.md).
 - **Trail:** `bridge/org-report.ts` (`parsePlainSummary`) · `bridge/org-cli.ts` (`explainThread`) ·
   `bridge/routes/org.ts` (`/api/org/thread/explain`) · `bridge/projects.ts` (`threadSummary`) ·
   `web/src/components/coordinator-summary.tsx` (`ReportWords`)

@@ -115,8 +115,8 @@
 .composer-chip[aria-expanded="true"] { background: var(--accent); }
 .composer-chip:active { scale: 0.97; }
 @media (hover: hover) { .composer-chip:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
-/* What gives way is read off the box's own width, so a phone and a thread docked beside its coordinator
-   on a desk take the same row. Narrow, only Needs you keeps its word, and with chips in the row the
+/* What gives way is read off the box's own width, so a phone and a narrow desk column take the same
+   row. Narrow, only Needs you keeps its word, and with chips in the row the
    model's effort and the context's number step aside (the model picker and the ring's own panel still
    say them); the model's name truncates after that: the chips and the place keep their width. */
 @container composer (max-width: 479px) {
@@ -124,8 +124,8 @@
   .composer-chip:not([data-chip="needs"]) .composer-chip-label { display: none; }
   .composer-meta:has(.composer-chip) .workbench-effort, .composer-meta:has(.composer-chip) .workbench-context-number { display: none; }
 }
-/* At a docked thread's narrowest the context's ring steps aside too (the thread's full view still
-   says it); the model's button stays, since the model panel opens on its own from it. */
+/* At a narrow phone's width the context's ring steps aside too (its panel still says it); the model's
+   button stays, since the model panel opens on its own from it. */
 @container composer (max-width: 299px) { .composer-meta:has(.composer-chip) .workbench-context { display: none; } }
 /* 44px of reach each way: at least 44px wide, and grown down into the home indicator's inset, never up
    into the box, as the row's other targets. */
@@ -144,10 +144,7 @@
 .composer-chip-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--muted-foreground); }
 @media (hover: hover) { .composer-chip-icon:hover { color: var(--foreground); background: var(--workbench-row-hover); } }
 @media (pointer: coarse) { .composer-chip-icon { width: 44px; height: 44px; margin: -8px -8px -8px 0; } }
-.composer-chip-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 6px; border-radius: var(--radius-md); font-size: var(--text-footnote); text-align: left; }
-@media (pointer: coarse) { .composer-chip-item { min-height: 44px; } }
-@media (hover: hover) { button.composer-chip-item:hover { background: var(--workbench-row-hover); } }
-/* Under the box, after the model: the branch the chat works on and the machine it runs on. */
+/* Under the box, after the model: the machine the chat runs on. */
 .composer-place { display: flex; min-width: 0; flex: 1; align-items: center; padding: 0 6px; }
 .composer-place-whole { display: flex; min-width: 0; align-items: center; gap: 12px; overflow: hidden; }
 .composer-place-item { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }

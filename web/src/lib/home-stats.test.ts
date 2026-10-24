@@ -1,6 +1,6 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewItems, reviewQueue, runningWorkflows } from "./home-stats";
-import type { AgentView, ProjectView, PullRequestView } from "./types";
+import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewQueue, runningWorkflows } from "./home-stats";
+import type { AgentView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
 const MIN = 60_000;
@@ -8,16 +8,6 @@ const MIN = 60_000;
 function agent(paneId: string, status: AgentView["status"], extra: Partial<AgentView> = {}): AgentView {
   return { paneId, workspaceId: "w", workspaceLabel: "nenu", workspaceNumber: 1, tabId: "t", agent: "claude", status, cwd: "/dev/nenu", focused: false, ...extra };
 }
-
-const project: ProjectView = {
-  slug: "hub", name: "Hub", status: "active",
-  coordinator: { paneId: "coord", agent: "claude", liveStatus: "working" },
-  threads: [
-    { id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker" },
-    { id: "t2", title: "Ship", parentId: "root", role: "worker", status: "resolved" },
-    { id: "t3", title: "Docs", parentId: "root", role: "worker", status: "resolved" },
-  ],
-};
 
 describe("headline", () => {
   it("leads with what needs you, never the pull requests, and says nothing does only once that was read", () => {
@@ -54,54 +44,10 @@ it("lists dialogs oldest first, then blocked panes the bridge read no dialog on"
   expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : "blocked"}`)).toEqual(["a:asks", "b:asks", "c:blocked"]);
 });
 
-it("lists after them the threads whose agent stopped for your reply, on a live pane, once each", () => {
-  const hub: ProjectView = {
-    slug: "hub", name: "Hub", status: "active", source: "json",
-    threads: [
-      { id: "t1", title: "Copy", parentId: "root", role: "worker", status: "open", paneId: "r", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true },
-      { id: "t2", title: "Gone", parentId: "root", role: "worker", status: "open", paneId: "closed", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true },
-      { id: "t3", title: "Asks", parentId: "root", role: "worker", status: "open", paneId: "a", liveStatus: "blocked", group: "waiting-on-you", selfWaiting: true },
-    ],
-  };
-  const items = needsYouItems([agent("a", "blocked"), agent("r", "idle")], [{ paneId: "a", detectedAt: 1 }], [hub]);
-  expect(items.map((item) => `${item.paneId}:${item.interaction ? "asks" : item.reply ? "reply" : "blocked"}`)).toEqual(["a:asks", "r:reply"]);
+it("counts by the snapshot alone the blocked panes", () => {
+  expect(needsYouCount({ agents: [agent("a", "blocked"), agent("b", "working"), agent("c", "blocked")] })).toBe(2);
 });
 
-it("leaves out a conversation that ended its turn, from Needs you, Home's count and its rows", () => {
-  const talk = { id: "t1", title: "Charla", parentId: "root", role: "worker", status: "open", paneId: "c", liveStatus: "done", group: "waiting-on-you", selfWaiting: true, conversation: true } as const;
-  const hub: ProjectView = { slug: "hub", name: "Hub", status: "active", source: "json", threads: [talk] };
-  const agents = [agent("c", "done")];
-  expect(needsYouItems(agents, [], [hub])).toEqual([]);
-  expect(needsYouCount({ agents, projects: [hub] })).toBe(0);
-  expect(recentChats(agents, [hub], new Set())[0]).not.toHaveProperty("ask");
-  expect(reviewItems([hub])).toEqual([]);
-  // Stopped on a dialog, it asks like any agent.
-  const asking = [agent("c", "blocked")];
-  expect(needsYouCount({ agents: asking, projects: [{ ...hub, threads: [{ ...talk, liveStatus: "blocked" }] }] })).toBe(1);
-});
-
-describe("review state", () => {
-  const hub: ProjectView = {
-    slug: "hub", name: "Hub", status: "active", source: "json",
-    coordinator: { paneId: "coord", agent: "codex", liveStatus: "working" },
-    threads: [
-      { id: "t1", title: "Coordinator", parentId: "root", role: "coordinator", status: "open", paneId: "coord", liveStatus: "working", group: "working" },
-      { id: "t2", title: "Panel", parentId: "t1", role: "worker", status: "open", paneId: "p2", liveStatus: "done", group: "ready-for-review", pr: { state: "open", number: 12 } },
-      { id: "t3", title: "Asks", parentId: "t1", role: "worker", status: "open", paneId: "p3", liveStatus: "blocked", group: "ready-for-review" },
-      { id: "t4", title: "Idle", parentId: "t1", role: "worker", status: "open", paneId: "p4", liveStatus: "idle", group: "idle" },
-      { id: "t5", title: "Shipped", parentId: "t1", role: "worker", status: "resolved", group: "resolved" },
-    ],
-  };
-
-  it("takes Organizations' ready-for-review group, unless the thread is asking", () => {
-    expect(reviewItems([hub]).map((item) => item.thread.id)).toEqual(["t2"]);
-  });
-
-  it("falls back to an open pull request on a stopped agent for a files-only project", () => {
-    const files: ProjectView = { ...hub, source: "files", threads: hub.threads.map(({ group: _group, ...thread }) => thread) };
-    expect(reviewItems([files]).map((item) => item.thread.id)).toEqual(["t2"]);
-  });
-});
 
 describe("review queue", () => {
   const gh = (number: number, extra: Partial<PullRequestView> = {}): PullRequestView => ({
@@ -110,7 +56,7 @@ describe("review queue", () => {
   });
 
   it("lists pull requests only, drafts last, green and approved first, then the most recent", () => {
-    const rows = reviewQueue([], [
+    const rows = reviewQueue([
       gh(1),
       gh(2, { draft: true, updatedAt: 99_000 }),
       gh(3, { review: "approved", checks: { passed: 3, failed: 0, pending: 0 } }),
@@ -121,41 +67,26 @@ describe("review queue", () => {
     expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
   });
 
-  it("calls a pull request ready to merge only when it is approved, its checks pass and nothing blocks it", () => {
+  it("calls a pull request ready to merge only when it is approved, its checks pass and it is no draft", () => {
     const green = { passed: 3, failed: 0, pending: 0 };
-    const rows = reviewQueue([], [
+    const rows = reviewQueue([
       gh(1, { review: "approved", checks: green }),
       gh(2, { checks: green }),
       gh(3, { review: "approved", checks: { passed: 2, failed: 1, pending: 0 } }),
       gh(4, { review: "approved", checks: { passed: 2, failed: 0, pending: 1 } }),
       gh(5, { review: "approved", checks: green, draft: true }),
-      gh(6, { review: "approved", checks: green }),
-      gh(7, { review: "approved" }),
-    ]).sort((a, b) => a.number! - b.number!).map((row) => row.number === 6 ? { ...row, mergeBlocker: "branch out of date" } : row);
-    expect(rows.map(readyToMerge)).toEqual([true, false, false, false, false, false, true]);
+      gh(6, { review: "approved" }),
+    ]).sort((a, b) => a.number! - b.number!);
+    expect(rows.map(readyToMerge)).toEqual([true, false, false, false, false, true]);
   });
 
   it("opens the agent on the PR's branch, else the PR on GitHub", () => {
-    const [mapped, unmapped] = reviewQueue([], [gh(2, { paneIds: ["w1:p3", "w1:p4"] }), gh(1)]);
+    const [mapped, unmapped] = reviewQueue([gh(2, { paneIds: ["w1:p3", "w1:p4"] }), gh(1)]);
     expect(mapped!.open).toEqual({ paneId: "w1:p3" });
     expect(unmapped!.open).toBeUndefined();
   });
-
-  it("joins the same PR from Organizations into one row that opens its thread", () => {
-    const hub: ProjectView = {
-      slug: "hub", name: "Hub", status: "active", source: "json",
-      threads: [
-        { id: "t2", title: "Thread title", parentId: "root", role: "worker", status: "open", paneId: "p2", liveStatus: "done", group: "ready-for-review",
-          pr: { state: "open", number: 7, url: "https://github.com/acme/shop/pull/7", mergeBlocker: "checks failing" } },
-        { id: "t3", title: "Org only", parentId: "root", role: "worker", status: "open", liveStatus: "done", group: "ready-for-review", pr: { state: "open", number: 12 } },
-      ],
-    };
-    const rows = reviewQueue([hub], [gh(7, { paneIds: ["other"], updatedAt: 5_000 })]);
-    expect(rows).toHaveLength(2);
-    expect(rows.find((row) => row.number === 7)).toMatchObject({ title: "PR 7", repo: "shop", open: { paneId: "p2" }, mergeBlocker: "checks failing" });
-    expect(rows.find((row) => row.number === 12)).toMatchObject({ title: "Org only", repo: "Hub", open: { project: "hub", node: "t3" } });
-  });
 });
+
 
 describe("background work", () => {
   const wf = (runId: string, status: ActivityWorkflow["status"], updatedAt?: number): ActivityWorkflow =>
@@ -179,51 +110,29 @@ describe("recent chats", () => {
   ];
 
   it("lists chats by their last movement or visit, leaving out what Needs you shows", () => {
-    expect(recentChats(panes, [project], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
+    expect(recentChats(panes, new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
       .toEqual(["worker", "chat-old", "coord", "chat-quiet"]);
   });
 
-  it("names a pane as every other view does: a thread by its title and project, a loose chat by its workspace and tab", () => {
-    const [worker, old, coord] = recentChats(panes, [project], new Set(["chat-asks"]));
-    expect(worker).toMatchObject({ title: "Build", place: "Hub", tab: null, at: NOW - 2 * MIN, unseen: true });
+  it("names a pane as every other view does: by its own name, its workspace and tab", () => {
+    const [worker, old] = recentChats(panes, new Set(["chat-asks"]));
+    expect(worker).toMatchObject({ title: "claude", place: "nenu", tab: null, at: NOW - 2 * MIN, unseen: true });
     expect(old).toMatchObject({ title: "Changelog", place: "nenu", tab: "docs", at: NOW - 20 * MIN, unseen: false });
-    // The coordinator goes by its project's name in every view, never a bare "Coordinator".
-    expect(coord).toMatchObject({ title: "Hub coordinator", place: "nenu" });
   });
 
-  it("carries a session's pull request: GitHub's on its branch first, else the one its thread records", () => {
-    const hub: ProjectView = {
-      ...project, source: "json",
-      threads: [
-        { id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "done", group: "ready-for-review",
-          pr: { state: "open", number: 7, diff: { additions: 9, deletions: 2 } } },
-        { id: "t4", title: "Plan", parentId: "root", role: "coordinator", status: "open", paneId: "chat-old", liveStatus: "idle", group: "idle" },
-      ],
-    };
+  it("carries the pull request GitHub has on a session's branch", () => {
     const gh: PullRequestView = { repo: "acme/shop", number: 8, title: "Docs", url: "https://github.com/acme/shop/pull/8", branch: "docs", draft: false,
       diff: { additions: 30, deletions: 1 }, paneIds: ["chat-quiet"], updatedAt: 1 };
-    const rows = recentChats(panes, [hub], new Set(["chat-asks"]), reviewQueue([hub], [gh]));
+    const rows = recentChats(panes, new Set(["chat-asks"]), reviewQueue([gh]));
     const by = (id: string) => rows.find((row) => row.agent.paneId === id)!;
-    expect(by("worker")).toMatchObject({ review: true, detail: "PR #7", diff: { additions: 9, deletions: 2 } });
-    expect(by("chat-quiet")).toMatchObject({ review: false, detail: "PR #8", diff: { additions: 30, deletions: 1 } });
-    // A coordinator thread says what it is where a worker would name its tab.
-    expect(by("chat-old")).toMatchObject({ title: "Plan", place: "Hub", detail: "coordinator" });
-    expect(by("coord")).toMatchObject({ review: false, detail: null });
+    expect(by("chat-quiet")).toMatchObject({ detail: "PR #8", diff: { additions: 30, deletions: 1 } });
+    expect(by("coord")).toMatchObject({ detail: null });
     expect(by("coord")).not.toHaveProperty("diff");
-  });
-
-  it("says a session's thread waits for your reply, as Organizations' own word puts it", () => {
-    const hub: ProjectView = {
-      ...project, source: "json",
-      threads: [{ id: "t1", title: "Build", parentId: "root", role: "worker", status: "open", paneId: "worker", liveStatus: "idle", group: "waiting-on-you", selfWaiting: true }],
-    };
-    expect(recentChats(panes, [hub], new Set()).find((row) => row.agent.paneId === "worker")).toMatchObject({ ask: "reply" });
-    expect(recentChats(panes, [project], new Set()).find((row) => row.agent.paneId === "worker")).not.toHaveProperty("ask");
   });
 
   it("lists shells by the same clock, as plain sessions", () => {
     const shell = agent("sh", "idle", { kind: "shell", agent: "shell", paneLabel: "Logs", lastActiveAt: NOW - 3 * MIN });
-    expect(recentChats([...panes, shell], [project], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
+    expect(recentChats([...panes, shell], new Set(["chat-asks"])).map((chat) => chat.agent.paneId))
       .toEqual(["worker", "sh", "chat-old", "coord", "chat-quiet"]);
   });
 });

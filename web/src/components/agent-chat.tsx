@@ -10,15 +10,13 @@ import { useSubagents, type SubagentSelection } from "@/hooks/use-subagents";
 import { useActivity, useActivityClock } from "@/hooks/use-activity";
 import { buildProcesses } from "@/lib/processes";
 import { detailTitle, ProcessDetailView, ProcessesList, ProcessPanel, type ProcessDetail } from "@/components/activity/processes";
-import { ComposerPlace, NEEDS_MARK, PRS_MARK, RoutineRows, ThreadRows, threadsAround, useRoutines, WORKING_MARK, type ChipId, type ChipView, type ProjectChipsSource } from "@/components/composer-chips";
-import { PrChecks } from "@/components/pr-bar";
-import { PrList, prLists } from "@/components/threads-panel";
+import { ComposerPlace, NEEDS_MARK, WORKING_MARK, type ChipId, type ChipView } from "@/components/composer-chips";
 import { RunNamedAbove } from "@/components/activity/workflow-detail";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ComponentProps, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useNavigate, useRevalidator } from "react-router";
-import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Clock, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
+import { AppWindow, ArrowUpToLine, ChevronDown, ChevronUp, Hourglass, ListChecks, Keyboard, Pending, ChatCircleText, Paperclip, PanelTop, ScrollText, Search, SquareTerminal } from "@/components/ui/icon";
 import { NEUTRAL_ACTION, PRIMARY_ACTION } from "@/components/option-button";
 import { Button } from "@/components/ui/button";
 import { agentName } from "@/hooks/use-message-queue";
@@ -31,10 +29,10 @@ import { useConnectionLost } from "@/hooks/use-connection-lost";
 import { isConnecting } from "@/lib/connection";
 import { setStatus } from "@/lib/status";
 import { ChatMessageList, type ChatMessageListHandle } from "@/components/ui/chat/chat-message-list";
-import { ConversationActions, type ConversationAction, type ConversationActionGroup } from "@/components/conversation-actions";
+import { ConversationActions, type ConversationAction } from "@/components/conversation-actions";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useKeyboardOpen } from "@/hooks/use-keyboard";
-import { AppHeader, type HeaderBack } from "@/components/app-header";
+import { AppHeader } from "@/components/app-header";
 import { ChatFilesBrowser } from "@/components/chat-files-browser";
 import { AnsiOutput } from "@/components/ansi-output";
 import { AgentsFooter } from "@/components/agents-footer";
@@ -53,7 +51,6 @@ import { LiveConversation } from "@/components/live-conversation";
 import { PaneCwdContext } from "@/components/work-log-tools";
 import type { SessionPanelLink } from "@/components/session-inspector";
 import { WorkbenchTelemetry } from "@/components/workbench-telemetry";
-import { contextPercent } from "@/components/workbench-context-meter";
 import { useLiveConversation } from "@/hooks/use-live-conversation";
 import { useModelMenuSource } from "@/hooks/use-model-menu-source";
 import { useModelCatalog } from "@/hooks/use-model-catalog";
@@ -84,12 +81,10 @@ import { shortCwd } from "@/lib/format";
 import { displayName, displayPlace } from "@/lib/display-name";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 import { setMirrorShown } from "@/lib/live-events";
-import { historyPath, nodePath, panePath, projectPath } from "@/lib/nav";
-import { liveCoordinator, projectChat, projectForPane } from "@/lib/projects";
-import { CoordinatorGlyph } from "@/components/project-glyph";
+import { historyPath } from "@/lib/nav";
 import { paneInTab, tabName } from "@/lib/spaces";
 import { isReadOnly, STATUS_LABEL } from "@/lib/types";
-import type { AgentView, BridgeStatus, DeviceAuth, ProjectThreadView, ProjectView, TabView, PaneReadResponse } from "@/lib/types";
+import type { AgentView, BridgeStatus, DeviceAuth, TabView, PaneReadResponse } from "@/lib/types";
 import type {
   MenuModel,
   MultiSelectModel,
@@ -98,36 +93,8 @@ import type {
   WizardModel,
 } from "@/lib/blocks";
 
-/** The chat title's box, whether it opens the navigation, the project's page or nothing. */
+/** The chat title's box, whether it opens the navigation or nothing. */
 const TITLE_SHAPE = "flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left pointer-coarse:select-none lg:-mx-1 lg:min-h-9";
-
-/**
- * Where a project pane's back leads, one level up the project's tree (ADR 0115), shown on a desk too:
- * a coordinator goes to its parent coordinator (its chat while that runs, else its page) or to the
- * project; a worker to the coordinator it runs under, the project's own for one at the root. A phone's
- * project that opens on its own coordinator's chat leaves that chat nothing above but Home, the caller's
- * default; a desk's project is a page, so its coordinator goes up to it.
- */
-function threadBack(projects: readonly ProjectView[] | undefined, paneId: string, panes: readonly AgentView[], desktop: boolean, session?: string): HeaderBack | undefined {
-  const owner = projectForPane(projects, paneId);
-  if (!owner) return undefined;
-  const { project, thread } = owner;
-  const page = { label: project.name, to: projectPath(project.slug, session), desk: true };
-  if (!thread) return desktop || !projectChat(project, panes) ? page : undefined;
-  const parent = project.threads.find((candidate) => candidate.id === thread.parentId);
-  if (!parent) {
-    const chat = thread.role === "coordinator" ? undefined : liveCoordinator(project, panes);
-    return chat ? { label: project.name, to: panePath(chat, session), desk: true } : page;
-  }
-  const chat = parent.paneId !== undefined && panes.some((pane) => pane.paneId === parent.paneId) ? parent.paneId : undefined;
-  return { label: parent.title, to: chat ? panePath(chat, session) : nodePath(project.slug, parent.id, session), desk: true };
-}
-
-/** A worker thread takes steering; a coordinator takes questions and new work. */
-const COMPOSER_PLACEHOLDER: Record<ProjectThreadView["role"], string> = {
-  worker: "Steer this thread…",
-  coordinator: "Ask the coordinator…",
-};
 
 interface AgentChatProps {
   paneId: string;
@@ -143,27 +110,8 @@ interface AgentChatProps {
   agents: AgentView[];
   shellPanes: AgentView[];
   tabs: TabView[];
-  /** The herd's projects, so the title and the pane strip name a project's thread as every row does. */
-  projects?: readonly ProjectView[];
-  /** Owning project, when this pane is one of its coordinator/agent threads; `role` picks the composer copy. */
-  project?: { slug: string; name: string; role: ProjectThreadView["role"] };
-  /** Header title override; a project frame names the thread this pane runs. */
-  title?: string;
-  /** A control at the head of the header's right cluster (a project's Tasks toggle). */
-  headerAction?: ReactNode;
   /** The header's last control, right of the menu: a desk's way back to a folded session panel. */
   headerTrail?: ReactNode;
-  /** Replaces the conversation body while set; the chat stays mounted underneath. */
-  overlay?: ReactNode;
-  /** Replaces the workspace tab strip under the header when defined (a project's thread chips). */
-  strip?: ReactNode;
-  /** A project's own rows at the head of the ⋯ menu (a phone's Chat, Threads, PRs and Status). */
-  menu?: ConversationActionGroup;
-  /** The project around this chat, counted in the row of chips above the composer. */
-  projectChips?: ProjectChipsSource;
-  /** Shown beside another pane instead of as the route: its own compact header, and its mirror is
-   *  watched through `onMirrorShown` rather than the route's flag. */
-  docked?: DockedChat;
   /** Beside a desk's session panel, whose Terminal tab shows this pane's mirror, Keys and Type. */
   sessionPanel?: SessionPanelLink;
   nativeTelemetry?: PaneReadResponse["nativeTelemetry"];
@@ -189,20 +137,6 @@ interface AgentChatProps {
   onSelect: (paneId: string) => void;
 }
 
-export interface DockedHeaderView {
-  terminal: boolean;
-  canToggle: boolean;
-  setTerminal: (terminal: boolean) => void;
-  find?: ReactNode;
-  menu?: ReactNode;
-}
-
-export interface DockedChat {
-  /** `find` is the find bar while searching; `menu` holds the chat's files and ⋯ actions. */
-  header: (view: DockedHeaderView) => ReactNode;
-  onMirrorShown: (shown: boolean) => void;
-}
-
 // The detail view mirrors a terminal pane, NOT a chat thread. The pane's output comes from the
 // route loader (`text`); polling revalidates it. Replies/keys are confirmed via the header status
 // line (`setStatus`), then a revalidation pulls the fresh output.
@@ -222,16 +156,7 @@ export function AgentChat({
   agents,
   shellPanes,
   tabs,
-  projects,
-  project,
-  title: titleOverride,
-  headerAction,
   headerTrail,
-  overlay,
-  strip,
-  menu,
-  projectChips,
-  docked,
   sessionPanel,
   text,
   pending = false,
@@ -246,7 +171,7 @@ export function AgentChat({
   onBack,
   onSelect,
 }: AgentChatProps) {
-  useHoldReload(docked ? "docked-agent-session" : "open-agent-session", true, "view");
+  useHoldReload("open-agent-session", true, "view");
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   // Poll-truth "is the data on screen not live". The header (AppHeader) reads the same inputs to drive
@@ -502,12 +427,10 @@ export function AgentChat({
   // Terminal tab is on screen (lib/live-events.ts). Leaving the pane restores the default.
   const terminalTab = sessionPanel?.terminal ?? null;
   const mirrorShown = !showConversation || dialogPresent || terminalTab !== null;
-  const onDockedMirror = docked?.onMirrorShown;
   useEffect(() => {
-    if (onDockedMirror) return onDockedMirror(mirrorShown);
     setMirrorShown(mirrorShown);
     return () => setMirrorShown(true);
-  }, [mirrorShown, onDockedMirror]);
+  }, [mirrorShown]);
 
   // Both are threaded to the composer: the RAW value (live) plus a stabilised one. extractInputDraft
   // is stateless, so it can't distinguish a stranded draft from the ~350ms flash where our OWN
@@ -903,12 +826,6 @@ export function AgentChat({
     if (target) switchTo(target.paneId);
   }
 
-  // A project pane's title opens the project's page. A workspace has no page of its own: its tabs
-  // and panes are the strips above the conversation.
-  function openProject(slug: string) {
-    navigate(projectPath(slug, session));
-  }
-
   // Tapping the terminal mirror focuses the composer so you can start typing right away. Three bails:
   //  - the operator turned "Tap to type" off (View). It is on by default and always has been — the
   //    mirror as one big "start typing" target is the fastest path from reading to replying on a
@@ -936,12 +853,6 @@ export function AgentChat({
 
   const nativeUsage = agent?.agent === "claude" ? nativeTelemetry?.telemetry : undefined;
   const telemetry = nativeUsage ?? (conversation.history?.available ? conversation.history.telemetry : undefined);
-  const report = sessionPanel?.report;
-  const reportedModel = telemetry?.model;
-  // Whole percents, as the panel shows them: a token more is no reason to draw it again.
-  const contextUsed = contextPercent(telemetry?.context);
-  const contextShown = contextUsed === null ? undefined : Math.round(contextUsed);
-  useEffect(() => { report?.({ model: reportedModel, contextPercent: contextShown }); }, [report, reportedModel, contextShown]);
   const telemetryProps = {
     telemetry,
     stale: conversation.error || connecting,
@@ -995,9 +906,8 @@ export function AgentChat({
   const processDetailContent = processDetail &&
     <ProcessDetailView paneId={paneId} session={session} activity={activity} detail={processDetail} now={processesNow} onChange={setProcessDetail} />;
   const published = activity.data?.available ? activity.data.artifacts : [];
-  // The chips under the box: what needs you and what works, this session's background work beside the
-  // project's threads around it, then the project's open PRs. Finished work and routines are rows of
-  // the ⋯ menu (ADR 0108).
+  // The chips under the box: what needs you and what works in this session's background work. Finished
+  // work is a row of the ⋯ menu (ADR 0108).
   const processList = (part: Partial<typeof processes>, artifacts: typeof published = [], finished?: ComponentProps<typeof ProcessesList>["finished"], quiet = false) => (
     <ProcessesList processes={{ waiting: [], running: [], done: [], ...part }} artifacts={artifacts} finished={finished} quiet={quiet} now={processesNow} stale={activity.stale || subagents.stale}
       onRetry={() => { activity.refresh(); subagents.refresh(); }} onDetail={openProcessDetail}
@@ -1008,63 +918,31 @@ export function AgentChat({
         selectSubagent({ agent: item.agent, parentKey: subagents.list.sessionKey });
       }} />
   );
-  const around = projectChips && threadsAround(projectChips, paneId);
-  const openThread = (thread: ProjectThreadView) => {
-    setChip(null);
-    if (thread.paneId) projectChips?.onOpenPane(thread.paneId);
-    else projectChips?.onOpenNode(thread.id);
-  };
-  const threadRows = (threads: readonly ProjectThreadView[]) => threads.length > 0 &&
-    <ThreadRows threads={threads} panes={agents} now={Date.now()} onOpen={openThread} />;
   const sessionWork = !isShell;
-  const needsCount = (around?.needs.length ?? 0) + (sessionWork ? processes.waiting.length : 0);
-  const workingCount = (around?.working.length ?? 0) + (sessionWork ? processes.running.length : 0);
+  const needsCount = sessionWork ? processes.waiting.length : 0;
+  const workingCount = sessionWork ? processes.running.length : 0;
   const finished = sessionWork ? processes.done.length : 0;
   const publishedCount = sessionWork ? published.length : 0;
-  const openPrs = projectChips ? prLists(projectChips.threads).open : [];
-  const ownPr = projectChips?.thread?.pr ? projectChips.thread : undefined;
-  const routines = useRoutines(projectChips?.project.slug, projectChips?.session, chip === "routines");
   const chips: ChipView[] = [
-    ...(needsCount > 0 ? [{ id: "needs" as const, label: "Needs you", count: needsCount, mark: NEEDS_MARK, content: <>
-      {around && threadRows(around.needs)}
-      {sessionWork && processes.waiting.length > 0 && processList({ waiting: processes.waiting })}
-    </> }] : []),
+    ...(needsCount > 0 ? [{ id: "needs" as const, label: "Needs you", count: needsCount, mark: NEEDS_MARK, content: processList({ waiting: processes.waiting }) }] : []),
     // Nothing runs: what finished asks nothing of you, so it leaves the line for the ⋯ menu, one tap
-    // from the same panel. Resolved threads around the chat fold in with it, but never raise it on
-    // their own: a project's history would keep it there for good.
+    // from the same panel.
     ...(workingCount > 0 || finished > 0 || publishedCount > 0 ? [{ id: "working" as const,
       // The chat's own turn is never in this count: the session's work alone reads as Background.
-      label: workingCount > 0 ? (around?.working.length ? "Working" : "Background") : finished > 0 ? "Finished work" : "Published",
+      label: workingCount > 0 ? "Background" : finished > 0 ? "Finished work" : "Published",
       count: workingCount > 0 ? workingCount : finished > 0 ? finished : publishedCount, mark: workingCount > 0 ? WORKING_MARK : undefined,
-      tucked: workingCount === 0, icon: ListChecks, content: <>
-      {around && threadRows(around.working)}
-      {(sessionWork && (processes.running.length > 0 || finished > 0 || publishedCount > 0) || (around?.resolved.length ?? 0) > 0) &&
-        processList({ running: processes.running, done: processes.done }, published,
-          around && around.resolved.length > 0 ? { count: around.resolved.length, rows: threadRows(around.resolved) } : undefined, workingCount === 0)}
-    </> }] : []),
-    ...(projectChips && (openPrs.length > 0 || ownPr) ? [{ id: "prs" as const, label: "PRs", title: "Pull requests", count: openPrs.length, mark: PRS_MARK, content: <div className="flex flex-col gap-2">
-      <PrList project={projectChips.project} threads={projectChips.threads} session={projectChips.session} readOnly={projectChips.readOnly}
-        onOpenPane={(id) => { setChip(null); projectChips.onOpenPane(id); }} onOpenNode={(id) => { setChip(null); projectChips.onOpenNode(id); }} onChanged={projectChips.onChanged} />
-      {ownPr && <div className="border-t border-border pt-2">
-        <PrChecks project={projectChips.project} thread={ownPr} session={projectChips.session} readOnly={projectChips.readOnly} onChanged={projectChips.onChanged} />
-      </div>}
-    </div> }] : []),
-    // Routines run on their own clock and ask nothing of you here: the ⋯ menu opens them.
-    ...(routines.length > 0 ? [{ id: "routines" as const, label: "Routines", count: routines.filter((routine) => routine.enabled).length, tucked: true, icon: Clock,
-      content: <RoutineRows routines={routines} now={Date.now()} /> }] : []),
+      tucked: workingCount === 0, icon: ListChecks,
+      content: processList({ running: processes.running, done: processes.done }, published, undefined, workingCount === 0) }] : []),
   ];
   const openChip = (next: ChipId | null) => { setChip(next); if (!desktop) setProcessDetail(null); };
   const tuckedActions: ConversationAction[] = chips.flatMap((c) => c.tucked && c.icon ? [{ id: `chip-${c.id}`,
-    label: c.count > 0 ? `${c.title ?? c.label} · ${c.count}` : c.title ?? c.label, icon: c.icon, run: () => openChip(c.id) }] : []);
+    label: c.count > 0 ? `${c.label} · ${c.count}` : c.label, icon: c.icon, run: () => openChip(c.id) }] : []);
   const chipDetail = !desktop && processDetail && processDetailContent
     ? { title: detailTitle(processDetail, activity), content: <RunNamedAbove value>{processDetailContent}</RunNamedAbove>, onBack: () => setProcessDetail(null) }
     : null;
   // The pane's one name, as its row in the sidebar and Home say it, and where it lives under it.
-  const title = titleOverride ?? (agent ? displayName(agent, projects) : "");
-  const place = agent && displayPlace(agent, projects);
-  // A coordinator's chat carries its mark before its name, as its row does (ADR 0122); the project's own draws the project's.
-  const owner = projectForPane(projects, paneId);
-  const markId = owner && (!owner.thread ? "root" : owner.thread.role === "coordinator" ? owner.thread.id : undefined);
+  const title = agent ? displayName(agent) : "";
+  const place = agent && displayPlace(agent);
 
   const findBar = findOpen ? (
     <FindBar query={findQuery} onQueryChange={setFindQuery} count={matchCount} current={currentMatch} subject={findSubject}
@@ -1074,20 +952,19 @@ export function AgentChat({
     ? <ChatFilesBrowser paneId={paneId} session={session} history={conversation.history} published={published} open={filesOpen && !subagent} onOpenChange={setFilesOpen} />
     : undefined;
   const actionsMenu = agent && !subagent ? <ConversationActions ref={actionsRef}
-    groups={[...(menu ? [menu] : []), { label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
+    groups={[{ label: "View", actions: [...viewActions, ...tuckedActions] }, { label: "Tab and pane", actions: paneActions }]}
     recovery={hasConversation && agent.agent === "codex" ? <ConnectConversation key={displayScope} paneId={paneId} session={session} disabled={readOnly || connecting || gone} onConnected={conversation.refresh} /> : undefined}
     folder={agent.cwd ? shortCwd(agent.cwd) : undefined}
   /> : undefined;
 
   // On a phone the title opens the navigation the brand mark used to, where every workspace, tab and
-  // pane is a tap away; a desk keeps that in the sidebar. A project's title opens its page instead.
+  // pane is a tap away; a desk keeps that in the sidebar.
   const navigation = useContext(WorkbenchNavigationContext);
   const opensNavigation = !desktop && navigation !== undefined;
   const titleLabel = agent && <span className="flex min-w-0 flex-1 flex-col">
     <span className="flex min-w-0 items-center gap-1">
-      {owner && markId && <CoordinatorGlyph project={owner.project} id={markId} size={16} className="mr-1" />}
       <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{title}</span>
-      {!project && opensNavigation && <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+      {opensNavigation && <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
       {!isShell && <span className="sr-only">, {STATUS_LABEL[agent.status]}</span>}
     </span>
     {/* The place, never the folder: the folder sits in the ⋯ menu and in this line's tooltip. The
@@ -1118,16 +995,14 @@ export function AgentChat({
             identical on every screen (no hand-rolled bar to drift). The pane's own bits ride in via
             slots: the title as the center, the pane's tools as the right cluster, and the find bar as
             the full-row takeover while searching. */}
-        {docked ? docked.header({ terminal: !showConversation, canToggle: conversationCapable, setTerminal: (terminal) => { setSubagent(null); setRawTerminal(terminal); },
-          find: findBar, menu: agent ? <>{sessionTools}{actionsMenu}</> : undefined }) : <AppHeader
+        <AppHeader
           bridge={bridge}
           error={error}
-          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : threadBack(projects, paneId, agents, desktop, session) ?? { label: "Home", onClick: onBack }}
+          back={subagent ? { label: "Main", onClick: () => setSubagent(null), inPlace: true } : { label: "Home", onClick: onBack }}
           override={subagent ? undefined : findBar}
           rightLead={
             subagent ? undefined : agent ? (
               <>
-                {headerAction}
                 {sessionTools}
                 {desktop && conversationCapable && (
                   <button
@@ -1144,25 +1019,15 @@ export function AgentChat({
                 {actionsMenu}
                 {headerTrail}
               </>
-            ) : <>{headerAction}{headerTrail}</>
+            ) : headerTrail
           }
         >
-          {/* The screen's heading: the pane's name over its place. A project's title opens the
-              project's page; any other opens the navigation on a phone. A subagent's view names the
-              subagent and what it is. */}
+          {/* The screen's heading: the pane's name over its place, which opens the navigation on a
+              phone. A subagent's view names the subagent and what it is. */}
           {subagentView ? <h1 className="flex min-w-0 flex-1 flex-col px-1">
             <span className="truncate text-headline font-semibold lg:text-subhead lg:tracking-normal">{subagentView.name}</span>
             <span className="truncate text-footnote text-muted-foreground"><SubagentSubtitle agent={subagentView} harness={subagentHarness} /></span>
-          </h1> : agent ? <h1 className="flex min-w-0 flex-1">{project ? (
-            <button
-              type="button"
-              onClick={() => openProject(project.slug)}
-              aria-label={`Open ${project.name} overview`}
-              className={cn(TITLE_SHAPE, "transition-colors active:bg-muted/60")}
-            >
-              {titleLabel}
-            </button>
-          ) : opensNavigation ? (
+          </h1> : agent ? <h1 className="flex min-w-0 flex-1">{opensNavigation ? (
             <button
               type="button"
               data-chat-title
@@ -1176,18 +1041,14 @@ export function AgentChat({
           ) : <span className={TITLE_SHAPE}>{titleLabel}</span>}</h1> : (
             <h1 className="min-w-0 flex-1 truncate px-1 text-headline font-semibold lg:text-subhead lg:tracking-normal">{closed ? "Pane closed" : connecting ? "Pane" : "Pane not found"}</h1>
           )}
-        </AppHeader>}
-        {/* A project's overlay (its Threads and PRs) brings its own tabs, so only the header stays above
-            it: the rest of the chrome belongs to the chat underneath. */}
-        {!overlay && <>
+        </AppHeader>
         {/* Read-only notice when this device isn't allowlisted (the composer below is disabled too). */}
         <ReadOnlyBanner device={device} />
 
         {/* A subagent's view steps the strips aside: its header leads back to Main, not to a tab. */}
-        {!subagent && (strip !== undefined ? strip : <>
         {/* In-pane tab bar: the current space's tabs above the mirror — switch tab without leaving the
             pane, or create one with +. */}
-        {agent && (
+        {agent && !subagent && (
           <TabStrip
             workspaceId={agent.workspaceId}
             tabs={tabs}
@@ -1204,7 +1065,6 @@ export function AgentChat({
             onMoved={() => revalidator.revalidate()}
           />
         )}
-        </>)}
 
         {/* Pane switcher: the panes that share this tab (space › tab › pane). Mobile shows them as a
             tabbed row rather than tiling the panes; only appears when the tab holds more than one. */}
@@ -1214,7 +1074,6 @@ export function AgentChat({
               .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
               .sort((a, b) => a.paneId.localeCompare(b.paneId))}
             currentPaneId={paneId}
-            projects={projects}
             onSelect={switchTo}
             session={session}
             readOnly={readOnly}
@@ -1227,13 +1086,11 @@ export function AgentChat({
         <SpawnStatus paneId={paneId} />
         {/* Only a shell at its prompt can take an agent; while a command runs, the terminal keeps the room. */}
         {isShell && !spawning && atPrompt !== false && <StartAgent paneId={paneId} session={session} disabled={readOnly || connecting || gone} ready={Boolean(text.trim())} />}
-        </>}
       </div>
-      {overlay && <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col">{overlay}</div>}
 
       {/* The pane's folder, for every work log under it: the conversation's and a subagent's. */}
       <PaneCwdContext value={agent?.cwd ?? ""}>
-      <div className="flex min-h-0 min-w-0 flex-1" hidden={Boolean(overlay)}>
+      <div className="flex min-h-0 min-w-0 flex-1">
       {/* Content region below the header — the mirror inside is the scroller. Files dropped anywhere
           on it attach to the composer. */}
       <div ref={dropZoneRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1246,11 +1103,11 @@ export function AgentChat({
         {gone ? (
           <div className="chat-below-chrome flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto border-t border-border/40">
             <PaneGone closed={closed !== undefined} unsure={connecting}
-              next={next && { paneId: next.paneId, name: displayName(next, projects) }}
+              next={next && { paneId: next.paneId, name: displayName(next) }}
               onOpen={switchTo} onHome={onBack} />
           </div>
         ) : subagent ? <SubagentConversation key={`${displayScope}:${subagent.parentKey}:${subagent.agent.id}`} paneId={paneId} session={session} selection={subagent}
-          harness={subagentHarness} ownHeader={Boolean(docked)} onMain={() => setSubagent(null)}
+          harness={subagentHarness}
           onWrite={readOnly || gone || connecting ? undefined : (draft) => { setForward(draft); setSubagent(null); }} /> : showConversation ? (
           <div className="chat-thread min-h-0 min-w-0 flex-1 border-t border-border/40">
             <InlineDialog.Provider value={inlineDialog}><QuestionLiveContext.Provider value={dialogInThread ? "card" : interaction === undefined ? null : "dialog"}><QuestionReplyContext.Provider value={readOnly || gone || connecting ? null : (text) => composerRef.current?.prepareAnswer(text)}><LiveConversation paneId={paneId} session={session} activityStatus={connecting ? undefined : agentBusy(agent, modelSource.text) ? "working" : agent?.status}
@@ -1429,7 +1286,6 @@ export function AgentChat({
             session={session}
             agent={agent?.agent}
             isShell={isShell}
-            placeholder={project && COMPOSER_PLACEHOLDER[project.role]}
             working={turnRunning(agent, modelSource.text)}
             limit={limit}
             gone={gone}
@@ -1439,7 +1295,7 @@ export function AgentChat({
             lockOnCard={showCard && cardCovers && !interaction?.typing}
             herdrDown={bridge === "disconnected" && !error}
             modelControl={!isShell && <WorkbenchTelemetry {...telemetryProps} mode="model" />}
-            place={<ComposerPlace branch={projectChips?.thread?.branch || undefined} machine={machine} />}
+            place={<ComposerPlace machine={machine} />}
             onEscape={desktop && processDetail ? () => setProcessDetail(null) : undefined}
             chips={subagent ? undefined : { chips, open: chip, detail: chipDetail,
               returnFocus: actionsRef, onOpenChange: openChip }}

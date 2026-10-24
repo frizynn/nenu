@@ -287,8 +287,8 @@ export function useSpawnInto(onDone: () => void) {
 }
 
 // ── The New flow's request ────────────────────────────────────────────────────────────────────
-// Every way to create something (sidebar, ⌘N, the phone's center +, a tab strip's +, Home's composer,
-// a project's New thread) opens the one New flow mounted here, at the app root, preset to where the
+// Every way to create something (sidebar, ⌘N, the phone's center +, a tab strip's +, Home's composer)
+// opens the one New flow mounted here, at the app root, preset to where the
 // person is, so none of them threads state through its parents.
 let newRequest: NewPreset | null = null;
 const newListeners = new Set<() => void>();

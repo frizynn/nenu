@@ -8,7 +8,7 @@ import { WorkbenchShell } from "@/components/workbench-shell";
 import type { ActivityResponse } from "@/lib/activity";
 import { __resetConnectionHealth, CONNECTION_LOST_MS } from "@/lib/connection-health";
 import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
-import type { AgentView, Interaction, ProjectView, PullRequestView } from "@/lib/types";
+import type { AgentView, Interaction, PullRequestView } from "@/lib/types";
 import { server } from "@/test/setup";
 
 vi.mock("@/components/update-banner", () => ({ UpdateBanner: () => null }));
@@ -44,17 +44,7 @@ const permission: Interaction = {
   detailComplete: true,
 };
 
-const hub: ProjectView = {
-  slug: "hub", name: "Hub", status: "active", source: "json", workspaceIds: ["w2"],
-  coordinator: { paneId: "c1", agent: "codex", liveStatus: "idle" },
-  threads: [
-    { id: "t1", title: "Coordinator", parentId: "root", role: "coordinator", status: "open", paneId: "c1", liveStatus: "idle", group: "idle" },
-    { id: "t2", title: "Mobile panel", parentId: "t1", role: "worker", status: "open", paneId: "w2:p2", liveStatus: "done", group: "ready-for-review",
-      pr: { state: "open", number: 1342, review: "approved", diff: { additions: 212, deletions: 148 }, checks: { passed: 4, failed: 0, pending: 0 }, mergeBlocker: null } },
-    { id: "t3", title: "Landing", parentId: "t1", role: "worker", status: "open", paneId: "w2:p3", liveStatus: "working", group: "working" },
-  ],
-};
-const projectData: HomeData = {
+const twoWorkspaces: HomeData = {
   ...data,
   workspaces: [...data.workspaces, { workspaceId: "w2", number: 2, label: "hub", focused: false, activeTabId: "t2", tabCount: 3, paneCount: 3 }],
   agents: [
@@ -63,7 +53,6 @@ const projectData: HomeData = {
     { ...data.agents[0]!, paneId: "w2:p2", workspaceId: "w2", workspaceLabel: "hub", status: "done", paneLabel: "Mobile panel" },
     { ...data.agents[0]!, paneId: "w2:p3", workspaceId: "w2", workspaceLabel: "hub", status: "working", paneLabel: "Landing" },
   ],
-  projects: [hub],
 };
 
 /** The app's frame; `banner` also draws the connection banner above it, as RootLayout does. */
@@ -81,8 +70,6 @@ async function setup(value = data, { paneLoader, banner = false }: { paneLoader?
     { path: "/", element: <HomeRoute /> },
     { path: "/space/:spaceId", element: <p>Workspace opened</p> },
     { path: "/pane/:paneId", element: <p>Pane opened</p>, ...(paneLoader ? { loader: paneLoader } : {}) },
-    { path: "/project/:projectSlug", element: <p>Project page</p> },
-    { path: "/project/:projectSlug/node/:nodeId", element: <p>Node opened</p> },
   ] }], { initialEntries: ["/?s=work"] });
   render(<RouterProvider router={router} />);
   await screen.findAllByRole("heading");
@@ -154,11 +141,10 @@ it("offers a blocked pane with no readable dialog as a row into its thread", asy
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
 });
 
-it("has no box to write to a coordinator or start a task: New and the coordinator's own chat do that", async () => {
-  const { main } = await setup(projectData);
+it("has no box to write to: New and each chat's own box do that", async () => {
+  const { main } = await setup(twoWorkspaces);
   expect(main.queryByRole("textbox")).not.toBeInTheDocument();
   expect(main.queryByRole("combobox", { name: "Send to" })).not.toBeInTheDocument();
-  expect(main.queryByText(/coordinator…/)).not.toBeInTheDocument();
   expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "New" })).toBeEnabled();
 });
 
@@ -167,7 +153,7 @@ it("orients an empty herd: two ways to start an agent, and where else agents com
   const starters = within(main.getByRole("region", { name: "Get started" }));
   await user.click(starters.getByRole("button", { name: /^Start an agent in a folder/ }));
   expect(openNewAgent).toHaveBeenLastCalledWith({ kind: "workspace" });
-  await user.click(starters.getByRole("button", { name: /^Start a project or a quick chat/ }));
+  await user.click(starters.getByRole("button", { name: /^More ways to start/ }));
   expect(openNewDialog).toHaveBeenCalledTimes(1);
   expect(main.getByText("Agents you start in Herdr show up here too.")).toBeVisible();
 });
@@ -177,14 +163,14 @@ it("offers no starters once the herd has agents", async () => {
   expect(main.queryByRole("region", { name: "Get started" })).not.toBeInTheDocument();
 });
 
-it("says a session is ready to review on its own row, with its pull request and size, instead of in a second list", async () => {
-  const { user, router, main } = await setup(projectData);
+it("says on a session's own row its pull request and size, instead of in a second list", async () => {
+  const pullRequests: PullRequestView[] = [{ repo: "acme/app", number: 1342, title: "Mobile panel", url: "https://github.com/acme/app/pull/1342", branch: "mobile",
+    draft: false, review: "approved", diff: { additions: 212, deletions: 148 }, paneIds: ["w2:p2"] }];
+  const { user, router, main } = await setup({ ...twoWorkspaces, pullRequests });
   expect(headline()).toBe("1 needs you");
-  // The session under review is counted there, not again as idle.
   expect(subline()).toBe("1 to review · 1 working");
-  await user.click(main.getByRole("tab", { name: "Recents" }));
   const row = within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Mobile panel,/ });
-  expect(row).toHaveAccessibleName(/,\s*Ready to review,\s*Hub,\s*PR #1342,\s*\+212 −148$/);
+  expect(row).toHaveAccessibleName(/,\s*Done,\s*hub,\s*PR #1342,\s*\+212 −148$/);
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
   await user.click(row);
   expect(router.state.location.pathname).toBe("/pane/w2%3Ap2");
@@ -194,9 +180,9 @@ describe("Recents and Workspaces", () => {
   const now = Date.now();
   const shell = { ...data.agents[0]!, paneId: "w1:s1", agent: "shell", kind: "shell" as const, paneLabel: "Dev server", lastActiveAt: now - 10 * 60_000 };
   const recentData: HomeData = {
-    ...projectData,
+    ...twoWorkspaces,
     shellPanes: [shell],
-    agents: projectData.agents.map((agent) => ({
+    agents: twoWorkspaces.agents.map((agent) => ({
       "w1:p1": { ...agent, tabLabel: "docs", lastActiveAt: now - 3 * 3_600_000 },
       "w1:p2": { ...agent, lastActiveAt: now - 60_000 },
       c1: { ...agent, lastActiveAt: now - 2 * 3_600_000 },
@@ -207,18 +193,16 @@ describe("Recents and Workspaces", () => {
 
   it("lists every session that moved last, shells included, each with its state and place, and opens one in a tap", async () => {
     const { user, router, main } = await setup(recentData);
-    // Projects is the tab Home opens on; Recents is one tap away.
-    expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Projects", "Recents", "Workspaces", "PRs"]);
-    expect(main.getByRole("tab", { name: "Projects" })).toHaveAttribute("aria-selected", "true");
-    await user.click(main.getByRole("tab", { name: "Recents" }));
+    // Recents is the tab Home opens on.
+    expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces"]);
     const recent = within(main.getByRole("tabpanel", { name: "Recents" }));
     expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
     // "Review changes" is waiting on you, so Needs you shows it and Recents does not.
     expect(recent.getAllByRole("link").map((link) => link.getAttribute("href")))
       .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w1%3As1?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work", "/pane/w1%3Ap1?s=work"]);
     // Each row reads as one sentence: title, "New", state, place, pull request or tab, size, how long ago.
-    for (const parts of [["Mobile panel", "New", "Ready to review", "Hub", "PR #1342", "\\+212 −148", "5m ago"], ["Dev server", "Shell", "Nenu", "10m ago"],
-      ["Landing", "Working", "Hub", "20m ago"], ["Hub coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
+    for (const parts of [["Mobile panel", "New", "Done", "hub", "5m ago"], ["Dev server", "Shell", "Nenu", "10m ago"],
+      ["Landing", "Working", "hub", "20m ago"], ["Coordinator", "Idle", "hub", "2h ago"], ["Earlier thread", "Idle", "Nenu", "docs", "3h ago"]]) {
       expect(recent.getByRole("link", { name: new RegExp(`^${parts.join(",\\s*")}$`) })).toBeInTheDocument();
     }
     // How many are working is the headline's to say ("1 working" under it), not Recent's again.
@@ -445,35 +429,14 @@ describe("Recents and Workspaces", () => {
     });
   });
 
-  it("asks for your reply in Needs you, with Reply, and counts it in the headline", async () => {
-    const waiting: ProjectView = { ...hub, threads: hub.threads.map((thread) => thread.id === "t3" ? { ...thread, liveStatus: "idle", group: "waiting-on-you", selfWaiting: true } : thread) };
-    const { user, router, main } = await setup({ ...recentData, projects: [waiting], agents: recentData.agents.map((agent) => agent.paneId === "w2:p3" ? { ...agent, status: "idle" } : agent) });
-    const needs = within(main.getByRole("region", { name: /^Needs you/ }));
-    expect(needs.getByRole("link", { name: /^Landing, Hub, Waiting for your reply$/ })).toBeInTheDocument();
-    expect(headline()).toBe("2 need you");
-    // Home's icon counts the same two, in the phone's tab bar and the desk's sidebar.
-    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Home, 2 need you" })).toBeInTheDocument();
-    expect(within(screen.getByRole("complementary", { name: "Workspace sidebar" })).getByRole("link", { name: "Home, 2 need you" })).toBeInTheDocument();
-    await user.click(main.getByRole("tab", { name: "Recents" }));
-    expect(within(main.getByRole("tabpanel", { name: "Recents" })).queryByRole("link", { name: /^Landing,/ })).not.toBeInTheDocument();
-    await user.click(needs.getByRole("link", { name: "Reply" }));
-    expect(router.state.location.pathname).toBe("/pane/w2%3Ap3");
-  });
-
-  it("draws the sessions' control on a desk as a page's underlined tabs, and the project filter with no box", async () => {
+  it("draws the sessions' control on a desk as a page's underlined tabs", async () => {
     desk();
     try {
-      const { user, main } = await setup(recentData);
+      const { main } = await setup(recentData);
       const recents = main.getByRole("tab", { name: "Recents" });
       expect(recents).toHaveClass("desk-tab");
       expect(recents).not.toHaveClass("project-segment");
       expect(main.getByRole("tablist", { name: "Your work" })).not.toHaveClass("project-segmented");
-      // The project filter narrows sessions: the Projects tab has none.
-      expect(main.queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
-      await user.click(recents);
-      const filter = main.getByRole("combobox", { name: "Project" }).closest("label");
-      expect(filter).toHaveClass("quiet-action");
-      expect(filter).not.toHaveClass("border");
       expect(main.getByRole("heading", { level: 1 })).toHaveClass("text-large-title", "lg:text-title");
     } finally {
       vi.unstubAllGlobals();
@@ -483,43 +446,7 @@ describe("Recents and Workspaces", () => {
   it("keeps a phone's sessions control the segmented one, on its track", async () => {
     const { main } = await setup(recentData);
     expect(main.getByRole("tab", { name: "Recents" })).toHaveClass("project-segment");
-    expect(main.getByRole("tablist", { name: "Your work" })).toHaveClass("project-segmented", "grid-cols-4");
-  });
-
-  it("narrows the list to one project on a desk, from the snapshot it already has", async () => {
-    let reads = 0;
-    server.use(http.get("/api/snapshot", () => { reads++; return HttpResponse.json({}); }));
-    const { user, main } = await setup(recentData);
-    await user.click(main.getByRole("tab", { name: "Recents" }));
-    const filter = main.getByRole("combobox", { name: "Project" });
-    // A phone's Home shows every project: the filter is the desk's.
-    expect(filter.closest("label")).toHaveClass("max-sm:hidden");
-    expect(within(filter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All projects", "Hub"]);
-    await user.selectOptions(filter, "hub");
-    expect(within(main.getByRole("tabpanel", { name: "Recents" })).getAllByRole("link").map((link) => link.getAttribute("href")))
-      .toEqual(["/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work", "/pane/c1?s=work"]);
-    await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    const workspaceRows = () => within(main.getByRole("tabpanel", { name: "Workspaces" })).getAllByRole("listitem").map((row) => row.firstElementChild?.getAttribute("aria-label")?.split(",")[0]);
-    expect(workspaceRows()).toEqual(["hub"]);
-    await user.selectOptions(filter, "");
-    expect(workspaceRows()).toEqual(["Nenu", "hub"]);
-    expect(reads).toBe(0);
-  });
-
-  it("unfolds a one-tab workspace under a project filter that leaves out the pane it opens on", async () => {
-    const scratch = { ...data.agents[0]!, paneId: "w2:scratch", workspaceId: "w2", workspaceLabel: "hub", paneLabel: "Scratch", lastSeenAt: now };
-    const { user, main } = await setup({ ...recentData, agents: [...recentData.agents, scratch] });
-    await user.click(main.getByRole("tab", { name: "Workspaces" }));
-    const panel = within(main.getByRole("tabpanel", { name: "Workspaces" }));
-    expect(panel.getByRole("link", { name: /^hub,/ })).toHaveAttribute("href", "/pane/w2%3Ascratch?s=work");
-    await user.selectOptions(main.getByRole("combobox", { name: "Project" }), "hub");
-    await user.click(panel.getByRole("button", { name: /^hub,/ }));
-    expect(panel.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/pane/c1?s=work", "/pane/w2%3Ap2?s=work", "/pane/w2%3Ap3?s=work"]);
-  });
-
-  it("offers no project filter where there are no projects", async () => {
-    const { main } = await setup(data);
-    expect(main.queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
+    expect(main.getByRole("tablist", { name: "Your work" })).toHaveClass("project-segmented", "grid-cols-2");
   });
 
   it("remembers on this device which list it shows", async () => {
@@ -605,18 +532,6 @@ it("marks a Needs you row as opening too", async () => {
   await waitFor(() => expect(row).toHaveAttribute("aria-busy", "true"));
 });
 
-it("lists each project with what works and what is ready to review there under the tab it opens on, and leaves search to the sidebar", async () => {
-  const { main } = await setup(projectData);
-  const projects = within(main.getByRole("tabpanel", { name: "Projects" }));
-  const row = projects.getByRole("link", { name: /^Hub/ });
-  expect(row.getAttribute("href")).toMatch(/^\/project\/hub(\?|$)/);
-  expect(row).toHaveTextContent("1 working");
-  expect(row).toHaveTextContent("1 to review");
-  expect(main.queryByRole("searchbox")).not.toBeInTheDocument();
-  const sidebar = within(screen.getByRole("complementary", { name: "Workspace sidebar" }));
-  expect(sidebar.getByText("Hub")).toBeInTheDocument();
-});
-
 it("says in its headline that nothing needs you, never the pull requests, only while the herd is live", async () => {
   const quiet = { ...data, agents: data.agents.map((agent) => ({ ...agent, status: "idle" as const })),
     pullRequests: [{ repo: "a/b", number: 7, title: "PR 7", url: "https://github.com/a/b/pull/7", branch: "x", draft: false, paneIds: [] }] };
@@ -677,15 +592,13 @@ it("keeps workflows still running in the one column, each opening its chat", asy
 });
 
 // Pull requests are a tab of the sessions' switcher, never a section of their own.
-it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session, its thread or on GitHub", async () => {
+it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
     branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
   });
-  const { user, router, main } = await setup({ ...data, projects: [{ ...hub, workspaceIds: [], threads: [
-    { id: "t9", title: "Orders panel", parentId: "root", role: "worker", status: "open", liveStatus: "done", group: "ready-for-review",
-      pr: { state: "open", number: 1700, review: "approved", checks: { passed: 2, failed: 0, pending: 0 }, mergeBlocker: null } },
-  ] }], pullRequests: [
+  const { user, main } = await setup({ ...data, pullRequests: [
+    pr(1700, { title: "Orders panel", review: "approved", checks: { passed: 2, failed: 0, pending: 0 } }),
     pr(1699, { title: "Email campaigns", draft: true, checks: { passed: 1, failed: 0, pending: 2 } }),
     pr(1698, { title: "Abandoned carts", paneIds: ["w1:p1"], checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 3752, deletions: 154 } }),
     pr(1697, { title: "Gift cards", review: "changes_requested", checks: { passed: 2, failed: 1, pending: 0 }, diff: { additions: 30, deletions: 9 } }),
@@ -694,8 +607,7 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   expect(headline()).toBe("1 needs you");
   expect(subline()).toBe("5 to review");
   expect(main.queryByRole("region", { name: /^Pull requests/ })).not.toBeInTheDocument();
-  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Projects", "Recents", "Workspaces", "PRs"]);
-  await user.click(main.getByRole("tab", { name: "Recents" }));
+  expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces", "PRs"]);
   // A session's row still carries its pull request.
   expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
   await user.click(main.getByRole("tab", { name: "PRs" }));
@@ -703,8 +615,8 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   // The five the headline counts, ready to merge first.
   expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Ready to merge", "In review"]);
   expect(prs.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
-    "Publish products, #1696, +40 −2, checks passed, approved",
     "Orders panel, #1700, checks passed, approved",
+    "Publish products, #1696, +40 −2, checks passed, approved",
     "Abandoned carts, #1698, +3752 −154, 1 check failing",
     "Gift cards, #1697, +30 −9, 1 check failing, changes requested",
     "Email campaigns, #1699, checks running, draft",
@@ -712,8 +624,6 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("href", "https://github.com/acme/shop/pull/1696");
   expect(prs.getByRole("link", { name: /^Publish products,/ })).toHaveAttribute("target", "_blank");
   expect(prs.getByRole("link", { name: /^Abandoned carts,/ })).toHaveAttribute("href", "/pane/w1%3Ap1?s=work");
-  await user.click(prs.getByRole("link", { name: /^Orders panel,/ }));
-  expect(router.state.location.pathname).toBe("/project/hub/node/t9");
 });
 
 it("shows the first pull requests and the rest on request, and remembers the tab", async () => {
@@ -737,19 +647,17 @@ it("has no PRs tab when there is no pull request, and falls back to Recents from
   expect(main.getByRole("tabpanel", { name: "Recents" })).toBeInTheDocument();
 });
 
-it("has no Projects tab without a project, and opens on Recents from a remembered Projects", async () => {
+it("opens on Recents from a list remembered that is no longer one", async () => {
   localStorage.setItem("nenu:home-list:v2", "projects");
-  const { main } = await setup({ ...data, projects: [] });
+  const { main } = await setup();
   expect(main.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Recents", "Workspaces"]);
   expect(main.getByRole("tab", { name: "Recents" })).toHaveAttribute("aria-selected", "true");
-  expect(main.queryByRole("combobox", { name: "Project" })).toBeNull();
-  expect(localStorage.getItem("nenu:home-list:v2")).toBe("projects");
 });
 
 it("jumps with ⌘K, a few letters and Enter from the sidebar's search, the one place to jump from", async () => {
   const { user, router } = await setup();
   await user.keyboard("{Meta>}k{/Meta}");
-  const search = screen.getByRole("searchbox", { name: "Search projects and chats" });
+  const search = screen.getByRole("searchbox", { name: "Search workspaces and chats" });
   expect(search).toHaveFocus();
   await user.type(search, "review{Enter}");
   expect(router.state.location.pathname).toBe("/pane/w1%3Ap2");
@@ -826,7 +734,7 @@ describe("an outage", () => {
 });
 
 describe("a first load that never reached Nenu", () => {
-  const never: HomeData = { ...data, error: true, bridge: undefined, agents: [], workspaces: [], projects: [] };
+  const never: HomeData = { ...data, error: true, bridge: undefined, agents: [], workspaces: [] };
 
   it("says it is connecting while it retries quietly, with nothing to start", async () => {
     const { main } = await setup(never);

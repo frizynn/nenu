@@ -87,7 +87,7 @@ export function RootLayout() {
   // routine fast polls/navigations stay invisible. Mounted here so the whole app shares one
   // detector inside the router context.
   usePollBusy();
-  useAgentTransitions(data.agents, paneId ?? null, data.session, data.projects);
+  useAgentTransitions(data.agents, paneId ?? null, data.session);
   usePushSetup();
   useCloseStaleNotifications(data.agents, paneId ?? null);
 

@@ -22,7 +22,7 @@ const pane = (paneId: string, tabId: string, extra: Partial<AgentView> = {}): Ag
 
 function home(over: Partial<HomeData>): HomeData {
   return {
-    bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined, sessions: [],
+    bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined, sessions: [],
     session: undefined, snoozedUntil: null, update: undefined, error: false, authError: false, ...over,
   };
 }

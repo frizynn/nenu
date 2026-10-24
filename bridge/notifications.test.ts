@@ -221,20 +221,20 @@ describe("NotificationCoordinator — type preferences", () => {
 });
 
 describe("NotificationCoordinator — who, what and where", () => {
-  const thread = (status: "blocked" | "done", over: Partial<AlertDetail> = {}): AlertDetail => ({
-    status, kind: "thread", startedBy: "person", requested: false, launched: false, name: "t-0093 Wholesale orders", where: "Acme Shop", ...over,
+  const named = (status: "blocked" | "done", over: Partial<AlertDetail> = {}): AlertDetail => ({
+    status, startedBy: "person", requested: false, launched: false, name: "pedidos", where: "assistant · api", ...over,
   });
 
-  test("a finished thread is named by its title and says what it answered, then where", async () => {
-    const { clock, sink, coord } = setup(undefined, async (_a, status) => thread(status, { summary: "El HTML de avance ya está abierto." }));
+  test("a finished agent is named by its label and says what it answered, then where", async () => {
+    const { clock, sink, coord } = setup(undefined, async (_a, status) => named(status, { summary: "El HTML de avance ya está abierto." }));
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
     await settle();
-    expect(sink.last).toEqual({ title: "t-0093 Wholesale orders finished", body: "El HTML de avance ya está abierto.\nAcme Shop", paneId: "p1", renotify: true });
+    expect(sink.last).toEqual({ title: "pedidos finished", body: "El HTML de avance ya está abierto.\nassistant · api", paneId: "p1", renotify: true });
   });
 
   test("a turn a subagent's result started stays quiet while Subagents is off", async () => {
-    const { clock, sink, coord, prefs } = setup(undefined, (_a, status) => thread(status, { startedBy: "subagent" }));
+    const { clock, sink, coord, prefs } = setup(undefined, (_a, status) => named(status, { startedBy: "subagent" }));
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
     await settle();
@@ -243,7 +243,7 @@ describe("NotificationCoordinator — who, what and where", () => {
     coord.onTransition(agent("p2", "done"), "working", "done");
     clock.fireAll();
     await settle();
-    expect(sink.last?.title).toBe("t-0093 Wholesale orders got a subagent's result");
+    expect(sink.last?.title).toBe("pedidos got a subagent's result");
   });
 
   test("an alert resolved while it was being described never shows", async () => {
@@ -252,7 +252,7 @@ describe("NotificationCoordinator — who, what and where", () => {
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
     coord.onTransition(agent("p1", "working"), "done", "working");
-    answer(thread("done"));
+    answer(named("done"));
     await settle();
     expect(sink.renders).toEqual([]);
   });
@@ -267,7 +267,7 @@ describe("NotificationCoordinator — every decision is logged", () => {
     // Settings as shipped: an agent another agent launched does not push.
     const policy = { maybe: () => true, wants: (d: AlertDetail) => !d.launched };
     const describe = (view: AgentView, status: "blocked" | "done"): AlertDetail =>
-      ({ status, kind: "agent", name: view.paneLabel ?? "", where: "", startedBy: "person", requested: false, launched: view.paneId === "p2", summary: "secret words" });
+      ({ status, name: view.paneLabel ?? "", where: "", startedBy: "person", requested: false, launched: view.paneId === "p2", summary: "secret words" });
     let now = 1_000;
     const coord = new NotificationCoordinator(clock, sink, 30_000, policy, describe, () => undefined, () => now, (d) => decisions.push(d));
     coord.onTransition(agent("p1", "done"), "working", "done");
@@ -282,10 +282,10 @@ describe("NotificationCoordinator — every decision is logged", () => {
     coord.onTransition(agent("p1", "done"), "working", "done");
     clock.fireAll();
     expect(decisions.map((d) => decisionLine("main", d))).toEqual([
-      "notify main/p1 done (agent, started by person): not sent, Nenu is open on a screen",
-      "notify main/p2 done (agent, started by person, launched by an agent): not sent, no switch on in Settings pushes this turn",
-      "notify main/p1 done (agent, started by person): sent",
-      "notify main/p1 done (agent, started by person): not sent, it already notified and nobody has opened it since",
+      "notify main/p1 done (started by person): not sent, Nenu is open on a screen",
+      "notify main/p2 done (started by person, launched by an agent): not sent, no switch on in Settings pushes this turn",
+      "notify main/p1 done (started by person): sent",
+      "notify main/p1 done (started by person): not sent, it already notified and nobody has opened it since",
     ]);
   });
 });

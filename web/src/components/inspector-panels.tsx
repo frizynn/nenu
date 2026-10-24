@@ -1,10 +1,10 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, LayoutTemplate, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, FolderTree, GitCompareArrows, GitPullRequest, PanelRightClose, RefreshCw, SquareTerminal, type IconComponent } from "@/components/ui/icon";
 
 import { ArtifactsPanel } from "@/components/artifacts-panel";
 import { useConversationScan } from "@/components/chat-files-browser";
 import { DiffBody, useDiffRead } from "@/components/diff-viewer";
-import { ciLabel, ciTone } from "@/components/pr-bar";
+import { ciLabel, ciTone } from "@/components/ci-checks";
 import { ProjectFilesBrowser } from "@/components/project-files-browser";
 import { ColumnEdge, ICON_BUTTON, slidePanel, type InspectorTab, type SessionInspectorState, type SessionPr, type TerminalSlots } from "@/components/session-inspector";
 import { fetchActivity, type ActivityArtifact } from "@/lib/activity";
@@ -15,28 +15,24 @@ import type { DiffScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TABS: ReadonlyArray<readonly [InspectorTab, string, IconComponent]> = [
-  ["overview", "Overview", LayoutTemplate],
   ["changes", "Changes", GitCompareArrows],
   ["files", "Files", FolderTree],
   ["terminal", "Terminal", SquareTerminal],
 ];
 
 /**
- * A session's panel on a desk, right of its chat: Overview first when the pane belongs to a project,
- * then Changes, Files and Terminal for that pane, each read only while it is on screen.
+ * A session's panel on a desk, right of its chat: Changes, Files and Terminal for that pane, each read
+ * only while it is on screen.
  */
-export default function SessionPanel({ inspector, paneId, session, artifacts, pr, overview }: {
+export default function SessionPanel({ inspector, paneId, session, artifacts, pr }: {
   inspector: SessionInspectorState;
   paneId: string;
   session?: string;
   /** The pane has a conversation whose files can be listed (an agent, not a shell). */
   artifacts: boolean;
   pr?: SessionPr;
-  /** The Overview tab's body (thread-overview.tsx); without it the tab is not offered. */
-  overview?: ReactNode;
 }) {
-  const tabs = TABS.filter(([key]) => key !== "overview" || overview);
-  const view: InspectorTab = tabs.some(([key]) => key === inspector.tab) ? inspector.tab : "changes";
+  const view = inspector.tab;
   const { panelRef, entering } = inspector;
   useLayoutEffect(() => {
     // Only an open the person asked for slides in; a reload or a pane switch shows the panel in place.
@@ -50,7 +46,7 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
       <div className="flex min-h-13 shrink-0 items-center gap-1 border-b border-border/60 px-2">
         {/* A narrow panel scrolls its tabs rather than overlap the fold button. */}
         <div role="tablist" aria-label="Session" className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
-          {tabs.map(([key, label, Icon]) => (
+          {TABS.map(([key, label, Icon]) => (
             <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => inspector.setTab(key)} className="panel-tab shrink-0 px-1.5">
               <Icon aria-hidden className="size-3.5" />{label}
             </button>
@@ -61,8 +57,7 @@ export default function SessionPanel({ inspector, paneId, session, artifacts, pr
         </button>
       </div>
       <div role="tabpanel" aria-label={TABS.find(([key]) => key === view)![1]} className={cn("min-h-0 flex-1", view === "terminal" ? "flex flex-col" : "overflow-y-auto")}>
-        {view === "overview" ? overview
-          : view === "terminal" ? <Terminal publish={inspector.setTerminal} />
+        {view === "terminal" ? <Terminal publish={inspector.setTerminal} />
           : <TabBody key={`${paneId}\0${session ?? ""}`} tab={view} paneId={paneId} session={session} pr={pr} artifacts={artifacts} />}
       </div>
     </aside>
@@ -119,7 +114,6 @@ const REVIEW: Record<NonNullable<SessionPr["review"]>, string> = {
   approved: "Approved",
   changes_requested: "Changes requested",
   review_required: "Review required",
-  commented: "Commented",
 };
 
 /** The session's pull request when it has one, then its diff: the branch against its base, or what is not committed. */
@@ -159,7 +153,7 @@ function PrSummary({ pr }: { pr: SessionPr }) {
   return (
     <section aria-label={pr.number !== undefined ? `Pull request #${pr.number}` : "Pull request"} className="flex flex-col gap-1.5 px-4 pb-1 text-[13px]">
       <div className="flex min-w-0 items-center gap-2">
-        <GitPullRequest aria-hidden className={cn("size-4 shrink-0", pr.state === "merged" ? "text-violet-400" : "text-status-done")} />
+        <GitPullRequest aria-hidden className="size-4 shrink-0 text-status-done" />
         <span className="shrink-0 font-semibold tabular-nums">{name}</span>
         <span className="min-w-0 flex-1 truncate font-medium">{pr.title}</span>
         {pr.state && pr.state !== "open" && <span className="shrink-0 text-xs text-muted-foreground">{pr.state}</span>}

@@ -7,11 +7,11 @@ import { parseArgs } from "node:util";
 import { defaultSocketPath } from "../../bridge/config.ts";
 import { HerdrClient } from "../../bridge/herdr-client.ts";
 import { FakeHerdr } from "../../bridge/test-support/fake-herdr.ts";
-import { seedDemoHerd, type DemoHerd, type OrgSeed } from "./scenario.ts";
+import { seedDemoHerd, type DemoHerd } from "./scenario.ts";
 
 // A throwaway Nenu bridge for e2e runs: real bridge/index.ts, its own port, a temporary HOME, state,
 // config and journal tree, and (with --fake) a FakeHerdr on a temporary socket. It must never reach
-// the operator's live service, Herdr, Codex daemon or project registry, so it refuses port 8787 and
+// the operator's live service, Herdr or Codex daemon, so it refuses port 8787 and
 // any socket that is, or sits next to, Herdr's default one, and stubs the CLIs the bridge shells out to.
 //
 //   bun scripts/e2e/bridge.ts --port 8797 --fake            # runs until Ctrl-C
@@ -36,8 +36,6 @@ export interface TestBridge {
   herd: DemoHerd | null;
   /** The temporary HOME the bridge runs with, and with --herdr the Herdr server and its panes too. */
   home: string;
-  /** Every argv the bridge ran Organizations with, oldest first (empty without `org`). */
-  orgCalls(): Promise<string[][]>;
   stop(): Promise<void>;
 }
 
@@ -187,20 +185,13 @@ async function portIsFree(port: number): Promise<boolean> {
  * `epoch` plus the time since the bridge started, so captures taken hours apart render the same
  * greeting, date and activity chart.
  */
-/**
- * `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS) and before
- * the projects are seeded, so a seed can carry numbers the repo produced.
- */
+/** `repo` fills the demo panes' folder after it becomes a git repo (with $NENU_E2E_GH_PRS). */
 export async function startTestBridge(opts: {
-  port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; orgBin?: string; repo?: (dir: string) => void;
-  /** The projects fake-org.ts starts from; `projects` is the registry's root, where a seed's library files go. */
-  org?: (herd: DemoHerd, now: number, projects: string) => OrgSeed;
+  port: number; fake?: boolean; herdr?: boolean; socketPath?: string; epoch?: number; repo?: (dir: string) => void;
   /** The herd the FakeHerdr starts with (default: the demo herd). */
   seed?: (fake: FakeHerdr, ctx: { claudeRoot: string; cwd: string; shift: number }) => Promise<DemoHerd>;
   /** Extra variables for the bridge process (machines.ts reads NENU_E2E_MACHINES and NENU_E2E_SSH_HOSTS through the stubs). */
   env?: Record<string, string>;
-  /** Fills the registry's root before the bridge starts, for `orgBin` over projects of the bench's own. */
-  projects?: (root: string, ctx: { socketPath: string; cwd: string }) => Promise<void>;
 }): Promise<TestBridge> {
   assertTestPort(opts.port);
   if (!opts.fake && !opts.herdr && !opts.socketPath) throw new Error("pass --fake, --herdr or --socket <disposable herdr socket>");
@@ -216,7 +207,6 @@ export async function startTestBridge(opts: {
 
   const paths = {
     home: join(dir, "home"),
-    projects: join(dir, "projects"),
     state: join(dir, "state"),
     config: join(dir, "config"),
     claude: join(dir, "journals", "claude"),
@@ -225,18 +215,10 @@ export async function startTestBridge(opts: {
     bin: join(dir, "bin"),
   };
   for (const p of Object.values(paths)) await mkdir(p, { recursive: true });
-  // The bridge shells out to these. Organizations answers "no templates", or with `org` is
-  // fake-org.ts over the seeded projects, or with `orgBin` is that real binary over the empty
-  // registry under this temporary HOME; `claude agents` fails, so session discovery never lists
+  // The bridge shells out to these. `claude agents` fails, so session discovery never lists
   // the operator's real Claude processes; `gh` never reaches GitHub: it prints the pull requests in
   // $NENU_E2E_GH_PRS (a JSON file), or fails.
-  const orgState = join(dir, "org.json");
   const stubs = {
-    "herdr-organizations": opts.orgBin
-      ? `exec "${opts.orgBin}" "$@"`
-      : opts.org
-      ? `exec "${process.execPath}" "${join(import.meta.dir, "fake-org.ts")}" "$@"`
-      : "echo 'error: unrecognized subcommand' >&2\nexit 2",
     claude: "exit 1",
     gh: `[ -n "$NENU_E2E_GH_PRS" ] && exec cat "$NENU_E2E_GH_PRS"\necho 'gh stub: no pull requests' >&2\nexit 1`,
     // Herdr's saved machines are the bench's ($NENU_E2E_MACHINES, a `machine list --json`), never the
@@ -279,36 +261,15 @@ export async function startTestBridge(opts: {
     }
     await fake.start();
   }
-  const org = opts.org && herd ? opts.org(herd, Date.now() + shift, paths.projects) : undefined;
-  if (org) {
-    await writeFile(orgState, JSON.stringify(org, null, 2));
-    // The registry lists a project only with its PROJECT.md; its repo is the bench folder, where the
-    // demo panes run, so threads bound to those panes read as live.
-    for (const project of org.projects) {
-      await mkdir(join(paths.projects, project.slug), { recursive: true });
-      // A pick is stored where `set` stores it, so the first read (from the files) already has it.
-      const picks = (["icon", "tone"] as const).filter((key) => project[key]).map((key) => `${key} = ${JSON.stringify(project[key])}\n`).join("");
-      await writeFile(join(paths.projects, project.slug, "PROJECT.md"),
-        `+++\nname = ${JSON.stringify(project.name)}\ngoal = ${JSON.stringify(project.goal)}\n${picks}repos = [{ path = ${JSON.stringify(dir)} }]\n+++\n`);
-      if (project.coordinator) {
-        await mkdir(join(paths.projects, project.slug, ".state"), { recursive: true });
-        await writeFile(join(paths.projects, project.slug, ".state", "coordinator.json"), JSON.stringify({ session: "", cwd: dir, ...project.coordinator }));
-      }
-    }
-  }
-
-  await opts.projects?.(paths.projects, { socketPath, cwd: dir });
-
   // Inherit nothing Nenu- or Herdr-specific: HERDR_PLUGIN_STATE_DIR alone would point the bridge at
   // the live service's state. Every agent home goes under the temporary HOME: CODEX_HOME would
-  // otherwise dial the live Codex app-server, and HERDR_PROJECTS_ROOT would list real projects.
+  // otherwise dial the live Codex app-server.
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !/^(COLLIE|HERDR)_/.test(k)) env[k] = v;
   Object.assign(env, {
     HOME: paths.home,
     PATH: `${paths.bin}${delimiter}${process.env.PATH ?? ""}`,
     TZ: "UTC",
-    HERDR_PROJECTS_ROOT: paths.projects,
     CODEX_HOME: join(paths.home, ".codex"),
     CLAUDE_CONFIG_DIR: join(paths.home, ".claude"),
     PI_CODING_AGENT_DIR: join(paths.home, ".pi", "agent"),
@@ -330,14 +291,9 @@ export async function startTestBridge(opts: {
     COLLIE_PI_ROOT: paths.other,
     COLLIE_OPENCODE_ROOT: paths.other,
     COLLIE_GROK_ROOT: paths.other,
-    COLLIE_HERDR_ORGANIZATIONS_BIN: join(paths.bin, "herdr-organizations"),
     COLLIE_HERDR_BIN: join(paths.bin, "herdr"),
-    NENU_E2E_ORG: orgState,
     ...opts.env,
   });
-
-  const orgCalls = async () => (await Bun.file(`${orgState}.calls`).text().catch(() => ""))
-    .split("\n").filter(Boolean).map((line) => JSON.parse(line) as string[]);
 
   const child = Bun.spawn(["bun", "--preload", join(import.meta.dir, "clock-shift.ts"), join(ROOT, "bridge/index.ts")], { cwd: ROOT, env, stdout: logFd, stderr: logFd });
 
@@ -355,7 +311,7 @@ export async function startTestBridge(opts: {
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) break;
     const ok = await fetch(`${url}/api/snapshot`).then((r) => r.ok, () => false);
-    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, now: () => Date.now() + shift, fake, herd, home: paths.home, orgCalls, stop };
+    if (ok) return { url, port: opts.port, dir, socketPath, pid: child.pid, now: () => Date.now() + shift, fake, herd, home: paths.home, stop };
     await Bun.sleep(100);
   }
   const tail = (await Bun.file(logPath).text()).slice(-2000);

@@ -1,6 +1,6 @@
 # 0110. Projects is Home's first tab, and a phone enters a coordinator on its page
 
-- **Status:** Accepted (2026-10-21). Requested by the operator. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-21). Requested by the operator. Amends
   [ADR 0107](./0107-home-lists-the-projects-as-rows.md): the rows stay, under a tab instead of above the
   tabs, and a row with asks opens its project. Amends [ADR 0092](./0092-a-project-organizes-its-coordinators.md)
   point 1 on a phone: a coordinator's row opens its page instead of folding over its card. Point 3 amended by

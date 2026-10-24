@@ -1,6 +1,6 @@
 # 0122. A coordinator has its own mark, and the operator's pick of it is kept by Nenu
 
-- **Status:** Accepted (2026-10-22). Requested by the operator; the shape and the storage were
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-22). Requested by the operator; the shape and the storage were
   delegated. Amends [ADR 0092](./0092-a-project-organizes-its-coordinators.md) (a coordinator's row on
   its project) in how the rows are drawn; what a tap does (ADR 0115) holds.
 - **Trail:** `web/src/lib/coordinator-mark.ts` · `web/src/components/mark-picker.tsx` ·

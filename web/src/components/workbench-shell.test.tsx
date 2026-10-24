@@ -29,7 +29,7 @@ function ChatTitle() {
 
 function setup(testData: HomeData = data, initialEntry = "/?s=work") {
   const element = <WorkbenchShell data={testData}><AppHeader bridge="connected" error={false}><ChatTitle /></AppHeader><textarea aria-label="Draft" defaultValue="Keep this draft" /></WorkbenchShell>;
-  const routes = ["/pane/:paneId", "/pane/:paneId/history", "/project/:projectSlug", "/project/:projectSlug/node/:nodeId", "*"].map((path) => ({ path, element }));
+  const routes = ["/pane/:paneId", "/pane/:paneId/history", "*"].map((path) => ({ path, element }));
   const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
   const { unmount } = render(<RouterProvider router={router} />);
   return { router, unmount, user: userEvent.setup(), sidebar: within(screen.getByRole("complementary", { name: "Workspace sidebar" })) };
@@ -45,51 +45,11 @@ it("uses one shared mobile header without the old brand or session row", () => {
   expect(within(main as HTMLElement).queryByRole("button", { name: /Session:/ })).toBeNull();
 });
 
-it("keeps project, chat and settings links scoped to the active session", () => {
+it("keeps chat and settings links scoped to the active session", () => {
   const { sidebar } = setup();
   expect(sidebar.getByRole("link", { name: /Improve interface/ })).toHaveAttribute("href", "/pane/w%3A1%3Ap2?s=work");
   expect(sidebar.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/?s=work");
   expect(sidebar.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
-});
-
-const projectData: HomeData = {
-  ...data,
-  agents: [
-    ...data.agents,
-    { ...data.agents[0]!, paneId: "w:1:p9", paneLabel: "Coordinator pane", status: "blocked" },
-  ],
-  projects: [{
-    slug: "nenu", name: "Nenu Project", goal: "A focused project hub", status: "active",
-    coordinator: { paneId: "w:1:p9", agent: "claude", liveStatus: "blocked" },
-    threads: [{ id: "t-0007", title: "Project navigation", parentId: "root", role: "worker", status: "open" }],
-  }],
-};
-
-it("lists projects flat with their state, marks the one whose coordinator is open, and the loose chat under Chats", () => {
-  const { sidebar } = setup(projectData, "/pane/w%3A1%3Ap9?s=work");
-  const link = sidebar.getByRole("link", { name: /^Nenu Project/ });
-  expect(link).toHaveAttribute("href", "/project/nenu?s=work");
-  expect(link).toHaveAccessibleName(/^Nenu Project, needs you\b/);
-  // The open pane is the project's coordinator, which the project's own row opens.
-  expect(link).toHaveAttribute("aria-current", "page");
-  expect(within(sidebar.getByRole("region", { name: "Chats" })).getByRole("link", { name: /Improve interface/ })).toBeInTheDocument();
-});
-
-it("searches projects by thread metadata and chats by name, then closes on Escape", async () => {
-  const { sidebar, user } = setup(projectData);
-  await user.click(sidebar.getByRole("button", { name: "Search" }));
-  const search = sidebar.getByRole("searchbox", { name: "Search projects and chats" });
-  expect(search).toHaveFocus();
-  await user.type(search, "t-0007");
-  expect(sidebar.getByRole("option", { name: /^Project navigation/ })).toHaveAttribute("href", "/project/nenu/node/t-0007?s=work");
-  expect(sidebar.queryByRole("option", { name: /Improve interface/ })).not.toBeInTheDocument();
-  await user.clear(search);
-  await user.type(search, "improve");
-  expect(sidebar.queryByRole("option", { name: /Nenu Project/ })).not.toBeInTheDocument();
-  expect(sidebar.getByRole("option", { name: /Improve interface/ })).toBeInTheDocument();
-  await user.keyboard("{Escape}");
-  expect(sidebar.queryByRole("searchbox")).not.toBeInTheDocument();
-  expect(sidebar.getByRole("link", { name: /Nenu Project/ })).toBeInTheDocument();
 });
 
 it("filters without disturbing a mounted composer draft", async () => {
@@ -145,24 +105,6 @@ it("hides the tab bar on a pane and its History, where the composer owns the bot
     expect(screen.queryByRole("navigation", { name: "Primary" }), path).not.toBeInTheDocument();
     unmount();
   }
-});
-
-// The coordinator's pane w:1:p9 is not running, so the project page is its organization.
-const restingProject: HomeData = { ...projectData, agents: data.agents };
-
-it("keeps the tab bar on a project page and a node page, which draw no composer", () => {
-  // A node page stays put even while its project's coordinator runs.
-  for (const [home, path] of [[restingProject, "/project/nenu?s=work"], [projectData, "/project/nenu/node/t-0007?s=work"]] as const) {
-    const { unmount } = setup(home, path);
-    expect(screen.getByRole("navigation", { name: "Primary" }), path).toBeInTheDocument();
-    unmount();
-  }
-});
-
-it("draws no tab bar on a project whose live coordinator is opening its pane", () => {
-  // The router stays on /project/:slug while the pane loads; a tab bar there would sit alone on an empty page.
-  setup(projectData, "/project/nenu?s=work");
-  expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
 });
 
 it("draws New as a tab with its own label, like its neighbours", () => {
@@ -373,7 +315,7 @@ it("leaves Ctrl+K to a text field off Apple platforms, and opens search from els
   expect(sidebar.getByRole("searchbox")).toHaveFocus();
 });
 
-// A herd like the operator's: a project, and loose workspaces whose chats moved at different times.
+// A herd like the operator's: workspaces whose chats moved at different times.
 const herd: HomeData = {
   ...data,
   workspaces: [
@@ -393,13 +335,9 @@ const herd: HomeData = {
     { paneId: "acme:bench", workspaceId: "w:acme", workspaceLabel: "Acme producto", workspaceNumber: 2, tabId: "t-acme", agent: "claude", status: "working", cwd: "/", focused: false, paneLabel: "Afirmaciones marcadas", lastActiveAt: 80 },
     { paneId: "docs:t76", workspaceId: "w:docs", workspaceLabel: "docs", workspaceNumber: 3, tabId: "t-docs", agent: "claude", status: "idle", cwd: "/", focused: false, paneLabel: "T-76 Mejoras", lastActiveAt: 5 },
   ],
-  projects: [{
-    slug: "acme", name: "Acme Shop", goal: "", status: "active",
-    threads: [{ id: "t-0101", title: "Migración de stock", parentId: "root", role: "worker", status: "open" }],
-  }],
 };
 
-it("opens the chat title's drawer from the top: what needs you, the chats that moved last, then folded projects and workspaces", async () => {
+it("opens the chat title's drawer from the top: what needs you, the chats that moved last, then folded workspaces", async () => {
   const { user } = setup(herd, "/pane/dev%3Amobile?s=work");
   await user.click(screen.getByRole("button", { name: "Chat title" }));
   const drawer = screen.getByRole("dialog", { name: "Navigation" });
@@ -411,7 +349,7 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
   expect(nav.getByRole("link", { name: "Nenu home" })).toHaveClass("hit-area");
 
   const sections = nav.getAllByRole("region").filter((region) => region.parentElement?.classList.contains("nav-scroll"));
-  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Projects", "Workspaces", "Recent"]);
+  expect(sections.map((region) => region.getAttribute("aria-label"))).toEqual(["Needs you", "Workspaces", "Recent"]);
   const needs = within(nav.getByRole("region", { name: "Needs you" })).getAllByRole("link");
   expect(needs.map((link) => [link.querySelector(".nav-pane-title")?.textContent, link.querySelector(".nav-pane-detail")?.textContent]))
     .toEqual([["Brief nenu-send", "Developer"]]);
@@ -420,7 +358,6 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
     .toEqual(["Rediseño de Nenu", "Afirmaciones marcadas", "Brief de nenu-mobile", "T-76 Mejoras"]);
   expect(recent[2]).toHaveAttribute("aria-current", "page");
 
-  expect(nav.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
   const workspaces = within(nav.getByRole("region", { name: "Workspaces" }));
   expect(workspaces.getAllByRole("region").map((region) => region.getAttribute("aria-label"))).toEqual(["Developer", "Acme producto", "docs"]);
   // Each holds one tab, split in Developer's case: its row opens that tab, with nothing to unfold.
@@ -428,13 +365,6 @@ it("opens the chat title's drawer from the top: what needs you, the chats that m
   expect(workspaces.getAllByRole("link").map((link) => link.getAttribute("href")))
     .toEqual(["/pane/dev%3Asend?s=work", "/pane/acme%3Abench?s=work", "/pane/docs%3At76?s=work"]);
   expect(workspaces.getByRole("link", { name: /^Developer/ })).toHaveAttribute("aria-current", "true");
-
-  // Opening a fold lasts while the drawer is open; the next open is compact again.
-  await user.click(nav.getByRole("button", { name: "Acme Shop tasks" }));
-  expect(nav.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "true");
-  await user.click(nav.getByRole("button", { name: "Close" }));
-  await user.click(screen.getByRole("button", { name: "Chat title" }));
-  expect(within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("searches and starts something new from the drawer's header", async () => {
@@ -443,7 +373,7 @@ it("searches and starts something new from the drawer's header", async () => {
   await user.click(screen.getByRole("button", { name: "Chat title" }));
   const nav = within(screen.getByRole("dialog", { name: "Navigation" }));
   await user.click(nav.getByRole("button", { name: "Search" }));
-  const search = nav.getByRole("searchbox", { name: "Search projects and chats" });
+  const search = nav.getByRole("searchbox", { name: "Search workspaces and chats" });
   expect(search).toHaveFocus();
   await user.type(search, "docs");
   expect(nav.queryByRole("region", { name: "Recent" })).not.toBeInTheDocument();
@@ -454,13 +384,12 @@ it("searches and starts something new from the drawer's header", async () => {
   expect(screen.getByText("New dialog")).toBeInTheDocument();
 });
 
-it("holds in the tab bar's Search what Browse did before you type: folded projects and workspaces, sessions and host", async () => {
+it("holds in the tab bar's Search what Browse did before you type: folded workspaces, sessions and host", async () => {
   const sessions = [{ name: "work", isPrimary: true, reachable: true, agents: 1, working: 1, blocked: 0 }, { name: "remote", isPrimary: false, reachable: true, agents: 0, working: 0, blocked: 0 }];
   const { user } = setup({ ...herd, sessions }, "/?s=work");
   await user.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("button", { name: "Search" }));
   const sheet = within(screen.getByRole("dialog", { name: "Search" }));
   expect(sheet.getByRole("searchbox")).toHaveFocus();
-  expect(sheet.getByRole("button", { name: "Acme Shop tasks" })).toHaveAttribute("aria-expanded", "false");
   expect(within(sheet.getByRole("region", { name: "Developer" })).queryByRole("button")).toBeNull();
   expect(sheet.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings?s=work");
   expect(sheet.getByText(/^herdr ·/)).toBeInTheDocument();
@@ -509,43 +438,6 @@ it("folds every workspace to two letters no other tile shares, and names it on h
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("tooltip", { hidden: true })).not.toBeInTheDocument());
   expect(tiles[6]).toHaveFocus();
-});
-
-it("folds each project to its own glyph and each loose workspace to two letters in the rail", async () => {
-  desktop();
-  const { sidebar, user } = setup(herd);
-  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
-  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
-  const acme = rail.getByRole("link", { name: /^Acme Shop\b/ });
-  expect(acme.querySelector("svg[data-glyph]")).toHaveAttribute("data-glyph", "bolt");
-  expect(shownText(acme)).toBe("");
-  expect(shownText(rail.getByRole("link", { name: /^docs\b/ }))).toMatch(/^[A-Z0-9]{2}$/);
-});
-
-it("folds a project to the mark it picked in Organizations in the rail", async () => {
-  desktop();
-  const { sidebar, user } = setup({ ...herd, projects: herd.projects!.map((project) => ({ ...project, icon: "flag", tone: "red" })) });
-  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
-  const rail = within(screen.getByRole("navigation", { name: "Collapsed sidebar" }));
-  const glyph = rail.getByRole("link", { name: /^Acme Shop\b/ }).querySelector<SVGElement>("svg[data-glyph]")!;
-  expect(glyph).toHaveAttribute("data-glyph", "flag");
-  expect(glyph.style.color).toBe("var(--glyph-red)");
-});
-
-it("says Projects on the desk's bar and its rail only while there is a project", async () => {
-  desktop();
-  const bare = setup(data, "/?s=work");
-  expect(bare.sidebar.queryByRole("link", { name: "Projects" })).toBeNull();
-  expect(bare.sidebar.queryByRole("region", { name: "Projects" })).toBeNull();
-  await bare.user.click(bare.sidebar.getByRole("button", { name: "Collapse sidebar" }));
-  expect(within(screen.getByRole("navigation", { name: "Collapsed sidebar" })).queryByRole("link", { name: "Projects" })).toBeNull();
-  bare.unmount();
-  localStorage.clear();
-  const { sidebar, user } = setup(projectData, "/?s=work");
-  expect(sidebar.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects?s=work");
-  expect(sidebar.getByRole("region", { name: "Projects" })).toBeInTheDocument();
-  await user.click(sidebar.getByRole("button", { name: "Collapse sidebar" }));
-  expect(within(screen.getByRole("navigation", { name: "Collapsed sidebar" })).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects?s=work");
 });
 
 /** The fleet's folded rail with client-alpha-portal's name up; from there the test drives the clock. */

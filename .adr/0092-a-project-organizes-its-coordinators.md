@@ -1,6 +1,6 @@
 # 0092. A project organizes its coordinators; its own coordinator is one of them
 
-- **Status:** Accepted (2026-10-17). Requested by the operator. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-17). Requested by the operator. Amends
   [ADR 0090](./0090-a-coordinators-status-file-is-drawn-as-written.md): on a project that organizes
   coordinators, the project coordinator's STATUS.md heads the page only while it says something. Point 1 is amended on a desk by [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md): a card per coordinator, the project coordinator's last, and no redirect to its chat. On a phone, by [ADR 0110](./0110-projects-is-homes-first-tab-and-a-phone-enters-a-coordinator-on-its-page.md): a coordinator's row opens its page instead of folding over its card. On both, by [ADR 0115](./0115-a-tap-on-a-coordinator-enters-its-chat.md): a row enters the coordinator's chat and folds its threads down in place.
 - **Trail:** `web/src/components/new-dialog.tsx` (`CoordinatorsPane`) · `web/src/components/project-tasks.tsx`

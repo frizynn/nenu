@@ -14,7 +14,7 @@ import type { NotifyPrefs } from "@/lib/api";
 
 const ROWS: ReadonlyArray<{ key: keyof NotifyPrefs; label: string; hint: string }> = [
   { key: "blocked", label: "Needs input", hint: "Any agent waiting on you." },
-  { key: "replies", label: "Replies to you", hint: "An agent finishes what a person asked: from Nenu, or typed into it. Never the organization's own back-and-forth." },
+  { key: "replies", label: "Replies to you", hint: "An agent finishes what a person asked: from Nenu, or typed into it." },
   { key: "launched", label: "Agents started by an agent", hint: "An agent another agent launched finishes what that agent asked. The launcher is the one waiting." },
   { key: "subagents", label: "Subagent results", hint: "An agent ends a turn its subagent's result started. Usually noise." },
   { key: "updates", label: "App updates", hint: "When a new Nenu version is out." },

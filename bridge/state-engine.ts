@@ -45,34 +45,6 @@ export const SNAPSHOT_TIMEOUT_MS = 15_000;
 // 14 of the 15 socket calls per poll on a 14-claude herd (measured 2026-10-10).
 const SESSION_NAME_REFRESH_MS = 60_000;
 
-// Pane tokens copied into the view. Herdr Organizations writes these with a TTL and refreshes them
-// (`project`, `thread`, … at 300 s; `org_project`/`org_workspace` sidebar identity at 60 s);
-// `hp_group` is the sidebar's group order (live-observed). `org_heartbeat` stays out: it changes on
-// every 10 s refresh and would turn each one into a snapshot change.
-const ALLOWED_TOKENS = new Set([
-  "project", "thread", "review", "role", "rank", "depth", "parent", "tree-order", "hp_group",
-  "org_project", "org_workspace",
-]);
-const MAX_TOKEN_VALUE = 200;
-
-/**
- * The allowlisted subset of a pane's tokens, or undefined when none is set. Keys come out in the
- * allowlist's order: Herdr returns a pane's tokens in a different order on each read, and every
- * change check downstream (the snapshot ETag, live events, the poker's pane key) compares JSON.
- */
-export function allowedTokens(tokens: Record<string, unknown> | null | undefined): Record<string, string> | undefined {
-  if (!tokens) return undefined;
-  const out: Record<string, string> = {};
-  let any = false;
-  for (const key of ALLOWED_TOKENS) {
-    const value = tokens[key];
-    if (typeof value !== "string" || value.length > MAX_TOKEN_VALUE) continue;
-    out[key] = value;
-    any = true;
-  }
-  return any ? out : undefined;
-}
-
 // Claude renders its input box as a horizontal rule, the ❯ prompt line, then a closing rule. After
 // `/rename <name>` the TOP rule carries the session name inside it: "────────── my-name ──". This
 // matches that named rule. `\S` also matches box-drawing chars, but a *plain* rule has no embedded
@@ -313,7 +285,6 @@ export class StateEngine {
           agent,
           workspaceLabel,
         );
-        const tokens = allowedTokens(p.tokens);
         const counters = agentById.get(p.pane_id);
         return {
           paneId: p.pane_id,
@@ -358,7 +329,6 @@ export class StateEngine {
             ? { readableLines: p.scroll.max_offset_from_bottom + p.scroll.viewport_rows }
             : {}),
           // Tokens expire unless their plugin refreshes them: absent means unknown, not removed.
-          ...(tokens ? { tokens } : {}),
           // Herdr's own transition counters, when the server reports them (0.9.1 has no
           // completion_seq; the list-call fallback has neither).
           ...(typeof counters?.state_change_seq === "number" ? { stateChangeSeq: counters.state_change_seq } : {}),

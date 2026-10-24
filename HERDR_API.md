@@ -207,11 +207,8 @@ unknown method's error lists the server's 105 methods; `pane.get`, `pane.wait_fo
   agent view by `pane_id` (`stateChangeSeq`, `completionSeq`); the list-call fallback has neither.
 - **New pane-record fields:** `tokens` (key/value strings a plugin reports with a TTL, at most 32, keys
   `^[A-Za-z0-9_-]{1,32}$`), `state_labels`, `title`, `display_agent`, `restore_error`, alongside
-  `terminal_title(_stripped)`. Herdr Organizations writes `project`, `thread`, `review`, `rank`,
-  `depth`, `parent`, `role`, `tree-order` (300 s TTL) and `org_sidebar`/`org_project`/`org_workspace`/
-  `org_heartbeat` (60 s TTL); live panes also carry `hp_group`. **A missing token means unknown, never
-  "removed"**: it can simply have expired while its plugin was down. Nenu copies an allowlisted subset
-  (`bridge/state-engine.ts` `allowedTokens`).
+  `terminal_title(_stripped)`. **A missing token means unknown, never "removed"**: it can simply have
+  expired while its plugin was down. Nenu copies none of them into its views.
 - **No image API on the socket.** Neither the 0.9.1 method list nor the 0.9.3 schema has an image
   method; pictures in chat come from the journal, uploads or files.
 

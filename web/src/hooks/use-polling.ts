@@ -28,7 +28,7 @@ export interface LiveCoverage {
 /** Which loader a live event asks to re-read, or null when it concerns neither. */
 export function scopeOf(event: LiveEvent, paneId: string | null | undefined): RevalidationScope | "all" | null {
   if (event.topic === "resync") return "all";
-  if (concerns(event, "snapshot") || concerns(event, "org")) return "root";
+  if (concerns(event, "snapshot")) return "root";
   return paneId && concerns(event, "pane", paneId) ? "pane" : null;
 }
 

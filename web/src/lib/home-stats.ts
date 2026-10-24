@@ -1,11 +1,10 @@
 // What Home says about the herd, derived from the snapshot and the bridge's detected dialogs. Every
 // figure is a reading of the present, never a reconstructed series.
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { awaits, nodeState, type Ask } from "./org-tree";
 import { displayName, displayPlace, type DisplayPlace } from "./display-name";
-import { byRecency, chatRecency, isOpenThread, projectForPane } from "./projects";
+import { byRecency, chatRecency } from "./recency";
 import { isUnseen } from "./triage";
-import type { AgentView, ProjectThreadView, ProjectView, PullRequestView, ThreadPullRequest } from "./types";
+import type { AgentView, PullRequestView } from "./types";
 import { opensDirectly, workspaceTree } from "./workspace-tree";
 import { workspaceEntry, type Herd } from "./spaces";
 
@@ -54,80 +53,53 @@ export function greeting(now: number): string {
   return "Good evening";
 }
 
-/**
- * A pane Home asks you about: its detected dialog, none when it is blocked on something unread, or
- * `reply` when its agent stopped and said it waits for your reply, with no dialog at all.
- */
+/** A pane Home asks you about: its detected dialog, none when it is blocked on something unread. */
 export interface NeedsYouItem<I> {
   paneId: string;
   interaction?: I;
-  reply?: true;
 }
 
 /**
  * What needs you, oldest first: every detected dialog, then blocked panes the bridge read no dialog
- * on (still yours to look at, in the thread), then the live threads waiting for your reply (`awaits`).
+ * on (still yours to look at, in the thread).
  */
-export function needsYouItems<I extends { paneId: string; detectedAt: number }>(agents: readonly AgentView[], interactions: readonly I[], projects?: readonly ProjectView[]): NeedsYouItem<I>[] {
+export function needsYouItems<I extends { paneId: string; detectedAt: number }>(agents: readonly AgentView[], interactions: readonly I[]): NeedsYouItem<I>[] {
   const asked = [...interactions].sort((a, b) => a.detectedAt - b.detectedAt);
   const covered = new Set(asked.map((i) => i.paneId));
   const blocked = agents.filter((agent) => agent.status === "blocked" && !covered.has(agent.paneId))
     .sort((a, b) => (a.lastActiveAt ?? 0) - (b.lastActiveAt ?? 0));
-  for (const agent of blocked) covered.add(agent.paneId);
-  const live = new Set(agents.map((agent) => agent.paneId));
-  const replies = (projects ?? []).flatMap((project) => project.threads)
-    .filter((thread) => thread.paneId && live.has(thread.paneId) && !covered.has(thread.paneId) && awaits(thread) === "reply");
   return [
     ...asked.map((interaction) => ({ paneId: interaction.paneId, interaction })),
     ...blocked.map((agent) => ({ paneId: agent.paneId })),
-    ...replies.map((thread) => ({ paneId: thread.paneId!, reply: true as const })),
   ];
 }
 
 /**
- * How many need you by the snapshot alone: blocked panes and threads waiting for your reply. Home's
- * icon shows it; Home's headline counts the same set and adds the dialogs it reads itself.
+ * How many need you by the snapshot alone: blocked panes. Home's icon shows it; Home's headline
+ * counts the same set and adds the dialogs it reads itself.
  */
-export function needsYouCount(herd: { agents: readonly AgentView[]; projects?: readonly ProjectView[] }): number {
-  return needsYouItems(herd.agents, [], herd.projects).length;
+export function needsYouCount(herd: { agents: readonly AgentView[] }): number {
+  return needsYouItems(herd.agents, []).length;
 }
 
-export interface ReviewItem {
-  project: ProjectView;
-  thread: ProjectThreadView;
-}
-
-/**
- * Open threads waiting on a review, as the organization tree reads them (`nodeState`); a files-only
- * project carries no group, so there an open pull request on an agent that stopped counts instead.
- */
-export function reviewItems(projects: readonly ProjectView[] | undefined): ReviewItem[] {
-  return (projects ?? []).flatMap((project) => project.threads
-    .filter((thread) => isOpenThread(thread) && (thread.group
-      ? nodeState(thread) === "review"
-      : thread.pr?.state === "open" && thread.liveStatus !== "working" && thread.liveStatus !== "blocked"))
-    .map((thread) => ({ project, thread })));
-}
-
-/** One pull request in Home's "Ready to review", from GitHub, from Organizations, or both. */
+/** One pull request in Home's "Ready to review", from GitHub. */
 export interface ReviewEntry {
-  /** `owner/name#number` when the URL is known, else the thread's own key. */
+  /** `owner/name#number` when the URL is known, else `repo#number`. */
   key: string;
   title: string;
-  /** The repo's short name, or the project's name for a PR Organizations reported without a URL. */
+  /** The repo's short name. */
   repo: string;
   number?: number;
   branch?: string;
   url?: string;
   draft: boolean;
-  review?: ThreadPullRequest["review"];
+  review?: PullRequestView["review"];
   checks?: { passed: number; failed: number; pending: number };
   diff?: { additions: number; deletions: number };
-  mergeBlocker?: string | null;
   /** Epoch ms; 0 when unknown. */
   updatedAt: number;
-  /** Where Review goes inside Nenu; absent means the PR's page on GitHub. */
-  open?: { paneId: string } | { project: string; node: string };
+  /** The pane on its branch, where Review goes inside Nenu; absent means the PR's page on GitHub. */
+  open?: { paneId: string };
 }
 
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/;
@@ -137,17 +109,16 @@ const prKey = (url: string | undefined) => {
 };
 const checksPassed = (checks: ReviewEntry["checks"]) => !!checks && checks.passed > 0 && !checks.failed && !checks.pending;
 
-/** Approved, not a draft, no check failing or running and nothing else blocking: one merge away. */
+/** Approved, not a draft, no check failing or running: one merge away. */
 export function readyToMerge(entry: ReviewEntry): boolean {
-  return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending && !entry.mergeBlocker;
+  return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending;
 }
 
 /**
- * Home's review list: the person's open pull requests from GitHub, joined with the PRs Organizations
- * threads are waiting on. The same PR from both is one row that opens Organizations' thread. Drafts
- * go last; among the rest a PR with green checks and an approval comes first, then the most recent.
+ * Home's review list: the person's open pull requests from GitHub. Drafts go last; among the rest a
+ * PR with green checks and an approval comes first, then the most recent.
  */
-export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRequests: readonly PullRequestView[] | undefined): ReviewEntry[] {
+export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined): ReviewEntry[] {
   const rows = new Map<string, ReviewEntry>();
   for (const pr of pullRequests ?? []) {
     const id = prKey(pr.url);
@@ -159,29 +130,6 @@ export function reviewQueue(projects: readonly ProjectView[] | undefined, pullRe
       ...(pr.diff ? { diff: pr.diff } : {}),
       updatedAt: pr.updatedAt ?? 0,
       ...(pr.paneIds[0] ? { open: { paneId: pr.paneIds[0] } } : {}),
-    });
-  }
-  for (const { project, thread } of reviewItems(projects)) {
-    const pr = thread.pr;
-    const id = prKey(pr?.url);
-    const key = id?.key ?? `${project.slug}:${thread.id}`;
-    const { open: _ownPane, ...github } = rows.get(key) ?? {};
-    // Organizations' thread is the one to open; GitHub's read is the fresher one for everything else.
-    rows.set(key, {
-      key,
-      title: thread.title,
-      repo: id?.repo ?? project.name,
-      ...(pr?.number !== undefined ? { number: pr.number } : {}),
-      ...(thread.branch ? { branch: thread.branch } : {}),
-      ...(pr?.url ? { url: pr.url } : {}),
-      draft: pr?.state === "draft",
-      ...(pr?.review ? { review: pr.review } : {}),
-      ...(pr?.checks ? { checks: pr.checks } : {}),
-      ...(pr?.diff ? { diff: pr.diff } : {}),
-      ...(pr?.mergeBlocker !== undefined ? { mergeBlocker: pr.mergeBlocker } : {}),
-      updatedAt: Date.parse(thread.updated ?? "") || 0,
-      ...github,
-      open: thread.paneId ? { paneId: thread.paneId } : { project: project.slug, node: thread.id },
     });
   }
   const ready = (row: ReviewEntry) => Number(checksPassed(row.checks)) + Number(row.review === "approved");
@@ -196,11 +144,7 @@ export interface RecentChat extends DisplayPlace {
   at: number;
   /** Finished since you last opened it. */
   unseen: boolean;
-  /** Its thread waits on a review, as the organization tree reads it. */
-  review: boolean;
-  /** What its thread waits on you for, as every view of the organization says it. */
-  ask?: Ask;
-  /** What tells it apart after its place: its pull request, "coordinator" for a coordinator thread, else its tab. */
+  /** What tells it apart after its place: its pull request, else its tab. */
   detail: string | null;
   /** Its pull request's size, when one is known. */
   diff?: { additions: number; deletions: number };
@@ -208,25 +152,18 @@ export interface RecentChat extends DisplayPlace {
 
 /**
  * Home's rows for `panes`, in the order given. A session's pull request is the one Home's review
- * queue opens in it (GitHub's on its branch, joined with its thread's), else the one its thread records.
+ * queue opens in it: GitHub's on its branch.
  */
-export function sessionChats(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): RecentChat[] {
-  const inReview = new Set(reviewItems(projects).map(({ thread }) => thread.paneId));
+export function sessionChats(panes: readonly AgentView[], reviews: readonly ReviewEntry[] = []): RecentChat[] {
   const byPane = new Map<string, ReviewEntry>();
-  for (const entry of reviews) if (entry.open && "paneId" in entry.open && !byPane.has(entry.open.paneId)) byPane.set(entry.open.paneId, entry);
+  for (const entry of reviews) if (entry.open && !byPane.has(entry.open.paneId)) byPane.set(entry.open.paneId, entry);
   return panes.map((agent) => {
-    const thread = projectForPane(projects, agent.paneId)?.thread;
     const entry = byPane.get(agent.paneId);
-    const number = entry?.number ?? thread?.pr?.number;
-    const diff = entry?.diff ?? thread?.pr?.diff;
-    const place = displayPlace(agent, projects);
-    const ask = thread && awaits(thread);
+    const place = displayPlace(agent);
     return {
-      agent, title: displayName(agent, projects), ...place, at: chatRecency(agent), unseen: isUnseen(agent),
-      review: inReview.has(agent.paneId),
-      detail: number !== undefined ? `PR #${number}` : thread?.role === "coordinator" ? "coordinator" : place.tab,
-      ...(diff ? { diff } : {}),
-      ...(ask ? { ask } : {}),
+      agent, title: displayName(agent), ...place, at: chatRecency(agent), unseen: isUnseen(agent),
+      detail: entry?.number !== undefined ? `PR #${entry.number}` : place.tab,
+      ...(entry?.diff ? { diff: entry.diff } : {}),
     };
   });
 }
@@ -235,8 +172,8 @@ export function sessionChats(panes: readonly AgentView[], projects: readonly Pro
  * Home's "Recents": every session, agents and shells, most recently moved or opened first, except the
  * ones "Needs you" already shows. Equal (or unknown) times keep the bridge's pane order.
  */
-export function recentChats(panes: readonly AgentView[], projects: readonly ProjectView[] | undefined, shown: ReadonlySet<string>, reviews: readonly ReviewEntry[] = []): RecentChat[] {
-  return sessionChats(byRecency(panes.filter((pane) => !shown.has(pane.paneId))), projects, reviews);
+export function recentChats(panes: readonly AgentView[], shown: ReadonlySet<string>, reviews: readonly ReviewEntry[] = []): RecentChat[] {
+  return sessionChats(byRecency(panes.filter((pane) => !shown.has(pane.paneId))), reviews);
 }
 
 /** A tab in Home's "Workspaces" list, with its sessions in pane order. */
@@ -259,13 +196,13 @@ export interface WorkspaceChats {
 export const workspaceSessions = (group: Pick<WorkspaceChats, "tabs">): RecentChat[] => group.tabs.flatMap((tab) => tab.chats);
 
 /** Home's "Workspaces": every session under its workspace and tab, in the order the workspace tree keeps them. */
-export function workspaceChats(herd: Herd, projects: readonly ProjectView[] | undefined, reviews: readonly ReviewEntry[] = []): WorkspaceChats[] {
+export function workspaceChats(herd: Herd, reviews: readonly ReviewEntry[] = []): WorkspaceChats[] {
   return workspaceTree(herd).map((branch) => {
     const entry = opensDirectly(branch) ? workspaceEntry(branch.workspace.workspaceId, herd)?.paneId : undefined;
     return {
       workspaceId: branch.workspace.workspaceId,
       name: branch.name,
-      tabs: branch.tabs.map((tab) => ({ tabId: tab.tabId, label: tab.label, chats: sessionChats(tab.panes, projects, reviews) })),
+      tabs: branch.tabs.map((tab) => ({ tabId: tab.tabId, label: tab.label, chats: sessionChats(tab.panes, reviews) })),
       ...(entry ? { entry } : {}),
     };
   });

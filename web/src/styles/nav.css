@@ -16,7 +16,7 @@
 .nav-label { display: flex; align-items: center; gap: 6px; padding: 16px 10px 4px; color: var(--muted-foreground); font-size: var(--text-footnote); font-weight: 400; }
 .nav-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 32px; padding: 5px var(--nav-pad, 10px); border-radius: var(--radius-md); color: var(--foreground); font-size: var(--text-footnote); text-align: left; text-decoration: none; cursor: pointer; }
 .nav-row > svg { flex-shrink: 0; color: var(--muted-foreground); }
-/* The lead rows' 16px icons take the 18px a project's avatar does, so every top-level name starts at one x. */
+/* The lead rows' 16px icons take the 18px a row's mark does, so every top-level name starts at one x. */
 .nav-top .nav-row > svg { margin-inline: 1px; }
 /* Hover only where a pointer hovers: on a phone a tap would leave the row under it lit. */
 @media (hover: hover) {
@@ -50,27 +50,10 @@
 .nav-lead { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 18px; color: var(--muted-foreground); }
 .nav-disclosure { position: absolute; z-index: 1; inset-block: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted-foreground); cursor: pointer; }
 .nav-disclosure-end { right: 4px; width: 26px; }
-.nav-disclosure > svg, .nav-history > svg { transition: transform var(--motion-control) var(--motion-ease); }
-.nav-disclosure[aria-expanded="true"] > svg, .nav-history[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.nav-disclosure > svg { transition: transform var(--motion-control) var(--motion-ease); }
+.nav-disclosure[aria-expanded="true"] > svg { transform: rotate(90deg); }
 .nav-row-note { flex-shrink: 1; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-caption); }
 .nav-count { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-
-/* The tree under a project or workspace. */
-.nav-thread { position: relative; }
-.nav-tree-row { min-height: 28px; padding-left: calc(var(--nav-pad, 10px) + var(--nav-fold, 20px) + (var(--nav-depth, 1) - 1) * var(--nav-indent, 16px)); color: var(--muted-foreground); }
-.nav-tree-row[aria-current="page"] { color: var(--foreground); }
-.nav-tree-row.nav-tree-head { color: var(--foreground); }
-.nav-tree-row.nav-tree-resolved:not([aria-current="page"]) { color: var(--muted-foreground); }
-.nav-tree-mark { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 14px; }
-.nav-thread > .nav-disclosure { left: calc(var(--nav-pad, 10px) + (var(--nav-depth, 1) - 1) * var(--nav-indent, 16px)); width: var(--nav-fold, 20px); }
-.nav-dots { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; }
-.nav-row-word { flex-shrink: 0; font-size: var(--text-caption); }
-/* History: everything resolved, grey, behind one row that starts closed. Its chevron sits in the
-   depth-1 fold column and its name where depth-1 marks start; the rest of it lives on the project page. */
-.nav-history { gap: 0; padding-left: var(--nav-pad, 10px); color: var(--muted-foreground); font-size: var(--text-caption); }
-.nav-history > svg { margin-inline: calc((var(--nav-fold, 20px) - 14px) / 2); }
-.nav-history > .nav-count { margin-left: 6px; }
-.nav-history-all { color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A workspace's panes, one level in; a tab that folds at depth 1, its chevron in the fold column, and its panes at depth 2. */
 .nav-ws > .nav-project { margin-top: 0; }
@@ -84,7 +67,6 @@
 /* The redesigned sidebar: grouped sections, nested threads, counters and the host footer. */
 .nav-group { padding-top: 14px; }
 .nav-group > .nav-label { padding: 0 10px 6px; color: var(--subtle-foreground); font-weight: 500; }
-.nav-group > .nav-project-section:first-of-type > .nav-project { margin-top: 0; }
 .nav-kbd { margin-left: auto; color: var(--subtle-foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-caption); }
 /* A row's shortcut is the hand on the mouse's reminder: out of sight until the pointer rests on the row
    or a key lands on it, as Cursor keeps its own. */
@@ -93,7 +75,6 @@
   .nav-row:is(:hover, :focus-visible) > .nav-kbd { opacity: 1; }
 }
 .nav-row[aria-pressed="true"] { background: var(--workbench-row-selected); }
-.nav-project-section > .nav-project > .nav-row { font-weight: 500; }
 .nav-host { display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 4px -8px -8px; padding: 0 6px 0 14px; border-top: 1px solid var(--border); }
 .nav-host-text { display: flex; flex: 1; min-width: 0; flex-direction: column; line-height: 1.25; }
 .nav-host-name, .nav-host-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -124,11 +105,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-chat-time { flex-shrink: 0; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* The tertiary tone measured 4.43:1 on the light selected fill; the muted one clears 4.5:1 there. */
 .nav-pane[aria-current="page"] .nav-chat-time { color: var(--muted-foreground); }
-.nav-group > .nav-label > .nav-count, .nav-fold > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
-/* A section heading that folds its rows (the pane switcher's Recent and Shells). */
-.nav-fold { display: inline-flex; align-items: center; gap: 6px; color: inherit; cursor: pointer; }
-.nav-fold > svg { flex-shrink: 0; transition: transform var(--motion-control) var(--motion-ease); }
-.nav-fold[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.nav-group > .nav-label > .nav-count { margin-left: 0; color: inherit; font-size: inherit; }
 /* Search: one flat list of what matched, the pick filled like the current row, the match in semibold. */
 .nav-result[aria-selected="true"] { background: var(--workbench-row-selected); }
 .nav-match { background: none; color: inherit; font-weight: 600; }
@@ -139,17 +116,14 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-place-tab { flex-shrink: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; }
 .workbench-sidebar .nav-label:first-child { padding-top: 10px; }
 
-/* What a desk row says at its end: a project's dot and age, Home's count, a chat's pull request. */
+/* What a desk row says at its end: Home's count. */
 .nav-row-meta { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; margin-left: auto; color: var(--subtle-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-.nav-row-end { display: inline-flex; flex-shrink: 0; color: var(--subtle-foreground); }
 /* A resting chat reads in the muted ink, as T3 Code's list does, so the eye lands on what is alive: a
    chat that waits, works, finished unseen or has something to review, the one on screen and the one
    under the pointer keep the full ink. */
 .nav-chats .nav-row:not([data-live], [aria-current="page"]) { color: var(--muted-foreground); }
 @media (hover: hover) { .nav-chats .nav-row:hover { color: var(--foreground); } }
 .nav-label-text { flex: 1; min-width: 0; font: inherit; }
-.nav-label-action { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--subtle-foreground); cursor: pointer; }
-@media (hover: hover) { .nav-label-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 .nav-more { color: var(--subtle-foreground); }
 @media (hover: hover) { .nav-more:hover { color: var(--muted-foreground); } }
 .nav-more-chevron { transition: transform var(--motion-panel) var(--motion-ease); }
@@ -162,9 +136,6 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-reveal-inner { min-width: 0; min-height: 0; overflow: clip; }
 /* A period's name stays on top of its chats while they scroll under it, so a row deep in the list still says when it moved. */
 .nav-chats .nav-group > .nav-label { position: sticky; top: 0; z-index: 1; background: var(--workbench-sidebar); }
-/* A pull request that asks for something takes its colour; one that only waits stays grey. */
-.nav-row-end[data-pr="failing"] { color: var(--status-blocked); }
-.nav-row-end[data-pr="approved"] { color: var(--status-done); }
 /* The bar's chats held in place: a quiet text button that puts them in order. Its height stays inside the label's. */
 .nav-label-updates { height: 22px; margin-right: -6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; cursor: pointer; }
 @media (hover: hover) { .nav-label-updates:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
@@ -200,7 +171,7 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
 .nav-enter { animation: nav-enter var(--motion-control) var(--motion-ease); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-disclosure > svg, .nav-history > svg, .nav-fold > svg, .nav-tab-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
+  .nav-disclosure > svg, .nav-tab-fold, .nav-more-chevron, .nav-reveal, .nav-row, .nav-pane { transition: none; }
   .nav-enter { animation: none; }
   .nav-kbd { transition: none; }
 }
@@ -219,14 +190,10 @@ button.nav-pane:disabled .nav-pane-detail { color: inherit; }
   .nav-disclosure::before { content: ""; position: absolute; inset-block: 0; left: 50%; width: 44px; transform: translateX(-50%); }
   /* The end chevron sits on the row's edge: its target grows inward, so the list never scrolls sideways. */
   .nav-disclosure-end::before { left: auto; right: 0; transform: none; }
-  .nav-fold { position: relative; }
-  .nav-fold::before { content: ""; position: absolute; inset: -13px -8px; }
   .nav-project > .nav-row:has(+ .nav-disclosure-end) { padding-right: 36px; }
   .nav-kbd { display: none; }
-  .nav-history { font-size: var(--text-footnote); }
-  .nav-history-all { font-size: var(--text-footnote); }
   .nav-pane { min-height: 52px; padding-block: 6px; }
   .nav-ws-body .nav-pane { min-height: 44px; }
   .nav-pane-title { font-size: var(--text-body); }
-  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-row-word, .nav-host-meta { font-size: var(--text-footnote); }
+  .nav-pane-detail, .nav-pane-status, .nav-row-note, .nav-count, .nav-chat-time, .nav-host-meta { font-size: var(--text-footnote); }
 }

@@ -61,7 +61,7 @@
   --font-sans: "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   /* Motion: three lengths and one curve for everything that moves. A control answers a tap or a hover
      (colour, a press, a chevron, a tooltip, a fade out); a panel arrives or folds (a sheet, a popover,
-     a row revealed, a docked column); a page slides in whole (lib/motion.ts). The curve starts fast and
+     a row revealed, a side panel); a page slides in whole (lib/motion.ts). The curve starts fast and
      settles, so a short motion reads as an answer, not a wait. Stylesheets name these, never a number;
      Tailwind's bare `transition`, `ease-out` and the duration-120/180/280 classes resolve to them. */
   --motion-control: 120ms;
@@ -152,19 +152,15 @@
   --status-idle: light-dark(oklch(0.45 0.02 250), oklch(0.65 0.02 250));
   --status-unknown: light-dark(oklch(0.43 0.02 250), oklch(0.64 0.02 250));
 
-  /* Project marks (lib/project-glyph.ts): ten hues, each tuned per theme so a 16px glyph keeps 3:1 on
-     every ground it sits on (the sidebar, the page, a card, a popover; 3.07:1 at worst, amber on a
-     selected light row). A project draws one of them, picked from its slug. */
-  --glyph-red: light-dark(oklch(0.56 0.19 27), oklch(0.72 0.17 25));
+  /* The mark hues: each tuned per theme so a 16px glyph keeps 3:1 on every ground it sits on (the
+     sidebar, the page, a card, a popover; 3.07:1 at worst, amber on a selected light row). Commands
+     and Usage draw in them. */
   --glyph-orange: light-dark(oklch(0.6 0.16 50), oklch(0.76 0.15 55));
   --glyph-amber: light-dark(oklch(0.6 0.13 80), oklch(0.82 0.14 85));
   --glyph-green: light-dark(oklch(0.55 0.14 150), oklch(0.75 0.15 150));
   --glyph-teal: light-dark(oklch(0.55 0.1 190), oklch(0.76 0.11 190));
-  --glyph-blue: light-dark(oklch(0.55 0.18 255), oklch(0.73 0.14 255));
-  --glyph-indigo: light-dark(oklch(0.5 0.2 275), oklch(0.71 0.15 278));
   --glyph-violet: light-dark(oklch(0.54 0.2 300), oklch(0.74 0.15 300));
   --glyph-pink: light-dark(oklch(0.58 0.2 350), oklch(0.76 0.15 350));
-  --glyph-slate: light-dark(oklch(0.5 0.03 255), oklch(0.74 0.03 255));
 
   /* A command a step ran, drawn as a shell reads it (lib/shell-tokens.ts): the program, its flags, its
      arguments and words, variables and keywords in the mark hues; operators stay the line's grey. */

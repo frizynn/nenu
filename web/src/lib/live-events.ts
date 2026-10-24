@@ -38,7 +38,7 @@ export function onLiveEvent(listener: (event: LiveEvent) => void): () => void {
 
 /** Whether `event` asks the reader of `topic` for `paneId` to refresh. */
 export function concerns(event: LiveEvent, topic: LiveTopic, paneId?: string | null): boolean {
-  return event.topic === "resync" || (event.topic === topic && (topic === "snapshot" || topic === "org" || event.paneId === paneId));
+  return event.topic === "resync" || (event.topic === topic && (topic === "snapshot" || event.paneId === paneId));
 }
 
 /** Live read, safe from timers, like idle.ts's isLocked. */
@@ -75,7 +75,7 @@ function emit(event: LiveEvent): void {
   for (const listener of listeners) listener(event);
 }
 
-const TOPICS: Record<LiveTopic, true> = { snapshot: true, pane: true, queue: true, journal: true, interaction: true, org: true, activity: true, usage: true };
+const TOPICS: Record<LiveTopic, true> = { snapshot: true, pane: true, queue: true, journal: true, interaction: true, activity: true, usage: true };
 
 /** Validate one `data:` payload; anything else is ignored rather than trusted. */
 export function parseLiveEvent(data: string): LiveEvent | null {

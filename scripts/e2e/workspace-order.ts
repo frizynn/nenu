@@ -6,7 +6,7 @@ import { DESKTOP, launchChrome, PHONE, userCacheDir, type Browser, type Page } f
 import { startTestBridge } from "./bridge.ts";
 import { seedDemoHerd } from "./scenario.ts";
 
-// Home's Workspaces in the order chosen (ADR 0123), over the demo herd and six more workspaces, the
+// Home's Workspaces in the order chosen (ADR 0124), over the demo herd and six more workspaces, the
 // last one's agent working so it moved last. At 390x844 with a finger:
 // the list is Herdr's order whatever moved last, Name sorts it, Reorder drags the third row's handle
 // past the fifth, a finger on a row's body still scrolls the page and moves no row, and a reload keeps

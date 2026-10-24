@@ -5,7 +5,7 @@ import { ROOT_ROUTE_ID, type HomeData } from "@/lib/loaders";
 import { SettingsRoute } from "./settings";
 
 const root: HomeData = {
-  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], projects: [], device: undefined,
+  bridge: "connected", agents: [], shellPanes: [], workspaces: [], tabs: [], device: undefined,
   sessions: [], session: "work", snoozedUntil: null, update: undefined, error: false, authError: false,
 };
 

@@ -1,4 +1,4 @@
-# 0123. Workspaces keep Herdr's order, or the operator's, never their agents' activity
+# 0124. Workspaces keep Herdr's order, or the operator's, never their agents' activity
 
 - **Status:** Accepted (2026-10-24). Requested by the operator; where the choice is kept was delegated.
 - **Trail:** `web/src/lib/workspace-order.ts` · `web/src/lib/workspace-tree.ts` (`workspaceTree`) ·
@@ -18,7 +18,7 @@ drag". They read Nenu mostly on a phone.
 
 | Where the choice lives | Same on every device | Cost |
 | --- | --- | --- |
-| The browser (`localStorage`) | no | none: Home's tab and a panel's Arrange (ADR 0119) are kept there |
+| The browser (`localStorage`) | no | none: Home's remembered tab is kept there |
 | Nenu's state dir, in the snapshot | yes | a route, a file, a snapshot field and an event |
 | Herdr itself (`workspace.move`) | yes | a drag rewrites the operator's real Herdr order, and Name could not be a mode |
 
@@ -38,8 +38,8 @@ drag". They read Nenu mostly on a phone.
 - A row stays where the operator put it, so a finished agent no longer moves its workspace; what moved
   last is Recents' to say.
 - A phone and a desk can disagree on a custom order. If the operator asks for one order everywhere,
-  move the store into the bridge's state dir as ADR 0122 did for a coordinator's mark, rather than
-  writing Herdr's order.
+  move the store into the bridge's state dir and serve it in the snapshot, rather than writing
+  Herdr's order.
 - The handle takes the touch (`touch-action: none`) so a finger drags at once; the rest of each row
   still scrolls the list. Don't make the row itself draggable with a hold: in this list a tap already
   opens the workspace, and a hold would compete with the scroll the list needs.

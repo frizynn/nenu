@@ -41,7 +41,7 @@ function agentCounts(panes: readonly AgentView[]): AgentCounts {
  * Workspace → tab → pane, in Herdr's order (`number` is the position: workspace.move renumbers). A
  * workspace never moves for what its agents do or for being opened: the row you reach for stays put,
  * and the workspace on screen is marked, not pinned. The operator's own order is applied over this
- * (lib/workspace-order.ts, ADR 0123).
+ * (lib/workspace-order.ts, ADR 0124).
  */
 export function workspaceTree(source: Herd, currentPaneId?: string): WorkspaceBranch[] {
   const shells = source.shellPanes ?? [];

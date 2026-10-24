@@ -9,7 +9,6 @@ import { historyPaneActions } from "./history.ts";
 import { hookRoutes } from "./hooks.ts";
 import { jsonError, text } from "./http.ts";
 import { interactionPaneActions, interactionRoutes } from "./interactions.ts";
-import { orgRoutes } from "./org.ts";
 import { panePaneActions } from "./pane.ts";
 import { queuePaneActions } from "./queue.ts";
 import { replyPaneActions } from "./reply.ts";
@@ -104,8 +103,6 @@ const paneRoute: Route = {
 
 /** The API, in match order: the first route whose method and path match handles the request. */
 export const ROUTES: readonly Route[] = [
-  // Organizations runs on this machine only: a project spanning machines is not a thing yet.
-  ...orgRoutes.map((route): Route => ({ ...route, machine: false })),
   ...snapshotRoutes,
   ...eventRoutes,
   ...structureRoutes,

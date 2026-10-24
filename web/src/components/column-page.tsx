@@ -52,7 +52,7 @@ const KEEP_TRYING_MS = 3000;
 /**
  * Keeps where a page was scrolled, per history entry, and puts it back when the history steps back to
  * that entry (the back control, the system's Back), the way a phone's back shows the list as you left
- * it. What loads after the page (Your asks' list) grows it, so the position is applied again as it
+ * it. What loads after the page grows it, so the position is applied again as it
  * grows, until it fits, the person scrolls, or a few seconds pass. A page pushed or replaced opens at the top.
  */
 function useKeptScroll(scroller: RefObject<HTMLElement | null>): void {
@@ -87,7 +87,7 @@ function useKeptScroll(scroller: RefObject<HTMLElement | null>): void {
 }
 
 /** Whether the page's heading that says `title` is still in view in its scroller. False when no heading
- *  says it: a heading that names something else (a node under its project) never hides the bar's title. */
+ *  says it: a heading that names something else never hides the bar's title. */
 function useHeadingInView(scroller: RefObject<HTMLElement | null>, title: string): boolean {
   const [heading, setHeading] = useState<Element | null>(null);
   const [inView, setInView] = useState(true);

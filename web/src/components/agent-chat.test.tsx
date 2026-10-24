@@ -3,10 +3,9 @@ import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { createMemoryRouter, RouterProvider, useLoaderData, useParams } from "react-router";
+import { createMemoryRouter, RouterProvider, useLoaderData } from "react-router";
 
 import { __resetConnectionHealth, CONNECTION_LOST_MS, markLive } from "@/lib/connection-health";
-import { Search } from "@/components/ui/icon";
 
 // Mock the race guard at AgentChat's seam so the frozen-revision tests can observe exactly what
 // `detectedRevision` the tap handler passes (the guard's own behaviour is covered in
@@ -140,12 +139,6 @@ describe("AgentChat — reply flow", () => {
   });
 });
 
-// Echoes the project a title tap opened.
-function ProjectSentinel() {
-  const { projectSlug } = useParams();
-  return <div>project:{projectSlug ?? "none"}</div>;
-}
-
 /** A shell in another tab of fixtureAgents[0]'s workspace, so the workspace holds more than this pane. */
 const neighbourShell = { ...fixtureAgents[0]!, paneId: "w1:shell", tabId: "w1:t9", kind: "shell" as const, agent: "shell", status: "idle" as const };
 
@@ -194,30 +187,6 @@ describe("AgentChat — header title block", () => {
     expect(within(screen.getByRole("dialog", { name: "Conversation actions" })).getByText("~/webapp")).toBeInTheDocument();
   });
 
-  // A phone's project views (ADR 0121): its rows head the menu, and what waits on you shows on the ⋯ while shut.
-  it("heads the ⋯ menu with a project's rows and counts what waits on you on the ⋯ itself", async () => {
-    const show = vi.fn();
-    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [
-      { id: "view-chat", label: "Chat", icon: Search, on: true, run: () => {} },
-      { id: "view-status", label: "Status", icon: Search, waiting: 2, run: show },
-    ] } });
-    const more = screen.getByRole("button", { name: "Conversation actions, 2 waiting on you" });
-    expect(more).toHaveTextContent("2");
-    await userEvent.click(more);
-    const menu = within(screen.getByRole("dialog", { name: "Conversation actions" }));
-    const groups = menu.getAllByRole("region");
-    expect(groups[0]).toHaveAccessibleName("Show");
-    expect(within(groups[0]!).getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
-    // The row says what its count is, not only the digit.
-    await userEvent.click(within(groups[0]!).getByRole("button", { name: "Status, 2 waiting on you" }));
-    expect(show).toHaveBeenCalledOnce();
-  });
-
-  it("keeps the ⋯ plain when nothing waits on you", () => {
-    renderChat({ agent: named, agents: [named], menu: { label: "Show", actions: [{ id: "view-status", label: "Status", icon: Search, waiting: 0, run: () => {} }] } });
-    expect(screen.getByRole("button", { name: "Conversation actions" })).not.toHaveTextContent(/\d/);
-  });
-
   it("drops the unlabeled grab handle: the terminal view switches panes from the title too", () => {
     const shell = { ...fixtureAgents[0]!, kind: "shell" as const, agent: "shell", status: "idle" as const };
     renderChat({ agent: shell, agents: [], shellPanes: [shell] });
@@ -229,37 +198,6 @@ describe("AgentChat — header title block", () => {
     renderChat({ shellPanes: [neighbourShell] });
     expect(screen.getByText("webapp")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /overview/i })).toBeNull();
-  });
-
-  it("opens the project's page from a project pane's title", async () => {
-    const user = userEvent.setup();
-    const agent = fixtureAgents[0]!;
-    const router = createMemoryRouter(
-      [
-        { path: "/project/:projectSlug", element: <ProjectSentinel /> },
-        {
-          path: "/pane/:paneId",
-          element: (
-            <AgentChat
-              paneId={agent.paneId}
-              agent={agent}
-              project={{ slug: "shop", name: "Shop", role: "coordinator" }}
-              agents={fixtureAgents}
-              shellPanes={[neighbourShell]}
-              tabs={[]}
-              text="out"
-              onBack={vi.fn()}
-              onSelect={vi.fn()}
-            />
-          ),
-        },
-      ],
-      { initialEntries: ["/pane/w1:p1"] },
-    );
-    render(<RouterProvider router={router} />);
-
-    await user.click(screen.getByRole("button", { name: "Open Shop overview" }));
-    expect(await screen.findByText("project:shop")).toBeInTheDocument();
   });
 });
 
@@ -738,7 +676,6 @@ describe("AgentChat — shared header: stale-status dimming", () => {
         <AgentChat
           paneId={agent.paneId}
           agent={agent}
-          project={{ slug: "shop", name: "Shop", role: "coordinator" }}
           agents={fixtureAgents}
           shellPanes={[]}
           tabs={[]}
@@ -752,7 +689,7 @@ describe("AgentChat — shared header: stale-status dimming", () => {
     const router = createMemoryRouter([{ path: "/", element: <Harness /> }]);
     render(<RouterProvider router={router} />);
 
-    const title = screen.getByRole("button", { name: /overview$/ });
+    const title = screen.getByRole("heading", { level: 1 });
     expect(title).toHaveTextContent("needs you");
     const dot = () => title.querySelector("[data-node-state]");
     expect(dot()).toHaveClass("opacity-40"); // not live → frozen status dimmed
@@ -1180,86 +1117,7 @@ describe("AgentChat — the ⋯ menu renames and closes the pane and its tab", (
   });
 });
 
-it("names a project's pane in the pane strip as its rows do", () => {
-  const coordinator = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
-  const projects = [{ slug: "shop", name: "Shop", status: "active" as const, coordinator: { paneId: "w1:p2", agent: "claude", liveStatus: "idle" as const }, threads: [] }];
-  renderChat({ agents: [fixtureAgents[0]!, coordinator], projects });
-  expect(screen.getByRole("button", { name: /Shop coordinator/ })).toBeInTheDocument();
-});
-
-// A project thread's back climbs one level, as its node page's does (NAV-03): to the coordinator it
-// runs under, else to its project. Only the project's own coordinator leads Home, since the project
-// opens on it.
-describe("AgentChat — a project thread's back", () => {
-  const coordinatorPane = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "claude" };
-  const thread = (id: string, title: string, parentId: string, role: "worker" | "coordinator", paneId?: string) =>
-    ({ id, title, parentId, role, status: "open" as const, ...(paneId ? { paneId } : {}) });
-  const shop = (threads: ReturnType<typeof thread>[], coordinator?: string) => [{
-    slug: "shop", name: "Shop", status: "active" as const, threads,
-    ...(coordinator ? { coordinator: { paneId: coordinator, agent: "claude", liveStatus: "idle" as const } } : {}),
-  }];
-  const worker = { slug: "shop", name: "Shop", role: "worker" as const };
-
-  it("leads a worker back to its coordinator's chat while that runs", () => {
-    renderChat({ session: "work", agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
-      projects: shop([thread("t-1", "Checkout", "root", "coordinator", "w1:p2"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) }, { open: false, onOpen: vi.fn() });
-    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/pane/w1%3Ap2?s=work");
-    expect(screen.queryByRole("button", { name: "Back to Home" })).toBeNull();
-  });
-
-  it("leads a worker back to its coordinator's page when the coordinator has no chat", () => {
-    renderChat({ project: worker, projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "t-1", "worker", "w1:p1")]) });
-    expect(screen.getByRole("link", { name: "Back to Checkout" })).toHaveAttribute("href", "/project/shop/node/t-1");
-  });
-
-  it("leads a thread of the project itself back to the chat the project opens on, its coordinator's while it runs", () => {
-    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
-    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/pane/w1%3Ap2");
-  });
-
-  it("leads a thread of the project itself back to the project's page while its coordinator is stopped", () => {
-    renderChat({ agents: [fixtureAgents[0]!], project: worker, projects: shop([thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
-    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
-  });
-
-  it("leads the project's own coordinator Home", () => {
-    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([], "w1:p1") });
-    expect(screen.getByRole("button", { name: "Back to Home" })).toBeInTheDocument();
-  });
-
-  it("leads the project's own coordinator to the project's page where the project organizes coordinators", () => {
-    renderChat({ project: { slug: "shop", name: "Shop", role: "coordinator" }, projects: shop([thread("t-1", "Checkout", "root", "coordinator")], "w1:p1") });
-    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/project/shop");
-  });
-
-  it("leads a thread at the root of a project that organizes coordinators to the project's coordinator while it runs", () => {
-    renderChat({ agents: [fixtureAgents[0]!, coordinatorPane], project: worker,
-      projects: shop([thread("t-1", "Checkout", "root", "coordinator"), thread("t-2", "Pagos", "root", "worker", "w1:p1")], "w1:p2") });
-    expect(screen.getByRole("link", { name: "Back to Shop" })).toHaveAttribute("href", "/pane/w1%3Ap2");
-  });
-});
-
-// A project lays its Threads and PRs over the chat (ProjectFrame) and brings its own tabs into the
-// overlay, so only the header stays above it: the strips belong to the chat underneath.
-describe("AgentChat — a project's overlay", () => {
-  const sibling = { ...fixtureAgents[0]!, paneId: "w1:p2", paneLabel: "Second pane" };
-
-  it("draws the project's tabs once, inside the overlay", () => {
-    const projectTabs = <div role="tablist" aria-label="Project" />;
-    renderChat({ strip: projectTabs, overlay: <div>{projectTabs}<p>Threads list</p></div> });
-    expect(screen.getAllByRole("tablist", { name: "Project" })).toHaveLength(1);
-    expect(screen.getByText("Threads list")).toBeVisible();
-  });
-
-  it("keeps a worker's chips and the pane row under the overlay", () => {
-    renderChat({ agents: [fixtureAgents[0]!, sibling], strip: <nav aria-label="Threads" />, overlay: <p>Threads list</p> });
-    expect(screen.getByRole("banner")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Threads" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Second pane/ })).toBeNull();
-  });
-});
-
-// The work log names a file as the operator thinks of it inside the project: from the pane's folder.
+// The work log names a file as the operator thinks of it: from the pane's folder.
 it("shows a work step's file relative to the pane's folder", async () => {
   const ts = "2026-07-25T06:22:21.253Z";
   server.use(http.get(/\/api\/pane\/[^/]+\/history/, () => HttpResponse.json({
@@ -1295,31 +1153,20 @@ it("shows a subagent's work step file relative to the pane's folder too", async 
   expect(await screen.findByRole("button", { name: /^Read / })).toHaveTextContent(/^Read\s*web\/src\/workbench\.css$/);
 });
 
-// The chip above the box counts the session's background work and the project's threads around the
-// chat, never this chat's own turn: while only the session's work runs it says Background, so it does
-// not read as a second "Working" beside the turn's.
+// The chip under the box counts the session's background work, never this chat's own turn: it says
+// Background, so it does not read as a second "Working" beside the turn's.
 describe("AgentChat — the chip that counts other work", () => {
   const subagent = () => server.use(http.get(/\/api\/pane\/[^/]+\/subagents$/, () => HttpResponse.json({
     available: true, sessionKey: "parent-key", truncated: false,
     agents: [{ id: "a1", parentId: "", name: "reviewer", task: "Review the diff", status: "running" }],
   })));
 
-  it("says Background while only the session's own work runs", async () => {
+  it("says Background while the session's own work runs", async () => {
     subagent();
     const agent = { ...fixtureAgents[0]!, status: "working" as const, hasSession: true };
     renderChat({ agent, agents: [agent] });
     expect(await screen.findByRole("button", { name: /^Background, / })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Working, / })).toBeNull();
-  });
-
-  it("says Working while a thread of the project works", async () => {
-    const agent = { ...fixtureAgents[0]!, status: "idle" as const, hasSession: true };
-    const project = { slug: "shop", name: "Shop", status: "active" as const, threads: [] };
-    const busy = { id: "t-2", title: "Pagos", parentId: "root", role: "worker" as const, status: "open" as const, group: "working" as const };
-    renderChat({ agent, agents: [agent], projectChips: {
-      project, threads: [busy], readOnly: false, onOpenPane: vi.fn(), onOpenNode: vi.fn(), onChanged: vi.fn(),
-    } } as Partial<ComponentProps<typeof AgentChat>>);
-    expect(await screen.findByRole("button", { name: /^Working, / })).toBeInTheDocument();
   });
 });
 
@@ -1738,18 +1585,8 @@ describe("AgentChat — pointing at a preview option", () => {
   });
 });
 
-describe("AgentChat — project composer copy", () => {
-  it("asks a worker thread to be steered", () => {
-    renderChat({ project: { slug: "hub", name: "Hub", role: "worker" } });
-    expect(screen.getByPlaceholderText("Steer this thread…")).toBeInTheDocument();
-  });
-
-  it("points a coordinator's composer at the coordinator", () => {
-    renderChat({ project: { slug: "hub", name: "Hub", role: "coordinator" } });
-    expect(screen.getByPlaceholderText("Ask the coordinator…")).toBeInTheDocument();
-  });
-
-  it("keeps the reply copy outside a project", () => {
+describe("AgentChat — composer copy", () => {
+  it("asks for a reply", () => {
     renderChat();
     expect(screen.getByPlaceholderText("Type a reply…")).toBeInTheDocument();
   });
@@ -1895,7 +1732,7 @@ describe("AgentChat — the desk's Terminal tab", () => {
         <button type="button" onClick={() => setShown((on) => !on)}>toggle tab</button>
         {shown && <section aria-label="Terminal tab"><div ref={setMirror} /><div ref={setControls} /></section>}
         <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]} text={"$ bun test\n3 pass"} onBack={vi.fn()} onSelect={vi.fn()}
-          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal, report: vi.fn() }} />
+          sessionPanel={{ terminal: shown && mirror && controls ? { mirror, controls } : null, showTerminal }} />
         <MirrorShown />
       </>;
     }
@@ -1913,21 +1750,5 @@ describe("AgentChat — the desk's Terminal tab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "toggle tab" }));
     await waitFor(() => expect(screen.getByTestId("mirror-shown")).toHaveTextContent("false"));
-  });
-
-  it("tells the panel its model and how full its context is, from tokens when no share is reported", async () => {
-    const paneId = "reported";
-    server.use(http.get(/\/api\/pane\/[^/]+\/history$/, () => HttpResponse.json({
-      paneId, available: true, entries: [{ uuid: "a", ts: "", role: "assistant", parts: [{ kind: "text", text: "Conversation turn" }] }],
-      total: 1, hasMore: false, fileTruncated: false,
-      telemetry: { source: "journal", model: "gpt-5.5", fileTruncated: false, context: { usedTokens: 82_000, windowTokens: 200_000 } },
-    })));
-    const agent = { ...fixtureAgents[0]!, paneId, agent: "codex", status: "idle" as const, hasSession: true };
-    const report = vi.fn();
-    const router = createMemoryRouter([{ path: "/pane/:paneId", element: <AgentChat paneId={paneId} agent={agent} agents={[agent]} shellPanes={[]} tabs={[]}
-      text="" onBack={vi.fn()} onSelect={vi.fn()} sessionPanel={{ terminal: null, showTerminal: vi.fn(), report }} /> }], { initialEntries: [`/pane/${paneId}`] });
-    render(<RouterProvider router={router} />);
-    expect(await screen.findByText("Conversation turn")).toBeInTheDocument();
-    await waitFor(() => expect(report).toHaveBeenLastCalledWith({ model: "gpt-5.5", contextPercent: 41 }));
   });
 });

@@ -84,10 +84,8 @@ export type PaneDiff =
     files: DiffFile[];
     totals: { files: number; additions: number; deletions: number };
     truncated?: { files?: true; bytes?: true };
-    /** The project's repository, read because the pane's own folder is not in one (`projectSessionDiff`). */
-    repo?: string;
   }
-  | { ok: false; reason: keyof typeof MESSAGES; message: string; repo?: string };
+  | { ok: false; reason: keyof typeof MESSAGES; message: string };
 
 const MESSAGES = {
   "no-folder": "This pane's folder is not available, so there is no worktree to read.",
@@ -291,29 +289,18 @@ export async function sessionDiff(
 }
 
 /**
- * What a session changed where its work is: its own folder, else, when that is in no repository (a
- * coordinator works in its project's folder), the first repository its project names that is one,
- * named as `repo`. `base` gives the PR's base for a folder. The client never names either folder.
+ * What a session changed in its own folder, saying where that folder is when it is in no repository.
+ * `base` gives the PR's base for a folder. The client never names the folder.
  */
-export async function projectSessionDiff(
+export async function paneSessionDiff(
   cwd: string | undefined,
   scope: DiffScope,
-  repos: readonly string[],
   { base, run, limits }: { base: (folder: string) => string | undefined; run?: GitRun; limits?: Partial<DiffLimits> },
 ): Promise<PaneDiff> {
   const own = await sessionDiff(cwd, scope, { base: cwd ? base(cwd) : undefined, run, limits });
   if (own.ok || own.reason !== "no-repo") return own;
-  // A repository in a private-named folder (a password store, a dotfile config) is never read for it.
-  for (const repo of repos.filter((path) => !isPrivateProjectPath(path))) {
-    const read = await sessionDiff(repo, scope, { base: base(repo), run, limits });
-    // A repository that is gone, or no longer one, gives way to the next.
-    if (read.ok || (read.reason !== "no-repo" && read.reason !== "no-folder")) return { ...read, repo };
-  }
   // `no-repo` comes only after the folder was found, so `cwd` is a path here.
-  const folder = homeLabel(cwd!);
-  return { ...own, message: repos.length
-    ? `This pane works in ${folder}, which is not a git repository, and no repository its project names could be read.`
-    : `This pane works in ${folder}, which is not in a git repository, so there are no changes to read.` };
+  return { ...own, message: `This pane works in ${homeLabel(cwd!)}, which is not in a git repository, so there are no changes to read.` };
 }
 
 /** A path with the home folder written as `~`. */

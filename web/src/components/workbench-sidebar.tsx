@@ -1,34 +1,26 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ChevronRight, House, Laptop, LayoutGrid, ListChecks, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
+import { House, Laptop, LayoutGrid, Plus, Search, Settings2, SquarePen } from "@/components/ui/icon";
 
 import { DeskLists } from "@/components/desk-nav";
-import { openNewDialog } from "@/components/new-agent-sheet";
-import { NodeDot } from "@/components/node-row";
-import { CoordinatorGlyph, ProjectGlyph } from "@/components/project-glyph";
 import { SessionSwitcher } from "@/components/session-switcher";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { resting, StatusDot } from "@/components/status-badge";
+import { StatusDot } from "@/components/status-badge";
 import { ChatRow, Highlight, OpeningMark, PaneMark, PlaceText, RowBody } from "@/components/nav-rows";
 import { WorkspaceTree } from "@/components/workspace-tree";
 import { MachinesSlot } from "@/components/machines-slot";
 import { cn } from "@/lib/utils";
-import { isAttention } from "@/lib/triage";
 import { workspaceTree } from "@/lib/workspace-tree";
-import { displayName } from "@/lib/display-name";
 import { navSearch, type SearchGroup, type SearchHit } from "@/lib/nav-search";
 import { currentMachine, machineSearch, type MachineSearchGroup } from "@/lib/machines";
-import { asksAvailable } from "@/hooks/use-asks";
 import { useSidebarPrefs } from "@/hooks/use-sidebar-prefs";
 import { drawerSections, type DrawerChat } from "@/lib/nav-drawer";
 import { needsYouCount, needYou } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
-import { asksPath, homePath, nodePath, panePath, projectPath, projectsPath, settingsPath, workspacePath } from "@/lib/nav";
+import { homePath, panePath, settingsPath, workspacePath } from "@/lib/nav";
 import type { Herd } from "@/lib/spaces";
-import { ASK, STATE_LABEL, awaits, historyCount, holds, orgTree, type NodeState, type OrgNode } from "@/lib/org-tree";
-import { coordinatorPane, isOpenThread, projectForPane } from "@/lib/projects";
-import { STATUS_LABEL, type AgentView, type ProjectView, type WorkspaceView } from "@/lib/types";
+import { STATUS_LABEL } from "@/lib/types";
 
 export interface SidebarRequest {
   target: "search";
@@ -37,19 +29,15 @@ export interface SidebarRequest {
 
 /**
  * Where the navigation is drawn. The desk's sidebar is Cursor's: New chat, Search, Home (which counts
- * what needs you) and Projects (ADR 0102) while there is one, then its projects as flat rows and its chats by when they last moved;
- * the tree of projects and workspaces is its Search's, under the box until something is typed
- * (ADR 0080). A phone's Search sheet (the tab bar's) is also its browsing: under its box, until
- * something is typed, every project and workspace folded, the sessions and the host. Its drawer
- * (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with what needs you
- * and the chats that moved last.
+ * what needs you), then its chats by when they last moved; the tree of workspaces is its Search's,
+ * under the box until something is typed (ADR 0080). A phone's Search sheet (the tab bar's) is also
+ * its browsing: under its box, until something is typed, every workspace folded, the sessions and the
+ * host. Its drawer (Home's or a chat's Nenu mark) leaves New and Search to its header and leads with
+ * what needs you and the chats that moved last.
  */
 export type SidebarVariant = "sidebar" | "sheet" | "drawer";
 
-/**
- * The workbench navigation: its variant's lead, then projects (coordinators and their threads) and
- * the workspaces no project holds, and the host it all runs on.
- */
+/** The workbench navigation: its variant's lead, then the workspaces, and the host it all runs on. */
 export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar" }: {
   data: HomeData;
   variant?: SidebarVariant;
@@ -150,7 +138,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
   }
 
   return (
-    <nav ref={navigation} className="workbench-navigation" aria-label="Projects and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}
+    <nav ref={navigation} className="workbench-navigation" aria-label="Workspaces and chats" data-variant={variant} data-list={query.trim() ? "search" : "browse"}
       onKeyDown={(event) => { if (event.key === "Escape" && searching && !phone) closeSearch(); }}>
       {(!phone || searching) && <div className="nav-top">
         {!phone && <button type="button" className="nav-row" onClick={onNewChat} disabled={!onNewChat} aria-keyshortcuts="Meta+N">
@@ -159,7 +147,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
         {searching ? (
           <label className="nav-row nav-search">
             <Search aria-hidden size={16} />
-            <input ref={searchBox} type="search" autoFocus value={query} placeholder="Search" aria-label="Search projects and chats"
+            <input ref={searchBox} type="search" autoFocus value={query} placeholder="Search" aria-label="Search workspaces and chats"
               aria-controls={hits.length ? listId : undefined} aria-autocomplete="list"
               aria-activedescendant={hits.length ? optionId(listId, selected) : undefined}
               onChange={(event) => { setQuery(event.target.value); setPicked(undefined); }}
@@ -176,9 +164,6 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
           <House aria-hidden size={16} /><span className="nav-row-text">Home</span>
           {attention > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{attention}</span>}
         </Link>}
-        {!phone && !!data.projects?.length && <Link className="nav-row" to={projectsPath(data.session)} aria-current={pathname === "/projects" ? "page" : undefined}>
-          <LayoutGrid aria-hidden size={16} /><span className="nav-row-text">Projects</span>
-        </Link>}
       </div>}
 
       {/* A link followed from the desk's tree ends its search once the page is on screen, as a result does. */}
@@ -191,9 +176,7 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
             ? <PhoneLists data={data} drawer={variant === "drawer"} onNewChat={onNewChat} />
             : searching ? <div className="nav-enter"><SidebarTree data={data} /><MachinesSlot data={data} place="nav" /></div>
             : <>
-              {(data.projects?.length || data.agents.length)
-                ? <DeskLists data={data} onNewProject={onNewChat && (() => openNewDialog({ kind: "project" }))} />
-                : <Empty phone={false} />}
+              {data.agents.length ? <DeskLists data={data} /> : <Empty phone={false} />}
               <MachinesSlot data={data} place="nav" />
             </>}
       </div>
@@ -209,15 +192,13 @@ export function WorkbenchSidebar({ data, onNewChat, request, variant = "sidebar"
 
 const optionId = (listId: string, index: number) => `${listId}-${index}`;
 
-/** Where a search result opens: a project's page, a node's chat (or its detail when it runs nowhere), a pane's chat. */
+/** Where a search result opens: a workspace's pane, or a pane's chat. */
 function hitPath(hit: SearchHit, herd: Herd, session?: string): string {
-  if (hit.kind === "project") return projectPath(hit.project.slug, session);
-  if (hit.kind === "node") return hit.thread.paneId ? panePath(hit.thread.paneId, session) : nodePath(hit.project.slug, hit.thread.id, session);
   if (hit.kind === "workspace") return workspacePath(hit.workspace.workspaceId, herd, session);
   return panePath(hit.pane.paneId, session);
 }
 
-/** The search's matches as one list (Projects, Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
+/** The search's matches as one list (Workspaces, then Chats), each row named as everywhere else with the match in semibold. */
 function SearchResults({ groups, query, listId, selected, herd, session, onPick, onOpen }: {
   groups: Array<SearchGroup | MachineSearchGroup>;
   query: string;
@@ -260,23 +241,18 @@ function SearchResults({ groups, query, listId, selected, herd, session, onPick,
 }
 
 function HitMark({ hit }: { hit: SearchHit }) {
-  if (hit.kind === "project") return <ProjectGlyph slug={hit.project.slug} pick={hit.project} />;
-  if (hit.kind === "node") return <NodeDot state={hit.state} />;
   if (hit.kind === "workspace") return <LayoutGrid aria-hidden size={14} />;
   return <PaneMark pane={hit.pane} />;
 }
 
 function hitState(hit: SearchHit): string {
-  if (hit.kind === "project") return "project";
-  if (hit.kind === "node") return STATE_LABEL[hit.state].toLowerCase();
   if (hit.kind === "workspace") return "workspace";
   return hit.pane.kind === "shell" ? "shell" : STATUS_LABEL[hit.pane.status];
 }
 
 /**
  * A phone's drawer or Search sheet before anything is typed. The drawer leads with the chats waiting on
- * you, above the projects, and ends with the ones that moved last, so a coordinator is a tap into its
- * project from the top (ADR 0110).
+ * you, above the workspaces, and ends with the ones that moved last.
  */
 function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boolean; onNewChat?: () => void }) {
   const { paneId } = useParams();
@@ -285,7 +261,7 @@ function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boole
   const section = (label: string, rows: readonly DrawerChat[], counted: boolean) => rows.length > 0 && (
     <section aria-label={label} className="nav-group">
       <h3 className="nav-label">{label}{counted && <> <span className="nav-count">{rows.length}</span></>}</h3>
-      {rows.map((chat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} projects={data.projects} current={chat.current} now={now}
+      {rows.map((chat) => <ChatRow key={chat.pane.paneId} pane={chat.pane} current={chat.current} now={now}
         session={data.session} />)}
     </section>
   );
@@ -298,85 +274,21 @@ function PhoneLists({ data, drawer, onNewChat }: { data: HomeData; drawer: boole
 }
 
 /**
- * Your asks, where a phone lists the projects, with how many wait on you; only when Organizations can
- * list asks (ADR 0091), so an older one leaves the lists as they were. A desk reads them on each project.
- */
-function AsksRow({ data, current }: { data: HomeData; current: boolean }) {
-  if (!asksAvailable(data.projects)) return null;
-  const waiting = (data.projects ?? []).reduce((sum, project) => sum + (project.waitingAsks ?? 0), 0);
-  return (
-    <Link className="nav-row" to={asksPath(data.session)} aria-current={current ? "page" : undefined}
-      aria-label={waiting > 0 ? `Your asks, ${waiting} ${waiting === 1 ? "waits" : "wait"} on you` : undefined}>
-      <span className="nav-lead"><ListChecks aria-hidden size={16} /></span>
-      <span className="nav-row-text">Your asks</span>
-      {waiting > 0 && <span className="nav-row-meta" aria-hidden><StatusDot status="blocked" />{waiting}</span>}
-    </Link>
-  );
-}
-
-/**
- * Projects first, then the workspaces no project holds a pane in. `folded` is the phone's: every
- * project and workspace starts closed, and what the operator opens there lasts while the sheet does,
- * so the next open is compact again and the desk's remembered folds stay the desk's.
+ * The workspaces. `folded` is the phone's: every workspace starts closed, and what the operator opens
+ * there lasts while the sheet does, so the next open is compact again and the desk's remembered folds
+ * stay the desk's.
  */
 function SidebarTree({ data, onNewChat, folded = false }: { data: HomeData; onNewChat?: () => void; folded?: boolean }) {
-  const { paneId, projectSlug } = useParams();
-  const { prefs, setExpanded, setWorkspaceOpen, setTabOpen } = useSidebarPrefs({ persist: !folded });
-  const projects = data.projects ?? [];
-  const loose = { ...data, ...looseWorkspaces(data) };
-  const currentProject = projectSlug ?? projectForPane(data.projects, paneId)?.project.slug;
-  useRevealProject(folded ? undefined : currentProject, setExpanded);
-  const hasWorkspaces = workspaceTree(loose, paneId).length > 0;
-
-  return <>
-    {projects.length > 0 && (
-      <section aria-label="Projects" className="nav-group">
-        <h3 className="nav-label">Projects</h3>
-        {folded && <AsksRow data={data} current={false} />}
-        {projects.map((project) => (
-          <ProjectSection key={project.slug} project={project} data={data} open={prefs.expanded[project.slug] ?? !folded} phone={folded}
-            expanded={prefs.expanded} onExpand={setExpanded} panes={folded ? [] : projectPanes(data, project)} />
-        ))}
-      </section>
-    )}
-    {hasWorkspaces && (
-      <section aria-label="Workspaces" className="nav-group">
-        <h3 className="nav-label">Workspaces</h3>
-        <WorkspaceTree source={loose} session={data.session} currentPaneId={paneId}
-          expanded={prefs.workspaces} onExpand={setWorkspaceOpen} tabs={prefs.tabs} onTab={setTabOpen} startFolded={folded} />
-      </section>
-    )}
-    {projects.length === 0 && !hasWorkspaces && <Empty phone={folded} onNewChat={onNewChat} />}
-  </>;
-}
-
-/**
- * Workspaces no project holds a live pane in; all of them when there are no projects. A project's
- * panes are listed under the project, so the workspace tree leaves them out, and a workspace left
- * with only those (a bridge that did not report `workspaceIds`) is not loose either.
- */
-export function looseWorkspaces(data: Pick<HomeData, "workspaces" | "projects" | "agents" | "shellPanes">): { workspaces: WorkspaceView[]; agents: AgentView[]; shellPanes: AgentView[] } {
-  const held = new Set((data.projects ?? []).flatMap((project) => project.workspaceIds ?? []));
-  const free = (pane: AgentView) => !projectForPane(data.projects, pane.paneId);
-  const agents = data.agents.filter(free);
-  const shellPanes = data.shellPanes.filter(free);
-  const panes = [...data.agents, ...data.shellPanes];
-  const workspaces = data.workspaces.filter((workspace) => {
-    if (held.has(workspace.workspaceId)) return false;
-    const inside = panes.filter((pane) => pane.workspaceId === workspace.workspaceId);
-    return inside.length === 0 || inside.some(free);
-  });
-  return { workspaces, agents, shellPanes };
-}
-
-/** Arriving in a project reveals it once; collapsing it again afterwards is the operator's call. */
-function useRevealProject(currentProject: string | undefined, setExpanded: (slug: string, open: boolean) => void) {
-  const revealed = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!currentProject || revealed.current === currentProject) return;
-    revealed.current = currentProject;
-    setExpanded(currentProject, true);
-  }, [currentProject, setExpanded]);
+  const { paneId } = useParams();
+  const { prefs, setWorkspaceOpen, setTabOpen } = useSidebarPrefs({ persist: !folded });
+  if (workspaceTree(data, paneId).length === 0) return <Empty phone={folded} onNewChat={onNewChat} />;
+  return (
+    <section aria-label="Workspaces" className="nav-group">
+      <h3 className="nav-label">Workspaces</h3>
+      <WorkspaceTree source={data} session={data.session} currentPaneId={paneId}
+        expanded={prefs.workspaces} onExpand={setWorkspaceOpen} tabs={prefs.tabs} onTab={setTabOpen} startFolded={folded} />
+    </section>
+  );
 }
 
 /**
@@ -401,197 +313,6 @@ function HostRow({ data, desk }: { data: HomeData; desk: boolean }) {
         {meta && <span className="nav-host-meta">{meta}</span>}
       </span>
       <Link className="workbench-icon-button" to={settingsPath(data.session)} aria-label="Settings"><Settings2 aria-hidden size={16} /></Link>
-    </div>
-  );
-}
-
-interface TreeFolds {
-  /** Explicit folds, keyed by project slug, `slug/threadId` for a coordinator, and `slug/history`. */
-  expanded: Record<string, boolean>;
-  onExpand: (key: string, open: boolean) => void;
-}
-
-/** A tree row's word and its tone: red asks for you, blue is to review, green has merged and closes on its own. */
-const NEEDS_TONE = "text-status-blocked";
-const STATE_WORD: Partial<Record<NodeState, { word: string; tone: string }>> = {
-  needs: { word: "needs you", tone: NEEDS_TONE }, review: { word: "review", tone: "text-primary" }, closing: { word: "merged", tone: "text-status-done" },
-};
-
-function ProjectSection({ project, data, open, expanded, onExpand, panes = [], phone = false }: TreeFolds & {
-  project: ProjectView;
-  data: HomeData;
-  open: boolean;
-  /**
-   * A phone's drawer or Search sheet: the project opens on its coordinators, each a way into its chat,
-   * and the threads that work, wait on you or wait for a review; no count, no History (ADR 0110).
-   */
-  phone?: boolean;
-  /** The project's workspace panes outside every thread, listed after its threads. */
-  panes?: AgentView[];
-}) {
-  const { paneId, projectSlug, nodeId } = useParams();
-  const listId = useId();
-  const session = data.session;
-  const status = project.coordinator?.liveStatus;
-  const openCount = project.threads.filter(isOpenThread).length;
-  const tree = orgTree(project.threads);
-  const isCurrent = (node: OrgNode) => (node.thread.paneId !== undefined && node.thread.paneId === paneId) || (projectSlug === project.slug && nodeId === node.thread.id);
-  // Open coordinators start open and resolved ones folded; the node on screen opens them.
-  const branch = (node: OrgNode, depth: number): ReactNode => {
-    const row = (fold?: ThreadRowFold) => <ThreadRow key={node.thread.id} node={node} depth={depth} slug={project.slug} session={session} current={isCurrent(node)}
-      mark={node.thread.role === "coordinator" ? <CoordinatorGlyph project={project} id={node.thread.id} size={14} /> : undefined}
-      live={node.thread.paneId !== undefined && data.agents.some((agent) => agent.paneId === node.thread.paneId)}
-      fold={fold} />;
-    if (phone) {
-      const children = node.children.filter(shownOnPhone);
-      return children.length ? <div key={node.thread.id} role="group" aria-label={node.thread.title}>{row()}{children.map((child) => branch(child, depth + 1))}</div> : row();
-    }
-    if (node.children.length === 0) return row();
-    const key = `${project.slug}/${node.thread.id}`;
-    const nodeOpen = expanded[key] ?? (node.state !== "resolved" || node.children.some((child) => holds(child, isCurrent)));
-    return (
-      <div key={node.thread.id} role="group" aria-label={node.thread.title}>
-        {row({ open: nodeOpen, onToggle: () => onExpand(key, !nodeOpen) })}
-        {nodeOpen && node.children.map((child) => branch(child, depth + 1))}
-      </div>
-    );
-  };
-  const historyKey = `${project.slug}/history`;
-  const historyOpen = expanded[historyKey] ?? tree.history.some((node) => holds(node, isCurrent));
-  const historyTotal = tree.resolved.coordinators + tree.resolved.threads;
-  const history = historyPreview(tree.history, (node) => holds(node, isCurrent));
-  // The project's coordinator is entered at its chat, as every coordinator is (ADR 0115).
-  const coordinatorPaneId = coordinatorPane(project, "root", data.agents);
-  const coordinatorTo = coordinatorPaneId ? panePath(coordinatorPaneId, session) : nodePath(project.slug, "root", session);
-  return (
-    <section aria-label={project.name} className="nav-project-section">
-      <div className="nav-project">
-        <Link className="nav-row" to={projectPath(project.slug, session)} aria-current={projectSlug === project.slug && !nodeId ? "page" : undefined}>
-          <span className="nav-lead">
-            <OpeningMark to={projectPath(project.slug, session)}>
-              <ProjectGlyph slug={project.slug} pick={project} />
-            </OpeningMark>
-          </span>
-          <span className="nav-row-text">{project.name}</span>
-          {status && !resting(status) && <StatusDot status={status} />}
-          {status && <span className="sr-only">, coordinator {STATUS_LABEL[status]}</span>}
-          {openCount > 0 && !phone && <span className="nav-count" aria-hidden>{openCount}</span>}
-          {openCount > 0 && !phone && <span className="sr-only">{`, ${openCount} open ${openCount === 1 ? "task" : "tasks"}`}</span>}
-        </Link>
-        <button type="button" className="nav-disclosure nav-disclosure-end" aria-label={`${project.name} tasks`} aria-expanded={open} aria-controls={listId}
-          onClick={() => onExpand(project.slug, !open)}>
-          <ChevronRight aria-hidden size={14} />
-        </button>
-      </div>
-      {open && (
-        <div id={listId}>
-          {project.coordinator && (
-            <Link className="nav-row nav-tree-row" style={depthStyle(1)} to={coordinatorTo}
-              aria-current={project.coordinator.paneId === paneId || (projectSlug === project.slug && nodeId === "root") ? "page" : undefined}>
-              <span className="nav-tree-mark"><OpeningMark to={coordinatorTo}><CoordinatorGlyph project={project} id="root" size={14} /></OpeningMark></span>
-              <span className="nav-row-text">Coordinator</span>
-              <span className="sr-only">, {STATUS_LABEL[project.coordinator.liveStatus]}</span>
-              {isAttention(project.coordinator.liveStatus)
-                ? <span className="nav-row-word text-status-blocked">needs you</span>
-                : <span className="nav-row-note">{project.coordinator.agent}</span>}
-            </Link>
-          )}
-          {(phone ? tree.open.filter(shownOnPhone) : tree.open).map((node) => branch(node, 1))}
-          {panes.map((pane) => (
-            <Link key={pane.paneId} className="nav-row nav-tree-row" style={depthStyle(1)} to={panePath(pane.paneId, session)}
-              aria-current={pane.paneId === paneId ? "page" : undefined}>
-              <span className="nav-tree-mark"><OpeningMark to={panePath(pane.paneId, session)}><PaneMark pane={pane} /></OpeningMark></span>
-              <span className="nav-row-text">{displayName(pane, data.projects)}</span>
-              {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
-              <span className="nav-row-note">{pane.kind === "shell" ? "shell" : pane.agent}</span>
-            </Link>
-          ))}
-          {!phone && tree.history.length > 0 && <>
-            <button type="button" className="nav-row nav-history" aria-expanded={historyOpen}
-              title={`History · ${historyCount(tree.resolved)}`} onClick={() => onExpand(historyKey, !historyOpen)}>
-              <ChevronRight aria-hidden size={14} />History <span className="nav-count">{historyTotal}</span>
-            </button>
-            {historyOpen && history.map((node) => branch(node, 2))}
-            {historyOpen && history.length < tree.history.length && (
-              <Link className="nav-row nav-tree-row nav-history-all" style={depthStyle(2)} to={projectPath(project.slug, session)}>
-                <span className="nav-row-text">Show all {historyTotal} in project</span><ChevronRight aria-hidden size={14} />
-              </Link>
-            )}
-          </>}
-        </div>
-      )}
-    </section>
-  );
-}
-
-/** What a phone's project lists: its coordinators, and the threads that work or wait on you. */
-const shownOnPhone = (node: OrgNode): boolean => node.thread.role === "coordinator" || node.state === "needs" || node.state === "working" || node.state === "review";
-
-/** How many resolved nodes the sidebar's History lists before handing the rest to the project page. */
-const HISTORY_PREVIEW = 5;
-
-/**
- * History as the sidebar shows it: the nodes that moved last, plus any holding what is on screen,
- * still in the tree's own order (coordinators first, newest first).
- */
-function historyPreview(history: OrgNode[], onScreen: (node: OrgNode) => boolean): OrgNode[] {
-  if (history.length <= HISTORY_PREVIEW) return history;
-  const updated = (node: OrgNode) => Date.parse(node.thread.updated ?? "") || 0;
-  const keep = new Set([...history].sort((a, b) => updated(b) - updated(a)).slice(0, HISTORY_PREVIEW));
-  return history.filter((node) => keep.has(node) || onScreen(node));
-}
-
-/** Panes in a project's workspaces that run neither its coordinator nor one of its threads. */
-function projectPanes(data: HomeData, project: ProjectView): AgentView[] {
-  const held = new Set(project.workspaceIds ?? []);
-  if (held.size === 0) return [];
-  return [...data.agents, ...data.shellPanes].filter((pane) => held.has(pane.workspaceId) && !projectForPane(data.projects, pane.paneId));
-}
-
-const depthStyle = (depth: number) => ({ "--nav-depth": depth }) as CSSProperties;
-
-interface ThreadRowFold {
-  open: boolean;
-  onToggle: () => void;
-}
-
-/** A node's row: its chat when it runs in a live pane, its detail otherwise; never the project page. */
-function ThreadRow({ node, depth, slug, session, current, live, fold, mark }: {
-  node: OrgNode;
-  depth: number;
-  /** A coordinator's own mark (ADR 0122), in place of its state's: its word at the end says that. */
-  mark?: ReactNode;
-  slug: string;
-  session?: string;
-  current: boolean;
-  /** Its pane is in the snapshot: Organizations keeps a pane id after the pane closed. */
-  live: boolean;
-  /** Present on a coordinator with nodes under it. */
-  fold?: ThreadRowFold;
-}) {
-  const { thread, state } = node;
-  const ask = awaits(thread);
-  const word = ask ? { word: ASK[ask].word, tone: NEEDS_TONE } : STATE_WORD[state];
-  // "not running" only beside a quiet dot: a node whose last group says working keeps its dot's word.
-  const note = (thread.paneId && live) || state === "resolved" || (thread.status === "open" && state !== "idle") ? undefined : thread.status === "open" ? "not running" : thread.status;
-  const to = thread.paneId && live ? panePath(thread.paneId, session) : nodePath(slug, thread.id, session);
-  return (
-    <div className="nav-thread">
-      {fold && (
-        <button type="button" className="nav-disclosure" style={depthStyle(depth)} aria-label={`${thread.title} threads`} aria-expanded={fold.open}
-          onClick={fold.onToggle}>
-          <ChevronRight aria-hidden size={14} />
-        </button>
-      )}
-      <Link className={cn("nav-row nav-tree-row", fold && "nav-tree-head", state === "resolved" && "nav-tree-resolved")} style={depthStyle(depth)}
-        to={to} aria-current={current ? "page" : undefined}>
-        <span className="nav-tree-mark"><OpeningMark to={to}>{mark ?? <NodeDot state={state} />}</OpeningMark></span>
-        <span className="nav-row-text">{thread.title}</span>
-        <span className="sr-only">, {ask ? ASK[ask].word : STATE_LABEL[state].toLowerCase()}</span>
-        {fold && state !== "resolved" && <span className="nav-dots" aria-hidden>{node.children.filter((child) => child.state !== "idle").slice(0, 6).map((child) => <NodeDot key={child.thread.id} state={child.state} className="size-3" />)}</span>}
-        {word && <span aria-hidden className={cn("nav-row-word", word.tone)}>{word.word}</span>}
-        {note && !word && !fold && <span className="nav-row-note">{note}</span>}
-      </Link>
     </div>
   );
 }

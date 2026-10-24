@@ -247,7 +247,6 @@ describe("with the live-events stream", () => {
 
   it("maps each event to the loader it needs", () => {
     expect(scopeOf({ topic: "snapshot" }, "w1:p1")).toBe("root");
-    expect(scopeOf({ topic: "org" }, null)).toBe("root");
     expect(scopeOf({ topic: "pane", paneId: "w1:p1" }, "w1:p1")).toBe("pane");
     expect(scopeOf({ topic: "pane", paneId: "w1:p2" }, "w1:p1")).toBeNull();
     expect(scopeOf({ topic: "pane", paneId: "w1:p1" }, null)).toBeNull();

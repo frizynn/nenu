@@ -6,10 +6,10 @@ import { StateMark, StatusDot } from "@/components/status-badge";
 import { displayName, displayPlace, type DisplayPlace } from "@/lib/display-name";
 import { timeAgoShort } from "@/lib/format";
 import { panePath } from "@/lib/nav";
-import { chatRecency } from "@/lib/projects";
+import { chatRecency } from "@/lib/recency";
 import { matchRange } from "@/lib/nav-search";
 import { TITLE_SEP } from "@/lib/pane-name";
-import { STATUS_LABEL, type AgentView, type ProjectView } from "@/lib/types";
+import { STATUS_LABEL, type AgentView } from "@/lib/types";
 
 // The parts every list of chats in the navigation shares (the tree, search, Needs you, Recent and
 // the pane switcher), so a pane reads the same wherever it is listed: a mark, its name, where it lives.
@@ -77,9 +77,8 @@ export function OpeningMark({ to, children }: { to: string; children: ReactNode 
 }
 
 /** A chat: its state, its one name, where it lives and how long ago it last moved. */
-export function ChatRow({ pane, projects, current, now, session }: {
+export function ChatRow({ pane, current, now, session }: {
   pane: AgentView;
-  projects?: readonly ProjectView[];
   current: boolean;
   now: number;
   session?: string;
@@ -88,7 +87,7 @@ export function ChatRow({ pane, projects, current, now, session }: {
   const to = panePath(pane.paneId, session);
   return (
     <Link className="nav-pane nav-chat" to={to} aria-current={current ? "page" : undefined}>
-      <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={displayName(pane, projects)} detail={<PlaceText place={displayPlace(pane, projects)} />} end={<>
+      <RowBody mark={<OpeningMark to={to}><PaneMark pane={pane} /></OpeningMark>} title={displayName(pane)} detail={<PlaceText place={displayPlace(pane)} />} end={<>
         {pane.kind !== "shell" && <span className="sr-only">, {STATUS_LABEL[pane.status]}</span>}
         {at > 0 && <span className="nav-chat-time">{timeAgoShort(at, now)}</span>}
       </>} />

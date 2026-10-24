@@ -1,6 +1,5 @@
 import { shownStatus } from "../activity.ts";
 import { computeEtag, JsonBody, notModified, notModifiedResponse } from "../http-cache.ts";
-import { looseWorkspaceIds } from "../projects.ts";
 import type { SessionRuntime } from "../sessions.ts";
 import { toPaneWire, type AgentView, type MachineHerd, type SnapshotResponse } from "../types.ts";
 import { deviceAuth } from "./access.ts";
@@ -15,14 +14,12 @@ export const snapshotRoutes: Route[] = [
     access: "read",
     session: true,
     async handle(ctx, { req, rt }) {
-      const { cfg, projects, pullRequests, registry, machines } = ctx;
+      const { cfg, pullRequests, registry, machines } = ctx;
       const herd = herdOf(ctx, rt);
       const device = deviceAuth(req, cfg);
-      // Projects read the shown status too, so a thread's dot agrees with its row everywhere else.
-      const projectViews = projects.list(rt.name, rt.isPrimary, [...herd.shown.agents, ...herd.shown.shellPanes]);
       machines.refresh();
       const others = machines.views(undefined, null);
-      const view: Omit<SnapshotResponse, "ts"> & { looseWorkspaceIds: string[] } = {
+      const view: Omit<SnapshotResponse, "ts"> = {
         bridge: herd.wire.bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
         ...(device.enforced ? { device } : {}),
@@ -30,8 +27,6 @@ export const snapshotRoutes: Route[] = [
         shellPanes: herd.wire.shellPanes,
         workspaces: herd.wire.workspaces,
         tabs: herd.wire.tabs,
-        projects: projectViews,
-        looseWorkspaceIds: looseWorkspaceIds(herd.wire.workspaces, projectViews),
         pullRequests: pullRequests.list(rt.name, [...herd.raw.agents, ...herd.raw.shellPanes]),
         sessions: registry.list(),
         notifications: { snoozedUntil: ctx.snooze.until() },
@@ -71,7 +66,7 @@ function herdOf({ activity, agentStates, hasJournal, interactions }: Services, r
     workspaces,
     tabs,
   };
-  return { raw: { agents, shellPanes }, shown, wire };
+  return { raw: { agents, shellPanes }, wire };
 }
 
 /**
@@ -90,7 +85,7 @@ async function respond(req: Request, view: Omit<SnapshotResponse, "ts">): Promis
 /**
  * The snapshot of another machine (`?session=@<label>`): its herd as its own Nenu answers it now, with
  * this bridge's device, update, sessions and notifications, and every machine's list but its own. Its
- * projects and pull requests stay there: Organizations is one machine's. Its build and update are its
+ * pull requests stay there. Its build and update are its
  * own business, so this page never reloads or nags over the other machine's version.
  */
 export async function machineSnapshot(ctx: Services, req: Request, session: string): Promise<Response> {
@@ -110,7 +105,6 @@ export async function machineSnapshot(ctx: Services, req: Request, session: stri
     shellPanes: herd.shellPanes ?? [],
     workspaces: herd.workspaces ?? [],
     tabs: herd.tabs ?? [],
-    projects: [],
     pullRequests: [],
     sessions: ctx.registry.list(),
     notifications: { snoozedUntil: ctx.snooze.until() },

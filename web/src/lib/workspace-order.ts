@@ -1,7 +1,7 @@
 // How the operator orders the herd's workspaces on this device: Herdr's own order (the default), by
-// name, or an order of their own set by dragging (ADR 0123). Kept in localStorage like the rest of a
-// device's view (lib/panel-layout.ts); a store that throws (private mode, a full quota) keeps it for
-// the page's life. Home's Workspaces and the drawer's tree read the same store, so both follow a change.
+// name, or an order of their own set by dragging (ADR 0124). Kept in localStorage like the rest of a
+// device's view; a store that throws (private mode, a full quota) keeps it for the page's life. Home's
+// Workspaces and the drawer's tree read the same store, so both follow a change.
 import { useSyncExternalStore } from "react";
 
 export type WorkspaceOrderMode = "herdr" | "name" | "custom";
@@ -82,14 +82,3 @@ export function orderWorkspaces<T>(items: readonly T[], idOf: (item: T) => strin
   return [...items].sort((a, b) => at(a) - at(b));
 }
 
-/**
- * `every` id in the order shown, with the ones a narrowed list showed (`shown`, as they were dragged)
- * put back in the places they held: the workspaces a filter hid keep theirs. An id `every` no longer
- * holds (a workspace that closed during the drag) is dropped.
- */
-export function placeOrder(every: readonly string[], shown: readonly string[]): string[] {
-  const open = new Set(every);
-  const next = shown.filter((id) => open.has(id));
-  const moved = new Set(next);
-  return every.map((id) => moved.has(id) ? next.shift()! : id);
-}

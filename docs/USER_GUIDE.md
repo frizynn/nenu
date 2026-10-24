@@ -343,58 +343,7 @@ agent write math that renders, ask it to use these forms:
 - Colors (`\textcolor`) and boxes (`\boxed`) render without the color or the border, because inline
   styles are dropped for safety. A formula that fails to parse shows its TeX source.
 
-## Projects and chat controls
-
-Projects come from [Herdr Organizations](https://github.com/frizynn/herdr-organizations) (or the
-upstream herdr-projects it grew from). Nenu discovers registered projects automatically. Open a project from Overview or the sidebar
-to see its coordinator and threads. Only currently matched panes get chat links; a registered project
-still appears when its agents are offline. Ordinary workspaces remain available alongside projects.
-Discovery follows `HERDR_PROJECTS_ROOT`, then `root` in `~/.config/herdr-projects/config.toml`, then
-`~/.herdr-projects`. Projects are scoped to their recorded Herdr session. The overview reads existing
-project records and live panes; it does not create projects or start agents.
-
-Every view of a project (its page, the panel beside a coordinator, the phone's **Threads** tab and
-the sidebar) draws the same tree as Herdr Organizations' popup. It shows only what is open, nested
-under the coordinators that run it, coordinators first and then needs you, review, working and idle.
-Everything resolved sits in one grey **History** at the end, closed until you open it; each resolved
-coordinator folds over the threads it ran, newest first. Tapping a node opens its chat when it runs in
-a live pane, and its detail page otherwise; nothing jumps elsewhere.
-
-A coordinator's page also has a **Summary** tab: everything under it in three sections, **Needs your
-decision**, **In progress** and **Done**, newest first. Each card shows what the agent's last report
-says in plain words, its pull request, the pictures it took (swipe the row, tap one to see it large)
-and the documents it left; an HTML page or PDF opens in a new tab. The coordinator's own report heads
-the page. This needs a Herdr Organizations whose reports carry a status and a summary; with an older
-one the page opens on its threads as before, and the Summary shows each thread's state and pull
-request only.
-
-When a coordinator keeps a **STATUS.md** (what you asked and where it stands, what needs your decision
-and what was decided), its page opens with it in a **Status** block, and the project
-page shows the root coordinator's under the project's name. A state such as `[needs-decision]` at the
-start of a line reads as a coloured label, and a thread id such as `t-0042` opens that thread. A long
-file folds; **Show all** opens the rest. With a Herdr Organizations that does not publish the file there
-is no block.
-
-**Your asks** lists everything you asked any coordinator, in one place: what waits on you, what does
-not close (the coordinator says done but its pull request is still open, say), what is in progress,
-what is done, and lines that do not follow the format. Each row says the project, the coordinator and
-its answer, or why it does not close, and a tap opens that coordinator. It sits above the projects in
-the desk's bar and at the top of Projects in a phone's Search, with how many wait on you.
-
-A coordinator's page then opens on its **card**: its objective, what waits on you, its other asks, the
-agents it runs with their state and verdict, their pull requests, and how full its context is, marked
-when it passed a cap. The project's own coordinator has its card too, opened from Your asks. Its
-STATUS.md stays one tap below, under **Show STATUS.md**. Both need a Herdr Organizations with `asks`;
-with an older one neither shows, and the pages are as before.
-
-**Close** (the check on an open row) stops a node and its view and keeps its branch, worktree and
-report. A coordinator that still runs open work is refused until those are closed. **Replace
-coordinator** (on the coordinator's row) stops the project coordinator and starts a new one on the
-agent you choose (`herdr-organizations coordinator replace`). **New thread** and **New coordinator**
-start nodes, from a template when the project has them. The **PRs** tab lists the open pull requests of open threads with their
-state in words; pull requests of resolved threads fold into **History**, since Organizations stops
-re-reading a pull request once its thread is resolved. These actions need a device with write
-access and Herdr Organizations; upstream herdr-projects can only close and start top-level threads.
+## Chat controls
 
 In a chat, open **Files and photos** to browse file references and images from its available journal.
 The browser can load older entries and reports when the underlying journal is truncated. File
@@ -568,7 +517,6 @@ Each machine's state, in Settings and in the lists:
 - If a machine's Nenu keeps its state somewhere else (`COLLIE_STATE_DIR`), export the same variable in
   that machine's shell profile, so the SSH probe finds it.
 - `COLLIE_MACHINE_LABEL` names this machine in the lists (default: its host name).
-- Herdr Organizations projects stay on the machine that runs them.
 
 ### Multi-session
 
@@ -831,9 +779,8 @@ terminates TLS. Plain-HTTP modes (`COLLIE_SERVE_MODE=http`) are **not** a secure
 browser won't even offer the subscribe button — Settings flags it `insecure`.
 
 Nenu pushes when an agent **needs your input**, and when an agent **finishes something a person
-asked**: a message you sent from Nenu, or text typed into a loose agent or a coordinator. It does not
-push for Herdr Organizations' own back-and-forth (its inbox nudges and a coordinator's messages to
-its threads) or, unless you switch them on, for a subagent's result or for an agent another agent
+asked**: a message you sent from Nenu, or text typed into the agent. It does not push, unless you
+switch them on, for a subagent's result or for an agent another agent
 started with `herdr agent start <name>` (Nenu treats an agent with a Herdr name as one; a message you
 send it from Nenu still notifies). Each agent gets its own
 notification, and only once until you look at it in Nenu; **tapping it opens Nenu at that agent**.

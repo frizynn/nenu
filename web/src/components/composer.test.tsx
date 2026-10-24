@@ -3055,14 +3055,13 @@ describe("Composer — a busy agent gets Send now, and Send after this turn in t
 });
 
 describe("Composer — placeholder", () => {
-  it("uses the caller's idle copy in place of the reply default", () => {
-    renderComposer({ placeholder: "Steer this thread…" });
-    expect(screen.getByPlaceholderText("Steer this thread…")).not.toBeDisabled();
-    expect(screen.queryByPlaceholderText("Type a reply…")).not.toBeInTheDocument();
+  it("asks for a reply while the box is open", () => {
+    renderComposer();
+    expect(screen.getByPlaceholderText("Type a reply…")).not.toBeDisabled();
   });
 
-  it("keeps the lock copy over the caller's placeholder", () => {
-    renderComposer({ placeholder: "Steer this thread…", readOnly: true });
+  it("names the lock instead of the reply", () => {
+    renderComposer({ readOnly: true });
     expect(screen.getByPlaceholderText(/read-only — device not authorised/i)).toBeDisabled();
   });
 

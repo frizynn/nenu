@@ -113,7 +113,7 @@ Product details that shaped the loop:
   headline that counts it (never the pull requests), **"Needs you"** (dialogs answered in place), the
   pull requests no session carries (ready to merge first), then the sessions as Recents or one row
   per Herdr workspace. Home's icon counts what the headline counts; the phone's tab bar is Home, New
-  and Search, and the project tree lives in the sidebar (on a phone, under Search's box until
+  and Search, and the workspace tree lives in the sidebar (on a phone, under Search's box until
   something is typed). Simultaneous blocks batch into one summary notification, not three races.
 - **Close the trust loop.** A "Sent" state on the `POST`'s HTTP response, then the visible
   blocked→working transition. Without it, latency makes users double-tap.
@@ -320,11 +320,3 @@ it runs today. Fold each one in, and drop it from this list, in the release that
 - **Media.** Journal images by entry and index, SVG as an image, inlined sibling assets in HTML
   previews, ETags on media
   ([ADR 0059](./.adr/0059-agent-images-svg-and-html-assets-render-without-widening-file-access.md)).
-- **Organizations.** Reads through the versioned `--json` contract, with the files as a fallback
-  ([ADR 0061](./.adr/0061-nenu-reads-organizations-through-its-json-contract.md)). Each thread's
-  report summary, captures and deliverables are read on demand, and the project's library is served
-  through one contained route ([ADR 0088](./.adr/0088-a-projects-library-is-read-through-one-contained-route.md)).
-  A coordinator's STATUS.md comes the same way, with only its stamp in the snapshot
-  ([ADR 0090](./.adr/0090-a-coordinators-status-file-is-drawn-as-written.md)). Every coordinator's asks
-  (`asks --json`) are read beside the overview and served from that read, with only how many wait per
-  project in the snapshot ([ADR 0091](./.adr/0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md)).

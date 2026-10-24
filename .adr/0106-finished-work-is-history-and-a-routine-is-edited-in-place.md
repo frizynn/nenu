@@ -1,6 +1,6 @@
 # 0106. On a desk, finished work is a History by day, and a routine is edited where it is read
 
-- **Status:** Accepted (2026-10-20). Requested by the operator ("threads ya cerrados, no tienen
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-20). Requested by the operator ("threads ya cerrados, no tienen
   sentido, no me interesa ver eso"; "no puedo cliquear y editarlo"). Amends
   [ADR 0102](./0102-on-a-desk-projects-and-coordinators-are-pages-with-tabs.md) points 3 and 5.
 - **Trail:** `web/src/components/desk-project.tsx` · `web/src/components/desk-pages.tsx` ·

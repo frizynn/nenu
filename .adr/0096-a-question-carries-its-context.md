@@ -1,6 +1,6 @@
 # 0096. A question carries its context
 
-- **Status:** Accepted (2026-10-17). Requested by the operator. Amends
+- **Status:** Superseded by [ADR 0123](./0123-nenu-draws-herdr-alone.md) (2026-10-24). Before that: Accepted (2026-10-17). Requested by the operator. Amends
   [ADR 0088](./0088-a-projects-library-is-read-through-one-contained-route.md) points 1 and its "do not
   widen" (the library's root, and a thread's report), and
   [ADR 0091](./0091-your-asks-and-a-coordinators-card-come-from-organizations-fields.md) point 1 (rows
