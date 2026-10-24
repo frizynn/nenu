@@ -14,6 +14,22 @@ const queued: LocalSend = {
 };
 
 describe("PendingTurns", () => {
+  it("eases in a message sent while the thread is read, never one already there", () => {
+    const sent: LocalSend = { ...queued, id: "s2", text: "one more" };
+    const { container, rerender } = render(<PendingTurns sends={[queued]} />);
+    expect(container.querySelector('[data-pending-send]')).not.toHaveClass("row-enter");
+    rerender(<PendingTurns sends={[queued, sent]} />);
+    const [first, second] = container.querySelectorAll('[data-pending-send]');
+    expect(first).not.toHaveClass("row-enter");
+    expect(second).toHaveClass("row-enter");
+  });
+
+  it("eases in the first message sent into a thread that had none waiting", () => {
+    const { container, rerender } = render(<PendingTurns sends={[]} />);
+    rerender(<PendingTurns sends={[queued]} />);
+    expect(container.querySelector('[data-pending-send]')).toHaveClass("row-enter");
+  });
+
   it("tints the slash commands of a message still on its way, as the thread does once it lands", () => {
     const { container } = render(<PendingTurns sends={[{ ...queued, text: "/merge-pr 260 and a/b" }]} />);
     expect([...container.querySelectorAll(".slash-command")].map((el) => el.textContent)).toEqual(["/merge-pr"]);
