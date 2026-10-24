@@ -2879,23 +2879,26 @@ async function inlineImages(before: boolean): Promise<void> {
 /** A picture's chip walked across a line's end, under WebKit and Chromium. */
 async function chipWrap(): Promise<void> {
   await mkdir(outDir, { recursive: true });
-  const checks: Array<{ name: string; ok: boolean; detail?: string }> = [];
-  const seen: Record<string, unknown> = {};
-  for (const engine of ["webkit", "chromium"] as const) {
-    const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
-    const browser = await launchEngine(engine).catch(async (err) => { await bridge.stop(); throw err; });
-    try {
-      const result = await chipWrapBench(bridge, browser, engine, outDir);
-      checks.push(...result.checks);
-      Object.assign(seen, result.seen);
-    } finally {
-      await browser.close();
-      await bridge.stop();
+  const result = { checks: [] as Array<{ name: string; ok: boolean; detail?: string }>, shots: [] as string[], seen: {} as Record<string, unknown> };
+  const bridge = await startTestBridge({ port, fake: true, epoch: CAPTURE_EPOCH });
+  try {
+    for (const engine of ["webkit", "chromium"] as const) {
+      const browser = await launchEngine(engine);
+      try {
+        const one = await chipWrapBench(bridge, browser, engine, outDir);
+        result.checks.push(...one.checks);
+        result.shots.push(...one.shots);
+        Object.assign(result.seen, one.seen);
+      } finally {
+        await browser.close();
+      }
     }
+  } finally {
+    await bridge.stop();
   }
-  await writeFile(join(outDir, "chip-wrap.json"), JSON.stringify({ checks, seen }, null, 2));
-  for (const c of checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
-  if (checks.some((c) => !c.ok)) process.exit(1);
+  await writeFile(join(outDir, "chip-wrap.json"), JSON.stringify(result, null, 2));
+  for (const c of result.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+  if (result.checks.some((c) => !c.ok)) process.exit(1);
 }
 
 async function pasteImage(): Promise<void> {

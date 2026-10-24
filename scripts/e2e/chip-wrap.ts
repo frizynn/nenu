@@ -9,7 +9,9 @@ import type { TestBridge } from "./bridge.ts";
 // one box, its icon sits inside that box at the text's height, and the chips' layer wraps the draft
 // exactly where the textarea does. The operator saw the chip split at a line's end on an iPhone
 // (2.0.0): the icon alone in an empty pill, "Image" outside it and "#2" in a pill on the next line
-// (run.ts `chip-wrap`, which runs it under WebKit and Chromium).
+// (run.ts `chip-wrap`, which runs it under WebKit and Chromium). Chromium reproduces the break after
+// the blank cells; Playwright's WebKit breaks at neither place, so the break iOS Safari's textarea
+// takes at a no-break space is held only by the chip's exact form (message-images.test.ts).
 
 export interface Check { name: string; ok: boolean; detail?: string }
 
@@ -68,8 +70,7 @@ export async function chipWrapBench(bridge: TestBridge, browser: Browser, engine
     await page.keyboard.type(AFTER);
 
     // Walk the second chip to the right one letter at a time, typed before the words ahead of it, until it
-    // has moved down a line; desk lines are long, so a wider step gets there.
-    const step = name === "desk" ? 4 : 1;
+    // has moved down a line: a split can be narrower than two letters.
     const startTop = (await page.evaluate(measure, null)).chips[1]!.boxes[0]!.top;
     const bad: unknown[] = [];
     const save = async (label: string, bytes: Uint8Array) => {
@@ -99,7 +100,7 @@ export async function chipWrapBench(bridge: TestBridge, browser: Browser, engine
         field.focus();
         field.setSelectionRange(at, at);
       }, (await box.inputValue()).indexOf(BEFORE));
-      await page.keyboard.type("x".repeat(step));
+      await page.keyboard.type("x");
     }
     seen[`${engine}-${name}`] = { steps, bad: bad.slice(0, 3), last: await page.evaluate(measure, null) };
     checks.push({ name: `${engine} ${name}: the chip crossed a line's end`, ok: steps < 400, detail: `${steps} steps` });

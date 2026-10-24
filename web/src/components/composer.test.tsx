@@ -2705,9 +2705,11 @@ describe("Composer — images and the pending bubble", () => {
       expect([at, box.selectionStart, box.selectionEnd]).toEqual([at, end, end]);
     }
     // Either side of it is a place to type.
-    box.setSelectionRange(end, end);
-    fireEvent.select(box);
-    expect(box.selectionStart).toBe(end);
+    for (const at of [0, end]) {
+      box.setSelectionRange(at, at);
+      fireEvent.select(box);
+      expect(box.selectionStart).toBe(at);
+    }
   });
 
   it("a Backspace into a picture's chip takes the chip and the picture, and the thumbnail's X takes both too", async () => {
