@@ -61,7 +61,7 @@ import { FileDropOverlay, useFileDrop } from "@/components/file-drop";
 import { StopControl } from "@/components/stop-control";
 import { ComposerChips, rowChips, type ChipLine } from "@/components/composer-chips";
 import { Fold } from "@/components/fold";
-import { draftWire, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
+import { draftWire, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, pictureKeys, pictures, useComposerAttachments, type AttachRefusal } from "@/hooks/use-composer-attachments";
 import { draftFromWire, draftWords, insertImageChips, isSlashCommand, splitDraftUploads, splitMessageImages, withoutImages } from "@/lib/message-images";
 import {
   addLocalSend,
@@ -647,8 +647,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     // banner has decided the connection counts as lost yet.
     suspended: locked,
     sendKeys: pressKeys,
-    // The CLIs that attach a pasted path are the ones known to read a bracketed paste (ADR 0104).
-    pasteText: adapter?.pastesImagePaths ? (text) => terminalWrite(() => api.sendReply(paneId, text, false, session, undefined, undefined, true)) : null,
+    // Only a CLI known to read a bracketed paste gets one (ADR 0126).
+    pasteText: adapter?.bracketedPaste !== undefined ? (text) => terminalWrite(() => api.sendReply(paneId, text, false, session, undefined, undefined, true)) : null,
     saveFile: saveTerminalFile,
     pastePath: (path) => terminalWrite(() => api.pasteFile(paneId, path, session)),
     onActivate: () => {
@@ -1246,7 +1246,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     try {
       const res = await call();
       if (!res.ok) {
-        setStatus(res.error ?? "Key send failed", "error");
+        setStatus(res.error ?? "The terminal didn't take it", "error");
         return false;
       }
       scheduleKeyRevalidate();
@@ -1259,6 +1259,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   /** A file pasted or picked while typing into the terminal, saved the way an attachment is; its path. */
   async function saveTerminalFile(file: File): Promise<string | null> {
+    // Refused before a byte goes up, as an attachment is: the keys typed meanwhile wait behind it.
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setStatus(`${file.name} is too large to paste (max 25 MB).`, "error");
+      return null;
+    }
     try {
       const res = await api.uploadImage(paneId, await downscaleImage(file), session);
       if (res.ok) return res.path;

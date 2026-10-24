@@ -1458,6 +1458,13 @@ describe("pasteFile", () => {
     expect(await pasteFile(deps(term), picture)).toEqual({ ok: false, error: expect.stringContaining("didn't show"), textDelivered: true });
   });
 
+  test("pastes nothing while a dialog hides the box: its tokens could not be counted", async () => {
+    const term = new Term();
+    term.dialog = "  Do you want to proceed?\n  ❯ 1. Yes\n    2. No";
+    expect(await pasteFile(deps(term), picture)).toEqual({ ok: false, error: expect.stringContaining("can't see"), textDelivered: false });
+    expect(term.calls.some((c) => c.method === "pane.send_text")).toBe(false);
+  });
+
   test("another file's path is one paste with no wait; a pane whose CLI takes no paste gets the path as text", async () => {
     const term = new Term();
     const notes = `${UP}/w1_p1-mv8g-0a1b2c3d-notes.txt`;

@@ -24,6 +24,7 @@ const PUBLISH_GAP_MS = 1_000;
  * every {@link TYPED_GAP_MS}: typing shows in the mirror in about a tenth of a second instead of
  * waiting out the one-second gap, and stops costing extra reads {@link TYPED_FOR_MS} after the last key.
  */
+// About 33 local reads a second for that moment, against 5 on the fast cadence (0.23 ms each).
 const TYPED_READ_MS = 30;
 const TYPED_GAP_MS = 200;
 const TYPED_FOR_MS = 1_500;
@@ -48,6 +49,7 @@ interface Watch {
   /** Consecutive reads that found the screen unchanged. */
   quiet: number;
   timer?: ReturnType<typeof setTimeout>;
+  /** A read is on its way; it schedules the next one when it ends. */
   reading: boolean;
   /** Until when a write from a page keeps the pane on the typed cadence (epoch ms). */
   typedUntil: number;

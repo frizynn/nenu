@@ -150,6 +150,8 @@ export const PATH_SETTLED_MS = 1_000;
  * the same request id, joins this send instead of typing again (WriteLedger).
  */
 export const PICTURES_BY_MS = 55_000;
+/** A picture pasted while typing into the terminal answers inside the phone's 20 s for a write (web/src/lib/api.ts). */
+export const PASTED_PICTURE_BY_MS = 15_000;
 
 // ── The trigger regex ─────────────────────────────────────────────────────────────────────────────
 
@@ -532,11 +534,11 @@ function onlyItsPictures(sent: string, draft: string): boolean {
  * bound does not run: a starved Claude reads a picture for longer than 15 s (ADR 0117). The send's
  * clock ends every picture's wait {@link PICTURES_BY_MS} in, and pastes none past it. Neither: null.
  */
-async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string): Promise<"token" | "path" | null> {
+async function pictureDrawn(send: Send, adapter: HarnessAdapter, count: number, path: string, by = PICTURES_BY_MS): Promise<"token" | "path" | null> {
   let shownFor: number | null = null;
   let waited = 0;
   // The bound while Claude is not pasting, and the send's own clock for all its pictures together.
-  for (let i = 0; waited < WAIT_BUDGET_MS && send.elapsed() < PICTURES_BY_MS; i++) {
+  for (let i = 0; waited < WAIT_BUDGET_MS && send.elapsed() < by; i++) {
     const delay = WAIT_DELAYS_MS[Math.min(i, WAIT_DELAYS_MS.length - 1)]!;
     if (delay > 0) await send.sleep(delay);
     let pasting = false;
@@ -802,12 +804,12 @@ export async function settleDraft(
 
 /**
  * Paste one file Nenu saved into the pane while the operator types into it, as a terminal paste would
- * hand it over: a CLI that attaches a pasted path (`pastesImagePaths`) gets the path as a bracketed
- * paste of its own, and any other pane gets it typed as text, as it reads any path. Claude draws a
- * picture's `[Image #N]` a beat after the paste and keys sent on its heels land before it (measured
- * `xy[Image #6]`), so for a picture this waits until the box shows one more token than it held, or
- * the path kept as text (ADR 0104); the keys typed after it wait for this answer. The caller holds the
- * pane's write lock.
+ * hand it over: a CLI that reads a bracketed paste gets the path as one of its own, and any other pane
+ * gets it typed as text, as it reads any path. Claude draws a picture's `[Image #N]` a beat after the
+ * paste and keys sent on its heels land before it (measured `xy[Image #6]`), so for a picture on a CLI
+ * that attaches pasted paths this counts the box's tokens first and waits until it shows one more, or
+ * the path kept as text (ADR 0104); the keys typed after it wait for this answer. A box it cannot read
+ * cannot be counted, so nothing is pasted then. The caller holds the pane's write lock.
  */
 export async function pasteFile(
   deps: Pick<GuardedSendDeps, "herdr" | "paneId" | "readLines" | "sleep" | "now">,
@@ -819,23 +821,26 @@ export async function pasteFile(
   } catch (err) {
     return { ok: false, error: `herdr pane.get failed: ${message(err)}`, textDelivered: false };
   }
-  const attaches = adapter?.pastesImagePaths === true;
+  const attaches = adapter?.pastesImagePaths === true && isPicturePath(path);
   const send = new Send({ ...deps, submitKeys: [] }, { text: path, requestId: "paste-file" }, adapter);
   let before = 0;
-  if (attaches && isPicturePath(path)) {
+  if (attaches) {
+    let seen: Seen;
     try {
-      before = imageTokens((await send.read()).draft);
+      seen = await send.read();
     } catch (err) {
       return { ok: false, error: `herdr read failed: ${message(err)}`, textDelivered: false };
     }
+    if (seen.composer !== true) return { ok: false, error: "Nenu can't see the agent's input box, so the picture wasn't pasted.", textDelivered: false };
+    before = imageTokens(seen.draft);
   }
   try {
-    await deps.herdr.sendPaneText(deps.paneId, attaches ? `\x1b[200~${path}\x1b[201~` : path);
+    await deps.herdr.sendPaneText(deps.paneId, adapter?.bracketedPaste !== undefined ? `\x1b[200~${path}\x1b[201~` : path);
   } catch (err) {
     return { ok: false, error: `herdr send_text failed: ${message(err)}`, textDelivered: false };
   }
-  if (!attaches || !isPicturePath(path)) return { ok: true };
-  const drawn = await pictureDrawn(send, adapter!, before + 1, path);
+  if (!attaches) return { ok: true };
+  const drawn = await pictureDrawn(send, adapter!, before + 1, path, PASTED_PICTURE_BY_MS);
   return drawn === null ? { ok: false, error: "The picture didn't show in the agent's box. Check Terminal before typing on.", textDelivered: true } : { ok: true };
 }
 

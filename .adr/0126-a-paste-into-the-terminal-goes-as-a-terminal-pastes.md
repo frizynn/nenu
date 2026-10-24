@@ -28,18 +28,21 @@ picked picture did nothing. Measured 2026-10-24 on Herdr 0.9.5 and Claude Code a
 
 ## Decision
 
-1. **A text paste to a CLI that attaches a pasted path (`pastesImagePaths`: Claude, Codex) is one
-   bracketed paste with no Enter**, through `/reply` with `submit: false, paste: true`, in line with
-   the keys around it. Those CLIs read bracketed paste (ADR 0023, ADR 0076). Every other pane keeps
-   the paste as keys, as a terminal does for a program that never asked for the markers. A paste
-   holding an escape goes as keys everywhere.
+1. **A text paste to a CLI whose adapter reads a bracketed paste (`bracketedPaste`: Claude, Codex) is
+   one bracketed paste with no Enter**, through `/reply` with `submit: false, paste: true`, in line
+   with the keys around it (ADR 0023, ADR 0076). Every other pane keeps the paste as keys, as a
+   terminal does for a program that never asked for the markers. A paste holding an escape goes as
+   keys everywhere.
 2. **A pasted, picked or dropped file is saved the way the composer attaches one and its path pasted
-   in its place.** The upload starts at once; the keys typed meanwhile wait behind it. For a picture on
-   a CLI that attaches pasted paths, the bridge (`paste-file`) waits until the box shows one more
-   `[Image #N]` than it held, or the path kept as text, before it answers, so the next keys land after
-   the token. Any other file, or a pane without such a CLI, gets the path alone. The route takes only a
-   path straight under an uploads directory. A save that fails stops the mode as a failed batch does.
-   A file saved after the mode ended, or for a pane no longer on screen, is not pasted.
+   in its place.** The upload starts at once (a file past 25 MB is refused before it starts); the keys
+   typed meanwhile wait behind it, and a pane change frees the line. For a picture on a CLI that
+   attaches pasted paths (`pastesImagePaths`), the bridge (`paste-file`) counts the box's tokens, pastes
+   the path, and waits until the box shows one more `[Image #N]`, or the path kept as text, before it
+   answers, so the next keys land after the token; it answers within 15 s, inside the phone's 20 s for
+   a write, and pastes nothing into a box it cannot read. Any other file gets its path alone, as a
+   paste where the CLI reads one and as text elsewhere. The route takes only a path straight under an
+   uploads directory. A save that fails stops the mode as a failed batch does. A file saved after the
+   mode ended, or for a pane no longer on screen, is not pasted.
 3. **A write to a watched pane puts it on a typed cadence for 1.5 s**: read 30 ms after the write and
    every 30 ms, its changes out every 200 ms instead of every second. The composer then stops its own
    refresh after a key while the stream is up and the mirror is on screen; without the stream, its
@@ -52,9 +55,15 @@ picked picture did nothing. Measured 2026-10-24 on Herdr 0.9.5 and Claude Code a
   paragraph where there were 15 (each a small pane read, 1.2 KB on this bench with uncompressed
   headers). At a 120 ms gap the mirror took 61 ms but 61 reads; 200 ms is the balance. Reads stop
   1.5 s after the last key.
+- The bridge pays for it locally: about 33 Herdr reads a second for a watched pane during the 1.5 s
+  after a write, against 5 on the fast cadence, each about 0.23 ms; bridge CPU for a paragraph went from
+  about 110 to 150 ms on this host.
 - Writes per key are unchanged: one request per key at human speed, fewer over a slow link (in-flight
   backpressure batches them). A paste to Claude or Codex is one request whatever its length.
 - Pasting into a shell still turns each line break into Enter, as before. Making a shell's paste
   bracketed would need Herdr to report whether the program asked for it; reopen this then.
 - A picture whose token never shows ends the mode with its path delivered and says to check Terminal;
   the keys typed behind it are dropped, never sent after an unknown box.
+- A phone file picker that hides the page ends the mode on the way out, as any hidden page does
+  (ADR 0077). The picked file then arrives with the mode off and becomes an attachment in the chat's
+  draft: nothing reaches the pane that the operator did not see go in.

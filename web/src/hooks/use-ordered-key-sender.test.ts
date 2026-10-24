@@ -118,8 +118,12 @@ describe("useOrderedKeySender", () => {
       return true;
     }]));
     act(() => result.current.reset());
+    // The new pane's keys don't wait behind the old pane's upload.
+    act(() => result.current.enqueue(["n"]));
+    await waitFor(() => expect(send).toHaveBeenCalledWith(["n"]));
     upload.resolve();
     await waitFor(() => expect(seen).toEqual([false]));
+    send.mockClear();
 
     act(() => result.current.enqueue([async () => false, "x"]));
     await waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));

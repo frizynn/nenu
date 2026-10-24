@@ -15,13 +15,16 @@ export type OrderedWrite = (current: () => boolean) => Promise<boolean>;
 // `send_keys` array, but not across concurrent connections, so one batch stays in flight while any
 // later input accumulates into the next batch. This is transport backpressure, not a typing delay:
 // the first key leaves immediately and a slow round trip merely makes the following batch larger.
-// A paste is one write of its own in the same line: keys typed after it wait for its answer.
+// A paste is one write of its own in the same line: keys typed after it wait for its answer. The line
+// belongs to one pane: after a reset, a write still running for the old pane (an upload, say) no
+// longer holds it, and the new pane's keys go at once.
 export function useOrderedKeySender(
   send: (keys: string[]) => Promise<boolean>,
   onFailure: () => void,
 ) {
   const pending = useRef<Array<string | OrderedWrite>>([]);
-  const inFlight = useRef(false);
+  /** The generation whose write is on its way, or null: only the current generation's blocks the line. */
+  const inFlight = useRef<number | null>(null);
   const generation = useRef(0);
   const mounted = useRef(true);
   const sendRef = useRef(send);
@@ -33,7 +36,7 @@ export function useOrderedKeySender(
   failureRef.current = onFailure;
 
   const pump = useCallback(() => {
-    if (inFlight.current || pending.current.length === 0) return;
+    if (inFlight.current === generation.current || pending.current.length === 0) return;
 
     const head = pending.current[0]!;
     let write: () => Promise<boolean>;
@@ -47,7 +50,7 @@ export function useOrderedKeySender(
       write = () => sendRef.current(batch);
     }
     const batchGeneration = generation.current;
-    inFlight.current = true;
+    inFlight.current = batchGeneration;
 
     const flush = async () => {
       try {
@@ -65,10 +68,10 @@ export function useOrderedKeySender(
           failureRef.current();
         }
       } finally {
-        inFlight.current = false;
+        if (inFlight.current === batchGeneration) inFlight.current = null;
         if (pending.current.length > 0) {
           pumpRef.current();
-        } else if (mounted.current) {
+        } else if (inFlight.current === null && mounted.current) {
           setBusy(false);
         }
       }
@@ -89,7 +92,7 @@ export function useOrderedKeySender(
   const reset = useCallback(() => {
     generation.current += 1;
     pending.current = [];
-    if (!inFlight.current && mounted.current) setBusy(false);
+    if (mounted.current) setBusy(false);
   }, []);
 
   useEffect(

@@ -92,7 +92,7 @@ interface DirectTypingOptions {
 // with no trailing Enter. This hook owns the armed state, the transient Android IME composition
 // value, the pane-boundary reset, special-key capture, and the lifecycle rules that disarm it.
 // Transport ordering stays in useOrderedKeySender so this hook never permits concurrent one-shot
-// Herdr writes.
+// Herdr writes to one pane.
 //
 // Arming is a choice the operator can read on screen, never a gesture: the "Type into terminal" row
 // in the composer's + menu on a phone, the switch of that name in a desk's Terminal tab, or a
@@ -154,8 +154,8 @@ export function useDirectTyping({
   const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
   const sender = useOrderedKeySender(sendKeys, () => {
     resetMode();
-    // A failed batch is the connection's word, not the view's: a terminal view on screen stays off
-    // until it is entered again. Armed from the + with no view, there is nothing to keep off.
+    // A failed batch (or a file that could not be saved) is the connection's word, not the view's: a
+    // terminal view on screen stays off until it is entered again. Armed from the + with no view, there is nothing to keep off.
     if (autoRef.current) optedOut.current = true;
     // Stop the phone keyboard too: otherwise continued typing after a transport failure silently
     // becomes a buffered Reply, which is a different action with an eventual Enter attached.
@@ -381,7 +381,9 @@ export function useDirectTyping({
       sender.enqueue([async (current) => {
         const path = await saved;
         if (path === null) return false;
-        if (!current() || !activeRef.current) {
+        // Another pane is on screen now: its line has moved on, and this file was never meant for it.
+        if (!current()) return true;
+        if (!activeRef.current) {
           setStatus("The file was not pasted: typing into the terminal stopped first.", "info");
           return true;
         }

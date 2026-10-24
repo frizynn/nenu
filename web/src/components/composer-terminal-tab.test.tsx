@@ -323,6 +323,20 @@ describe("Composer — pasting while typing into the terminal", () => {
     await waitFor(() => expect(writes).toEqual(["paste-file /st/uploads/w1_p1-mv8g-0a1b2c3d.png"]));
   });
 
+  it("refuses a file past 25 MB before uploading a byte", async () => {
+    const { writes, uploads } = recordWrites();
+    renderDesk();
+    const field = screen.getByPlaceholderText(/type into the terminal/i);
+    await waitFor(() => expect(armed()).toBe(true));
+    const big = new File(["x"], "huge.png", { type: "image/png" });
+    Object.defineProperty(big, "size", { value: 26 * 1024 * 1024 });
+    fireEvent.paste(field, { clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => big }], getData: () => "" } });
+    await waitFor(() => expect(armed()).toBe(false));
+    expect(screen.getByTestId("status")).toHaveTextContent("too large");
+    expect(uploads()).toBe(0);
+    expect(writes).toEqual([]);
+  });
+
   it("stops typing into the terminal when a picture can't be saved, and says why; the keys behind it are dropped", async () => {
     const { writes } = recordWrites();
     server.use(http.post(/\/api\/pane\/[^/]+\/upload$/, () => HttpResponse.json({ ok: false, error: "File too large (max 25 MB)." })));
