@@ -124,6 +124,7 @@ A superseded ADR is never deleted or edited into agreement with the present. Mar
 | [0120](./0120-a-claude-at-its-usage-limit-waits-and-its-messages-wait-in-nenu.md) | A Claude at its usage limit reads so, and its messages wait in Nenu; Continue now resumes it (amends 0067, 0108, 0113, 0114) | Accepted |
 | [0121](./0121-a-phones-project-views-are-rows-of-the-menu.md) | A phone's project views are rows of the ⋯, and what waits on you is counted on it (amends 0115) | Superseded by 0123 |
 | [0123](./0123-nenu-draws-herdr-alone.md) | Nenu draws Herdr alone; Herdr Organizations left the app (supersedes 0061, 0064, 0088–0093, 0096, 0099, 0101–0103, 0105–0107, 0109, 0110, 0115, 0119, 0121, 0122) | Accepted |
+| [0124](./0124-workspaces-keep-herdrs-order-or-the-operators.md) | Workspaces keep Herdr's order, or the operator's (by name or dragged, kept per device), never their agents' activity | Accepted |
 
 The gaps are reserved by decisions that remain in the upstream history and are not part of Nenu's
 current contract. New ADRs continue from the highest number already used; existing numbers are never

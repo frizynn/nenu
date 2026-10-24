@@ -38,16 +38,14 @@ function agentCounts(panes: readonly AgentView[]): AgentCounts {
 }
 
 /**
- * Workspace → tab → pane, the one whose agent moved last first and Herdr's order between the rest.
- * Opening a pane never moves its workspace: the row you reach for stays put, and the workspace on
- * screen is marked, not pinned.
+ * Workspace → tab → pane, in Herdr's order (`number` is the position: workspace.move renumbers). A
+ * workspace never moves for what its agents do or for being opened: the row you reach for stays put,
+ * and the workspace on screen is marked, not pinned. The operator's own order is applied over this
+ * (lib/workspace-order.ts, ADR 0124).
  */
 export function workspaceTree(source: Herd, currentPaneId?: string): WorkspaceBranch[] {
   const shells = source.shellPanes ?? [];
-  const all = [...source.agents, ...shells];
-  const moved = new Map<string, number>();
-  for (const pane of all) moved.set(pane.workspaceId, Math.max(moved.get(pane.workspaceId) ?? 0, pane.lastActiveAt ?? 0));
-  const currentWorkspace = all.find((pane) => pane.paneId === currentPaneId)?.workspaceId;
+  const currentWorkspace = [...source.agents, ...shells].find((pane) => pane.paneId === currentPaneId)?.workspaceId;
 
   return source.workspaces
     .map((workspace): WorkspaceBranch => {
@@ -62,8 +60,7 @@ export function workspaceTree(source: Herd, currentPaneId?: string): WorkspaceBr
       };
     })
     .filter((branch) => branch.tabs.length > 0 || branch.counts.agents === 0)
-    .sort((a, b) => (moved.get(b.workspace.workspaceId) ?? 0) - (moved.get(a.workspace.workspaceId) ?? 0)
-      || a.workspace.number - b.workspace.number);
+    .sort((a, b) => a.workspace.number - b.workspace.number);
 }
 
 /**

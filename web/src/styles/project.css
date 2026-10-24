@@ -22,6 +22,16 @@
 @media (hover: hover) { .quiet-action:hover { background: var(--workbench-row-hover); color: var(--foreground); } }
 }
 
+/* Home's workspaces while they are reordered (ui/list-reorder): the row dragged by its handle lifts over
+   its neighbours, which slide aside into the place it leaves while it follows the pointer. Outside the
+   layer, so the lifted fill wins over the row's own background utility. */
+.workspace-reorder-row[data-lifted] { position: relative; z-index: 1; background: var(--background); box-shadow: 0 2px 8px rgb(0 0 0 / 0.35); }
+.workspace-reorder-row[data-lifted] > div { background: var(--workbench-row-selected); }
+@media (min-width: 640px) { .workspace-reorder-row[data-lifted] { border-radius: var(--radius-lg); } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-reordering] > .workspace-reorder-row:not([data-lifted]) { transition: translate var(--motion-control) var(--motion-ease); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .project-segment, .panel-tab { transition: none; }
 }

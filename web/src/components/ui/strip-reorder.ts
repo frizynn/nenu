@@ -24,7 +24,8 @@ const EDGE_SPEED = 12;
 
 export interface ReorderSlot {
   key: string;
-  /** Left edge and width in the strip's scroll coordinates (offsetLeft/offsetWidth, transforms aside). */
+  /** Where the item starts along its axis and how long it is: here a chip's offsetLeft/offsetWidth in the
+   *  strip's scroll coordinates, transforms aside; ui/list-reorder.ts gives a row's top and height. */
   start: number;
   width: number;
 }
