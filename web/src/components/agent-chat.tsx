@@ -1353,7 +1353,8 @@ export const AgentChat = memo(function AgentChat({
 
 /**
  * The question at the thread's end. Following measures the stop, so only what is inside it moves as it
- * eases in, and the receipt that answers it takes its place without moving.
+ * eases in. Only its arrival moves: the receipt that answers it, and a next question that replaces
+ * either, take its place without moving.
  */
 function ThreadQuestion({ children }: { children: ReactNode }) {
   const enter = useEnter();

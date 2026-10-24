@@ -4,6 +4,17 @@ import userEvent from "@testing-library/user-event";
 import { AttachmentChips } from "./attachment-chips";
 
 describe("AttachmentChips", () => {
+  it("eases in a file attached to a draft already drawn, never the files it was drawn with", () => {
+    const remove = vi.fn();
+    const retry = vi.fn();
+    const first = { id: "a", status: "ready" as const, image: false, name: "notes.md" };
+    const { rerender } = render(<AttachmentChips items={[first]} onRemove={remove} onRetry={retry} />);
+    rerender(<AttachmentChips items={[first, { id: "b", status: "uploading" as const, image: true, url: "blob:b" }]} onRemove={remove} onRetry={retry} />);
+    const [drawn, added] = screen.getByRole("list", { name: "Attached files" }).children;
+    expect(drawn).not.toHaveClass("row-enter");
+    expect(added).toHaveClass("row-enter");
+  });
+
   // The X stays a small 24px mark; the shared .hit-area gives a touch screen its 44px reach (the
   // workbench.css rule composer-workbench.test.tsx pins). The bench measures the 44x44 on the chip.
   it("gives Remove the app's one 44px touch reach and removes that image", async () => {

@@ -24,7 +24,7 @@ describe("PendingTurns", () => {
     expect(second).toHaveClass("row-enter");
   });
 
-  it("eases in the first message sent into a thread that had none waiting", () => {
+  it("eases in the first message sent into a drawn thread that had none waiting", () => {
     const { container, rerender } = render(<PendingTurns sends={[]} />);
     rerender(<PendingTurns sends={[queued]} />);
     expect(container.querySelector('[data-pending-send]')).toHaveClass("row-enter");

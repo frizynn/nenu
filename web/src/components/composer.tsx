@@ -198,7 +198,8 @@ interface ComposerProps {
 // the header's ⋯ menu (onControlsChange). The model and the session's background work sit in the
 // quiet row beneath the box, which steps aside while a phone keyboard is up.
 type ComposerDrawer = "quick" | "cmd" | "keys" | "display" | "usage" | null;
-const DOCK_TITLE: Record<Exclude<ComposerDrawer, "cmd" | null>, string> = { usage: "Context and usage", keys: "Keys", quick: "Quick replies", display: "Display" };
+/** The drawers that open as a dock above the box; Commands is a covering sheet. */
+type DockId = Exclude<ComposerDrawer, "cmd" | null>;
 
 // Grace window after a send during which a terminal draft matching what we just sent is treated as
 // our own in-flight reply (still on the "❯" line before the bridge's pending Enter lands), NOT a
@@ -1376,6 +1377,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   // for the moment between the touch and the tap).
   useFocusInPlace(inputRef, surfaceRef);
 
+  // The dock on screen, with its title and body; none while Usage has nothing to show.
+  const openDock: DockId | null = drawer === "cmd" || (drawer === "usage" && !usageControls) ? null : drawer;
+  function dock(id: DockId): { title: string; body: ReactNode } {
+    switch (id) {
+      case "usage": return { title: "Context and usage", body: <div className="px-3 pb-3">{usageControls}</div> };
+      case "keys": return { title: "Keys", body: <NavTray onSend={pressKeys} presets={keyPresets} onQueueChange={setQueuedKeys} disabled={locked} /> };
+      case "quick": return {
+        title: "Quick replies",
+        body: <QuickActionsContent onSend={(t) => send(t, false)} onClose={closeDrawer} agent={agent} isShell={isShell} disabled={locked || sending} />,
+      };
+      case "display": return {
+        title: "Display",
+        body: <DisplayPrefsContent surface={nativeWorkbench ? "chat" : "terminal"} prefs={prefs} setWrap={setWrap}
+          stepFontSize={stepFontSize} setTapToFocus={setTapToFocus} />,
+      };
+    }
+  }
+
   return (
     <>
       {dropOver && <FileDropOverlay rect={dropOver} />}
@@ -1409,31 +1428,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             it belongs to, so tab and queue reset on each open even when it reopens while the last one
             is still folding shut (ADR 0005). Commands stays a covering BottomSheet below (it's a
             palette, not a pad). */}
-        <Fold value={drawer === "cmd" || (drawer === "usage" && !usageControls) ? null : drawer}>{(dock) => (
-          <ComposerDock key={drawerOpens} title={DOCK_TITLE[dock]} onClose={closeDrawer}>
-            {dock === "usage" ? <div className="px-3 pb-3">{usageControls}</div>
-              : dock === "keys" ? <NavTray
-                onSend={pressKeys}
-                presets={keyPresets}
-                onQueueChange={setQueuedKeys}
-                disabled={locked}
-              />
-              : dock === "quick" ? <QuickActionsContent
-                onSend={(t) => send(t, false)}
-                onClose={closeDrawer}
-                agent={agent}
-                isShell={isShell}
-                disabled={locked || sending}
-              />
-              : <DisplayPrefsContent
-                surface={nativeWorkbench ? "chat" : "terminal"}
-                prefs={prefs}
-                setWrap={setWrap}
-                stepFontSize={stepFontSize}
-                setTapToFocus={setTapToFocus}
-              />}
-          </ComposerDock>
-        )}</Fold>
+        <Fold value={openDock}>{(id) => {
+          const { title, body } = dock(id);
+          return <ComposerDock key={drawerOpens} title={title} onClose={closeDrawer}>{body}</ComposerDock>;
+        }}</Fold>
         {/* The text in the agent's own box, shown once it holds still, with what to do about it in one
             tap: Send it first, Add to my message, Discard (terminal-draft-preview.tsx, ADR 0114). A Send while it
             is there waits on that tap instead of sweeping it or queueing behind it. */}

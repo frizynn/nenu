@@ -2484,7 +2484,9 @@ describe("Composer — a dock folds open and shut", () => {
     await user.click(screen.getByRole("button", { name: "Tab" }));
     await user.click(screen.getByRole("button", { name: "Close Keys" })); // arm
     await user.click(screen.getByRole("button", { name: "Close Keys" })); // discard
-    await user.click(control("Keys"));
+    // Still folding shut, with the discarded queue in it; the reopen is synchronous, so it lands inside the fold.
+    expect(document.querySelector('.fold[data-phase="shutting"] [aria-label="Remove Ctrl Tab"]')).not.toBeNull();
+    fireEvent.click(control("Keys"));
     expect(screen.getByRole("button", { name: "Esc" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove Ctrl Tab" })).not.toBeInTheDocument();
   });
