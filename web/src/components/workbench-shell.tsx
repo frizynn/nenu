@@ -8,12 +8,12 @@ import { clampTo, ResizeHandle, type WidthRange } from "@/components/ui/resize-h
 import { WorkbenchSidebar, type SidebarRequest } from "@/components/workbench-sidebar";
 import { BottomSheet, SideSheet } from "@/components/ui/sheet";
 import { openNewDialog } from "@/components/new-agent-sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { isCatchingUp, isLocked } from "@/lib/idle";
 import { needsYouCount } from "@/lib/home-stats";
 import type { HomeData } from "@/lib/loaders";
 import { homePath } from "@/lib/nav";
 import { canCreate } from "@/lib/types";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 /** ⌘ on Apple keyboards. Elsewhere Ctrl, except in a text field, where Ctrl+K and Ctrl+N edit text. */

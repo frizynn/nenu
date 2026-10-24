@@ -166,7 +166,7 @@ it("searches with Cmd+K and reaches every action from the collapsed rail", async
 });
 
 // A phone hides the desk's sidebar and rail, so it never mounts them; the drawer and Search sheet are its own.
-it("mounts the sidebar and its rail only once on a desk, and keeps them across the breakpoint", async () => {
+it("mounts the sidebar and its rail only on a desk, and keeps them across the breakpoint", async () => {
   let wide = false;
   const listeners = new Set<() => void>();
   const matchMedia = window.matchMedia;
@@ -191,6 +191,10 @@ it("mounts the sidebar and its rail only once on a desk, and keeps them across t
   await user.keyboard("{Meta>}k{/Meta}");
   await user.type(within(sidebar()!).getByRole("searchbox"), "missing");
   resize(false);
+  // Hidden but kept, the sidebar leaves Cmd+K to the phone's Search sheet.
+  await user.keyboard("{Meta>}k{/Meta}");
+  expect(within(screen.getByRole("dialog", { name: "Search" })).getByRole("searchbox")).toHaveFocus();
+  await user.keyboard("{Escape}");
   resize(true);
   expect(within(sidebar()!).getByRole("searchbox")).toHaveValue("missing");
 });
