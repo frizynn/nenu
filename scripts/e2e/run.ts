@@ -2739,12 +2739,12 @@ async function phoneScroll(): Promise<void> {
     const screens: Array<{ name: string; path: string; open?: (page: Page) => Promise<void>; sheet?: boolean }> = [
       // Recents, the tall list.
       { name: "home", path: "/", open: (page) => page.getByRole("tab", { name: "Recents" }).click() },
-      // Workspaces, under its Order control.
-      { name: "workspaces", path: "/", open: (page) => page.getByRole("tab", { name: "Workspaces" }).click() },
       { name: "settings", path: "/settings" },
       { name: "chat", path: chat },
       { name: "history", path: `${chat}/history` },
       { name: "search-sheet", path: "/", sheet: true, open: (page) => page.locator(".bottom-tab-bar").getByRole("button", { name: "Search" }).click() },
+      // Workspaces, under its Order control. Last: Home remembers the list, and the sheet above opens over Recents.
+      { name: "workspaces", path: "/", open: (page) => page.getByRole("tab", { name: "Workspaces" }).click() },
     ];
     for (const engine of ["webkit", "chromium"] as const) {
       const browser = await launchEngine(engine);
@@ -2802,8 +2802,8 @@ async function phoneScroll(): Promise<void> {
             if (!screen.sheet && page_.length !== 1) failures.push(`${where}: ${page_.length} boxes scroll, ${JSON.stringify(page_)}`);
             // A finger from each place, up then down. Only the screen's own box may move, and it must; a sheet moves nothing behind it.
             const own = !screen.sheet && page_.length === 1 ? page_[0]! : null;
-            // Neither the screen's box nor the window is wider than the phone: a finger never drags the page sideways.
-            if (own && own.sideways > 1) failures.push(`${where}: ${own.name} scrolls ${own.sideways}px sideways`);
+            // No box of the page nor the window is wider than the phone: a finger never drags the page sideways.
+            for (const box of page_) if (box.sideways > 1) failures.push(`${where}: ${box.name} scrolls ${box.sideways}px sideways`);
             if (at.windowSideways > 1) failures.push(`${where}: the window scrolls ${at.windowSideways}px sideways`);
             let ownMoved = false;
             const bottom = at.bar ?? at.composer ?? 800;
