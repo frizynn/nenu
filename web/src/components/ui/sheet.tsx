@@ -97,7 +97,7 @@ interface BottomSheetProps {
   headingRef?: React.Ref<HTMLHeadingElement>;
   /** Its shape from 1024 px; below that it is always the bottom sheet. */
   desktop?: keyof typeof DESKTOP;
-  /** Once closed and gone, its exit over: for an owner that stays mounted only to let it leave. */
+  /** Once closed and gone, its exit over (at once if it mounts closed): for an owner that stays mounted only to let it leave. */
   onExited?: () => void;
 }
 
@@ -245,8 +245,8 @@ export function BottomSheet({ open, onClose, title, onBack, children, className,
           "sheet-bottom-panel relative z-10 w-full overflow-y-auto overscroll-contain rounded-t-2xl outline-none border-t border-border bg-background shadow-2xl duration-180 ease-out motion-reduce:animate-none",
           "pb-[calc(env(safe-area-inset-bottom)_+_1rem)]",
           "lg:rounded-2xl lg:border lg:pb-1 lg:shadow-[var(--shadow-float)]",
-          // It rises from below the screen and leaves the way it came; a released drag closes from
-          // where the finger left it, from the panel's own transform to fully below the screen.
+          // It comes in from a full panel's height below and leaves the way it came; a released drag
+          // closes from where the finger left it, from the panel's own transform on down.
           closing
             ? "animate-out slide-out-to-bottom fill-mode-forwards lg:fade-out lg:zoom-out-98 lg:slide-out-to-bottom-0"
             : "animate-in slide-in-from-bottom lg:fade-in lg:zoom-in-98 lg:slide-in-from-bottom-0",

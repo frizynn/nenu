@@ -65,10 +65,10 @@ type KindRow = { key: string; label: string; hint: string; icon: IconComponent |
  * phone whose header names the step and steps back, a two-pane dialog of one fixed size on a desk,
  * where the list of kinds stays in view and only the folder picker steps back.
  */
-export default function NewDialog({ preset = {}, open = true, onClose, onExited }: {
+export default function NewDialog({ preset = {}, open, onClose, onExited }: {
   preset?: NewPreset;
   /** Closed, the sheet slides away showing its last step, and `onExited` follows once it is gone. */
-  open?: boolean;
+  open: boolean;
   onClose: () => void;
   onExited?: () => void;
 }) {
