@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { record } from "./codex-rpc.ts";
-import { sameProcStart } from "./agent-state-sources.ts";
+import { procStartTicks, sameProcStart, statStartTicks } from "./agent-state-sources.ts";
 import { processStart, readSmall } from "./agent-state.ts";
 
 /** launchd does not inherit the user's interactive shell PATH, so add the usual user tool folders. */
@@ -89,9 +89,9 @@ export interface ProcessStarts {
 
 const processStarts: ProcessStarts = {
   async ticks(pid) {
-    // /proc files report size 0, so they are read whole; field 22 follows the parenthesised command.
+    // /proc files report size 0, so they are read whole.
     const stat = await Bun.file(`/proc/${pid}/stat`).text().catch(() => null);
-    return stat?.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+    return stat === null ? null : statStartTicks(stat);
   },
   lstart: (pid) => processStart(pid).catch(() => null),
 };
@@ -146,9 +146,9 @@ export class ClaudeSessionFiles {
 
   /** Null when the start cannot be read: the session is kept, as it would be without `procStart`. */
   private async startMatches(key: string, pid: number, procStart: string): Promise<boolean | null> {
-    if (/^\d+$/.test(procStart) && process.platform === "linux") {
+    if (procStartTicks(procStart) && process.platform === "linux") {
       const ticks = await this.starts.ticks(pid);
-      return ticks === null ? null : ticks === procStart;
+      return ticks === null ? null : ticks === procStart.trim();
     }
     const known = this.verified.get(key);
     if (known !== undefined) return known;
