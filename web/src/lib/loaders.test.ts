@@ -215,6 +215,17 @@ describe("rootLoader — pull requests", () => {
     expect(data.pullRequests?.map((p) => p.number)).toEqual([3]);
   });
 
+  it("falls back to the list inside a snapshot an older build stored", async () => {
+    server.use(http.get("/api/snapshot", () => HttpResponse.json({ ...fixtureSnapshot, pullRequests: [pr(9)] })));
+    await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    sessionStorage.removeItem("collie:last-pull-requests:");
+    vi.resetModules();
+    failSnapshot();
+    const cold = await (await import("./loaders")).rootLoader({ request: new Request("http://localhost/") });
+    expect(cold.error).toBe(true);
+    expect(cold.pullRequests?.map((p) => p.number)).toEqual([9]);
+  });
+
   it("shows none for a snapshot that names no list (another machine)", async () => {
     const { rootLoader } = await import("./loaders");
     const data = await rootLoader();

@@ -20,13 +20,13 @@ export const snapshotRoutes: Route[] = [
       machines.refresh();
       const others = machines.views(undefined, null);
       const view: Omit<SnapshotResponse, "ts"> = {
-        bridge: herd.wire.bridge,
+        bridge: herd.bridge,
         // Only report device state when the feature is on, so an off deployment sends nothing new.
         ...(device.enforced ? { device } : {}),
-        agents: herd.wire.agents,
-        shellPanes: herd.wire.shellPanes,
-        workspaces: herd.wire.workspaces,
-        tabs: herd.wire.tabs,
+        agents: herd.agents,
+        shellPanes: herd.shellPanes,
+        workspaces: herd.workspaces,
+        tabs: herd.tabs,
         // Only the list's version: the list itself is most of the herd's bytes and changes far less often.
         pullRequestsEtag: pullRequestBody(ctx, rt).etag,
         sessions: registry.list(),
@@ -69,7 +69,7 @@ function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime): JsonBo
  * engine stays a pure Herdr poller and the numbers are as fresh as the request. A dialog Herdr's
  * manifest does not name leaves the pane `unknown`; the bridge's card says it asks.
  */
-function herdOf({ activity, agentStates, hasJournal, interactions }: Services, rt: SessionRuntime) {
+function herdOf({ activity, agentStates, hasJournal, interactions }: Services, rt: SessionRuntime): MachineHerd {
   const { agents, shellPanes, workspaces, tabs, bridge } = rt.engine.current();
   agentStates.sync(rt.name, rt.herdr, agents);
   const withActivity = (p: AgentView): AgentView => {
@@ -83,14 +83,13 @@ function herdOf({ activity, agentStates, hasJournal, interactions }: Services, r
   // an agent-reported filesystem path never reaches a browser (see toPaneWire). The flag is computed
   // against the registry, so a harness Herdr detects but Nenu has no journal for doesn't advertise a
   // History button that can only ever come back empty.
-  const wire: MachineHerd = {
+  return {
     bridge,
     agents: shown.agents.map((p) => toPaneWire(p, hasJournal)),
     shellPanes: shown.shellPanes.map((p) => toPaneWire(p, hasJournal)),
     workspaces,
     tabs,
   };
-  return { wire };
 }
 
 /**
@@ -132,7 +131,7 @@ export async function machineSnapshot(ctx: Services, req: Request, session: stri
     sessions: ctx.registry.list(),
     notifications: { snoozedUntil: ctx.snooze.until() },
     update: ctx.updateMonitor.status(),
-    machines: ctx.machines.views(session, primary ? herdOf(ctx, primary).wire : null),
+    machines: ctx.machines.views(session, primary ? herdOf(ctx, primary) : null),
   };
   return respond(req, view);
 }
