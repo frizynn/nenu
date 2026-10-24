@@ -6,7 +6,7 @@ it("bounds the ring when the reported usage exceeds the window", async () => {
   render(<WorkbenchContextMeter usedTokens={250_000} maxTokens={200_000} />);
   await userEvent.click(screen.getByRole("button", { name: "Context window 100% used" }));
   expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
-  expect(screen.getByText("250k / 200k")).toBeInTheDocument();
+  expect(screen.getByText("100% · 250k / 200k")).toBeInTheDocument();
 });
 
 
@@ -26,4 +26,33 @@ it("says the percentage beside the composer row's ring, and draws nothing when n
   // A hollow ring with no number said nothing; an unknown context is simply not shown.
   rerender(<WorkbenchContextMeter usedTokens={null} maxTokens={null} />);
   expect(screen.queryByRole("button", { name: /^Context/ })).not.toBeInTheDocument();
+});
+
+it("lists the context, then the 5-hour and weekly limits with when each resets", async () => {
+  const resetsAt = Date.now() / 1000 + 3600;
+  render(<WorkbenchContextMeter reportedPercent={23} usedTokens={229_000} maxTokens={1_000_000}
+    rateLimits={[{ name: "secondary", usedPercent: 90.4, windowMinutes: 10080, resetsAt }, { name: "primary", usedPercent: 51, windowMinutes: 300, resetsAt }]} />);
+  await userEvent.click(screen.getByRole("button", { name: "Context window 23% used" }));
+  const bars = screen.getAllByRole("progressbar");
+  expect(bars.map((bar) => bar.getAttribute("aria-label"))).toEqual(["Context window usage", "5-hour limit used", "Weekly limit used"]);
+  expect(bars.map((bar) => bar.getAttribute("aria-valuenow"))).toEqual(["23", "51", "90"]);
+  expect(screen.getByText("23% · 229k / 1m")).toBeInTheDocument();
+  expect(screen.getByText(/^51% · resets /)).toBeInTheDocument();
+  // Nearly spent reads as the ring does past 90%, on the share reported rather than the one shown.
+  expect(bars[2]!.firstElementChild).toHaveStyle({ backgroundColor: "var(--destructive)" });
+});
+
+it("shows only the context for a harness that reports no limits", async () => {
+  render(<WorkbenchContextMeter reportedPercent={40} usedTokens={null} maxTokens={null} rateLimits={undefined} />);
+  await userEvent.click(screen.getByRole("button", { name: "Context window 40% used" }));
+  expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+  expect(screen.queryByText(/limit/)).not.toBeInTheDocument();
+});
+
+it("draws no bar for a window that has reset since it was read", async () => {
+  render(<WorkbenchContextMeter reportedPercent={10} usedTokens={null} maxTokens={null}
+    rateLimits={[{ name: "primary", usedPercent: 80, windowMinutes: 300, resetsAt: Date.now() / 1000 - 60 }]} />);
+  await userEvent.click(screen.getByRole("button", { name: "Context window 10% used" }));
+  expect(screen.getByText("Window not started")).toBeInTheDocument();
+  expect(screen.queryByRole("progressbar", { name: "5-hour limit used" })).not.toBeInTheDocument();
 });

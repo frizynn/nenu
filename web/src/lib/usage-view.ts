@@ -1,4 +1,5 @@
 import { timeAgo } from "./format";
+import { windowLength } from "./rate-limits";
 import type { UsageAccount, UsageAgent, UsageDay, UsageLimitWindow, UsageLimits, UsageOn } from "./types";
 import { realAccounts, usd } from "./usage";
 
@@ -118,8 +119,7 @@ export interface WindowView {
   missing?: boolean;
 }
 
-const WINDOW_NAME: Record<UsageLimitWindow["name"], string> = { five_hour: "5-hour", seven_day: "Weekly", other: "" };
-const windowName = (w: UsageLimitWindow) => WINDOW_NAME[w.name] || (w.windowMinutes % 1440 ? `${Math.round(w.windowMinutes / 60)}-hour` : `${w.windowMinutes / 1440}-day`);
+const windowName = (w: UsageLimitWindow) => windowLength(w.windowMinutes);
 
 const two = (n: number) => String(n).padStart(2, "0");
 /** "17:40", or "Thu 22 Oct, 14:22" on another day, in this device's zone. */

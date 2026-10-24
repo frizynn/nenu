@@ -1,6 +1,7 @@
 import { modelDisplayName } from "@/lib/model-display";
 import { Fragment, useState, type RefObject } from "react";
-import { contextPercent, formatContextTokens, WorkbenchContextMeter } from "@/components/workbench-context-meter";
+import { contextPercent, contextSize, MeterRow, WorkbenchContextMeter } from "@/components/workbench-context-meter";
+import { limitRows } from "@/lib/rate-limits";
 import type { SessionTelemetry } from "@/lib/types";
 
 export type WorkbenchPanel = "model" | "usage" | "context" | null;
@@ -25,20 +26,6 @@ function tokens(value: number | undefined): string {
   return value === undefined ? "Not reported" : value.toLocaleString();
 }
 
-function windowName(limit: { name: string; windowMinutes?: number }): string {
-  if (!limit.windowMinutes) return limit.name;
-  return limit.windowMinutes === 10080 ? "Weekly" : `${limit.windowMinutes / 60}h window`;
-}
-
-/** A thin bar for a share of a window; it never stands alone, its number is beside it. */
-function UsageBar({ value, label, danger = false }: { value: number; label: string; danger?: boolean }) {
-  return (
-    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value)}>
-      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%`, backgroundColor: danger ? "var(--destructive)" : "var(--primary)" }} />
-    </div>
-  );
-}
-
 /** Everything the agent reported about this session, read in place: no button between the dock and
  *  the numbers, and one plain sentence when there are none. */
 function UsageDetails({ telemetry, stale }: { telemetry?: SessionTelemetry; stale?: boolean }) {
@@ -48,34 +35,17 @@ function UsageDetails({ telemetry, stale }: { telemetry?: SessionTelemetry; stal
     ["Cached input", telemetry?.tokens?.cachedInput], ["Total tokens", telemetry?.tokens?.total],
   ];
   const reported = values.filter((entry): entry is [string, number] => entry[1] !== undefined);
-  const used = context?.usedTokens;
-  const max = context?.windowTokens;
   const percent = contextPercent(context) ?? undefined;
-  const limits = telemetry?.rateLimits ?? [];
-  const contextSize = used !== undefined ? `${formatContextTokens(used)}${max ? ` / ${formatContextTokens(max)}` : ""}` : max ? `${formatContextTokens(max)} window` : null;
-  if (percent === undefined && contextSize === null && !reported.length && !limits.length) {
+  const limits = limitRows(telemetry?.rateLimits);
+  const size = contextSize(context?.usedTokens, context?.windowTokens);
+  if (percent === undefined && size === null && !reported.length && !limits.length) {
     return <p className="text-footnote text-muted-foreground">This agent hasn't reported usage yet.</p>;
   }
   return (
     <div className="space-y-4 text-footnote text-muted-foreground">
       {stale && <p className="text-destructive">Refreshing failed. These values may be out of date.</p>}
-      {(percent !== undefined || contextSize !== null) && <div>
-        <div className="flex justify-between gap-3">
-          <span className="text-foreground">Context</span>
-          <span className="tabular-nums">{[percent !== undefined ? `${Math.round(percent)}%` : null, contextSize].filter(Boolean).join(" · ")}</span>
-        </div>
-        {percent !== undefined && <UsageBar value={percent} label="Context window usage" danger={percent > 90} />}
-      </div>}
-      {limits.map((limit) => (
-        <div key={limit.name}>
-          <div className="flex justify-between gap-3">
-            <span className="text-foreground">{windowName(limit)}</span>
-            <span className="tabular-nums">{Math.round(limit.usedPercent)}% used</span>
-          </div>
-          <UsageBar value={limit.usedPercent} label={`${limit.name} rate limit used`} danger={limit.usedPercent > 90} />
-          {limit.resetsAt !== undefined && <p className="mt-1">Resets {new Date(limit.resetsAt * 1000).toLocaleString()}</p>}
-        </div>
-      ))}
+      {(percent !== undefined || size !== null) && <MeterRow label="Context" percent={percent} detail={size} bar="Context window usage" />}
+      {limits.map((limit) => <MeterRow key={limit.key} label={limit.label} percent={limit.percent} detail={limit.detail} bar={`${limit.label} used`} />)}
       {reported.length > 0 && <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         {reported.map(([label, value]) => <Fragment key={label}><dt>{label}</dt><dd className="text-right tabular-nums text-foreground">{tokens(value)}</dd></Fragment>)}
         {telemetry?.tokens && <><dt>Scope</dt><dd className="text-right text-foreground">{telemetry.tokens.scope === "session" ? "Session" : "Last message"}</dd></>}
@@ -122,7 +92,7 @@ export function WorkbenchTelemetry({ mode, telemetry, stale, modelAvailable, dis
       </button>}
       {/* The composer row carries the context ring and its number (and its Compact action). */}
       <WorkbenchContextMeter reportedPercent={context?.usedPercent} usedTokens={context?.usedTokens ?? null} maxTokens={context?.windowTokens ?? null}
-        onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
+        rateLimits={telemetry?.rateLimits} onCompact={onCompact} compactDisabled={disabled} open={panel === "context"}
         onOpenChange={(open) => changePanel(open ? "context" : null)} />
     </div>
   );
