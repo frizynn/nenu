@@ -486,8 +486,18 @@
 @starting-style {
   [data-workbench-popover] { opacity: 0; translate: 0 6px; }
 }
+/* Opened under its anchor (the ⋯ under the header), it drops from the anchor rather than rising.
+   Its side is known only once it is placed, after @starting-style is spent, so it enters by keyframes
+   alone. It leaves by the exit classes in workbench-popover.tsx, which this rule must not cover. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-workbench-popover][data-side="below"]:not([data-leaving]) { animation: popover-drop var(--motion-control) var(--motion-ease); }
+}
+[data-workbench-popover][data-side="below"] { transition: none; }
+@keyframes popover-drop { from { opacity: 0; translate: 0 -6px; } }
 @media (prefers-reduced-motion: reduce) {
   .workbench-icon-button, [data-workbench-popover] { transition: none; }
+  /* Unlayered, so it also stops the slide and exit utilities, which a motion-reduce: class could not. */
+  [data-workbench-popover] { animation: none; }
   .workbench-icon-button:active { scale: none; }
 }
 
