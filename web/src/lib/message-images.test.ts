@@ -121,6 +121,14 @@ describe("pictures in their places", () => {
     expect(withoutImages(`x ${chip(1)} y`, [1])).toBe("x y");
   });
 
+  it("glues a chip into one unit no line can break: a joiner at every seam, no space a textarea breaks at", () => {
+    const chip = imageChip(12);
+    // Chromium and Safari break between a blank cell and a letter, and Safari's textarea at a
+    // no-break space; only the joiner (U+2060) and the narrow no-break space (U+202F) sit between pieces.
+    expect(chip).toBe("\u2800\u2060\u2800\u2060Image\u2060\u202f\u2060#12\u2060");
+    expect(chip).not.toMatch(/[ \u00a0]/);
+  });
+
   it("inserts chips at the caret, as they are", () => {
     expect(insertImageChips("look here.", 9, [1])).toEqual({ text: `look here${chip(1)}.`, caret: 9 + chip(1).length });
     expect(insertImageChips("", 0, [1, 2])).toEqual({ text: `${chip(1)} ${chip(2)}`, caret: chip(1).length * 2 + 1 });
