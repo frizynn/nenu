@@ -8,6 +8,12 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-24
+
+### Fixed
+
+- On an iPhone, Home's Workspaces no longer scrolls sideways under the Order control (d71f4a31).
+
 ## [2.0.0] - 2026-10-24
 
 ### Removed
