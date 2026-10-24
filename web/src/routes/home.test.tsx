@@ -381,11 +381,22 @@ describe("Recents and Workspaces", () => {
     await user.click(main.getByRole("tab", { name: "Workspaces" }));
     expect(main.queryByRole("menu")).toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
-    // Its own button shuts it and keeps the focus, which Safari would otherwise drop on the page.
+    // Its own button shuts it and takes the focus back from the item, as Safari's click doesn't.
     await user.click(button);
-    await user.click(button);
+    expect(main.getByRole("menuitemradio", { name: "Herdr order" })).toHaveFocus();
+    fireEvent.click(button);
     expect(main.queryByRole("menu")).toBeNull();
     expect(button).toHaveFocus();
+  });
+
+  it("keeps the order menu open while the focus moves among its items, and shuts it when the focus leaves", async () => {
+    const { user, main } = await setup(recentData);
+    await user.click(main.getByRole("tab", { name: "Workspaces" }));
+    await user.click(main.getByRole("button", { name: "Order: Herdr order" }));
+    fireEvent.blur(main.getByRole("menuitemradio", { name: "Herdr order" }), { relatedTarget: main.getByRole("menuitemradio", { name: "Name" }) });
+    expect(main.getByRole("menu")).toBeInTheDocument();
+    fireEvent.blur(main.getByRole("menuitemradio", { name: "Herdr order" }), { relatedTarget: main.getByRole("button", { name: "Reorder workspaces" }) });
+    expect(main.queryByRole("menu")).toBeNull();
   });
 
   it("hands Tab in the order menu to its button, so it leaves for the control after it", async () => {
@@ -396,6 +407,11 @@ describe("Recents and Workspaces", () => {
     // The browser's Tab then leaves from the button (scripts/e2e/workspace-order.ts lands it on
     // Reorder); jsdom only shows the hand-off.
     fireEvent.keyDown(main.getByRole("menuitemradio", { name: "Herdr order" }), { key: "Tab" });
+    expect(main.queryByRole("menu")).toBeNull();
+    expect(main.getByRole("button", { name: "Order: Herdr order" })).toHaveFocus();
+    // Shift+Tab stops on the button rather than stepping past it.
+    await user.click(main.getByRole("button", { name: "Order: Herdr order" }));
+    expect(fireEvent.keyDown(main.getByRole("menuitemradio", { name: "Herdr order" }), { key: "Tab", shiftKey: true })).toBe(false);
     expect(main.queryByRole("menu")).toBeNull();
     expect(main.getByRole("button", { name: "Order: Herdr order" })).toHaveFocus();
   });

@@ -192,10 +192,10 @@ function workspaceState(chats: readonly RecentChat[]): { word: string; tone?: st
   return states.find((state) => state.word === word) ?? { word: "Empty" };
 }
 
-// Reorder's controls and handles fade in as a panel arrives; leaving it, what they stood in for fades
-// back as a control answers.
-const ARRIVE = "duration-180 ease-out animate-in fade-in";
-const RETURN = "duration-120 ease-out animate-in fade-in";
+// Entering Reorder, its handles and controls fade in at a panel's pace (180 ms); on Done, the times and
+// controls they replaced fade back at a control's (120 ms).
+const ARRIVE_FADE = "duration-180 ease-out animate-in fade-in";
+const RETURN_FADE = "duration-120 ease-out animate-in fade-in";
 
 /** What a row that folds rows stands for: its mark, what it counts, and how far in its rows sit. */
 const FOLDS = {
@@ -240,10 +240,11 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, to, busy = false,
     </span>
     {reorder
       ? <button type="button" aria-label={`Move ${name}`} {...reorder.handle(id)}
-        className="col-start-3 row-span-2 row-start-1 -my-2 -mr-1 flex size-11 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground duration-180 ease-out animate-in fade-in slide-in-from-right-2 hover:text-foreground active:cursor-grabbing motion-reduce:slide-in-from-right-0 sm:-mr-2.5">
+        className={cn("col-start-3 row-span-2 row-start-1 -my-2 -mr-1 flex size-11 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing sm:-mr-2.5",
+          ARRIVE_FADE, "slide-in-from-right-2 motion-reduce:slide-in-from-right-0")}>
         <GripVertical aria-hidden className="size-4" />
       </button>
-      : <span className={cn("col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground", settling && RETURN)}>
+      : <span className={cn("col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground", settling && RETURN_FADE)}>
         {busy ? <OpeningSpinner /> : at > 0 && <span aria-hidden className="min-w-8 text-right tabular-nums">{timeAgoShort(at, now)}</span>}
         {!to && <ChevronRight aria-hidden className={cn("size-4 transition-transform duration-120 motion-reduce:transition-none", open && "rotate-90")} />}
       </span>}
@@ -404,12 +405,12 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
       {ordering && (
         <div className="-mb-1 flex min-h-11 items-center justify-between gap-2 px-1 sm:min-h-9 sm:px-0">
           {arranging
-            ? <p className={cn("text-footnote text-muted-foreground", ARRIVE)}>Drag a handle to move a workspace</p>
-            : <WorkspaceOrderMenu order={order} onChoose={(mode) => setOrder({ ...order, mode })} className={cn("-ml-2", settling && RETURN)} />}
+            ? <p className={cn("text-footnote text-muted-foreground", ARRIVE_FADE)}>Drag a handle to move a workspace</p>
+            : <WorkspaceOrderMenu order={order} onChoose={(mode) => setOrder({ ...order, mode })} className={cn("-ml-2", settling && RETURN_FADE)} />}
           {arranging
-            ? <button ref={doneControl} type="button" onClick={stopArranging} className={cn("quiet-action -mr-2 font-medium text-foreground", ARRIVE)}>Done</button>
+            ? <button ref={doneControl} type="button" onClick={stopArranging} className={cn("quiet-action -mr-2 font-medium text-foreground", ARRIVE_FADE)}>Done</button>
             : <button ref={reorderControl} type="button" aria-label="Reorder workspaces" onClick={startArranging}
-              className={cn("quiet-action -mr-2", settling && RETURN)}>Reorder</button>}
+              className={cn("quiet-action -mr-2", settling && RETURN_FADE)}>Reorder</button>}
         </div>
       )}
       <div id="home-list" role="tabpanel" aria-labelledby={`home-list-${list}`} className="sm:-mx-2.5">

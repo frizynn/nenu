@@ -50,8 +50,12 @@ export function WorkspaceOrderMenu({ order, onChoose, className }: {
   };
   const focusItem = (index: number) => items.current[(index + modes.length) % modes.length]?.focus({ preventScroll: true });
   const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Tab leaves from the button, so it lands on the control after it.
-    if (event.key === "Tab") return close();
+    // Tab leaves from the button, so it lands on the control after it; Shift+Tab stops on the button.
+    if (event.key === "Tab") {
+      close();
+      if (event.shiftKey) event.preventDefault();
+      return;
+    }
     const index = items.current.findIndex((item) => item === document.activeElement);
     if (event.key === "ArrowDown") focusItem(index + 1);
     else if (event.key === "ArrowUp") focusItem(index - 1);
