@@ -28,7 +28,8 @@ interface Props {
   folder?: string;
 }
 
-/** The pane's one ⋯ menu: the pane's views, grouped and named when there is more than one group. */
+/** The pane's one ⋯ menu: the pane's views, its groups parted by a rule. Its rows say what they do, so
+ * the groups go unnamed and the menu stays short on a phone. */
 export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(function ConversationActions({ groups, recovery, folder }, ref) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -41,30 +42,33 @@ export const ConversationActions = forwardRef<HTMLButtonElement | null, Props>(f
       <Ellipsis aria-hidden="true" className="size-5 lg:size-4" />
       {waiting > 0 && <span aria-hidden="true" className="waiting-count waiting-count-corner">{waiting}</span>}
     </button>
-    <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1.5">
-      <ActionGroups groups={groups} onRun={run} />
+    <WorkbenchPopover open={open} onDismiss={() => setOpen(false)} anchorRef={trigger} label="Conversation actions" className="w-64 [&>div:first-child]:hidden [&>div:last-child]:p-1">
+      <ActionGroups groups={groups} onRun={run} named={false} />
       {recovery && <details className="mt-1 border-t border-border/60 pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-body lg:min-h-8 lg:text-footnote">Change connected conversation</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center px-2.5 text-subhead lg:min-h-8 lg:text-footnote">Change connected conversation</summary>
         {recovery}
       </details>}
-      {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 pt-2 pb-1 font-mono text-footnote text-muted-foreground" title={folder}>{folder}</p>}
+      {folder && <p className="mt-1 truncate border-t border-border/60 px-2.5 py-1.5 font-mono text-footnote text-muted-foreground" title={folder}>{folder}</p>}
     </WorkbenchPopover>
   </>;
 });
 
-/** The menu's grouped rows; `onRun` decides what happens around an action (the menu closes first). */
-export function ActionGroups({ groups, onRun }: { groups: ConversationActionGroup[]; onRun: (action: () => void) => void }) {
+/**
+ * The menu's grouped rows; `onRun` decides what happens around an action (the menu closes first).
+ * `named` heads each group with its label when there is more than one.
+ */
+export function ActionGroups({ groups, onRun, named = true }: { groups: ConversationActionGroup[]; onRun: (action: () => void) => void; named?: boolean }) {
   const shown = groups.filter((group) => group.actions.length > 0);
   // A lone group needs no heading; the menu's own name says what it holds.
   return shown.map((group, index) => (
     <section key={group.label} aria-label={group.label} className={cn(index > 0 && "mt-1 border-t border-border/60 pt-1")}>
-      {shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5"><SectionLabel>{group.label}</SectionLabel></h4>}
+      {named && shown.length > 1 && <h4 className="px-2.5 pb-0.5 pt-1.5"><SectionLabel>{group.label}</SectionLabel></h4>}
       {group.actions.map(({ id, label, icon: Icon, run, disabled, on, waiting }) => (
         <button key={id} type="button" disabled={disabled} aria-pressed={on === undefined ? undefined : on}
           // Said whole: Chrome reads text split across the row's flex items as "Status , 1".
           aria-label={waiting ? `${label}, ${waiting} waiting on you` : undefined}
           onClick={() => onRun(run)}
-          className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-body hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
+          className="workbench-menu-item group flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-subhead hover:bg-hover active:bg-muted disabled:text-disabled-foreground disabled:hover:bg-transparent lg:min-h-8 lg:text-footnote">
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-disabled:text-disabled-foreground" />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {waiting !== undefined && waiting > 0 && <span aria-hidden="true" className="waiting-count">{waiting}</span>}

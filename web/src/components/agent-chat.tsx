@@ -202,8 +202,10 @@ export function AgentChat({
   const dropZoneRef = useRef<HTMLDivElement>(null);
   // The header keeps one ⋯ on a phone; a desktop also shows the terminal switch.
   const desktop = useMediaQuery("(min-width: 1024px)");
-  // While a phone keyboard is up, the tab and pane strips step aside so the chat keeps the height.
+  // While a phone keyboard is up, the tab and pane strips step aside so the chat keeps the height
+  // (strips.css, under the same query).
   const keyboardOpen = useKeyboardOpen();
+  const stripsHidden = useMediaQuery("(max-width: 1023px) and (pointer: coarse)") && keyboardOpen;
   const [composerControls, setComposerControls] = useState<ComposerControl[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
   const [chip, setChip] = useState<ChipId | null>(null);
@@ -878,14 +880,18 @@ export function AgentChat({
     ...(!desktop && conversationCapable ? [{ id: "terminal", label: "Terminal view", icon: SquareTerminal, on: prefs.rawTerminal, run: toggleRawTerminal }] : []),
     ...composerControls.filter((control) => control.group === "View"),
   ];
-  // Renaming and closing the pane and its tab, which otherwise hide behind a long-press on a chip.
-  // Each opens the strip's own sheet, so the rename field and the close confirmation are the same.
+  // Renaming and closing the pane and its tab: a tap on a strip's open chip opens the same sheet, so the
+  // menu offers only what no strip on screen does. The tab strip is always there and the pane strip from
+  // two panes, except while a phone keyboard hides both.
   const [paneSheet, setPaneSheet] = useState<"pane" | "tab" | null>(null);
   const tab = agent && tabs.find((t) => t.tabId === agent.tabId);
   const tabTitle = tab ? tabName(tab.label, tabs.filter((t) => t.workspaceId === tab.workspaceId).indexOf(tab) + 1) : "";
+  const tabPanes = agent ? [...agents, ...shellPanes]
+    .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
+    .sort((a, b) => a.paneId.localeCompare(b.paneId)) : [];
   const paneActions: ConversationAction[] = agent && !readOnly ? [
-    { id: "pane", label: "Rename or close pane…", icon: AppWindow, run: () => setPaneSheet("pane") },
-    ...(tab ? [{ id: "tab", label: "Rename or close tab…", icon: PanelTop, run: () => setPaneSheet("tab") }] : []),
+    ...(tabPanes.length < 2 || stripsHidden ? [{ id: "pane", label: "Rename or close pane…", icon: AppWindow, run: () => setPaneSheet("pane") }] : []),
+    ...(tab && stripsHidden ? [{ id: "tab", label: "Rename or close tab…", icon: PanelTop, run: () => setPaneSheet("tab") }] : []),
   ] : [];
 
   // Background work: workflows and commands (Claude's activity reader) and subagents, as one list
@@ -1070,9 +1076,7 @@ export function AgentChat({
             tabbed row rather than tiling the panes; only appears when the tab holds more than one. */}
         {agent && !subagent && (
           <PaneStrip
-            panes={[...agents, ...shellPanes]
-              .filter((p) => p.workspaceId === agent.workspaceId && p.tabId === agent.tabId)
-              .sort((a, b) => a.paneId.localeCompare(b.paneId))}
+            panes={tabPanes}
             currentPaneId={paneId}
             onSelect={switchTo}
             session={session}
