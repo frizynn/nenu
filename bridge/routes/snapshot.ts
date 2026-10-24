@@ -28,7 +28,7 @@ export const snapshotRoutes: Route[] = [
         workspaces: herd.wire.workspaces,
         tabs: herd.wire.tabs,
         // Only the list's version: the list itself is most of the herd's bytes and changes far less often.
-        pullRequestsEtag: pullRequestBody(ctx, rt, [...herd.raw.agents, ...herd.raw.shellPanes]).etag,
+        pullRequestsEtag: pullRequestBody(ctx, rt).etag,
         sessions: registry.list(),
         notifications: { snoozedUntil: ctx.snooze.until() },
         update: ctx.updateMonitor.status(),
@@ -46,8 +46,7 @@ export const snapshotRoutes: Route[] = [
     // Another machine's pull requests stay there (machineSnapshot).
     machine: false,
     handle(ctx, { req, rt }) {
-      const { agents, shellPanes } = rt.engine.current();
-      const body = pullRequestBody(ctx, rt, [...agents, ...shellPanes]);
+      const body = pullRequestBody(ctx, rt);
       const etag = body.etag;
       if (notModified(req.headers.get("if-none-match"), etag)) return secure(notModifiedResponse(etag));
       return secure(body.response(req.headers.get("accept-encoding"), { etag }));
@@ -55,9 +54,13 @@ export const snapshotRoutes: Route[] = [
   },
 ];
 
-/** The session's open pull requests with the panes on each branch; reading them asks for a refresh when stale. */
-function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime, panes: readonly AgentView[]): JsonBody {
-  return new JsonBody(pullRequests.list(rt.name, panes));
+/**
+ * The session's open pull requests with the panes on each branch; reading them asks for a refresh when
+ * stale. The snapshot's `pullRequestsEtag` and this route both come from here, so they always agree.
+ */
+function pullRequestBody({ pullRequests }: Services, rt: SessionRuntime): JsonBody {
+  const { agents, shellPanes } = rt.engine.current();
+  return new JsonBody(pullRequests.list(rt.name, [...agents, ...shellPanes]));
 }
 
 /**
@@ -87,7 +90,7 @@ function herdOf({ activity, agentStates, hasJournal, interactions }: Services, r
     workspaces,
     tabs,
   };
-  return { raw: { agents, shellPanes }, wire };
+  return { wire };
 }
 
 /**

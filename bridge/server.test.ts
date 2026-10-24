@@ -1130,6 +1130,7 @@ describe("revalidatedFile", () => {
     expect(again.status).toBe(304);
     expect(again.headers.get("etag")).toBe(etag);
     expect(again.headers.get("cache-control")).toBe("no-cache");
+    expect(again.headers.get("vary")).toBe("accept-encoding");
     expect(await again.text()).toBe("");
   });
 

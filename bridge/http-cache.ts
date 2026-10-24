@@ -6,7 +6,7 @@
 
 // Only compress if serialised body is at least this many bytes; below this the
 // deflate overhead and header cost outweigh the savings.
-const GZIP_MIN_BYTES = 256;
+export const GZIP_MIN_BYTES = 256;
 
 /**
  * Compute a strong ETag for the given response body string.

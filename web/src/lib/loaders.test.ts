@@ -192,6 +192,29 @@ describe("rootLoader — pull requests", () => {
     expect(cold.pullRequests?.map((p) => p.number)).toEqual([7]);
   });
 
+  it("hands back the same herd object when the snapshot answers 304", async () => {
+    let reads = 0;
+    server.use(
+      http.get("/api/snapshot", ({ request }) =>
+        request.headers.get("if-none-match") === '"h1"'
+          ? new HttpResponse(null, { status: 304, headers: { etag: '"h1"' } })
+          : HttpResponse.json({ ...fixtureSnapshot, pullRequestsEtag: '"v1"' }, { headers: { etag: '"h1"' } }),
+      ),
+      http.get("/api/pull-requests", () => { reads++; return HttpResponse.json([pr(1)], { headers: { etag: '"v1"' } }); }),
+    );
+    const { rootLoader } = await import("./loaders");
+    const first = await rootLoader({ request: new Request("http://localhost/") });
+    const second = await rootLoader({ request: new Request("http://localhost/") });
+    expect(second).toBe(first);
+    expect(reads).toBe(1);
+  });
+
+  it("takes the list inline from a bridge older than its own route", async () => {
+    server.use(http.get("/api/snapshot", () => HttpResponse.json({ ...fixtureSnapshot, pullRequests: [pr(3)] })));
+    const data = await (await import("./loaders")).rootLoader();
+    expect(data.pullRequests?.map((p) => p.number)).toEqual([3]);
+  });
+
   it("shows none for a snapshot that names no list (another machine)", async () => {
     const { rootLoader } = await import("./loaders");
     const data = await rootLoader();

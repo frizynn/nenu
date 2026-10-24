@@ -378,6 +378,9 @@ export async function fetchSnapshot(
 // The last pull request list per session with its ETag, under the snapshot cache's invariants.
 const pullRequestCache = new Map<string, { etag: string; list: PullRequestView[] }>();
 const NO_PULL_REQUESTS: PullRequestView[] = [];
+// The herd waits for this read when the list moved, so it gives up sooner than other reads; the list on
+// screen stays until the next try.
+const PULL_REQUESTS_TIMEOUT_MS = 4_000;
 
 /**
  * The session's open pull requests at the version `etag` a snapshot named. The same list object comes
@@ -392,7 +395,7 @@ export async function fetchPullRequests(
   const cached = pullRequestCache.get(session ?? "");
   if (cached?.etag === etag) return cached.list;
   const res = await apiFetch(withSession("/api/pull-requests", session), {
-    signal: withTimeout(signal, GET_TIMEOUT_MS),
+    signal: withTimeout(signal, PULL_REQUESTS_TIMEOUT_MS),
     headers: { [XHR_HEADER]: XHR_HEADER_VALUE, ...(cached ? { "if-none-match": cached.etag } : {}) },
   });
   if (res.status === 304 && cached) return cached.list;

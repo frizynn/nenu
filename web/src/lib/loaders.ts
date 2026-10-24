@@ -222,7 +222,7 @@ function staleHome(session: string | undefined): HomeData {
   const cached = lastSnapshot.get(session ?? "") ?? restored?.value;
   if (cached) {
     lastSnapshot.set(session ?? "", cached);
-    const pullRequests = lastHomeData.get(session ?? "")?.pullRequests ?? loadLastPullRequests(session) ?? [];
+    const pullRequests = lastHomeData.get(session ?? "")?.pullRequests ?? loadLastPullRequests(session) ?? cached.pullRequests ?? [];
     return toHomeData(cached, pullRequests, session, true, restored?.at);
   }
   // Nothing cached at all — an outage on a tab that never saw a good snapshot. `error: true` is what
@@ -307,7 +307,7 @@ async function readPullRequests(
   request: Request | undefined,
 ): Promise<PullRequestView[]> {
   try {
-    return await fetchPullRequests(session, snap.pullRequestsEtag, request?.signal);
+    return snap.pullRequests ?? await fetchPullRequests(session, snap.pullRequestsEtag, request?.signal);
   } catch (e) {
     if (isSuperseded(request)) throw e;
     return previous?.pullRequests ?? loadLastPullRequests(session) ?? [];

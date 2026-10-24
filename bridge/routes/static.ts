@@ -1,5 +1,5 @@
 import { extname, join, normalize, sep } from "node:path";
-import { computeEtag, notModified } from "../http-cache.ts";
+import { computeEtag, GZIP_MIN_BYTES, notModified } from "../http-cache.ts";
 import type { WebAssetArchive } from "../web-assets.ts";
 import { BUILD_HEADER, buildId, CSP, secure, text, WEB_DIR } from "./http.ts";
 
@@ -18,7 +18,6 @@ const CONTENT_TYPES: Record<string, string> = {
 
 /** Text types worth gzipping; images and fonts are compressed already. */
 const COMPRESSIBLE = new Set([".html", ".js", ".mjs", ".css", ".json", ".webmanifest", ".svg"]);
-const GZIP_MIN_BYTES = 256;
 
 /**
  * Resolve a request pathname to an absolute path under `webDir`, or null if it escapes. Pure +
@@ -129,12 +128,11 @@ export async function serveStatic(req: Request, pathname: string, assets: WebAss
  * it. Pure + exported for tests.
  */
 export function revalidatedFile(req: Request, ext: string, bytes: Uint8Array<ArrayBuffer>, base: Record<string, string>): Response {
-  const headers = { ...base, etag: `W/${computeEtag(bytes)}` };
+  const gzips = COMPRESSIBLE.has(ext) && bytes.length >= GZIP_MIN_BYTES;
+  const headers = { ...base, etag: `W/${computeEtag(bytes)}`, ...(gzips ? { vary: "accept-encoding" } : {}) };
   if (notModified(req.headers.get("if-none-match"), headers.etag)) return new Response(null, { status: 304, headers });
-  if (!COMPRESSIBLE.has(ext) || bytes.length < GZIP_MIN_BYTES) return new Response(bytes, { headers });
-  const varied = { ...headers, vary: "accept-encoding" };
-  if (!req.headers.get("accept-encoding")?.includes("gzip")) return new Response(bytes, { headers: varied });
-  return new Response(Bun.gzipSync(bytes), { headers: { ...varied, "content-encoding": "gzip" } });
+  if (!gzips || !req.headers.get("accept-encoding")?.includes("gzip")) return new Response(bytes, { headers });
+  return new Response(Bun.gzipSync(bytes), { headers: { ...headers, "content-encoding": "gzip" } });
 }
 
 /** Module workers need a JavaScript MIME under nosniff, including Vite's emitted .mjs assets. */
