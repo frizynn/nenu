@@ -33,11 +33,12 @@ import type { AgentView, LivePublisher, TurnState } from "./types.ts";
 /** A Claude transcript or Codex rollout read on first sight: enough tail to hold the current turn. */
 const TAIL_BYTES = 4 * 1024 * 1024;
 /**
- * A Claude at rest, first seen: enough tail to hold its last reply or usage-limit row, which is all the
- * usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured 2.9 MB. The first
- * look is short and the long one runs only when it found neither row: on 14 resting transcripts that
- * row sat 3–269 KB from the end (median 4 KB), and every resting pane is read at once on first sight,
- * at a resident cost that scales with the read (14 panes measured: 66 MB at 1 MB, 7 MB at 64 KB).
+ * A Claude at rest, first seen: enough tail to hold its last reply and any usage-limit row after it,
+ * which is all the usage limit needs (ADR 0120). Its request blobs average 18 KB, the largest measured
+ * 2.9 MB. The first look is short and the long one runs only when it found no reply: on 14 resting
+ * transcripts the last reply sat 3–269 KB from the end (median 4 KB), and every resting pane is read at
+ * once on first sight, at a resident cost that scales with the read (14 panes measured: 66 MB at 1 MB,
+ * 7 MB at 64 KB).
  */
 const IDLE_PEEK_BYTES = 64 * 1024;
 const IDLE_TAIL_BYTES = 1024 * 1024;
@@ -314,12 +315,14 @@ export class AgentStates {
       // A busy spell that began meanwhile followed the transcript itself, watched: that tail stays.
       if (!path || entry.dropped || entry.file?.sessionId !== sessionId || entry.transcript) return;
       for (const bytes of [IDLE_PEEK_BYTES, IDLE_TAIL_BYTES]) {
-        const transcript = { path, sessionId, scan: new ClaudeTurnScan() };
+        const transcript: NonNullable<Entry["transcript"]> = { path, sessionId, scan: new ClaudeTurnScan() };
         entry.transcript = transcript;
         await this.readTail(transcript, bytes);
-        // Done once a row was found, or a busy spell began meanwhile and follows this tail now.
-        const { scan } = transcript;
-        if (scan.lastReply > -Infinity || scan.limit || entry.dropped || (entry as Entry).transcript !== transcript || entry.file?.status === "busy") return;
+        // Done once the reply was found or the whole file read, or once the session moved on: a busy
+        // spell that began meanwhile follows this tail now.
+        const found = transcript.scan.lastReply > -Infinity || (transcript.tail?.offset ?? Infinity) <= bytes;
+        const moved = entry.dropped || (entry as Entry).transcript !== transcript || entry.file?.sessionId !== sessionId || entry.file?.status === "busy";
+        if (found || moved) return;
       }
       return;
     }

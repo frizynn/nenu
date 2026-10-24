@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { statStartTicks } from "./agent-state-sources.ts";
 import { AgentStates, sameProcess, type WatchFn } from "./agent-state.ts";
+import * as lines from "./journal/lines.ts";
 import type { AgentView, LiveEvent } from "./types.ts";
 
 // The service over real files in a temp dir, with the watcher and the process lookups injected so a
@@ -259,6 +260,33 @@ describe("Claude panes at their usage limit, timers and races", () => {
     await until(() => service.get("s", "w1:p1")?.limit !== undefined);
     expect(service.get("s", "w1:p1")).toEqual({ running: false, limit: { resetsAt: T0 + 3_600_000 }, source: "claude-session" });
     service.close();
+  });
+
+  test("a resting Claude whose last reply is near the end is read only that far", async () => {
+    const read = spyOn(lines, "readAppended");
+    try {
+      const w = watches();
+      const { service } = states(w, { now: () => T0 });
+      const long = JSON.stringify({ type: "system", subtype: "informational", timestamp: iso(T0 - 2_000), content: "x".repeat(200 * 1024) }) + "\n";
+      const reply = JSON.stringify({ type: "assistant", timestamp: iso(T0 - 1_000), message: { stop_reason: "end_turn", content: [] } }) + "\n";
+      await writeFile(transcript, long + reply);
+      await writeFile(join(sessions, `${PID}.json`), sessionFile("idle", T0));
+      service.sync("s", herdr([PID]), [pane("claude")]);
+      await until(() => read.mock.calls.length > 0 && service.get("s", "w1:p1") !== undefined);
+      await settle();
+      expect(read.mock.calls.map((call) => call[1])).toEqual([64 * 1024]);
+
+      // A short transcript with no reply yet was read whole by the first look: no second read.
+      read.mockClear();
+      await writeFile(transcript, JSON.stringify({ type: "user", timestamp: iso(T0), message: { content: "hi" } }) + "\n");
+      const other = states(watches(), { now: () => T0 });
+      other.service.sync("s", herdr([PID]), [pane("claude")]);
+      await until(() => read.mock.calls.length > 0 && other.service.get("s", "w1:p1") !== undefined);
+      await settle();
+      expect(read.mock.calls.map((call) => call[1])).toEqual([64 * 1024]);
+      service.close();
+      other.service.close();
+    } finally { read.mockRestore(); }
   });
 
   test("a reset weeks away arms a timer of an hour at most, never one past 2^31 ms", async () => {
