@@ -70,7 +70,7 @@ function sourceLine(diff: Extract<PaneDiff, { ok: true }>): ReactNode {
   const code = (text: string) => <code className="font-mono">{text}</code>;
   if (diff.source === "uncommitted") return <>What is not committed on {code(diff.head)} yet, against its last commit.</>;
   if (diff.source === "branch") return <>The pushed branch {code(diff.head)}, against {code(diff.base)}.</>;
-  return <>{diff.pr === undefined ? "This session's" : "This pull request's"} worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
+  return <>This session's worktree on {code(diff.head)}, uncommitted edits included, against {code(diff.base)}.</>;
 }
 
 /** The pane a diff was read from, whose composer its line comments wait on. */

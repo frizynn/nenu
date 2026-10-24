@@ -10,7 +10,7 @@ function Root() {
   return <Outlet />;
 }
 
-// Pane "t" is a thread under pane "a", its coordinator; every other pane sits under Home.
+// Pane "t" sits under pane "a"; every other pane sits under Home.
 function Pane() {
   const { paneId } = useParams();
   const back = paneId === "t" ? { label: "A", to: "/pane/a" } : { label: "Home", to: "/" };
@@ -25,7 +25,7 @@ const routes: RouteObject[] = [{
   children: [
     { index: true, handle: { depth: 0 }, element: <p>Home</p> },
     { path: "settings", handle: { depth: 1 }, element: <p>Settings</p> },
-    { path: "asks", handle: { depth: 1 }, element: <p>Asks</p> },
+    { path: "files", handle: { depth: 1 }, element: <p>Files</p> },
     { path: "slow", handle: { depth: 1 }, loader: () => slowPage, element: <p>Slow</p> },
     { path: "pane/:paneId", handle: { depth: 3 }, element: <Pane /> },
   ],
@@ -35,7 +35,7 @@ async function open(at: InitialEntry) {
   const router = createMemoryRouter(routes, { initialEntries: [at] });
   animateNavigations(router);
   render(<RouterProvider router={router} />);
-  await screen.findByText(/Home|Settings|Asks|Pane/);
+  await screen.findByText(/Home|Settings|Files|Pane/);
   return router;
 }
 
@@ -170,12 +170,12 @@ describe("the back control", () => {
 
   it("goes back to the screen it was opened from, whatever it is, with its filter", async () => {
     const router = await open("/settings");
-    await act(() => router.navigate("/asks?project=acme&coordinator=t-0002"));
+    await act(() => router.navigate("/files?path=docs%2Fa.md"));
     await act(() => router.navigate("/pane/t"));
     await userEvent.click(await screen.findByRole("link", { name: "Back to A" }));
-    await screen.findByText("Asks");
-    // Not its coordinator: the screen before it, as the system's Back would show it.
-    expect(stack(router)).toEqual({ action: "POP", at: "/asks?project=acme&coordinator=t-0002" });
+    await screen.findByText("Files");
+    // Not its parent pane: the screen before it, as the system's Back would show it.
+    expect(stack(router)).toEqual({ action: "POP", at: "/files?path=docs%2Fa.md" });
     await act(() => router.navigate(-1));
     expect(stack(router).at).toBe("/settings");
   });

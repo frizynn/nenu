@@ -87,7 +87,7 @@ function useKeptScroll(scroller: RefObject<HTMLElement | null>): void {
 }
 
 /** Whether the page's heading that says `title` is still in view in its scroller. False when no heading
- *  says it: a heading that names something else (a node under its project) never hides the bar's title. */
+ *  says it: a heading that names something else never hides the bar's title. */
 function useHeadingInView(scroller: RefObject<HTMLElement | null>, title: string): boolean {
   const [heading, setHeading] = useState<Element | null>(null);
   const [inView, setInView] = useState(true);

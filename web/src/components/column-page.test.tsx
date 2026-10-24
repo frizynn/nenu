@@ -119,9 +119,9 @@ describe("the page's scroll", () => {
   const page = (name: string) => <PageBody key={name}><p>{name}</p></PageBody>;
   const scroller = () => document.querySelector("main.page-body") as HTMLElement;
   async function open() {
-    const router = createMemoryRouter([{ path: "/asks", element: page("Asks") }, { path: "/node", element: page("Node") }], { initialEntries: ["/asks?q=acme"] });
+    const router = createMemoryRouter([{ path: "/files", element: page("Files") }, { path: "/node", element: page("Node") }], { initialEntries: ["/files?q=acme"] });
     render(<RouterProvider router={router} />);
-    await screen.findByText("Asks");
+    await screen.findByText("Files");
     return router;
   }
 
@@ -131,7 +131,7 @@ describe("the page's scroll", () => {
     await act(() => router.navigate("/node"));
     expect(scroller().scrollTop).toBe(0);
     await act(() => router.navigate(-1));
-    await screen.findByText("Asks");
+    await screen.findByText("Files");
     expect(scroller().scrollTop).toBe(600);
   });
 
@@ -139,8 +139,8 @@ describe("the page's scroll", () => {
     const router = await open();
     act(() => { scroller().scrollTop = 600; fireEvent.scroll(scroller()); });
     await act(() => router.navigate("/node"));
-    await act(() => router.navigate("/asks?q=acme"));
-    await screen.findByText("Asks");
+    await act(() => router.navigate("/files?q=acme"));
+    await screen.findByText("Files");
     expect(scroller().scrollTop).toBe(0);
   });
 });
