@@ -211,8 +211,9 @@ const FOLDS = {
 /**
  * A row that folds the rows under it, a Herdr workspace or a tab of several panes: its name, how it
  * is, how many it holds and when the latest moved. A tap folds its rows open in place, or opens `to`
- * when there is nothing to unfold; one opened by the app (`animate` off) is simply there. While its list is reordered it opens nothing and its end is the
- * handle that drags it, which fades in from the end; `settling`, just after, its time fades back.
+ * when there is nothing to unfold; one opened by the app (`animate` off) is simply there. While its
+ * list is reordered it opens nothing and its end is the handle that drags it, which fades in from the
+ * end; `settling`, just after, its time fades back.
  */
 function FoldRow({ kind, id, name, chats, now, open, onToggle, animate = true, to, busy = false, reorder, settling = false, children }: {
   kind: keyof typeof FOLDS;
@@ -265,7 +266,7 @@ function FoldRow({ kind, id, name, chats, now, open, onToggle, animate = true, t
     <li className="flex flex-col">
       {to
         ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={className}>{body}</Link>
-        : <button type="button" aria-expanded={open} aria-controls={listId} aria-label={label} onClick={onToggle} className={className}>{body}</button>}
+        : <button type="button" aria-expanded={open} aria-controls={open ? listId : undefined} aria-label={label} onClick={onToggle} className={className}>{body}</button>}
       {!to && <Fold value={open} animate={animate}>
         {() => <ul id={listId} aria-label={name} className={cn("flex flex-col max-sm:divide-y max-sm:divide-border", rows)}>{children}</ul>}
       </Fold>}
@@ -412,7 +413,7 @@ export function HomeSessions({ recent: everyRecent, workspaces, reviews, pullReq
         <button type="button" onClick={held.reorder} aria-hidden={updates === 0 || undefined} tabIndex={updates === 0 ? -1 : undefined}
           className={cn("shrink-0 rounded-full border border-border px-2.5 py-1 text-footnote tabular-nums text-muted-foreground hover:text-foreground",
             "max-sm:absolute max-sm:left-1/2 max-sm:top-full max-sm:z-10 max-sm:mt-2 max-sm:-translate-x-1/2 max-sm:bg-background max-sm:shadow-md",
-            "transition-[opacity,visibility] duration-120 ease-out motion-reduce:transition-none", !updates && "invisible opacity-0", "ml-auto")}>
+            "transition-[opacity,visibility] duration-120 ease-out motion-reduce:transition-none", !updates && "pointer-events-none invisible opacity-0", "ml-auto")}>
           {said.current} {said.current === 1 ? "update" : "updates"}
         </button>
       </div>

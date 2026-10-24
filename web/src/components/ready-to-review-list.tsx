@@ -6,6 +6,7 @@ import { DiffStat } from "@/components/diff-stat";
 import { FoldedList, isOpening, OpeningSpinner } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
+import { useEnter } from "@/lib/enter";
 import { readyToMerge, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
@@ -110,6 +111,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   const label = [entry.title, number && number.word, size, ...said.map((fact) => fact.word)].filter(Boolean).join(", ");
   const to = entry.open && panePath(entry.open.paneId, session);
   const busy = !!to && isOpening(opening, to);
+  const enter = useEnter();
   // What a desk says in red, on the icon alone: a check failing or changes asked for.
   const blocked = !!entry.checks?.failed || entry.review === "changes_requested";
   const body = <>
@@ -126,7 +128,7 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
     </span>
   </>;
   return (
-    <li>
+    <li className={enter}>
       {to ? <Link to={to} aria-label={label} aria-busy={busy || undefined} className={cn(rowClass, busy && "bg-[var(--workbench-row-hover)]")}>{body}</Link>
         : entry.url ? <a href={entry.url} target="_blank" rel="noopener noreferrer" aria-label={label} className={rowClass}>{body}</a>
         : <div aria-label={label} className={rowClass}>{body}</div>}
