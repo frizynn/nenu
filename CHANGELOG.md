@@ -8,6 +8,22 @@ All notable changes to Nenu are recorded here. The format follows
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-25
+
+### Added
+
+- Type into terminal pastes or picks a picture or file as its path, in place, the way Claude Code and Codex attach one (5ee62a8f).
+
+### Changed
+
+- The terminal mirror follows typing sooner, with no more Herdr reads or CPU than before (e87b0695, addb5c67).
+
+### Fixed
+
+- A multi-line paste into Claude or Codex goes as one bracketed paste and no longer submits at the first line break (5ee62a8f).
+- A paste into the terminal answers within 15 s and never blocks another pane's keys (3a5fdbc8).
+- A held key no longer freezes the mirror, and queued keys stay with their pane on a pane switch (60653060).
+
 ## [2.3.0] - 2026-10-24
 
 ### Changed
