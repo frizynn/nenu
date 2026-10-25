@@ -473,6 +473,30 @@ describe("registry", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(inUse()).toEqual([true, false]);
     await prs.refresh();
+    // Its remotes never came: the folder says nothing, and the record stands, on disk too.
+    expect(inUse()).toEqual([true, false]);
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual({ main: ["acme/shop"] });
+  });
+
+  test("while one folder of a session has not answered, what the others name joins the saved record and takes nothing from it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nenu-prs-"));
+    dirs.push(dir);
+    const file = join(dir, "pull-requests.json");
+    const clock = { t: 1_000_000 };
+    const rows = [inRepo("acme/shop", 1, "x"), inRepo("acme/api", 2, "y"), inRepo("acme/lib", 3, "z")];
+    writeFileSync(file, JSON.stringify({ at: clock.t, prs: parseViewer(JSON.stringify(viewerAnswer(rows))), inUse: { main: ["acme/api", "acme/lib"] } }));
+    const hang = new Set(["/r/api rev-parse"]);
+    const { prs } = registry(fakeRun({ folders, viewer: rows, hang }).run, clock, { gh: 50, git: 20 }, file);
+    const panes = [pane("p1", "/r/shop"), pane("p2", "/r/api")];
+    prs.list("main", panes);
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.inUse)).toEqual([true, true, true]);
+    expect(JSON.parse(readFileSync(file, "utf8")).inUse).toEqual({ main: ["acme/api", "acme/lib", "acme/shop"] });
+    // Once every folder answers, the session reads what they name, and nothing else.
+    hang.clear();
+    clock.t += PR_TTL_MS;
+    await prs.refresh();
+    expect(prs.list("main", panes).map((pr) => pr.inUse)).toEqual([true, true, false]);
   });
 
   test("finds a PR by number in the repo a folder sits in, with the branch that folder is on", async () => {
