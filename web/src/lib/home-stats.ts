@@ -37,7 +37,7 @@ export function homeHeadline(counts: HomeCounts, total: number, calm: boolean): 
   const { needs, review, working } = counts;
   const rest = (...parts: Array<string | false>) => parts.filter(Boolean).join(" · ") || null;
   // Only live work: an idle agent waits on nobody, so the line leaves it out.
-  const reviewing = review > 0 && `${review} to review`;
+  const reviewing = review > 0 && `${review} open ${review === 1 ? "PR" : "PRs"}`;
   if (needs) return { title: needYou(needs), detail: rest(reviewing, working > 0 && `${working} working`) };
   if (!total) return { title: "What should we work on?", detail: null };
   if (calm) return { title: "Nothing needs you", detail: rest(reviewing, working > 0 && `${working} working`) };
@@ -82,7 +82,7 @@ export function needsYouCount(herd: { agents: readonly AgentView[] }): number {
   return needsYouItems(herd.agents, []).length;
 }
 
-/** One pull request in Home's "Ready to review", from GitHub. */
+/** One open pull request on Home's PRs tab, from GitHub. */
 export interface ReviewEntry {
   /** `owner/name#number` when the URL is known, else `repo#number`. */
   key: string;
@@ -109,17 +109,20 @@ const prKey = (url: string | undefined) => {
   const match = url ? PR_URL_RE.exec(url) : null;
   return match ? { key: `${match[1]}/${match[2]}#${match[3]}`, repo: match[2]!, owner: match[1]! } : undefined;
 };
-const checksPassed = (checks: ReviewEntry["checks"]) => !!checks && checks.passed > 0 && !checks.failed && !checks.pending;
 
 /** Approved, not a draft, no check failing or running: one merge away. */
 export function readyToMerge(entry: ReviewEntry): boolean {
   return !entry.draft && entry.review === "approved" && !entry.checks?.failed && !entry.checks?.pending;
 }
 
-/**
- * Home's review list: the person's open pull requests from GitHub. Drafts go last; among the rest a
- * PR with green checks and an approval comes first, then the most recent.
- */
+/** Where a pull request stands: one merge away, then blocked (a check failing or changes asked for), then in review, drafts last. */
+function standing(entry: ReviewEntry): number {
+  if (readyToMerge(entry)) return 0;
+  if (entry.draft) return 3;
+  return entry.checks?.failed || entry.review === "changes_requested" ? 1 : 2;
+}
+
+/** Home's review list: the person's open pull requests from GitHub, by where each stands, then newest first. */
 export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined): ReviewEntry[] {
   const rows = new Map<string, ReviewEntry>();
   for (const pr of pullRequests ?? []) {
@@ -134,8 +137,7 @@ export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined
       ...(pr.paneIds[0] ? { open: { paneId: pr.paneIds[0] } } : {}),
     });
   }
-  const ready = (row: ReviewEntry) => Number(checksPassed(row.checks)) + Number(row.review === "approved");
-  return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
+  return [...rows.values()].sort((a, b) => standing(a) - standing(b) || b.updatedAt - a.updatedAt);
 }
 
 /** One repo's pull requests on Home's PRs tab. */
@@ -147,17 +149,9 @@ export interface RepoReviews {
   entries: ReviewEntry[];
 }
 
-/** Where a pull request sits in its repo's run: one merge away, then blocked, then in review, drafts last. */
-function standing(entry: ReviewEntry): number {
-  if (readyToMerge(entry)) return 0;
-  if (entry.draft) return 3;
-  return entry.checks?.failed || entry.review === "changes_requested" ? 1 : 2;
-}
-
 /**
- * The PRs tab's runs, one per repo: inside each, what needs a hand first (ready to merge, then a check
- * failing or changes asked for), then the rest, drafts last, each step newest first; the repos by their
- * latest move, so the one being worked on leads.
+ * The PRs tab's runs, one per repo, each in `reviewQueue`'s order; the repos by their latest move, so
+ * the one being worked on leads.
  */
 export function reviewsByRepo(entries: readonly ReviewEntry[]): RepoReviews[] {
   const repos = new Map<string, RepoReviews>();
@@ -168,7 +162,6 @@ export function reviewsByRepo(entries: readonly ReviewEntry[]): RepoReviews[] {
     repos.set(key, repo);
   }
   const latest = (repo: RepoReviews) => Math.max(...repo.entries.map((entry) => entry.updatedAt));
-  for (const repo of repos.values()) repo.entries.sort((a, b) => standing(a) - standing(b) || b.updatedAt - a.updatedAt);
   return [...repos.values()].sort((a, b) => latest(b) - latest(a) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 

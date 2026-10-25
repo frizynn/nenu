@@ -7,11 +7,9 @@
 // dir, so a restarted bridge shows it before its first read comes back.
 //
 // A refresh asks GitHub once, for the viewer's own open pull requests (`viewer.pullRequests`, not the
-// search index: a PR opened a second ago is there, and searches have their own, tighter rate limit).
-// It used to search only the repos the panes sit in, which left out every PR in a repo with no pane
-// open. The panes' folders are still resolved, alongside, to match each PR to the panes on its branch:
-// a folder whose remotes name a github.com repo is matched by that name, and one whose remotes only gh
-// can name (an ssh alias, another host) by the rows `gh pr list` reads from it.
+// search index: a PR opened a second ago is there, and searches have their own, tighter rate limit),
+// so a PR in a repo no pane sits in is listed too (ADR 0127). The panes' folders resolve alongside, to
+// match each PR to the panes on its branch by the `owner/name` their remotes name.
 import { homedir } from "node:os";
 import { basename, dirname } from "node:path";
 
@@ -26,18 +24,16 @@ export type CommandRun = (argv: string[], opts: { cwd: string; timeoutMs: number
 export const PR_TTL_MS = 60_000;
 /** A pane in a folder never resolved asks for a sooner refresh, but not more often than this. */
 const NEW_CWD_MIN_MS = 5_000;
-/** Repos only gh can name, each one `gh pr list` a refresh. */
-const MAX_GH_NAMED = 12;
 const MAX_CWDS = 64;
 /** The newest open PRs one refresh reads; GitHub's page size. */
 const MAX_PRS = 100;
+/** A list kept on disk longer than this is not shown after a restart: those PRs may long be merged. */
+const SAVED_MAX_AGE_MS = 24 * 60 * 60_000;
 const GH_TIMEOUT_MS = 15_000;
 const GIT_TIMEOUT_MS = 3_000;
 const CONCURRENCY = 4;
-const SCALAR_FIELDS = ["number", "title", "url", "headRefName", "baseRefName", "isDraft", "reviewDecision", "additions", "deletions", "updatedAt"];
-const PR_FIELDS = [...SCALAR_FIELDS, "statusCheckRollup"].join(",");
-/** PR_FIELDS in GraphQL, with the check contexts `gh` flattens into `statusCheckRollup`. */
-const GRAPHQL_FIELDS = SCALAR_FIELDS.join(" ")
+/** The fields `gh pr list --json` names, in GraphQL, with the check contexts it flattens into `statusCheckRollup`. */
+const GRAPHQL_FIELDS = "number title url headRefName baseRefName isDraft reviewDecision additions deletions updatedAt"
   + " commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{...on StatusContext{state} ...on CheckRun{status conclusion}}}}}}}";
 const SCP_RE = /^([^@]+@)?([^:]+):(\/?.+)$/;
 const REPO_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -101,13 +97,7 @@ export function summarizeChecks(rollup: unknown): PullRequestView["checks"] {
   return checks;
 }
 
-/** `gh pr list --json` output to rows; a malformed row is dropped, never guessed at. */
-export function parsePullRequests(stdout: string): RepoPr[] {
-  const value: unknown = JSON.parse(stdout);
-  if (!Array.isArray(value)) throw new Error("gh pr list did not return a list");
-  return value.flatMap(parseRow);
-}
-
+/** A row shaped as `gh pr list --json` prints it; a malformed row is dropped, never guessed at. */
 function parseRow(raw: unknown): RepoPr[] {
   const row = record(raw);
   const url = typeof row.url === "string" ? row.url : "";
@@ -132,34 +122,31 @@ function parseRow(raw: unknown): RepoPr[] {
 }
 
 /**
- * The repo a remote URL names on github.com, as gh reads it: `git@host:o/n` is ssh, a subdomain of
- * github.com is github.com, and the path is exactly `owner/name`. Null for a remote on this machine (a
- * path or `file:`), which gh skips; undefined for any other host or shape.
+ * The repo a remote URL names, `owner/name` from its path as gh reads one: `git@host:o/n` is ssh and
+ * the path is exactly two parts. Any host counts: an ssh alias (`git@github-work:o/n`) names a
+ * github.com repo, and the list it is matched against is github.com's alone. Null for a remote on this
+ * machine (a path or `file:`), which names no repo; undefined for any other shape.
  */
-export function githubRepo(url: string): string | null | undefined {
+export function remoteName(url: string): string | null | undefined {
   const scp = url.includes("://") ? undefined : SCP_RE.exec(url);
   if (url.startsWith("file:") || (!scp && !url.includes("://"))) return null;
-  let host: string;
   let parts: string[];
   try {
     const parsed = new URL(scp ? `ssh://${scp[1] ?? ""}${scp[2]}/${scp[3]!.replace(/^\//, "")}` : url);
-    host = parsed.hostname.toLowerCase();
     parts = decodeURIComponent(parsed.pathname).replace(/^\/+|\/+$/g, "").split("/");
   } catch {
     return undefined;
   }
-  if (host !== "github.com" && !host.endsWith(".github.com")) return undefined;
   const repo = `${parts[0]}/${parts[1]?.replace(/\.git$/, "")}`;
   return parts.length === 2 && REPO_NAME_RE.test(repo) ? repo : undefined;
 }
 
 /**
- * The repo `gh pr list` reads in a checkout, from `git config --get-regexp ^remote\.`: the remote
- * `gh repo set-default` marked, else the first by gh's order, skipping remotes on this machine as gh
- * does (null when that leaves none). Undefined when a remote names another host or alias, which only
- * gh can resolve, and for a repo with no remote at all, so gh says so as it always has.
+ * The repo a checkout's PRs are opened against, from `git config --get-regexp ^remote\.`, as gh picks
+ * it: the remote `gh repo set-default` marked, else the first by gh's order, skipping remotes that name
+ * no repo. Null when none does (no remote, or only ones on this machine).
  */
-export function remoteRepo(config: string): string | null | undefined {
+export function remoteRepo(config: string): string | null {
   const remotes = new Map<string, { url?: string; pushurl?: string; resolved?: string }>();
   for (const line of config.split("\n")) {
     const match = /^remote\.(.+)\.(url|pushurl|gh-resolved) (.*)$/.exec(line.trim());
@@ -169,22 +156,19 @@ export function remoteRepo(config: string): string | null | undefined {
     remote[key] ??= match[3]!;
     remotes.set(match[1]!, remote);
   }
-  const named = [...remotes].map(([name, remote]) => {
+  const named = [...remotes].flatMap(([name, remote]) => {
     // gh reads the push URL only when the fetch URL gives it no repo at all.
-    const fetch = remote.url === undefined ? null : githubRepo(remote.url);
-    const repo = fetch !== null ? fetch : remote.pushurl === undefined ? null : githubRepo(remote.pushurl);
-    return { name, repo, resolved: remote.resolved };
+    const fetch = remote.url === undefined ? null : remoteName(remote.url);
+    const repo = fetch !== null ? fetch : remote.pushurl === undefined ? null : remoteName(remote.pushurl);
+    return repo ? [{ name, repo, resolved: remote.resolved }] : [];
   });
-  if (named.length === 0 || named.some((remote) => remote.repo === undefined)) return undefined;
-  const github = named.filter((remote): remote is typeof remote & { repo: string } => remote.repo !== null);
-  if (github.length === 0) return null;
   const rank = (name: string) => REMOTE_RANK.get(name.toLowerCase()) ?? 0;
-  github.sort((a, b) => rank(b.name) - rank(a.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  for (const remote of github) {
+  named.sort((a, b) => rank(b.name) - rank(a.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const remote of named) {
     if (remote.resolved === "base") return remote.repo;
     if (remote.resolved && REPO_NAME_RE.test(remote.resolved)) return remote.resolved;
   }
-  return github[0]!.repo;
+  return named[0]?.repo ?? null;
 }
 
 /** The one GraphQL request a refresh sends: the viewer's open pull requests, newest first. */
@@ -213,11 +197,15 @@ export function parseViewer(stdout: string): RepoPr[] {
   });
 }
 
+/** The list as kept on disk, with when it was read (epoch ms). */
+interface SavedList { at: number; prs: RepoPr[] }
+
 /** A saved list back from disk: the rows the last refresh kept, any other shape read as none. */
-function savedRows(raw: unknown): { prs: RepoPr[] } {
-  const prs = record(raw).prs;
-  if (!Array.isArray(prs)) return { prs: [] };
+function savedList(raw: unknown): SavedList {
+  const { at, prs } = record(raw);
+  if (typeof at !== "number" || !Array.isArray(prs)) return { at: 0, prs: [] };
   return {
+    at,
     prs: prs.filter((row): row is RepoPr => {
       const pr = record(row);
       return typeof pr.repo === "string" && typeof pr.number === "number" && typeof pr.title === "string"
@@ -297,12 +285,12 @@ export class PullRequestRegistry {
   private readonly live?: LivePublisher;
   private readonly log: (message: string) => void;
   private readonly timeouts: { gh: number; git: number };
-  private readonly saved?: PrefsFile<{ prs: RepoPr[] }>;
+  private readonly saved?: PrefsFile<SavedList>;
   /** Each session's panes as of its last snapshot read; their folders are what gets resolved. */
   private readonly panes = new Map<string, readonly AgentView[]>();
   private cwds = new Map<string, CwdInfo | null>();
-  /** The GitHub repo (`owner/name`) each repo, by common git dir, names. */
-  private names = new Map<string, string>();
+  /** The GitHub repo (`owner/name`) each repo, by common git dir, names; null when its remotes name none. */
+  private names = new Map<string, string | null>();
   /** The last good read, newest first. */
   private prs: RepoPr[] = [];
   /** The failure last logged, so a repeating one is logged once. */
@@ -317,9 +305,10 @@ export class PullRequestRegistry {
     this.timeouts = options.timeouts ?? { gh: GH_TIMEOUT_MS, git: GIT_TIMEOUT_MS };
     this.log = options.log ?? ((message) => console.warn(`[bridge] pull requests: ${message}`));
     if (options.file) {
-      this.saved = new PrefsFile(options.file, savedRows);
+      this.saved = new PrefsFile(options.file, savedList);
       this.saved.loadSync();
-      this.prs = this.saved.current().prs;
+      const kept = this.saved.current();
+      if (this.now() - kept.at < SAVED_MAX_AGE_MS) this.prs = kept.prs;
     }
   }
 
@@ -333,6 +322,11 @@ export class PullRequestRegistry {
     const unseen = panes.some((pane) => pane.cwd && !this.cwds.has(pane.cwd));
     if (age >= PR_TTL_MS || (unseen && age >= NEW_CWD_MIN_MS)) void this.refresh();
 
+    return this.rows(panes);
+  }
+
+  /** Every PR the last refresh read, each with those of `panes` that sit on its branch. */
+  private rows(panes: readonly AgentView[]): PullRequestView[] {
     const onBranch = new Map<string, string[]>();
     for (const pane of panes) {
       const info = this.cwds.get(pane.cwd);
@@ -387,16 +381,6 @@ export class PullRequestRegistry {
     }
   }
 
-  /** The GitHub repo `gh pr list` reads from `cwd`, learnt from the rows it prints; undefined when it reads none. */
-  private async ghName(cwd: string): Promise<string | undefined> {
-    const result = await attempt(this.run, ["gh", "pr", "list", "--state", "open", "--author", "@me", "--limit", "1", "--json", PR_FIELDS], cwd, this.timeouts.gh);
-    try {
-      return result.ok ? parsePullRequests(result.stdout)[0]?.repo : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   /** Where each pane's folder sits, and the GitHub repo each of those repos names. */
   private async resolveFolders(): Promise<void> {
     const folders = [...new Set([...this.panes.values()].flatMap((panes) => panes.map((pane) => pane.cwd)).filter(Boolean))].slice(0, MAX_CWDS);
@@ -415,29 +399,27 @@ export class PullRequestRegistry {
       cwds.set(cwd, repo?.ok ? parseRepo(repo.stdout, branch?.ok ? branch.stdout : "") ?? null : null);
     });
 
-    // Each repo is read from the first worktree seen; pane order is the herd's triage order.
+    // A repo's remotes are read once, from the first worktree seen, and kept while a pane sits in it.
     const where = new Map<string, string>();
     for (const info of cwds.values()) if (info && !where.has(info.repo)) where.set(info.repo, info.toplevel);
-    const names = new Map<string, string>();
-    const ghNamed: Array<[string, string]> = [];
-    await pool([...where], CONCURRENCY, async ([repo, cwd]) => {
+    const names = new Map<string, string | null>([...where.keys()].flatMap((repo) => this.names.has(repo) ? [[repo, this.names.get(repo) ?? null]] : []));
+    await pool([...where].filter(([repo]) => !names.has(repo)), CONCURRENCY, async ([repo, cwd]) => {
       const remotes = await attempt(this.run, ["git", "config", "--get-regexp", "^remote\\."], cwd, this.timeouts.git);
-      const name = remotes.ok ? remoteRepo(remotes.stdout) : undefined;
-      if (name) names.set(repo, name);
-      // A repo whose remotes are all on this machine has no PRs; gh says so too.
-      else if (name === undefined) ghNamed.push([repo, cwd]);
-    });
-    await pool(ghNamed.slice(0, MAX_GH_NAMED), CONCURRENCY, async ([repo, cwd]) => {
-      const name = await this.ghName(cwd) ?? this.names.get(repo);
-      if (name) names.set(repo, name);
+      // git config exits 1 when there is no remote at all; anything else is asked again next time.
+      if (remotes.ok || remotes.reason === "exit 1") names.set(repo, remoteRepo(remotes.ok ? remotes.stdout : ""));
     });
     this.cwds = cwds;
     this.names = names;
   }
 
+  /** What each session's page would read, to tell whether a refresh changed it. */
+  private shown(): string {
+    return JSON.stringify([...this.panes].map(([session, panes]) => [session, this.rows(panes)]));
+  }
+
   private async read(): Promise<void> {
     this.lastRefresh = this.now();
-    const before = JSON.stringify([this.prs, ...this.names, ...this.cwds]);
+    const before = this.shown();
     // GitHub's answer does not depend on the folders, so the two run side by side.
     const [mine] = await Promise.all([this.readMine(), this.resolveFolders()]);
     if (typeof mine === "string") {
@@ -445,11 +427,11 @@ export class PullRequestRegistry {
       this.failure = mine;
     } else {
       this.failure = "";
-      if (JSON.stringify(mine) !== JSON.stringify(this.prs)) void this.saved?.set({ prs: mine }).catch(() => {});
       this.prs = mine;
+      await this.saved?.set({ at: this.now(), prs: mine }).catch(() => {});
     }
 
-    if (JSON.stringify([this.prs, ...this.names, ...this.cwds]) !== before) {
+    if (this.shown() !== before) {
       for (const session of this.panes.keys()) this.live?.publish({ session, topic: "snapshot" });
     }
   }

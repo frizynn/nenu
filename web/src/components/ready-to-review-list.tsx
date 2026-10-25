@@ -3,10 +3,10 @@ import { Link } from "react-router";
 import { GitPullRequest } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
-import { isOpening, OpeningSpinner } from "@/components/home-panels";
+import { FoldedList, isOpening, OpeningSpinner } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
-import { EnterScope, useEnter } from "@/lib/enter";
+import { useEnter } from "@/lib/enter";
 import { readyToMerge, reviewsByRepo, type RepoReviews, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
@@ -139,31 +139,19 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
 /** How many of a repo's PRs show before "Show N more": its first run, the ones that need a hand. */
 export const REPO_ROWS = 3;
 
-/** One repo's run: its name, its owner unless it is `home`, and how many, then its PRs, the rest behind "Show N more". */
+/** One repo's run: its owner unless it is `home`, its name and how many, then its PRs, the rest folded. */
 function RepoRun({ repo, home, session, opening }: { repo: RepoReviews; home?: string; session?: string; opening: string | null }) {
-  const [all, setAll] = useState(false);
   const id = useId();
-  // A fold that would hide a single row hides nothing worth a tap.
-  const shown = all || repo.entries.length <= REPO_ROWS + 1 ? repo.entries : repo.entries.slice(0, REPO_ROWS);
-  const hidden = repo.entries.length - shown.length;
   return (
     <section aria-labelledby={id} className="flex flex-col">
-      <h3 id={id} className="flex min-w-0 items-baseline gap-1.5 px-1 pb-1 pt-4 text-footnote sm:px-2.5">
+      <h3 id={id} className="flex min-w-0 items-baseline px-1 pb-1 pt-6 text-footnote sm:px-2.5">
+        {repo.owner && repo.owner !== home && <span className="min-w-0 truncate text-muted-foreground">{repo.owner}/</span>}
         <span className="truncate font-semibold text-foreground">{repo.name}</span>
-        {repo.owner && repo.owner !== home && <span className="min-w-0 truncate text-muted-foreground">{repo.owner}</span>}
-        <span className="ml-auto shrink-0 pl-3 tabular-nums text-muted-foreground">{repo.entries.length}<span className="sr-only"> open</span></span>
+        <span className="ml-auto shrink-0 pl-3 tabular-nums text-muted-foreground"><span className="sr-only">, </span>{repo.entries.length}<span className="sr-only"> open</span></span>
       </h3>
-      <EnterScope>
-        <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
-          {shown.map((entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />)}
-        </ul>
-      </EnterScope>
-      {hidden > 0 && (
-        <button type="button" onClick={() => setAll(true)} aria-label={`Show ${hidden} more in ${repo.name}`}
-          className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
-          Show {hidden} more
-        </button>
-      )}
+      <FoldedList items={repo.entries} rows={REPO_ROWS} name={repo.name}>
+        {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
+      </FoldedList>
     </section>
   );
 }

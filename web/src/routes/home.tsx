@@ -22,7 +22,7 @@ import { WorkbenchNavigationContext } from "@/lib/workbench-navigation";
 
 // Home answers "what needs me now", top to bottom: one sentence saying what needs you, those asks
 // (answered in place), then one list under tabs: every session as Recents or by Workspace, each row
-// carrying its pull request; every pull request (ready to merge first) as PRs. Then the workflows still
+// carrying its pull request; every open pull request, under its repo, as PRs. Then the workflows still
 // running. Starting something is New's. Figures come from the snapshot, the bridge's
 // detected dialogs and the Claude sessions' background work; nothing here is stored history.
 //

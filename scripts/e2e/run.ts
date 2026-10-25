@@ -1229,7 +1229,7 @@ async function home(): Promise<void> {
         const page = await context.newPage();
         await page.clock.install({ time: bridge.now() });
         await page.goto(bridge.url + "/");
-        // The sessions' control, not a row: with this many sessions a row can sit behind "Show all".
+        // The sessions' control, not a row: with this many sessions a row can sit behind "Show N more".
         await page.getByRole("tab", { name: "Recents" }).waitFor({ timeout: 15_000 });
         await page.waitForTimeout(1500);
         return { page, close: () => context.close() };

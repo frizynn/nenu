@@ -67,9 +67,10 @@ journals, `bridge.log`).
   Codex pane answers "Codex server is unavailable" instead of dialing the live Codex app-server.
   `bridge.test.ts` checks it.
 - The CLIs the bridge runs are stubs placed first on `PATH`. `claude agents` fails, so Claude session discovery never sees real processes.
-  `gh` never reaches GitHub: it prints the JSON file named by `NENU_E2E_GH_PRS` (the output of
-  `gh pr list --json …`), or fails. With that variable set the demo panes' folder is a fresh git
-  repo on branch `e2e-demo`, so Home's "Ready to review" shows those pull requests.
+  `gh` never reaches GitHub (`fake-gh.ts`): it answers the bridge's one GraphQL read with the rows
+  in the JSON file named by `NENU_E2E_GH_PRS` (shaped as `gh pr list --json …` prints them), or
+  fails. With that variable set the demo panes' folder is a fresh git repo whose origin is `acme/shop`, on
+  branch `e2e-demo`, so Home's PRs tab shows those pull requests.
   `PATH` itself is inherited, and so is everything outside the bridge process: the FakeHerdr and
   the browser run in the bench's own process.
 - The FakeHerdr counts calls by method and keeps a log of every call for the whole run (resetting

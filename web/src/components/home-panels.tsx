@@ -73,17 +73,23 @@ export function HomeHeading({ id, label, count, note }: { id: string; label: str
 }
 
 /**
- * A Home list: its first `rows` items, and the rest behind "Show all". A row that joins once the list
- * is drawn, as "Show all" adds them, eases in where it lands when it asks to (`useEnter`).
+ * A Home list: its first `rows` items, and the rest behind "Show N more", which folds them back as
+ * "Show less". A fold that would hide one row shows it instead: one row is not worth a tap. A row that
+ * joins once the list is drawn eases in where it lands when it asks to (`useEnter`). `name` says whose
+ * rows the control shows, for a list among several.
  */
-export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; rows: number; children: (item: T) => ReactNode }) {
+export function FoldedList<T>({ items, rows, name, children }: { items: readonly T[]; rows: number; name?: string; children: (item: T) => ReactNode }) {
   const [all, setAll] = useState(false);
-  const shown = all ? items : items.slice(0, rows);
+  const folds = items.length > rows + 1;
+  const shown = all || !folds ? items : items.slice(0, rows);
+  const more = `Show ${items.length - rows} more`;
   return <EnterScope>
     <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
-    {items.length > shown.length && (
-      <button type="button" onClick={() => setAll(true)} className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
-        Show all {items.length}
+    {folds && (
+      <button type="button" onClick={() => setAll(!all)} aria-expanded={all}
+        aria-label={name ? (all ? `Show less of ${name}` : `${more} in ${name}`) : undefined}
+        className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
+        {all ? "Show less" : more}
       </button>
     )}
   </EnterScope>;
@@ -91,7 +97,7 @@ export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; 
 
 const DESK = "(min-width: 1024px)";
 
-/** How many sessions Recents lists before "Show all". */
+/** How many sessions Recents lists before "Show N more". */
 export const RECENT_ROWS = 6;
 
 // A state's word takes its colour on a phone only: a desk keeps the word grey and the colour to the row's

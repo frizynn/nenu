@@ -54,12 +54,17 @@ test("eases in only the PRs Show N more adds", async () => {
   const entries: ReviewEntry[] = Array.from({ length: 7 }, (_, i) => (
     { key: `a/b#${i}`, title: `PR ${i}`, repo: "b", owner: "a", number: i, draft: false, updatedAt: 0, url: `https://github.com/a/b/pull/${i}` }));
   render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
-  await userEvent.setup().click(screen.getByRole("button", { name: "Show 4 more in b" }));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Show 4 more in b" }));
   expect(screen.getAllByRole("listitem").map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, true, true, true, true]);
+  // And folds back from where it stands.
+  await user.click(screen.getByRole("button", { name: "Show less of b" }));
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  expect(screen.getByRole("button", { name: "Show 4 more in b" })).toHaveAttribute("aria-expanded", "false");
 });
 
 // A repo is a heading over its own PRs; a fold that would hide one row shows it instead.
-test("lists each repo under its name, count and, unless it is the owner of most, its owner; the latest-moved repo first", () => {
+test("lists each repo under its name, count and, unless it is the owner of most, its owner; the latest-moved repo first, its PRs in the order given", () => {
   const pr = (owner: string, repo: string, number: number, updatedAt: number): ReviewEntry => (
     { key: `${owner}/${repo}#${number}`, title: `${repo} ${number}`, repo, owner, number, draft: false, updatedAt, url: `https://github.com/${owner}/${repo}/pull/${number}` });
   render(<MemoryRouter><PullRequestList opening={null} entries={[
@@ -67,7 +72,7 @@ test("lists each repo under its name, count and, unless it is the owner of most,
     pr("acme", "notes", 5, 40), pr("other", "shop", 6, 60),
   ]} /></MemoryRouter>);
   const runs = screen.getAllByRole("region");
-  expect(runs.map((run) => run.querySelector("h3")?.textContent)).toEqual(["shopother1 open", "shop4 open", "notes1 open"]);
-  expect(runs.map((run) => [...run.querySelectorAll("li a")].map((link) => link.getAttribute("aria-label")))).toEqual([["shop 6, #6"], ["shop 2, #2", "shop 3, #3", "shop 4, #4", "shop 1, #1"], ["notes 5, #5"]]);
+  expect(runs.map((run) => run.querySelector("h3")?.textContent)).toEqual(["other/shop, 1 open", "shop, 4 open", "notes, 1 open"]);
+  expect(runs.map((run) => [...run.querySelectorAll("li a")].map((link) => link.getAttribute("aria-label")))).toEqual([["shop 6, #6"], ["shop 1, #1", "shop 2, #2", "shop 3, #3", "shop 4, #4"], ["notes 5, #5"]]);
   expect(screen.queryByRole("button", { name: /^Show/ })).not.toBeInTheDocument();
 });
