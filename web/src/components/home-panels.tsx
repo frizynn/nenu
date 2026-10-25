@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigation } from "react-router";
 import { ChevronRight, FolderPlus, GripVertical, LayoutGrid, LayoutTemplate, Pending, Sparkle, Workflow, type IconComponent } from "@/components/ui/icon";
 
@@ -73,25 +73,14 @@ export function HomeHeading({ id, label, count, note }: { id: string; label: str
 }
 
 /**
- * A Home list: its first `rows` items, and the rest behind "Show all". With `group`, items already
- * ordered by group show under each group's name. A row that joins once the list is drawn, as "Show
- * all" adds them, eases in where it lands when it asks to (`useEnter`).
+ * A Home list: its first `rows` items, and the rest behind "Show all". A row that joins once the list
+ * is drawn, as "Show all" adds them, eases in where it lands when it asks to (`useEnter`).
  */
-export function FoldedList<T>({ items, rows, group, children }: { items: readonly T[]; rows: number; group?: (item: T) => string; children: (item: T) => ReactNode }) {
+export function FoldedList<T>({ items, rows, children }: { items: readonly T[]; rows: number; children: (item: T) => ReactNode }) {
   const [all, setAll] = useState(false);
   const shown = all ? items : items.slice(0, rows);
-  const runs: Array<{ label?: string; items: T[] }> = [];
-  for (const item of shown) {
-    const label = group?.(item);
-    const last = runs.at(-1);
-    if (last && last.label === label) last.items.push(item);
-    else runs.push({ label, items: [item] });
-  }
   return <EnterScope>
-    {runs.map((run) => <Fragment key={run.label ?? ""}>
-      {run.label && <h3 className="px-1 pt-2 text-caption font-medium text-muted-foreground first:pt-0 sm:px-2.5">{run.label}</h3>}
-      <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{run.items.map(children)}</ul>
-    </Fragment>)}
+    <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">{shown.map(children)}</ul>
     {items.length > shown.length && (
       <button type="button" onClick={() => setAll(true)} className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
         Show all {items.length}

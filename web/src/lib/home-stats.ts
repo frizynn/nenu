@@ -89,6 +89,8 @@ export interface ReviewEntry {
   title: string;
   /** The repo's short name. */
   repo: string;
+  /** The repo's owner, when the URL names one. */
+  owner?: string;
   number?: number;
   branch?: string;
   url?: string;
@@ -105,7 +107,7 @@ export interface ReviewEntry {
 const PR_URL_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/;
 const prKey = (url: string | undefined) => {
   const match = url ? PR_URL_RE.exec(url) : null;
-  return match ? { key: `${match[1]}/${match[2]}#${match[3]}`, repo: match[2]! } : undefined;
+  return match ? { key: `${match[1]}/${match[2]}#${match[3]}`, repo: match[2]!, owner: match[1]! } : undefined;
 };
 const checksPassed = (checks: ReviewEntry["checks"]) => !!checks && checks.passed > 0 && !checks.failed && !checks.pending;
 
@@ -124,7 +126,7 @@ export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined
     const id = prKey(pr.url);
     const key = id?.key ?? `${pr.repo}#${pr.number}`;
     rows.set(key, {
-      key, title: pr.title, repo: id?.repo ?? pr.repo, number: pr.number, branch: pr.branch, url: pr.url, draft: pr.draft,
+      key, title: pr.title, repo: id?.repo ?? pr.repo, ...(id ? { owner: id.owner } : {}), number: pr.number, branch: pr.branch, url: pr.url, draft: pr.draft,
       ...(pr.review ? { review: pr.review } : {}),
       ...(pr.checks ? { checks: pr.checks } : {}),
       ...(pr.diff ? { diff: pr.diff } : {}),
@@ -134,6 +136,40 @@ export function reviewQueue(pullRequests: readonly PullRequestView[] | undefined
   }
   const ready = (row: ReviewEntry) => Number(checksPassed(row.checks)) + Number(row.review === "approved");
   return [...rows.values()].sort((a, b) => Number(a.draft) - Number(b.draft) || ready(b) - ready(a) || b.updatedAt - a.updatedAt);
+}
+
+/** One repo's pull requests on Home's PRs tab. */
+export interface RepoReviews {
+  /** `owner/name`, or the short name when no URL names the owner. */
+  key: string;
+  name: string;
+  owner?: string;
+  entries: ReviewEntry[];
+}
+
+/** Where a pull request sits in its repo's run: one merge away, then blocked, then in review, drafts last. */
+function standing(entry: ReviewEntry): number {
+  if (readyToMerge(entry)) return 0;
+  if (entry.draft) return 3;
+  return entry.checks?.failed || entry.review === "changes_requested" ? 1 : 2;
+}
+
+/**
+ * The PRs tab's runs, one per repo: inside each, what needs a hand first (ready to merge, then a check
+ * failing or changes asked for), then the rest, drafts last, each step newest first; the repos by their
+ * latest move, so the one being worked on leads.
+ */
+export function reviewsByRepo(entries: readonly ReviewEntry[]): RepoReviews[] {
+  const repos = new Map<string, RepoReviews>();
+  for (const entry of entries) {
+    const key = entry.owner ? `${entry.owner}/${entry.repo}` : entry.repo;
+    const repo = repos.get(key) ?? { key, name: entry.repo, ...(entry.owner ? { owner: entry.owner } : {}), entries: [] };
+    repo.entries.push(entry);
+    repos.set(key, repo);
+  }
+  const latest = (repo: RepoReviews) => Math.max(...repo.entries.map((entry) => entry.updatedAt));
+  for (const repo of repos.values()) repo.entries.sort((a, b) => standing(a) - standing(b) || b.updatedAt - a.updatedAt);
+  return [...repos.values()].sort((a, b) => latest(b) - latest(a) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
 /** A session in Home's list (any pane, agent or shell): what every view calls it, where it lives, and when it last moved. */

@@ -655,7 +655,7 @@ it("keeps workflows still running in the one column, each opening its chat", asy
 });
 
 // Pull requests are a tab of the sessions' switcher, never a section of their own.
-it("lists every pull request under the PRs tab, ready to merge first, and opens each in its session or on GitHub", async () => {
+it("lists every pull request under the PRs tab by repo, ready to merge first, and opens each in its session or on GitHub", async () => {
   const pr = (number: number, extra: Partial<PullRequestView>): PullRequestView => ({
     repo: "acme/shop", number, title: `PR ${number}`, url: `https://github.com/acme/shop/pull/${number}`,
     branch: `feat/${number}`, draft: false, updatedAt: number, paneIds: [], ...extra,
@@ -675,8 +675,10 @@ it("lists every pull request under the PRs tab, ready to merge first, and opens 
   expect(within(main.getByRole("tabpanel", { name: "Recents" })).getByRole("link", { name: /^Earlier thread,/ })).toHaveAccessibleName(/,\s*PR #1698,\s*\+3752 −154$/);
   await user.click(main.getByRole("tab", { name: "PRs" }));
   const prs = within(main.getByRole("tabpanel", { name: "PRs" }));
-  // The five the headline counts, ready to merge first.
-  expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Ready to merge", "In review"]);
+  // The five the headline counts under their repo, ready to merge first, then blocked, drafts last.
+  expect(prs.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["shop5 open"]);
+  expect(prs.getAllByRole("link")).toHaveLength(3);
+  await user.click(prs.getByRole("button", { name: "Show 2 more in shop" }));
   expect(prs.getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual([
     "Orders panel, #1700, checks passed, approved",
     "Publish products, #1696, +40 −2, checks passed, approved",
@@ -696,8 +698,8 @@ it("shows the first pull requests and the rest on request, and remembers the tab
   const { user, main } = await setup({ ...data, pullRequests });
   await user.click(main.getByRole("tab", { name: "PRs" }));
   const review = within(main.getByRole("tabpanel", { name: "PRs" }));
-  expect(review.getAllByRole("link")).toHaveLength(5);
-  await user.click(review.getByRole("button", { name: "Show all 9" }));
+  expect(review.getAllByRole("link")).toHaveLength(3);
+  await user.click(review.getByRole("button", { name: "Show 6 more in b" }));
   expect(review.getAllByRole("link")).toHaveLength(9);
   expect(localStorage.getItem("nenu:home-list:v2")).toBe("prs");
 });

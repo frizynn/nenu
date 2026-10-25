@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router";
 import { GitPullRequest } from "@/components/ui/icon";
 
 import { DiffStat } from "@/components/diff-stat";
-import { FoldedList, isOpening, OpeningSpinner } from "@/components/home-panels";
+import { isOpening, OpeningSpinner } from "@/components/home-panels";
 import { ACTIVITY_POLL_MS, activityConcerns } from "@/hooks/use-activity";
 import { fetchActivity, type ActivityResponse } from "@/lib/activity";
-import { useEnter } from "@/lib/enter";
-import { readyToMerge, type ReviewEntry } from "@/lib/home-stats";
+import { EnterScope, useEnter } from "@/lib/enter";
+import { readyToMerge, reviewsByRepo, type RepoReviews, type ReviewEntry } from "@/lib/home-stats";
 import { isLocked, useLocked } from "@/lib/idle";
 import { isLiveHealthy, onLiveEvent } from "@/lib/live-events";
 import { panePath } from "@/lib/nav";
@@ -99,7 +99,8 @@ const rowClass = "relative grid min-h-14 min-w-0 grid-cols-[1rem_minmax(0,1fr)_a
 
 /**
  * A pull request as one row and one tap: its title, then its number and what its checks and review
- * say in a few words, its size at the end. The tap opens the chat on its branch in Nenu, else its page on GitHub.
+ * say in a few words, its size at the end; its repo is the heading it sits under. The tap opens the
+ * chat on its branch in Nenu, else its page on GitHub.
  */
 function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: string; opening: string | null }) {
   const checks = checksWord(entry.checks);
@@ -119,7 +120,6 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
       readyToMerge(entry) ? "text-status-done" : blocked ? "text-muted-foreground lg:text-destructive" : "text-muted-foreground")} />
     <span className="col-start-2 truncate text-body sm:text-subhead">{entry.title}</span>
     <span className="col-start-2 row-start-2 flex min-w-0 items-baseline gap-1 truncate text-footnote text-muted-foreground">
-      <span className="shrink-0 max-sm:hidden">{entry.repo} ·</span>
       {facts.map((fact, index) => <span key={fact.word} className={cn("shrink-0", fact.tone)}>{index > 0 && <span aria-hidden className="text-muted-foreground">· </span>}{fact.word}</span>)}
     </span>
     <span className="col-start-3 row-span-2 row-start-1 flex items-center gap-3 text-footnote text-muted-foreground">
@@ -136,18 +136,50 @@ function ReviewRow({ entry, session, opening }: { entry: ReviewEntry; session?: 
   );
 }
 
-/** How many rows show before "Show all": enough to act on, short enough to keep the sessions in reach. */
-export const REVIEW_ROWS = 5;
+/** How many of a repo's PRs show before "Show N more": its first run, the ones that need a hand. */
+export const REPO_ROWS = 3;
 
-/** Which run a pull request sits in; ready to merge comes first. */
-const reviewGroup = (entry: ReviewEntry) => readyToMerge(entry) ? "Ready to merge" : "In review";
-
-/** Home's PRs tab: every pull request, the ones ready to merge first, then the rest. */
-export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
-  const ordered = [...entries.filter(readyToMerge), ...entries.filter((entry) => !readyToMerge(entry))];
+/** One repo's run: its name, its owner unless it is `home`, and how many, then its PRs, the rest behind "Show N more". */
+function RepoRun({ repo, home, session, opening }: { repo: RepoReviews; home?: string; session?: string; opening: string | null }) {
+  const [all, setAll] = useState(false);
+  const id = useId();
+  // A fold that would hide a single row hides nothing worth a tap.
+  const shown = all || repo.entries.length <= REPO_ROWS + 1 ? repo.entries : repo.entries.slice(0, REPO_ROWS);
+  const hidden = repo.entries.length - shown.length;
   return (
-    <FoldedList items={ordered} rows={REVIEW_ROWS} group={reviewGroup}>
-      {(entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />}
-    </FoldedList>
+    <section aria-labelledby={id} className="flex flex-col">
+      <h3 id={id} className="flex min-w-0 items-baseline gap-1.5 px-1 pb-1 pt-4 text-footnote sm:px-2.5">
+        <span className="truncate font-semibold text-foreground">{repo.name}</span>
+        {repo.owner && repo.owner !== home && <span className="min-w-0 truncate text-muted-foreground">{repo.owner}</span>}
+        <span className="ml-auto shrink-0 pl-3 tabular-nums text-muted-foreground">{repo.entries.length}<span className="sr-only"> open</span></span>
+      </h3>
+      <EnterScope>
+        <ul className="flex flex-col max-sm:divide-y max-sm:divide-border">
+          {shown.map((entry) => <ReviewRow key={entry.key} entry={entry} session={session} opening={opening} />)}
+        </ul>
+      </EnterScope>
+      {hidden > 0 && (
+        <button type="button" onClick={() => setAll(true)} aria-label={`Show ${hidden} more in ${repo.name}`}
+          className="inline-flex min-h-9 items-center self-start px-1 text-footnote font-medium text-muted-foreground hover:text-foreground coarse:min-h-11 sm:px-2.5">
+          Show {hidden} more
+        </button>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Home's PRs tab: every open pull request, under its repo. The owner of most of the repos is the
+ * person's own account, so only the others name theirs.
+ */
+export function PullRequestList({ entries, session, opening }: { entries: readonly ReviewEntry[]; session?: string; opening: string | null }) {
+  const repos = reviewsByRepo(entries);
+  const owners = new Map<string, number>();
+  for (const repo of repos) if (repo.owner) owners.set(repo.owner, (owners.get(repo.owner) ?? 0) + 1);
+  const home = [...owners].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return (
+    <div className="flex flex-col [&>section:first-child>h3]:pt-1">
+      {repos.map((repo) => <RepoRun key={repo.key} repo={repo} home={home} session={session} opening={opening} />)}
+    </div>
   );
 }

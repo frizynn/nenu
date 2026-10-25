@@ -1,5 +1,5 @@
 import type { ActivityResponse, ActivityWorkflow } from "./activity";
-import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewQueue, runningWorkflows } from "./home-stats";
+import { greeting, homeHeadline, needsYouCount, needsYouItems, readyToMerge, recentChats, reviewQueue, reviewsByRepo, runningWorkflows } from "./home-stats";
 import type { AgentView, PullRequestView } from "./types";
 
 const NOW = new Date(2026, 9, 7, 15, 30).getTime();
@@ -64,7 +64,23 @@ describe("review queue", () => {
       gh(5, { checks: { passed: 2, failed: 0, pending: 0 } }),
     ]);
     expect(rows.map((row) => row.number)).toEqual([3, 5, 4, 1, 2]);
-    expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+    expect(rows[0]).toMatchObject({ key: "acme/shop#3", repo: "shop", owner: "acme", branch: "feat/3", url: "https://github.com/acme/shop/pull/3" });
+  });
+
+  it("groups by repo: ready to merge, then blocked, then in review, drafts last, the latest-moved repo first", () => {
+    const green = { passed: 3, failed: 0, pending: 0 };
+    const other = (number: number, extra: Partial<PullRequestView> = {}) => gh(number, { url: `https://github.com/acme/api/pull/${number}`, ...extra });
+    const repos = reviewsByRepo(reviewQueue([
+      gh(1, { draft: true, updatedAt: 90_000 }),
+      gh(2),
+      gh(3, { review: "changes_requested" }),
+      gh(4, { checks: { passed: 1, failed: 1, pending: 0 } }),
+      gh(5, { review: "approved", checks: green }),
+      gh(6),
+      other(7, { updatedAt: 95_000 }),
+    ]));
+    expect(repos.map((repo) => [repo.key, repo.name, repo.owner])).toEqual([["acme/api", "api", "acme"], ["acme/shop", "shop", "acme"]]);
+    expect(repos[1]!.entries.map((row) => row.number)).toEqual([5, 4, 3, 6, 2, 1]);
   });
 
   it("calls a pull request ready to merge only when it is approved, its checks pass and it is no draft", () => {

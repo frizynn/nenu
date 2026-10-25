@@ -49,11 +49,25 @@ test("a review row is one tap into its PR, its size read as text", () => {
   expect(screen.getByRole("link", { name: "Other, #8, +9 −2" })).toHaveAttribute("href", "https://github.com/a/b/pull/8");
 });
 
-// As in Recents, the rows "Show all" adds ease in where they land; those already shown stay still.
-test("eases in only the PRs Show all adds", async () => {
+// As in Recents, the rows "Show N more" adds ease in where they land; those already shown stay still.
+test("eases in only the PRs Show N more adds", async () => {
   const entries: ReviewEntry[] = Array.from({ length: 7 }, (_, i) => (
-    { key: `a/b#${i}`, title: `PR ${i}`, repo: "b", number: i, draft: false, updatedAt: 0, url: `https://github.com/a/b/pull/${i}` }));
+    { key: `a/b#${i}`, title: `PR ${i}`, repo: "b", owner: "a", number: i, draft: false, updatedAt: 0, url: `https://github.com/a/b/pull/${i}` }));
   render(<MemoryRouter><PullRequestList entries={entries} opening={null} /></MemoryRouter>);
-  await userEvent.setup().click(screen.getByRole("button", { name: "Show all 7" }));
-  expect(screen.getAllByRole("listitem").map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, false, false, true, true]);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Show 4 more in b" }));
+  expect(screen.getAllByRole("listitem").map((row) => row.classList.contains("row-enter"))).toEqual([false, false, false, true, true, true, true]);
+});
+
+// A repo is a heading over its own PRs; a fold that would hide one row shows it instead.
+test("lists each repo under its name, count and, unless it is the owner of most, its owner; the latest-moved repo first", () => {
+  const pr = (owner: string, repo: string, number: number, updatedAt: number): ReviewEntry => (
+    { key: `${owner}/${repo}#${number}`, title: `${repo} ${number}`, repo, owner, number, draft: false, updatedAt, url: `https://github.com/${owner}/${repo}/pull/${number}` });
+  render(<MemoryRouter><PullRequestList opening={null} entries={[
+    pr("acme", "shop", 1, 10), pr("acme", "shop", 2, 50), pr("acme", "shop", 3, 30), pr("acme", "shop", 4, 20),
+    pr("acme", "notes", 5, 40), pr("other", "shop", 6, 60),
+  ]} /></MemoryRouter>);
+  const runs = screen.getAllByRole("region");
+  expect(runs.map((run) => run.querySelector("h3")?.textContent)).toEqual(["shopother1 open", "shop4 open", "notes1 open"]);
+  expect(runs.map((run) => [...run.querySelectorAll("li a")].map((link) => link.getAttribute("aria-label")))).toEqual([["shop 6, #6"], ["shop 2, #2", "shop 3, #3", "shop 4, #4", "shop 1, #1"], ["notes 5, #5"]]);
+  expect(screen.queryByRole("button", { name: /^Show/ })).not.toBeInTheDocument();
 });
